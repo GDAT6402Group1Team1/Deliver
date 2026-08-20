@@ -4,64 +4,50 @@
 
 引擎：**Unreal Engine 5.8**
 
-## 核心体验
-
 你是一个快递员。地图会换地区、换气质，任务也不只是“送到就结束”：在把东西交到客户手上之前，沿路可以捉弄 NPC、和场景里的物件互动。认真送货能赚钱升级；一路作妖则构成这款游戏的欢乐奇遇感。
 
-## 总流程框架
+- **单人**：独自完成任务、升级、推进流程。
+- **多人**：互相比拼。谁先把物品交到客户手上，谁拿走该任务奖励。
 
-游戏从乡下开始。随着进度推进，解锁新地图。章节按地区划分：
+## Git 操作
 
-| 章节 | 地区 | 气质 |
-| --- | --- | --- |
-| 1 | 乡下 | 西式乡村，多为农村自建房 |
-| 2 | 城市 | 建筑密集，车流多 |
-| 3 | 魔法小镇 | 充满魔法元素与特殊玩法 |
-| 4 | 海滩 | — |
-| 5 | 城堡 | — |
+二进制资源（`.uasset` / `.umap` 等）走 **Git LFS**。克隆前请安装 [Git LFS](https://git-lfs.com)。
 
-## 核心循环
+### 克隆
 
-1. 完成送货任务  
-2. 按完成度获得奖励  
-3. 用奖励升级送货工具 / 道具，让后续任务更轻松  
-4. 同一任务可能会多次触发  
-5. 达到一定完成次数或总收入后，解锁新客户与新地区  
-6. 进入下一章，重复循环  
+```bash
+git lfs install
+git clone <仓库地址>
+cd Delivery
+git lfs pull
+```
 
-## 开发阶段
+### 日常同步
 
-### Demo
+```bash
+git pull
+git lfs pull
+```
 
-内容集中在**乡下**。重点做乡下通往城市、乡下通往魔法小镇的过渡区域和衔接任务。
+提交前确认没有把可生成目录加进去。下列路径已被 `.gitignore` 忽略，不要强制添加：
 
-### Pitch
+- `Binaries/`
+- `Intermediate/`
+- `Saved/`
+- `DerivedDataCache/`
+- `*.sln` / `.vs/` 等 IDE 工程文件
 
-完成第一章里的这几项任务：
+```bash
+git add -A
+git status
+git commit -m "简短说明这次改了什么"
+git push
+```
 
-- 给老人送餐  
-- 送宠物猪  
-- 与魔法相关的任务  
+### 打开工程
 
-### 毕设
+用 Unreal Engine 5.8 打开 `Delivery.uproject`。需要 Visual Studio 工程时，右键 `.uproject` → **Generate Visual Studio project files**，在本地生成 `.sln`，不要提交。
 
-完成**整个第一章**，包括：
-
-- 第一章到第二章的地图过渡点  
-- 经济系统（载具、道具升级等）  
-
-## 单人 / 多人
-
-- **单人**：独自完成任务、升级、推进流程。  
-- **多人**：互相比拼。谁先把物品交到客户手上，谁拿走该任务奖励。  
-
-## 仓库说明
-
-- 忽略 `Binaries/`、`Intermediate/`、`Saved/`、`DerivedDataCache/` 等可生成目录。  
-- `Content/` 中的 `.uasset` / `.umap` 等二进制资源走 **Git LFS**。  
-- 需要本机安装 [Git LFS](https://git-lfs.com)，克隆后执行 `git lfs pull`。  
-- 用引擎的 **Generate Visual Studio project files** 生成本地 `.sln`，不要提交 IDE 工程文件。  
-
-## 许可
+### 许可
 
 见 [LICENSE](LICENSE)（MIT）。
