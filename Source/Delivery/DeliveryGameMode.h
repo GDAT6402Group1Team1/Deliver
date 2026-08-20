@@ -15,6 +15,7 @@ class ADeliveryGameMode : public AGameModeBase
 	GENERATED_BODY()
 
 public:
-
+	
+	// 地图加载时调用
 	ADeliveryGameMode();
 };

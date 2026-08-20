@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>滑稽布娃娃的原理与实现步骤</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --paper: #fffdf8;
+      --ink: #1c1915;
+      --muted: #534c44;
+      --line: #ddd4c6;
+      --tutorial: #c45c26;
+      --tutorial-soft: #f8e6d8;
+      --ours: #1b6e63;
+      --ours-soft: #dceeea;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 17px;
+      line-height: 1.85;
+    }
+    header.hero { padding: 48px 24px 24px; max-width: 820px; margin: 0 auto; }
+    .kicker { letter-spacing: .12em; font-size: 12px; color: var(--muted); font-weight: 700; }
+    h1 { font-size: clamp(26px, 4vw, 38px); line-height: 1.25; margin: 10px 0 16px; font-weight: 800; }
+    .lead { font-size: 18px; color: var(--muted); }
+    .lead strong { color: var(--ink); font-weight: 700; }
+    nav {
+      position: sticky; top: 0; z-index: 20;
+      background: rgba(244,239,230,.94); backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+    }
+    nav .inner { max-width: 820px; margin: 0 auto; padding: 10px 24px; display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; }
+    nav a { color: var(--muted); text-decoration: none; font-weight: 600; }
+    nav a:hover { color: var(--ink); }
+    main { max-width: 820px; margin: 0 auto; padding: 8px 24px 72px; }
+    section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 32px 32px 28px;
+      margin: 22px 0;
+    }
+    h2 { margin: 0 0 14px; font-size: 22px; line-height: 1.35; }
+    h3 { margin: 28px 0 10px; font-size: 18px; }
+    p { margin: 0 0 14px; }
+    ul { margin: 0 0 16px; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+    @media (max-width: 760px) {
+      .two { grid-template-columns: 1fr; }
+      section { padding: 22px 18px; }
+    }
+    figure { margin: 18px 0 20px; }
+    figure img {
+      width: 100%; display: block; border-radius: 12px;
+      border: 1px solid var(--line); background: #111;
+    }
+    figcaption { font-size: 15px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
+    ol.steps { padding-left: 22px; }
+    ol.steps > li { margin: 0 0 18px; }
+    ol.steps h3 { display: inline; font-size: 17px; margin: 0; }
+    .callout {
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin: 16px 0 18px;
+      font-size: 16px;
+    }
+    .callout.t { background: var(--tutorial-soft); border: 1px solid #efcbb3; }
+    .callout.o { background: var(--ours-soft); border: 1px solid #b7d8d2; }
+    .callout.note { background: #fff7e8; border: 1px solid #ead8b0; color: #5c4a1e; }
+    .callout .lab { font-weight: 800; display: block; margin-bottom: 4px; font-size: 13px; letter-spacing: .04em; }
+    .callout.t .lab { color: var(--tutorial); }
+    .callout.o .lab { color: var(--ours); }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0 18px; }
+    @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+    .pair .callout { margin: 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 15px; margin: 12px 0 18px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px 8px; text-align: left; vertical-align: top; }
+    th { font-size: 13px; color: var(--muted); font-weight: 700; }
+    code { background: #efe8dc; padding: 1px 6px; border-radius: 4px; font-size: 15px; }
+    footer { max-width: 820px; margin: 0 auto; padding: 0 24px 48px; color: var(--muted); font-size: 14px; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="kicker">原理与实现步骤</div>
+    <h1>怎样做出《动物派对》《人类一败涂地》那种滑稽布娃娃</h1>
+    <p class="lead">
+      你看的那份 Unreal Engine 5.5 教程，教的是在 Game Animation Sample 里给角色加上摔倒和起身。
+      那一套用于写实第三人称：平时由动画和 Character Movement 控制，摔倒时再打开物理模拟。
+      《动物派对》《人类一败涂地》使用同一类刚体和约束，但角色在整段游玩中持续模拟，位移来自施加在刚体上的力，关节电机强度更低。
+      下面先说明原理，再按实现顺序写出步骤。
+    </p>
+  </header>
+
+  <nav>
+    <div class="inner">
+      <a href="#principle">原理</a>
+      <a href="#tutorial">教程在做什么</a>
+      <a href="#comedy">与教程的差别</a>
+      <a href="#steps">实现步骤</a>
+      <a href="#art">建模要注意什么</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="principle">
+      <h2>一、原理：布娃娃在 Unreal 里如何计算</h2>
+      <p>
+        在 Unreal 里，角色平时由两套系统共同控制。一套是动画系统：骨骼按关键帧或动画蓝图状态机更新变换。另一套是移动系统：Character Movement Component 移动胶囊体，Skeletal Mesh 作为子组件跟随胶囊体显示。
+        物理引擎默认不计算角色的行走位移。只有对骨骼网格启用 Simulate Physics 之后，Physics Asset 上的刚体才会参与碰撞和约束求解。
+      </p>
+      <p>
+        Physics Asset 为骨骼网格定义刚体和约束。每个参与模拟的骨骼对应一个碰撞形状，形状可以是球体、胶囊体、盒体，并带有质量、阻尼、摩擦、弹性等参数。相邻刚体用 Constraint 连接。每个约束有三个角运动轴，在编辑器中名为 Swing 1、Swing 2、Twist。每个轴可以设为 Locked（不允许旋转）、Limited（限制最大角度）、Free（不限制角度）。
+        没有刚体，引擎无法计算身体各段与场景的碰撞。没有约束，各段刚体不会保持骨骼层级关系，也无法形成可弯曲的身体。
+      </p>
+      <figure>
+        <img src="guide-assets/constraint-axes.png" alt="关节约束的三根转轴：Swing 1、Swing 2 和 Twist" />
+        <figcaption>
+          选中约束后，可分别设置三个轴的运动类型。Locked 不允许该轴旋转。Limited 允许在设定角度内旋转。Free 不限制该轴角度。约束还可以启用 Angular Drive。Angular Drive 按目标旋转施加力矩。教程将驱动模式设为 Twist and Swing 后，在编辑器中拖动头部再释放，头部会回到约束的目标旋转。
+        </figcaption>
+      </figure>
+      <p>
+        Angular Drive 使用弹簧和阻尼。当前旋转偏离目标旋转时，弹簧产生力矩；角速度过大时，阻尼减小角速度。弹簧刚度高，刚体旋转会接近动画姿态，受外力后偏移小、恢复快。弹簧刚度低，同样外力会造成更大的旋转偏移，恢复更慢。参数形式相同，刚度不同，得到的是摔倒后较快稳定，还是摔倒后继续翻滚。
+      </p>
+      <h3>同一套刚体链上的三种用法</h3>
+      <p>
+        Physics Asset、约束和 Simulate Physics 是共用的。差别在于：模拟开多久、关节电机开不开、强度多高、以及 Actor 位移由谁写出。下面三种不是三套引擎，而是同一条刚体链上的三种控制方式。
+      </p>
+      <p>
+        <strong>被动布娃娃。</strong>
+        对骨骼网格启用 Simulate Physics，关节 Angular Drive 关闭，强度设为零。Physical Animation 不写入目标姿态。之后每帧的运动只由重力、碰撞冲量、约束限位和阻尼决定。肢体不会自行回到某个动画姿势。
+        用途是死亡、失去控制、爆炸击飞：需要身体随环境和冲量运动，不需要继续迈步或挥击。
+        在 Unreal 中对应：<code>Set All Bodies Below Simulate Physics</code> 为 true，不调用 <code>Apply Physical Animation Settings</code>，约束上不启用 Drive，或 Drive 弹簧为零。
+        限制：没有回复力矩，角色会完全倒下，不能靠这套逻辑自己站稳、行走或抓取。
+      </p>
+      <p>
+        <strong>主动布娃娃（Active Ragdoll）。</strong>
+        同样启用 Simulate Physics。同时在约束上启用 Angular Drive，并把目标旋转设为某一姿态。当前旋转与目标不同时，电机会施加力矩，使关节转向目标。目标可以来自当前动画、一张固定姿势，或运行时计算的朝向。
+        摔倒时身体仍受重力和碰撞，但电机让肢体保持一定弯曲和张力，而不是立刻全部松开。Epic 文档中的 Physical Animation 做的就是这件事：指定网格后，对某根骨骼及其子骨骼写入 Orientation Strength、Position Strength，把刚体目标设为当前动画姿态。数值越高，刚体越接近动画；数值越低，碰撞造成的偏离越大、恢复越慢。
+        你看的教程标题里的 Active Ragdoll 属于这一类，但只在摔倒阶段使用。未按下 F 时，位移仍由 Character Movement 移动胶囊体，网格跟随胶囊播放走跑动画，物理不参与行走。按下 F 之后才从 pelvis 向下模拟，并用 Physical Animation 和电机把刚体拉向挣扎动画。退出时关闭模拟，用姿态快照过渡到起身 Montage，再把控制交还 Character Movement。
+        因此教程是「第三人称角色 + 摔倒时的主动布娃娃」，不是整段游玩都由物理决定位移。
+      </p>
+      <p>
+        <strong>持续物理驱动。</strong>
+        Simulate Physics 在 BeginPlay 启用后保持开启，没有「进入布娃娃 / 退出布娃娃」两种模式。Actor 位移不由 Character Movement 或 Root Motion 写出，而来自对刚体施加的力、冲量，以及刚体之间、刚体与场景之间的约束求解。
+        行走：对 pelvis 施加水平力，整条刚体链被带动；直立用低强度电机跟踪一个运动学参考体的旋转，使 Pitch、Roll 不无限增大。
+        挥击：对前臂或手施加冲量，命中结果由碰撞冲量和接触部位决定，不播放受击 Montage 来改变对方位移。
+        抓取：在手刚体与目标刚体之间创建 Physics Constraint，松开后销毁。
+        动画仍可播放。此时动画只作为电机的目标姿态，例如给腿一个迈步旋转目标。动画不移动 Actor。电机强度低于教程截图中的 7000 至 10000，外力才能明显改变姿态。
+        《人类一败涂地》《动物派对》《Gang Beasts》使用这一类：控制全程作用在刚体上，物理求解给出当帧姿态和位移。
+      </p>
+      <p>
+        Tomas Sakalauskas（NoBrakesGames，《人类一败涂地》）在 itch.io 说明过实现来源和手感来源。角色控制试过 Overgrowth 相关演讲中的方法，以及 IK 与 PID，最后采用按关节力矩工作的自定义控制器，而不是把电机目标简单设成动画旋转。他写过：手感大约九成来自 Unity 的物理和关节参数；同一套玩法试过至少三种控制器，手感接近，最终留下的是最适合推、拉、爬、搬、对齐、使用工具的那一套。他还看过 Gang Beasts。要点是：位移和接触由物理关节积分得到，走跑动画不负责把角色从一点移到另一点。
+      </p>
+      <p>
+        Recreate Games（《动物派对》）在开发日志和访谈中说明过：角色不使用「按键触发固定动画、再触发固定音效」的状态机流程，而使用由动力学计算的动作。一次击打的结果随双方位置、速度、体力、击中部位变化，同一输入不会得到同一段预制动画。音频也按质量、材质、速度计算，因为动作无法预先录死。他们列出的参考包括人类一败涂地、Gang Beasts、Stick Fight。要点与上一段相同：结果来自当帧物理状态，不是来自切换到某一条 Montage。
+      </p>
+      <p>
+        仅降低教程中 Physical Animation 的弹簧数值，不会得到上述结构。教程在未摔倒时仍由动画和胶囊体决定位移，物理只在摔倒阶段启用。把摔倒阶段的 Orientation Strength 从 7000 改成 200，只会让摔倒时肢体更松，不会让 WASD 变成对 pelvis 加力，也不会产生手部 Constraint 抓取，起身也仍是 Montage。要做成人类一败涂地或动物派对，需要改控制结构：持续模拟、力驱动位移、约束抓取、用电机强度随状态变化，而不是只改一个弹簧数字。
+      </p>
+    </section>
+
+    <section id="tutorial">
+      <h2>二、那份教程在原理上做了什么</h2>
+      <p>
+        教程流程如下。未摔倒时，角色由 Character Movement 和动画蓝图控制。按下 F 后，从 pelvis 向下启用 Simulate Physics。Physical Animation 和关节电机把刚体目标设为动画姿态，使摔倒过程中肢体仍有回复力矩。退出时保存当前姿态，过渡到起身 Montage，关闭模拟，恢复 Character Movement。
+        这是真实的布娃娃模拟，但只在摔倒阶段启用，不是持续物理驱动。
+      </p>
+      <figure>
+        <img src="guide-assets/two-pipelines.png" alt="教程流程与持续物理驱动流程对照" />
+        <figcaption>
+          左：输入驱动胶囊体和走跑动画；仅摔倒时启用网格物理；起身后关闭模拟。右：输入对刚体施加力；网格持续模拟；站立用额外的运动学参考体提供回复力矩；抓取通过 Physics Constraint 连接手和物体。
+        </figcaption>
+      </figure>
+
+      <h3>Physics Asset：刚体形状和约束限位</h3>
+      <p>
+        教程使用 <code>PA_ufn</code>。默认约束限位较紧，肢体旋转范围不足，模拟结果不符合人体关节活动范围。作者调整各约束的 Limited 角度，并在手臂与躯干、左右腿之间 Enable Collision，否则模拟时碰撞体会互相穿过。
+        从 pelvis 启用 Simulate Physics，会启用该骨骼及其子层级刚体。通常不模拟 Root。Root 刚体用于读取模拟速度。进入布娃娃后 Actor Velocity 不能正确反映肢体运动，后续用 Root 线速度调整电机弹簧。
+      </p>
+      <div class="two">
+        <figure>
+          <img src="guide-assets/pa-tutorial-human.png" alt="写实人体 Physics Asset" />
+          <figcaption>教程按人体骨骼布置刚体，约束角度按人体关节范围设置。</figcaption>
+        </figure>
+        <figure>
+          <img src="guide-assets/pa-comedy-doll.png" alt="简化角色 Physics Asset" />
+          <figcaption>持续物理驱动使用更少刚体、更大的角限位、更低的电机刚度。碰撞体覆盖四肢体积即可，不需要按人体解剖一一对应。</figcaption>
+        </figure>
+      </div>
+
+      <h3>Physical Animation：把动画姿态作为刚体目标</h3>
+      <p>
+        在角色蓝图中添加 Physical Animation Component。BeginPlay 中调用 Set Skeletal Mesh Component，指定要驱动的网格。
+        再对指定骨骼及其子骨骼写入 Orientation Strength 和 Position Strength。数值越高，刚体变换越接近当前动画姿态。
+        官方文档中的 Physical Animation Profile 完成同一操作。
+      </p>
+      <figure>
+        <img src="guide-assets/bp-ragdoll-physanim.png" alt="BeginPlay 中绑定 Physical Animation 并开启物理模拟的蓝图" />
+        <figcaption>
+          BeginPlay 顺序为：Set Skeletal Mesh Component，Apply Physical Animation Settings Below，Set All Bodies Below Simulate Physics。
+          图中 Orientation Strength 约为 7000，Position Strength 约为 10000。该数值下，刚体对动画姿态的跟踪误差小。教程在摔倒更新中还会按速度提高弹簧，使高速碰撞后角速度更快衰减，便于过渡到起身动画。
+          持续物理驱动可保留同一组节点，但强度应降到约 80 至 300。强度过高时，外力引起的姿态变化过小，不符合该玩法。
+        </figcaption>
+      </figure>
+
+      <h3>RagdollStart：关闭移动组件，启用网格物理</h3>
+      <p>
+        教程进入布娃娃时需要同时改移动和碰撞，否则胶囊体、输入和模拟刚体会同时作用于角色。顺序为：修改 Movement Mode，避免输入继续移动胶囊；关闭或忽略胶囊碰撞，避免胶囊与网格刚体互相阻挡；将网格 Object Type 设为 Physics Body，Collision Enabled 设为 Query and Physics；从 pelvis 启用 Simulate Physics；Physics Blend Weight 设为 1，网格变换完全由物理输出；设置布尔变量，供动画蓝图切换状态。
+      </p>
+      <figure>
+        <img src="guide-assets/bp-enable-ragdoll.png" alt="Enable Ragdoll：关闭移动并把相机绑到骨盆" />
+        <figcaption>
+          Character Movement 设为 None。胶囊对 Pawn 和 Camera 通道设为 Ignore。Camera Boom 附加到 pelvis，使摄像机跟随模拟中的网格。
+          写实摔倒需要这一次状态切换。持续物理驱动不使用「进入布娃娃」：BeginPlay 即启用模拟并保持启用。
+        </figcaption>
+      </figure>
+
+      <h3>每帧更新：同步 Actor 位置，并按速度调整弹簧</h3>
+      <p>
+        启用模拟后，网格刚体与胶囊体分离，Actor 仍停在原处，摄像机会落后。教程每帧读取 pelvis 插槽位置，写入 Actor Location；向下 Line Trace 检测地面，着地时提高胶囊，避免胶囊下端进入地面。同时用 pelvis 旋转判断朝向，用于选择正面或背面起身动画。
+      </p>
+      <figure>
+        <img src="guide-assets/bp-set-actor-location.png" alt="Set Actor Location During Ragdoll 蓝图" />
+        <figcaption>
+          函数名为 Set Actor Location During Ragdoll。第一条执行线：Get Socket Location(pelvis) 写入 TargetRagdollLocation。第二条：用 pelvis Pitch 判断是否仰面，生成仅含 Yaw 的旋转。第三条：向下检测，着地时修正胶囊高度。
+          教程另取 Root 线速度大小，映射到电机弹簧：速度越大，弹簧越硬，碰撞后角速度衰减更快，便于接到起身动画。持续物理驱动需要碰撞后仍能翻滚，因此不按速度提高弹簧。
+        </figcaption>
+      </figure>
+
+      <h3>起身：保存姿态后播放 Montage，并关闭模拟</h3>
+      <p>
+        退出前调用 Save Pose Snapshot。动画蓝图中：模拟期间播放挣扎动画；退出时先使用该快照，再过渡到正面或背面 Get Up Montage。然后关闭 Simulate Physics，网格改回 Pawn、Query Only，恢复胶囊碰撞，恢复 Character Movement。
+        起身变换来自动画资产，不是刚体在力矩作用下自行直立。人类一败涂地的起身通过对胸部或髋部施加向上的力，并提高电机强度来完成，不播放 Get Up Montage。
+      </p>
+      <div class="callout t">
+        教程中需要保留的部分：Physics Asset、约束三轴、Physical Animation 绑定网格、从指定骨骼向下启用模拟。打开和关闭模拟、胶囊跟随网格、姿态快照和起身 Montage 用于写实第三人称，不用于持续物理驱动。
+      </div>
+    </section>
+
+    <section id="comedy">
+      <h2>三、持续物理驱动与教程的差别</h2>
+      <p>
+        先记住这一句：教程把角色分成两种状态；持续物理驱动只有一种状态。
+      </p>
+      <div class="pair">
+        <div class="callout t">
+          <span class="lab">教程</span>
+          平时：Character Movement 移动胶囊，网格播走跑动画，物理关闭。摔倒：打开 Simulate Physics。起身：关闭物理，播 Montage，再交回胶囊移动。
+        </div>
+        <div class="callout o">
+          <span class="lab">持续物理驱动</span>
+          进游戏就打开 Simulate Physics，之后不再关掉。走路、站立、摔倒、起身、抓取都在同一条刚体链上完成。没有「进入布娃娃 / 退出布娃娃」。
+        </div>
+      </div>
+      <p>
+        只改教程里的弹簧数字，得不到右边这一套。下面按「谁在控制角色」拆开写。本节用到的几个词先说明含义。
+      </p>
+      <ul>
+        <li><strong>胶囊体：</strong>Character 自带的碰撞柱。教程用它走路、上台阶、贴地。</li>
+        <li><strong>电机：</strong>约束上的 Angular Drive，或 Physical Animation 写入的 Orientation Strength。它按目标旋转施加力矩，把关节拉回去。数值高，姿态几乎等于动画；数值低，碰撞能明显改变姿态。</li>
+        <li><strong>运动学（Kinematic）：</strong>该物体不参与力的积分。你指定它的位置和旋转，它不会被重力或碰撞推倒。用来当「站直目标」，不是当角色本体。</li>
+        <li><strong>Pitch / Roll / Yaw：</strong>Pitch 是前后倾，Roll 是左右倾，Yaw 是水平转向。站直需要限制前两个，只保留转向。</li>
+        <li><strong>Physics Constraint：</strong>每帧维持两个刚体之间的相对位置或旋转。抓取用它，而不是播抓取动画。</li>
+      </ul>
+
+      <h3>1. 物理什么时候开</h3>
+      <p>
+        只有 <code>Simulate Physics</code> 为 true 时，Physics Asset 上的刚体才会被求解。教程平时把它关掉，所以走路阶段刚体不算碰撞、也不受力。你按 WASD 时，引擎直接改胶囊位置，网格跟着走，轨迹干净、没有晃。
+      </p>
+      <p>
+        《动物派对》要的就是那种晃：按前进之后，力先加在骨盆（pelvis）上，约束再把胸、腿、胳膊带起来。四肢不会同一帧转到同一个角速度，身体会前倾、侧倾。这不是 bug，是这条控制链的结果。要做到这一点，走路阶段也必须在模拟。如果只在摔倒时打开模拟，走路仍是胶囊在精确平移，画面上仍是教程。
+      </p>
+      <div class="pair">
+        <div class="callout t">
+          <span class="lab">教程</span>
+          按 F 或 overlap 才调用 RagdollStart。未按之前，物理不参与位移。
+        </div>
+        <div class="callout o">
+          <span class="lab">持续物理驱动</span>
+          BeginPlay 从 pelvis 向下启用模拟，Physics Blend Weight 设为 1，之后保持开启。
+        </div>
+      </div>
+
+      <h3>2. 怎样站着不倒</h3>
+      <p>
+        角色的质量主要在躯干。游戏一帧大约 1/30 或 1/60 秒。在这个步长下，只靠脚和地面的接触力，不够把躯干稳定撑住，角色会很快倒下。所以不能指望「腿部刚体自己站稳」。
+      </p>
+      <p>
+        做法是在 pelvis 旁边放一个看不见的运动学物体，当作直立参考体。你每帧指定它的旋转：Pitch 和 Roll 锁死（不让它前后、左右倒），只改 Yaw（转向）。髋和胸的电机以很低的强度跟踪这个旋转，相当于给躯干一个「尽量别倒」的力矩。另外对 pelvis 加一个较小的向上的力，部分抵消重力。Rain World、Gang Beasts、Totally Accurate Battle Simulator 用的是同一类参考体。
+      </p>
+      <p>
+        电机必须弱。太强就会把身体钉在直立姿态上，被撞也几乎不倒，不像《动物派对》。倒下的判定也很直接：pelvis 的「头顶方向」和世界向上（Z）夹角太大，或者质心在地面上的投影离开双脚太远，就把跟踪强度降到接近零。强度接近零之后，重力与碰撞重新主导，角色倒下。
+      </p>
+      <figure>
+        <img src="guide-assets/upright-support.png" alt="运动学直立参考体：站立时低强度跟踪，倒下后关掉跟踪" />
+        <figcaption>
+          左：站立。参考体不倒，髋和胸弱跟踪它，pelvis 有一点向上的力。右：判定倒下后，跟踪强度接近零，身体按重力和碰撞运动。起身时把参考体移到 pelvis 上方，对胸或髋加向上的力，再把电机强度提高一点。全程不关 Simulate Physics，也不播 Get Up Montage。
+        </figcaption>
+      </figure>
+
+      <h3>3. 怎样走路</h3>
+      <p>
+        教程走路：输入进 Character Movement，胶囊平移，网格播走跑。Root Motion 若开启，则由动画剪辑写出根骨骼位移。这两种都是直接改变换，不是对刚体积分。
+      </p>
+      <p>
+        持续物理驱动走路：读取 WASD 方向，对 pelvis 调用 <code>AddForce</code>。力改变骨盆速度，约束把力传到四肢，整条链移动。直立参考体的 Yaw 转到输入方向，角色会转向。可以再给 pelvis 一个与前进同向的力矩，让身体略前倾。
+      </p>
+      <p>
+        走跑动画可以继续播，但只当作腿部电机的目标旋转，让腿看起来在迈步。必须关掉 Root Motion，否则动画会把根位置写死，刚体只是被拖着走。腿部电机也要弱：撞到矮障碍时，碰撞冲量要能打断迈步旋转。脚刚体接触地面，但直立主要仍靠上一节的参考体，不是靠脚把全身撑住。
+      </p>
+      <div class="pair">
+        <div class="callout t">
+          <span class="lab">教程</span>
+          移动胶囊。碰到矮碰撞体时，胶囊通常直接跨过或被挡住，身体姿态仍是走跑动画。
+        </div>
+        <div class="callout o">
+          <span class="lab">持续物理驱动</span>
+          对 pelvis 加力。碰到矮碰撞体时，小腿会先撞上，身体可以绊住、前倾。
+        </div>
+      </div>
+
+      <h3>4. 怎样起身</h3>
+      <p>
+        教程起身是状态切换：Save Pose Snapshot，播正面或背面 Get Up Montage，然后 <code>Set All Bodies Below Simulate Physics</code> 设为 false，恢复胶囊和 Character Movement。起身轨迹写在动画资产里。
+      </p>
+      <p>
+        持续物理驱动不切换状态。倒下后电机已经接近零。玩家按起身时，先确认胸或背已经在地面上停了一小段时间（空中立刻加力会在没有支撑时乱转）。然后把参考体放到 pelvis 上方，对 chest 或 pelvis 加世界向上的力，并把电机强度从接近零提高到仍然偏低的站立值。角色可能起失败，再次倒下。成功之后仍可被冲量推倒，因为电机没有回到教程截图里的 7000。
+      </p>
+
+      <h3>5. 怎样抓东西；移动平台为什么不能 overlap 摔倒</h3>
+      <p>
+        两个刚体默认只在碰到的那几帧交换冲量，分开之后不再互拉。抓取需要「抓住之后一直连着」：手与目标重叠且玩家按住抓取时，创建 Physics Constraint。Linear 设为 Locked，手和物体的相对位置被锁住；Angular 可设为 Limited，允许一点转动。松开按键就销毁这条约束。
+      </p>
+      <p>
+        抓取期间只把手臂电机调高，让手能对准并抓住。躯干电机保持低，所以会出现：手相对箱子固定，身体其余部分仍被冲量甩动。不播放抓取 Montage。
+      </p>
+      <figure>
+        <img src="guide-assets/grab-constraint.png" alt="手刚体与物体刚体之间创建 Physics Constraint" />
+        <figcaption>
+          抓取不是动画事件。系统在手刚体和目标刚体之间加一条约束。松手后约束删除，两个刚体重新独立。
+        </figcaption>
+      </figure>
+      <p>
+        教程里的移动平台在 overlap 时调用 RagdollStart，目的是测试「碰到就摔倒」。平台并没有把速度传给角色刚体。持续物理驱动里平台自己移动（运动学或物理均可）。角色站在上面：脚与平台摩擦，把速度传给刚体。被平台撞到：碰撞冲量改变速度。抓住平台边缘：用手上那条 Constraint，不要再调用摔倒函数。
+      </p>
+
+      <h3>对照表</h3>
+      <table>
+        <thead>
+          <tr><th>看哪一项</th><th>教程</th><th>持续物理驱动</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>平时谁在移动角色</td>
+            <td>Character Movement 移动胶囊，网格播动画</td>
+            <td>对 pelvis 施加力，约束带动全身</td>
+          </tr>
+          <tr>
+            <td>Simulate Physics 何时为 true</td>
+            <td>按 F 或受击之后，起身再关掉</td>
+            <td>BeginPlay 打开，一直保持</td>
+          </tr>
+          <tr>
+            <td>怎样保持直立</td>
+            <td>不需要。胶囊本身不会倒</td>
+            <td>运动学参考体锁 Pitch/Roll；髋胸弱跟踪；倒下则把跟踪关掉</td>
+          </tr>
+          <tr>
+            <td>电机强度</td>
+            <td>摔倒阶段约 7000–10000，还可随速度再提高</td>
+            <td>站立约 80–300；倒下接近 0；起身略提高，仍远低于教程</td>
+          </tr>
+          <tr>
+            <td>起身</td>
+            <td>姿态快照 + Get Up Montage，然后关模拟</td>
+            <td>对胸或髋加向上的力，提高电机；不关模拟</td>
+          </tr>
+          <tr>
+            <td>抓取</td>
+            <td>没有</td>
+            <td>手与物体之间创建 Physics Constraint，松手销毁</td>
+          </tr>
+          <tr>
+            <td>移动平台</td>
+            <td>overlap 时调用摔倒，用来测试 RagdollStart</td>
+            <td>摩擦传速度，碰撞传冲量，抓边用约束</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout note">
+        第四节按这个结构做，不要按视频顺序做。视频顺序是：先做第三人称走路，再做按 F 摔倒。按那条路做完，平时仍然是胶囊在走。
+      </div>
+    </section>
+
+    <section id="steps">
+      <h2>四、实现步骤</h2>
+      <p>
+        按《动物派对》的控制结构实现：网格持续模拟，输入变为力、冲量和约束，动画不写出 Actor 位移。不按教程视频顺序做。下面每一步都包含原理、做法和验收。
+      </p>
+
+      <ol class="steps">
+        <li>
+          <p><h3>第一步：创建刚体数量更少、角限位更大的 Physics Asset。</h3></p>
+          <p>
+            <strong>原理。</strong>
+            物理求解的对象是刚体和约束，不是渲染网格。刚体数量决定自由度：刚体越多，运动越接近人体，低强度电机也越难维持可玩的直立。约束的 Limited 角度决定肢体最大转角；按人体收紧时，电机再弱也转不到大弯曲。Linear 未锁定时刚体会滑开、身体分离。质量分布决定冲量如何变成角速度：躯干重、四肢轻，击中头或四肢时旋转更明显。Restitution 和 Friction 决定碰撞后的分离与滑动。自碰撞决定肢体是否穿透。这些参数会被后面所有步骤用到。
+            <br><br>
+            <strong>做法。</strong>
+            新建 Physics Asset，不以 <code>PA_ufn</code> 为最终资产。刚体保留 head、chest、abdomen、左右 upperarm、lowerarm、hand、thigh、calf，约十五至十八个。形状使用胶囊或球。Linear Motion 全部 Locked，避免刚体分离。Angular Motion 使用 Limited，角度上限大于人体默认值，并启用 Soft Constraint，到达限位时用弹簧而不是硬约束。Angular Drive 可启用，弹簧刚度低于教程。质量：躯干大于四肢，头部可略高于颈部。Restitution 高于默认写实设置，Friction 取中低。自碰撞仅在 hand-head、hand-torso、thigh-thigh 等会穿透的配对上 Enable Collision。全部开启会增加求解冲突。
+            <strong>验收。</strong>在 Physics Asset 编辑器中 Simulate，对刚体施加外力后，各段保持约束连接，相邻肢体在已启用碰撞的配对上不穿透。
+          </p>
+        </li>
+        <li>
+          <p><h3>第二步：BeginPlay 启用模拟，不编写进入和退出布娃娃。</h3></p>
+          <p>
+            <strong>原理。</strong>
+            Character Movement 每帧写出胶囊变换，网格跟随胶囊。只有 Simulate Physics 为 true 时刚体才参与积分。若平时关闭模拟、仅按键后打开，未按键时位移仍由胶囊和动画决定，结构与教程相同。Blend Weight 不为 1 时动画仍混入最终姿态，力和冲量无法单独决定位移。Physical Animation 强度过高时，外力几乎看不出效果。胶囊保持阻挡会与网格刚体互相解算。
+            <br><br>
+            <strong>做法。</strong>
+            可使用 Pawn。若暂用 Character，不以 Character Movement 产生位移。BeginPlay：Physical Animation 绑定 Mesh；从 pelvis 执行 Set All Bodies Below Simulate Physics 为 true；Physics Blend Weight 为 1。Orientation Strength 和 Position Strength 先取 80 至 300，不使用截图中的 7000 和 10000。网格 Object Type 为 Physics Body，Collision Enabled 为 Query and Physics。胶囊碰撞关闭，或缩小后仅作后续参考体，不作为主碰撞。
+            每帧将 Actor 根位置设为 pelvis 或 chest 位置，摄像机跟随该根。不需要教程中完整的地面 Trace 来维持站立胶囊；允许角色躺在地面上，只需避免 pelvis 持续进入地面几何。
+            <strong>验收。</strong>进入 PIE 后无需按键，网格已在模拟。对角色施加冲量后会倾倒。
+          </p>
+        </li>
+        <li>
+          <p><h3>第三步：添加运动学直立参考体，用低强度电机保持直立。</h3></p>
+          <p>
+            <strong>原理。</strong>
+            质心通常在躯干。游戏固定时间步下，脚与地面的接触力不足以稳定抵消躯干倾覆力矩。电机只能把关节拉向某个旋转；若该目标自己会倾倒，整条链仍会倒下。运动学物体不参与力积分，可锁定 Pitch、Roll，只留 Yaw，从而给出不倾倒的旋转目标。髋和胸低强度跟踪该目标。强度降到接近零后，重力与碰撞重新主导，角色倾倒。
+            <br><br>
+            <strong>做法。</strong>
+            在 pelvis 位置创建无显示的组件，Mobility 为 Movable，模拟类型为 Kinematic。锁定 Pitch、Roll，保留 Yaw，Yaw 跟随输入方向或摄像机。髋和胸用 Physical Animation 或 Physics Control 以低强度跟踪该旋转。对 pelvis 施加较小的世界 Z 方向力，部分抵消重力。当 pelvis 上方向量与世界 Z 夹角超过阈值，或质心水平投影离开双脚过远，将跟踪强度降到接近零。
+            <strong>验收。</strong>无外力时可保持直立一段时间。侧向冲量后夹角超过阈值，跟踪强度下降，角色倾倒。
+          </p>
+        </li>
+        <li>
+          <p><h3>第四步：对 pelvis 施加力产生位移。动画只更新腿部目标旋转。</h3></p>
+          <p>
+            <strong>原理。</strong>
+            Character Movement 和 Root Motion 直接改 Actor 或根骨骼变换。网格即使在模拟，根被改写后，刚体链只是被拖着走，加速度、前倾、被挡时的倾覆都不会从力积分里出现。对 pelvis 加水平力，冲量进入速度，再经约束传到四肢，位移由求解器给出。动画只作为腿的电机目标时不得开启 Root Motion。电机必须低到碰撞冲量能打断迈步旋转。
+            <br><br>
+            <strong>做法。</strong>
+            读取输入方向，对 pelvis 调用 AddForce，力的大小应使速度逐步增加。将直立参考体的 Yaw 转到输入方向。可对 pelvis 施加与加速度同向的力矩，产生前倾。动画蓝图可播放行走循环作为电机目标，禁用 Root Motion。电机强度应低到碰撞后步伐旋转被冲量改变。
+            <strong>验收。</strong>WASD 使整条刚体链移动。碰到矮碰撞体时，腿部会被阻挡，不会像胶囊体那样直接跨过。
+          </p>
+        </li>
+        <li>
+          <p><h3>第五步：倒下时降低电机强度。起身时施加向上的力并提高强度。</h3></p>
+          <p>
+            <strong>原理。</strong>
+            电机强度决定跟踪目标的强弱。倒下后强度仍高，角速度会被很快减掉，无法继续翻滚。教程此时关模拟并播 Montage。持续物理驱动不关模拟：倒下把强度降到接近零，运动回到重力和碰撞；起身对胸或髋加向上的力并提高强度。空中立刻提高强度会在无支撑时乱拧，所以要等胸或背与地面接触一段时间。
+            <br><br>
+            <strong>做法。</strong>
+            判定倒下后，将电机和参考体跟踪强度降到接近零。起身输入在胸或背与地面接触并持续一段时间后再响应，避免在空中提高强度。然后将参考体移到 pelvis 上方，对 chest 或 pelvis 施加世界 Z 方向的力，提高电机强度；对 calf 施加指向质心地面投影的力。不播放 Get Up Montage，不在此时关闭 Simulate Physics。
+            <strong>验收。</strong>起身过程中刚体与地面持续碰撞，可能失败。成功后电机强度仍低于教程截图中的数值，角色仍可被冲量推倒。
+          </p>
+        </li>
+        <li>
+          <p><h3>第六步：用手部 Physics Constraint 实现抓取。</h3></p>
+          <p>
+            <strong>原理。</strong>
+            两个刚体默认只在碰撞期间传冲量，分开后不再互施力。抓取需要接触期间持续传力：Physics Constraint 锁定手与目标的相对自由度，求解器每帧维持该关系。松手销毁约束。只提高手臂电机，是为了让手稳定抓住，躯干仍以低强度响应外力。教程平台 overlap 只切换摔倒，不传递平台速度；持续物理驱动里站立靠摩擦，撞击靠冲量，抓边靠该约束。
+            <br><br>
+            <strong>做法。</strong>
+            左右手各使用球形碰撞。按住抓取时，提高手臂电机强度，使前臂和手转向准星或角色前方。手与带可抓标签的物体重叠时，创建 Physics Constraint，Linear 为 Locked，Angular 可为 Limited。松开输入后销毁约束。抓取期间只提高手臂强度。移动平台不要在 overlap 时调用摔倒函数；平台自身移动，站立接触通过摩擦传递速度，撞击通过冲量传递，抓住边缘使用该约束。
+            <strong>验收。</strong>抓住箱子后，箱子随手运动；松开后约束消失。抓住移动平台边缘时，手部刚体相对平台固定，其余刚体仍可摆动。
+          </p>
+        </li>
+        <li>
+          <p><h3>第七步：击打用冲量；动力学可用后再换外观。</h3></p>
+          <p>
+            <strong>原理（击打）。</strong>
+            动物派对不切换固定受击动画。出拳冲量改变刚体速度，碰撞按接触法线、质量和相对速度分配动量。同一输入因双方位置、相对速度、接触部位（头、胸、腿的质量与转动惯量不同）、体力（电机更弱）而得到不同飞出结果。伤害盒播 Montage 会盖掉刚体速度。被击中后降低电机，回复力矩暂时减小，碰撞结果能保持更久。
+            <br><br>
+            <strong>原理（换外观）。</strong>
+            碰撞和质量在 Physics Asset 上。先换完整动画，电机会跟踪错误目标，难以判断是质量、约束还是动画在出错。简化网格上走、倒、抓、打成立后再换渲染网格。
+            <br><br>
+            <strong>做法。</strong>
+            出拳对前臂或手 AddImpulse，沿接触法线，大小乘相对速度；头、胸、腿用不同系数；体力降低冲量和电机。不播受击动画。前几步用简化网格验证后再换目标网格。联机的权威模拟与约束复制单独做。
+            <br><br>
+            <strong>验收。</strong>
+            击中头与击中腿角速度不同；换网格后行走、倾倒、抓取、起身仍成立。
+          </p>
+        </li>
+      </ol>
+      <div class="callout o">
+        完成第五步后，控制结构已不同于教程。完成第六步后，具备人类一败涂地所需的抓取。外观和击打放在最后。不要在 Game Animation Sample 的第三人称角色上仅降低 ragdoll 弹簧来实现该玩法。
+      </div>
+    </section>
+
+    <section id="art">
+      <h2>五、建模要求</h2>
+      <p>
+        外观可按常规角色流程制作：概念、剪影、高模、低模、UV、贴图。需要单独规定的是骨骼数量、关节位置、四肢截面和蒙皮检查项。渲染网格可以按角色完成；骨骼和刚体按可模拟的简化层级完成。
+      </p>
+      <p>
+        头部体积大于写实人体，四肢短，躯干截面大。四肢最细处仍须能容纳对应胶囊刚体。手使用连指形状或球形，最多增加拇指骨骼。服装与身体使用同一蒙皮，第一版不单独模拟飘带、头发、围巾。脊柱使用两节。不绑定五至六节写实脊柱和全套手指。关节原点放在网格实际发生弯曲的位置，例如肩部位于躯干侧面凸起处，不使用人体肩关节坐标。绑定姿势使用上臂略低于水平的 A Pose。双臂完全平举时，大角度限位更容易使手部网格进入躯干。
+      </p>
+      <p>
+        蒙皮检查不限于走跑循环。需要检查：胸与腿接近、头与腋下接近、手臂大角度扭转、两腿交叉、俯卧、以及单手约束将角色吊起时，网格是否出现明显凹陷和穿插。关节两侧权重需要过渡，避免权重在单根骨骼上过硬导致网格折叠。面部权重集中在 head，避免 chest 变形影响到面部。
+      </p>
+      <p>
+        玩家看到的是 Skeletal Mesh。碰撞由 Physics Asset 中的刚体计算。渲染网格可以大于刚体，用于表现毛发和服装厚度。耳、尾、角若无对应刚体，会进入地面或其他角色。应先确定刚体体积，再制作覆盖这些体积的网格，而不是先完成写实网格再补碰撞。
+      </p>
+      <div class="callout note">
+        给美术的说明：按角色流程出模型和贴图。骨骼使用约十五至十八根，四肢截面能包住胶囊，手为连指或球形。不要使用人体解剖骨骼和 Unreal 标准 Mannequin。蒙皮按大角度扭转、俯卧、单手吊起时网格仍连续来验收。Physics Asset 由程序制作，建模时为每段肢体预留胶囊体积。
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    蓝图截图来自与教程相同结构的 Unreal 节点：Physical Animation 的 BeginPlay、进入 Ragdoll 时关闭移动、Set Actor Location During Ragdoll。示意图对照人体 Physics Asset 与简化 Physics Asset、约束三轴、直立参考体和抓取约束。原理依据 Unreal 的 Physics Asset、Constraint、Physical Animation，以及人类一败涂地、动物派对、Gang Beasts 的持续物理驱动做法。
+  </footer>
+</body>
+</html>

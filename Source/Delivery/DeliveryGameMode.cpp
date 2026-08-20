@@ -5,18 +5,20 @@
 #include "DeliveryPlayerController.h"
 #include "UObject/ConstructorHelpers.h"
 
+
 ADeliveryGameMode::ADeliveryGameMode()
 {
-	DefaultPawnClass = ADeliveryCharacter::StaticClass();
+	// 创建 Pawn 和 PlayerController
+	DefaultPawnClass = ADeliveryCharacter::StaticClass();																		// 兜底从C++创建
 	PlayerControllerClass = ADeliveryPlayerController::StaticClass();
 
-	static ConstructorHelpers::FClassFinder<APawn> PawnBP(TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter"));
+	static ConstructorHelpers::FClassFinder<APawn> PawnBP(TEXT("/Game/Blueprint/Character/BP_DeliveryMan"));					// 正常从蓝图创建
 	if (PawnBP.Succeeded())
 	{
 		DefaultPawnClass = PawnBP.Class;
 	}
 
-	static ConstructorHelpers::FClassFinder<APlayerController> ControllerBP(TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonPlayerController"));
+	static ConstructorHelpers::FClassFinder<APlayerController> ControllerBP(TEXT("/Game/Blueprint/PlayerController/BP_DeliveryManPC"));
 	if (ControllerBP.Succeeded())
 	{
 		PlayerControllerClass = ControllerBP.Class;
