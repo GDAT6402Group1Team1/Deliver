@@ -7,54 +7,51 @@
 #include "DeliveryCharacter.generated.h"
 
 class UCapsuleComponent;
+class UDeliveryActiveRagdollComponent;
 class USkeletalMeshComponent;
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 struct FInputActionValue;
 
-/**
- * Camera-focused pawn with no CharacterMovement.
- * Locomotion is expected to be driven later by physics / physical animation.
- */
+/** 第三人称Pawn：胶囊跟镜头，身体由主动滑稽布娃娃驱动。 */
 UCLASS()
 class ADeliveryCharacter : public APawn
 {
 	GENERATED_BODY()
 
-	// 胶囊体
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCapsuleComponent> CapsuleComponent;
 
-	// 网格体
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USkeletalMeshComponent> Mesh;
 
-	// 第三视角弹簧臂
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USpringArmComponent> CameraBoom;
 
-	// 第三视角摄像机
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCameraComponent> FollowCamera;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDeliveryActiveRagdollComponent> ActiveRagdoll;
+
 protected:
 
-	// TODO：跳跃
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> JumpAction;
 
-	// TODO：移动
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> MoveAction;
 
-	// 视角移动
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> LookAction;
 
-	// 鼠标移动
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> MouseLookAction;
+
+	/** 跳跃时给盆骨的向上速度（厘米/秒）。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll", meta=(ClampMin="0.0"))
+	float JumpSpeed = 700.0f;
 
 public:
 
@@ -64,7 +61,9 @@ protected:
 
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
+	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
+	void JumpStarted(const FInputActionValue& Value);
 
 public:
 
@@ -84,4 +83,5 @@ public:
 	FORCEINLINE USkeletalMeshComponent* GetMesh() const { return Mesh; }
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+	FORCEINLINE UDeliveryActiveRagdollComponent* GetActiveRagdoll() const { return ActiveRagdoll; }
 };

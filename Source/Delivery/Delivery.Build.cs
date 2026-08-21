@@ -13,7 +13,8 @@ public class Delivery : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
-			"EnhancedInput"
+			"EnhancedInput",
+			"PhysicsControl"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

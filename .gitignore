@@ -104,3 +104,7 @@ DerivedDataCache/*
 Thumbs.db
 Desktop.ini
 .DS_Store
+.cursor/mcp.json
+Config/DefaultEditorPerProjectUserSettings.ini
+Config/DefaultEditorPerProjectUserSettings.ini
+Delivery.uproject
