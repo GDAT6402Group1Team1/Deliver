@@ -6,7 +6,9 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/GameStateBase.h"
 #include "GameFramework/Pawn.h"
+#include "Net/UnrealNetwork.h"
 #include "PhysicsControlComponent.h"
 #include "PhysicsControlData.h"
 #include "PhysicsEngine/BodyInstance.h"
@@ -41,12 +43,21 @@ UDeliveryActiveRagdollComponent::UDeliveryActiveRagdollComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
+	SetIsReplicatedByDefault(true);
 
 	PostPhysicsTickFunction.bCanEverTick = true;
 	PostPhysicsTickFunction.bStartWithTickEnabled = false;
 	PostPhysicsTickFunction.TickGroup = TG_PostPhysics;
 
 	PhysicsControl = CreateDefaultSubobject<UPhysicsControlComponent>(TEXT("PhysicsControl"));
+}
+
+void UDeliveryActiveRagdollComponent::GetLifetimeReplicatedProps(
+	TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(UDeliveryActiveRagdollComponent, ReplicatedControlMode);
+	DOREPLIFETIME(UDeliveryActiveRagdollComponent, ReplicatedSnapshot);
 }
 
 void UDeliveryActiveRagdollComponent::RegisterComponentTickFunctions(bool bRegister)
@@ -73,6 +84,10 @@ void UDeliveryActiveRagdollComponent::BeginPlay()
 
 	if (bStartOnBeginPlay)
 	{
+		if (GetOwner() && GetOwner()->HasAuthority())
+		{
+			ReplicatedControlMode = EDeliveryRagdollControlMode::Active;
+		}
 		StartRagdoll();
 	}
 }
@@ -89,9 +104,35 @@ void UDeliveryActiveRagdollComponent::TickComponent(
 
 	if (ThisTickFunction == &PostPhysicsTickFunction)
 	{
-		SyncOwnerToPelvis(DeltaTime);
+		if (GetOwner()->HasAuthority())
+		{
+			SnapshotAccumulator += DeltaTime;
+			if (SnapshotAccumulator >= 1.0f / FMath::Max(NetworkSnapshotRate, 1.0f))
+			{
+				SnapshotAccumulator = 0.0f;
+				CaptureNetworkSnapshot();
+			}
+		}
+
+		if (GetOwner()->HasAuthority() || GetOwner()->GetLocalRole() == ROLE_AutonomousProxy)
+		{
+			SyncOwnerToPelvis(DeltaTime);
+		}
+		return;
 	}
-	else if (!bIsLimp)
+
+	if (GetOwner()->GetLocalRole() == ROLE_SimulatedProxy)
+	{
+		ApplyNetworkSnapshot(DeltaTime);
+		return;
+	}
+
+	if (GetOwner()->GetLocalRole() == ROLE_AutonomousProxy)
+	{
+		ApplyNetworkSnapshot(DeltaTime);
+	}
+
+	if (!bIsLimp)
 	{
 		UpdateControlTargets(DeltaTime);
 	}
@@ -173,8 +214,8 @@ void UDeliveryActiveRagdollComponent::ConfigurePhysics()
 	Mesh->SetAngularDamping(RigidBodyAngularDamping);
 	Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 
-	Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Capsule->SetSimulatePhysics(false);
+	Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Capsule->SetEnableGravity(false);
 
 	Mesh->RecreatePhysicsState();
@@ -317,7 +358,9 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 	PhysicsControl->SetControlTargetPositionAndOrientation(
 		RightFoot.Control, RightFoot.Target, RightFoot.TargetRotation.Rotator(),
 		0.0f, true, true, true, false);
-	PhysicsControl->SetControlsInSetEnabled(FeetSet, StartupPlantRemaining > 0.0f);
+	const bool bEnableFeet = StartupPlantRemaining > 0.0f;
+	PhysicsControl->SetControlEnabled(LeftFoot.Control, bEnableFeet, true, false);
+	PhysicsControl->SetControlEnabled(RightFoot.Control, bEnableFeet, true, false);
 	return true;
 }
 
@@ -384,8 +427,26 @@ void UDeliveryActiveRagdollComponent::CacheStandingState()
 
 void UDeliveryActiveRagdollComponent::StartRagdoll()
 {
+	AActor* Owner = GetOwner();
+	if (Owner)
+	{
+		if (Owner->HasAuthority())
+		{
+			ReplicatedControlMode = EDeliveryRagdollControlMode::Active;
+			Owner->ForceNetUpdate();
+		}
+	}
+
 	if (bIsActive)
 	{
+		bIsLimp = false;
+		if (PhysicsControl)
+		{
+			const bool bRemoteProxy = Owner && Owner->GetLocalRole() == ROLE_SimulatedProxy;
+			PhysicsControl->SetControlsInSetEnabled(TEXT("All"), !bRemoteProxy);
+			PhysicsControl->SetControlEnabled(LeftFoot.Control, false, true, false);
+			PhysicsControl->SetControlEnabled(RightFoot.Control, false, true, false);
+		}
 		return;
 	}
 
@@ -414,6 +475,11 @@ void UDeliveryActiveRagdollComponent::StartRagdoll()
 	SetComponentTickEnabled(true);
 	PostPhysicsTickFunction.SetTickFunctionEnable(true);
 	UpdateControlTargets(0.0f);
+	if (Owner && Owner->GetLocalRole() == ROLE_SimulatedProxy)
+	{
+		// 远端身体由服务端快照驱动，不再运行本地肌肉目标。
+		PhysicsControl->SetControlsInSetEnabled(TEXT("All"), false);
+	}
 
 	UE_LOG(LogDelivery, Log, TEXT("%s: Active ragdoll started with %d bodies."),
 		*GetNameSafe(GetOwner()), Mesh->GetPhysicsAsset()->SkeletalBodySetups.Num());
@@ -421,11 +487,25 @@ void UDeliveryActiveRagdollComponent::StartRagdoll()
 
 void UDeliveryActiveRagdollComponent::StopRagdoll()
 {
+	AActor* Owner = GetOwner();
+	if (Owner)
+	{
+		if (Owner->HasAuthority())
+		{
+			ReplicatedControlMode = EDeliveryRagdollControlMode::Disabled;
+			Owner->ForceNetUpdate();
+		}
+	}
+
 	DestroyControls();
 	bIsActive = false;
 	bIsLimp = false;
 	MoveInput = FVector2D::ZeroVector;
 	StartupPlantRemaining = 0.0f;
+	SnapshotAccumulator = 0.0f;
+	bHasNetworkSnapshot = false;
+	PreviousSnapshot = FDeliveryRagdollSnapshot();
+	TargetSnapshot = FDeliveryRagdollSnapshot();
 	SetComponentTickEnabled(false);
 	PostPhysicsTickFunction.SetTickFunctionEnable(false);
 
@@ -445,6 +525,25 @@ void UDeliveryActiveRagdollComponent::StopRagdoll()
 
 void UDeliveryActiveRagdollComponent::SetLimp(bool bLimp)
 {
+	AActor* Owner = GetOwner();
+	const EDeliveryRagdollControlMode NewMode = bLimp
+		? EDeliveryRagdollControlMode::Limp
+		: EDeliveryRagdollControlMode::Active;
+	if (Owner)
+	{
+		if (Owner->HasAuthority())
+		{
+			ReplicatedControlMode = NewMode;
+			Owner->ForceNetUpdate();
+		}
+	}
+
+	if (!bIsActive && !bLimp)
+	{
+		StartRagdoll();
+		return;
+	}
+
 	bIsLimp = bLimp;
 	if (bLimp)
 	{
@@ -455,7 +554,12 @@ void UDeliveryActiveRagdollComponent::SetLimp(bool bLimp)
 		PhysicsControl->SetControlsInSetEnabled(TEXT("All"), !bLimp);
 		if (!bLimp)
 		{
-			PhysicsControl->SetControlsInSetEnabled(FeetSet, false);
+			PhysicsControl->SetControlEnabled(LeftFoot.Control, false, true, false);
+			PhysicsControl->SetControlEnabled(RightFoot.Control, false, true, false);
+			if (Owner && Owner->GetLocalRole() == ROLE_SimulatedProxy)
+			{
+				PhysicsControl->SetControlsInSetEnabled(TEXT("All"), false);
+			}
 		}
 	}
 }
@@ -464,6 +568,10 @@ void UDeliveryActiveRagdollComponent::SetMoveInput(FVector2D RightForward)
 {
 	MoveInput.X = FMath::Clamp(RightForward.X, -1.0f, 1.0f);
 	MoveInput.Y = FMath::Clamp(RightForward.Y, -1.0f, 1.0f);
+	if (GetOwner() && GetOwner()->HasAuthority() && GetWorld())
+	{
+		LastMoveInputTime = GetWorld()->GetTimeSeconds();
+	}
 }
 
 void UDeliveryActiveRagdollComponent::AddImpulse(FVector Impulse, bool bVelocityChange)
@@ -500,6 +608,17 @@ float UDeliveryActiveRagdollComponent::GetAimYaw() const
 
 void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 {
+	if (GetOwner() && GetOwner()->HasAuthority() && GetOwner()->GetLocalRole() == ROLE_Authority)
+	{
+		const APawn* Pawn = Cast<APawn>(GetOwner());
+		if (Pawn && !Pawn->IsLocallyControlled() && GetWorld()
+			&& GetWorld()->GetTimeSeconds() - LastMoveInputTime > ServerInputTimeout)
+		{
+			// 高频移动 RPC 允许丢包，超时归零可避免松键包丢失后继续移动。
+			MoveInput = FVector2D::ZeroVector;
+		}
+	}
+
 	const FVector Wish = GetWishDir();
 	const FVector EffectiveWish = StartupPlantRemaining > 0.0f ? FVector::ZeroVector : Wish;
 	UpdatePelvisTarget(DeltaTime, EffectiveWish);
@@ -626,7 +745,8 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 		StartupPlantRemaining = FMath::Max(0.0f, StartupPlantRemaining - DeltaTime);
 		if (StartupPlantRemaining <= 0.0f)
 		{
-			PhysicsControl->SetControlsInSetEnabled(FeetSet, false);
+			PhysicsControl->SetControlEnabled(LeftFoot.Control, false, true, false);
+			PhysicsControl->SetControlEnabled(RightFoot.Control, false, true, false);
 		}
 		return;
 	}
@@ -812,4 +932,152 @@ void UDeliveryActiveRagdollComponent::SyncOwnerToPelvis(float DeltaTime)
 	const FVector SmoothedLocation = FMath::VInterpTo(
 		Capsule->GetComponentLocation(), Location, DeltaTime, CameraSmoothingSpeed);
 	Capsule->SetWorldLocationAndRotation(SmoothedLocation, FRotator(0.0f, GetAimYaw(), 0.0f));
+}
+
+void UDeliveryActiveRagdollComponent::OnRep_ControlMode()
+{
+	switch (ReplicatedControlMode)
+	{
+	case EDeliveryRagdollControlMode::Active:
+		StartRagdoll();
+		break;
+	case EDeliveryRagdollControlMode::Limp:
+		if (!bIsActive)
+		{
+			StartRagdoll();
+		}
+		SetLimp(true);
+		break;
+	default:
+		StopRagdoll();
+		break;
+	}
+}
+
+void UDeliveryActiveRagdollComponent::CaptureNetworkSnapshot()
+{
+	if (!Mesh || !GetWorld())
+	{
+		return;
+	}
+
+	++ReplicatedSnapshot.Sequence;
+	if (const AGameStateBase* GameState = GetWorld()->GetGameState())
+	{
+		ReplicatedSnapshot.ServerTime = GameState->GetServerWorldTimeSeconds();
+	}
+	else
+	{
+		ReplicatedSnapshot.ServerTime = GetWorld()->GetTimeSeconds();
+	}
+
+	const FName SnapshotBones[] = {
+		Bones.Hips, Bones.Spine, Bones.Head, Bones.LeftFoot, Bones.RightFoot
+	};
+	ReplicatedSnapshot.Bodies.Reset(UE_ARRAY_COUNT(SnapshotBones));
+	for (const FName Bone : SnapshotBones)
+	{
+		const FBodyInstance* Body = Mesh->GetBodyInstance(Bone);
+		if (!Body)
+		{
+			continue;
+		}
+
+		const FTransform Transform = Body->GetUnrealWorldTransform();
+		FDeliveryRagdollBodyState& State = ReplicatedSnapshot.Bodies.AddDefaulted_GetRef();
+		State.Bone = Bone;
+		State.Position = FVector_NetQuantize10(Transform.GetLocation());
+		State.Rotation = Transform.Rotator();
+		State.LinearVelocity = FVector_NetQuantize10(Body->GetUnrealWorldVelocity());
+		State.AngularVelocity = FVector_NetQuantize10(
+			Body->GetUnrealWorldAngularVelocityInRadians());
+	}
+
+	GetOwner()->ForceNetUpdate();
+}
+
+void UDeliveryActiveRagdollComponent::OnRep_RagdollSnapshot()
+{
+	PreviousSnapshot = bHasNetworkSnapshot ? TargetSnapshot : ReplicatedSnapshot;
+	TargetSnapshot = ReplicatedSnapshot;
+	SnapshotReceivedAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	bHasNetworkSnapshot = true;
+}
+
+void UDeliveryActiveRagdollComponent::ApplyNetworkSnapshot(float DeltaTime)
+{
+	if (!bHasNetworkSnapshot || !Mesh || TargetSnapshot.Bodies.IsEmpty() || !GetWorld())
+	{
+		return;
+	}
+
+	const bool bOwnerPrediction = GetOwner()->GetLocalRole() == ROLE_AutonomousProxy;
+	const float SnapshotInterval = 1.0f / FMath::Max(NetworkSnapshotRate, 1.0f);
+	const float TimeSinceReceive = GetWorld()->GetTimeSeconds() - SnapshotReceivedAt;
+	const float InterpolationAlpha = bOwnerPrediction
+		? 1.0f
+		: FMath::Clamp(TimeSinceReceive / SnapshotInterval, 0.0f, 1.0f);
+
+	float ExtrapolationTime = FMath::Max(0.0f, TimeSinceReceive - SnapshotInterval);
+	if (bOwnerPrediction)
+	{
+		if (const AGameStateBase* GameState = GetWorld()->GetGameState())
+		{
+			ExtrapolationTime = FMath::Max(
+				0.0f, GameState->GetServerWorldTimeSeconds() - TargetSnapshot.ServerTime);
+		}
+	}
+	ExtrapolationTime = FMath::Min(ExtrapolationTime, MaxSnapshotExtrapolation);
+
+	bool bHardCorrection = false;
+	if (bOwnerPrediction)
+	{
+		if (const FBodyInstance* PelvisBody = Mesh->GetBodyInstance(TargetSnapshot.Bodies[0].Bone))
+		{
+			const FVector TargetPelvis = FVector(TargetSnapshot.Bodies[0].Position)
+				+ FVector(TargetSnapshot.Bodies[0].LinearVelocity) * ExtrapolationTime;
+			bHardCorrection = FVector::Dist(
+				PelvisBody->GetUnrealWorldTransform().GetLocation(), TargetPelvis)
+				> OwnerHardCorrectionDistance;
+		}
+	}
+
+	const int32 BodyCount = FMath::Min(
+		PreviousSnapshot.Bodies.Num(), TargetSnapshot.Bodies.Num());
+	const float CorrectionAlpha = bOwnerPrediction && !bHardCorrection
+		? 1.0f - FMath::Exp(-OwnerCorrectionSpeed * DeltaTime)
+		: 1.0f;
+
+	for (int32 Index = 0; Index < BodyCount; ++Index)
+	{
+		const FDeliveryRagdollBodyState& Previous = PreviousSnapshot.Bodies[Index];
+		const FDeliveryRagdollBodyState& Target = TargetSnapshot.Bodies[Index];
+		FBodyInstance* Body = Mesh->GetBodyInstance(Target.Bone);
+		if (!Body)
+		{
+			continue;
+		}
+
+		FVector TargetPosition = FMath::Lerp(
+			FVector(Previous.Position), FVector(Target.Position), InterpolationAlpha);
+		TargetPosition += FVector(Target.LinearVelocity) * ExtrapolationTime;
+		const FQuat TargetRotation = FQuat::Slerp(
+			Previous.Rotation.Quaternion(), Target.Rotation.Quaternion(), InterpolationAlpha);
+
+		const FTransform Current = Body->GetUnrealWorldTransform();
+		const FVector CorrectedPosition = FMath::Lerp(
+			Current.GetLocation(), TargetPosition, CorrectionAlpha);
+		const FQuat CorrectedRotation = FQuat::Slerp(
+			Current.GetRotation(), TargetRotation, CorrectionAlpha).GetNormalized();
+		Body->SetBodyTransform(
+			FTransform(CorrectedRotation, CorrectedPosition), ETeleportType::TeleportPhysics);
+
+		const FVector LinearVelocity = FMath::Lerp(
+			Body->GetUnrealWorldVelocity(), FVector(Target.LinearVelocity), CorrectionAlpha);
+		const FVector AngularVelocity = FMath::Lerp(
+			Body->GetUnrealWorldAngularVelocityInRadians(),
+			FVector(Target.AngularVelocity), CorrectionAlpha);
+		Body->SetLinearVelocity(LinearVelocity, false);
+		Body->SetAngularVelocityInRadians(AngularVelocity, false);
+	}
 }

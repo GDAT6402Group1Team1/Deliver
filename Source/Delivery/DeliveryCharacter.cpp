@@ -17,6 +17,10 @@
 ADeliveryCharacter::ADeliveryCharacter()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	bReplicates = true;
+	SetReplicateMovement(true);
+	NetUpdateFrequency = 20.0f;
+	MinNetUpdateFrequency = 10.0f;
 
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
@@ -144,7 +148,13 @@ void ADeliveryCharacter::DoMove(float Right, float Forward)
 {
 	if (ActiveRagdoll)
 	{
-		ActiveRagdoll->SetMoveInput(FVector2D(Right, Forward));
+		const FVector2D Input(Right, Forward);
+		ActiveRagdoll->SetMoveInput(Input);
+		if (!HasAuthority())
+		{
+			// 本地先响应，服务端接收同一输入并运行权威物理。
+			ServerSetMoveInput(Input, Controller ? Controller->GetControlRotation().Yaw : 0.0f);
+		}
 	}
 }
 
@@ -152,10 +162,58 @@ void ADeliveryCharacter::DoJumpStart()
 {
 	if (ActiveRagdoll && JumpSpeed > 0.0f)
 	{
-		ActiveRagdoll->AddImpulse(FVector(0.0f, 0.0f, JumpSpeed), true);
+		if (HasAuthority())
+		{
+			ServerJump();
+		}
+		else
+		{
+			// 客户端先播放跳跃，随后由服务端快照修正误差。
+			ActiveRagdoll->AddImpulse(FVector(0.0f, 0.0f, JumpSpeed), true);
+			ServerJump();
+		}
 	}
 }
 
 void ADeliveryCharacter::DoJumpEnd()
 {
+}
+
+void ADeliveryCharacter::ServerSetMoveInput_Implementation(FVector2D Input, float AimYaw)
+{
+	if (Controller && FMath::IsFinite(AimYaw))
+	{
+		FRotator ControlRotation = Controller->GetControlRotation();
+		ControlRotation.Yaw = FMath::UnwindDegrees(AimYaw);
+		Controller->SetControlRotation(ControlRotation);
+	}
+
+	if (ActiveRagdoll)
+	{
+		const float Right = FMath::IsFinite(Input.X)
+			? FMath::Clamp(Input.X, -1.0f, 1.0f)
+			: 0.0f;
+		const float Forward = FMath::IsFinite(Input.Y)
+			? FMath::Clamp(Input.Y, -1.0f, 1.0f)
+			: 0.0f;
+		ActiveRagdoll->SetMoveInput(FVector2D(Right, Forward));
+	}
+}
+
+void ADeliveryCharacter::ServerJump_Implementation()
+{
+	UWorld* World = GetWorld();
+	if (!ActiveRagdoll || !World || JumpSpeed <= 0.0f)
+	{
+		return;
+	}
+
+	const float Now = World->GetTimeSeconds();
+	if (Now - LastServerJumpTime < MinimumJumpInterval)
+	{
+		return;
+	}
+
+	LastServerJumpTime = Now;
+	ActiveRagdoll->AddImpulse(FVector(0.0f, 0.0f, JumpSpeed), true);
 }

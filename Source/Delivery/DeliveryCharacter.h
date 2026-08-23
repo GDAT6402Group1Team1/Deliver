@@ -53,6 +53,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll", meta=(ClampMin="0.0"))
 	float JumpSpeed = 700.0f;
 
+	UPROPERTY(EditAnywhere, Category="Ragdoll|Network", meta=(ClampMin="0.05"))
+	float MinimumJumpInterval = 0.2f;
+
 public:
 
 	ADeliveryCharacter();
@@ -79,9 +82,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
 
+	UFUNCTION(Server, Unreliable)
+	void ServerSetMoveInput(FVector2D Input, float AimYaw);
+
+	UFUNCTION(Server, Reliable)
+	void ServerJump();
+
 	FORCEINLINE UCapsuleComponent* GetCapsuleComponent() const { return CapsuleComponent; }
 	FORCEINLINE USkeletalMeshComponent* GetMesh() const { return Mesh; }
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 	FORCEINLINE UDeliveryActiveRagdollComponent* GetActiveRagdoll() const { return ActiveRagdoll; }
+
+private:
+
+	float LastServerJumpTime = -1000.0f;
 };

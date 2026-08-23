@@ -4,11 +4,56 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Engine/NetSerialization.h"
 #include "DeliveryActiveRagdollComponent.generated.h"
 
 class UCapsuleComponent;
 class UPhysicsControlComponent;
 class USkeletalMeshComponent;
+
+UENUM(BlueprintType)
+enum class EDeliveryRagdollControlMode : uint8
+{
+	Disabled,
+	Active,
+	Limp
+};
+
+USTRUCT()
+struct FDeliveryRagdollBodyState
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FName Bone;
+
+	UPROPERTY()
+	FVector_NetQuantize10 Position;
+
+	UPROPERTY()
+	FRotator Rotation = FRotator::ZeroRotator;
+
+	UPROPERTY()
+	FVector_NetQuantize10 LinearVelocity;
+
+	UPROPERTY()
+	FVector_NetQuantize10 AngularVelocity;
+};
+
+USTRUCT()
+struct FDeliveryRagdollSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	uint16 Sequence = 0;
+
+	UPROPERTY()
+	float ServerTime = 0.0f;
+
+	UPROPERTY()
+	TArray<FDeliveryRagdollBodyState> Bodies;
+};
 
 USTRUCT(BlueprintType)
 struct FDeliveryRagdollBones
@@ -58,14 +103,15 @@ public:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void RegisterComponentTickFunctions(bool bRegister) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	UFUNCTION(BlueprintCallable, Category="Ragdoll")
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Ragdoll")
 	void StartRagdoll();
 
-	UFUNCTION(BlueprintCallable, Category="Ragdoll")
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Ragdoll")
 	void StopRagdoll();
 
-	UFUNCTION(BlueprintCallable, Category="Ragdoll")
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Ragdoll")
 	void SetLimp(bool bLimp);
 
 	UFUNCTION(BlueprintCallable, Category="Ragdoll")
@@ -76,6 +122,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Ragdoll")
 	bool IsRagdollActive() const { return bIsActive; }
+
+	UFUNCTION(BlueprintPure, Category="Ragdoll")
+	EDeliveryRagdollControlMode GetControlMode() const { return ReplicatedControlMode; }
 
 protected:
 
@@ -202,6 +251,27 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll|镜头", meta=(ClampMin="0.0"))
 	float CameraSmoothingSpeed = 7.0f;
 
+	UPROPERTY(EditAnywhere, Category="Ragdoll|网络", meta=(ClampMin="5.0", ClampMax="60.0"))
+	float NetworkSnapshotRate = 20.0f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|网络", meta=(ClampMin="0.0"))
+	float OwnerCorrectionSpeed = 5.0f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|网络", meta=(ClampMin="1.0"))
+	float OwnerHardCorrectionDistance = 100.0f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|网络", meta=(ClampMin="0.0", ClampMax="0.5"))
+	float MaxSnapshotExtrapolation = 0.1f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|网络", meta=(ClampMin="0.05", ClampMax="1.0"))
+	float ServerInputTimeout = 0.25f;
+
+	UPROPERTY(ReplicatedUsing=OnRep_ControlMode)
+	EDeliveryRagdollControlMode ReplicatedControlMode = EDeliveryRagdollControlMode::Disabled;
+
+	UPROPERTY(ReplicatedUsing=OnRep_RagdollSnapshot)
+	FDeliveryRagdollSnapshot ReplicatedSnapshot;
+
 	UPROPERTY(Transient)
 	TObjectPtr<USkeletalMeshComponent> Mesh;
 
@@ -242,9 +312,21 @@ protected:
 	float ReferenceFacingYaw = 0.0f;
 	float CurrentFacingYaw = 0.0f;
 	float StartupPlantRemaining = 0.0f;
+	float SnapshotAccumulator = 0.0f;
+	float SnapshotReceivedAt = 0.0f;
+	float LastMoveInputTime = 0.0f;
+	FDeliveryRagdollSnapshot PreviousSnapshot;
+	FDeliveryRagdollSnapshot TargetSnapshot;
+	bool bHasNetworkSnapshot = false;
 	bool bStepLeftNext = true;
 	bool bIsActive = false;
 	bool bIsLimp = false;
+
+	UFUNCTION()
+	void OnRep_ControlMode();
+
+	UFUNCTION()
+	void OnRep_RagdollSnapshot();
 
 	void ResolveOwnerComponents();
 	bool ValidateSetup() const;
@@ -264,4 +346,6 @@ protected:
 	FVector GetWishDir() const;
 	float GetAimYaw() const;
 	void SyncOwnerToPelvis(float DeltaTime);
+	void CaptureNetworkSnapshot();
+	void ApplyNetworkSnapshot(float DeltaTime);
 };
