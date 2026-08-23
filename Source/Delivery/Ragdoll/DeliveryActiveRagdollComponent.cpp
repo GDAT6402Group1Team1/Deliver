@@ -24,6 +24,7 @@ namespace
 	const FName TorsoSet(TEXT("Ragdoll.Torso"));
 	const FName HeadSet(TEXT("Ragdoll.Head"));
 	const FName LegsSet(TEXT("Ragdoll.Legs"));
+	const FName FootPostureSet(TEXT("Ragdoll.FootPosture"));
 	const FName ArmsSet(TEXT("Ragdoll.Arms"));
 
 	FPhysicsControlData MakeAngularControl(float Strength, float Damping)
@@ -327,14 +328,18 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 		Mesh, UpperLegs, EPhysicsControlType::ParentSpace, MakeAngularControl(StableHipStrength, 1.3f), LegsSet);
 	PhysicsControl->CreateControlsFromSkeletalMesh(
 		Mesh, LowerLegs, EPhysicsControlType::ParentSpace, MakeAngularControl(ArticulatedKneeStrength, 1.15f), LegsSet);
+	// 脚踝持续跟随站立姿势；世界空间脚控制仍只负责抬脚和落点。
+	PhysicsControl->CreateControlsFromSkeletalMesh(
+		Mesh, { Bones.LeftFoot, Bones.RightFoot }, EPhysicsControlType::ParentSpace,
+		MakeAngularControl(FootFacingStrength, StableMuscleDampingRatio), FootPostureSet);
 	PhysicsControl->CreateControlsFromSkeletalMesh(
 		Mesh, Arms, EPhysicsControlType::ParentSpace, MakeAngularControl(ComedyArmStrength, 1.0f), ArmsSet);
 
 	FPhysicsControlData FootData;
 	FootData.LinearStrength = LegPullStrength;
 	FootData.LinearDampingRatio = StableMuscleDampingRatio;
-	FootData.AngularStrength = FootFacingStrength;
-	FootData.AngularDampingRatio = 1.25f;
+	// 世界空间控制只移动脚，脚踝父空间控制负责旋转，避免两个角度目标互相拉扯。
+	FootData.AngularStrength = 0.0f;
 	FootData.bUseSkeletalAnimation = false;
 	FootData.bUseAccelerationDriveMode = true;
 	FootData.bOnlyControlChildObject = true;
@@ -420,6 +425,8 @@ void UDeliveryActiveRagdollComponent::CacheStandingState()
 	SmoothedMoveLead = FVector::ZeroVector;
 	SmoothedAccelerationAlpha = 0.0f;
 	StartupPlantRemaining = StartupFootPlantDuration;
+	bWasMoving = false;
+	bPendingStopRecovery = false;
 	const FVector Right = FVector::CrossProduct(FVector::UpVector, LastWishDirection).GetSafeNormal();
 	LeftFoot.SideSign = FVector::DotProduct(LeftFoot.Target - Hips, Right) < 0.0f ? -1.0f : 1.0f;
 	RightFoot.SideSign = -LeftFoot.SideSign;
@@ -502,6 +509,8 @@ void UDeliveryActiveRagdollComponent::StopRagdoll()
 	bIsLimp = false;
 	MoveInput = FVector2D::ZeroVector;
 	StartupPlantRemaining = 0.0f;
+	bWasMoving = false;
+	bPendingStopRecovery = false;
 	SnapshotAccumulator = 0.0f;
 	bHasNetworkSnapshot = false;
 	PreviousSnapshot = FDeliveryRagdollSnapshot();
@@ -740,6 +749,17 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 	UpdateFootTarget(LeftFoot, DeltaTime);
 	UpdateFootTarget(RightFoot, DeltaTime);
 
+	const bool bMoving = !Wish.IsNearlyZero();
+	if (bWasMoving && !bMoving)
+	{
+		bPendingStopRecovery = true;
+	}
+	else if (bMoving)
+	{
+		bPendingStopRecovery = false;
+	}
+	bWasMoving = bMoving;
+
 	if (StartupPlantRemaining > 0.0f)
 	{
 		StartupPlantRemaining = FMath::Max(0.0f, StartupPlantRemaining - DeltaTime);
@@ -751,7 +771,8 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 		return;
 	}
 
-	if (GetUprightDot() < 0.72f || LeftFoot.Alpha < 1.0f || RightFoot.Alpha < 1.0f)
+	if (GetUprightDot() < MinimumStepUprightDot
+		|| LeftFoot.Alpha < 1.0f || RightFoot.Alpha < 1.0f)
 	{
 		return;
 	}
@@ -771,44 +792,83 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 
 	if (Wish.IsNearlyZero())
 	{
+		if (!bPendingStopRecovery)
+		{
+			return;
+		}
+
+		const FVector LeftStand = Hips + Right * (LeftFoot.SideSign * StableComedyStance);
+		const FVector RightStand = Hips + Right * (RightFoot.SideSign * StableComedyStance);
+		const float LeftError = FVector::Dist2D(
+			Mesh->GetCenterOfMass(Bones.LeftFoot), LeftStand);
+		const float RightError = FVector::Dist2D(
+			Mesh->GetCenterOfMass(Bones.RightFoot), RightStand);
+
+		// 停止输入时最多收脚一次，避免站立状态反复迈步。
+		if (FMath::Max(LeftError, RightError) > StopRecoveryDistance)
+		{
+			const bool bRecoverLeft = LeftError > RightError;
+			if (BeginStep(bRecoverLeft ? LeftFoot : RightFoot, Facing))
+			{
+				bStepLeftNext = !bRecoverLeft;
+			}
+		}
+		bPendingStopRecovery = false;
 		return;
 	}
 
 	if (LeftSide * LeftFoot.SideSign < -MovingCrossingRecoveryMargin)
 	{
-		BeginStep(LeftFoot, Facing);
-		bStepLeftNext = false;
+		if (BeginStep(LeftFoot, Facing))
+		{
+			bStepLeftNext = false;
+		}
 		return;
 	}
 	if (RightSide * RightFoot.SideSign < -MovingCrossingRecoveryMargin)
 	{
-		BeginStep(RightFoot, Facing);
-		bStepLeftNext = true;
+		if (BeginStep(RightFoot, Facing))
+		{
+			bStepLeftNext = true;
+		}
 		return;
 	}
 
-	if (bStepLeftNext)
+	const float LeftForward = FVector::DotProduct(
+		Mesh->GetCenterOfMass(Bones.LeftFoot) - Hips, Facing);
+	const float RightForward = FVector::DotProduct(
+		Mesh->GetCenterOfMass(Bones.RightFoot) - Hips, Facing);
+	const bool bStepLeft = FMath::Abs(LeftForward - RightForward) > MovingCrossingRecoveryMargin
+		? LeftForward < RightForward
+		: bStepLeftNext;
+	const bool bStarted = BeginStep(bStepLeft ? LeftFoot : RightFoot, Facing);
+	if (bStarted)
 	{
-		BeginStep(LeftFoot, Facing);
+		bStepLeftNext = !bStepLeft;
 	}
-	else
-	{
-		BeginStep(RightFoot, Facing);
-	}
-	bStepLeftNext = !bStepLeftNext;
 }
 
-void UDeliveryActiveRagdollComponent::BeginStep(FFoot& Foot, const FVector& Wish)
+bool UDeliveryActiveRagdollComponent::BeginStep(FFoot& Foot, const FVector& Wish)
 {
 	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
 	const FVector Right = FVector::CrossProduct(FVector::UpVector, Wish).GetSafeNormal();
 	const float ForwardDistance = MoveInput.IsNearlyZero() ? 0.0f : ControlledStrideLength;
-	FVector Destination = Hips + Wish * ForwardDistance + Right * (Foot.SideSign * StableComedyStance);
+	const float ForwardSpeed = FVector::DotProduct(
+		Mesh->GetPhysicsLinearVelocity(Bones.Hips), Wish);
+	const float VelocityLead = MoveInput.IsNearlyZero()
+		? 0.0f
+		: FMath::Clamp(
+			ForwardSpeed * ControlledStrideDuration * 0.35f,
+			0.0f, ControlledStrideLength * 0.5f);
+	FVector Destination = Hips + Wish * (ForwardDistance + VelocityLead)
+		+ Right * (Foot.SideSign * StableComedyStance);
 	FVector Ground;
-	if (TraceGround(Destination, Ground))
+	if (!TraceGround(Destination, Ground))
 	{
-		Destination.Z = Ground.Z + Foot.GroundOffset + LandingClearance;
+		// 前方没有可站立地面时不抬脚，避免把落点留在骨盆高度。
+		return false;
 	}
+	Destination.Z = Ground.Z + Foot.GroundOffset;
 
 	Foot.Start = Mesh->GetCenterOfMass(Foot.Bone);
 	Foot.Target = Destination;
@@ -819,6 +879,7 @@ void UDeliveryActiveRagdollComponent::BeginStep(FFoot& Foot, const FVector& Wish
 	Foot.TargetRotation = FacingDelta * Foot.ReferenceRotation;
 	Foot.Alpha = 0.0f;
 	PhysicsControl->SetControlEnabled(Foot.Control, true, true, false);
+	return true;
 }
 
 void UDeliveryActiveRagdollComponent::UpdateFootTarget(FFoot& Foot, float DeltaTime)
@@ -829,7 +890,9 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FFoot& Foot, float DeltaT
 	}
 
 	Foot.Alpha = FMath::Min(1.0f, Foot.Alpha + DeltaTime / FMath::Max(ControlledStrideDuration, 0.05f));
-	const float SmoothAlpha = FMath::InterpEaseInOut(0.0f, 1.0f, Foot.Alpha, 2.0f);
+	// 五次平滑曲线让起步、轨迹中段和落脚之间的速度与加速度连续。
+	const float SmoothAlpha = Foot.Alpha * Foot.Alpha * Foot.Alpha
+		* (Foot.Alpha * (Foot.Alpha * 6.0f - 15.0f) + 10.0f);
 	FVector Position = FMath::Lerp(Foot.Start, Foot.Target, SmoothAlpha);
 	Position.Z += FMath::Square(FMath::Sin(PI * Foot.Alpha)) * ControlledStepHeight;
 
@@ -1072,11 +1135,14 @@ void UDeliveryActiveRagdollComponent::ApplyNetworkSnapshot(float DeltaTime)
 		Body->SetBodyTransform(
 			FTransform(CorrectedRotation, CorrectedPosition), ETeleportType::TeleportPhysics);
 
+		const FVector TargetLinearVelocity = FMath::Lerp(
+			FVector(Previous.LinearVelocity), FVector(Target.LinearVelocity), InterpolationAlpha);
+		const FVector TargetAngularVelocity = FMath::Lerp(
+			FVector(Previous.AngularVelocity), FVector(Target.AngularVelocity), InterpolationAlpha);
 		const FVector LinearVelocity = FMath::Lerp(
-			Body->GetUnrealWorldVelocity(), FVector(Target.LinearVelocity), CorrectionAlpha);
+			Body->GetUnrealWorldVelocity(), TargetLinearVelocity, CorrectionAlpha);
 		const FVector AngularVelocity = FMath::Lerp(
-			Body->GetUnrealWorldAngularVelocityInRadians(),
-			FVector(Target.AngularVelocity), CorrectionAlpha);
+			Body->GetUnrealWorldAngularVelocityInRadians(), TargetAngularVelocity, CorrectionAlpha);
 		Body->SetLinearVelocity(LinearVelocity, false);
 		Body->SetAngularVelocityInRadians(AngularVelocity, false);
 	}

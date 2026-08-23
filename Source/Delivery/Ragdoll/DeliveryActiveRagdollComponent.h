@@ -141,7 +141,7 @@ protected:
 	bool bPlaceOnGroundAtStart = true;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0"))
-	float DesiredMoveSpeed = 240.0f;
+	float DesiredMoveSpeed = 300.0f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0"))
 	float TargetLeadTime = 0.08f;
@@ -165,7 +165,7 @@ protected:
 	float SmoothBounceHeight = 2.5f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0"))
-	float ControlledStrideLength = 86.0f;
+	float ControlledStrideLength = 96.0f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0"))
 	float StableComedyStance = 32.0f;
@@ -179,11 +179,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0"))
 	float MovingCrossingRecoveryMargin = 6.0f;
 
-	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0"))
-	float LandingClearance = 4.0f;
-
 	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.05"))
-	float ControlledStrideDuration = 0.42f;
+	float ControlledStrideDuration = 0.34f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0"))
+	float StopRecoveryDistance = 34.0f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float MinimumStepUprightDot = 0.62f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|肌肉", meta=(ClampMin="0.0"))
 	float RootLinearStrength = 4.0f;
@@ -207,10 +210,10 @@ protected:
 	float StandingHeadCorrectionAngle = 6.0f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|肌肉", meta=(ClampMin="0.0"))
-	float StableHipStrength = 5.5f;
+	float StableHipStrength = 6.5f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|肌肉", meta=(ClampMin="0.0"))
-	float ArticulatedKneeStrength = 3.2f;
+	float ArticulatedKneeStrength = 6.0f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|肌肉", meta=(ClampMin="0.0"))
 	float ComedyArmStrength = 0.2f;
@@ -219,7 +222,7 @@ protected:
 	float LegPullStrength = 3.8f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|肌肉", meta=(ClampMin="0.0"))
-	float FootFacingStrength = 2.5f;
+	float FootFacingStrength = 4.5f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|肌肉", meta=(ClampMin="0.0"))
 	float StableMuscleDampingRatio = 1.35f;
@@ -243,7 +246,7 @@ protected:
 	float DriveTargetSmoothingSpeed = 10.0f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|稳定", meta=(ClampMin="0.0", ClampMax="2.0"))
-	float StartupFootPlantDuration = 0.65f;
+	float StartupFootPlantDuration = 0.3f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll")
 	float CapsuleHipsZOffset = 0.0f;
@@ -318,6 +321,8 @@ protected:
 	FDeliveryRagdollSnapshot PreviousSnapshot;
 	FDeliveryRagdollSnapshot TargetSnapshot;
 	bool bHasNetworkSnapshot = false;
+	bool bWasMoving = false;
+	bool bPendingStopRecovery = false;
 	bool bStepLeftNext = true;
 	bool bIsActive = false;
 	bool bIsLimp = false;
@@ -338,7 +343,7 @@ protected:
 	void UpdateControlTargets(float DeltaTime);
 	void UpdatePelvisTarget(float DeltaTime, const FVector& Wish);
 	void UpdateFeet(float DeltaTime, const FVector& Wish);
-	void BeginStep(FFoot& Foot, const FVector& Wish);
+	bool BeginStep(FFoot& Foot, const FVector& Wish);
 	void UpdateFootTarget(FFoot& Foot, float DeltaTime);
 	FVector GetWholeBodyCenterOfMass() const;
 	float GetUprightDot() const;
