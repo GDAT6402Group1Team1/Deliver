@@ -1,5 +1,14 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+/*
+每一帧是：
+
+用水平 Wish 和速度差，算出髋接下来要去的水平位置。
+在这个位置竖直探测地面，高度 = 地面 + 站立身高。这里探测不到，再退回当前髋下方探测一次，避免把髋吊到半空。
+电机把髋拉向这个完整目标 PlannedPelvisTarget。
+脚的落点从同一个 PlannedPelvisTarget 推出，再探测地面；摆动脚沿抬脚曲线跟过去。选哪只脚迈步仍看当前身体姿态。
+*/
+
 #include "DeliveryActiveRagdollComponent.h"
 
 #include "CollisionQueryParams.h"
@@ -135,6 +144,7 @@ void UDeliveryActiveRagdollComponent::TickComponent(
 
 	if (!bIsLimp)
 	{
+		// 物理积分之前写入本帧的髋目标和脚目标。
 		UpdateControlTargets(DeltaTime);
 	}
 }
@@ -278,6 +288,7 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 		}
 	}
 
+	// 髋：世界空间位置和旋转。这是走路位移的来源，目标由 UpdatePelvisTarget 每帧写入。
 	FPhysicsControlData PelvisData;
 	PelvisData.LinearStrength = RootLinearStrength;
 	PelvisData.LinearDampingRatio = StableMuscleDampingRatio;
@@ -294,6 +305,7 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 	}
 	PelvisControl = PelvisControls[0];
 
+	// 胸：父空间旋转，目标来自启动时记下的胸相对髋姿势，走路时再叠加一点左右摆动。
 	FPhysicsControlData ChestData;
 	ChestData.AngularStrength = LooseWaistFollowStrength;
 	ChestData.AngularDampingRatio = StableMuscleDampingRatio;
@@ -309,8 +321,10 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 	}
 	ChestControl = ChestControls[0];
 
+	// 躯干其余节：父空间旋转，目标是当前骨骼动画姿势，不是启动时记下的站立姿势。
 	PhysicsControl->CreateControlsFromSkeletalMesh(
 		Mesh, Torso, EPhysicsControlType::ParentSpace, MakeAngularControl(LooseComedyBodyStrength, StableMuscleDampingRatio), TorsoSet);
+	// 头：世界空间旋转，目标由启动时记下的头部姿势随身体转向得到。
 	FPhysicsControlData HeadData = MakeAngularControl(UprightHeadStrength, StableHeadDampingRatio);
 	HeadData.bUseSkeletalAnimation = false;
 	HeadData.bOnlyControlChildObject = true;
@@ -324,21 +338,23 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 	PhysicsControl->CreateControlsFromSkeletalMesh(
 		Mesh, HeadChildren, EPhysicsControlType::ParentSpace,
 		MakeAngularControl(UprightHeadStrength, StableHeadDampingRatio), HeadSet);
+	// 大腿和小腿：父空间旋转，目标是当前骨骼动画姿势。腿会跟着弯，但迈步位移由脚的世界空间目标决定。
 	PhysicsControl->CreateControlsFromSkeletalMesh(
 		Mesh, UpperLegs, EPhysicsControlType::ParentSpace, MakeAngularControl(StableHipStrength, 1.3f), LegsSet);
 	PhysicsControl->CreateControlsFromSkeletalMesh(
 		Mesh, LowerLegs, EPhysicsControlType::ParentSpace, MakeAngularControl(ArticulatedKneeStrength, 1.15f), LegsSet);
-	// 脚踝持续跟随站立姿势；世界空间脚控制仍只负责抬脚和落点。
+	// 脚踝：父空间旋转负责脚尖朝向。世界空间脚控制只拉位置，不写角度，避免两套旋转目标互相拉扯。
 	PhysicsControl->CreateControlsFromSkeletalMesh(
 		Mesh, { Bones.LeftFoot, Bones.RightFoot }, EPhysicsControlType::ParentSpace,
 		MakeAngularControl(FootFacingStrength, StableMuscleDampingRatio), FootPostureSet);
+	// 手臂：父空间旋转，目标是当前骨骼动画姿势。强度很低，外力和惯性很容易把胳膊带走。
 	PhysicsControl->CreateControlsFromSkeletalMesh(
 		Mesh, Arms, EPhysicsControlType::ParentSpace, MakeAngularControl(ComedyArmStrength, 1.0f), ArmsSet);
 
+	// 摆动脚的世界空间位置电机。支撑阶段关掉，避免和地面摩擦较劲。
 	FPhysicsControlData FootData;
 	FootData.LinearStrength = LegPullStrength;
 	FootData.LinearDampingRatio = StableMuscleDampingRatio;
-	// 世界空间控制只移动脚，脚踝父空间控制负责旋转，避免两个角度目标互相拉扯。
 	FootData.AngularStrength = 0.0f;
 	FootData.bUseSkeletalAnimation = false;
 	FootData.bUseAccelerationDriveMode = true;
@@ -384,6 +400,7 @@ void UDeliveryActiveRagdollComponent::DestroyControls()
 
 void UDeliveryActiveRagdollComponent::CacheStandingState()
 {
+	// 记下启动瞬间的站立姿势，供髋、胸、头和脚尖朝向当作参考，而不是每帧重新当成动画目标。
 	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
 	ReferencePelvisRotation = Mesh->GetBoneQuaternion(Bones.Hips, EBoneSpaces::WorldSpace);
 	const FQuat ReferenceSpineWorld = Mesh->GetBoneQuaternion(Bones.Spine, EBoneSpaces::WorldSpace);
@@ -423,6 +440,7 @@ void UDeliveryActiveRagdollComponent::CacheStandingState()
 	LastWishDirection = GetOwner() ? GetOwner()->GetActorForwardVector() : FVector::ForwardVector;
 	SmoothedBalanceOffset = FVector::ZeroVector;
 	SmoothedMoveLead = FVector::ZeroVector;
+	PlannedPelvisTarget = Hips;
 	SmoothedAccelerationAlpha = 0.0f;
 	StartupPlantRemaining = StartupFootPlantDuration;
 	bWasMoving = false;
@@ -598,6 +616,7 @@ FVector UDeliveryActiveRagdollComponent::GetWishDir() const
 		return FVector::ZeroVector;
 	}
 
+	// 用镜头水平朝向把 WASD 变成世界方向，最后丢掉 Z，所以前进意图始终贴在水平面上。
 	const FRotator YawRotation(0.0f, GetAimYaw(), 0.0f);
 	return (YawRotation.Vector() * MoveInput.Y
 		+ FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y) * MoveInput.X).GetSafeNormal2D();
@@ -630,15 +649,18 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 
 	const FVector Wish = GetWishDir();
 	const FVector EffectiveWish = StartupPlantRemaining > 0.0f ? FVector::ZeroVector : Wish;
+	// 先写出髋部目标 PlannedPelvisTarget，脚的落点再从同一个点推。
 	UpdatePelvisTarget(DeltaTime, EffectiveWish);
 	UpdateFeet(DeltaTime, EffectiveWish);
 }
 
 void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const FVector& Wish)
 {
+	// 顺序：先算水平目标，再在该点探测地面得到高度，最后把完整目标交给髋部电机。
 	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
 	const FVector Velocity = Mesh->GetPhysicsLinearVelocity(Bones.Hips);
 	const FVector DesiredVelocity = Wish * DesiredMoveSpeed;
+	// 用期望水平速度和当前水平速度的差，估计髋部接下来要去的水平位置。这不是步长，只是让电机有一个略微领前的目标。
 	const FVector RawLead = ((DesiredVelocity - FVector(Velocity.X, Velocity.Y, 0.0f)) * TargetLeadTime)
 		.GetClampedToMaxSize(MaxTargetLead);
 	SmoothedMoveLead = FMath::VInterpTo(
@@ -656,13 +678,7 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 		Wobble = -GaitPulse;
 	}
 
-	FVector Ground;
-	const bool bHasGround = TraceGround(Hips, Ground);
 	FVector Target = Hips + FVector(SmoothedMoveLead.X, SmoothedMoveLead.Y, 0.0f);
-	if (bHasGround)
-	{
-		Target.Z = Ground.Z + StandHeight + SmoothBounceHeight * GaitPulse;
-	}
 
 	FVector DesiredBalanceOffset = FVector::ZeroVector;
 	if (Wish.IsNearlyZero())
@@ -678,6 +694,15 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	SmoothedBalanceOffset = FMath::VInterpTo(
 		SmoothedBalanceOffset, DesiredBalanceOffset, DeltaTime, BalanceResponseSpeed);
 	Target += SmoothedBalanceOffset;
+
+	// 水平目标已经确定，再在这个位置探测地面高度。探测不到时退回当前髋下方，避免把髋吊到半空。
+	FVector Ground;
+	if (ResolveGroundHeight(Target, Hips, Ground))
+	{
+		Target.Z = Ground.Z + StandHeight + SmoothBounceHeight * GaitPulse;
+	}
+
+	PlannedPelvisTarget = Target;
 
 	const float DesiredYaw = Wish.IsNearlyZero() ? CurrentFacingYaw : Wish.Rotation().Yaw;
 	const float YawError = FMath::FindDeltaAngleDegrees(CurrentFacingYaw, DesiredYaw);
@@ -746,6 +771,7 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 
 void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector& Wish)
 {
+	// 先推进正在摆动的脚。若可以开新步，落点从 PlannedPelvisTarget 计算，而不是从当前髋骨骼另算。
 	UpdateFootTarget(LeftFoot, DeltaTime);
 	UpdateFootTarget(RightFoot, DeltaTime);
 
@@ -771,6 +797,7 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 		return;
 	}
 
+	// 身体相对世界铅垂线倾得太厉害，或者已经有一只脚在空中，就不要再开新步。
 	if (GetUprightDot() < MinimumStepUprightDot
 		|| LeftFoot.Alpha < 1.0f || RightFoot.Alpha < 1.0f)
 	{
@@ -786,6 +813,7 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 		Facing = GetOwner() ? GetOwner()->GetActorForwardVector() : FVector::ForwardVector;
 	}
 	const FVector Right = FVector::CrossProduct(FVector::UpVector, Facing).GetSafeNormal();
+	// 哪只脚在后面、有没有交叉，看的是当前身体姿态；落点本身用 PlannedPelvisTarget。
 	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
 	const float LeftSide = FVector::DotProduct(Mesh->GetCenterOfMass(Bones.LeftFoot) - Hips, Right);
 	const float RightSide = FVector::DotProduct(Mesh->GetCenterOfMass(Bones.RightFoot) - Hips, Right);
@@ -797,14 +825,14 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 			return;
 		}
 
-		const FVector LeftStand = Hips + Right * (LeftFoot.SideSign * StableComedyStance);
-		const FVector RightStand = Hips + Right * (RightFoot.SideSign * StableComedyStance);
+		const FVector LeftStand = PlannedPelvisTarget + Right * (LeftFoot.SideSign * StableComedyStance);
+		const FVector RightStand = PlannedPelvisTarget + Right * (RightFoot.SideSign * StableComedyStance);
 		const float LeftError = FVector::Dist2D(
 			Mesh->GetCenterOfMass(Bones.LeftFoot), LeftStand);
 		const float RightError = FVector::Dist2D(
 			Mesh->GetCenterOfMass(Bones.RightFoot), RightStand);
 
-		// 停止输入时最多收脚一次，避免站立状态反复迈步。
+		// 松开移动后最多收脚一次，把脚收到髋部目标两侧的站宽上，避免站着不停倒脚。
 		if (FMath::Max(LeftError, RightError) > StopRecoveryDistance)
 		{
 			const bool bRecoverLeft = LeftError > RightError;
@@ -850,7 +878,6 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 
 bool UDeliveryActiveRagdollComponent::BeginStep(FFoot& Foot, const FVector& Wish)
 {
-	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
 	const FVector Right = FVector::CrossProduct(FVector::UpVector, Wish).GetSafeNormal();
 	const float ForwardDistance = MoveInput.IsNearlyZero() ? 0.0f : ControlledStrideLength;
 	const float ForwardSpeed = FVector::DotProduct(
@@ -860,12 +887,13 @@ bool UDeliveryActiveRagdollComponent::BeginStep(FFoot& Foot, const FVector& Wish
 		: FMath::Clamp(
 			ForwardSpeed * ControlledStrideDuration * 0.35f,
 			0.0f, ControlledStrideLength * 0.5f);
-	FVector Destination = Hips + Wish * (ForwardDistance + VelocityLead)
+	// 落点从本帧髋部目标推出，再在落点探测地面高度。平滑曲线只负责从当前位置走到这个落点，并不重新决定落点。
+	FVector Destination = PlannedPelvisTarget + Wish * (ForwardDistance + VelocityLead)
 		+ Right * (Foot.SideSign * StableComedyStance);
 	FVector Ground;
 	if (!TraceGround(Destination, Ground))
 	{
-		// 前方没有可站立地面时不抬脚，避免把落点留在骨盆高度。
+		// 落点下方没有地面就不抬这只脚，否则目标会停在髋部高度的半空中。
 		return false;
 	}
 	Destination.Z = Ground.Z + Foot.GroundOffset;
@@ -890,14 +918,13 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FFoot& Foot, float DeltaT
 	}
 
 	Foot.Alpha = FMath::Min(1.0f, Foot.Alpha + DeltaTime / FMath::Max(ControlledStrideDuration, 0.05f));
-	// 五次平滑曲线让起步、轨迹中段和落脚之间的速度与加速度连续。
+	// 落点已经定好。这条曲线只描述这一脚怎么从现在的位置走到落点：水平两端慢起慢停，中间按正弦抬起，避免直线拽进地面。
 	const float SmoothAlpha = Foot.Alpha * Foot.Alpha * Foot.Alpha
 		* (Foot.Alpha * (Foot.Alpha * 6.0f - 15.0f) + 10.0f);
 	FVector Position = FMath::Lerp(Foot.Start, Foot.Target, SmoothAlpha);
 	Position.Z += FMath::Square(FMath::Sin(PI * Foot.Alpha)) * ControlledStepHeight;
 
-	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
-	const float SignedSide = FVector::DotProduct(Position - Hips, Foot.SideAxis) * Foot.SideSign;
+	const float SignedSide = FVector::DotProduct(Position - PlannedPelvisTarget, Foot.SideAxis) * Foot.SideSign;
 	const float RequiredSide = StableMinimumFootSide * SmoothAlpha;
 	if (SignedSide < RequiredSide)
 	{
@@ -909,6 +936,7 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FFoot& Foot, float DeltaT
 
 	if (Foot.Alpha >= 1.0f)
 	{
+		// 落地后关掉世界空间位置电机。这只脚改做支撑，靠摩擦和腿部角度电机留在地上。
 		PhysicsControl->SetControlEnabled(Foot.Control, false, true, false);
 	}
 }
@@ -949,6 +977,16 @@ FVector UDeliveryActiveRagdollComponent::GetWholeBodyCenterOfMass() const
 	return TotalMass > UE_SMALL_NUMBER ? WeightedCenter / TotalMass : Mesh->GetComponentLocation();
 }
 
+bool UDeliveryActiveRagdollComponent::ResolveGroundHeight(
+	const FVector& PlannedHorizontal, const FVector& Fallback, FVector& GroundPoint) const
+{
+	if (TraceGround(PlannedHorizontal, GroundPoint))
+	{
+		return true;
+	}
+	return TraceGround(Fallback, GroundPoint);
+}
+
 float UDeliveryActiveRagdollComponent::GetUprightDot() const
 {
 	if (!Mesh)
@@ -956,6 +994,7 @@ float UDeliveryActiveRagdollComponent::GetUprightDot() const
 		return 0.0f;
 	}
 
+	// 把启动时髋部里的头顶方向转到现在，再和世界向上做点积。数值越接近 1 越直立。
 	const FQuat PelvisRotation = Mesh->GetBoneQuaternion(Bones.Hips, EBoneSpaces::WorldSpace);
 	const FVector Up = PelvisRotation.RotateVector(UprightInPelvisSpace).GetSafeNormal();
 	return FVector::DotProduct(Up, FVector::UpVector);
@@ -963,6 +1002,7 @@ float UDeliveryActiveRagdollComponent::GetUprightDot() const
 
 bool UDeliveryActiveRagdollComponent::TraceGround(const FVector& Around, FVector& GroundPoint) const
 {
+	// 从探测点上方 60 打到下方 220，只取撞击点，不用地面法线。
 	UWorld* World = GetWorld();
 	if (!World)
 	{

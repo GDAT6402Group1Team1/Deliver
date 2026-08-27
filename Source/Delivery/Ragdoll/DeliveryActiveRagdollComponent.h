@@ -89,7 +89,13 @@ struct FDeliveryRagdollBones
 };
 
 /**
- * 全身物理角色。Physics Control 提供肌肉，骨盆和脚目标负责平衡与移动；
+ * 全身物理角色：网格刚体持续模拟，Physics Control 当作关节肌肉，用目标位置和目标旋转去拉身体。
+ *
+ * 走路不是动画位移，也不是 IK 反解腿部角度。每一帧先根据水平移动意图算出髋部接下来要去的水平位置，
+ * 再在那个位置竖直向下探测地面，把探测到的高度加上站立身高，得到髋部的完整目标；电机把髋刚体拉向这个目标。
+ * 脚的落点从同一个髋部目标推出来：一只脚留在地上做支撑，另一只脚沿一条抬起再落下的曲线迈向新落点，
+ * 只有迈步中的那只脚打开世界空间位置电机。胸和头跟随启动时记下的站立姿势；大腿、小腿、脚踝和手臂
+ * 跟随当前骨骼动画的旋转，强度较低，所以碰撞和外力仍然能把肢体带走。物理资产上的关节限位始终限制活动范围。
  */
 UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
@@ -143,9 +149,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0"))
 	float DesiredMoveSpeed = 300.0f;
 
+	/** 用速度误差估计髋部水平目标时，向前看多长时间。时间越长，目标离当前髋越远。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0"))
 	float TargetLeadTime = 0.08f;
 
+	/** 髋部水平目标相对当前髋的最大距离，避免电机一次性把身体拉得太远。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0"))
 	float MaxTargetLead = 18.0f;
 
@@ -281,16 +289,21 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UCapsuleComponent> Capsule;
 
+	/** 一只脚的迈步状态。Alpha 小于 1 表示正在摆动，等于 1 表示落在地上做支撑。 */
 	struct FFoot
 	{
 		FName Bone;
 		FName Control;
+		/** 抬脚瞬间的脚质心，摆动曲线的起点。 */
 		FVector Start = FVector::ZeroVector;
+		/** 这一步要落到的世界位置。 */
 		FVector Target = FVector::ZeroVector;
 		FVector SideAxis = FVector::RightVector;
 		FQuat ReferenceRotation = FQuat::Identity;
 		FQuat TargetRotation = FQuat::Identity;
+		/** 启动时脚质心相对地面的高度，落到地面时加回去，避免脚埋进地里。 */
 		float GroundOffset = 0.0f;
+		/** 左脚为负、右脚为正，或按启动时相对髋的左右决定。 */
 		float SideSign = 1.0f;
 		float Alpha = 1.0f;
 	};
@@ -304,6 +317,8 @@ protected:
 	FVector LastWishDirection = FVector::ForwardVector;
 	FVector SmoothedBalanceOffset = FVector::ZeroVector;
 	FVector SmoothedMoveLead = FVector::ZeroVector;
+	/** 本帧已经算好的髋部目标，脚的落点从这里推出，不再使用当前髋骨骼位置另算一套。 */
+	FVector PlannedPelvisTarget = FVector::ZeroVector;
 	FVector UprightInPelvisSpace = FVector::UpVector;
 	float SmoothedAccelerationAlpha = 0.0f;
 	FFoot LeftFoot;
@@ -340,11 +355,18 @@ protected:
 	bool CreateControls();
 	void DestroyControls();
 	void CacheStandingState();
+	/** 先更新髋部目标，再更新脚。脚的落点使用本帧已经写好的 PlannedPelvisTarget。 */
 	void UpdateControlTargets(float DeltaTime);
+	/** 根据水平移动意图写出髋部目标：先确定水平位置，再在该点探测地面高度。 */
 	void UpdatePelvisTarget(float DeltaTime, const FVector& Wish);
+	/** 选择支撑脚和摆动脚，并把摆动脚的世界空间位置电机目标沿抬脚曲线推进。 */
 	void UpdateFeet(float DeltaTime, const FVector& Wish);
+	/** 从 PlannedPelvisTarget 计算落点。成功后打开该脚的世界空间位置电机。 */
 	bool BeginStep(FFoot& Foot, const FVector& Wish);
+	/** 把摆动脚从起点插值到落点。曲线只描述路径，不改变已经定好的落点。 */
 	void UpdateFootTarget(FFoot& Foot, float DeltaTime);
+	/** 先在规划位置探测地面；没有碰到地面时，改在当前髋下方再探测一次。 */
+	bool ResolveGroundHeight(const FVector& PlannedHorizontal, const FVector& Fallback, FVector& GroundPoint) const;
 	FVector GetWholeBodyCenterOfMass() const;
 	float GetUprightDot() const;
 	bool TraceGround(const FVector& Around, FVector& GroundPoint) const;
