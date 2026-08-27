@@ -3,10 +3,17 @@
 /*
 每一帧是：
 
-用水平 Wish 和速度差，算出髋接下来要去的水平位置。
-在这个位置竖直探测地面，高度 = 地面 + 站立身高。这里探测不到，再退回当前髋下方探测一次，避免把髋吊到半空。
+把水平 Wish 投影到当前坡面的切平面上，再用速度差算出髋接下来要去的位置。
+在切平面上定好这一点，沿法线投到坡面上。髋目标等于击中点加上站立高度乘以法线。
+如果这条射线没有碰到地面，就回到当前髋的位置，再沿法线探测一次，避免把髋吊到半空。
+坡顶接到平面时，法线和贴地点不会立刻换成新值，而是平滑过渡过去，避免髋的位置和旋转在一帧里抽掉。
 电机把髋拉向这个完整目标 PlannedPelvisTarget。
-脚的落点从同一个 PlannedPelvisTarget 推出，再探测地面；摆动脚沿抬脚曲线跟过去。选哪只脚迈步仍看当前身体姿态。
+脚的落点从同一个 PlannedPelvisTarget 在切平面上推出来，再沿法线投到坡面上。
+摆动过程中每一帧按本帧的髋目标重新计算落点，不要在抬脚那一瞬间把落点算死。
+脚底板的朝向用切平面上的前进方向和法线来建，让脚底板贴着地面。
+选哪只脚迈步，仍然看当前身体姿态。人有没有倾倒，看髋的朝上方向和坡面法线的点积，不用世界竖直向上。
+
+髋先走，脚后追。这套方法只处理比较缓的斜面。陡坡、台阶和用手攀爬都不做。
 */
 
 #include "DeliveryActiveRagdollComponent.h"
@@ -23,6 +30,7 @@
 #include "PhysicsEngine/BodyInstance.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "PhysicsEngine/SkeletalBodySetup.h"
+#include "Math/RotationMatrix.h"
 #include "../Delivery.h"
 
 namespace
@@ -417,30 +425,39 @@ void UDeliveryActiveRagdollComponent::CacheStandingState()
 	LeftFoot.TargetRotation = LeftFoot.ReferenceRotation;
 	RightFoot.TargetRotation = RightFoot.ReferenceRotation;
 
-	FVector LeftGround;
-	FVector RightGround;
-	float LeftGroundZ = LeftFoot.Target.Z;
-	float RightGroundZ = RightFoot.Target.Z;
-	if (TraceGround(LeftFoot.Target, LeftGround))
+	FGroundHit LeftGround;
+	FGroundHit RightGround;
+	FVector LeftGroundPoint = LeftFoot.Target;
+	FVector RightGroundPoint = RightFoot.Target;
+	FVector LeftNormal = FVector::UpVector;
+	FVector RightNormal = FVector::UpVector;
+	if (TraceGround(LeftFoot.Target, FVector::UpVector, LeftGround))
 	{
-		LeftFoot.GroundOffset = FMath::Max(0.0f, LeftFoot.Target.Z - LeftGround.Z);
-		LeftGroundZ = LeftGround.Z;
+		LeftFoot.GroundOffset = FMath::Max(0.0f, FVector::DotProduct(LeftFoot.Target - LeftGround.Point, LeftGround.Normal));
+		LeftGroundPoint = LeftGround.Point;
+		LeftNormal = LeftGround.Normal;
 	}
-	if (TraceGround(RightFoot.Target, RightGround))
+	if (TraceGround(RightFoot.Target, FVector::UpVector, RightGround))
 	{
-		RightFoot.GroundOffset = FMath::Max(0.0f, RightFoot.Target.Z - RightGround.Z);
-		RightGroundZ = RightGround.Z;
+		RightFoot.GroundOffset = FMath::Max(0.0f, FVector::DotProduct(RightFoot.Target - RightGround.Point, RightGround.Normal));
+		RightGroundPoint = RightGround.Point;
+		RightNormal = RightGround.Normal;
 	}
 
 	LeftFoot.Start = LeftFoot.Target;
 	RightFoot.Start = RightFoot.Target;
 	LeftFoot.Alpha = 1.0f;
 	RightFoot.Alpha = 1.0f;
-	StandHeight = FMath::Clamp(Hips.Z - 0.5f * (LeftGroundZ + RightGroundZ), 80.0f, 140.0f);
+	const FVector AverageNormal = (LeftNormal + RightNormal).GetSafeNormal();
+	CurrentGroundNormal = AverageNormal.IsNearlyZero() ? FVector::UpVector : AverageNormal;
+	const FVector MidGround = 0.5f * (LeftGroundPoint + RightGroundPoint);
+	SmoothedGroundPoint = MidGround;
+	StandHeight = FMath::Clamp(FVector::DotProduct(Hips - MidGround, CurrentGroundNormal), 80.0f, 140.0f);
 	LastWishDirection = GetOwner() ? GetOwner()->GetActorForwardVector() : FVector::ForwardVector;
 	SmoothedBalanceOffset = FVector::ZeroVector;
 	SmoothedMoveLead = FVector::ZeroVector;
 	PlannedPelvisTarget = Hips;
+	WishOnSlope = FVector::ZeroVector;
 	SmoothedAccelerationAlpha = 0.0f;
 	StartupPlantRemaining = StartupFootPlantDuration;
 	bWasMoving = false;
@@ -616,7 +633,7 @@ FVector UDeliveryActiveRagdollComponent::GetWishDir() const
 		return FVector::ZeroVector;
 	}
 
-	// 用镜头水平朝向把 WASD 变成世界方向，最后丢掉 Z，所以前进意图始终贴在水平面上。
+	// 用镜头水平朝向把 WASD 变成世界方向，最后丢掉 Z。沿坡行走时再投影到切平面。
 	const FRotator YawRotation(0.0f, GetAimYaw(), 0.0f);
 	return (YawRotation.Vector() * MoveInput.Y
 		+ FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y) * MoveInput.X).GetSafeNormal2D();
@@ -649,19 +666,27 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 
 	const FVector Wish = GetWishDir();
 	const FVector EffectiveWish = StartupPlantRemaining > 0.0f ? FVector::ZeroVector : Wish;
-	// 先写出髋部目标 PlannedPelvisTarget，脚的落点再从同一个点推。
 	UpdatePelvisTarget(DeltaTime, EffectiveWish);
 	UpdateFeet(DeltaTime, EffectiveWish);
 }
 
 void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const FVector& Wish)
 {
-	// 顺序：先算水平目标，再在该点探测地面得到高度，最后把完整目标交给髋部电机。
 	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
 	const FVector Velocity = Mesh->GetPhysicsLinearVelocity(Bones.Hips);
-	const FVector DesiredVelocity = Wish * DesiredMoveSpeed;
-	// 用期望水平速度和当前水平速度的差，估计髋部接下来要去的水平位置。这不是步长，只是让电机有一个略微领前的目标。
-	const FVector RawLead = ((DesiredVelocity - FVector(Velocity.X, Velocity.Y, 0.0f)) * TargetLeadTime)
+
+	FGroundHit GroundUnderHips;
+	bool bHasHipGround = TraceGround(Hips, CurrentGroundNormal, GroundUnderHips);
+	if (!bHasHipGround)
+	{
+		bHasHipGround = TraceGround(Hips, FVector::UpVector, GroundUnderHips);
+	}
+
+	// 把水平 Wish 和当前速度都投影到坡面上，用它们的差估计髋要沿坡往前领多远。
+	WishOnSlope = FVector::VectorPlaneProject(Wish, CurrentGroundNormal).GetSafeNormal();
+	const FVector VelocityOnSlope = FVector::VectorPlaneProject(Velocity, CurrentGroundNormal);
+	const FVector DesiredVelocity = WishOnSlope * DesiredMoveSpeed;
+	const FVector RawLead = ((DesiredVelocity - VelocityOnSlope) * TargetLeadTime)
 		.GetClampedToMaxSize(MaxTargetLead);
 	SmoothedMoveLead = FMath::VInterpTo(
 		SmoothedMoveLead, RawLead, DeltaTime, DriveTargetSmoothingSpeed);
@@ -678,7 +703,7 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 		Wobble = -GaitPulse;
 	}
 
-	FVector Target = Hips + FVector(SmoothedMoveLead.X, SmoothedMoveLead.Y, 0.0f);
+	FVector Target = Hips + SmoothedMoveLead;
 
 	FVector DesiredBalanceOffset = FVector::ZeroVector;
 	if (Wish.IsNearlyZero())
@@ -686,25 +711,44 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 		const FVector SupportCenter = 0.5f * (
 			Mesh->GetCenterOfMass(Bones.LeftFoot) + Mesh->GetCenterOfMass(Bones.RightFoot));
 		const FVector BodyCenter = GetWholeBodyCenterOfMass();
-		DesiredBalanceOffset = FVector(
-			SupportCenter.X - BodyCenter.X,
-			SupportCenter.Y - BodyCenter.Y,
-			0.0f).GetClampedToMaxSize(MaxCenterOfMassCorrection) * CenterOfMassCorrection;
+		DesiredBalanceOffset = FVector::VectorPlaneProject(
+			SupportCenter - BodyCenter, CurrentGroundNormal)
+			.GetClampedToMaxSize(MaxCenterOfMassCorrection) * CenterOfMassCorrection;
 	}
 	SmoothedBalanceOffset = FMath::VInterpTo(
 		SmoothedBalanceOffset, DesiredBalanceOffset, DeltaTime, BalanceResponseSpeed);
 	Target += SmoothedBalanceOffset;
 
-	// 水平目标已经确定，再在这个位置探测地面高度。探测不到时退回当前髋下方，避免把髋吊到半空。
-	FVector Ground;
-	if (ResolveGroundHeight(Target, Hips, Ground))
+	FVector DesiredNormal = CurrentGroundNormal;
+	FVector DesiredGroundPoint = SmoothedGroundPoint;
+	FGroundHit Ground;
+	if (SampleGround(Target, Hips, CurrentGroundNormal, Ground))
 	{
-		Target.Z = Ground.Z + StandHeight + SmoothBounceHeight * GaitPulse;
+		DesiredNormal = Ground.Normal;
+		DesiredGroundPoint = Ground.Point;
 	}
+	else if (bHasHipGround)
+	{
+		DesiredNormal = GroundUnderHips.Normal;
+		DesiredGroundPoint = GroundUnderHips.Point;
+	}
+
+	// 探测结果可以马上变。发给电机的法线和贴地点慢慢靠过去，坡顶接到平面时才不会抽一下。
+	CurrentGroundNormal = FMath::VInterpTo(
+		CurrentGroundNormal, DesiredNormal, DeltaTime, GroundNormalSmoothingSpeed).GetSafeNormal();
+	if (CurrentGroundNormal.IsNearlyZero())
+	{
+		CurrentGroundNormal = FVector::UpVector;
+	}
+	SmoothedGroundPoint = FMath::VInterpTo(
+		SmoothedGroundPoint, DesiredGroundPoint, DeltaTime, GroundNormalSmoothingSpeed);
+	// 髋目标等于平滑后的贴地点，再加上站立高度沿法线抬起来。
+	Target = SmoothedGroundPoint + CurrentGroundNormal * (StandHeight + SmoothBounceHeight * GaitPulse);
 
 	PlannedPelvisTarget = Target;
 
-	const float DesiredYaw = Wish.IsNearlyZero() ? CurrentFacingYaw : Wish.Rotation().Yaw;
+	const FVector FacingWish = WishOnSlope.IsNearlyZero() ? Wish : WishOnSlope;
+	const float DesiredYaw = FacingWish.IsNearlyZero() ? CurrentFacingYaw : FacingWish.GetSafeNormal2D().Rotation().Yaw;
 	const float YawError = FMath::FindDeltaAngleDegrees(CurrentFacingYaw, DesiredYaw);
 	CurrentFacingYaw = FMath::UnwindDegrees(FMath::FInterpTo(
 		CurrentFacingYaw, CurrentFacingYaw + YawError, DeltaTime, TurnResponsiveness));
@@ -712,25 +756,27 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	{
 		LastWishDirection = FRotator(0.0f, CurrentFacingYaw, 0.0f).Vector();
 	}
-	const FQuat YawDelta(FVector::UpVector, FMath::DegreesToRadians(
+	const FVector StanceUp = FMath::Lerp(FVector::UpVector, CurrentGroundNormal, 0.45f).GetSafeNormal();
+	const FQuat SlopeAlign = FQuat::FindBetweenNormals(FVector::UpVector, StanceUp);
+	const FQuat YawDelta(CurrentGroundNormal, FMath::DegreesToRadians(
 		FMath::FindDeltaAngleDegrees(ReferenceFacingYaw, CurrentFacingYaw)));
 	FQuat Lean = FQuat::Identity;
+	const FVector SlopeForward = GetSlopeForward(Wish);
+	const FVector SlopeRight = GetSlopeRight(Wish);
 	if (!Wish.IsNearlyZero())
 	{
-		const float ForwardSpeed = FVector::DotProduct(
-			FVector(Velocity.X, Velocity.Y, 0.0f), Wish);
+		const float ForwardSpeed = FVector::DotProduct(VelocityOnSlope, WishOnSlope);
 		const float RawAccelerationAlpha = FMath::Clamp(
 			(DesiredMoveSpeed - ForwardSpeed) / FMath::Max(DesiredMoveSpeed, 1.0f), 0.0f, 1.0f);
 		SmoothedAccelerationAlpha = FMath::FInterpTo(
 			SmoothedAccelerationAlpha, RawAccelerationAlpha, DeltaTime, DriveTargetSmoothingSpeed);
 		const float LeanRadians = FMath::DegreesToRadians(
-			AccelerationLeanAngle * SmoothedAccelerationAlpha * FMath::Clamp(MoveInput.Size(), 0.0f, 1.0f));
-		const FVector Right = FVector::CrossProduct(FVector::UpVector, Wish).GetSafeNormal();
+			AccelerationLeanAngle * FMath::Clamp(MoveInput.Size(), 0.0f, 1.0f));
 		const float WobbleRadians = FMath::DegreesToRadians(BouncyPelvisWobbleAngle * Wobble);
-		const FVector DesiredUp = (FVector::UpVector
-			+ Wish * FMath::Tan(LeanRadians)
-			+ Right * FMath::Tan(WobbleRadians)).GetSafeNormal();
-		Lean = FQuat::FindBetweenNormals(FVector::UpVector, DesiredUp);
+		const FVector DesiredUp = (StanceUp
+			+ WishOnSlope * FMath::Tan(LeanRadians)
+			+ SlopeRight * FMath::Tan(WobbleRadians)).GetSafeNormal();
+		Lean = FQuat::FindBetweenNormals(StanceUp, DesiredUp);
 	}
 	else
 	{
@@ -738,15 +784,15 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 			SmoothedAccelerationAlpha, 0.0f, DeltaTime, DriveTargetSmoothingSpeed);
 	}
 
-	const FQuat PelvisRotation = Lean * YawDelta * ReferencePelvisRotation;
+	const FQuat PelvisRotation = Lean * YawDelta * SlopeAlign * ReferencePelvisRotation;
 	FQuat SpineRelativeRotation = ReferenceSpineRelativeRotation;
-	if (!Wish.IsNearlyZero() && !FMath::IsNearlyZero(Wobble))
+	if (!Wish.IsNearlyZero() && !FMath::IsNearlyZero(Wobble) && !SlopeForward.IsNearlyZero())
 	{
 		const float SwingRadians = FMath::DegreesToRadians(-LooseTorsoSwingAngle * Wobble);
 		const float TwistRadians = FMath::DegreesToRadians(LooseTorsoSwingAngle * 0.35f * Wobble);
 		const FQuat SpineWorldRotation =
-			FQuat(FVector::UpVector, TwistRadians)
-			* FQuat(Wish, SwingRadians)
+			FQuat(CurrentGroundNormal, TwistRadians)
+			* FQuat(SlopeForward, SwingRadians)
 			* PelvisRotation
 			* ReferenceSpineRelativeRotation;
 		SpineRelativeRotation = PelvisRotation.Inverse() * SpineWorldRotation;
@@ -759,11 +805,9 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 		ChestControl, FVector::ZeroVector, SpineRelativeRotation.Rotator(), DeltaTime, true, false, true, false);
 
 	const float StandingAlpha = 1.0f - FMath::Clamp(MoveInput.Size(), 0.0f, 1.0f);
-	const FVector Facing = FRotator(0.0f, CurrentFacingYaw, 0.0f).Vector();
-	const FVector Right = FVector::CrossProduct(FVector::UpVector, Facing).GetSafeNormal();
 	const FQuat BodyRotationDelta = PelvisRotation * ReferencePelvisRotation.Inverse();
 	const FQuat HeadCorrection(
-		Right, FMath::DegreesToRadians(StandingHeadCorrectionAngle * StandingAlpha));
+		SlopeRight, FMath::DegreesToRadians(StandingHeadCorrectionAngle * StandingAlpha));
 	const FQuat HeadRotation = HeadCorrection * BodyRotationDelta * ReferenceHeadRotation;
 	PhysicsControl->SetControlTargetPositionAndOrientation(
 		HeadControl, FVector::ZeroVector, HeadRotation.Rotator(), DeltaTime, true, false, true, false);
@@ -771,7 +815,6 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 
 void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector& Wish)
 {
-	// 先推进正在摆动的脚。若可以开新步，落点从 PlannedPelvisTarget 计算，而不是从当前髋骨骼另算。
 	UpdateFootTarget(LeftFoot, DeltaTime);
 	UpdateFootTarget(RightFoot, DeltaTime);
 
@@ -797,23 +840,15 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 		return;
 	}
 
-	// 身体相对世界铅垂线倾得太厉害，或者已经有一只脚在空中，就不要再开新步。
 	if (GetUprightDot() < MinimumStepUprightDot
 		|| LeftFoot.Alpha < 1.0f || RightFoot.Alpha < 1.0f)
 	{
 		return;
 	}
 
-	FVector Facing = Wish.IsNearlyZero()
-		? LastWishDirection
-		: FRotator(0.0f, CurrentFacingYaw, 0.0f).Vector();
-	Facing = Facing.GetSafeNormal2D();
-	if (Facing.IsNearlyZero())
-	{
-		Facing = GetOwner() ? GetOwner()->GetActorForwardVector() : FVector::ForwardVector;
-	}
-	const FVector Right = FVector::CrossProduct(FVector::UpVector, Facing).GetSafeNormal();
-	// 哪只脚在后面、有没有交叉，看的是当前身体姿态；落点本身用 PlannedPelvisTarget。
+	// 哪只脚在后面、有没有交叉到身体另一侧，看现在的身体姿态。落点本身从 PlannedPelvisTarget 推。
+	const FVector Forward = GetSlopeForward(Wish);
+	const FVector Right = GetSlopeRight(Wish);
 	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
 	const float LeftSide = FVector::DotProduct(Mesh->GetCenterOfMass(Bones.LeftFoot) - Hips, Right);
 	const float RightSide = FVector::DotProduct(Mesh->GetCenterOfMass(Bones.RightFoot) - Hips, Right);
@@ -827,16 +862,18 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 
 		const FVector LeftStand = PlannedPelvisTarget + Right * (LeftFoot.SideSign * StableComedyStance);
 		const FVector RightStand = PlannedPelvisTarget + Right * (RightFoot.SideSign * StableComedyStance);
-		const float LeftError = FVector::Dist2D(
-			Mesh->GetCenterOfMass(Bones.LeftFoot), LeftStand);
-		const float RightError = FVector::Dist2D(
-			Mesh->GetCenterOfMass(Bones.RightFoot), RightStand);
+		const FVector LeftDelta = FVector::VectorPlaneProject(
+			Mesh->GetCenterOfMass(Bones.LeftFoot) - LeftStand, CurrentGroundNormal);
+		const FVector RightDelta = FVector::VectorPlaneProject(
+			Mesh->GetCenterOfMass(Bones.RightFoot) - RightStand, CurrentGroundNormal);
+		const float LeftError = LeftDelta.Size();
+		const float RightError = RightDelta.Size();
 
-		// 松开移动后最多收脚一次，把脚收到髋部目标两侧的站宽上，避免站着不停倒脚。
+		// 刚松开移动时最多收一次脚，把脚收到髋目标两侧的站宽上，免得站着不停倒脚。
 		if (FMath::Max(LeftError, RightError) > StopRecoveryDistance)
 		{
 			const bool bRecoverLeft = LeftError > RightError;
-			if (BeginStep(bRecoverLeft ? LeftFoot : RightFoot, Facing))
+			if (BeginStep(bRecoverLeft ? LeftFoot : RightFoot, Wish))
 			{
 				bStepLeftNext = !bRecoverLeft;
 			}
@@ -847,7 +884,7 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 
 	if (LeftSide * LeftFoot.SideSign < -MovingCrossingRecoveryMargin)
 	{
-		if (BeginStep(LeftFoot, Facing))
+		if (BeginStep(LeftFoot, Wish))
 		{
 			bStepLeftNext = false;
 		}
@@ -855,7 +892,7 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 	}
 	if (RightSide * RightFoot.SideSign < -MovingCrossingRecoveryMargin)
 	{
-		if (BeginStep(RightFoot, Facing))
+		if (BeginStep(RightFoot, Wish))
 		{
 			bStepLeftNext = true;
 		}
@@ -863,13 +900,13 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 	}
 
 	const float LeftForward = FVector::DotProduct(
-		Mesh->GetCenterOfMass(Bones.LeftFoot) - Hips, Facing);
+		Mesh->GetCenterOfMass(Bones.LeftFoot) - Hips, Forward);
 	const float RightForward = FVector::DotProduct(
-		Mesh->GetCenterOfMass(Bones.RightFoot) - Hips, Facing);
+		Mesh->GetCenterOfMass(Bones.RightFoot) - Hips, Forward);
 	const bool bStepLeft = FMath::Abs(LeftForward - RightForward) > MovingCrossingRecoveryMargin
 		? LeftForward < RightForward
 		: bStepLeftNext;
-	const bool bStarted = BeginStep(bStepLeft ? LeftFoot : RightFoot, Facing);
+	const bool bStarted = BeginStep(bStepLeft ? LeftFoot : RightFoot, Wish);
 	if (bStarted)
 	{
 		bStepLeftNext = !bStepLeft;
@@ -878,33 +915,13 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 
 bool UDeliveryActiveRagdollComponent::BeginStep(FFoot& Foot, const FVector& Wish)
 {
-	const FVector Right = FVector::CrossProduct(FVector::UpVector, Wish).GetSafeNormal();
-	const float ForwardDistance = MoveInput.IsNearlyZero() ? 0.0f : ControlledStrideLength;
-	const float ForwardSpeed = FVector::DotProduct(
-		Mesh->GetPhysicsLinearVelocity(Bones.Hips), Wish);
-	const float VelocityLead = MoveInput.IsNearlyZero()
-		? 0.0f
-		: FMath::Clamp(
-			ForwardSpeed * ControlledStrideDuration * 0.35f,
-			0.0f, ControlledStrideLength * 0.5f);
-	// 落点从本帧髋部目标推出，再在落点探测地面高度。平滑曲线只负责从当前位置走到这个落点，并不重新决定落点。
-	FVector Destination = PlannedPelvisTarget + Wish * (ForwardDistance + VelocityLead)
-		+ Right * (Foot.SideSign * StableComedyStance);
-	FVector Ground;
-	if (!TraceGround(Destination, Ground))
+	if (!PlanFootLanding(Foot, Wish))
 	{
-		// 落点下方没有地面就不抬这只脚，否则目标会停在髋部高度的半空中。
 		return false;
 	}
-	Destination.Z = Ground.Z + Foot.GroundOffset;
 
+	// 记下抬脚时的位置，打开这只脚的位置电机。落点在摆动过程中还会按本帧髋目标重算。
 	Foot.Start = Mesh->GetCenterOfMass(Foot.Bone);
-	Foot.Target = Destination;
-	Foot.SideAxis = Right;
-	const float TargetYaw = Wish.Rotation().Yaw;
-	const FQuat FacingDelta(FVector::UpVector, FMath::DegreesToRadians(
-		FMath::FindDeltaAngleDegrees(ReferenceFacingYaw, TargetYaw)));
-	Foot.TargetRotation = FacingDelta * Foot.ReferenceRotation;
 	Foot.Alpha = 0.0f;
 	PhysicsControl->SetControlEnabled(Foot.Control, true, true, false);
 	return true;
@@ -918,11 +935,13 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FFoot& Foot, float DeltaT
 	}
 
 	Foot.Alpha = FMath::Min(1.0f, Foot.Alpha + DeltaTime / FMath::Max(ControlledStrideDuration, 0.05f));
-	// 落点已经定好。这条曲线只描述这一脚怎么从现在的位置走到落点：水平两端慢起慢停，中间按正弦抬起，避免直线拽进地面。
+	PlanFootLanding(Foot, WishOnSlope.IsNearlyZero() ? GetWishDir() : WishOnSlope);
+
+	// 落点已经在上面重算过。这条曲线只描述这一脚怎么从现在的位置走到落点：两端慢起慢停，中间沿法线抬起。
 	const float SmoothAlpha = Foot.Alpha * Foot.Alpha * Foot.Alpha
 		* (Foot.Alpha * (Foot.Alpha * 6.0f - 15.0f) + 10.0f);
 	FVector Position = FMath::Lerp(Foot.Start, Foot.Target, SmoothAlpha);
-	Position.Z += FMath::Square(FMath::Sin(PI * Foot.Alpha)) * ControlledStepHeight;
+	Position += CurrentGroundNormal * (FMath::Square(FMath::Sin(PI * Foot.Alpha)) * ControlledStepHeight);
 
 	const float SignedSide = FVector::DotProduct(Position - PlannedPelvisTarget, Foot.SideAxis) * Foot.SideSign;
 	const float RequiredSide = StableMinimumFootSide * SmoothAlpha;
@@ -936,9 +955,87 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FFoot& Foot, float DeltaT
 
 	if (Foot.Alpha >= 1.0f)
 	{
-		// 落地后关掉世界空间位置电机。这只脚改做支撑，靠摩擦和腿部角度电机留在地上。
+		// 脚已经落到目标上。关掉位置电机，这只脚改做支撑，靠摩擦和腿部角度电机留在地上。
 		PhysicsControl->SetControlEnabled(Foot.Control, false, true, false);
 	}
+}
+
+bool UDeliveryActiveRagdollComponent::PlanFootLanding(FFoot& Foot, const FVector& Wish)
+{
+	// 在切平面上从髋目标推出落点，再沿法线投到坡面上，并用前进方向和法线摆正脚底板。
+	const FVector Forward = GetSlopeForward(Wish);
+	const FVector Right = GetSlopeRight(Wish);
+	if (Forward.IsNearlyZero() || Right.IsNearlyZero())
+	{
+		return false;
+	}
+
+	const float ForwardDistance = MoveInput.IsNearlyZero() ? 0.0f : ControlledStrideLength;
+	const float ForwardSpeed = FVector::DotProduct(
+		FVector::VectorPlaneProject(Mesh->GetPhysicsLinearVelocity(Bones.Hips), CurrentGroundNormal),
+		Forward);
+	const float VelocityLead = MoveInput.IsNearlyZero()
+		? 0.0f
+		: FMath::Clamp(
+			ForwardSpeed * ControlledStrideDuration * 0.35f,
+			0.0f, ControlledStrideLength * 0.5f);
+	const FVector DestinationOnPlane = PlannedPelvisTarget
+		+ Forward * (ForwardDistance + VelocityLead)
+		+ Right * (Foot.SideSign * StableComedyStance);
+
+	FGroundHit Ground;
+	if (!TraceGround(DestinationOnPlane, CurrentGroundNormal, Ground))
+	{
+		// 落点沿法线投不到地面，这一步取消，免得把脚目标留在半空。
+		return false;
+	}
+
+	Foot.Target = Ground.Point + Ground.Normal * Foot.GroundOffset;
+	Foot.SideAxis = Right;
+	Foot.TargetRotation = MakeSlopeAlignedFootRotation(Foot, Forward);
+	return true;
+}
+
+FVector UDeliveryActiveRagdollComponent::GetSlopeForward(const FVector& Wish) const
+{
+	FVector WorldForward = Wish.IsNearlyZero()
+		? FRotator(0.0f, CurrentFacingYaw, 0.0f).Vector()
+		: Wish;
+	FVector Forward = FVector::VectorPlaneProject(WorldForward, CurrentGroundNormal).GetSafeNormal();
+	if (Forward.IsNearlyZero())
+	{
+		Forward = FVector::VectorPlaneProject(LastWishDirection, CurrentGroundNormal).GetSafeNormal();
+	}
+	if (Forward.IsNearlyZero() && GetOwner())
+	{
+		Forward = FVector::VectorPlaneProject(GetOwner()->GetActorForwardVector(), CurrentGroundNormal).GetSafeNormal();
+	}
+	return Forward;
+}
+
+FVector UDeliveryActiveRagdollComponent::GetSlopeRight(const FVector& Wish) const
+{
+	return FVector::CrossProduct(CurrentGroundNormal, GetSlopeForward(Wish)).GetSafeNormal();
+}
+
+FQuat UDeliveryActiveRagdollComponent::MakeSlopeAlignedFootRotation(
+	const FFoot& Foot, const FVector& SlopeForward) const
+{
+	FVector AxisZ = CurrentGroundNormal.GetSafeNormal();
+	FVector AxisX = FVector::VectorPlaneProject(SlopeForward, AxisZ).GetSafeNormal();
+	if (AxisX.IsNearlyZero())
+	{
+		AxisX = FVector::VectorPlaneProject(FVector::ForwardVector, AxisZ).GetSafeNormal();
+	}
+	if (AxisZ.IsNearlyZero() || AxisX.IsNearlyZero())
+	{
+		return Foot.ReferenceRotation;
+	}
+
+	const FQuat SlopeBasis(FRotationMatrix::MakeFromZX(AxisZ, AxisX));
+	const FVector ReferenceForward = FRotator(0.0f, ReferenceFacingYaw, 0.0f).Vector();
+	const FQuat ReferenceBasis(FRotationMatrix::MakeFromZX(FVector::UpVector, ReferenceForward));
+	return SlopeBasis * ReferenceBasis.Inverse() * Foot.ReferenceRotation;
 }
 
 FVector UDeliveryActiveRagdollComponent::GetWholeBodyCenterOfMass() const
@@ -977,14 +1074,14 @@ FVector UDeliveryActiveRagdollComponent::GetWholeBodyCenterOfMass() const
 	return TotalMass > UE_SMALL_NUMBER ? WeightedCenter / TotalMass : Mesh->GetComponentLocation();
 }
 
-bool UDeliveryActiveRagdollComponent::ResolveGroundHeight(
-	const FVector& PlannedHorizontal, const FVector& Fallback, FVector& GroundPoint) const
+bool UDeliveryActiveRagdollComponent::SampleGround(
+	const FVector& Planned, const FVector& Fallback, const FVector& AlongNormal, FGroundHit& OutHit) const
 {
-	if (TraceGround(PlannedHorizontal, GroundPoint))
+	if (TraceGround(Planned, AlongNormal, OutHit))
 	{
 		return true;
 	}
-	return TraceGround(Fallback, GroundPoint);
+	return TraceGround(Fallback, AlongNormal, OutHit);
 }
 
 float UDeliveryActiveRagdollComponent::GetUprightDot() const
@@ -994,30 +1091,49 @@ float UDeliveryActiveRagdollComponent::GetUprightDot() const
 		return 0.0f;
 	}
 
-	// 把启动时髋部里的头顶方向转到现在，再和世界向上做点积。数值越接近 1 越直立。
+	// 把启动时髋里的头顶方向转到现在，再和坡面法线做点积。不要和世界竖直向上比。
 	const FQuat PelvisRotation = Mesh->GetBoneQuaternion(Bones.Hips, EBoneSpaces::WorldSpace);
 	const FVector Up = PelvisRotation.RotateVector(UprightInPelvisSpace).GetSafeNormal();
-	return FVector::DotProduct(Up, FVector::UpVector);
+	return FVector::DotProduct(Up, CurrentGroundNormal);
 }
 
-bool UDeliveryActiveRagdollComponent::TraceGround(const FVector& Around, FVector& GroundPoint) const
+bool UDeliveryActiveRagdollComponent::TraceGround(
+	const FVector& Around, const FVector& AlongNormal, FGroundHit& OutHit) const
 {
-	// 从探测点上方 60 打到下方 220，只取撞击点，不用地面法线。
 	UWorld* World = GetWorld();
 	if (!World)
 	{
 		return false;
 	}
 
-	const FVector Start = Around + FVector::UpVector * 60.0f;
-	const FVector End = Around - FVector::UpVector * 220.0f;
+	FVector Normal = AlongNormal.GetSafeNormal();
+	if (Normal.IsNearlyZero() || Normal.Z < 0.0f)
+	{
+		Normal = FVector::UpVector;
+	}
+
+	const FVector Start = Around + Normal * 60.0f;
+	const FVector End = Around - Normal * 220.0f;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(RagdollGround), false, GetOwner());
 	FHitResult Hit;
 
 	if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, Params)
 		|| World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
 	{
-		GroundPoint = Hit.ImpactPoint;
+		FVector HitNormal = Hit.ImpactNormal.GetSafeNormal();
+		if (HitNormal.Z < 0.0f)
+		{
+			HitNormal = -HitNormal;
+		}
+		const float MinimumWalkableNormalZ = FMath::Cos(FMath::DegreesToRadians(MaxWalkableSlopeDegrees));
+		if (HitNormal.Z < MinimumWalkableNormalZ)
+		{
+			// 比 MaxWalkableSlopeDegrees 更陡的面不按坡面走，例如立面和台阶踢面。
+			return false;
+		}
+
+		OutHit.Point = Hit.ImpactPoint;
+		OutHit.Normal = HitNormal;
 		return true;
 	}
 	return false;
