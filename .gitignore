@@ -82,6 +82,10 @@ Plugins/**/Intermediate/*
 # Cache files for the editor to use
 DerivedDataCache/*
 
+# Python bytecode and cache directories
+__pycache__/
+*.py[cod]
+
 # Crash dumps and logs
 *.dmp
 *.log
