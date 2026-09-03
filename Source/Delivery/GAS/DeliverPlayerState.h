@@ -8,6 +8,7 @@
 #include "DeliverPlayerState.generated.h"
 
 class UDeliverAbilitySystemComponent;
+class UDeliverAttributeSet;
 class UAbilitySystemComponent;
 
 /**
@@ -20,10 +21,10 @@ class DELIVERY_API ADeliverPlayerState : public APlayerState, public IAbilitySys
 
 public:
 
-	// 在 GameMode 创建出 PlayerState 时调用
+	// 在 GameMode 创建 PlayerState 时调用，用于创建子组件（ASC,属性表）
 	ADeliverPlayerState();
 
-	// 在 组件创建完毕时 由引擎调用 
+	// 在 PlayerState的子组件创建完毕时 由引擎调用 
 	virtual void PostInitializeComponents() override;
 
 	/** Getter **/
@@ -34,9 +35,17 @@ public:
 
 protected:
 
+	/** 子组件 **/
+	// ASC
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Ability")
 	TObjectPtr<UDeliverAbilitySystemComponent> AbilitySystemComponent;
 
+	// 属性表
+	UPROPERTY()
+	TObjectPtr<UDeliverAttributeSet> AttributeSet;
+
+	/** 回调 **/
+	// 角色被控制时的回调
 	UFUNCTION()
 	void HandlePawnSet(APlayerState* Player, APawn* NewPawn, APawn* OldPawn);
 };

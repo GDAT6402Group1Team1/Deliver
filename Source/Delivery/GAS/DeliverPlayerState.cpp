@@ -2,11 +2,15 @@
 
 #include "DeliverPlayerState.h"
 #include "DeliverAbilitySystemComponent.h"
+#include "DeliverAttributeSet.h"
 
 ADeliverPlayerState::ADeliverPlayerState()
 {
 	// 创建 ASC
 	AbilitySystemComponent = CreateDefaultSubobject<UDeliverAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+	
+	// 创建 属性表
+	AttributeSet = CreateDefaultSubobject<UDeliverAttributeSet>(TEXT("AttributeSet"));
 }
 
 void ADeliverPlayerState::PostInitializeComponents()
