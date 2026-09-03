@@ -4,7 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystemComponent.h"
+#include "GameplayEffectTypes.h"
 #include "DeliverAbilitySystemComponent.generated.h"
+
+class UGameplayEffect;
 
 /**
  * 玩家专用 ASC。负责 GAS 复制策略，以及 Owner / Avatar 绑定。
@@ -21,4 +24,14 @@ public:
 
 	// InitActorInfo封装
 	void InitializeAbilityActor(AActor* Owner, AActor* Avatar);
+
+protected:
+
+	TSubclassOf<UGameplayEffect> HealthRegenEffect;
+
+	FActiveGameplayEffectHandle RegenHandle;
+	bool bRegenWatchBound = false;
+
+	// 血量变化回调（服务器上）
+	void OnHealthChanged(const FOnAttributeChangeData& Data);
 };

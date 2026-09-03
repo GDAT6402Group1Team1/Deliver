@@ -8,6 +8,7 @@
 #include "DeliveryCharacter.generated.h"
 
 class UAbilitySystemComponent;
+class UGameplayEffect;
 class UCapsuleComponent;
 class UDeliveryActiveRagdollComponent;
 class USkeletalMeshComponent;
@@ -58,6 +59,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll|Network", meta=(ClampMin="0.05"))
 	float MinimumJumpInterval = 0.2f;
 
+	// 在 BP_DeliveryMan 里指定 GE_HealthRegen
+	UPROPERTY(EditDefaultsOnly, Category="Ability")
+	TSubclassOf<UGameplayEffect> HealthRegenEffect;
+
 public:
 
 	ADeliveryCharacter();
@@ -100,6 +105,7 @@ public:
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 	FORCEINLINE UDeliveryActiveRagdollComponent* GetActiveRagdoll() const { return ActiveRagdoll; }
+	FORCEINLINE TSubclassOf<UGameplayEffect> GetHealthRegenEffect() const { return HealthRegenEffect; }
 
 private:
 

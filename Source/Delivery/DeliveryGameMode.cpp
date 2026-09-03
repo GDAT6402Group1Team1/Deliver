@@ -14,7 +14,7 @@ ADeliveryGameMode::ADeliveryGameMode()
 	PlayerControllerClass = ADeliveryPlayerController::StaticClass();
 	PlayerStateClass = ADeliverPlayerState::StaticClass();
 
-	static ConstructorHelpers::FClassFinder<APawn> PawnBP(TEXT("/Game/Blueprint/Character/BP_DeliveryMan"));					// 正常从蓝图创建
+	static ConstructorHelpers::FClassFinder<APawn> PawnBP(TEXT("/Game/Blueprint/Character/Deliverman/BP_DeliveryMan"));					// 正常从蓝图创建
 	if (PawnBP.Succeeded())
 	{
 		DefaultPawnClass = PawnBP.Class;
