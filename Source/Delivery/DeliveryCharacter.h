@@ -63,6 +63,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Ability")
 	TSubclassOf<UGameplayEffect> HealthRegenEffect;
 
+	// 在 BP_DeliveryMan 里指定 GE_Damage（Instant + SetByCaller Effect.Type.Damage）
+	UPROPERTY(EditDefaultsOnly, Category="Ability")
+	TSubclassOf<UGameplayEffect> DamageEffect;
+
 public:
 
 	ADeliveryCharacter();
@@ -106,6 +110,7 @@ public:
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 	FORCEINLINE UDeliveryActiveRagdollComponent* GetActiveRagdoll() const { return ActiveRagdoll; }
 	FORCEINLINE TSubclassOf<UGameplayEffect> GetHealthRegenEffect() const { return HealthRegenEffect; }
+	FORCEINLINE TSubclassOf<UGameplayEffect> GetDamageEffect() const { return DamageEffect; }
 
 private:
 
