@@ -3,9 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AbilitySystemInterface.h"
 #include "GameFramework/Pawn.h"
 #include "DeliveryCharacter.generated.h"
 
+class UAbilitySystemComponent;
 class UCapsuleComponent;
 class UDeliveryActiveRagdollComponent;
 class USkeletalMeshComponent;
@@ -16,7 +18,7 @@ struct FInputActionValue;
 
 /** 第三人称Pawn：胶囊跟镜头，身体由主动滑稽布娃娃驱动。 */
 UCLASS()
-class ADeliveryCharacter : public APawn
+class ADeliveryCharacter : public APawn, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
@@ -59,6 +61,11 @@ protected:
 public:
 
 	ADeliveryCharacter();
+
+	// PlayerState复制时调用
+	virtual void OnRep_PlayerState() override;
+	
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
 protected:
 

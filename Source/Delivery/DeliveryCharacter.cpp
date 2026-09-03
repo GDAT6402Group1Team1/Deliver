@@ -12,6 +12,8 @@
 #include "InputActionValue.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Delivery.h"
+#include "GAS/DeliverAbilitySystemComponent.h"
+#include "GAS/DeliverPlayerState.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 
 ADeliveryCharacter::ADeliveryCharacter()
@@ -88,6 +90,30 @@ ADeliveryCharacter::ADeliveryCharacter()
 		Mesh->SetAnimation(StandPoseFinder.Object);
 		Mesh->SetPlayRate(0.0f);
 	}
+}
+
+void ADeliveryCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	// 本机客户端： 已经在 OnPawnSet 时InitAbilityInfo
+	if (IsLocallyControlled())
+	{
+		return;
+	}
+
+	// 其他客户端： PS复制时InitAbilityInfo
+	ADeliverPlayerState* PS = GetPlayerState<ADeliverPlayerState>();
+	if (UDeliverAbilitySystemComponent* ASC = PS ? PS->GetDeliverAbilitySystemComponent() : nullptr)
+	{
+		ASC->InitializeAbilityActor(PS, this);
+	}
+}
+
+UAbilitySystemComponent* ADeliveryCharacter::GetAbilitySystemComponent() const
+{
+	const ADeliverPlayerState* PS = GetPlayerState<ADeliverPlayerState>();
+	return PS ? PS->GetAbilitySystemComponent() : nullptr;
 }
 
 void ADeliveryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

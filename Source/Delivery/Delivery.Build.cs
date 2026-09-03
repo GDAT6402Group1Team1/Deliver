@@ -14,8 +14,11 @@ public class Delivery : ModuleRules
 			"Engine",
 			"InputCore",
 			"EnhancedInput",
-			"PhysicsControl"
-		});
+			"PhysicsControl",
+            "GameplayAbilities",
+            "GameplayTags",
+            "GameplayTasks"
+        });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 	}
