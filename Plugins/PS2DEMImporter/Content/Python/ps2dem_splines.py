@@ -91,14 +91,7 @@ def tangent_vector(
         float(handle[0]), float(handle[1]), GROUND_OFFSET_CM
     )
     delta = handle_world - anchor_world if leaving else anchor_world - handle_world
-    # Photoshop Bezier handles describe only the route's plan-view shape. Their
-    # sampled terrain height is not a real vertical handle coordinate. Keeping
-    # that Z delta makes long handles overshoot far below/above the terrain when
-    # UE evaluates the cubic spline, and Editor Apply Spline then carves spikes
-    # or trenches into the Landscape. Anchor points still retain sampled terrain
-    # heights; zero-Z tangents give a smooth, non-overshooting transition between
-    # those anchor heights.
-    return unreal.Vector(delta.x * 3.0, delta.y * 3.0, 0.0)
+    return delta * 3.0
 
 
 def import_splines() -> None:

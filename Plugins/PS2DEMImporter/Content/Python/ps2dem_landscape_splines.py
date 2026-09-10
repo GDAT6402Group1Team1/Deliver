@@ -6,16 +6,12 @@ import math
 
 import unreal
 
-from ps2dem_common import TerrainHeightSampler, show_message
+from ps2dem_common import show_message
 
 
 EDIT_LAYER_NAME = "PS2DEM_Splines"
+GENERATED_TAG = "PS2DEM_SPLINE"
 WIDTH_TAG_PREFIX = "WIDTH_M_"
-GROUND_SAMPLE_SPACING_CM = 100.0
-GROUND_OFFSET_CM = 10.0
-MAX_SAFE_HEIGHT_CORRECTION_CM = 200.0
-TRACE_TOP_CM = 1_000_000.0
-TRACE_BOTTOM_CM = -1_000_000.0
 
 TYPE_CONFIG = {
     "MainRoad": {
@@ -145,156 +141,11 @@ def _require_edit_layer(landscape: unreal.Landscape) -> None:
     )
 
 
-def _grounded_world_points(
-    spline: unreal.SplineComponent,
-    sampler: TerrainHeightSampler,
-    landscape: unreal.Landscape,
-    actors_to_ignore: list[unreal.Actor],
-) -> tuple[list[unreal.Vector], float, int]:
-    """Encode the desired final DEM height as a regular Edit Layer delta."""
-
+def _subdivision_count(spline: unreal.SplineComponent) -> int:
+    # Roughly one subdivision per five metres, bounded to avoid very slow or
+    # artifact-prone values on unusually long routes.
     length_cm = float(spline.get_spline_length())
-    segment_count = max(1, int(math.ceil(length_cm / GROUND_SAMPLE_SPACING_CM)))
-    closed = bool(spline.is_closed_loop())
-    point_count = max(3, segment_count) if closed else segment_count + 1
-    denominator = point_count if closed else point_count - 1
-    points = []
-    max_correction_cm = 0.0
-    missed_surface_samples = 0
-    landscape_origin_z = float(landscape.get_actor_location().z)
-    world = unreal.EditorLevelLibrary.get_editor_world()
-    for index in range(point_count):
-        distance = length_cm * index / denominator
-        route_location = spline.get_location_at_distance_along_spline(
-            distance, unreal.SplineCoordinateSpace.WORLD
-        )
-        desired = sampler.location(
-            route_location.x / 100.0,
-            route_location.y / 100.0,
-            GROUND_OFFSET_CM,
-        )
-        hit = unreal.SystemLibrary.line_trace_single(
-            world,
-            unreal.Vector(route_location.x, route_location.y, TRACE_TOP_CM),
-            unreal.Vector(route_location.x, route_location.y, TRACE_BOTTOM_CM),
-            unreal.TraceTypeQuery.TRACE_TYPE_QUERY1,
-            True,
-            actors_to_ignore,
-            unreal.DrawDebugTrace.NONE,
-            True,
-        )
-        if hit is None:
-            # Outside the Landscape there is nothing to deform. A zero-delta
-            # proxy height keeps the boundary interpolation safe.
-            encoded_z = landscape_origin_z
-            missed_surface_samples += 1
-        else:
-            hit_data = hit.to_dict()
-            impact = hit_data.get("impact_point") or hit_data.get("location")
-            if impact is None:
-                encoded_z = landscape_origin_z
-                missed_surface_samples += 1
-            else:
-                correction_cm = float(desired.z) - float(impact.z)
-                max_correction_cm = max(max_correction_cm, abs(correction_cm))
-                if abs(correction_cm) > MAX_SAFE_HEIGHT_CORRECTION_CM:
-                    raise RuntimeError(
-                        "The current Landscape differs from the R16 target by "
-                        f"{correction_cm:.1f} cm near "
-                        f"({route_location.x / 100.0:.1f} m, "
-                        f"{route_location.y / 100.0:.1f} m).\n\n"
-                        "The PS2DEM_Splines layer may already contain an older "
-                        "application, or the Landscape and R16 may be from "
-                        "different terrain exports. Reset the deformation layer "
-                        "or reimport the matching terrain before applying again."
-                    )
-                # On a normal Landscape Edit Layer, Editor Apply Spline writes
-                # (spline Z - Landscape actor Z) as an additive height. Passing
-                # the desired absolute world Z would therefore add the terrain
-                # elevation a second time. Encode only the required correction.
-                encoded_z = landscape_origin_z + correction_cm
-        points.append(unreal.Vector(route_location.x, route_location.y, encoded_z))
-    return points, max_correction_cm, missed_surface_samples
-
-
-def _target_landscape_ignore_list(
-    subsystem: unreal.EditorActorSubsystem,
-    target: unreal.Landscape,
-) -> list[unreal.Actor]:
-    """Ignore all Actors except the target Landscape and its streaming proxies."""
-
-    target_path = target.get_path_name()
-    ignored = []
-    for actor in subsystem.get_all_level_actors():
-        if isinstance(actor, unreal.LandscapeProxy):
-            root = _root_landscape(actor)
-            if root and root.get_path_name() == target_path:
-                continue
-        ignored.append(actor)
-    return ignored
-
-
-def _spawn_grounded_proxy(
-    subsystem: unreal.EditorActorSubsystem,
-    source_actor: unreal.Actor,
-    source_spline: unreal.SplineComponent,
-    sampler: TerrainHeightSampler,
-    landscape: unreal.Landscape,
-    actors_to_ignore: list[unreal.Actor],
-) -> tuple[unreal.Actor, unreal.SplineComponent, int, float, int]:
-    """Create a short-lived, densely sampled spline that follows the source DEM."""
-
-    world_points, max_correction_cm, missed_surface_samples = _grounded_world_points(
-        source_spline, sampler, landscape, actors_to_ignore
-    )
-    origin = world_points[0]
-    proxy_actor = subsystem.spawn_actor_from_class(
-        source_actor.get_class(), origin, unreal.Rotator()
-    )
-    if not proxy_actor:
-        raise RuntimeError(
-            f"Could not create grounded proxy for {source_actor.get_actor_label()}"
-        )
-    proxy_spline = proxy_actor.get_component_by_class(unreal.SplineComponent)
-    if not proxy_spline:
-        subsystem.destroy_actor(proxy_actor)
-        raise RuntimeError(
-            f"Grounded proxy for {source_actor.get_actor_label()} has no SplineComponent"
-        )
-
-    local_points = [point - origin for point in world_points]
-    proxy_spline.set_spline_points(
-        local_points, unreal.SplineCoordinateSpace.LOCAL, False
-    )
-    for index in range(len(local_points)):
-        # Linear segments cannot overshoot vertically between grounded samples.
-        proxy_spline.set_spline_point_type(
-            index, unreal.SplinePointType.LINEAR, False
-        )
-    proxy_spline.set_closed_loop(bool(source_spline.is_closed_loop()), False)
-    proxy_spline.update_spline()
-    actual_origin = proxy_spline.get_location_at_spline_point(
-        0, unreal.SplineCoordinateSpace.WORLD
-    )
-    origin_delta = actual_origin - world_points[0]
-    origin_error_cm = math.sqrt(
-        origin_delta.x * origin_delta.x
-        + origin_delta.y * origin_delta.y
-        + origin_delta.z * origin_delta.z
-    )
-    if origin_error_cm > 0.1:
-        subsystem.destroy_actor(proxy_actor)
-        raise RuntimeError(
-            f"Grounded proxy transform mismatch for {source_actor.get_actor_label()}: "
-            f"{origin_error_cm:.3f} cm"
-        )
-    return (
-        proxy_actor,
-        proxy_spline,
-        len(world_points),
-        max_correction_cm,
-        missed_surface_samples,
-    )
+    return max(20, min(256, int(math.ceil(length_cm / 500.0))))
 
 
 def apply_selected_splines_to_landscape() -> None:
@@ -311,8 +162,6 @@ def apply_selected_splines_to_landscape() -> None:
 
         landscape = _target_landscape(subsystem)
         _require_edit_layer(landscape)
-        sampler = TerrainHeightSampler()
-        actors_to_ignore = _target_landscape_ignore_list(subsystem, landscape)
 
         route_lines = "\n".join(
             f"- {actor.get_actor_label()} ({route_type}, {width_m:g} m)"
@@ -325,8 +174,6 @@ def apply_selected_splines_to_landscape() -> None:
             f"Target edit layer: {EDIT_LAYER_NAME}\n\n"
             f"{route_lines}\n\n"
             "Roads can raise and lower terrain. Rivers only lower terrain.\n"
-            "A temporary ground-following spline will be sampled every 1 m; "
-            "the editable source routes will not gain extra points.\n"
             "Applying again accumulates changes; delete and recreate the edit "
             "layer first when you want a clean rebuild.",
             unreal.AppMsgType.YES_NO,
@@ -336,60 +183,38 @@ def apply_selected_splines_to_landscape() -> None:
             return
 
         applied = []
-        proxy_actors = []
-        try:
-            with unreal.ScopedEditorTransaction("Apply PS2DEM splines to Landscape"):
-                landscape.modify()
-                for actor, spline, route_type, width_m in routes:
-                    config = TYPE_CONFIG[route_type]
-                    half_width_cm = width_m * 50.0
-                    falloff_cm = max(
-                        200.0,
-                        half_width_cm * float(config["falloff_factor"]),
-                    )
-                    (
-                        proxy_actor,
-                        proxy_spline,
-                        ground_point_count,
-                        max_correction_cm,
-                        missed_surface_samples,
-                    ) = _spawn_grounded_proxy(
-                        subsystem,
-                        actor,
-                        spline,
-                        sampler,
-                        landscape,
-                        actors_to_ignore,
-                    )
-                    proxy_actors.append(proxy_actor)
-                    landscape.editor_apply_spline(
-                        proxy_spline,
-                        start_width=half_width_cm,
-                        end_width=half_width_cm,
-                        start_side_falloff=falloff_cm,
-                        end_side_falloff=falloff_cm,
-                        start_roll=0.0,
-                        end_roll=0.0,
-                        # The proxy already has one linear point every metre.
-                        num_subdivisions=1,
-                        raise_heights=bool(config["raise_heights"]),
-                        lower_heights=bool(config["lower_heights"]),
-                        paint_layer=None,
-                        edit_layer_name=unreal.Name(EDIT_LAYER_NAME),
-                    )
-                    applied.append(actor.get_actor_label())
-                    unreal.log(
-                        f"PS2DEM applied {actor.get_actor_label()} to Landscape: "
-                        f"type={route_type}, total_width={width_m:g}m, "
-                        f"half_width={half_width_cm:g}cm, falloff={falloff_cm:g}cm, "
-                        f"ground_samples={ground_point_count}, "
-                        f"max_height_correction={max_correction_cm:.2f}cm, "
-                        f"surface_misses={missed_surface_samples}"
-                    )
-                landscape.force_layers_full_update()
-        finally:
-            for proxy_actor in proxy_actors:
-                subsystem.destroy_actor(proxy_actor)
+        with unreal.ScopedEditorTransaction("Apply PS2DEM splines to Landscape"):
+            landscape.modify()
+            for actor, spline, route_type, width_m in routes:
+                config = TYPE_CONFIG[route_type]
+                half_width_cm = width_m * 50.0
+                falloff_cm = max(
+                    200.0,
+                    half_width_cm * float(config["falloff_factor"]),
+                )
+                subdivisions = _subdivision_count(spline)
+                landscape.editor_apply_spline(
+                    spline,
+                    start_width=half_width_cm,
+                    end_width=half_width_cm,
+                    start_side_falloff=falloff_cm,
+                    end_side_falloff=falloff_cm,
+                    start_roll=0.0,
+                    end_roll=0.0,
+                    num_subdivisions=subdivisions,
+                    raise_heights=bool(config["raise_heights"]),
+                    lower_heights=bool(config["lower_heights"]),
+                    paint_layer=None,
+                    edit_layer_name=unreal.Name(EDIT_LAYER_NAME),
+                )
+                applied.append(actor.get_actor_label())
+                unreal.log(
+                    f"PS2DEM applied {actor.get_actor_label()} to Landscape: "
+                    f"type={route_type}, total_width={width_m:g}m, "
+                    f"half_width={half_width_cm:g}cm, falloff={falloff_cm:g}cm, "
+                    f"subdivisions={subdivisions}"
+                )
+            landscape.force_layers_full_update()
 
         message = (
             f"Applied {len(applied)} route(s) to Landscape "
@@ -423,3 +248,4 @@ def show_reset_instructions() -> None:
         "UE 5.8 does not expose stable Python methods for creating or deleting "
         "Landscape Edit Layers, so these two layer operations remain manual.",
     )
+

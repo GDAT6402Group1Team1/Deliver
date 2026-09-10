@@ -1,19 +1,12 @@
 {
   "FileVersion": 3,
-  "Version": 7,
-  "VersionName": "1.3.0",
+  "Version": 2,
+  "VersionName": "1.2.0",
   "FriendlyName": "PS2DEM Importer",
   "Description": "PS2DEM terrain, building, route spline and Landscape deformation editor tools.",
   "Category": "Editor",
   "CreatedBy": "PS2DEM",
   "CanContainContent": true,
-  "Modules": [
-    {
-      "Name": "PS2DEMImporter",
-      "Type": "Editor",
-      "LoadingPhase": "PostEngineInit"
-    }
-  ],
   "EnabledByDefault": false,
   "Installed": false,
   "SupportedTargetPlatforms": ["Win64"],
