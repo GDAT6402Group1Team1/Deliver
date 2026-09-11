@@ -19,9 +19,11 @@
 #include "DeliveryActiveRagdollComponent.h"
 
 #include "CollisionQueryParams.h"
+#include "Combat/DeliveryHandPose.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "Engine/SkeletalMesh.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
@@ -219,6 +221,7 @@ void UDeliveryActiveRagdollComponent::PlaceOnGround()
 
 void UDeliveryActiveRagdollComponent::ConfigurePhysics()
 {
+	FDeliveryBoxingPose::CompletePhysicsAsset(Mesh, ArmPose);
 	InitialMeshRelativeTransform = Mesh->GetRelativeTransform();
 	Mesh->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 
@@ -232,6 +235,17 @@ void UDeliveryActiveRagdollComponent::ConfigurePhysics()
 	Mesh->SetLinearDamping(RigidBodyLinearDamping);
 	Mesh->SetAngularDamping(RigidBodyAngularDamping);
 	Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+
+	// 手指没有刚体，物理姿势管不到，它们只跟动画姿势走。不接管的话就是参考姿势的五指张开，
+	// 出拳打出去的是巴掌而不是拳头。这里换成只负责握拳的动画实例，有刚体的骨骼照旧由物理覆盖。
+	Mesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+	Mesh->SetAnimInstanceClass(UDeliveryHandPoseAnimInstance::StaticClass());
+	if (UDeliveryHandPoseAnimInstance* Hands = Cast<UDeliveryHandPoseAnimInstance>(Mesh->GetAnimInstance()))
+	{
+		Hands->FingerCurlAngle = ArmPose.FingerCurlAngle;
+		Hands->ThumbCurlAngle = ArmPose.ThumbCurlAngle;
+		Hands->RebuildFist();
+	}
 
 	Capsule->SetSimulatePhysics(false);
 	Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -256,7 +270,9 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 	TArray<FName> HeadChildren;
 	TArray<FName> UpperLegs;
 	TArray<FName> LowerLegs;
-	TArray<FName> Arms;
+	TArray<FName> LeftArmBones;
+	TArray<FName> RightArmBones;
+	BoxingPose.Create(Mesh, PhysicsControl, ArmPose);
 
 	for (const TObjectPtr<USkeletalBodySetup>& Setup : PhysicsAsset->SkeletalBodySetups)
 	{
@@ -266,6 +282,11 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 		}
 
 		const FName Bone = Setup->BoneName;
+		// Each arm body has exactly one controller. Never also add an upper arm to Torso.
+		const int32 BoxingSide = (Bone == Bones.LeftArm || Mesh->BoneIsChildOf(Bone, Bones.LeftArm)) ? 0
+			: ((Bone == Bones.RightArm || Mesh->BoneIsChildOf(Bone, Bones.RightArm)) ? 1 : -1);
+		if (BoxingSide >= 0 && BoxingPose.IsReady(BoxingSide)) continue;
+		if (Bone == Bones.LeftArm || Bone == Bones.RightArm) continue;
 		if (Bone == Bones.Head || Mesh->BoneIsChildOf(Bone, Bones.Head))
 		{
 			if (Bone != Bones.Head)
@@ -285,10 +306,13 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 				LowerLegs.Add(Bone);
 			}
 		}
-		else if (Mesh->BoneIsChildOf(Bone, Bones.LeftArm) || Mesh->BoneIsChildOf(Bone, Bones.RightArm)
-			|| Bone == Bones.LeftArm || Bone == Bones.RightArm)
+		else if (Mesh->BoneIsChildOf(Bone, Bones.LeftArm))
 		{
-			Arms.Add(Bone);
+			LeftArmBones.Add(Bone);
+		}
+		else if (Mesh->BoneIsChildOf(Bone, Bones.RightArm))
+		{
+			RightArmBones.Add(Bone);
 		}
 		else
 		{
@@ -330,7 +354,8 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 	ChestControl = ChestControls[0];
 
 	// 躯干其余节：父空间旋转，目标是当前骨骼动画姿势，不是启动时记下的站立姿势。
-	PhysicsControl->CreateControlsFromSkeletalMesh(
+	// 上臂就挂在这几节上，出拳时要按名字把它们绷紧，所以留着控制名。
+	TorsoControls = PhysicsControl->CreateControlsFromSkeletalMesh(
 		Mesh, Torso, EPhysicsControlType::ParentSpace, MakeAngularControl(LooseComedyBodyStrength, StableMuscleDampingRatio), TorsoSet);
 	// 头：世界空间旋转，目标由启动时记下的头部姿势随身体转向得到。
 	FPhysicsControlData HeadData = MakeAngularControl(UprightHeadStrength, StableHeadDampingRatio);
@@ -355,9 +380,20 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 	PhysicsControl->CreateControlsFromSkeletalMesh(
 		Mesh, { Bones.LeftFoot, Bones.RightFoot }, EPhysicsControlType::ParentSpace,
 		MakeAngularControl(FootFacingStrength, StableMuscleDampingRatio), FootPostureSet);
-	// 手臂：父空间旋转，目标是当前骨骼动画姿势。强度很低，外力和惯性很容易把胳膊带走。
-	PhysicsControl->CreateControlsFromSkeletalMesh(
-		Mesh, Arms, EPhysicsControlType::ParentSpace, MakeAngularControl(ComedyArmStrength, 1.0f), ArmsSet);
+	// 手臂正常由 BoxingPose 驱动。只有它建不起来时才退回这套跟随骨架动画的软控制，
+	// 避免猜测局部轴导致关节持续扭动。
+	TArray<FName> FallbackArmBones = LeftArmBones;
+	FallbackArmBones.Append(RightArmBones);
+	if (!BoxingPose.IsReady(0)) FallbackArmBones.Add(Bones.LeftArm);
+	if (!BoxingPose.IsReady(1)) FallbackArmBones.Add(Bones.RightArm);
+	const TArray<FName> FallbackArmControls = PhysicsControl->CreateControlsFromSkeletalMesh(
+		Mesh, FallbackArmBones, EPhysicsControlType::ParentSpace, MakeAngularControl(ComedyArmStrength, 1.0f), ArmsSet);
+	if (FallbackArmControls.IsEmpty() && !BoxingPose.IsReady(0) && !BoxingPose.IsReady(1))
+	{
+		// 这会直接导致出拳只能动躯干。带出骨骼配置问题，但不再在每次攻击时刷屏。
+		UE_LOG(LogDelivery, Warning, TEXT("%s: No arm Physics Controls were created; check the arm bodies in the Physics Asset."),
+			*GetNameSafe(GetOwner()));
+	}
 
 	// 摆动脚的世界空间位置电机。支撑阶段关掉，避免和地面摩擦较劲。
 	FPhysicsControlData FootData;
@@ -395,6 +431,9 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 
 void UDeliveryActiveRagdollComponent::DestroyControls()
 {
+	BoxingPose = FDeliveryBoxingPose();
+	bBodyDrivenPunchActive = false;
+	bBodyDrivenPunchReleased = false;
 	if (PhysicsControl)
 	{
 		PhysicsControl->DestroyControlsInSet(TEXT("All"));
@@ -402,6 +441,11 @@ void UDeliveryActiveRagdollComponent::DestroyControls()
 	PelvisControl = NAME_None;
 	ChestControl = NAME_None;
 	HeadControl = NAME_None;
+	TorsoControls.Reset();
+	BraceAlpha = 0.0f;
+	AppliedBraceAlpha = -1.0f;
+	PunchTwist = 0.0f;
+	PunchLunge = 0.0f;
 	LeftFoot.Control = NAME_None;
 	RightFoot.Control = NAME_None;
 }
@@ -414,6 +458,23 @@ void UDeliveryActiveRagdollComponent::CacheStandingState()
 	const FQuat ReferenceSpineWorld = Mesh->GetBoneQuaternion(Bones.Spine, EBoneSpaces::WorldSpace);
 	ReferenceSpineRelativeRotation = ReferencePelvisRotation.Inverse() * ReferenceSpineWorld;
 	ReferenceHeadRotation = Mesh->GetBoneQuaternion(Bones.Head, EBoneSpaces::WorldSpace);
+	const auto GetParentRelativeRotation = [this](const FName Bone)
+	{
+		const int32 BoneIndex = Mesh->GetBoneIndex(Bone);
+		const USkeletalMesh* SkeletalMesh = Mesh->GetSkeletalMeshAsset();
+		const int32 ParentIndex = BoneIndex == INDEX_NONE || !SkeletalMesh
+			? INDEX_NONE
+			: SkeletalMesh->GetRefSkeleton().GetParentIndex(BoneIndex);
+		if (ParentIndex == INDEX_NONE)
+		{
+			return FQuat::Identity;
+		}
+		const FName ParentBone = Mesh->GetBoneName(ParentIndex);
+		return Mesh->GetBoneQuaternion(ParentBone, EBoneSpaces::WorldSpace).Inverse()
+			* Mesh->GetBoneQuaternion(Bone, EBoneSpaces::WorldSpace);
+	};
+	ReferenceLeftArmRelativeRotation = GetParentRelativeRotation(Bones.LeftArm);
+	ReferenceRightArmRelativeRotation = GetParentRelativeRotation(Bones.RightArm);
 	ReferenceFacingYaw = GetAimYaw();
 	CurrentFacingYaw = ReferenceFacingYaw;
 	UprightInPelvisSpace = ReferencePelvisRotation.UnrotateVector(FVector::UpVector).GetSafeNormal();
@@ -626,6 +687,44 @@ void UDeliveryActiveRagdollComponent::AddImpulse(FVector Impulse, bool bVelocity
 	}
 }
 
+void UDeliveryActiveRagdollComponent::BraceTorsoForPunch(float DeltaTime, bool bBrace)
+{
+	// 上臂挂在胸腔和脊柱上，这几节平时是软的。肩膀要转动上臂，反作用力就得有地方去；
+	// 不绷紧的话反作用力先把躯干拧走，看起来就是上臂没伸出去、只有小臂在甩。
+	// 强度要渐变：一帧之内把整段脊柱从软切到硬，上半身会当场僵住。
+	BraceAlpha = FMath::FInterpTo(BraceAlpha, bBrace ? 1.0f : 0.0f, DeltaTime, PunchBraceSpeed);
+	if (FMath::IsNearlyEqual(AppliedBraceAlpha, BraceAlpha, 0.02f)) return;
+	AppliedBraceAlpha = BraceAlpha;
+	PhysicsControl->SetControlAngularData(
+		ChestControl, FMath::Lerp(LooseWaistFollowStrength, PunchBraceStrength, BraceAlpha),
+		StableMuscleDampingRatio, 0.0f, 0.0f, true, true, false);
+	const float Spine = FMath::Lerp(LooseComedyBodyStrength, PunchBraceStrength, BraceAlpha);
+	for (const FName& Control : TorsoControls)
+	{
+		PhysicsControl->SetControlAngularData(
+			Control, Spine, StableMuscleDampingRatio, 0.0f, 0.0f, true, true, false);
+	}
+}
+
+void UDeliveryActiveRagdollComponent::BeginBodyDrivenPunch(FVector AimDirection, float HandSide)
+{
+	PunchAimDirection = AimDirection.GetSafeNormal2D();
+	PunchHandSide = FMath::Sign(HandSide);
+	bBodyDrivenPunchActive = !PunchAimDirection.IsNearlyZero();
+	bBodyDrivenPunchReleased = false;
+}
+
+void UDeliveryActiveRagdollComponent::ReleaseBodyDrivenPunch()
+{
+	bBodyDrivenPunchReleased = bBodyDrivenPunchActive;
+}
+
+void UDeliveryActiveRagdollComponent::EndBodyDrivenPunch()
+{
+	bBodyDrivenPunchActive = false;
+	bBodyDrivenPunchReleased = false;
+}
+
 FVector UDeliveryActiveRagdollComponent::GetWishDir() const
 {
 	if (MoveInput.IsNearlyZero())
@@ -668,6 +767,10 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	const FVector EffectiveWish = StartupPlantRemaining > 0.0f ? FVector::ZeroVector : Wish;
 	UpdatePelvisTarget(DeltaTime, EffectiveWish);
 	UpdateFeet(DeltaTime, EffectiveWish);
+	BraceTorsoForPunch(DeltaTime, bBodyDrivenPunchActive);
+	BoxingPose.Update(Mesh, PhysicsControl, CurrentFacingYaw, DeltaTime,
+		bBodyDrivenPunchActive ? (PunchHandSide > 0 ? 0 : 1) : -1, bBodyDrivenPunchReleased,
+		bBodyDrivenPunchActive ? PunchAimDirection : FVector::ZeroVector);
 }
 
 void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const FVector& Wish)
@@ -745,10 +848,25 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	// 髋目标等于平滑后的贴地点，再加上站立高度沿法线抬起来。
 	Target = SmoothedGroundPoint + CurrentGroundNormal * (StandHeight + SmoothBounceHeight * GaitPulse);
 
+	// 直拳的力道来自体重压上去，不是手臂伸得远。手臂本身只有三十几厘米行程，
+	// 全身沿拳路前送这一下才是"打"和"推"的区别。脚会跟着这个目标上步。
+	PunchLunge = FMath::FInterpTo(PunchLunge,
+		bBodyDrivenPunchActive && bBodyDrivenPunchReleased ? 1.0f : 0.0f, DeltaTime, PunchLungeSpeed);
+	if (PunchLunge > KINDA_SMALL_NUMBER && !PunchAimDirection.IsNearlyZero())
+	{
+		Target += FVector::VectorPlaneProject(PunchAimDirection, CurrentGroundNormal).GetSafeNormal()
+			* (PunchLungeDistance * PunchLunge);
+	}
+
 	PlannedPelvisTarget = Target;
 
 	const FVector FacingWish = WishOnSlope.IsNearlyZero() ? Wish : WishOnSlope;
-	const float DesiredYaw = FacingWish.IsNearlyZero() ? CurrentFacingYaw : FacingWish.GetSafeNormal2D().Rotation().Yaw;
+	float DesiredYaw = FacingWish.IsNearlyZero() ? CurrentFacingYaw : FacingWish.GetSafeNormal2D().Rotation().Yaw;
+	if (bBodyDrivenPunchActive && !PunchAimDirection.IsNearlyZero())
+	{
+		// 出拳时身体转向瞄准方向。不转身的话拳头目标会落在肩膀活动范围之外，看起来就只有小臂在动。
+		DesiredYaw = PunchAimDirection.Rotation().Yaw;
+	}
 	const float YawError = FMath::FindDeltaAngleDegrees(CurrentFacingYaw, DesiredYaw);
 	CurrentFacingYaw = FMath::UnwindDegrees(FMath::FInterpTo(
 		CurrentFacingYaw, CurrentFacingYaw + YawError, DeltaTime, TurnResponsiveness));
@@ -784,7 +902,17 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 			SmoothedAccelerationAlpha, 0.0f, DeltaTime, DriveTargetSmoothingSpeed);
 	}
 
-	const FQuat PelvisRotation = Lean * YawDelta * SlopeAlign * ReferencePelvisRotation;
+	// 纯水平拧身，不弯腰也不侧倾：蓄力时出拳侧的肩膀往后拧，释放后拧回来再带出去一点。
+	// 正的 Yaw 会把左肩转向前方，所以左拳（PunchHandSide 为正）蓄力要给负角度。
+	const float DesiredPunchTwist = !bBodyDrivenPunchActive ? 0.0f
+		: PunchHandSide * (bBodyDrivenPunchReleased ? PunchFollowThroughAngle : -PunchSideStanceAngle);
+	// 这个目标角度是阶跃的：出拳、释放、收拳各跳一次。骨盆电机很硬，把阶跃直接喂进去
+	// 会把整个上半身连着伸出去的手臂横甩过去，看着就是在扇耳光。必须平滑。
+	PunchTwist = FMath::FInterpTo(PunchTwist, DesiredPunchTwist, DeltaTime, PunchTwistSpeed);
+	const FQuat PunchSideRotation = FMath::IsNearlyZero(PunchTwist)
+		? FQuat::Identity
+		: FQuat(CurrentGroundNormal, FMath::DegreesToRadians(PunchTwist));
+	const FQuat PelvisRotation = PunchSideRotation * Lean * YawDelta * SlopeAlign * ReferencePelvisRotation;
 	FQuat SpineRelativeRotation = ReferenceSpineRelativeRotation;
 	if (!Wish.IsNearlyZero() && !FMath::IsNearlyZero(Wobble) && !SlopeForward.IsNearlyZero())
 	{
@@ -1191,7 +1319,9 @@ void UDeliveryActiveRagdollComponent::CaptureNetworkSnapshot()
 	}
 
 	const FName SnapshotBones[] = {
-		Bones.Hips, Bones.Spine, Bones.Head, Bones.LeftFoot, Bones.RightFoot
+		Bones.Hips, Bones.Spine, Bones.Head, Bones.LeftFoot, Bones.RightFoot,
+		TEXT("LeftArm"), TEXT("LeftForeArm"), TEXT("LeftHand"),
+		TEXT("RightArm"), TEXT("RightForeArm"), TEXT("RightHand")
 	};
 	ReplicatedSnapshot.Bodies.Reset(UE_ARRAY_COUNT(SnapshotBones));
 	for (const FName Bone : SnapshotBones)
