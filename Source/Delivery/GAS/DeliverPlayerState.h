@@ -10,6 +10,7 @@
 class UDeliverAbilitySystemComponent;
 class UDeliverAttributeSet;
 class UAbilitySystemComponent;
+class UDeliveryTaskTrackerComponent;
 
 /**
  * PlayerState
@@ -33,6 +34,9 @@ public:
 
 	UDeliverAbilitySystemComponent* GetDeliverAbilitySystemComponent() const { return AbilitySystemComponent; }
 
+	// 获取本玩家的任务追踪组件（任务状态本身是全局的，挂在 GameState 上）
+	UDeliveryTaskTrackerComponent* GetTaskTracker() const { return TaskTracker; }
+
 protected:
 
 	/** 子组件 **/
@@ -43,6 +47,10 @@ protected:
 	// 属性表
 	UPROPERTY()
 	TObjectPtr<UDeliverAttributeSet> AttributeSet;
+
+	// 当前追踪的任务（每个玩家各自选，只有被追踪的任务显示地图引导）
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Task")
+	TObjectPtr<UDeliveryTaskTrackerComponent> TaskTracker;
 
 	/** 回调 **/
 	// 角色被控制时的回调

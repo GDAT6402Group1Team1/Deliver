@@ -3,14 +3,18 @@
 #include "DeliverPlayerState.h"
 #include "DeliverAbilitySystemComponent.h"
 #include "DeliverAttributeSet.h"
+#include "Task/DeliveryTaskTrackerComponent.h"
 
 ADeliverPlayerState::ADeliverPlayerState()
 {
 	// 创建 ASC
 	AbilitySystemComponent = CreateDefaultSubobject<UDeliverAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
-	
+
 	// 创建 属性表
 	AttributeSet = CreateDefaultSubobject<UDeliverAttributeSet>(TEXT("AttributeSet"));
+
+	// 创建 任务追踪组件
+	TaskTracker = CreateDefaultSubobject<UDeliveryTaskTrackerComponent>(TEXT("TaskTracker"));
 }
 
 void ADeliverPlayerState::PostInitializeComponents()

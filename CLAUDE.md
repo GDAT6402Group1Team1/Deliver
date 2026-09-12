@@ -36,6 +36,17 @@
 - [DeliverGameplayTags](Source/Delivery/GAS/DeliverGameplayTags.h) —— Native Gameplay Tag：`Ability.Attack.Punch.Left/Right`、`Effect.Type.Damage`、`State.Stunned`。
 - Character 上配置了 `HealthRegenEffect` / `DamageEffect`（Instant + SetByCaller Effect.Type.Damage）以及左右拳 GA 类，均在蓝图 `BP_DeliveryMan` 里指定。
 
+### 任务系统（电话接任务）
+完整的结构、接口清单、配置方式、调用链和待确认假设见 **[Document/TaskSystem.md](Document/TaskSystem.md)**，改动前先看这份。要点：
+
+- 任务状态全局共享（多人下解锁/来电/计时/完成对所有人是同一份），挂在 GameState 上的 [DeliveryTaskManagerComponent](Source/Delivery/Task/DeliveryTaskManagerComponent.h)；"当前追踪哪个任务"是每玩家各自的，挂在 PlayerState 上的 [DeliveryTaskTrackerComponent](Source/Delivery/Task/DeliveryTaskTrackerComponent.h)。
+- 计时用服务器时间戳而不是 Tick 累加：取件时记一个时间戳，之后掉落/换手/进后备箱/晕倒都碰不到计时，天然满足"计时不停"。
+- "同时只有一个进行中任务"不是状态，是 `CanAcquireItem()` 里的取件规则。
+- 四个状态无失败态（Locked / AwaitingPickup / InProgress / Completed），超时只打一次催促电话并降低奖励倍率，任务继续。
+- 电话队列 [DeliveryPhoneCallQueueComponent](Source/Delivery/Task/DeliveryPhoneCallQueueComponent.h) 也在 GameState 上，由服务器按配置时长推进，不等客户端播完回报。
+- 单个任务的配置是一份 [DeliveryTaskDefinition](Source/Delivery/Task/DeliveryTaskDefinition.h) 资产；关卡的任务清单填在 GameState 蓝图的 `TaskDefinitions` 上（数组顺序 = 同时解锁时的来电顺序）。
+- UI、背包/交互、金钱、存档都还没做，对接点见文档第七节。
+
 ### 地图与交通场景
 - 已导入地图，接入 **PS2UE / PS2DEMImporter** 插件（PS2 地形/道路生成工具，见 `Plugins/PS2DEMImporter`）用于生成 landscape spline 道路。
 - 交通路口、红绿灯（`trafficlight`）、道路与门的破碎效果等场景内容持续在搭建中（`Content/trafficlight`、`Content/PS2DEM` 下的 `BP_Intersection`、`BP_TrafficLine*` 等蓝图）。
@@ -50,10 +61,12 @@
 Source/Delivery/
 ├── DeliveryCharacter.{h,cpp}        角色 Pawn，输入、组件组装
 ├── DeliveryGameMode.{h,cpp}         最小 GameMode，具体类在蓝图里配
+├── DeliveryGameState.{h,cpp}        承载全局共享状态（任务管理器 + 电话队列）
 ├── DeliveryPlayerController.{h,cpp}
 ├── Combat/                          战斗类型、姿势定义、战斗接口
 ├── GAS/                             AbilitySystemComponent、AttributeSet、PlayerState、GameplayTags、Abilities/
-└── Ragdoll/                         主动布娃娃、布娃娃战斗组件
+├── Ragdoll/                         主动布娃娃、布娃娃战斗组件
+└── Task/                            任务系统：配置资产、解锁条件、全局管理器、电话队列、追踪、快递/收件人组件
 ```
 
 蓝图层：`Content/Blueprint/Character/BP_DeliveryMan`、`Content/Blueprint/GameMode/BP_DeliverGameMode`、
