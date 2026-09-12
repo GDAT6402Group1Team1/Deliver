@@ -397,7 +397,20 @@ FDeliveryRewardBreakdown UDeliveryTaskManagerComponent::PreviewReward(const UDel
 
 void UDeliveryTaskManagerComponent::OnRep_Tasks()
 {
-	// 数组整体复制下来，跟上一次的快照逐个比对，补广播出跟服务器一致的事件
+	/*
+	首次同步要和后续变化区别对待。
+
+	中途加入的玩家一进来就会收到全部任务的当前状态，这是"现状"而不是"刚刚发生的事"。
+	OnTaskStatusChanged 照常广播——UI 可能比首次同步更早创建并订阅，不广播的话它的列表会一直是空的；
+	而这个事件语义上就是"刷新一下你的视图"，重复收到没有副作用。
+
+	OnTaskCompleted 和 OnTaskOverdue 不补播：它们是一次性的表现事件（结算弹窗、催促提示），
+	对刚进场的人来说那是别人几分钟前做完的事，补播出来就是一进场弹一串"任务完成"。
+	*/
+	const bool bInitialSync = !bReceivedInitialState;
+	bReceivedInitialState = true;
+
+	// 跟上一次的快照逐个比对，补广播出跟服务器一致的事件
 	for (const FDeliveryTaskState& State : Tasks)
 	{
 		if (!State.Definition)
@@ -415,14 +428,14 @@ void UDeliveryTaskManagerComponent::OnRep_Tasks()
 		{
 			OnTaskStatusChanged.Broadcast(State.Definition, State.Status);
 
-			if (State.Status == EDeliveryTaskStatus::Completed)
+			if (!bInitialSync && State.Status == EDeliveryTaskStatus::Completed)
 			{
 				const float Elapsed = FMath::Max(0.f, State.CompleteServerTime - State.StartServerTime);
 				OnTaskCompleted.Broadcast(State.Definition, EvaluateReward(State.Definition, Elapsed, State.SpecialEvents), State.Deliverer);
 			}
 		}
 
-		if (bJustOverdue)
+		if (bJustOverdue && !bInitialSync)
 		{
 			OnTaskOverdue.Broadcast(State.Definition);
 		}

@@ -140,4 +140,7 @@ protected:
 	/** 客户端上一次看到的状态，用来在 OnRep 里做差分并广播事件。 */
 	UPROPERTY(Transient)
 	TMap<TObjectPtr<UDeliveryTaskDefinition>, FDeliveryTaskState> KnownStates;
+
+	/** 客户端是否已经收到过首次同步。首次同步是"现状"，不是"刚刚发生的变化"。 */
+	bool bReceivedInitialState = false;
 };
