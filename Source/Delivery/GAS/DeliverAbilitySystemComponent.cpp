@@ -3,6 +3,8 @@
 #include "DeliverAbilitySystemComponent.h"
 #include "DeliverAttributeSet.h"
 #include "../DeliveryCharacter.h"
+#include "Abilities/GameplayAbility.h"
+#include "Abilities/GA_DeliverPunch.h"
 #include "GameplayEffect.h"
 
 UDeliverAbilitySystemComponent::UDeliverAbilitySystemComponent()
@@ -24,10 +26,25 @@ void UDeliverAbilitySystemComponent::InitializeAbilityActor(AActor* Owner, AActo
 	if (const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(Avatar))
 	{
 		HealthRegenEffect = Character->GetHealthRegenEffect();
+		PunchLeftAbilityClass = Character->GetPunchLeftAbilityClass();
+		PunchRightAbilityClass = Character->GetPunchRightAbilityClass();
+	}
+
+	if (GetOwner()->HasAuthority() && Avatar && !bAbilitiesGranted)
+	{
+		bAbilitiesGranted = true;
+		if (PunchLeftAbilityClass)
+		{
+			GiveAbility(FGameplayAbilitySpec(PunchLeftAbilityClass, 1, INDEX_NONE, Avatar));
+		}
+		if (PunchRightAbilityClass)
+		{
+			GiveAbility(FGameplayAbilitySpec(PunchRightAbilityClass, 1, INDEX_NONE, Avatar));
+		}
 	}
 
 	// 绑定生命值变化事件
-	if (!GetOwner()->HasAuthority()/* 服务器上才ApplyGE*/  || !Avatar || bRegenWatchBound /*之前已经应用过GE*/)
+	if (!GetOwner()->HasAuthority() || !Avatar || bRegenWatchBound)
 	{
 		return;
 	}

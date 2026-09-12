@@ -5,15 +5,23 @@
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "CollisionQueryParams.h"
 #include "Engine/CollisionProfile.h"
+#include "Engine/OverlapResult.h"
+#include "Engine/World.h"
 #include "EnhancedInputComponent.h"
+#include "AbilitySystemComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GAS/Abilities/GA_DeliverPunch.h"
+#include "GAS/DeliverGameplayTags.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Delivery.h"
 #include "GAS/DeliverAbilitySystemComponent.h"
 #include "GAS/DeliverPlayerState.h"
+#include "Combat/DeliveryRagdollCombatComponent.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 
 ADeliveryCharacter::ADeliveryCharacter()
@@ -58,6 +66,10 @@ ADeliveryCharacter::ADeliveryCharacter()
 	FollowCamera->bUsePawnControlRotation = false;
 
 	ActiveRagdoll = CreateDefaultSubobject<UDeliveryActiveRagdollComponent>(TEXT("ActiveRagdoll"));
+	RagdollCombat = CreateDefaultSubobject<UDeliveryRagdollCombatComponent>(TEXT("RagdollCombat"));
+
+	PunchLeftAbilityClass = UGA_DeliverPunchLeft::StaticClass();
+	PunchRightAbilityClass = UGA_DeliverPunchRight::StaticClass();
 
 	static ConstructorHelpers::FObjectFinder<UInputAction> LookActionFinder(TEXT("/Game/Input/Actions/IA_Look"));
 	if (LookActionFinder.Succeeded())
@@ -81,6 +93,18 @@ ADeliveryCharacter::ADeliveryCharacter()
 	if (JumpActionFinder.Succeeded())
 	{
 		JumpAction = JumpActionFinder.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UInputAction> AttackLeftFinder(TEXT("/Game/Input/Actions/IA_AttackLeft"));
+	if (AttackLeftFinder.Succeeded())
+	{
+		AttackLeftAction = AttackLeftFinder.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UInputAction> AttackRightFinder(TEXT("/Game/Input/Actions/IA_AttackRight"));
+	if (AttackRightFinder.Succeeded())
+	{
+		AttackRightAction = AttackRightFinder.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UAnimSequence> StandPoseFinder(
@@ -142,6 +166,14 @@ void ADeliveryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	{
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ADeliveryCharacter::JumpStarted);
 	}
+	if (AttackLeftAction)
+	{
+		EnhancedInputComponent->BindAction(AttackLeftAction, ETriggerEvent::Started, this, &ADeliveryCharacter::AttackLeftStarted);
+	}
+	if (AttackRightAction)
+	{
+		EnhancedInputComponent->BindAction(AttackRightAction, ETriggerEvent::Started, this, &ADeliveryCharacter::AttackRightStarted);
+	}
 }
 
 void ADeliveryCharacter::Move(const FInputActionValue& Value)
@@ -159,6 +191,16 @@ void ADeliveryCharacter::Look(const FInputActionValue& Value)
 void ADeliveryCharacter::JumpStarted(const FInputActionValue& /*Value*/)
 {
 	DoJumpStart();
+}
+
+void ADeliveryCharacter::AttackLeftStarted(const FInputActionValue& /*Value*/)
+{
+	DoAttackLeft();
+}
+
+void ADeliveryCharacter::AttackRightStarted(const FInputActionValue& /*Value*/)
+{
+	DoAttackRight();
 }
 
 void ADeliveryCharacter::DoLook(float Yaw, float Pitch)
@@ -203,6 +245,73 @@ void ADeliveryCharacter::DoJumpStart()
 
 void ADeliveryCharacter::DoJumpEnd()
 {
+}
+
+void ADeliveryCharacter::DoAttackLeft()
+{
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Ability_Attack_Punch_Left));
+	}
+}
+
+void ADeliveryCharacter::DoAttackRight()
+{
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Ability_Attack_Punch_Right));
+	}
+}
+
+bool ADeliveryCharacter::ComputePunchAim(EMeleeHand Hand, FVector& OutAimDir) const
+{
+	// 出拳跟随角色朝向，而非相机/准星朝向：转动镜头观察时不会改变拳路。
+	OutAimDir = ActiveRagdoll ? ActiveRagdoll->GetBodyForward() : GetActorForwardVector().GetSafeNormal2D();
+	return !OutAimDir.IsNearlyZero();
+}
+
+bool ADeliveryCharacter::StartMeleeAttack(EMeleeHand Hand)
+{
+	if (!RagdollCombat)
+	{
+		return false;
+	}
+
+	FVector AimDir;
+	return ComputePunchAim(Hand, AimDir)
+		&& RagdollCombat->StartPunch(Hand, AimDir);
+}
+
+TArray<AActor*> ADeliveryCharacter::GatherMeleeHits(EMeleeHand Hand) const
+{
+	TArray<AActor*> Results;
+	const FVector Center = RagdollCombat->GetPunchTraceTransform().GetLocation();
+	const float Radius = RagdollCombat->GetHitRadius();
+
+	TArray<FOverlapResult> Overlaps;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(PunchHit), false, this);
+	GetWorld()->OverlapMultiByChannel(
+		Overlaps, Center, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(Radius), Params);
+
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		APawn* Other = Cast<APawn>(Overlap.GetActor());
+		if (Other && Other != this && Other->GetPlayerState<ADeliverPlayerState>())
+		{
+			Results.Add(Other);
+		}
+	}
+
+	return Results;
+}
+
+void ADeliveryCharacter::EndMeleeAttack(EMeleeHand /*Hand*/)
+{
+}
+
+bool ADeliveryCharacter::IsMeleeAttacking() const
+{
+	return RagdollCombat->IsPunching();
 }
 
 void ADeliveryCharacter::ServerSetMoveInput_Implementation(FVector2D Input, float AimYaw)

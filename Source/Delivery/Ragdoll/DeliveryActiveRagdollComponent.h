@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Engine/NetSerialization.h"
+#include "Combat/DeliveryBoxingPose.h"
 #include "DeliveryActiveRagdollComponent.generated.h"
 
 class UCapsuleComponent;
@@ -86,6 +87,7 @@ struct FDeliveryRagdollBones
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ragdoll")
 	FName RightArm = TEXT("RightArm");
+
 };
 
 /**
@@ -122,6 +124,17 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Ragdoll")
 	void AddImpulse(FVector Impulse, bool bVelocityChange = true);
+
+	/** 开始直拳：记录攻击方向和手侧。 */
+	void BeginBodyDrivenPunch(FVector AimDirection, float HandSide);
+	bool CanDrivePunch(float HandSide) const { return bIsActive && !bIsLimp && BoxingPose.IsReady(HandSide > 0 ? 0 : 1); }
+	FVector GetBodyForward() const { return FRotator(0, CurrentFacingYaw, 0).Vector(); }
+
+	/** 释放直拳：标记前送阶段。 */
+	void ReleaseBodyDrivenPunch();
+
+	/** 清除额外的出拳姿势，回到普通站立/移动控制。 */
+	void EndBodyDrivenPunch();
 
 	UFUNCTION(BlueprintPure, Category="Ragdoll")
 	bool IsRagdollActive() const { return bIsActive; }
@@ -231,6 +244,42 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll|肌肉", meta=(ClampMin="0.0"))
 	float ComedyArmStrength = 0.2f;
 
+	/**
+	 * 蓄力阶段把出拳侧的肩膀向后拧多少度。纯水平旋转，不弯腰。
+	 * 这个角度和下面的跟随角度加起来就是身体在一次出拳里横转的总量。给大了，
+	 * 伸出去的手臂会被整块躯干横着带过去，看起来是在扇耳光而不是出拳。
+	 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0", ClampMax="60.0"))
+	float PunchSideStanceAngle = 12.0f;
+
+	/** 释放时上身向出拳侧带出多少度。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0", ClampMax="45.0"))
+	float PunchFollowThroughAngle = 14.0f;
+
+	/** 拧身角度的过渡速度。目标角度是阶跃的，这里决定身体多快跟上去。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="1.0"))
+	float PunchTwistSpeed = 10.0f;
+
+	/** 释放时全身沿拳路前送多远。直拳的力道主要来自这一下体重前压。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0", ClampMax="60.0"))
+	float PunchLungeDistance = 41.0f;
+
+	/** 前送和收回的速度。要比拧身快，身体先压出去，拳头才跟着有重量。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="1.0"))
+	float PunchLungeSpeed = 16.0f;
+
+	/** 出拳期间胸腔和脊柱的强度。肩膀要有支点，上臂才转得动。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0"))
+	float PunchBraceStrength = 12.0f;
+
+	/** 躯干绷紧和放松的过渡速度。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="1.0"))
+	float PunchBraceSpeed = 8.0f;
+
+	/** 手臂三个姿势的参数：站立走路的 A 姿势、出拳起手的收拳、直拳终点。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳")
+	FDeliveryArmPoseSettings ArmPose;
+
 	UPROPERTY(EditAnywhere, Category="Ragdoll|肌肉", meta=(ClampMin="0.0"))
 	float LegPullStrength = 3.8f;
 
@@ -325,10 +374,13 @@ protected:
 	};
 
 	FActorComponentTickFunction PostPhysicsTickFunction;
+	FDeliveryBoxingPose BoxingPose;
 	FVector2D MoveInput = FVector2D::ZeroVector;
 	FQuat ReferencePelvisRotation = FQuat::Identity;
 	FQuat ReferenceSpineRelativeRotation = FQuat::Identity;
 	FQuat ReferenceHeadRotation = FQuat::Identity;
+	FQuat ReferenceLeftArmRelativeRotation = FQuat::Identity;
+	FQuat ReferenceRightArmRelativeRotation = FQuat::Identity;
 	FTransform InitialMeshRelativeTransform = FTransform::Identity;
 	FVector LastWishDirection = FVector::ForwardVector;
 	FVector SmoothedBalanceOffset = FVector::ZeroVector;
@@ -345,6 +397,13 @@ protected:
 	FName PelvisControl;
 	FName ChestControl;
 	FName HeadControl;
+	/** 胸腔以上的脊柱节。出拳时按名字绷紧，不要假定自定义 Set 名一定存在。 */
+	TArray<FName> TorsoControls;
+	float BraceAlpha = 0.0f;
+	float AppliedBraceAlpha = -1.0f;
+	/** 平滑后的拧身角度。发给电机的必须是这个，不是阶跃的目标角度。 */
+	float PunchTwist = 0.0f;
+	float PunchLunge = 0.0f;
 	float StandHeight = 95.0f;
 	float ReferenceFacingYaw = 0.0f;
 	float CurrentFacingYaw = 0.0f;
@@ -360,6 +419,10 @@ protected:
 	bool bStepLeftNext = true;
 	bool bIsActive = false;
 	bool bIsLimp = false;
+	bool bBodyDrivenPunchActive = false;
+	bool bBodyDrivenPunchReleased = false;
+	float PunchHandSide = 1.0f;
+	FVector PunchAimDirection = FVector::ForwardVector;
 
 	UFUNCTION()
 	void OnRep_ControlMode();
@@ -375,6 +438,7 @@ protected:
 	void DestroyControls();
 	void CacheStandingState();
 	void UpdateControlTargets(float DeltaTime);
+	void BraceTorsoForPunch(float DeltaTime, bool bBrace);
 	void UpdatePelvisTarget(float DeltaTime, const FVector& Wish);
 	void UpdateFeet(float DeltaTime, const FVector& Wish);
 	bool BeginStep(FFoot& Foot, const FVector& Wish);
