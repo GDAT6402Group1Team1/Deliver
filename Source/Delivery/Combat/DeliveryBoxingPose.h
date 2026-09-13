@@ -27,6 +27,7 @@ struct FDeliveryBoxingPose
 	float ReferenceYaw = 0;
 	float SettleTime = 0;
 
+	/** 物理资产缺手或小臂刚体时当场补上，否则只有一侧能出拳。 */
 	static void CompletePhysicsAsset(USkeletalMeshComponent* Mesh,
 		const FDeliveryArmPoseSettings& Settings = FDeliveryArmPoseSettings());
 	void Create(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* Controls,
