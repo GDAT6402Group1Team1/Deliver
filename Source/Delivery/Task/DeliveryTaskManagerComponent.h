@@ -94,6 +94,13 @@ public:
 	UFUNCTION(BlueprintPure, Category="Task")
 	FDeliveryRewardBreakdown PreviewReward(const UDeliveryTaskDefinition* Task) const;
 
+	/**
+	 * 把 GetTimeSnapshot 的剩余秒数格式化成 UI 显示的样子：`05:00`；
+	 * 超时后剩余为负，输出 `+00:07` 并继续往上走。
+	 */
+	UFUNCTION(BlueprintPure, Category="Task")
+	static FText FormatCountdown(float RemainingSeconds);
+
 	/** —— 事件（服务器与客户端都会广播）—— */
 
 	UPROPERTY(BlueprintAssignable, Category="Task")

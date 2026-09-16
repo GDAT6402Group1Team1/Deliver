@@ -82,4 +82,12 @@ public:
 
 	/** 用时命中的时间评价档；没命中任何档返回 nullptr，调用方按超时倍率处理。 */
 	const FDeliveryTimeGrade* FindTimeGrade(float ElapsedSeconds) const;
+
+#if WITH_EDITOR
+	/**
+	 * 编辑器里校验配置。这份资产全是手填的数值，而配错的后果要跑到那一刻才看得出来
+	 * （颜色不跳、评价档永远命中不到），所以在保存时就标出来。
+	 */
+	virtual EDataValidationResult IsDataValid(class FDataValidationContext& Context) const override;
+#endif
 };

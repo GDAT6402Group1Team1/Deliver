@@ -384,6 +384,22 @@ FDeliveryRewardBreakdown UDeliveryTaskManagerComponent::EvaluateReward(const UDe
 	return Result;
 }
 
+FText UDeliveryTaskManagerComponent::FormatCountdown(float RemainingSeconds)
+{
+	const bool bOverdue = RemainingSeconds < 0.f;
+
+	// 倒计时向上取整：还剩 0.4 秒也要显示 00:01，归零和真的到点对上。
+	// 超时后的正计时向下取整：刚过线显示 +00:00，走满一秒才变 +00:01。
+	const int32 TotalSeconds = bOverdue
+		? FMath::FloorToInt(-RemainingSeconds)
+		: FMath::CeilToInt(RemainingSeconds);
+
+	return FText::FromString(FString::Printf(TEXT("%s%02d:%02d"),
+		bOverdue ? TEXT("+") : TEXT(""),
+		TotalSeconds / 60,
+		TotalSeconds % 60));
+}
+
 FDeliveryRewardBreakdown UDeliveryTaskManagerComponent::PreviewReward(const UDeliveryTaskDefinition* Task) const
 {
 	const FDeliveryTaskState* State = FindState(Task);

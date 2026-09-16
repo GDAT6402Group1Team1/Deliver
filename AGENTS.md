@@ -49,6 +49,7 @@
 - 电话队列 [DeliveryPhoneCallQueueComponent](Source/Delivery/Task/DeliveryPhoneCallQueueComponent.h) 由服务器按每通电话配置的时长推进，不等客户端播完回报（队列是全局共享的）。
 - 一个任务 = 一份 [DeliveryTaskDefinition](Source/Delivery/Task/DeliveryTaskDefinition.h) 资产；关卡任务清单填在 GameState 蓝图的 `TaskDefinitions` 数组里，顺序即同时解锁时的来电顺序。
 - 快递 Actor 挂 [DeliveryItemComponent](Source/Delivery/Task/DeliveryItemComponent.h)、收件人挂 [DeliveryTargetComponent](Source/Delivery/Task/DeliveryTargetComponent.h)，交互/背包系统只需要调 `CanBeAcquired` / `NotifyAcquired` / `TryDeliver` 三个口。
+- 调试用控制台命令（`Delivery.Task.Dump` / `Acquire` / `Deliver` / `Event`）见 [DeliveryTaskDebugCommands.cpp](Source/Delivery/Task/DeliveryTaskDebugCommands.cpp)，在 PIE 里不用 UI 就能跑完整个任务流程；`DeliveryTaskDefinition` 有 `IsDataValid` 校验，阈值配反、档位顺序错会在编辑器里标红。
 - UI、背包/交互、金钱结算、存档都还没做，对接点见文档第七节；文档第八节列了我在实现时替规则做的假设，需要确认。
 
 ### 5. 地图 / 交通场景

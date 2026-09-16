@@ -181,6 +181,21 @@
 3. 快递 Actor 上加 `DeliveryItemComponent`，填 `OwningTask`。
 4. 收件人 Actor 上加 `DeliveryTargetComponent`，填 `ExpectedTask`。
 
+### 5.3 不用 UI 也能测：控制台命令
+
+交互和背包系统还没有，所以加了四条控制台命令，在 PIE 里按 `` ` `` 敲。
+实现在 `Task/DeliveryTaskDebugCommands.cpp`，用 `#if !UE_BUILD_SHIPPING` 包着，不进正式包。
+
+| 命令 | 作用 |
+|---|---|
+| `Delivery.Task.Dump` | 打印所有任务的状态、倒计时、奖励预览、当前追踪目标、队首来电 |
+| `Delivery.Task.Acquire [TaskId]` | 模拟取件。不填 TaskId 就取第一个待取件的 |
+| `Delivery.Task.Deliver` | 模拟交付当前进行中的任务，打印奖励算式 |
+| `Delivery.Task.Event <Tag>` | 给进行中的任务上报特殊事件，验证奖励倍率 |
+
+都是权威操作，要用 Standalone 或 Play As Listen Server 跑。
+双人测试时在服务器窗口 Acquire、客户端窗口 Dump，可以验证复制和客户端计时基准。
+
 ---
 
 ## 六、一次完整流程的调用链
@@ -248,8 +263,6 @@
 | 存档 | 目前状态全在内存，重开关卡即重置 |
 | 解锁条件 | 内置只有"前置任务已完成"一条，其他条件继承 `UDeliveryTaskUnlockCondition` 扩展 |
 | **快递丢失的处理** | 快递掉出世界/被删之后，任务会永远卡在进行中，而且因为"同时只有一个进行中任务"，整局再也接不了别的任务。需要定：重生快递、加放弃接口、还是先不管 |
-| 配置校验 | Definition 里黄/红阈值配反、`TimeGrades` 顺序配错都不会报错，可以加 `IsDataValid` 在编辑器里标红 |
-| 倒计时文本格式化 | `05:00` / 超时的 `+00:07` 现在要在蓝图里自己拼 |
 | 自动化测试 | 奖励结算是纯函数，最值得测，可复用互殴系统 `DeliveryBoxingPoseTests.cpp` 那套框架 |
 
 ---
