@@ -32,7 +32,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/** 从 Pawn / Controller / PlayerState 任意一个拿到这个玩家的追踪组件。 */
-	UFUNCTION(BlueprintPure, Category="Task")
+	UFUNCTION(BlueprintPure, Category="Task", meta=(DisplayName="Get Delivery Task Tracker"))
 	static UDeliveryTaskTrackerComponent* FindTracker(AActor* Actor);
 
 	UFUNCTION(BlueprintPure, Category="Task")

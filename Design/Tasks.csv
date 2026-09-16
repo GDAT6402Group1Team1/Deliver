@@ -1,0 +1,2 @@
+Task ID,Task Name,Delivery Item ID,Pickup Location ID,Delivery Location ID,Receiver NPC ID,Unlock Condition,Simple Task Description,Detailed Task Description,Time Limit,Base Reward,Time Rating,Special Event ID
+Task_001,给独居老头送饭,Delivery_Food_001,Location_Restaurant_001,Location_OldManHouse_001,NPC_OldMan_001,time:15,将外卖送到顾客手中,将一份热气腾腾的汤面送到顾客手中，路上别洒了,300,100,"150,1.2|60,1.1|0,1|-60,0.9|-120,0.8",Special_Event_Caterpillar

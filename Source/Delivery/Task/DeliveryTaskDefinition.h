@@ -31,8 +31,36 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Task")
 	FText DisplayName;
 
+	/** 任务列表里显示的一句话。 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Task")
+	FText SimpleDescription;
+
+	/** 任务详情页显示的完整描述。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Task", meta=(MultiLine="true"))
-	FText Description;
+	FText DetailedDescription;
+
+	/*
+	下面这些是策划表里的外部引用 ID。它们指向的东西（快递 Actor、取件点、送达点、收件 NPC、
+	特殊事件）目前都还没有对应的系统，所以先原样存字符串，不做解析。
+	等交互和关卡系统落地后，再决定是按场景 Actor 的 Tag 查，还是解析成资产引用。
+	地图引导要取件点/送达点坐标时，依据也在这里。
+	*/
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Reference")
+	FName DeliveryItemId;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Reference")
+	FName PickupLocationId;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Reference")
+	FName DeliveryLocationId;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Reference")
+	FName ReceiverNpcId;
+
+	/** 特殊事件表里的 ID。倍率暂时还在下面的 SpecialEventRules 里手配。 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Reference")
+	FName SpecialEventId;
 
 	/** 解锁条件，必须全部满足。留空表示开局即解锁。 */
 	UPROPERTY(EditDefaultsOnly, Instanced, BlueprintReadOnly, Category="Unlock")
@@ -61,13 +89,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Reward", meta=(ClampMin="0"))
 	int32 BaseReward = 100;
 
-	/** 时间评价档位，按 WithinSeconds 从小到大配置。用时落在哪一档就吃哪一档倍率。 */
+	/**
+	 * 时间评价档位，按剩余秒数**从大到小**配置（正数提前、负数超时），
+	 * 和策划表里 Time Rating 那一列的写法一致。
+	 * 结算时取第一条"剩余时间不低于门槛"的档；比最后一档还差就按最后一档算。
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Reward")
 	TArray<FDeliveryTimeGrade> TimeGrades;
-
-	/** 所有档位都超了（超时交付）时的倍率。 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Reward", meta=(ClampMin="0.0"))
-	float OvertimeMultiplier = 0.5f;
 
 	/** 特殊事件倍率规则，可叠乘。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Reward")
@@ -80,8 +108,8 @@ public:
 	UFUNCTION(BlueprintPure, Category="Time")
 	EDeliveryTaskUrgency GetUrgency(float RemainingSeconds) const;
 
-	/** 用时命中的时间评价档；没命中任何档返回 nullptr，调用方按超时倍率处理。 */
-	const FDeliveryTimeGrade* FindTimeGrade(float ElapsedSeconds) const;
+	/** 按交付时的剩余秒数取评价档。档位为空时返回 nullptr（调用方按 1 倍处理）。 */
+	const FDeliveryTimeGrade* FindTimeGrade(float RemainingSeconds) const;
 
 #if WITH_EDITOR
 	/**

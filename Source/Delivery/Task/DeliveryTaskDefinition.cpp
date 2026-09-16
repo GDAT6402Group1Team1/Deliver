@@ -37,19 +37,26 @@ EDeliveryTaskUrgency UDeliveryTaskDefinition::GetUrgency(float RemainingSeconds)
 	return EDeliveryTaskUrgency::Green;
 }
 
-const FDeliveryTimeGrade* UDeliveryTaskDefinition::FindTimeGrade(float ElapsedSeconds) const
+const FDeliveryTimeGrade* UDeliveryTaskDefinition::FindTimeGrade(float RemainingSeconds) const
 {
-	// 配置顺序即优先级：从快到慢，第一条容得下这次用时的就是评价结果。
-	// 不做排序，配错顺序应该在配置阶段被发现，而不是被代码悄悄纠正。
+	if (TimeGrades.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	// 配置顺序即优先级：剩余时间从多到少，第一条够得着的就是评价结果。
+	// 不做排序，配错顺序应该在保存资产时被校验挡住，而不是被代码悄悄纠正。
 	for (const FDeliveryTimeGrade& Grade : TimeGrades)
 	{
-		if (ElapsedSeconds <= Grade.WithinSeconds)
+		if (RemainingSeconds >= Grade.RemainingSeconds)
 		{
 			return &Grade;
 		}
 	}
 
-	return nullptr;
+	// 超时超过了最后一档。最后一档就是配置里最严厉的那一级，继续按它算，
+	// 不额外发明一个"更惨"的倍率——否则策划在表里看不到这个数。
+	return &TimeGrades.Last();
 }
 
 #if WITH_EDITOR
@@ -79,32 +86,29 @@ EDataValidationResult UDeliveryTaskDefinition::IsDataValid(FDataValidationContex
 		Context.AddWarning(LOCTEXT("NoGreenPhase", "YellowRemainingSeconds 不小于 TimeLimitSeconds，任务一开始就是黄色，不会有绿色阶段。"));
 	}
 
-	// FindTimeGrade 取第一条容得下用时的档位，顺序配反的话后面的档永远命中不到
+	// FindTimeGrade 取第一条够得着的档位，顺序配反的话后面的档永远命中不到
 	for (int32 Index = 1; Index < TimeGrades.Num(); ++Index)
 	{
-		if (TimeGrades[Index].WithinSeconds < TimeGrades[Index - 1].WithinSeconds)
+		if (TimeGrades[Index].RemainingSeconds > TimeGrades[Index - 1].RemainingSeconds)
 		{
 			Context.AddError(FText::Format(
-				LOCTEXT("GradesOutOfOrder", "TimeGrades 第 {0} 项的 WithinSeconds 比上一项小。档位必须按用时从小到大排，否则靠后的档永远命中不到。"),
+				LOCTEXT("GradesOutOfOrder", "TimeGrades 第 {0} 项的 RemainingSeconds 比上一项大。档位必须按剩余时间从多到少排，否则靠后的档永远命中不到。"),
 				FText::AsNumber(Index)));
 			Result = EDataValidationResult::Invalid;
 		}
 	}
 
-	// 一档都不配的话，再快送到也会走 OvertimeMultiplier，看起来像"怎么都是超时"
 	if (TimeGrades.Num() == 0)
 	{
-		Context.AddWarning(LOCTEXT("NoTimeGrades", "TimeGrades 为空，任何用时都会按 OvertimeMultiplier 结算。"));
+		Context.AddWarning(LOCTEXT("NoTimeGrades", "TimeGrades 为空，无论多快送到都按 1 倍结算。"));
 	}
-	// OvertimeMultiplier 的真实含义是"没命中任何档位"，不是"超过了限时"。
-	// 最后一档没盖到限时的话，玩家还在限时之内就会吃到超时惩罚，很难查。
-	else if (TimeGrades.Last().WithinSeconds < TimeLimitSeconds)
+	// 第一档的门槛比限时还高的话，那一档永远够不着——剩余时间不可能超过限时
+	else if (TimeGrades[0].RemainingSeconds > TimeLimitSeconds)
 	{
 		Context.AddWarning(FText::Format(
-			LOCTEXT("GradeGapBeforeLimit",
-				"最后一档只覆盖到 {0} 秒，但限时是 {1} 秒。用时落在这两个数之间时并没有超时，"
-				"却会因为没命中任何档位而按 OvertimeMultiplier 结算。把最后一档的 WithinSeconds 提到限时即可。"),
-			FText::AsNumber(TimeGrades.Last().WithinSeconds),
+			LOCTEXT("TopGradeUnreachable",
+				"第一档要求剩余 {0} 秒，但总限时只有 {1} 秒，这一档永远命中不到。"),
+			FText::AsNumber(TimeGrades[0].RemainingSeconds),
 			FText::AsNumber(TimeLimitSeconds)));
 	}
 

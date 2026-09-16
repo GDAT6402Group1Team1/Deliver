@@ -27,6 +27,23 @@ public:
 	virtual bool IsSatisfied_Implementation(const UDeliveryTaskManagerComponent* Manager) const;
 };
 
+/**
+ * 开局若干秒后。对应策划表里"游戏开始 15 秒后"这类条件。
+ * 靠管理器每秒的解锁轮询触发，不需要外部通知。
+ */
+UCLASS(DisplayName="开局若干秒后")
+class DELIVERY_API UDeliveryTaskUnlockCondition_TimeSinceStart : public UDeliveryTaskUnlockCondition
+{
+	GENERATED_BODY()
+
+public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Unlock", meta=(ClampMin="0.0", Units="s"))
+	float DelaySeconds = 15.f;
+
+	virtual bool IsSatisfied_Implementation(const UDeliveryTaskManagerComponent* Manager) const override;
+};
+
 /** 前置任务全部完成。链式任务用这一条就够。 */
 UCLASS(DisplayName="前置任务已完成")
 class DELIVERY_API UDeliveryTaskUnlockCondition_TasksCompleted : public UDeliveryTaskUnlockCondition

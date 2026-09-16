@@ -32,7 +32,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/** 从任意对象拿到全局电话队列（挂在 GameState 上）。 */
-	UFUNCTION(BlueprintPure, Category="Phone", meta=(WorldContext="WorldContextObject"))
+	UFUNCTION(BlueprintPure, Category="Phone", meta=(WorldContext="WorldContextObject", DisplayName="Get Delivery Phone Queue"))
 	static UDeliveryPhoneCallQueueComponent* Get(const UObject* WorldContextObject);
 
 	/** 服务器：来电入队。同一任务同一类型不会重复入队。 */

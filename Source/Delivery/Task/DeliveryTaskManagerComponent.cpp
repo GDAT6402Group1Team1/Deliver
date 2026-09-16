@@ -145,6 +145,36 @@ void UDeliveryTaskManagerComponent::ReevaluateUnlocks()
 			Phone->EnqueueCall(State.Definition, EDeliveryPhoneCallType::TaskUnlocked);
 		}
 	}
+
+	UpdateUnlockPolling();
+}
+
+void UDeliveryTaskManagerComponent::UpdateUnlockPolling()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const bool bHasLockedTask = Tasks.ContainsByPredicate(
+		[](const FDeliveryTaskState& State) { return State.Status == EDeliveryTaskStatus::Locked; });
+
+	if (!bHasLockedTask)
+	{
+		World->GetTimerManager().ClearTimer(UnlockPollTimerHandle);
+		return;
+	}
+
+	if (!World->GetTimerManager().IsTimerActive(UnlockPollTimerHandle))
+	{
+		// 一秒一次足够：解锁条件是"到点了没"这种粒度，没必要每帧查
+		World->GetTimerManager().SetTimer(
+			UnlockPollTimerHandle,
+			FTimerDelegate::CreateUObject(this, &UDeliveryTaskManagerComponent::ReevaluateUnlocks),
+			1.f,
+			true);
+	}
 }
 
 bool UDeliveryTaskManagerComponent::CanAcquireItem(const UDeliveryTaskDefinition* Task) const
@@ -361,14 +391,11 @@ FDeliveryRewardBreakdown UDeliveryTaskManagerComponent::EvaluateReward(const UDe
 	Result.bOverdue = ElapsedSeconds > Task->TimeLimitSeconds;
 	Result.SpecialEvents = SpecialEvents;
 
-	if (const FDeliveryTimeGrade* Grade = Task->FindTimeGrade(ElapsedSeconds))
+	// 档位按剩余时间表达，超时就是负的剩余时间，所以超时分档不需要额外分支
+	if (const FDeliveryTimeGrade* Grade = Task->FindTimeGrade(Task->TimeLimitSeconds - ElapsedSeconds))
 	{
 		Result.TimeMultiplier = Grade->Multiplier;
 		Result.TimeGradeName = Grade->GradeName;
-	}
-	else
-	{
-		Result.TimeMultiplier = Task->OvertimeMultiplier;
 	}
 
 	for (const FDeliverySpecialEventRule& Rule : Task->SpecialEventRules)

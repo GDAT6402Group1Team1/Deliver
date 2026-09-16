@@ -68,15 +68,21 @@ struct FDeliveryPhoneCallContent
 	float DurationSeconds = 6.f;
 };
 
-/** 时间评价的一档。按 WithinSeconds 从小到大配置。 */
+/**
+ * 时间评价的一档。用**交付时的剩余秒数**表达：正数是提前，负数是超时。
+ * 按从大到小配置，和策划表里 `150,1.2|60,1.1|0,1|-60,0.9` 的顺序一致。
+ *
+ * 用剩余时间而不是已用时间，一是填表时能直接抄、不用拿限时去心算，
+ * 二是超时档位天然就是负数，不需要再单独配一个"超时倍率"。
+ */
 USTRUCT(BlueprintType)
 struct FDeliveryTimeGrade
 {
 	GENERATED_BODY()
 
-	/** 完成用时不超过这个秒数就吃这一档。 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reward", meta=(ClampMin="0.0", Units="s"))
-	float WithinSeconds = 0.f;
+	/** 交付时剩余不少于这个秒数就吃这一档。负数表示已经超时了这么多秒。 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reward", meta=(Units="s"))
+	float RemainingSeconds = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reward", meta=(ClampMin="0.0"))
 	float Multiplier = 1.f;

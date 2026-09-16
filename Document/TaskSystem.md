@@ -159,18 +159,26 @@
 | 分组 | 字段 | 说明 |
 |---|---|---|
 | Task | `TaskId` | 稳定 ID，上线后不要改 |
-| Task | `DisplayName` / `Description` | 手机里显示 |
+| Task | `DisplayName` | 任务名 |
+| Task | `SimpleDescription` / `DetailedDescription` | 列表里的一句话 / 详情页的完整描述 |
+| Reference | `DeliveryItemId` / `PickupLocationId` / `DeliveryLocationId` / `ReceiverNpcId` / `SpecialEventId` | 策划表里的外部引用 ID。**目前只存字符串不做解析**，指向的系统还没做（见第八节） |
 | Unlock | `UnlockConditions` | 内联条件数组，全部满足才解锁。**留空 = 开局即解锁** |
 | Phone | `UnlockCall` / `OverdueCall` | 台词、语音、这通电话占队列多久 |
 | Time | `TimeLimitSeconds` | 总限时，例：300（5 分钟） |
-| Time | `YellowRemainingSeconds` | 剩余少于它转黄，例：120 |
-| Time | `RedRemainingSeconds` | 剩余少于它转红，例：60 |
+| Time | `YellowRemainingSeconds` | 剩余少于它转黄，例：120。**纯 UI 配色，无机制后果** |
+| Time | `RedRemainingSeconds` | 剩余少于它转红，例：60。同上 |
 | Reward | `BaseReward` | 基础奖励 |
-| Reward | `TimeGrades` | 时间评价档位，**按 `WithinSeconds` 从小到大配**，第一条容得下用时的即评价结果 |
-| Reward | `OvertimeMultiplier` | 所有档都超了（超时交付）时的倍率 |
+| Reward | `TimeGrades` | 时间评价档位，见下 |
 | Reward | `SpecialEventRules` | 事件 Tag → 倍率，命中的可叠乘 |
 
 最终奖励 = `BaseReward × 时间评价倍率 × ∏(命中的特殊事件倍率)`，四舍五入取整。
+
+**时间评价档位用「交付时的剩余秒数」表达，正数是提前、负数是超时，按从大到小配置**，
+和策划表 Time Rating 那列（`150,1.2|60,1.1|0,1|-60,0.9|-120,0.8`）一一对应。
+结算时取第一条"剩余时间不低于门槛"的档；比最后一档还差就按最后一档算。
+
+这样写有两个好处：填表时能直接抄、不用拿限时去心算；超时档位天然就是负数，
+不需要再单独配一个"超时倍率"（早期版本有个 `OvertimeMultiplier`，已经删掉了）。
 
 ### 5.2 关卡接线
 
@@ -181,7 +189,32 @@
 3. 快递 Actor 上加 `DeliveryItemComponent`，填 `OwningTask`。
 4. 收件人 Actor 上加 `DeliveryTargetComponent`，填 `ExpectedTask`。
 
-### 5.3 不用 UI 也能测：控制台命令
+### 5.3 从策划表导入
+
+任务数值由策划在表格里维护，导出成 `Design/Tasks.csv`（13 列，列顺序见文件本身），
+然后在编辑器菜单 **Delivery → Import / Reimport Tasks** 一键同步成 DataAsset。
+脚本在 `Content/Python/delivery_task_import.py`。
+
+几条关键行为：
+
+- **按 `TaskId` 增量更新**：已存在的资产只改表里有的字段，不重建。所以来电语音、
+  黄红阈值、特殊事件倍率这些表里没有的列，在资产上手填之后不会被导入冲掉。
+- **表里删掉的任务不会被自动删除**，只在日志里提示，避免误删。
+- **按列名匹配而不是列位置**，策划调整列顺序不会串位。
+- 导入后**不会自动加进 GameState 的 `TaskDefinitions`**，那一步仍要手动做。
+
+解锁条件那一列在表里原本是自然语言（"游戏开始15秒后"），没法可靠解析，约定改成：
+
+| 写法 | 含义 |
+|---|---|
+| 留空 | 开局立刻解锁 |
+| `time:15` | 关卡开始 15 秒后 |
+| `task:Task_001` | 前置任务完成（整张表导完后统一回填，所以可以引用表里靠后的任务） |
+| `time:15\|task:Task_001` | 用 `\|` 连接，全部满足才解锁 |
+
+解析不了的内容会告警并当成"无条件"，不会静默生成一个错的条件。
+
+### 5.4 不用 UI 也能测：控制台命令
 
 交互和背包系统还没有，所以加了四条控制台命令，在 PIE 里按 `` ` `` 敲。
 实现在 `Task/DeliveryTaskDebugCommands.cpp`，用 `#if !UE_BUILD_SHIPPING` 包着，不进正式包。
@@ -262,6 +295,7 @@
 | 快递 Actor 本体 | 手持、掉落、放车后备箱由交互/背包系统实现，任务系统只认 `DeliveryItemComponent` |
 | 存档 | 目前状态全在内存，重开关卡即重置 |
 | 解锁条件 | 内置只有"前置任务已完成"一条，其他条件继承 `UDeliveryTaskUnlockCondition` 扩展 |
+| 外部 ID 的解析 | `DeliveryItemId` / `PickupLocationId` / `DeliveryLocationId` / `ReceiverNpcId` / `SpecialEventId` 目前只存字符串。等交互和关卡系统落地后再决定怎么解析（场景 Actor 打 Tag 按 ID 查，还是转成资产引用）。**地图引导要取件点/送达点坐标，依赖这一步** |
 | **快递丢失的处理** | 快递掉出世界/被删之后，任务会永远卡在进行中，而且因为"同时只有一个进行中任务"，整局再也接不了别的任务。需要定：重生快递、加放弃接口、还是先不管 |
 | 自动化测试 | 奖励结算是纯函数，最值得测，可复用互殴系统 `DeliveryBoxingPoseTests.cpp` 那套框架 |
 
@@ -275,6 +309,6 @@
 2. **电话队列由服务器按配置时长推进**，所有人同时听到同一通电话；没有做"某个玩家挂断"的接口（挂断会影响所有人）。
 3. **换手/掉落再捡不算重新接取，也不重置计时**；`NotifyAcquired` 此时返回 false（表示"没有发生接取"，不表示"拾取失败"）。
 4. **同一个特殊事件 Tag 只计一次**，防止沿途反复触发把倍率叠爆。
-5. **超时交付用单独的 `OvertimeMultiplier`**。规则只写了"时间评价档位"，没写超时怎么算。
+5. ~~超时交付用单独的 `OvertimeMultiplier`~~ —— **已确认**：策划表里超时是分档的（负数档位），已改成剩余时间语义，`OvertimeMultiplier` 删除。
 6. **未解锁任务在数据层完全不暴露给 UI**（手机里不显示灰条）。
 7. **没有放弃任务的接口**，和"不设失败状态"保持一致。

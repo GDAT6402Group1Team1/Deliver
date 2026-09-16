@@ -35,7 +35,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/** 从任意对象拿到全局任务管理器（挂在 GameState 上）。 */
-	UFUNCTION(BlueprintPure, Category="Task", meta=(WorldContext="WorldContextObject"))
+	UFUNCTION(BlueprintPure, Category="Task", meta=(WorldContext="WorldContextObject", DisplayName="Get Delivery Task Manager"))
 	static UDeliveryTaskManagerComponent* Get(const UObject* WorldContextObject);
 
 	/** —— 取件与交付（服务器）—— */
@@ -141,8 +141,17 @@ protected:
 	/** 服务器时间。客户端拿到的是同一条时间轴，倒计时不会各算各的。 */
 	float GetServerTimeSeconds() const;
 
+	/**
+	 * 还有未解锁任务时，每秒重新评估一次解锁条件。
+	 * 像"开局 15 秒后"这类条件不会有人来通知我们，只能主动轮询；
+	 * 全部解锁完就停掉，不留常驻定时器。
+	 */
+	void UpdateUnlockPolling();
+
 	/** 同一时间只有一个进行中任务，一个句柄就够。 */
 	FTimerHandle OverdueTimerHandle;
+
+	FTimerHandle UnlockPollTimerHandle;
 
 	/** 客户端上一次看到的状态，用来在 OnRep 里做差分并广播事件。 */
 	UPROPERTY(Transient)
