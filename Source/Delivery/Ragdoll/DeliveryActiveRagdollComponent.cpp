@@ -56,6 +56,110 @@ namespace
 		Data.bDisableCollision = true;
 		return Data;
 	}
+
+	bool HasPhysicsBody(const USkeletalMeshComponent* Mesh, const FName Bone)
+	{
+		return Mesh
+			&& Bone != NAME_None
+			&& Mesh->GetBoneIndex(Bone) != INDEX_NONE
+			&& Mesh->GetBodyInstance(Bone) != nullptr;
+	}
+
+	int32 BoneDepth(const USkeletalMeshComponent* Mesh, FName Bone)
+	{
+		int32 Depth = 0;
+		while (Bone != NAME_None)
+		{
+			++Depth;
+			Bone = Mesh->GetParentBone(Bone);
+		}
+		return Depth;
+	}
+
+	/** 从某节往末梢找，用该枝上最远端、且真有刚体的那一节。没有脚刚体时就是小腿。 */
+	FName FindMostDistalPhysicsBody(const USkeletalMeshComponent* Mesh, const FName Root)
+	{
+		if (!Mesh || Root == NAME_None || Mesh->GetBoneIndex(Root) == INDEX_NONE)
+		{
+			return NAME_None;
+		}
+
+		FName Best = NAME_None;
+		int32 BestDepth = -1;
+		const int32 NumBones = Mesh->GetNumBones();
+		for (int32 Index = 0; Index < NumBones; ++Index)
+		{
+			const FName Bone = Mesh->GetBoneName(Index);
+			if (Bone != Root && !Mesh->BoneIsChildOf(Bone, Root))
+			{
+				continue;
+			}
+			if (!HasPhysicsBody(Mesh, Bone))
+			{
+				continue;
+			}
+
+			const int32 Depth = BoneDepth(Mesh, Bone);
+			if (Depth >= BestDepth)
+			{
+				Best = Bone;
+				BestDepth = Depth;
+			}
+		}
+		return Best;
+	}
+
+	FName WalkToAncestorPhysicsBody(const USkeletalMeshComponent* Mesh, FName Bone, const FName StopAt)
+	{
+		if (!Mesh)
+		{
+			return NAME_None;
+		}
+
+		FName Current = Mesh->GetBoneIndex(Bone) != INDEX_NONE ? Mesh->GetParentBone(Bone) : StopAt;
+		while (Current != NAME_None)
+		{
+			if (HasPhysicsBody(Mesh, Current))
+			{
+				return Current;
+			}
+			if (Current == StopAt)
+			{
+				break;
+			}
+			Current = Mesh->GetParentBone(Current);
+		}
+		return NAME_None;
+	}
+
+	/** 在一条腿上取组件空间最低的骨骼当脚底，通常是脚尖。 */
+	FName FindVisualSole(const USkeletalMeshComponent* Mesh, const FName LimbRoot, const FName Fallback)
+	{
+		if (!Mesh || LimbRoot == NAME_None || Mesh->GetBoneIndex(LimbRoot) == INDEX_NONE)
+		{
+			return Fallback;
+		}
+
+		FName Best = Fallback;
+		float BestZ = MAX_flt;
+		const int32 NumBones = Mesh->GetNumBones();
+		for (int32 Index = 0; Index < NumBones; ++Index)
+		{
+			const FName Bone = Mesh->GetBoneName(Index);
+			if (Bone != LimbRoot && !Mesh->BoneIsChildOf(Bone, LimbRoot))
+			{
+				continue;
+			}
+
+			const float Z = Mesh->GetBoneLocation(Bone, EBoneSpaces::ComponentSpace).Z;
+			if (Z < BestZ)
+			{
+				Best = Bone;
+				BestZ = Z;
+			}
+		}
+		return Best;
+	}
 }
 
 UDeliveryActiveRagdollComponent::UDeliveryActiveRagdollComponent()
@@ -168,6 +272,51 @@ void UDeliveryActiveRagdollComponent::ResolveOwnerComponents()
 	}
 }
 
+void UDeliveryActiveRagdollComponent::ResolveConfiguredPhysicsBones()
+{
+	if (!Mesh)
+	{
+		return;
+	}
+
+	const auto Remap = [this](FName& Bone, const FName Resolved)
+	{
+		if (Resolved == NAME_None || Resolved == Bone)
+		{
+			return;
+		}
+
+		UE_LOG(LogDelivery, Warning,
+			TEXT("%s: '%s' has no physics body, using '%s'."),
+			*GetNameSafe(GetOwner()), *Bone.ToString(), *Resolved.ToString());
+		Bone = Resolved;
+	};
+
+	if (!HasPhysicsBody(Mesh, Bones.Spine))
+	{
+		FName Chest = WalkToAncestorPhysicsBody(Mesh, Bones.Spine, Bones.Hips);
+		if (Chest == NAME_None)
+		{
+			Chest = HasPhysicsBody(Mesh, TEXT("Spine")) ? FName(TEXT("Spine")) : FName(TEXT("Spine1"));
+			if (!HasPhysicsBody(Mesh, Chest))
+			{
+				Chest = NAME_None;
+			}
+		}
+		Remap(Bones.Spine, Chest);
+	}
+
+	// 迈步电机必须挂在有刚体的那一节；脚底高度另用脚尖骨骼量，不要把 Bones.LeftFoot 改成小腿。
+	LeftFoot.Bone = HasPhysicsBody(Mesh, Bones.LeftFoot)
+		? Bones.LeftFoot
+		: FindMostDistalPhysicsBody(Mesh, Bones.LeftUpLeg);
+	RightFoot.Bone = HasPhysicsBody(Mesh, Bones.RightFoot)
+		? Bones.RightFoot
+		: FindMostDistalPhysicsBody(Mesh, Bones.RightUpLeg);
+	LeftFoot.SoleBone = FindVisualSole(Mesh, Bones.LeftUpLeg, LeftFoot.Bone);
+	RightFoot.SoleBone = FindVisualSole(Mesh, Bones.RightUpLeg, RightFoot.Bone);
+}
+
 bool UDeliveryActiveRagdollComponent::ValidateSetup() const
 {
 	if (!Mesh || !Capsule || !PhysicsControl)
@@ -183,8 +332,8 @@ bool UDeliveryActiveRagdollComponent::ValidateSetup() const
 	}
 
 	const FName Required[] = {
-		Bones.Hips, Bones.Spine, Bones.Head, Bones.LeftUpLeg, Bones.LeftFoot,
-		Bones.RightUpLeg, Bones.RightFoot, Bones.LeftArm, Bones.RightArm
+		Bones.Hips, Bones.Spine, Bones.Head, Bones.LeftUpLeg, LeftFoot.Bone,
+		Bones.RightUpLeg, RightFoot.Bone, Bones.LeftArm, Bones.RightArm
 	};
 
 	for (const FName Bone : Required)
@@ -216,6 +365,34 @@ void UDeliveryActiveRagdollComponent::PlaceOnGround()
 		Hit, Start, End, FQuat::Identity, ECC_WorldStatic, Capsule->GetCollisionShape(), Params))
 	{
 		Owner->SetActorLocation(Hit.Location, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+
+	// 胶囊半高和网格相对偏移对不齐时，脚会先悬空。再用脚底骨骼把整个人往地面收。
+	if (!Mesh)
+	{
+		return;
+	}
+
+	const FName LeftSole = LeftFoot.SoleBone != NAME_None ? LeftFoot.SoleBone : Bones.LeftFoot;
+	const FName RightSole = RightFoot.SoleBone != NAME_None ? RightFoot.SoleBone : Bones.RightFoot;
+	if (Mesh->GetBoneIndex(LeftSole) == INDEX_NONE || Mesh->GetBoneIndex(RightSole) == INDEX_NONE)
+	{
+		return;
+	}
+
+	FGroundHit SoleGround;
+	const FVector MidSole = 0.5f * (
+		Mesh->GetBoneLocation(LeftSole, EBoneSpaces::WorldSpace)
+		+ Mesh->GetBoneLocation(RightSole, EBoneSpaces::WorldSpace));
+	if (TraceGround(MidSole, FVector::UpVector, SoleGround))
+	{
+		const float Gap = FVector::DotProduct(MidSole - SoleGround.Point, SoleGround.Normal);
+		if (FMath::Abs(Gap) > 0.5f)
+		{
+			Owner->SetActorLocation(
+				Owner->GetActorLocation() - SoleGround.Normal * Gap,
+				false, nullptr, ETeleportType::TeleportPhysics);
+		}
 	}
 }
 
@@ -301,7 +478,7 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 			{
 				UpperLegs.Add(Bone);
 			}
-			else if (Bone != Bones.LeftFoot && Bone != Bones.RightFoot)
+			else if (Bone != LeftFoot.Bone && Bone != RightFoot.Bone)
 			{
 				LowerLegs.Add(Bone);
 			}
@@ -378,7 +555,7 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 		Mesh, LowerLegs, EPhysicsControlType::ParentSpace, MakeAngularControl(ArticulatedKneeStrength, 1.15f), LegsSet);
 	// 脚踝：父空间旋转负责脚尖朝向。世界空间脚控制只拉位置，不写角度，避免两套旋转目标互相拉扯。
 	PhysicsControl->CreateControlsFromSkeletalMesh(
-		Mesh, { Bones.LeftFoot, Bones.RightFoot }, EPhysicsControlType::ParentSpace,
+		Mesh, { LeftFoot.Bone, RightFoot.Bone }, EPhysicsControlType::ParentSpace,
 		MakeAngularControl(FootFacingStrength, StableMuscleDampingRatio), FootPostureSet);
 	// 手臂正常由 BoxingPose 驱动。只有它建不起来时才退回这套跟随骨架动画的软控制，
 	// 避免猜测局部轴导致关节持续扭动。
@@ -405,17 +582,15 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 	FootData.bOnlyControlChildObject = true;
 
 	const TArray<FName> LeftControls = PhysicsControl->CreateControlsFromSkeletalMesh(
-		Mesh, { Bones.LeftFoot }, EPhysicsControlType::WorldSpace, FootData, FeetSet);
+		Mesh, { LeftFoot.Bone }, EPhysicsControlType::WorldSpace, FootData, FeetSet);
 	const TArray<FName> RightControls = PhysicsControl->CreateControlsFromSkeletalMesh(
-		Mesh, { Bones.RightFoot }, EPhysicsControlType::WorldSpace, FootData, FeetSet);
+		Mesh, { RightFoot.Bone }, EPhysicsControlType::WorldSpace, FootData, FeetSet);
 	if (LeftControls.IsEmpty() || RightControls.IsEmpty())
 	{
 		return false;
 	}
 
-	LeftFoot.Bone = Bones.LeftFoot;
 	LeftFoot.Control = LeftControls[0];
-	RightFoot.Bone = Bones.RightFoot;
 	RightFoot.Control = RightControls[0];
 	PhysicsControl->SetControlTargetPositionAndOrientation(
 		LeftFoot.Control, LeftFoot.Target, LeftFoot.TargetRotation.Rotator(),
@@ -479,31 +654,37 @@ void UDeliveryActiveRagdollComponent::CacheStandingState()
 	CurrentFacingYaw = ReferenceFacingYaw;
 	UprightInPelvisSpace = ReferencePelvisRotation.UnrotateVector(FVector::UpVector).GetSafeNormal();
 
-	LeftFoot.Target = Mesh->GetCenterOfMass(Bones.LeftFoot);
-	RightFoot.Target = Mesh->GetCenterOfMass(Bones.RightFoot);
-	LeftFoot.ReferenceRotation = Mesh->GetBoneQuaternion(Bones.LeftFoot, EBoneSpaces::WorldSpace);
-	RightFoot.ReferenceRotation = Mesh->GetBoneQuaternion(Bones.RightFoot, EBoneSpaces::WorldSpace);
+	const FName LeftSole = LeftFoot.SoleBone != NAME_None ? LeftFoot.SoleBone : Bones.LeftFoot;
+	const FName RightSole = RightFoot.SoleBone != NAME_None ? RightFoot.SoleBone : Bones.RightFoot;
+	const FVector LeftSoleLocation = Mesh->GetBoneLocation(LeftSole, EBoneSpaces::WorldSpace);
+	const FVector RightSoleLocation = Mesh->GetBoneLocation(RightSole, EBoneSpaces::WorldSpace);
+	LeftFoot.Target = Mesh->GetCenterOfMass(LeftFoot.Bone);
+	RightFoot.Target = Mesh->GetCenterOfMass(RightFoot.Bone);
+	LeftFoot.ReferenceRotation = Mesh->GetBoneQuaternion(LeftFoot.Bone, EBoneSpaces::WorldSpace);
+	RightFoot.ReferenceRotation = Mesh->GetBoneQuaternion(RightFoot.Bone, EBoneSpaces::WorldSpace);
 	LeftFoot.TargetRotation = LeftFoot.ReferenceRotation;
 	RightFoot.TargetRotation = RightFoot.ReferenceRotation;
 
 	FGroundHit LeftGround;
 	FGroundHit RightGround;
-	FVector LeftGroundPoint = LeftFoot.Target;
-	FVector RightGroundPoint = RightFoot.Target;
+	FVector LeftGroundPoint = LeftSoleLocation;
+	FVector RightGroundPoint = RightSoleLocation;
 	FVector LeftNormal = FVector::UpVector;
 	FVector RightNormal = FVector::UpVector;
-	if (TraceGround(LeftFoot.Target, FVector::UpVector, LeftGround))
+	if (TraceGround(LeftSoleLocation, FVector::UpVector, LeftGround))
 	{
-		LeftFoot.GroundOffset = FMath::Max(0.0f, FVector::DotProduct(LeftFoot.Target - LeftGround.Point, LeftGround.Normal));
 		LeftGroundPoint = LeftGround.Point;
 		LeftNormal = LeftGround.Normal;
 	}
-	if (TraceGround(RightFoot.Target, FVector::UpVector, RightGround))
+	if (TraceGround(RightSoleLocation, FVector::UpVector, RightGround))
 	{
-		RightFoot.GroundOffset = FMath::Max(0.0f, FVector::DotProduct(RightFoot.Target - RightGround.Point, RightGround.Normal));
 		RightGroundPoint = RightGround.Point;
 		RightNormal = RightGround.Normal;
 	}
+
+	// 没有脚刚体时质心在小腿。偏移只记质心到脚底，不把出生时的悬空写进站立高度。
+	LeftFoot.GroundOffset = FMath::Max(0.0f, FVector::DotProduct(LeftFoot.Target - LeftSoleLocation, LeftNormal));
+	RightFoot.GroundOffset = FMath::Max(0.0f, FVector::DotProduct(RightFoot.Target - RightSoleLocation, RightNormal));
 
 	LeftFoot.Start = LeftFoot.Target;
 	RightFoot.Start = RightFoot.Target;
@@ -512,8 +693,9 @@ void UDeliveryActiveRagdollComponent::CacheStandingState()
 	const FVector AverageNormal = (LeftNormal + RightNormal).GetSafeNormal();
 	CurrentGroundNormal = AverageNormal.IsNearlyZero() ? FVector::UpVector : AverageNormal;
 	const FVector MidGround = 0.5f * (LeftGroundPoint + RightGroundPoint);
+	const FVector MidSole = 0.5f * (LeftSoleLocation + RightSoleLocation);
 	SmoothedGroundPoint = MidGround;
-	StandHeight = FMath::Clamp(FVector::DotProduct(Hips - MidGround, CurrentGroundNormal), 80.0f, 140.0f);
+	StandHeight = FMath::Clamp(FVector::DotProduct(Hips - MidSole, CurrentGroundNormal), 40.0f, 160.0f);
 	LastWishDirection = GetOwner() ? GetOwner()->GetActorForwardVector() : FVector::ForwardVector;
 	SmoothedBalanceOffset = FVector::ZeroVector;
 	SmoothedMoveLead = FVector::ZeroVector;
@@ -554,6 +736,7 @@ void UDeliveryActiveRagdollComponent::StartRagdoll()
 	}
 
 	ResolveOwnerComponents();
+	ResolveConfiguredPhysicsBones();
 	if (!ValidateSetup())
 	{
 		return;
@@ -812,7 +995,7 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	if (Wish.IsNearlyZero())
 	{
 		const FVector SupportCenter = 0.5f * (
-			Mesh->GetCenterOfMass(Bones.LeftFoot) + Mesh->GetCenterOfMass(Bones.RightFoot));
+			Mesh->GetCenterOfMass(LeftFoot.Bone) + Mesh->GetCenterOfMass(RightFoot.Bone));
 		const FVector BodyCenter = GetWholeBodyCenterOfMass();
 		DesiredBalanceOffset = FVector::VectorPlaneProject(
 			SupportCenter - BodyCenter, CurrentGroundNormal)
@@ -978,8 +1161,8 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 	const FVector Forward = GetSlopeForward(Wish);
 	const FVector Right = GetSlopeRight(Wish);
 	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
-	const float LeftSide = FVector::DotProduct(Mesh->GetCenterOfMass(Bones.LeftFoot) - Hips, Right);
-	const float RightSide = FVector::DotProduct(Mesh->GetCenterOfMass(Bones.RightFoot) - Hips, Right);
+	const float LeftSide = FVector::DotProduct(Mesh->GetCenterOfMass(LeftFoot.Bone) - Hips, Right);
+	const float RightSide = FVector::DotProduct(Mesh->GetCenterOfMass(RightFoot.Bone) - Hips, Right);
 
 	if (Wish.IsNearlyZero())
 	{
@@ -991,9 +1174,9 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 		const FVector LeftStand = PlannedPelvisTarget + Right * (LeftFoot.SideSign * StableComedyStance);
 		const FVector RightStand = PlannedPelvisTarget + Right * (RightFoot.SideSign * StableComedyStance);
 		const FVector LeftDelta = FVector::VectorPlaneProject(
-			Mesh->GetCenterOfMass(Bones.LeftFoot) - LeftStand, CurrentGroundNormal);
+			Mesh->GetCenterOfMass(LeftFoot.Bone) - LeftStand, CurrentGroundNormal);
 		const FVector RightDelta = FVector::VectorPlaneProject(
-			Mesh->GetCenterOfMass(Bones.RightFoot) - RightStand, CurrentGroundNormal);
+			Mesh->GetCenterOfMass(RightFoot.Bone) - RightStand, CurrentGroundNormal);
 		const float LeftError = LeftDelta.Size();
 		const float RightError = RightDelta.Size();
 
@@ -1028,9 +1211,9 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 	}
 
 	const float LeftForward = FVector::DotProduct(
-		Mesh->GetCenterOfMass(Bones.LeftFoot) - Hips, Forward);
+		Mesh->GetCenterOfMass(LeftFoot.Bone) - Hips, Forward);
 	const float RightForward = FVector::DotProduct(
-		Mesh->GetCenterOfMass(Bones.RightFoot) - Hips, Forward);
+		Mesh->GetCenterOfMass(RightFoot.Bone) - Hips, Forward);
 	const bool bStepLeft = FMath::Abs(LeftForward - RightForward) > MovingCrossingRecoveryMargin
 		? LeftForward < RightForward
 		: bStepLeftNext;
@@ -1319,7 +1502,7 @@ void UDeliveryActiveRagdollComponent::CaptureNetworkSnapshot()
 	}
 
 	const FName SnapshotBones[] = {
-		Bones.Hips, Bones.Spine, Bones.Head, Bones.LeftFoot, Bones.RightFoot,
+		Bones.Hips, Bones.Spine, Bones.Head, LeftFoot.Bone, RightFoot.Bone,
 		TEXT("LeftArm"), TEXT("LeftForeArm"), TEXT("LeftHand"),
 		TEXT("RightArm"), TEXT("RightForeArm"), TEXT("RightHand")
 	};

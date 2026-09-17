@@ -73,12 +73,14 @@ struct FDeliveryRagdollBones
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ragdoll")
 	FName LeftUpLeg = TEXT("LeftUpLeg");
 
+	/** 迈步落点刚体。物理资产没有脚时，启动会改成该腿最远端的现有刚体（通常是小腿）。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ragdoll")
 	FName LeftFoot = TEXT("LeftFoot");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ragdoll")
 	FName RightUpLeg = TEXT("RightUpLeg");
 
+	/** 迈步落点刚体。物理资产没有脚时，启动会改成该腿最远端的现有刚体（通常是小腿）。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ragdoll")
 	FName RightFoot = TEXT("RightFoot");
 
@@ -168,19 +170,19 @@ protected:
 	float MaxTargetLead = 18.0f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0", ClampMax="20.0"))
-	float AccelerationLeanAngle = 6.0f;
+	float AccelerationLeanAngle = 4.5f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.1"))
 	float TurnResponsiveness = 5.0f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0", ClampMax="8.0"))
-	float BouncyPelvisWobbleAngle = 3.5f;
+	float BouncyPelvisWobbleAngle = 2.2f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0", ClampMax="20.0"))
-	float LooseTorsoSwingAngle = 14.0f;
+	float LooseTorsoSwingAngle = 7.5f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0", ClampMax="8.0"))
-	float SmoothBounceHeight = 2.5f;
+	float SmoothBounceHeight = 1.8f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0"))
 	float ControlledStrideLength = 108.0f;
@@ -242,7 +244,7 @@ protected:
 	float ArticulatedKneeStrength = 6.0f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|肌肉", meta=(ClampMin="0.0"))
-	float ComedyArmStrength = 0.2f;
+	float ComedyArmStrength = 3.0f;
 
 	/**
 	 * 蓄力阶段把出拳侧的肩膀向后拧多少度。纯水平旋转，不弯腰。
@@ -250,11 +252,11 @@ protected:
 	 * 伸出去的手臂会被整块躯干横着带过去，看起来是在扇耳光而不是出拳。
 	 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0", ClampMax="60.0"))
-	float PunchSideStanceAngle = 12.0f;
+	float PunchSideStanceAngle = 8.0f;
 
 	/** 释放时上身向出拳侧带出多少度。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0", ClampMax="45.0"))
-	float PunchFollowThroughAngle = 14.0f;
+	float PunchFollowThroughAngle = 9.0f;
 
 	/** 拧身角度的过渡速度。目标角度是阶跃的，这里决定身体多快跟上去。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="1.0"))
@@ -262,11 +264,11 @@ protected:
 
 	/** 释放时全身沿拳路前送多远。直拳的力道主要来自这一下体重前压。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0", ClampMax="60.0"))
-	float PunchLungeDistance = 41.0f;
+	float PunchLungeDistance = 24.0f;
 
 	/** 前送和收回的速度。要比拧身快，身体先压出去，拳头才跟着有重量。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="1.0"))
-	float PunchLungeSpeed = 16.0f;
+	float PunchLungeSpeed = 12.0f;
 
 	/** 出拳期间胸腔和脊柱的强度。肩膀要有支点，上臂才转得动。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0"))
@@ -357,7 +359,10 @@ protected:
 	/** 一只脚的迈步状态。Alpha 小于 1 表示正在摆动，等于 1 表示落在地上做支撑。 */
 	struct FFoot
 	{
+		/** 位置电机拉的刚体。没有脚刚体时是小腿。 */
 		FName Bone;
+		/** 用来量贴地的骨骼，通常是脚尖；可以没有刚体。 */
+		FName SoleBone;
 		FName Control;
 		/** 抬脚瞬间的脚质心，摆动曲线的起点。 */
 		FVector Start = FVector::ZeroVector;
@@ -366,7 +371,7 @@ protected:
 		FVector SideAxis = FVector::RightVector;
 		FQuat ReferenceRotation = FQuat::Identity;
 		FQuat TargetRotation = FQuat::Identity;
-		/** 启动时脚质心相对地面的高度，落到地面时加回去，避免脚埋进地里。 */
+		/** 刚体质心比脚底高出多少。落点按这个抬，让脚底着地，而不是把小腿质心按到地面。 */
 		float GroundOffset = 0.0f;
 		/** 左脚为负、右脚为正，或按启动时相对髋的左右决定。 */
 		float SideSign = 1.0f;
@@ -431,6 +436,7 @@ protected:
 	void OnRep_RagdollSnapshot();
 
 	void ResolveOwnerComponents();
+	void ResolveConfiguredPhysicsBones();
 	bool ValidateSetup() const;
 	void PlaceOnGround();
 	void ConfigurePhysics();

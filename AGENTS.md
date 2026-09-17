@@ -55,7 +55,8 @@
 
 ### 5. 地图 / 交通场景
 - 已导入地图并接入 **PS2DEMImporter**（`Plugins/PS2DEMImporter`，PS2 地形/道路生成插件）用于把地形转换为 landscape spline 道路。
-- 交通路口、红绿灯、道路与门的破碎效果正在搭建：`Content/PS2DEM`（`BP_Intersection`、`BP_TrafficLine*`）、`Content/trafficlight`。
+- 交通路口、红绿灯、道路与门的破碎效果正在搭建：`Content/PS2DEM`（`BP_Intersection`、`BP_TrafficLine*`）、`Content/trafficlight`。车辆沿样条行驶、进路口的 Overlap 检测都写在 `BP_car_base` 事件图里，C++ 侧原本没有对应基类。
+- [Source/Delivery/Traffic/DeliveryTrafficCarComponent.h](Source/Delivery/Traffic/DeliveryTrafficCarComponent.h) —— 挂在 `BP_car_base` 上的辅助组件，不接管移动本身：车辆走完所有预设样条、没接上下一段车道时会脱离路线按最后方向裸奔冲出画面；蓝图每帧用 `UpdateRouteFollowState(bool)` 告诉组件这一帧还在不在跟随预设样条，连续脱离满 5 秒（`RouteLostTimeout`）广播 `OnRouteLost` 让蓝图把车放回起始样条起点、形成循环车流；同时自己在 `TickComponent` 里做前方球形扫描，探测到前方另一辆挂了同组件的车就把 `GetSpeedMultiplier()` 平滑降到 0，蓝图乘到目标速度上即可实现遇前车减速到停、让开后恢复。
 - 测试地图：`Content/Level/TestForCharacter.umap`（角色/互殴）、`Content/Level/testfortraffic.umap`（交通路口）。
 
 ### 6. 人物美术
@@ -72,7 +73,7 @@ Source/Delivery/
 ├── Combat/                           姿势/类型定义、战斗接口、单测
 ├── GAS/                              ASC、AttributeSet、PlayerState、Tags、Abilities/
 ├── Ragdoll/                          主动布娃娃、布娃娃战斗组件
-└── Task/                             任务系统：配置资产、解锁条件、全局管理器、电话队列、追踪、快递/收件人组件
+└── Traffic/                          交通车辆辅助组件（卡住重置循环、前车避让减速）
 
 Plugins/PS2DEMImporter/               地形转 landscape spline 道路插件
 Content/Blueprint/                    角色/GameMode/PlayerController 蓝图（C++ 与资产的粘合层）
