@@ -18,31 +18,31 @@ UENUM(BlueprintType)
 enum class EDeliveryTaskStatus : uint8
 {
 	/** 解锁条件未满足，手机里看不到。 */
-	Locked,
+	Locked UMETA(DisplayName="未解锁"),
 	/** 已解锁、来电已入队，但还没人取件。不计时、不过期，可以一直挂着。 */
-	AwaitingPickup,
+	AwaitingPickup UMETA(DisplayName="待取件"),
 	/** 有人取过件，全局计时中。同一时间全世界只允许一个。 */
-	InProgress,
+	InProgress UMETA(DisplayName="进行中"),
 	/** 已交付。 */
-	Completed
+	Completed UMETA(DisplayName="已完成")
 };
 
 /** 倒计时配色阶段，只驱动 UI。 */
 UENUM(BlueprintType)
 enum class EDeliveryTaskUrgency : uint8
 {
-	Green,
-	Yellow,
-	Red
+	Green UMETA(DisplayName="充裕"),
+	Yellow UMETA(DisplayName="偏紧"),
+	Red UMETA(DisplayName="紧迫")
 };
 
 UENUM(BlueprintType)
 enum class EDeliveryPhoneCallType : uint8
 {
 	/** 任务解锁来电。 */
-	TaskUnlocked,
+	TaskUnlocked UMETA(DisplayName="任务解锁"),
 	/** 首次超时的催促来电，同一任务只会有一次。 */
-	Overdue
+	Overdue UMETA(DisplayName="超时催促")
 };
 
 /**
@@ -53,11 +53,11 @@ UENUM(BlueprintType)
 enum class EDeliveryPhoneCallState : uint8
 {
 	/** 没有电话，手机待机。 */
-	Idle,
+	Idle UMETA(DisplayName="待机"),
 	/** 响铃中，等人接听。超时没人接就算未接来电。 */
-	Ringing,
+	Ringing UMETA(DisplayName="来电中"),
 	/** 已接通，正在播台词。 */
-	InCall
+	InCall UMETA(DisplayName="通话中")
 };
 
 /** 一通电话的内容。真正的播放由 UI / 音频层负责，这里只存数据。 */
