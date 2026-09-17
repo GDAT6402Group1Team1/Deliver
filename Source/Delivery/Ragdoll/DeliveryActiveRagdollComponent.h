@@ -127,6 +127,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Ragdoll")
 	void AddImpulse(FVector Impulse, bool bVelocityChange = true);
 
+	/** 仅服务器在确认受到一拳后调用；受击者自己承受冲量并短暂放松直立控制。 */
+	void ApplyMeleeImpact(const FVector& Impulse, const FVector& ImpactPoint);
+
 	/** 开始直拳：记录攻击方向和手侧。 */
 	void BeginBodyDrivenPunch(FVector AimDirection, float HandSide);
 	bool CanDrivePunch(float HandSide) const { return bIsActive && !bIsLimp && BoxingPose.IsReady(HandSide > 0 ? 0 : 1); }
@@ -245,6 +248,52 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|肌肉", meta=(ClampMin="0.0"))
 	float ComedyArmStrength = 3.0f;
+
+	/** 受击后重点减弱胸和躯干电机；髋、腿只轻微让位。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|受击", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float HitReactionStrengthMultiplier = 0.2f;
+
+	/** 受击时髋部电机保留的强度；高于上半身，避免整个人飞走。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|受击", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float HitReactionPelvisStrengthMultiplier = 0.85f;
+
+	/** 两脚仍盯住落点，但位置电机可稍微让位。给小一点，脚会被拖着走得更多。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|受击", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float HitReactionFootStrengthMultiplier = 0.45f;
+
+	/** 受击时两脚沿被打飞的方向挪多远，做出踉跄一步。0 就是原地钉住。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|受击", meta=(ClampMin="0.0", ClampMax="200.0"))
+	float HitReactionFootSlideDistance = 34.0f;
+
+	/** 受击时髋部目标沿被打方向额外挪多远，让整个人真的被打退一步，不只是上身晃。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|受击", meta=(ClampMin="0.0", ClampMax="200.0"))
+	float HitReactionPelvisSlideDistance = 30.0f;
+
+	/** 髋部挪出去/收回来的过渡速度。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|受击", meta=(ClampMin="1.0"))
+	float HitReactionPelvisSlideSpeed = 10.0f;
+
+	/** 胸部冲量中额外传给髋的比例，制造很短的下身后移。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|受击", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float HitReactionPelvisImpulseFraction = 0.12f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|受击", meta=(ClampMin="0.0"))
+	float HitReactionDuration = 0.4f;
+
+	/** 胸部绕髋部后仰的瞬时角速度变化（弧度/秒）。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|受击", meta=(ClampMin="0.0"))
+	float HitReactionAngularVelocity = 5.5f;
+
+	/**
+	 * 额外给胸部一个纯向上的冲量，大小是水平冲量的这个倍数。挨打这段时间上半身电机很松，
+	 * 这一下会把上身弹起来，靠重力自己落回去，看起来是上半身带着一跳，而不只是往后倒。
+	 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|受击", meta=(ClampMin="0.0", ClampMax="3.0"))
+	float HitReactionUpwardImpulseFraction = 0.5f;
+
+	/** 受击后转身面向来拳方向的速度。比平时转身快一点，挨打是被动的反射。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|受击", meta=(ClampMin="0.0"))
+	float HitReactionFacingTurnSpeed = 9.0f;
 
 	/**
 	 * 蓄力阶段把出拳侧的肩膀向后拧多少度。纯水平旋转，不弯腰。
@@ -409,6 +458,8 @@ protected:
 	/** 平滑后的拧身角度。发给电机的必须是这个，不是阶跃的目标角度。 */
 	float PunchTwist = 0.0f;
 	float PunchLunge = 0.0f;
+	/** 受击后退平滑值，0 到 1，驱动髋部目标沿 HitPushDirection 的偏移量。 */
+	float HitPushAlpha = 0.0f;
 	float StandHeight = 95.0f;
 	float ReferenceFacingYaw = 0.0f;
 	float CurrentFacingYaw = 0.0f;
@@ -416,6 +467,13 @@ protected:
 	float SnapshotAccumulator = 0.0f;
 	float SnapshotReceivedAt = 0.0f;
 	float LastMoveInputTime = 0.0f;
+	float HitReactionEndTime = 0.0f;
+	/** 被打飞的水平方向（单位向量）。脚沿它挪，朝向取它的反向。 */
+	FVector HitPushDirection = FVector::ZeroVector;
+	/** 受击期间身体要转过去的朝向：面对出拳的人。 */
+	float HitFacingYaw = 0.0f;
+	bool bHasHitFacing = false;
+	bool bHitFeetPlanted = false;
 	FDeliveryRagdollSnapshot PreviousSnapshot;
 	FDeliveryRagdollSnapshot TargetSnapshot;
 	bool bHasNetworkSnapshot = false;
@@ -444,6 +502,8 @@ protected:
 	void DestroyControls();
 	void CacheStandingState();
 	void UpdateControlTargets(float DeltaTime);
+	void SetHitReactionStrength(float Multiplier);
+	void SetHitFeetPlanted(bool bPlant);
 	void BraceTorsoForPunch(float DeltaTime, bool bBrace);
 	void UpdatePelvisTarget(float DeltaTime, const FVector& Wish);
 	void UpdateFeet(float DeltaTime, const FVector& Wish);

@@ -37,6 +37,7 @@ public:
 	FTransform GetPunchTraceTransform() const;
 
 	float GetHitRadius() const { return HitRadius; }
+	FVector GetPunchAimDirection() const { return CachedAimDir; }
 	bool IsPunching() const { return bIsPunching; }
 
 	UPROPERTY(BlueprintAssignable, Category="Punch")

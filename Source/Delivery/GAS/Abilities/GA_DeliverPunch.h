@@ -47,6 +47,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Punch")
 	float PunchDamage = 18.f;
 
+	/** 命中后由服务器额外施加给受击者胸部的冲量；不推髋和腿。 */
+	UPROPERTY(EditDefaultsOnly, Category="Punch|Hit Reaction", meta=(ClampMin="0.0"))
+	float HitReactionImpulse = 1500.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Punch|Hit Reaction", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float HitReactionUpwardFraction = 0.08f;
+
 	UFUNCTION()
 	void OnHitWindow(EMeleeHand FiredHand);
 

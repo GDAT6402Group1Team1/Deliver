@@ -96,6 +96,10 @@ __pycache__/
 *.utoc
 *.o.pak
 
+# Local AI agent docs
+AGENTS.md
+CLAUDE.md
+
 # Local user / machine files
 *.code-workspace
 *.VC.db-wal

@@ -9,6 +9,7 @@
 #include "GAS/DeliverPlayerState.h"
 #include "GAS/DeliverAbilitySystemComponent.h"
 #include "GameplayEffect.h"
+#include "Ragdoll/DeliveryActiveRagdollComponent.h"
 
 UGA_DeliverPunch::UGA_DeliverPunch()
 {
@@ -89,22 +90,43 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 	}
 
 	ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(CurrentActorInfo->AvatarActor.Get());
+	if (!Character || !RagdollCombat || !Character->GetDamageEffect())
+	{
+		return;
+	}
 	const TArray<AActor*> Hits = Character->GatherMeleeHits(Hand);
 	const TSubclassOf<UGameplayEffect> DamageClass = Character->GetDamageEffect();
+	const FVector PunchDirection = RagdollCombat->GetPunchAimDirection();
+	const FVector ImpactPoint = RagdollCombat->GetPunchTraceTransform().GetLocation();
 
 	for (AActor* HitActor : Hits)
 	{
-		const APawn* HitPawn = Cast<APawn>(HitActor);
-		const ADeliverPlayerState* TargetPS = HitPawn ? HitPawn->GetPlayerState<ADeliverPlayerState>() : nullptr;
+		ADeliveryCharacter* TargetCharacter = Cast<ADeliveryCharacter>(HitActor);
+		const ADeliverPlayerState* TargetPS = TargetCharacter
+			? TargetCharacter->GetPlayerState<ADeliverPlayerState>() : nullptr;
 		UAbilitySystemComponent* TargetASC = TargetPS ? TargetPS->GetAbilitySystemComponent() : nullptr;
-		if (!TargetASC)
+		UDeliveryActiveRagdollComponent* TargetRagdoll = TargetCharacter
+			? TargetCharacter->GetActiveRagdoll() : nullptr;
+		if (!TargetASC || !TargetRagdoll || !TargetRagdoll->IsRagdollActive())
 		{
 			continue;
 		}
 
 		FGameplayEffectSpecHandle Spec = MakeOutgoingGameplayEffectSpec(DamageClass);
+		if (!Spec.Data.IsValid())
+		{
+			continue;
+		}
 		Spec.Data->SetSetByCallerMagnitude(TAG_Effect_Type_Damage, -PunchDamage);
 		TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+
+		// 击打者只提供方向和力度；真正的物理冲量由服务器施加到受击者自身。
+		if (HitReactionImpulse > 0.0f && !PunchDirection.IsNearlyZero())
+		{
+			const FVector ReactionDirection = (PunchDirection
+				+ FVector::UpVector * HitReactionUpwardFraction).GetSafeNormal();
+			TargetRagdoll->ApplyMeleeImpact(ReactionDirection * HitReactionImpulse, ImpactPoint);
+		}
 	}
 }
 

@@ -285,20 +285,26 @@ bool ADeliveryCharacter::StartMeleeAttack(EMeleeHand Hand)
 TArray<AActor*> ADeliveryCharacter::GatherMeleeHits(EMeleeHand Hand) const
 {
 	TArray<AActor*> Results;
+	if (!HasAuthority() || !RagdollCombat || !GetWorld())
+	{
+		return Results;
+	}
 	const FVector Center = RagdollCombat->GetPunchTraceTransform().GetLocation();
 	const float Radius = RagdollCombat->GetHitRadius();
 
 	TArray<FOverlapResult> Overlaps;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(PunchHit), false, this);
 	GetWorld()->OverlapMultiByChannel(
-		Overlaps, Center, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeSphere(Radius), Params);
+		Overlaps, Center, FQuat::Identity, ECC_PhysicsBody, FCollisionShape::MakeSphere(Radius), Params);
 
 	for (const FOverlapResult& Overlap : Overlaps)
 	{
-		APawn* Other = Cast<APawn>(Overlap.GetActor());
-		if (Other && Other != this && Other->GetPlayerState<ADeliverPlayerState>())
+		ADeliveryCharacter* Other = Cast<ADeliveryCharacter>(Overlap.GetActor());
+		if (Other && Other != this && Other->GetPlayerState<ADeliverPlayerState>()
+			&& Other->GetActiveRagdoll() && Other->GetActiveRagdoll()->IsRagdollActive())
 		{
-			Results.Add(Other);
+			// 一个角色有多个刚体，同一拳命中多个部位也只结算一次。
+			Results.AddUnique(Other);
 		}
 	}
 

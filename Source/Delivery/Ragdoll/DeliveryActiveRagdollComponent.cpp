@@ -225,6 +225,15 @@ void UDeliveryActiveRagdollComponent::TickComponent(
 	{
 		return;
 	}
+	if (GetOwner()->HasAuthority() && HitReactionEndTime > 0.0f && GetWorld()
+		&& GetWorld()->GetTimeSeconds() >= HitReactionEndTime)
+	{
+		HitReactionEndTime = 0.0f;
+		SetHitReactionStrength(1.0f);
+		SetHitFeetPlanted(false);
+		bHasHitFacing = false;
+		HitPushDirection = FVector::ZeroVector;
+	}
 
 	if (ThisTickFunction == &PostPhysicsTickFunction)
 	{
@@ -621,6 +630,11 @@ void UDeliveryActiveRagdollComponent::DestroyControls()
 	AppliedBraceAlpha = -1.0f;
 	PunchTwist = 0.0f;
 	PunchLunge = 0.0f;
+	HitPushAlpha = 0.0f;
+	HitReactionEndTime = 0.0f;
+	HitPushDirection = FVector::ZeroVector;
+	bHasHitFacing = false;
+	bHitFeetPlanted = false;
 	LeftFoot.Control = NAME_None;
 	RightFoot.Control = NAME_None;
 }
@@ -870,6 +884,122 @@ void UDeliveryActiveRagdollComponent::AddImpulse(FVector Impulse, bool bVelocity
 	}
 }
 
+void UDeliveryActiveRagdollComponent::SetHitReactionStrength(float Multiplier)
+{
+	if (!PhysicsControl)
+	{
+		return;
+	}
+
+	FPhysicsControlMultiplier ControlMultiplier;
+	ControlMultiplier.LinearStrengthMultiplier = FVector(Multiplier);
+	ControlMultiplier.AngularStrengthMultiplier = Multiplier;
+	FPhysicsControlMultiplier PelvisMultiplier;
+	const float PelvisStrength = FMath::IsNearlyEqual(Multiplier, 1.0f)
+		? 1.0f : FMath::Clamp(HitReactionPelvisStrengthMultiplier, 0.0f, 1.0f);
+	PelvisMultiplier.LinearStrengthMultiplier = FVector(PelvisStrength);
+	PelvisMultiplier.AngularStrengthMultiplier = PelvisStrength;
+	// 控制名是创建时返回的真实名字。按名字更新，避免依赖可能未注册的自定义 Set。
+	// 不重新启用已经因晕倒/远端代理而关闭的控制。
+	if (!PelvisControl.IsNone())
+	{
+		PhysicsControl->SetControlMultiplier(PelvisControl, PelvisMultiplier, false, true, false);
+	}
+	if (!ChestControl.IsNone())
+	{
+		PhysicsControl->SetControlMultiplier(ChestControl, ControlMultiplier, false, true, false);
+	}
+	for (const FName& Control : TorsoControls)
+	{
+		PhysicsControl->SetControlMultiplier(Control, ControlMultiplier, false, true, false);
+	}
+}
+
+void UDeliveryActiveRagdollComponent::SetHitFeetPlanted(bool bPlant)
+{
+	if (!PhysicsControl || !Mesh || bHitFeetPlanted == bPlant
+		|| LeftFoot.Control.IsNone() || RightFoot.Control.IsNone())
+	{
+		return;
+	}
+
+	auto SetFootPlant = [this, bPlant](FFoot& Foot)
+	{
+		FPhysicsControlMultiplier FootMultiplier;
+		FootMultiplier.LinearStrengthMultiplier = FVector(bPlant
+			? FMath::Clamp(HitReactionFootStrengthMultiplier, 0.0f, 1.0f) : 1.0f);
+		PhysicsControl->SetControlMultiplier(Foot.Control, FootMultiplier, false, true, false);
+		if (bPlant)
+		{
+			// 用当前刚体质心作世界空间位置目标，不把脚拉去步态规划的下一落点；
+			// 再沿被打飞的方向推出一段，脚被拖着挪出一小步，而不是钉死在原地。
+			Foot.Start = Mesh->GetCenterOfMass(Foot.Bone);
+			Foot.Target = Foot.Start
+				+ HitPushDirection * FMath::Max(HitReactionFootSlideDistance, 0.0f);
+			Foot.Alpha = 1.0f;
+			PhysicsControl->SetControlTargetPositionAndOrientation(
+				Foot.Control, Foot.Target, Foot.TargetRotation.Rotator(),
+				0.0f, true, true, true, false);
+		}
+		PhysicsControl->SetControlEnabled(Foot.Control, bPlant, true, false);
+	};
+
+	SetFootPlant(LeftFoot);
+	SetFootPlant(RightFoot);
+	bHitFeetPlanted = bPlant;
+	if (bPlant)
+	{
+		bWasMoving = false;
+		bPendingStopRecovery = false;
+	}
+}
+
+void UDeliveryActiveRagdollComponent::ApplyMeleeImpact(const FVector& Impulse, const FVector& ImpactPoint)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !bIsActive || !Mesh
+		|| !HasPhysicsBody(Mesh, Bones.Spine))
+	{
+		return;
+	}
+
+	// 大部分冲量留在胸部；髋只分到很小一部分，两脚仍围绕原位置支撑。
+	Mesh->AddImpulseAtLocation(Impulse, ImpactPoint, Bones.Spine);
+	if (HasPhysicsBody(Mesh, Bones.Hips) && HitReactionPelvisImpulseFraction > 0.0f)
+	{
+		Mesh->AddImpulse(
+			Impulse * FMath::Clamp(HitReactionPelvisImpulseFraction, 0.0f, 1.0f), Bones.Hips);
+	}
+	const FVector HorizontalDirection = FVector(Impulse.X, Impulse.Y, 0.0f).GetSafeNormal();
+	if (!HorizontalDirection.IsNearlyZero() && HitReactionAngularVelocity > 0.0f)
+	{
+		// 绕横轴给胸部一个短促后仰，速度变化与刚体质量无关；方向随来拳方向变化。
+		const FVector TiltAxis = FVector::CrossProduct(FVector::UpVector, HorizontalDirection);
+		Mesh->AddAngularImpulseInRadians(
+			TiltAxis * HitReactionAngularVelocity, Bones.Spine, true);
+	}
+	if (HitReactionUpwardImpulseFraction > 0.0f)
+	{
+		// 纯向上的一下，跟水平冲量分开算。上半身电机这段时间很松，弹起来之后自由落体，
+		// 视觉上就是整个上身带着一跳，而不只是往后仰。
+		Mesh->AddImpulseAtLocation(
+			FVector::UpVector * Impulse.Size() * HitReactionUpwardImpulseFraction,
+			ImpactPoint, Bones.Spine);
+	}
+	HitPushDirection = HorizontalDirection;
+	if (!bIsLimp && HitReactionDuration > 0.0f && GetWorld())
+	{
+		if (!HorizontalDirection.IsNearlyZero())
+		{
+			// 冲量把人往外推，出拳的人就在它的反向。被前面打，就转过去面向前。
+			HitFacingYaw = (-HorizontalDirection).Rotation().Yaw;
+			bHasHitFacing = true;
+		}
+		HitReactionEndTime = GetWorld()->GetTimeSeconds() + HitReactionDuration;
+		SetHitReactionStrength(FMath::Clamp(HitReactionStrengthMultiplier, 0.0f, 1.0f));
+		SetHitFeetPlanted(true);
+	}
+}
+
 void UDeliveryActiveRagdollComponent::BraceTorsoForPunch(float DeltaTime, bool bBrace)
 {
 	// 上臂挂在胸腔和脊柱上，这几节平时是软的。肩膀要转动上臂，反作用力就得有地方去；
@@ -947,9 +1077,13 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	}
 
 	const FVector Wish = GetWishDir();
-	const FVector EffectiveWish = StartupPlantRemaining > 0.0f ? FVector::ZeroVector : Wish;
+	const FVector EffectiveWish = StartupPlantRemaining > 0.0f || bHitFeetPlanted
+		? FVector::ZeroVector : Wish;
 	UpdatePelvisTarget(DeltaTime, EffectiveWish);
-	UpdateFeet(DeltaTime, EffectiveWish);
+	if (!bHitFeetPlanted)
+	{
+		UpdateFeet(DeltaTime, EffectiveWish);
+	}
 	BraceTorsoForPunch(DeltaTime, bBodyDrivenPunchActive);
 	BoxingPose.Update(Mesh, PhysicsControl, CurrentFacingYaw, DeltaTime,
 		bBodyDrivenPunchActive ? (PunchHandSide > 0 ? 0 : 1) : -1, bBodyDrivenPunchReleased,
@@ -1041,6 +1175,16 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 			* (PunchLungeDistance * PunchLunge);
 	}
 
+	// 挨打不只是上身晃一下，髋部目标本身也顺着来拳方向往后挪一段再弹回来，
+	// 整个人才像真的被打退了一步，而不是脚踩死原地光看上身在倒。
+	HitPushAlpha = FMath::FInterpTo(
+		HitPushAlpha, bHitFeetPlanted ? 1.0f : 0.0f, DeltaTime, HitReactionPelvisSlideSpeed);
+	if (HitPushAlpha > KINDA_SMALL_NUMBER && !HitPushDirection.IsNearlyZero())
+	{
+		Target += FVector::VectorPlaneProject(HitPushDirection, CurrentGroundNormal).GetSafeNormal()
+			* (HitReactionPelvisSlideDistance * HitPushAlpha);
+	}
+
 	PlannedPelvisTarget = Target;
 
 	const FVector FacingWish = WishOnSlope.IsNearlyZero() ? Wish : WishOnSlope;
@@ -1050,9 +1194,16 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 		// 出拳时身体转向瞄准方向。不转身的话拳头目标会落在肩膀活动范围之外，看起来就只有小臂在动。
 		DesiredYaw = PunchAimDirection.Rotation().Yaw;
 	}
+	else if (bHasHitFacing)
+	{
+		// 挨打之后转过去面对来拳方向，而不是保持原朝向挨第二拳。
+		DesiredYaw = HitFacingYaw;
+	}
+	const bool bTurningToHit = bHasHitFacing && !bBodyDrivenPunchActive;
 	const float YawError = FMath::FindDeltaAngleDegrees(CurrentFacingYaw, DesiredYaw);
 	CurrentFacingYaw = FMath::UnwindDegrees(FMath::FInterpTo(
-		CurrentFacingYaw, CurrentFacingYaw + YawError, DeltaTime, TurnResponsiveness));
+		CurrentFacingYaw, CurrentFacingYaw + YawError, DeltaTime,
+		bTurningToHit ? HitReactionFacingTurnSpeed : TurnResponsiveness));
 	if (!Wish.IsNearlyZero())
 	{
 		LastWishDirection = FRotator(0.0f, CurrentFacingYaw, 0.0f).Vector();
