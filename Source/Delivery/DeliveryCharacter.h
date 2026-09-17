@@ -64,12 +64,12 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> AttackRightAction;
 
-	/** 跳跃时给盆骨的向上速度（厘米/秒）。 */
-	UPROPERTY(EditAnywhere, Category="Ragdoll", meta=(ClampMin="0.0"))
-	float JumpSpeed = 700.0f;
-
-	UPROPERTY(EditAnywhere, Category="Ragdoll|Network", meta=(ClampMin="0.05"))
-	float MinimumJumpInterval = 0.2f;
+	/**
+	 * 服务端两次起跳之间的最小间隔，只用来拦客户端刷包，不是玩法上的冷却。
+	 * 能不能跳由 UDeliveryActiveRagdollComponent::IsGrounded() 决定：落地即可再跳。
+	 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|Network", meta=(ClampMin="0.0"))
+	float MinimumJumpInterval = 0.05f;
 
 	// 在 BP_DeliveryMan 里指定 GE_HealthRegen
 	UPROPERTY(EditDefaultsOnly, Category="Ability")

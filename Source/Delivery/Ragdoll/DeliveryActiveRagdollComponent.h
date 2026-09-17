@@ -147,6 +147,17 @@ public:
 	UFUNCTION(BlueprintPure, Category="Ragdoll")
 	EDeliveryRagdollControlMode GetControlMode() const { return ReplicatedControlMode; }
 
+	/** 盆骨是否贴在站立高度附近。跳跃过程中恒为 false，二段跳就是被这里挡住的。 */
+	UFUNCTION(BlueprintPure, Category="Ragdoll|跳跃")
+	bool IsGrounded() const;
+
+	/** 起跳。不在地上、正在跳、或处于瘫软状态时返回 false，不做任何事。 */
+	UFUNCTION(BlueprintCallable, Category="Ragdoll|跳跃")
+	bool TryStartJump();
+
+	UFUNCTION(BlueprintPure, Category="Ragdoll|跳跃")
+	bool IsJumping() const { return bJumping; }
+
 protected:
 
 	UPROPERTY(VisibleAnywhere, Category="Ragdoll")
@@ -365,6 +376,18 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll|稳定", meta=(ClampMin="0.0", ClampMax="2.0"))
 	float StartupFootPlantDuration = 0.3f;
 
+	/** 跳跃最高点相对站立高度的抬升量。默认约为角色身高的一半。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|跳跃", meta=(ClampMin="0.0"))
+	float JumpHeight = 90.0f;
+
+	/** 一次跳跃从离地到髋目标回到站立高度的总时长。没有前摇，按下即开始。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|跳跃", meta=(ClampMin="0.05"))
+	float JumpDuration = 0.55f;
+
+	/** 落地判定容差，按站立高度的比例算。髋部低于 StandHeight*(1+该值) 就算站在地上。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|跳跃", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float GroundedHeightTolerance = 0.35f;
+
 	UPROPERTY(EditAnywhere, Category="Ragdoll")
 	float CapsuleHipsZOffset = 0.0f;
 
@@ -461,6 +484,10 @@ protected:
 	/** 受击后退平滑值，0 到 1，驱动髋部目标沿 HitPushDirection 的偏移量。 */
 	float HitPushAlpha = 0.0f;
 	float StandHeight = 95.0f;
+	/** 本次跳跃已经过去的时间，超过 JumpDuration 即落地。 */
+	float JumpElapsed = 0.0f;
+	/** 本帧要叠加到髋部目标上的抬升量，沿地面法线方向。 */
+	float JumpOffset = 0.0f;
 	float ReferenceFacingYaw = 0.0f;
 	float CurrentFacingYaw = 0.0f;
 	float StartupPlantRemaining = 0.0f;
@@ -482,6 +509,7 @@ protected:
 	bool bStepLeftNext = true;
 	bool bIsActive = false;
 	bool bIsLimp = false;
+	bool bJumping = false;
 	bool bBodyDrivenPunchActive = false;
 	bool bBodyDrivenPunchReleased = false;
 	float PunchHandSide = 1.0f;
@@ -497,6 +525,8 @@ protected:
 	void ResolveConfiguredPhysicsBones();
 	bool ValidateSetup() const;
 	void PlaceOnGround();
+	/** 取消正在进行的迈步，并关掉两只脚的世界空间位置电机。起跳和落地各调一次。 */
+	void CancelFootSteps();
 	void ConfigurePhysics();
 	bool CreateControls();
 	void DestroyControls();

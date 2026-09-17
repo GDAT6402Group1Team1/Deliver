@@ -228,19 +228,21 @@ void ADeliveryCharacter::DoMove(float Right, float Forward)
 
 void ADeliveryCharacter::DoJumpStart()
 {
-	if (ActiveRagdoll && JumpSpeed > 0.0f)
+	if (!ActiveRagdoll)
 	{
-		if (HasAuthority())
-		{
-			ServerJump();
-		}
-		else
-		{
-			// 客户端先播放跳跃，随后由服务端快照修正误差。
-			ActiveRagdoll->AddImpulse(FVector(0.0f, 0.0f, JumpSpeed), true);
-			ServerJump();
-		}
+		return;
 	}
+
+	if (HasAuthority())
+	{
+		ServerJump();
+		return;
+	}
+
+	// 客户端先本地起跳（无前摇），随后由服务端快照修正误差。
+	// 不在地上时 TryStartJump 自己会拒绝，这里不用额外判断。
+	ActiveRagdoll->TryStartJump();
+	ServerJump();
 }
 
 void ADeliveryCharacter::DoJumpEnd()
@@ -344,7 +346,7 @@ void ADeliveryCharacter::ServerSetMoveInput_Implementation(FVector2D Input, floa
 void ADeliveryCharacter::ServerJump_Implementation()
 {
 	UWorld* World = GetWorld();
-	if (!ActiveRagdoll || !World || JumpSpeed <= 0.0f)
+	if (!ActiveRagdoll || !World)
 	{
 		return;
 	}
@@ -355,6 +357,9 @@ void ADeliveryCharacter::ServerJump_Implementation()
 		return;
 	}
 
-	LastServerJumpTime = Now;
-	ActiveRagdoll->AddImpulse(FVector(0.0f, 0.0f, JumpSpeed), true);
+	// 只有真的起跳成功才记时间戳，否则连点被拒的那几次会白白占掉间隔。
+	if (ActiveRagdoll->TryStartJump())
+	{
+		LastServerJumpTime = Now;
+	}
 }

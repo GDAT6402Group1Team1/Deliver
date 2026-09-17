@@ -884,6 +884,55 @@ void UDeliveryActiveRagdollComponent::AddImpulse(FVector Impulse, bool bVelocity
 	}
 }
 
+bool UDeliveryActiveRagdollComponent::IsGrounded() const
+{
+	// 跳跃期间直接判定为离地：这一条就是「无二段跳」的实现，
+	// 不依赖射线在起跳瞬间是否已经脱离地面。
+	if (!bIsActive || bJumping || !Mesh)
+	{
+		return false;
+	}
+
+	// SmoothedGroundPoint 和 CurrentGroundNormal 由 UpdatePelvisTarget 每帧维护，
+	// 这里复用它们，不再单独打一次射线。
+	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
+	const float HeightAboveGround = FVector::DotProduct(Hips - SmoothedGroundPoint, CurrentGroundNormal);
+	return HeightAboveGround <= StandHeight * (1.0f + GroundedHeightTolerance);
+}
+
+bool UDeliveryActiveRagdollComponent::TryStartJump()
+{
+	if (bIsLimp || !IsGrounded())
+	{
+		return false;
+	}
+
+	bJumping = true;
+	JumpElapsed = 0.0f;
+	// 摆动中的那只脚，它的世界空间位置电机正把脚拉向地面上的落点。
+	// 人已经升空、脚却还在追地面，视觉上就是一条腿往后伸直。起跳瞬间先把迈步作废。
+	CancelFootSteps();
+	return true;
+}
+
+void UDeliveryActiveRagdollComponent::CancelFootSteps()
+{
+	LeftFoot.Alpha = 1.0f;
+	RightFoot.Alpha = 1.0f;
+	if (!PhysicsControl)
+	{
+		return;
+	}
+	if (!LeftFoot.Control.IsNone())
+	{
+		PhysicsControl->SetControlEnabled(LeftFoot.Control, false, true, false);
+	}
+	if (!RightFoot.Control.IsNone())
+	{
+		PhysicsControl->SetControlEnabled(RightFoot.Control, false, true, false);
+	}
+}
+
 void UDeliveryActiveRagdollComponent::SetHitReactionStrength(float Multiplier)
 {
 	if (!PhysicsControl)
@@ -1080,7 +1129,9 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	const FVector EffectiveWish = StartupPlantRemaining > 0.0f || bHitFeetPlanted
 		? FVector::ZeroVector : Wish;
 	UpdatePelvisTarget(DeltaTime, EffectiveWish);
-	if (!bHitFeetPlanted)
+	// 空中不跑步态：髋已经被抬高，这时规划落点会让脚去追够不到的地面点。
+	// 腿改由各自的父空间角度电机拉回站立姿势，落地后再恢复迈步。
+	if (!bHitFeetPlanted && !bJumping)
 	{
 		UpdateFeet(DeltaTime, EffectiveWish);
 	}
@@ -1162,8 +1213,35 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	}
 	SmoothedGroundPoint = FMath::VInterpTo(
 		SmoothedGroundPoint, DesiredGroundPoint, DeltaTime, GroundNormalSmoothingSpeed);
+	// 跳跃只抬高髋部目标，不动冲量：抛物线在 JumpDuration 内从 0 升到 JumpHeight 再回到 0。
+	// 腿和脚各自的电机会滞后地跟上来，连跳时来不及收腿，滑稽感就是从这个滞后里出来的。
+	if (bJumping)
+	{
+		JumpElapsed += DeltaTime;
+		const float Alpha = JumpDuration > KINDA_SMALL_NUMBER
+			? FMath::Clamp(JumpElapsed / JumpDuration, 0.0f, 1.0f)
+			: 1.0f;
+		// 4*h*a*(1-a) 在 a=0.5 处取到 JumpHeight，两端为 0。
+		JumpOffset = 4.0f * JumpHeight * Alpha * (1.0f - Alpha);
+		if (Alpha >= 1.0f)
+		{
+			bJumping = false;
+			JumpOffset = 0.0f;
+			// 落地这一帧允许收一次脚，把两脚归到髋目标两侧的站宽上，
+			// 否则原地连跳几次之后两脚会越站越开。
+			CancelFootSteps();
+			bWasMoving = false;
+			bPendingStopRecovery = true;
+		}
+	}
+	else
+	{
+		JumpOffset = 0.0f;
+	}
+
 	// 髋目标等于平滑后的贴地点，再加上站立高度沿法线抬起来。
-	Target = SmoothedGroundPoint + CurrentGroundNormal * (StandHeight + SmoothBounceHeight * GaitPulse);
+	Target = SmoothedGroundPoint + CurrentGroundNormal
+		* (StandHeight + SmoothBounceHeight * GaitPulse + JumpOffset);
 
 	// 直拳的力道来自体重压上去，不是手臂伸得远。手臂本身只有三十几厘米行程，
 	// 全身沿拳路前送这一下才是"打"和"推"的区别。脚会跟着这个目标上步。
