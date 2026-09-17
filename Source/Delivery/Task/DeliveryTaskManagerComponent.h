@@ -95,6 +95,17 @@ public:
 	FDeliveryRewardBreakdown PreviewReward(const UDeliveryTaskDefinition* Task) const;
 
 	/**
+	 * 关卡开始到现在过了多少秒。
+	 *
+	 * 不能直接用 UWorld::GetTimeSeconds()——那是世界时钟的绝对值，PIE 下它的起点
+	 * 不保证是 0（实测编辑器开久了之后一进游戏就是个很大的数），会让"开局 N 秒后"
+	 * 这类条件在 BeginPlay 当场就成立。以管理器自己 BeginPlay 的时刻为基准才是
+	 * 这个语义真正要的东西。
+	 */
+	UFUNCTION(BlueprintPure, Category="Task")
+	float GetTimeSinceLevelStart() const;
+
+	/**
 	 * 把 GetTimeSnapshot 的剩余秒数格式化成 UI 显示的样子：`05:00`；
 	 * 超时后剩余为负，输出 `+00:07` 并继续往上走。
 	 */
@@ -159,4 +170,7 @@ protected:
 
 	/** 客户端是否已经收到过首次同步。首次同步是"现状"，不是"刚刚发生的变化"。 */
 	bool bReceivedInitialState = false;
+
+	/** 本组件 BeginPlay 的时刻，作为"关卡开始"的基准。 */
+	float LevelStartServerTime = 0.f;
 };

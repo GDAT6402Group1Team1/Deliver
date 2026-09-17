@@ -13,10 +13,9 @@ bool UDeliveryTaskUnlockCondition::IsSatisfied_Implementation(const UDeliveryTas
 
 bool UDeliveryTaskUnlockCondition_TimeSinceStart::IsSatisfied_Implementation(const UDeliveryTaskManagerComponent* Manager) const
 {
-	const UWorld* World = Manager ? Manager->GetWorld() : nullptr;
-
-	// 用关卡时间而不是服务器同步时间：解锁判断只在服务器跑，这里要的就是"这局开始多久了"
-	return World && World->GetTimeSeconds() >= DelaySeconds;
+	// 用"管理器 BeginPlay 以来过了多久"，不是世界时钟的绝对值——
+	// 后者在 PIE 下起点不保证是 0，会让这个条件在开局当场就成立
+	return Manager && Manager->GetTimeSinceLevelStart() >= DelaySeconds;
 }
 
 bool UDeliveryTaskUnlockCondition_TasksCompleted::IsSatisfied_Implementation(const UDeliveryTaskManagerComponent* Manager) const

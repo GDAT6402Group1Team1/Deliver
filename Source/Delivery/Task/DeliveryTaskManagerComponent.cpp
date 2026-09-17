@@ -48,6 +48,9 @@ void UDeliveryTaskManagerComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 两端都记，虽然目前只有服务器上的解锁判断用得到
+	LevelStartServerTime = GetServerTimeSeconds();
+
 	if (!GetOwner() || !GetOwner()->HasAuthority())
 	{
 		return;
@@ -76,6 +79,11 @@ UDeliveryTaskManagerComponent* UDeliveryTaskManagerComponent::Get(const UObject*
 	AGameStateBase* GameState = World ? World->GetGameState() : nullptr;
 
 	return GameState ? GameState->FindComponentByClass<UDeliveryTaskManagerComponent>() : nullptr;
+}
+
+float UDeliveryTaskManagerComponent::GetTimeSinceLevelStart() const
+{
+	return FMath::Max(0.f, GetServerTimeSeconds() - LevelStartServerTime);
 }
 
 float UDeliveryTaskManagerComponent::GetServerTimeSeconds() const
