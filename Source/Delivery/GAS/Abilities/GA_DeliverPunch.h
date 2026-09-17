@@ -44,8 +44,12 @@ protected:
 
 	EMeleeHand Hand = EMeleeHand::Left;
 
+	/**
+	 * 每拳伤害。配合 0.75 秒攻击间隔和 6/秒回血，单人连打第 5 拳把 HP 打到 0：
+	 * 76 → 56.5 → 37 → 17.5 → 0。改这个数会直接改变几拳晕倒。
+	 */
 	UPROPERTY(EditDefaultsOnly, Category="Punch")
-	float PunchDamage = 18.f;
+	float PunchDamage = 24.f;
 
 	/** 命中后由服务器额外施加给受击者胸部的冲量；不推髋和腿。 */
 	UPROPERTY(EditDefaultsOnly, Category="Punch|Hit Reaction", meta=(ClampMin="0.0"))

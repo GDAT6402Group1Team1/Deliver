@@ -527,6 +527,12 @@ protected:
 	void PlaceOnGround();
 	/** 取消正在进行的迈步，并关掉两只脚的世界空间位置电机。起跳和落地各调一次。 */
 	void CancelFootSteps();
+	/**
+	 * 按身体当前所在的位置重新播种髋目标、贴地点和步态状态。
+	 * 从 Limp 恢复时必须先调它：控制器里存的还是倒下前那一刻的目标，
+	 * 直接开电机会把人拽回旧位置。不动 StandHeight，人躺着时那个值算出来是错的。
+	 */
+	void ReseedFromCurrentPose();
 	void ConfigurePhysics();
 	bool CreateControls();
 	void DestroyControls();

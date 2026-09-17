@@ -738,7 +738,12 @@ void UDeliveryActiveRagdollComponent::StartRagdoll()
 
 	if (bIsActive)
 	{
+		const bool bWasLimp = bIsLimp;
 		bIsLimp = false;
+		if (bWasLimp)
+		{
+			ReseedFromCurrentPose();
+		}
 		if (PhysicsControl)
 		{
 			const bool bRemoteProxy = Owner && Owner->GetLocalRole() == ROLE_SimulatedProxy;
@@ -851,6 +856,12 @@ void UDeliveryActiveRagdollComponent::SetLimp(bool bLimp)
 	{
 		MoveInput = FVector2D::ZeroVector;
 	}
+	else if (bIsActive)
+	{
+		// 必须在开电机之前：控制器里存的目标还是倒下前的，
+		// 先按现在的姿势重新播种，人才会就地站起来而不是弹回原位。
+		ReseedFromCurrentPose();
+	}
 	if (PhysicsControl && bIsActive)
 	{
 		PhysicsControl->SetControlsInSetEnabled(TEXT("All"), !bLimp);
@@ -861,6 +872,11 @@ void UDeliveryActiveRagdollComponent::SetLimp(bool bLimp)
 			if (Owner && Owner->GetLocalRole() == ROLE_SimulatedProxy)
 			{
 				PhysicsControl->SetControlsInSetEnabled(TEXT("All"), false);
+			}
+			else
+			{
+				// 把刚播种好的目标立刻写进电机，别让第一帧继续用旧值。
+				UpdateControlTargets(0.0f);
 			}
 		}
 	}
@@ -913,6 +929,58 @@ bool UDeliveryActiveRagdollComponent::TryStartJump()
 	// 人已经升空、脚却还在追地面，视觉上就是一条腿往后伸直。起跳瞬间先把迈步作废。
 	CancelFootSteps();
 	return true;
+}
+
+void UDeliveryActiveRagdollComponent::ReseedFromCurrentPose()
+{
+	if (!Mesh)
+	{
+		return;
+	}
+
+	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
+
+	// 贴地点和法线按人现在躺的地方重新探一次，不要沿用倒下前的。
+	FGroundHit Ground;
+	if (TraceGround(Hips, FVector::UpVector, Ground))
+	{
+		CurrentGroundNormal = Ground.Normal;
+		SmoothedGroundPoint = Ground.Point;
+	}
+	else
+	{
+		CurrentGroundNormal = FVector::UpVector;
+		SmoothedGroundPoint = Hips - FVector::UpVector * StandHeight;
+	}
+
+	// StandHeight 保持不变：它是站立时髋到脚底的距离，躺着量出来只有几十厘米。
+	PlannedPelvisTarget = SmoothedGroundPoint + CurrentGroundNormal * StandHeight;
+
+	SmoothedBalanceOffset = FVector::ZeroVector;
+	SmoothedMoveLead = FVector::ZeroVector;
+	WishOnSlope = FVector::ZeroVector;
+	SmoothedAccelerationAlpha = 0.0f;
+	MoveInput = FVector2D::ZeroVector;
+	LastWishDirection = FRotator(0.0f, CurrentFacingYaw, 0.0f).Vector();
+
+	// 受击后退和跳跃的残留状态一并清掉，否则起身第一帧会带着它们跑。
+	bJumping = false;
+	JumpElapsed = 0.0f;
+	JumpOffset = 0.0f;
+	PunchLunge = 0.0f;
+	HitPushAlpha = 0.0f;
+	HitPushDirection = FVector::ZeroVector;
+	bHasHitFacing = false;
+
+	// 脚回到"站着、不迈步"的状态，并给一小段站定时间再开始走。
+	CancelFootSteps();
+	LeftFoot.Start = Mesh->GetCenterOfMass(LeftFoot.Bone);
+	RightFoot.Start = Mesh->GetCenterOfMass(RightFoot.Bone);
+	LeftFoot.Target = LeftFoot.Start;
+	RightFoot.Target = RightFoot.Start;
+	StartupPlantRemaining = StartupFootPlantDuration;
+	bWasMoving = false;
+	bPendingStopRecovery = false;
 }
 
 void UDeliveryActiveRagdollComponent::CancelFootSteps()

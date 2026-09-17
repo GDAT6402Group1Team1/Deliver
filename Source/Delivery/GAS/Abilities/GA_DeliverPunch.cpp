@@ -25,6 +25,17 @@ bool UGA_DeliverPunch::CanActivateAbility(
 	const FGameplayTagContainer* TargetTags,
 	FGameplayTagContainer* OptionalRelevantTags) const
 {
+	// 晕倒判定：服务器靠 State.Stunned（ActivationBlockedTags）拦，
+	// 但那个 Tag 不复制，客户端预测时看不到。这里改查布娃娃的控制模式——
+	// ReplicatedControlMode 是复制的，两端都能得到一致结论。
+	const ADeliveryCharacter* StunCheckCharacter = Cast<ADeliveryCharacter>(ActorInfo->AvatarActor.Get());
+	const UDeliveryActiveRagdollComponent* StunCheckRagdoll = StunCheckCharacter
+		? StunCheckCharacter->GetActiveRagdoll() : nullptr;
+	if (StunCheckRagdoll && StunCheckRagdoll->GetControlMode() == EDeliveryRagdollControlMode::Limp)
+	{
+		return false;
+	}
+
 	const UDeliverAbilitySystemComponent* ASC = Cast<UDeliverAbilitySystemComponent>(ActorInfo->AbilitySystemComponent.Get());
 	const UWorld* World = ActorInfo->AvatarActor->GetWorld();
 	if (ASC && World && World->GetTimeSeconds() - ASC->LastMeleeAttackTime < UDeliverAbilitySystemComponent::MeleeAttackCooldown)
@@ -112,13 +123,20 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 			continue;
 		}
 
-		FGameplayEffectSpecHandle Spec = MakeOutgoingGameplayEffectSpec(DamageClass);
-		if (!Spec.Data.IsValid())
+		// 已经晕倒的人不再掉血，否则永远回不到 40% 起身线。
+		// 冲量照给：瘫着的身体还能被打得满地滚，这部分是想要的。
+		const bool bTargetStunned =
+			TargetRagdoll->GetControlMode() == EDeliveryRagdollControlMode::Limp;
+		if (!bTargetStunned)
 		{
-			continue;
+			FGameplayEffectSpecHandle Spec = MakeOutgoingGameplayEffectSpec(DamageClass);
+			if (!Spec.Data.IsValid())
+			{
+				continue;
+			}
+			Spec.Data->SetSetByCallerMagnitude(TAG_Effect_Type_Damage, -PunchDamage);
+			TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 		}
-		Spec.Data->SetSetByCallerMagnitude(TAG_Effect_Type_Damage, -PunchDamage);
-		TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 
 		// 击打者只提供方向和力度；真正的物理冲量由服务器施加到受击者自身。
 		if (HitReactionImpulse > 0.0f && !PunchDirection.IsNearlyZero())

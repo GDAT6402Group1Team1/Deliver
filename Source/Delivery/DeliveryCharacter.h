@@ -86,6 +86,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Ability")
 	TSubclassOf<UGameplayAbility> PunchRightAbilityClass;
 
+	/**
+	 * 晕倒后回血到最大生命值的百分之多少就自动醒来。HP 归零即晕倒，晕倒期间不再受伤害，
+	 * 靠 GE_HealthRegen 按 HealthRegenRate（6/秒）回血：0% → 40% 约 6.7 秒。
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Ability", meta=(ClampMin="1.0", ClampMax="100.0"))
+	float StunRecoverHealthPercent = 40.0f;
+
 public:
 
 	ADeliveryCharacter();
@@ -147,6 +154,7 @@ public:
 	FORCEINLINE TSubclassOf<UGameplayEffect> GetDamageEffect() const { return DamageEffect; }
 	FORCEINLINE TSubclassOf<UGameplayAbility> GetPunchLeftAbilityClass() const { return PunchLeftAbilityClass; }
 	FORCEINLINE TSubclassOf<UGameplayAbility> GetPunchRightAbilityClass() const { return PunchRightAbilityClass; }
+	FORCEINLINE float GetStunRecoverHealthPercent() const { return StunRecoverHealthPercent; }
 
 private:
 
