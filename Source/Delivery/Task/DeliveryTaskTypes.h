@@ -45,6 +45,21 @@ enum class EDeliveryPhoneCallType : uint8
 	Overdue
 };
 
+/**
+ * 手机当前处于哪个阶段。队列是全局共享的，所以这个状态对所有玩家是同一份：
+ * 任意一个人接听，所有人一起进入通话。
+ */
+UENUM(BlueprintType)
+enum class EDeliveryPhoneCallState : uint8
+{
+	/** 没有电话，手机待机。 */
+	Idle,
+	/** 响铃中，等人接听。超时没人接就算未接来电。 */
+	Ringing,
+	/** 已接通，正在播台词。 */
+	InCall
+};
+
 /** 一通电话的内容。真正的播放由 UI / 音频层负责，这里只存数据。 */
 USTRUCT(BlueprintType)
 struct FDeliveryPhoneCallContent
@@ -61,11 +76,16 @@ struct FDeliveryPhoneCallContent
 	TSoftObjectPtr<USoundBase> Voice;
 
 	/**
-	 * 这通电话占用队列多久。服务器按这个时长推进电话队列，队列是全局共享的，
-	 * 不能让某一个客户端的播放进度决定下一通什么时候响。
+	 * 接通之后台词播多久。到点自动挂断，进下一通。
+	 * 由服务器计时而不是等客户端播完回报：队列是全局共享的，
+	 * 不能让某一个客户端的播放进度决定所有人什么时候进下一通。
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Phone", meta=(ClampMin="0.5", Units="s"))
 	float DurationSeconds = 6.f;
+
+	/** 响铃等待多久算未接来电。 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Phone", meta=(ClampMin="1.0", Units="s"))
+	float RingDurationSeconds = 8.f;
 };
 
 /**

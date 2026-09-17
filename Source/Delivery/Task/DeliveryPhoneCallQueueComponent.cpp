@@ -20,6 +20,9 @@ void UDeliveryPhoneCallQueueComponent::GetLifetimeReplicatedProps(TArray<FLifeti
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(UDeliveryPhoneCallQueueComponent, Queue);
+	DOREPLIFETIME(UDeliveryPhoneCallQueueComponent, CallState);
+	DOREPLIFETIME(UDeliveryPhoneCallQueueComponent, StateStartServerTime);
+	DOREPLIFETIME(UDeliveryPhoneCallQueueComponent, StateDurationSeconds);
 }
 
 UDeliveryPhoneCallQueueComponent* UDeliveryPhoneCallQueueComponent::Get(const UObject* WorldContextObject)
@@ -28,6 +31,16 @@ UDeliveryPhoneCallQueueComponent* UDeliveryPhoneCallQueueComponent::Get(const UO
 	AGameStateBase* GameState = World ? World->GetGameState() : nullptr;
 
 	return GameState ? GameState->FindComponentByClass<UDeliveryPhoneCallQueueComponent>() : nullptr;
+}
+
+float UDeliveryPhoneCallQueueComponent::GetServerTimeSeconds() const
+{
+	if (const AGameStateBase* GameState = Cast<AGameStateBase>(GetOwner()))
+	{
+		return GameState->GetServerWorldTimeSeconds();
+	}
+
+	return GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 }
 
 FDeliveryPhoneCallContent UDeliveryPhoneCallQueueComponent::GetCallContent(const FDeliveryPhoneCall& Call)
@@ -42,7 +55,7 @@ FDeliveryPhoneCallContent UDeliveryPhoneCallQueueComponent::GetCallContent(const
 
 bool UDeliveryPhoneCallQueueComponent::GetCurrentCall(FDeliveryPhoneCall& OutCall) const
 {
-	if (Queue.Num() == 0)
+	if (Queue.Num() == 0 || CallState == EDeliveryPhoneCallState::Idle)
 	{
 		return false;
 	}
@@ -50,6 +63,16 @@ bool UDeliveryPhoneCallQueueComponent::GetCurrentCall(FDeliveryPhoneCall& OutCal
 	OutCall = Queue[0];
 
 	return true;
+}
+
+float UDeliveryPhoneCallQueueComponent::GetStateRemainingSeconds() const
+{
+	if (CallState == EDeliveryPhoneCallState::Idle)
+	{
+		return 0.f;
+	}
+
+	return FMath::Max(0.f, StateDurationSeconds - (GetServerTimeSeconds() - StateStartServerTime));
 }
 
 void UDeliveryPhoneCallQueueComponent::EnqueueCall(UDeliveryTaskDefinition* Task, EDeliveryPhoneCallType CallType)
@@ -73,64 +96,136 @@ void UDeliveryPhoneCallQueueComponent::EnqueueCall(UDeliveryTaskDefinition* Task
 	Call.CallType = CallType;
 	Call.CallId = NextCallId++;
 
-	// 原来是空队列，这通就是队首，立刻开始
+	// 原来是空队列，这通就是队首，立刻开始响
 	if (Queue.Num() == 1)
 	{
-		StartHeadCall();
+		StartRinging();
 	}
 }
 
-void UDeliveryPhoneCallQueueComponent::StartHeadCall()
+void UDeliveryPhoneCallQueueComponent::StartRinging()
 {
 	if (Queue.Num() == 0 || !GetWorld())
 	{
 		return;
 	}
 
-	const float Duration = FMath::Max(0.5f, GetCallContent(Queue[0]).DurationSeconds);
-	GetWorld()->GetTimerManager().SetTimer(CallTimerHandle, this, &UDeliveryPhoneCallQueueComponent::AdvanceQueue, Duration, false);
+	const float RingDuration = FMath::Max(1.f, GetCallContent(Queue[0]).RingDurationSeconds);
 
-	BroadcastHeadIfChanged();
+	SetCallState(EDeliveryPhoneCallState::Ringing, RingDuration);
+
+	GetWorld()->GetTimerManager().SetTimer(
+		CallTimerHandle, this, &UDeliveryPhoneCallQueueComponent::HandleRingTimeout, RingDuration, false);
 }
 
-void UDeliveryPhoneCallQueueComponent::AdvanceQueue()
+bool UDeliveryPhoneCallQueueComponent::AnswerCurrentCall()
 {
-	if (Queue.Num() > 0)
+	if (!GetOwner() || !GetOwner()->HasAuthority() || CallState != EDeliveryPhoneCallState::Ringing)
 	{
-		Queue.RemoveAt(0);
+		return false;
+	}
+
+	const float TalkDuration = FMath::Max(0.5f, GetCallContent(Queue[0]).DurationSeconds);
+
+	SetCallState(EDeliveryPhoneCallState::InCall, TalkDuration);
+
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			CallTimerHandle, this, &UDeliveryPhoneCallQueueComponent::HandleCallFinished, TalkDuration, false);
+	}
+
+	return true;
+}
+
+bool UDeliveryPhoneCallQueueComponent::HangUpCurrentCall()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || CallState == EDeliveryPhoneCallState::Idle)
+	{
+		return false;
+	}
+
+	// 响铃时挂断算拒接，和没人接一样记为未接
+	FinishCurrentCall(CallState == EDeliveryPhoneCallState::Ringing);
+
+	return true;
+}
+
+void UDeliveryPhoneCallQueueComponent::HandleRingTimeout()
+{
+	FinishCurrentCall(true);
+}
+
+void UDeliveryPhoneCallQueueComponent::HandleCallFinished()
+{
+	FinishCurrentCall(false);
+}
+
+void UDeliveryPhoneCallQueueComponent::FinishCurrentCall(bool bMissed)
+{
+	if (Queue.Num() == 0)
+	{
+		SetCallState(EDeliveryPhoneCallState::Idle, 0.f);
+		return;
+	}
+
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(CallTimerHandle);
+	}
+
+	const FDeliveryPhoneCall Finished = Queue[0];
+	Queue.RemoveAt(0);
+
+	if (bMissed)
+	{
+		OnCallMissed.Broadcast(Finished);
 	}
 
 	if (Queue.Num() > 0)
 	{
-		StartHeadCall();
+		StartRinging();
 	}
 	else
 	{
-		BroadcastHeadIfChanged();
+		SetCallState(EDeliveryPhoneCallState::Idle, 0.f);
 	}
 }
 
-void UDeliveryPhoneCallQueueComponent::BroadcastHeadIfChanged()
+void UDeliveryPhoneCallQueueComponent::SetCallState(EDeliveryPhoneCallState NewState, float Duration)
+{
+	CallState = NewState;
+	StateStartServerTime = GetServerTimeSeconds();
+	StateDurationSeconds = Duration;
+
+	BroadcastStateIfChanged();
+}
+
+void UDeliveryPhoneCallQueueComponent::BroadcastStateIfChanged()
 {
 	const int32 HeadId = Queue.Num() > 0 ? Queue[0].CallId : 0;
-	if (HeadId == LastStartedCallId)
+
+	// 状态没变、队首也没换，就不用再广播一次
+	if (CallState == LastBroadcastState && HeadId == LastBroadcastCallId)
 	{
 		return;
 	}
 
-	LastStartedCallId = HeadId;
+	LastBroadcastState = CallState;
+	LastBroadcastCallId = HeadId;
 
-	if (HeadId != 0)
-	{
-		OnCallStarted.Broadcast(Queue[0]);
-	}
-	else
-	{
-		OnQueueDrained.Broadcast();
-	}
+	FDeliveryPhoneCall Call;
+	GetCurrentCall(Call);
+
+	OnPhoneStateChanged.Broadcast(CallState, Call);
 }
 
 void UDeliveryPhoneCallQueueComponent::OnRep_Queue()
 {
-	BroadcastHeadIfChanged();
+	BroadcastStateIfChanged();
+}
+
+void UDeliveryPhoneCallQueueComponent::OnRep_CallState()
+{
+	BroadcastStateIfChanged();
 }

@@ -12,6 +12,9 @@
   Delivery.Task.Acquire [TaskId]  模拟取件，不填 TaskId 就取第一个待取件的任务
   Delivery.Task.Deliver           模拟把进行中的任务交付掉
   Delivery.Task.Event <Tag>       上报一个特殊事件，用来验证奖励倍率
+  Delivery.Phone.Call [Id] [overdue]  强制打一通电话进来，测 UI 用
+  Delivery.Phone.Answer           接听当前来电
+  Delivery.Phone.HangUp           挂断（响铃时是拒接）
 
 这些都是权威操作，只在有权威的那一端有效——用 Standalone 或 Play As Listen Server 跑。
 选 Dedicated Server 的话客户端窗口敲了不会有反应。
@@ -20,6 +23,7 @@
 #if !UE_BUILD_SHIPPING
 
 #include "Delivery.h"
+#include "DeliveryPlayerController.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
@@ -164,20 +168,22 @@ namespace DeliveryTaskDebug
 			Print(FString::Printf(TEXT("[Task] 当前追踪：%s"), Tracked ? *Tracked->TaskId.ToString() : TEXT("(无)")));
 		}
 
-		// 电话队列在有 UI 之前完全看不见，这里顺手报一下队首
+		// 电话状态在有 UI 之前完全看不见，这里顺手报一下
 		if (UDeliveryPhoneCallQueueComponent* Phone = UDeliveryPhoneCallQueueComponent::Get(World))
 		{
 			FDeliveryPhoneCall Call;
 			if (Phone->GetCurrentCall(Call) && Call.Task)
 			{
-				Print(FString::Printf(TEXT("[Task] 来电中：%s（%s），队列共 %d 通"),
+				Print(FString::Printf(TEXT("[Task] 手机：%s  %s（%s）剩 %.0fs，队列共 %d 通"),
+					Phone->GetCallState() == EDeliveryPhoneCallState::Ringing ? TEXT("响铃中") : TEXT("通话中"),
 					*Call.Task->TaskId.ToString(),
 					Call.CallType == EDeliveryPhoneCallType::Overdue ? TEXT("超时催促") : TEXT("任务解锁"),
+					Phone->GetStateRemainingSeconds(),
 					Phone->GetPendingCallCount()));
 			}
 			else
 			{
-				Print(TEXT("[Task] 来电中：无"));
+				Print(TEXT("[Task] 手机：待机"));
 			}
 		}
 	}
@@ -252,6 +258,89 @@ namespace DeliveryTaskDebug
 			Reward.FinalReward));
 	}
 
+	void CallCommand(const TArray<FString>& Args, UWorld* World)
+	{
+		UDeliveryTaskManagerComponent* Manager = GetManagerChecked(World);
+		UDeliveryPhoneCallQueueComponent* Phone = UDeliveryPhoneCallQueueComponent::Get(World);
+		if (!Manager || !Phone)
+		{
+			return;
+		}
+
+		// 不填 TaskId 就随便挑一个任务，反正测 UI 只关心电话本身
+		UDeliveryTaskDefinition* Task = nullptr;
+		if (Args.Num() > 0)
+		{
+			Task = FindByTaskId(Manager, FName(*Args[0]));
+			if (!Task)
+			{
+				Print(FString::Printf(TEXT("[Task] 没有 TaskId 叫 %s 的任务。"), *Args[0]));
+				return;
+			}
+		}
+		else
+		{
+			TArray<UDeliveryTaskDefinition*> All;
+			CollectAllTasks(Manager, All);
+			if (All.Num() == 0)
+			{
+				Print(TEXT("[Task] 一个任务都没有，没法打电话。"));
+				return;
+			}
+
+			Task = All[0];
+		}
+
+		const bool bOverdue = Args.Num() > 1 && Args[1].Equals(TEXT("overdue"), ESearchCase::IgnoreCase);
+		const EDeliveryPhoneCallType CallType = bOverdue ? EDeliveryPhoneCallType::Overdue : EDeliveryPhoneCallType::TaskUnlocked;
+
+		const int32 CountBefore = Phone->GetPendingCallCount();
+		Phone->EnqueueCall(Task, CallType);
+
+		if (Phone->GetPendingCallCount() == CountBefore)
+		{
+			// EnqueueCall 会去重，同一通已经在队列里就不会再排一次
+			Print(FString::Printf(TEXT("[Task] %s 的%s来电已经在队列里了，没有重复入队。"),
+				*Task->TaskId.ToString(), bOverdue ? TEXT("催促") : TEXT("解锁")));
+			return;
+		}
+
+		Print(FString::Printf(TEXT("[Task] 已打入 %s 的%s来电，队列共 %d 通"),
+			*Task->TaskId.ToString(),
+			bOverdue ? TEXT("催促") : TEXT("解锁"),
+			Phone->GetPendingCallCount()));
+	}
+
+	void AnswerCommand(const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+		if (!PC)
+		{
+			Print(TEXT("[Task] 没有 PlayerController，是不是没在 PIE 里跑？"));
+			return;
+		}
+
+		if (ADeliveryPlayerController* DeliveryPC = Cast<ADeliveryPlayerController>(PC))
+		{
+			DeliveryPC->RequestAnswerCall();
+			Print(TEXT("[Task] 已请求接听"));
+		}
+		else
+		{
+			Print(TEXT("[Task] 当前 PlayerController 不是 ADeliveryPlayerController 的子类"));
+		}
+	}
+
+	void HangUpCommand(const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+		if (ADeliveryPlayerController* DeliveryPC = Cast<ADeliveryPlayerController>(PC))
+		{
+			DeliveryPC->RequestHangUpCall();
+			Print(TEXT("[Task] 已请求挂断"));
+		}
+	}
+
 	void EventCommand(const TArray<FString>& Args, UWorld* World)
 	{
 		UDeliveryTaskManagerComponent* Manager = GetManagerChecked(World);
@@ -302,6 +391,21 @@ static FAutoConsoleCommandWithWorldAndArgs GDeliveryTaskDeliverCmd(
 	TEXT("Delivery.Task.Deliver"),
 	TEXT("模拟交付当前进行中的任务"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&DeliveryTaskDebug::DeliverCommand));
+
+static FAutoConsoleCommandWithWorldAndArgs GDeliveryPhoneCallCmd(
+	TEXT("Delivery.Phone.Call"),
+	TEXT("强制打一通电话进来测 UI。可选参数：TaskId、overdue（打催促来电）"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&DeliveryTaskDebug::CallCommand));
+
+static FAutoConsoleCommandWithWorldAndArgs GDeliveryPhoneAnswerCmd(
+	TEXT("Delivery.Phone.Answer"),
+	TEXT("接听当前来电"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&DeliveryTaskDebug::AnswerCommand));
+
+static FAutoConsoleCommandWithWorldAndArgs GDeliveryPhoneHangUpCmd(
+	TEXT("Delivery.Phone.HangUp"),
+	TEXT("挂断当前电话（响铃时是拒接）"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&DeliveryTaskDebug::HangUpCommand));
 
 static FAutoConsoleCommandWithWorldAndArgs GDeliveryTaskEventCmd(
 	TEXT("Delivery.Task.Event"),

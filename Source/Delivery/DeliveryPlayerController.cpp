@@ -4,6 +4,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
+#include "Task/DeliveryPhoneCallQueueComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 ADeliveryPlayerController::ADeliveryPlayerController()
@@ -42,4 +43,44 @@ void ADeliveryPlayerController::SetupInputComponent()
 			Subsystem->AddMappingContext(CurrentContext, 0);
 		}
 	}
+}
+
+void ADeliveryPlayerController::RequestAnswerCall()
+{
+	if (HasAuthority())
+	{
+		if (UDeliveryPhoneCallQueueComponent* Phone = UDeliveryPhoneCallQueueComponent::Get(this))
+		{
+			Phone->AnswerCurrentCall();
+		}
+
+		return;
+	}
+
+	ServerAnswerCall();
+}
+
+void ADeliveryPlayerController::ServerAnswerCall_Implementation()
+{
+	RequestAnswerCall();
+}
+
+void ADeliveryPlayerController::RequestHangUpCall()
+{
+	if (HasAuthority())
+	{
+		if (UDeliveryPhoneCallQueueComponent* Phone = UDeliveryPhoneCallQueueComponent::Get(this))
+		{
+			Phone->HangUpCurrentCall();
+		}
+
+		return;
+	}
+
+	ServerHangUpCall();
+}
+
+void ADeliveryPlayerController::ServerHangUpCall_Implementation()
+{
+	RequestHangUpCall();
 }

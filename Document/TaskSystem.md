@@ -102,17 +102,42 @@
 
 ### 4.2 `UDeliveryPhoneCallQueueComponent`（全局电话队列，GameState 上）
 
+状态机：
+
+```
+Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCall ──(播完 / 挂断)──┐
+                         └──(响铃超时没人接，记未接)──────────────────┤
+                                                                     ▼
+                                                    出队 → 下一通 Ringing，没有则 Idle
+```
+
 | 接口 | 说明 |
 |---|---|
 | `EnqueueCall(Task, CallType)` | 服务器：来电入队。同任务同类型不会重复入队 |
-| `bool GetCurrentCall(FDeliveryPhoneCall& Out) const` | 队首（正在播的那通） |
-| `int32 GetPendingCallCount() const` | 队列长度 |
-| `static FDeliveryPhoneCallContent GetCallContent(Call)` | 取出这通电话的台词 / 语音 / 时长 |
-| `OnCallStarted(const FDeliveryPhoneCall&)` | 队首换人时广播，UI 接这个响铃 |
-| `OnQueueDrained()` | 队列播空，UI 接这个收线 |
+| `AnswerCurrentCall()` | 服务器：接听，只在 Ringing 时有效 |
+| `HangUpCurrentCall()` | 服务器：挂断。Ringing 时算拒接（记未接），InCall 时算提前结束 |
+| `EDeliveryPhoneCallState GetCallState()` | `Idle` / `Ringing` / `InCall`，UI 靠它切界面 |
+| `bool GetCurrentCall(FDeliveryPhoneCall& Out)` | 当前这通电话，Idle 时返回 false |
+| `float GetStateRemainingSeconds()` | 当前阶段剩余秒数：响铃时是还能接多久，通话时是台词还有多久播完 |
+| `int32 GetPendingCallCount()` | 队列长度 |
+| `static GetCallContent(Call)` | 取出台词 / 语音 / 时长 |
+| `OnPhoneStateChanged(State, Call)` | 状态变化。三个界面的切换接这一个就够 |
+| `OnCallMissed(Call)` | 响铃超时没人接，UI 可显示"未接来电" |
 
-队列推进由**服务器按每通电话配置的 `DurationSeconds` 驱动**，不是等客户端播完回报——
-队列是所有人共享的，不能让某一个客户端的播放进度决定下一通什么时候响。
+**客户端不要直接调 `AnswerCurrentCall`**。电话队列挂在 GameState 上，GameState 不属于任何客户端，
+客户端对它发 RPC 是无效的。玩家的接听/挂断意图走 PlayerController 中转：
+
+| PlayerController 接口 | 说明 |
+|---|---|
+| `RequestAnswerCall()` | 客户端调用自动转 Server RPC |
+| `RequestHangUpCall()` | 同上 |
+
+**所有计时都在服务器**（响铃时长 `RingDurationSeconds`、通话时长 `DurationSeconds`），
+不等客户端播完回报——否则某一个人的播放进度就决定了所有人什么时候进下一通。
+客户端只负责把当前状态表现出来。
+
+**接听是全局的**：任意一个玩家接听，所有人一起进入通话；挂断同理。
+这和"任意玩家取件则全体任务进入进行中"是同一套逻辑。
 
 ### 4.3 `UDeliveryTaskTrackerComponent`（每玩家，PlayerState 上）
 
@@ -306,7 +331,7 @@
 功能说明里没写死、我按最合理的方式定的地方，验收时重点看这几条：
 
 1. **取件后所有玩家的追踪都切到进行中任务**，不只是取件的那个人。理由：此时其他任务的快递也拿不起来，追踪别的没有意义。
-2. **电话队列由服务器按配置时长推进**，所有人同时听到同一通电话；没有做"某个玩家挂断"的接口（挂断会影响所有人）。
+2. ~~没有做挂断接口~~ —— **已实现接听/挂断**：任意玩家接听即全局接通，挂断同理；响铃超时记为未接来电，自动进下一通。所有计时仍在服务器。
 3. **换手/掉落再捡不算重新接取，也不重置计时**；`NotifyAcquired` 此时返回 false（表示"没有发生接取"，不表示"拾取失败"）。
 4. **同一个特殊事件 Tag 只计一次**，防止沿途反复触发把倍率叠爆。
 5. ~~超时交付用单独的 `OvertimeMultiplier`~~ —— **已确认**：策划表里超时是分档的（负数档位），已改成剩余时间语义，`OvertimeMultiplier` 删除。
