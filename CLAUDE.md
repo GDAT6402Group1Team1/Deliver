@@ -80,6 +80,80 @@
 
 - 测试地图：`Content/Level/TestForCharacter.umap`（角色/互殴测试）、`Content/Level/testfortraffic.umap`（交通路口测试）。
 
+
+### 交通线生成工具链（`Content/Python`，编辑器 Python）
+车道线、路口段、左右转、路口盒全部由脚本沿道路样条生成，不手摆。入口是
+**`rebuild_traffic.py`**，按固定顺序跑三步，顺序不能乱（后两步都依赖第一步的产物）：
+
+1. `gen_traffic_lanes.py` —— 直行车道 + 路口段
+2. `gen_intersections.py` —— 路口盒（按上一步 `Inter_*` 的 Box 位置算）
+3. `fill_turn_splines.py` —— 左右转曲线（按上一步的样条端点算）
+
+**"跑完车道忘了跑路口盒"已经造成过两次"红绿灯没了"**：路口盒是按 `Inter_*` 的 Box 位置算的，
+车道一重新生成 Box 全部挪位，旧盒子罩不住新的路口段，`BP_Intersection` 就找不到要管的子节点。
+把顺序固化进 `rebuild_traffic.py` 就是为了不再靠记性。
+
+生成物按 tag 区分，可重复运行、互不误删：`ClaudeGenLane:<路名>`（车道+路口段，按路独立）、
+`ClaudeGenIntersection`（路口盒）、`ClaudeGenTurn`（早期独立转弯 actor，已弃用）、`ClaudeGenSkirt`（裙边）。
+
+关键参数都在 `gen_traffic_lanes.py` 顶部，每个都写了为什么是这个值：
+- `CROSSING_WITH = "形状 13"` —— 自动算出要处理的路 = 这条路 + 所有与它相交的路，不手工维护名单
+- `EXCLUDE_ROADS` —— 排除不铺车道的路（形状43 的源样条本身是坏的：2 个点、首尾同坐标、长度却有 1597）
+- 车道横向位置用 `MAIN_ROAD_OFFSETS` / `SIDE_ROAD_OFFSETS` **显式指定**，不再按"宽度/车道数"均分。
+  规则是"车道落在等分点上"：主路 1800 五等分 → ±180/±540，次路 1080 三等分 → ±180
+- `TARGET_GAP = 150` —— 路段与路口段的空隙。250 时实测车接不上下一段（空隙里车是脱离样条直行的，越长横向漂得越多，弯道上容易错过下一段的 Box）
+- `INTER_HALF_EXTRA = 300` —— 路口段两头各加长。代价是 36 个路口里 23 个的路口盒为了罩住它压上了车道 Box，这是权衡后接受的；想回到不重叠就降到 150
+- `BOX_SCALE = 2.0` —— 车道/路口段自带的 Box 半尺寸从 32 放大到 64（实际 128×128×600）
+- `LIGHT_NUMBER_BY_AXIS` —— 沿 Y 走向的路口段 `LightNumber = 1`、沿 X 的保持 0，红绿灯才能交替放行
+
+生成时踩过并已修掉的坑，都有实测依据，别再走回头路：
+- **高度必须逐点打射线重测**，不能信源样条的 Z（形状13 与真实路面偏差 −546 ~ +411cm）
+- **一竖线上可能有多层路面**：路口处两条路的路面叠着，实测差约 200cm。只取最上面那层的话，
+  路口内的点会爬到交叉路的面上、路口外的点还在本路面上，接缝出现 250cm 台阶。现在
+  `surface_layers()` 取所有层，`build_profile()` 做**链式选层**——从只有单层的站点起锚、
+  向两头传播、每步挑离上一站最近的那层，而不是挑最上面的
+- **命中同一块板要聚成一层**：射线每次只降 1cm，26cm 厚的板会被连续命中二十几次，
+  预算全耗在同一块板上够不到下层；命中路面后直接跳 `SLAB_SKIP = 30` 一步跨过整块板
+- **高度剖面按整条车道算一次**（`PROFILE_STEP = 250`），所有段共用锚点。按段各自插值会让
+  相邻两段用不同的锚点，各自平滑但接缝对不上
+- **路口段的高度不实测，由两侧车道段的端点桥接**（`BRIDGE_INTERSECTIONS`）。路口内部不存在
+  唯一正确的"路面"，桥接保证车开得顺；代价是路口里车可能浮起/陷入，超过 `BRIDGE_DEV_WARN = 80`
+  的会在报告里点名——偏差大说明那个路口两条路的路面本来就对不上，是关卡几何问题
+- **转弯曲线用两条切线的交点当控制点**（二次贝塞尔）。"切线各伸出 k 倍距离"那种画法要猜 k，
+  猜大了曲线在反面鼓出包、整条变成 S 形。交点法没有可调参数，而且交点落在来向后方时
+  能自己报错，不会硬画一条怪线
+- **`get_direction_at_distance_along_spline` 在这些样条上返回零向量**，方向要用样条上两个采样点作差求。
+  兜底成 `(1,0,0)` 是有害的——它把"取不到方向"伪装成"方向朝 +X"，最后报出来的错误原因和真实原因毫无关系
+- 转弯路径挂在路口段 actor **自带的 `SplineLeft`/`SplineRight`** 上，和直行共用同一个 Box（车探测到一个 Box 就拿到三条候选）。
+  用不上的压成零长，蓝图判 `GetSplineLength() < 1` 跳过；不压的话会留下蓝图默认的 100cm 残桩，
+  152 个路口段就是 300 根方向一律朝 +X 的小棍子散在全图
+
+地形/路面配套（同目录）：
+- `deform_terrain.py` —— 沿路把地形压平到"路面顶面 −40"。**压平带宽度按大纲文件夹取标称半宽**
+  （主路 900 / 次路 540）与实测取大值、再加余量 150。早先只信实测的第 30 百分位，
+  等于全路 70% 的断面比压平带宽、路缘外侧根本压不到，实测路缘埋没率 **37%**；改完降到 **3%**
+- `thicken_road.py` —— 路面从 6cm 加厚到 26cm；`gen_road_skirt.py` —— 路面下铺绿色裙边遮住悬空的侧面
+- 这几样都可能在撤销/重载关卡时丢失。**先跑 `check_road_state.py` + `diag_road_buried.py` 定位**：
+  厚度和裙边都在、埋率却高 → 是地形压平丢了（它存在 landscape 的编辑图层里，前者查不到），单跑 `deform_terrain.py` 即可
+
+诊断脚本一律只读、结果写到 `Saved/*.txt`：`diag_lane_gaps.py`（接缝间距 + 高度差）、
+`diag_seams.py`（逐点查落差来源）、`whats_here.py`（某个 actor 附近都有哪些样条）、
+`inventory_level.py`、`audit_traffic_channels.py`（碰撞通道）、`dump_bp_graph.py`（导出蓝图图表）、
+`monitor_car.py` / `chase_car.py`（Simulate 期间采样车状态 / 跟拍相机——用每帧回调而不是 sleep 轮询，
+Python 跑在游戏线程上，轮询会把模拟本身卡死）。
+
+**还没解决的**：
+- `BP_car_base` **没有"进路口走哪条"的逻辑**，直行/左转/右转三条候选它都看得见，
+  抓到哪条取决于 `TraceForNewPath` 先扫到谁
+- **`Lane_*` 和 `Inter_*` 的 Box 在同一个碰撞通道**（都是 `ECC_TRAFFIC_ROAD`），`TraceForIntersection` 分不出两者。
+  更要紧的是同一路口里**别的路**的 `Inter_` 也能通过 Cast，车可能读到横向车流的灯态（灯正好相反）。
+  通道分离解决不了这个（两者都是 `IntersectionChild`），得给命中结果加方向校验（同向 dot > 0.7）
+- **`BP_Intersection` 怎么找它管的那些 `IntersectionChild` 至今没查清**，一直靠"重跑 `gen_intersections.py`"
+  这种经验性修复。蓝图图表是能读也能改的（`BlueprintEditorLibrary` + `BlueprintGraphEditor` +
+  `BlueprintGraphPin` 这套 API 在本机可用，`list_all_nodes` / `list_all_pins` / `list_connected_pins` /
+  `try_create_connection` 都在），但这张图一直没成功导出过。注意 `UBlueprint` 的 `FunctionGraphs`
+  和 `UEdGraph` 的 `Nodes` 都是 protected、`get_editor_property` 读不到，必须走上面那套 API
+
 ### 人物美术
 - 已导入测试角色模型，最近有一版人物相关提交（"人物"）。布娃娃对建模的要求见 Ragdoll.html 第五节：约 15–18 根骨骼、四肢截面需容纳胶囊碰撞体、不用人体解剖骨骼/标准 Mannequin。
 
@@ -96,6 +170,9 @@ Source/Delivery/
 ├── Ragdoll/                         主动布娃娃、布娃娃战斗组件
 └── Traffic/                         交通车辆辅助组件（卡住重置循环、前车避让减速）
 ```
+
+`Content/Python/` 是编辑器 Python 工具链（车道/路口/转弯生成、地形压平、裙边、以及一整套只读诊断脚本），
+入口 `rebuild_traffic.py`，详见上面「交通线生成工具链」一节。
 
 蓝图层：`Content/Blueprint/Character/BP_DeliveryMan`、`Content/Blueprint/GameMode/BP_DeliverGameMode`、
 `Content/Blueprint/PlayerController/BP_DeliveryManPC` 等，负责把 C++ 组件和具体资产（GE、GA 子类、动画）接起来。
