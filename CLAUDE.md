@@ -119,14 +119,45 @@
 - **路口段的高度不实测，由两侧车道段的端点桥接**（`BRIDGE_INTERSECTIONS`）。路口内部不存在
   唯一正确的"路面"，桥接保证车开得顺；代价是路口里车可能浮起/陷入，超过 `BRIDGE_DEV_WARN = 80`
   的会在报告里点名——偏差大说明那个路口两条路的路面本来就对不上，是关卡几何问题
-- **转弯曲线用两条切线的交点当控制点**（二次贝塞尔）。"切线各伸出 k 倍距离"那种画法要猜 k，
-  猜大了曲线在反面鼓出包、整条变成 S 形。交点法没有可调参数，而且交点落在来向后方时
-  能自己报错，不会硬画一条怪线
+- **转弯曲线用"直线进 → 定半径圆弧 → 直线出"**（`TURN_RADIUS`，当前 400cm）。
+  切点到角点的距离 `T = R*tan(|偏转角|/2)`，所以**半径同时控制弯的急缓和首尾直线段的长短**：
+  半径大 → 切点离角点远 → 直线段短、弯缓；半径小 → 弯急、但首尾留下更长的直线。
+  端点位置是定死的，这两个没法同时要。切点越过端点时半径自动夹小，报告会标注。
+  之前两版都留着（`USE_ARC=False` 退回贝塞尔），失败原因值得记：
+    * 切线各伸出 k 倍距离的三次贝塞尔 —— k 要猜，猜大了曲线在反面鼓包、整条变成 S 形
+    * 以两条切线交点为控制点的二次贝塞尔 —— 不会 S 形，但整段都在转，
+      车到终点时还没转到目标朝向、扫不到下一条线
+  实测转弯终点、目标 Box、距离都和直行完全一致（149~151cm），所以"接不上"只可能是朝向问题，
+  这也是换成圆弧（出口前有一段直的）的依据。
 - **`get_direction_at_distance_along_spline` 在这些样条上返回零向量**，方向要用样条上两个采样点作差求。
-  兜底成 `(1,0,0)` 是有害的——它把"取不到方向"伪装成"方向朝 +X"，最后报出来的错误原因和真实原因毫无关系
-- 转弯路径挂在路口段 actor **自带的 `SplineLeft`/`SplineRight`** 上，和直行共用同一个 Box（车探测到一个 Box 就拿到三条候选）。
-  用不上的压成零长，蓝图判 `GetSplineLength() < 1` 跳过；不压的话会留下蓝图默认的 100cm 残桩，
-  152 个路口段就是 300 根方向一律朝 +X 的小棍子散在全图
+  兜底成 `(1,0,0)` 是有害的——它把"取不到方向"伪装成"方向朝 +X"，
+  报出来的错误原因（"两端切线平行"）和真实原因毫无关系，白查一轮
+- **端点取控制点，不按弧长采样**：`get_location_at_distance_along_spline(L)` 用的是近似弧长，
+  曲线样条上采到 L 处未必正好是最后一个控制点。贝塞尔首尾也直接钉死成 p0/p3，不靠多项式算
+- 转弯路径挂在路口段 actor **自带的 `SplineLeft`/`SplineRight`** 上，和直行共用同一个 Box
+  （车探测到一个 Box 就拿到三条候选，选路是随机的，这是想要的行为）。
+  用不上的那条**写成和直行一模一样**的样条——选中它就等于直行，蓝图不需要任何特判。
+  早先压成零长，坏在它和蓝图默认的 100cm 都是"短东西"，排查时反复看混；
+  更早什么都不做，会留下 304 根方向一律朝 +X 的 100cm 残桩散在全图。
+- `check_turns.py` 全图核对 304 条转弯样条的状态（转弯曲线 / 直行副本 / 默认残桩 / 零长 / 缺组件）。
+  **改完关卡重启前后各跑一次比数字**，是验证"存住了没有"的标准动作。
+  当前基准：126 条转弯曲线 + 178 条直行副本，残桩 0。
+
+**编辑器 Python 写数据的三条边界**（都是实测撞出来的，不只适用于样条）：
+1. **改之前必须 `modify(True)`**。`clear_spline_points` / `add_spline_point` / `update_spline`
+   这类普通函数调用只改内存、**不把对象标记为已修改**，保存时整个对象不被序列化。
+   现象极具迷惑性：写完立刻读回是好的，存盘重载就变回蓝图默认值。
+   补上 `sp.modify(True)` + `owner.modify(True)` 之后，存活率从 1/8 变成 8/8。
+   脚本里"写入 N 条"这种计数器只能证明函数被调用过，**证明不了结果留住了**——
+   要验证就得写完回读，或者重启后用 `check_turns.py` 比数字。
+2. **样条的点数据存得住，组件的存在与否存不住。** 实例上 `destroy_component` 当场生效，
+   但重载后组件按蓝图 SCS 重建（加 `modify` 也没用，被删的对象本身没了、没有覆盖数据可存）。
+   所以用不着的组件**不能删，只能写成别的值**。真要彻底去掉只有复制出变体蓝图各删一条
+   （`make_turn_bp_variants.py`），代价是三个资产要同步维护。
+   注意在**共用蓝图**上删组件是真删、会一次性作用到全部实例——删掉 `SplineRight`
+   等于所有车道都失去右转。
+3. **蓝图被改动（加/删组件）会重跑所有实例的构造脚本，期间写进去的实例覆盖会丢。**
+   要写数据就等蓝图定型（编译 + 保存）之后再写。
 
 地形/路面配套（同目录）：
 - `deform_terrain.py` —— 沿路把地形压平到"路面顶面 −40"。**压平带宽度按大纲文件夹取标称半宽**
@@ -143,16 +174,22 @@
 Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 
 **还没解决的**：
-- `BP_car_base` **没有"进路口走哪条"的逻辑**，直行/左转/右转三条候选它都看得见，
-  抓到哪条取决于 `TraceForNewPath` 先扫到谁
 - **`Lane_*` 和 `Inter_*` 的 Box 在同一个碰撞通道**（都是 `ECC_TRAFFIC_ROAD`），`TraceForIntersection` 分不出两者。
   更要紧的是同一路口里**别的路**的 `Inter_` 也能通过 Cast，车可能读到横向车流的灯态（灯正好相反）。
   通道分离解决不了这个（两者都是 `IntersectionChild`），得给命中结果加方向校验（同向 dot > 0.7）
-- **`BP_Intersection` 怎么找它管的那些 `IntersectionChild` 至今没查清**，一直靠"重跑 `gen_intersections.py`"
-  这种经验性修复。蓝图图表是能读也能改的（`BlueprintEditorLibrary` + `BlueprintGraphEditor` +
-  `BlueprintGraphPin` 这套 API 在本机可用，`list_all_nodes` / `list_all_pins` / `list_connected_pins` /
-  `try_create_connection` 都在），但这张图一直没成功导出过。注意 `UBlueprint` 的 `FunctionGraphs`
-  和 `UEdGraph` 的 `Nodes` 都是 protected、`get_editor_property` 读不到，必须走上面那套 API
+- **`BP_Intersection` 怎么找它管的那些 `IntersectionChild` 仍然没查清**，一直靠"重跑
+  `gen_intersections.py`"这种经验性修复（车道一重新生成，`Inter_` 的 Box 全挪位，旧盒子就罩不住了）。
+  已排除的方向：`BP_TrafficLine1` 和 `BP_TrafficLine1_IntersectionChild` 两个蓝图的
+  构造脚本和事件图**全是空的**（只有入口节点和调父类的空事件），没有任何蓝图代码碰样条。
+  蓝图图表现在能完整导出了，见下。
+
+**蓝图图表 API**（`dump_bp_graph.py`，已验证可用）：
+`BlueprintEditorLibrary`（`list_graphs` / `find_graph` / `get_node_title` / `list_all_pins`）
++ `BlueprintGraphEditor`（`get_graph_editor_by_name` / `list_all_nodes`）
++ `BlueprintGraphPin`（`get_pin_name` / `list_connected_pins` / `get_owning_node` / `try_create_connection`）。
+连线能读也能改。两个坑：`UBlueprint` 的 `FunctionGraphs` 和 `UEdGraph` 的 `Nodes` 都是 protected、
+`get_editor_property` 读不到，必须走上面这套；`get_pin_name()` 返回的是 `unreal.Name` 不是 `str`，
+直接切片会抛 `'Name' object is not subscriptable`，整个导出断在第一个节点。
 
 ### 人物美术
 - 已导入测试角色模型，最近有一版人物相关提交（"人物"）。布娃娃对建模的要求见 Ragdoll.html 第五节：约 15–18 根骨骼、四肢截面需容纳胶囊碰撞体、不用人体解剖骨骼/标准 Mannequin。
