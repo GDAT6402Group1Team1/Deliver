@@ -23,9 +23,11 @@ import unreal
 
 # (蓝图路径, 要导的图名列表)；图名列表为空 = 该蓝图的全部图
 TARGETS = [
-    ("/Game/PS2DEM/BP_Intersection", []),          # 红绿灯逻辑在这里
-    ("/Game/Blueprint/BP_car_base",
-     ["TraceForIntersection", "TraceForNewPath"]),
+    # 首要目标：构造脚本在往 SplineLeft/SplineRight 里写点，
+    # 把脚本填进去的转弯曲线覆盖成蓝图默认的 100cm 直线。
+    # 空列表 = 导出这个蓝图的全部图（构造脚本 UserConstructionScript 也在里面）。
+    ("/Game/PS2DEM/BP_TrafficLine1_IntersectionChild", []),
+    ("/Game/PS2DEM/BP_TrafficLine1", []),          # 父类，构造脚本多半在这边
 ]
 
 OUT = unreal.Paths.project_saved_dir() + "bp_graph.txt"
@@ -67,23 +69,23 @@ BGE = getattr(unreal, "BlueprintGraphEditor", None)
 
 
 def pin_str(p):
-    try:
-        nm = p.get_pin_name()
-    except Exception:
-        nm = "?"
-    try:
-        d = str(p.get_pin_direction()).split(".")[-1]
-    except Exception:
-        d = "?"
-    try:
-        ty = p.get_pin_type_display_string()
-    except Exception:
-        ty = "?"
-    try:
-        v = p.get_pin_value()
-    except Exception:
-        v = ""
-    return nm, d, ty, (str(v) if v not in (None, "") else "")
+    """引脚的 (名字, 方向, 类型, 值)，一律转成 str。
+
+    get_pin_name() 返回的是 unreal.Name 不是 str，直接切片会抛
+    "'Name' object is not subscriptable"，整个导出就断在这里。
+    """
+    def g(fn, dflt="?"):
+        try:
+            v = fn()
+            return dflt if v is None else str(v)
+        except Exception:
+            return dflt
+
+    nm = g(p.get_pin_name)
+    d = g(p.get_pin_direction).split(".")[-1]
+    ty = g(p.get_pin_type_display_string)
+    v = g(p.get_pin_value, "")
+    return nm, d, ty, ("" if v in ("None", "") else v)
 
 
 def node_label(nd):

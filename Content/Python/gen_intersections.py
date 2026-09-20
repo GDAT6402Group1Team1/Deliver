@@ -1,15 +1,13 @@
 # -*- coding: utf-8 -*-
-"""在每个路口放一个 BP_Intersection，**必须**罩住路口段的 Box，尽量避开路段的 Box。
+"""在每个路口放一个 BP_Intersection，罩住该路口全部 Inter_* 的 Box。
 
-两条约束的优先级是有高下的：
-    硬约束：罩住本路口全部 Inter_* 的盒体。罩不住这个盒子就没意义。
-    软约束：不碰 Lane_* 的盒体。做得到就做，做不到就报出来。
-早先版本反了——先收缩到不碰任何 Lane_ 为止，收过头才判无解，
-于是"罩不住"成了常态（上一轮 10 个路口里有报 !! 没罩住 的）。
+唯一的目标就是**罩住路口段的 Box**。压不压到车道 Box 无所谓
+（AVOID_LANE_BOXES 默认 False）——那条软约束曾经存在过，
+但它和覆盖在当前参数下算术上冲突，见该常量处的推导。
+需要的话把它打开，收缩逻辑还在，只是永远以覆盖为优先。
 
-四条边独立伸缩，不是对称缩放。对称盒子为了躲开左边一个 Lane_ Box，
-右边得跟着一起缩，这是罩不住的主要来源。独立伸缩只动挨着的那条边，
-再把中心挪到新的中点、extent 取半跨度，对称盒子照样表达得出来。
+收缩用的是四条边独立伸缩而不是对称缩放。对称盒子为了躲开左边一个
+Lane_ Box，右边得跟着一起缩，那是早期"罩不住"的主要来源。
 
 判定用真实盒体，不是 actor 原点。Box 放大到 2 倍 (128x128x600) 之后
 点判定的误差不能忽略了：原点在盒内但盒体探出去、原点在盒外但盒体已经
@@ -36,7 +34,16 @@ TAG = "ClaudeGenIntersection"
 
 CLUSTER_DIST = 2500.0    # 距离小于此值的路口段归为同一个物理路口
 COVER_MARGIN = 40.0      # 罩住路口段盒体之后再往外放这么多
-MIN_CLEAR = 40.0         # 盒面与路段 Box 盒面之间希望留的距离（软约束）
+AVOID_LANE_BOXES = False
+# 是否为了避开车道 Box 而收缩盒子。现在关掉：压到车道 Box 无所谓，
+# 要紧的只是罩住路口 Box。
+#
+# 而且这两个目标在当前参数下本来就不可兼得——算术上就冲突：
+#   路口盒罩住 Inter Box 要伸到  INTER_HALF + 64(盒半长) + 40(余量) = +104
+#   车道 Box 的近端在            INTER_HALF + 150(TARGET_GAP) - 64   = +86
+#   104 > 86，出口侧必然重叠。
+# 打开避让的话就只能靠牺牲覆盖或者加大间隙来换，两个都不值得。
+MIN_CLEAR = 40.0         # 开启避让时，盒面与路段 Box 盒面之间希望留的距离
 Z_HALF = 400.0           # 盒子垂直半高
 
 OUT = unreal.Paths.project_saved_dir() + "gen_intersections.txt"
@@ -85,6 +92,9 @@ def solve_box(inter_boxes, lane_boxes, cz):
     返回 (bx0, bx1, by0, by1, 收缩次数, 仍然压着的车道Box列表)。
     硬下限 = 罩住所有 inter 盒体所需的范围，任何收缩都不许越过它。
     """
+    if not AVOID_LANE_BOXES:
+        lane_boxes = []      # 不避让：直接当成没有车道 Box，下面的收缩循环自然不进
+
     fx0 = min(p.x - h.x for p, h, _l in inter_boxes)
     fx1 = max(p.x + h.x for p, h, _l in inter_boxes)
     fy0 = min(p.y - h.y for p, h, _l in inter_boxes)
@@ -242,15 +252,17 @@ def run():
 
     w("")
     w("共放置 %d 个 BP_Intersection" % made)
-    if dirty:
+    if dirty and AVOID_LANE_BOXES:
         w("")
         w("以下路口为了罩住路口段，没能完全避开车道 Box：")
         for i, labels in dirty:
             w("  [%02d] %s" % (i, ", ".join(l[:30] for l in labels[:6])))
         w("  （硬约束是罩住路口段，这里是主动取舍。要改善就把间隙 TARGET_GAP 调大，")
         w("    让车道 Box 离路口远一点，再重跑 gen_traffic_lanes.py + 本脚本。）")
-    else:
+    elif AVOID_LANE_BOXES:
         w("全部路口都既罩住了路口段、又避开了所有车道 Box。")
+    else:
+        w("AVOID_LANE_BOXES=False：只保证罩住路口段，不管有没有压到车道 Box。")
     w("")
     w("关卡尚未保存。")
     flush()

@@ -13,8 +13,8 @@ import traceback
 
 import unreal
 
-ANCHOR = "Inter_形状13_-0180_I03"   # 以谁为中心
-RADIUS = 3000.0                     # 查多大范围
+ANCHOR = "Inter_形状13_-0540_I04"   # 以谁为中心
+RADIUS = 2000.0                     # 查多大范围
 MAX_ROWS = 60
 
 WS = unreal.SplineCoordinateSpace.WORLD

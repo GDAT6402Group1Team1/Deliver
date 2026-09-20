@@ -125,14 +125,19 @@ LIGHT_NUMBER_Y = 1
 # 左右走向（沿 Y 轴）的路口样条线，LightNumber 设成 LIGHT_NUMBER_Y；沿 X 的不动。
 # 红绿灯要交替放行，横竖两个方向必须分在不同的组里。
 # 放在生成器里而不是只有事后脚本：每次重新生成都是全新的 actor，
-# 事后设的值会被冲掉，和 BOX_SCALE 是同一类问题。
+# 事后设的值会被冲掉，和 Box 尺寸是同一类问题。
 
-BOX_SCALE = 2.0          # 车道/路口样条线自带的那个 Box 放大多少倍。
-                         # 蓝图默认半尺寸 (32, 32, 150)，x2 后 (64, 64, 300)，
-                         # 即实际 128 x 128 x 600 cm。构造脚本不会给 Box 定尺寸
-                         # （实测 2 点和 3 点的样条量出来都是 32），所以这里逐实例设。
-                         # 改的是 box_extent 不是 actor 缩放——缩放会连带
-                         # 放大 Spline 和 Billboard。
+# 车道/路口样条线自带的那个 Box 的半尺寸，逐轴指定（蓝图默认是 32/32/150）。
+# 原来是统一倍率 BOX_SCALE=2.0 三轴一起放大到 64/64/300，
+# 但 X 是**沿行驶方向**的（Box 跟着 actor 转），X 太长等于探测区在路上拖得很长。
+# 现在路段和路口段分开、逐轴给值，想单独收窄哪一轴就改哪一个。
+LANE_BOX_HALF = (83.0, 83.0, 390.0)    # Lane_*   实际 166 x 166 x 780
+                                       # 在 64/64/300 基础上整体放大 1.3 倍。
+                                       # 曾为了消除"路口盒压到车道 Box"把 X 收到 32，
+                                       # 后来确认那个重叠无所谓就撤回了——
+                                       # X 是沿行驶方向的，改它会影响车看到这个 Box
+                                       # 的时长，属于功能性参数，别为无害的重叠去动。
+INTER_BOX_HALF = (32.0, 64.0, 300.0)   # Inter_*  X 收回默认的 32（实际 64 x 128 x 600）
 
 SURFACE_MAX_LAYERS = 40  # 往下最多迭代几次再放弃。8 -> 16 -> 40：
                          # 层多的地方（地形+裙边+建筑+两条路的路面）会提前放弃，
@@ -146,7 +151,6 @@ PROFILE_STEP = 250.0     # 全程高度剖面的采样间距，比 SAMPLE_STEP �
 
 WS = unreal.SplineCoordinateSpace.WORLD
 OUT = unreal.Paths.project_saved_dir() + "gen_lanes_report.txt"
-_box_defaults = {}       # 类名 -> 蓝图默认 Box 半尺寸，首次 spawn 时读一次
 _profiles = {}           # (路名, 偏移) -> 全程高度剖面，见 build_profile()
 
 lines = []
@@ -547,7 +551,7 @@ def mark_edited(sp):
     return False
 
 
-def spawn_lane(eas, cls, pts, label, forward, tag):
+def spawn_lane(eas, cls, pts, label, forward, tag, box_half=None):
     if len(pts) < 2:
         return None
     if not forward:
@@ -564,7 +568,7 @@ def spawn_lane(eas, cls, pts, label, forward, tag):
     sp.update_spline()
     if not mark_edited(sp):
         w("!! %s 的 spline_has_been_edited 设置失败，双击后点会被构造脚本冲掉" % label)
-    scale_box(a, label)
+    scale_box(a, label, box_half)
     return a
 
 
@@ -614,23 +618,17 @@ def set_light_number(a, pts, label):
         w("  !! %s 设 LightNumber 失败: %s" % (label, str(exc)[:60]))
 
 
-def scale_box(a, label):
-    """把这个 actor 上的 Box 按 BOX_SCALE 放大（相对蓝图默认值，不是累乘）。"""
-    if BOX_SCALE == 1.0:
+def scale_box(a, label, half):
+    """把这个 actor 上的 Box 设成指定的半尺寸（绝对值，不是倍率，重复跑幂等）。"""
+    if half is None:
         return
-    key = a.get_class().get_name()
-    base = _box_defaults.get(key)
     for c in a.get_components_by_class(unreal.BoxComponent):
-        if base is None:
-            # 刚 spawn 出来还没改过，当前值就是蓝图默认值，记下来给同类复用
-            base = c.get_unscaled_box_extent()
-            _box_defaults[key] = base
         try:
             c.modify(True)
-            c.set_editor_property("box_extent", unreal.Vector(
-                base.x * BOX_SCALE, base.y * BOX_SCALE, base.z * BOX_SCALE))
+            c.set_editor_property("box_extent",
+                                  unreal.Vector(half[0], half[1], half[2]))
         except Exception as exc:
-            w("!! %s 的 Box 放大失败: %s" % (label, str(exc)[:60]))
+            w("!! %s 的 Box 设尺寸失败: %s" % (label, str(exc)[:60]))
         break
 
 
@@ -730,7 +728,8 @@ def process_road(eas, world, all_splines, road_label, tag, road_actor,
             if pts:
                 bounds.append((e0, pts[0].z, e1, pts[-1].z))
             if spawn_lane(eas, lane_cls, pts,
-                          "Lane_%s_%s_S%02d" % (rid, otag, i), forward, tag):
+                          "Lane_%s_%s_S%02d" % (rid, otag, i), forward, tag,
+                          LANE_BOX_HALF):
                 n_seg += 1
 
         n_bridged = 0
@@ -748,7 +747,8 @@ def process_road(eas, world, all_splines, road_label, tag, road_actor,
             for k, v in kinds.items():
                 all_kinds[k] = all_kinds.get(k, 0) + v
             ilabel = "Inter_%s_%s_I%02d" % (rid, otag, i)
-            ia = spawn_lane(eas, child_cls, pts, ilabel, forward, tag)
+            ia = spawn_lane(eas, child_cls, pts, ilabel, forward, tag,
+                            INTER_BOX_HALF)
             if ia:
                 set_light_number(ia, pts, ilabel)
                 n_int += 1
