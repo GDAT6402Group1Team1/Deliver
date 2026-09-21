@@ -709,6 +709,9 @@ void UDeliveryActiveRagdollComponent::CacheStandingState()
 	const FVector MidGround = 0.5f * (LeftGroundPoint + RightGroundPoint);
 	const FVector MidSole = 0.5f * (LeftSoleLocation + RightSoleLocation);
 	SmoothedGroundPoint = MidGround;
+	bPelvisAirborne = false;
+	// 髋目标从地面命中点抬起，但抬起量应是髋到视觉脚底的距离。
+	// 若用髋到地面的距离，出生时脚底的离地间隙会被算进站高，停步后两脚就悬空。
 	StandHeight = FMath::Clamp(FVector::DotProduct(Hips - MidSole, CurrentGroundNormal), 40.0f, 160.0f);
 	LastWishDirection = GetOwner() ? GetOwner()->GetActorForwardVector() : FVector::ForwardVector;
 	SmoothedBalanceOffset = FVector::ZeroVector;
@@ -904,7 +907,7 @@ bool UDeliveryActiveRagdollComponent::IsGrounded() const
 {
 	// 跳跃期间直接判定为离地：这一条就是「无二段跳」的实现，
 	// 不依赖射线在起跳瞬间是否已经脱离地面。
-	if (!bIsActive || bJumping || !Mesh)
+	if (!bIsActive || bJumping || bPelvisAirborne || !Mesh)
 	{
 		return false;
 	}
@@ -944,11 +947,13 @@ void UDeliveryActiveRagdollComponent::ReseedFromCurrentPose()
 	FGroundHit Ground;
 	if (TraceGround(Hips, FVector::UpVector, Ground))
 	{
+		bPelvisAirborne = false;
 		CurrentGroundNormal = Ground.Normal;
 		SmoothedGroundPoint = Ground.Point;
 	}
 	else
 	{
+		bPelvisAirborne = true;
 		CurrentGroundNormal = FVector::UpVector;
 		SmoothedGroundPoint = Hips - FVector::UpVector * StandHeight;
 	}
@@ -1199,7 +1204,7 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	UpdatePelvisTarget(DeltaTime, EffectiveWish);
 	// 空中不跑步态：髋已经被抬高，这时规划落点会让脚去追够不到的地面点。
 	// 腿改由各自的父空间角度电机拉回站立姿势，落地后再恢复迈步。
-	if (!bHitFeetPlanted && !bJumping)
+	if (!bHitFeetPlanted && !bJumping && !bPelvisAirborne)
 	{
 		UpdateFeet(DeltaTime, EffectiveWish);
 	}
@@ -1261,7 +1266,8 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	FVector DesiredNormal = CurrentGroundNormal;
 	FVector DesiredGroundPoint = SmoothedGroundPoint;
 	FGroundHit Ground;
-	if (SampleGround(Target, Hips, CurrentGroundNormal, Ground))
+	const bool bHasPlannedGround = SampleGround(Target, Hips, CurrentGroundNormal, Ground);
+	if (bHasPlannedGround)
 	{
 		DesiredNormal = Ground.Normal;
 		DesiredGroundPoint = Ground.Point;
@@ -1270,6 +1276,27 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	{
 		DesiredNormal = GroundUnderHips.Normal;
 		DesiredGroundPoint = GroundUnderHips.Point;
+	}
+	// 车撞飞后短时没有可站的地面：关闭髋部世界空间电机，避免它继续追着
+	// 上一帧的站立点把人吊在空中；落地时重新播种目标再启用。
+	if (!bJumping && !bHasPlannedGround && !bHasHipGround)
+	{
+		if (!bPelvisAirborne)
+		{
+			bPelvisAirborne = true;
+			CancelFootSteps();
+		}
+		// 从 Limp 恢复时 SetControlsInSetEnabled 会重新打开所有电机，
+		// 即使 bPelvisAirborne 早已为 true，这里也必须每次明确关闭髋电机。
+		PhysicsControl->SetControlEnabled(PelvisControl, false, true, false);
+		return;
+	}
+	if (bPelvisAirborne)
+	{
+		bPelvisAirborne = false;
+		CurrentGroundNormal = DesiredNormal;
+		SmoothedGroundPoint = DesiredGroundPoint;
+		PhysicsControl->SetControlEnabled(PelvisControl, true, true, false);
 	}
 
 	// 探测结果可以马上变。发给电机的法线和贴地点慢慢靠过去，坡顶接到平面时才不会抽一下。
@@ -1369,7 +1396,7 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 		SmoothedAccelerationAlpha = FMath::FInterpTo(
 			SmoothedAccelerationAlpha, RawAccelerationAlpha, DeltaTime, DriveTargetSmoothingSpeed);
 		const float LeanRadians = FMath::DegreesToRadians(
-			AccelerationLeanAngle * FMath::Clamp(MoveInput.Size(), 0.0f, 1.0f));
+			AccelerationLeanAngle * SmoothedAccelerationAlpha * FMath::Clamp(MoveInput.Size(), 0.0f, 1.0f));
 		const float WobbleRadians = FMath::DegreesToRadians(BouncyPelvisWobbleAngle * Wobble);
 		const FVector DesiredUp = (StanceUp
 			+ WishOnSlope * FMath::Tan(LeanRadians)
@@ -1724,9 +1751,11 @@ bool UDeliveryActiveRagdollComponent::TraceGround(
 	const FVector End = Around - Normal * 220.0f;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(RagdollGround), false, GetOwner());
 	FHitResult Hit;
-
-	if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, Params)
-		|| World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	FCollisionObjectQueryParams GroundObjects;
+	GroundObjects.AddObjectTypesToQuery(ECC_WorldStatic);
+	GroundObjects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	// 电瓶车是 Vehicle；只认静态/动态地面，不把车顶误当成可站立坡面。
+	if (World->LineTraceSingleByObjectType(Hit, Start, End, GroundObjects, Params))
 	{
 		FVector HitNormal = Hit.ImpactNormal.GetSafeNormal();
 		if (HitNormal.Z < 0.0f)

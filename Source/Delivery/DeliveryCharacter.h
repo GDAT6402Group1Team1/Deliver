@@ -71,6 +71,15 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll|Network", meta=(ClampMin="0.0"))
 	float MinimumJumpInterval = 0.05f;
 
+	UPROPERTY(EditDefaultsOnly, Category="Camera|Vehicle Impact", meta=(ClampMin="0.0"))
+	float VehicleImpactCameraZoom = 120.0f;
+	UPROPERTY(EditDefaultsOnly, Category="Camera|Vehicle Impact", meta=(ClampMin="0.0"))
+	float VehicleImpactCameraHoldSeconds = 0.35f;
+	UPROPERTY(EditDefaultsOnly, Category="Camera|Vehicle Impact", meta=(ClampMin="0.1"))
+	float VehicleImpactCameraZoomOutSpeed = 8.0f;
+	UPROPERTY(EditDefaultsOnly, Category="Camera|Vehicle Impact", meta=(ClampMin="0.1"))
+	float VehicleImpactCameraReturnSpeed = 3.0f;
+
 	// 在 BP_DeliveryMan 里指定 GE_HealthRegen
 	UPROPERTY(EditDefaultsOnly, Category="Ability")
 	TSubclassOf<UGameplayEffect> HealthRegenEffect;
@@ -96,6 +105,11 @@ protected:
 public:
 
 	ADeliveryCharacter();
+	virtual void Tick(float DeltaSeconds) override;
+	void NotifyVehicleImpact();
+
+	UFUNCTION(Client, Reliable)
+	void ClientVehicleImpactCamera();
 
 	// PlayerState复制时调用
 	virtual void OnRep_PlayerState() override;
@@ -162,4 +176,8 @@ private:
 	bool ComputePunchAim(EMeleeHand Hand, FVector& OutAimDir) const;
 
 	float LastServerJumpTime = -1000.0f;
+	float VehicleCameraBaseArmLength = 0.0f;
+	float VehicleCameraHoldUntil = 0.0f;
+	bool bVehicleCameraZoomActive = false;
+	void StartVehicleCameraZoom();
 };

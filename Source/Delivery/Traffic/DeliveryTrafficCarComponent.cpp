@@ -4,15 +4,58 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "DeliveryCharacter.h"
+#include "Ragdoll/DeliveryActiveRagdollComponent.h"
+#include "GAS/DeliverAttributeSet.h"
+#include "GAS/DeliverGameplayTags.h"
+#include "AbilitySystemComponent.h"
+#include "GameplayEffect.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
 
 UDeliveryTrafficCarComponent::UDeliveryTrafficCarComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.TickGroup = TG_PostPhysics;
+}
+
+void UDeliveryTrafficCarComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	// Camera 弹簧臂仍会避开墙/地形，但车身不再把镜头瞬间推到角色脸前。
+	if (AActor* Owner = GetOwner())
+	{
+		// 已摆在地图里的旧车实例序列化过 bReplicates=false，覆盖了蓝图新默认值。
+		// 在权威端运行时注册复制，不改地图资产也能让这些实例发出位置快照。
+		if (Owner->HasAuthority())
+		{
+			Owner->SetReplicates(true);
+		}
+		// 客户端地图实例也有旧的 bReplicateMovement=false 覆盖；
+		// OnRep_ReplicatedMovement 遇到 false 会直接丢弃服务器位置。
+		Owner->SetReplicateMovement(true);
+		TArray<UPrimitiveComponent*> Primitives;
+		Owner->GetComponents(Primitives);
+		for (UPrimitiveComponent* Primitive : Primitives)
+		{
+			Primitive->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+		}
+	}
+	if (const AActor* Owner = GetOwner())
+	{
+		PreviousImpactTransform = Owner->GetActorTransform();
+		bHasPreviousImpactTransform = true;
+	}
 }
 
 void UDeliveryTrafficCarComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+	ProcessVehicleImpacts(DeltaTime);
 
 	if (!bIsCurrentlyOnRoute && bHasReachedMaxSpeed)
 	{
@@ -92,6 +135,12 @@ void UDeliveryTrafficCarComponent::UpdateStoppedAtIntersection(bool bInStoppedAt
 
 void UDeliveryTrafficCarComponent::NotifyResetToStart()
 {
+	if (const AActor* Owner = GetOwner())
+	{
+		PreviousImpactTransform = Owner->GetActorTransform();
+		bHasPreviousImpactTransform = true;
+		bSkipNextImpactSweep = true;
+	}
 	bIsCurrentlyOnRoute = true;
 	RouteLostElapsedTime = 0.0f;
 
@@ -109,6 +158,127 @@ void UDeliveryTrafficCarComponent::NotifyResetToStart()
 	DebugSpeedMultiplier = 1.0f;
 	DebugDistanceAhead = -1.0f;
 	DebugBlockedElapsed = 0.0f;
+}
+
+void UDeliveryTrafficCarComponent::ProcessVehicleImpacts(float DeltaTime)
+{
+	AActor* Owner = GetOwner();
+	UWorld* World = GetWorld();
+	if (!Owner || !World || DeltaTime <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+	const FTransform Current = Owner->GetActorTransform();
+	if (!bHasPreviousImpactTransform || bSkipNextImpactSweep)
+	{
+		PreviousImpactTransform = Current;
+		bHasPreviousImpactTransform = true;
+		bSkipNextImpactSweep = false;
+		return;
+	}
+	const FVector Travel = Current.GetLocation() - PreviousImpactTransform.GetLocation();
+	if (Travel.SizeSquared() > FMath::Square(300.0f))
+	{
+		// 路线循环传送不能沿整张地图扫出一次虚假的撞击。
+		PreviousImpactTransform = Current;
+		return;
+	}
+	const FVector CarVelocity = Travel / DeltaTime;
+	if (CarVelocity.SizeSquared2D() < FMath::Square(30.0f))
+	{
+		PreviousImpactTransform = Current;
+		return;
+	}
+	const FVector Start = PreviousImpactTransform.TransformPosition(ImpactCenterOffset);
+	const FVector End = Current.TransformPosition(ImpactCenterOffset);
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_PhysicsBody);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(DeliveryTrafficImpact), false, Owner);
+	Params.AddIgnoredActor(Owner);
+	TArray<FHitResult> Hits;
+	World->SweepMultiByObjectType(Hits, Start, End, Current.GetRotation(), Objects,
+		FCollisionShape::MakeBox(ImpactHalfExtent.GetAbs()), Params);
+	TSet<ADeliveryCharacter*> SeenCharacters;
+	for (const FHitResult& Hit : Hits)
+	{
+		ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(Hit.GetActor());
+		if (!Character || SeenCharacters.Contains(Character))
+		{
+			continue;
+		}
+		SeenCharacters.Add(Character);
+		const float Now = World->GetTimeSeconds();
+		if (const float* LastHit = LastImpactTimeByActor.Find(Character))
+		{
+			if (Now - *LastHit < RepeatHitCooldown)
+			{
+				continue;
+			}
+		}
+		USkeletalMeshComponent* Mesh = Character->GetMesh();
+		UDeliveryActiveRagdollComponent* Ragdoll = Character->GetActiveRagdoll();
+		UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
+		if (!Mesh || !Ragdoll || !ASC || !Character->GetDamageEffect())
+		{
+			continue;
+		}
+		const FVector Direction = CarVelocity.GetSafeNormal2D();
+		const FVector BodyVelocity = Mesh->GetPhysicsLinearVelocity(TEXT("Hips"));
+		const float ClosingSpeed = FVector::DotProduct(CarVelocity - BodyVelocity, Direction);
+		const float DeltaV = FMath::Max(0.0f, ClosingSpeed)
+			* VehicleEffectiveMassKg / FMath::Max(VehicleEffectiveMassKg + CharacterEffectiveMassKg, 1.0f);
+		if (DeltaV < MinimumDamageDeltaV || ASC->HasMatchingGameplayTag(TAG_State_Stunned))
+		{
+			continue;
+		}
+		const float Health = ASC->GetNumericAttribute(UDeliverAttributeSet::GetHealthAttribute());
+		const bool bStrongHit = DeltaV >= KnockdownDeltaV;
+		// 先取地面状态；后面的 HP=0 会立即把角色切进 Limp。
+		const bool bTakeoff = bStrongHit && Ragdoll->IsGrounded();
+		const float Damage = bStrongHit ? Health
+			: FMath::Clamp((DeltaV - MinimumDamageDeltaV) * DamagePerDeltaV, 0.0f, MaximumLightDamage);
+		if (Damage <= 0.0f)
+		{
+			continue;
+		}
+		const FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+		FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(Character->GetDamageEffect(), 1.0f, Context);
+		if (!Spec.IsValid())
+		{
+			continue;
+		}
+		Spec.Data->SetSetByCallerMagnitude(TAG_Effect_Type_Damage, -Damage);
+		ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+		const FGameplayAttribute HealthAttribute = UDeliverAttributeSet::GetHealthAttribute();
+		// GE 是既有伤害路径，但在满血回复效果仍激活时可能被其它 GE 修饰抵消。
+		// 服务器检查结算后的值，仅在未达到这次应扣 HP 时补足，避免强撞偶发不晕倒。
+		const float ExpectedHealth = FMath::Max(0.0f, Health - Damage);
+		if (ASC->GetNumericAttribute(HealthAttribute) > ExpectedHealth + 0.5f)
+		{
+			ASC->SetNumericAttributeBase(HealthAttribute, ExpectedHealth);
+		}
+		const FVector HorizontalVelocityChange = Direction * FMath::Min(DeltaV, MaximumKnockbackDeltaV);
+		float TakeoffDeltaV = 0.0f;
+		if (bTakeoff)
+		{
+			// 一次性补到目标向上速度，已有上升速度不叠加；弱撞及空中再撞不追加升力。
+			// 只推髋部会被整条受约束刚体链分摊得几乎看不出升高，竖直分量须给全身刚体。
+			TakeoffDeltaV = FMath::Max(0.0f, StrongHitTakeoffSpeed - BodyVelocity.Z);
+		}
+		Mesh->AddImpulse(HorizontalVelocityChange, TEXT("Hips"), true);
+		if (TakeoffDeltaV > 0.0f)
+		{
+			Mesh->AddImpulseToAllBodiesBelow(FVector::UpVector * TakeoffDeltaV,
+				TEXT("Hips"), true, true);
+		}
+		Character->NotifyVehicleImpact();
+		UE_LOG(LogTemp, Log, TEXT("DeliveryVehicleImpact car=%s target=%s deltaV=%.1f launchZ=%.1f damage=%.1f healthAfter=%.1f"),
+			*GetNameSafe(Owner), *GetNameSafe(Character), DeltaV, TakeoffDeltaV,
+			Damage,
+			ASC->GetNumericAttribute(UDeliverAttributeSet::GetHealthAttribute()));
+		LastImpactTimeByActor.Add(Character, Now);
+	}
+	PreviousImpactTransform = Current;
 }
 
 float UDeliveryTrafficCarComponent::GetDistanceToCarAhead() const

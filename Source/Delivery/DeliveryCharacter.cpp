@@ -26,7 +26,8 @@
 
 ADeliveryCharacter::ADeliveryCharacter()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 	bReplicates = true;
 	SetReplicateMovement(true);
 	NetUpdateFrequency = 20.0f;
@@ -113,6 +114,61 @@ ADeliveryCharacter::ADeliveryCharacter()
 	{
 		Mesh->SetAnimation(StandPoseFinder.Object);
 		Mesh->SetPlayRate(0.0f);
+	}
+}
+
+void ADeliveryCharacter::NotifyVehicleImpact()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	if (IsLocallyControlled())
+	{
+		StartVehicleCameraZoom();
+	}
+	else
+	{
+		ClientVehicleImpactCamera();
+	}
+}
+
+void ADeliveryCharacter::ClientVehicleImpactCamera_Implementation()
+{
+	StartVehicleCameraZoom();
+}
+
+void ADeliveryCharacter::StartVehicleCameraZoom()
+{
+	if (!IsLocallyControlled() || !CameraBoom || !GetWorld())
+	{
+		return;
+	}
+	if (!bVehicleCameraZoomActive)
+	{
+		VehicleCameraBaseArmLength = CameraBoom->TargetArmLength;
+		bVehicleCameraZoomActive = true;
+		SetActorTickEnabled(true);
+	}
+	VehicleCameraHoldUntil = GetWorld()->GetTimeSeconds() + VehicleImpactCameraHoldSeconds;
+}
+
+void ADeliveryCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (!bVehicleCameraZoomActive || !CameraBoom || !GetWorld())
+	{
+		return;
+	}
+	const bool bHolding = GetWorld()->GetTimeSeconds() < VehicleCameraHoldUntil;
+	const float TargetLength = VehicleCameraBaseArmLength + (bHolding ? VehicleImpactCameraZoom : 0.0f);
+	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength,
+		TargetLength, DeltaSeconds, bHolding ? VehicleImpactCameraZoomOutSpeed : VehicleImpactCameraReturnSpeed);
+	if (!bHolding && FMath::IsNearlyEqual(CameraBoom->TargetArmLength, VehicleCameraBaseArmLength, 1.0f))
+	{
+		CameraBoom->TargetArmLength = VehicleCameraBaseArmLength;
+		bVehicleCameraZoomActive = false;
+		SetActorTickEnabled(false);
 	}
 }
 

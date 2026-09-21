@@ -10,7 +10,7 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDeliveryTrafficCarRouteLostSignature);
 
 /**
- * 挂在 BP_car_base 上的辅助组件，负责两件蓝图侧不好独立维护的事：
+ * 挂在 BP_car_base 上的辅助组件，保留蓝图样条移动，负责循环、避让和服务器撞击：
  *
  * 1. 循环：车辆按预设的样条路径链（一段一段 TrafficLine/Intersection 接力）行驶，
  *    正常情况下每次走到一段样条末尾都会通过 Overlap 拿到下一段样条继续跟随。
@@ -26,6 +26,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDeliveryTrafficCarRouteLostSignature);
  *    注意是按距离渐进而不是二值开关：探测边缘处系数还是 1（完全不减速），越靠近
  *    越小，近到 MinFollowDistance 以内才真正压到 0。这样才能"探测得远但停得近"
  *    ——探测距离只决定多早开始注意到前车，停车间距由 MinFollowDistance 单独控制。
+ *
+ * 3. 撞击：服务器按前后两帧车辆位置扫角色 PhysicsBody，同车同人设置短命中间隔，
+ *    用相对速度估算水平冲量并通过既有 HP/晕倒流程结算。旧地图实例覆盖了蓝图的
+ *    复制标志，BeginPlay 会在服务器启用 Actor 复制，并在两端启用移动复制。
  */
 UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
@@ -36,6 +40,7 @@ public:
 
 	UDeliveryTrafficCarComponent();
 
+	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	/**
@@ -160,7 +165,49 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Traffic|避让")
 	bool bDrawDebugTrace = false;
 
+	/** 车不模拟物理，用它和角色有效质量估算相对速度转成的撞击速度变化。 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "1.0"))
+	float VehicleEffectiveMassKg = 120.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "1.0"))
+	float CharacterEffectiveMassKg = 60.0f;
+
+	/** 估算角色速度变化达到此值时直接让 HP 归零，进入已有的晕倒/回血流程。 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "0.0"))
+	float KnockdownDeltaV = 300.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "0.0"))
+	float MinimumDamageDeltaV = 80.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "0.0"))
+	float DamagePerDeltaV = 0.08f;
+
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "0.0"))
+	float MaximumLightDamage = 24.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "0.0"))
+	float MaximumKnockbackDeltaV = 350.0f;
+
+	/** 强撞、且受击者仍在地面时的目标起飞竖直速度；400 cm/s 约腾空 82 cm、0.8 秒落地。 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "0.0"))
+	float StrongHitTakeoffSpeed = 400.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "0.0"))
+	float RepeatHitCooldown = 0.75f;
+
+	/** 只用于服务器检测角色，不改变车辆对场景物件的现有碰撞。 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击")
+	FVector ImpactHalfExtent = FVector(150.0f, 90.0f, 90.0f);
+
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击")
+	FVector ImpactCenterOffset = FVector(70.0f, 0.0f, 90.0f);
+
 private:
+	void ProcessVehicleImpacts(float DeltaTime);
+	FTransform PreviousImpactTransform = FTransform::Identity;
+	bool bHasPreviousImpactTransform = false;
+	bool bSkipNextImpactSweep = false;
+	TMap<TWeakObjectPtr<AActor>, float> LastImpactTimeByActor;
 
 	bool bIsCurrentlyOnRoute = true;
 	float RouteLostElapsedTime = 0.0f;

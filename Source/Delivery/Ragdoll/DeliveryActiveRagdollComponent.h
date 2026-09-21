@@ -466,6 +466,7 @@ protected:
 	FVector PlannedPelvisTarget = FVector::ZeroVector;
 	FVector CurrentGroundNormal = FVector::UpVector;
 	FVector SmoothedGroundPoint = FVector::ZeroVector;
+	bool bPelvisAirborne = false;
 	FVector WishOnSlope = FVector::ZeroVector;
 	FVector UprightInPelvisSpace = FVector::UpVector;
 	float SmoothedAccelerationAlpha = 0.0f;
