@@ -262,6 +262,35 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 ### 人物美术
 - 已导入测试角色模型，最近有一版人物相关提交（"人物"）。布娃娃对建模的要求见 Ragdoll.html 第五节：约 15–18 根骨骼、四肢截面需容纳胶囊碰撞体、不用人体解剖骨骼/标准 Mannequin。
 
+### 交互系统（走近按 F）
+通用框架，摩托车是第一个用户，都在 `Source/Delivery/Interaction/`。**和 `Grab/` 是两回事**：
+Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这里是一次性的按键交互。
+- [DeliveryInteractableComponent](Source/Delivery/Interaction/DeliveryInteractableComponent.h) —— 挂在可交互 Actor 上，持有提示词/半径/浮窗高度，交互时广播 `OnInteract`。查找走**静态注册表**而不是球形 Overlap：可交互物就几个，遍历代价可忽略，而碰撞查询在本项目已经栽过一次（`DeliveryTrafficCarComponent` 的前车探测通道配错、恒为空，肉眼完全看不出来）。注册表没有这个失败模式。
+- [DeliveryInteractionProbeComponent](Source/Delivery/Interaction/DeliveryInteractionProbeComponent.h) —— 挂在玩家 Pawn 上（`ADeliveryCharacter` 构造函数里已加），10Hz 探测最近目标并推浮窗。只在 `IsLocallyControlled()` 的 Pawn 上跑，所以上车后被丢在车上的那具身体不会再提示。
+- [DeliveryPromptSubsystem](Source/Delivery/Interaction/DeliveryPromptSubsystem.h) —— 浮窗本体，**C++ Slate 直接挂视口，没有 WBP 资产**。中文靠 Slate 自带的字体回退渲染（引擎自带 `DroidSansFallback.ttf`），不用额外导字体。调用约定是"每帧推一次"，停推 0.25 秒自动消失——调用方因此不需要成对写 Show/Hide，也就不会因为某条退出分支漏掉 Hide 把提示永久留在屏幕上。世界坐标→屏幕坐标用 `UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition`（自带 DPI 折算），为此 `Delivery.Build.cs` 加了 `Slate`/`SlateCore`/`UMG`。
+- 按键走服务器复核：客户端 `ADeliveryCharacter::DoInteract()` 把本地探到的目标发 `ServerInteract(Target)`，服务器重新查组件 + 距离才执行。
+
+### 可骑摩托车
+[DeliveryMotorbike](Source/Delivery/Vehicle/DeliveryMotorbike.h) —— **运动学街机式载具，不是 Chaos Vehicle**。
+- 为什么不用 Chaos：美术资产是一整套静态网格 + 一个坐姿骑手，没有轮子骨骼、没有物理资产，Chaos 要的东西一样都没有，硬上等于要先回 Blender 重新绑定；而且关卡里的交通车（`BP_car_base`）本来就是运动学沿样条走的，玩家车用同一套假设，不会出现"玩家车被物理弹飞、AI 车纹丝不动"这种两套世界观打架。
+- 每帧自己算速度/转向。水平位移带 sweep 挡墙（撞上掉速不弹开）；竖直方向打射线贴地，**竖直这一步不能用 sweep**——sweep 会被地面挡住，和"我要贴到地面上"互相打架。转向量乘 `Speed/TurnSpeedReference`，所以停着打把不会原地转圈。侧倾只改 `MeshRoot` 的 Roll，不碰碰撞和行驶（UE 里正 Roll 是往左倒，所以右转取负值）。
+- 上车顺序：先 `GrabComponent->ForceRelease()`（手里还抓着东西的话，约束会把货物/别的玩家一路拖在车上）→ `StopRagdoll()`（关刚体模拟并把网格挂回胶囊，不停的话被挂到车上的身体会一路抽搐）→ 隐藏 + 关碰撞 + 挂到车上 → `Controller->Possess(bike)`。下车反过来，先摆好位置再 `StartRagdoll()`（它内部带 `PlaceOnGround`，顺序反了人会掉在原地）。
+- 骑手网格平时隐藏，有人骑才显示——模型自带骑手，不藏起来路边空车上永远坐着个人。
+- 车体是 9 个 `UStaticMeshComponent` **固定槽位**（`MaxBodyParts = 12`，构造函数里建好），按 `BodyMeshes` 数组填充。没用运行时 `NewObject` 动态建组件，避免构造脚本反复重建组件/丢实例覆盖。
+
+### 摩托车资产接入（`Content/Python/setup_motorbike.py`）
+菜单 **Delivery → Setup Motorbike**，或控制台 `py setup_motorbike.py`。四步幂等、可单独重跑：
+导入 FBX → 建 `IA_Interact` 并在 IMC_Default 上映射 F → 建 `/Game/Vehicle/Motorbike/BP_Motorbike` → 在当前关卡出生点前方放一辆。报告写到 `Saved/setup_motorbike.txt`。
+
+这份 `摩托车.fbx`（工程根目录）离线解析出来的三个坑，改导入流程前先读：
+- **坐姿写在骨骼的当前变换里，不在网格顶点里。** 绑定姿势（Cluster 的 `TransformLink`）是站姿——膝盖在髋正下方；骨骼节点的当前变换才是坐姿——大腿前伸下压 131°、小腿回折 55°、两手落在把手宽度上。所以骑手只能按**骨骼网格**导入（UE 的参考骨架取自节点当前变换 = 坐姿）；按静态网格导入只有原始顶点 = 站姿，会得到一个站在车里的人。
+- **车体那 9 个网格没有蒙皮、挂在场景根节点下**（不在骨架层级里），骨骼网格导入器会直接跳过。所以一份 FBX 必须导两次：骨骼网格拿骑手，静态网格拿车体。静态那次用 `combine_meshes=False`（不然会和站姿骑手焊成一块、永远分不开）+ `transform_vertex_to_absolute=True`（顶点留在场景绝对坐标里，于是 9 个组件都摆在相对变换零点就能原样拼回整车，不用手工还原每个部件的相对位置）。脚本里有检测：部件原点全挤在 10cm 以内就说明这个选项没生效，会在报告里点名并给手动兜底步骤。
+- **UE 5.8 默认用 Interchange 接管 FBX 导入，那条路不读 `FbxImportUI`。** `AssetTools::ImportAssetTasks` 里 `bUseInterchangeFramework = IsInterchangeImportEnabled() && (SpecifiedFactory == nullptr)`，所以导入任务必须显式 `task.factory = unreal.FbxFactory()` 才会回到老的 FBX 导入器、上面那堆选项才有人读。
+
+其他两条：
+- `IMPORT_SCALE = 1.9` —— FBX 里骑手站立高度 100 个单位，游戏角色胶囊 96 半高（约 192cm）。车体和骑手必须用同一个值，否则比例会错。车体在 FBX 单位下是 135×88×72，乘 1.9 约 256×168×136 cm。
+- `IA_Interact` 是**复制 `IA_Jump`** 建出来的——`InputAction` 没有暴露给 Python 的工厂，`create_asset` 那条路不通。C++ 侧 `InteractAction` 用 `TSoftObjectPtr` 晚绑而不是 `ConstructorHelpers`：构造函数只在模块加载时跑一次，脚本这次会话里新建的资产永远解析不到，晚绑才能当场生效。
+
 ## 代码结构速览
 
 ```
@@ -272,8 +301,11 @@ Source/Delivery/
 ├── DeliveryPlayerController.{h,cpp}
 ├── Combat/                          战斗类型、姿势定义、战斗接口
 ├── GAS/                             AbilitySystemComponent、AttributeSet、PlayerState、GameplayTags、Abilities/
+├── Grab/                            双键抓取：抓取组件、可抓取组件、可抓道具
+├── Interaction/                     走近按 F：可交互组件、探测组件、Slate 浮窗子系统
 ├── Ragdoll/                         主动布娃娃、布娃娃战斗组件
-└── Traffic/                         交通车辆辅助组件（卡住重置循环、前车避让减速）
+├── Traffic/                         交通车辆辅助组件（卡住重置循环、前车避让减速）
+└── Vehicle/                         可骑载具（摩托车，运动学街机式）
 ```
 
 `Content/Python/` 是编辑器 Python 工具链（车道/路口/转弯生成、地形压平、裙边、以及一整套只读诊断脚本），

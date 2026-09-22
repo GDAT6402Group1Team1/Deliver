@@ -241,6 +241,31 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 ### 6. 人物美术
 - 已导入测试角色模型；建模要求（骨骼数量、四肢截面需容纳胶囊碰撞体、不使用标准 Mannequin/人体解剖骨骼）见 Ragdoll.html 第五节。
 
+### 7. 交互系统 + 可骑摩托车
+
+**交互（`Source/Delivery/Interaction/`）** —— 通用的"走近按 F"框架，摩托车是第一个用户。
+**和 `Grab/` 是两回事**：Grab 是双键按住、用物理约束把东西抓在手上的连续动作，这里是一次性按键交互。
+- [DeliveryInteractableComponent](Source/Delivery/Interaction/DeliveryInteractableComponent.h) —— 挂在可交互 Actor 上，持有提示词/半径/浮窗高度，交互时广播 `OnInteract`。查找用的是**静态注册表**而不是球形 Overlap：可交互物就几个，遍历代价忽略不计，而碰撞查询在本项目已经栽过一次（见 5 节交通组件"通道配错导致探测恒为空"）。
+- [DeliveryInteractionProbeComponent](Source/Delivery/Interaction/DeliveryInteractionProbeComponent.h) —— 挂在玩家 Pawn 上（`ADeliveryCharacter` 构造函数里已加），10Hz 探测最近目标并推浮窗。只在 `IsLocallyControlled()` 的 Pawn 上跑，所以上车之后被丢下的那具身体不会再提示。
+- [DeliveryPromptSubsystem](Source/Delivery/Interaction/DeliveryPromptSubsystem.h) —— 浮窗本体，**C++ Slate 直接挂视口**，没有 WBP 资产。中文靠 Slate 自带字体回退（引擎自带 `DroidSansFallback.ttf`）渲染。调用约定是"每帧推一次"，停推 0.25 秒自动消失——这样调用方不需要成对写 Show/Hide，不会因为某条退出分支漏掉 Hide 把提示永久留在屏幕上。世界坐标→屏幕坐标用 `UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition`（自带 DPI 折算），为此 Build.cs 加了 `Slate`/`SlateCore`/`UMG`。
+- 交互键走服务器复核：客户端 `ADeliveryCharacter::DoInteract()` 把本地探到的目标发 `ServerInteract(Target)`，服务器重新查组件 + 距离才执行。
+
+**摩托车（[DeliveryMotorbike](Source/Delivery/Vehicle/DeliveryMotorbike.h)）** —— 运动学街机式载具，不是 Chaos Vehicle：
+- 美术资产是一整套静态网格 + 一个坐姿骑手，**没有轮子骨骼、没有物理资产**，Chaos 需要的东西一样都没有；且关卡里的交通车本来就是运动学沿样条走的，玩家车用同一套假设不会出现"玩家车被物理弹飞、AI 车纹丝不动"。
+- 每帧自己算速度/转向，水平位移带 sweep 挡墙，竖直方向打射线贴地（竖直**不能**用 sweep，会和"贴到地面上"互相打架）。转向量乘 `Speed/TurnSpeedReference`，停着不能原地转圈。侧倾只改 `MeshRoot` 的 Roll，不影响碰撞。
+- 上车顺序：`GrabComponent->ForceRelease()`（不松手的话约束会把货物/别的玩家拖在车上）→ `StopRagdoll()`（关刚体并把网格挂回胶囊）→ 隐藏 + 关碰撞 + 挂到车上 → `Controller->Possess(bike)`。下车反过来，先摆好位置再 `StartRagdoll()`（它内部带 `PlaceOnGround`）。
+- 骑手网格平时隐藏，有人骑才显示——模型自带骑手，不藏起来的话路边空车上永远坐着个人。
+- 车体是 9 个 `UStaticMeshComponent` **固定槽位**（`MaxBodyParts=12`，构造函数里建好），按 `BodyMeshes` 数组填充。没用运行时 `NewObject` 建组件，避免构造脚本反复重建/丢实例覆盖。
+
+**资产接入（`Content/Python/setup_motorbike.py`，菜单 Delivery → Setup Motorbike）** ——
+导入 FBX、建 `BP_Motorbike`、配 `IA_Interact` + IMC_Default 的 F 键、在当前关卡放一辆，四步幂等可单独重跑。
+这份 `摩托车.fbx` 有三个必须知道的坑：
+1. **坐姿写在骨骼的当前变换里，不在网格顶点里。** 绑定姿势（Cluster 的 TransformLink）是站姿，骨骼节点的当前变换才是坐姿。所以骑手只能按**骨骼网格**导入（参考骨架取自节点变换=坐姿）；按静态网格导入会得到一个站在车里的人。
+2. **车体那 9 个网格没有蒙皮、挂在场景根节点下**，骨骼网格导入器会跳过它们。所以必须一份 FBX 导两次。静态那次用 `combine_meshes=False`（不然会和站姿骑手焊成一块）+ `transform_vertex_to_absolute=True`（顶点留在场景绝对坐标里，于是 9 个组件都摆在相对零点就能原样拼回整车）。脚本里有检测：部件原点全挤在 10cm 内就是这个选项没生效，会在报告里点名。
+3. UE 5.8 默认用 **Interchange** 接管 FBX 导入，那条路**不读 `FbxImportUI`**。`AssetTools::ImportAssetTasks` 里 `bUseInterchangeFramework = IsInterchangeImportEnabled() && (SpecifiedFactory == nullptr)`，所以任务必须显式 `task.factory = unreal.FbxFactory()` 才会回到老导入器、上面那些选项才有人读。
+- `IMPORT_SCALE = 1.9`：FBX 里骑手站立高度 100 单位，游戏角色胶囊 96 半高（约 192cm）。车体和骑手必须同一个值。
+- `IA_Interact` 是**复制 `IA_Jump`** 建出来的——`InputAction` 没有暴露给 Python 的工厂。C++ 侧 `InteractAction` 用 `TSoftObjectPtr` 晚绑而不是 `ConstructorHelpers`，因为构造函数只在模块加载时跑一次，脚本新建的资产在同一次会话里永远解析不到。
+
 ## 代码结构
 
 ```
@@ -251,8 +276,11 @@ Source/Delivery/
 ├── DeliveryPlayerController.{h,cpp}
 ├── Combat/                           姿势/类型定义、战斗接口、单测
 ├── GAS/                              ASC、AttributeSet、PlayerState、Tags、Abilities/
+├── Grab/                             双键抓取：抓取组件、可抓取组件、可抓道具
+├── Interaction/                      走近按 F：可交互组件、探测组件、Slate 浮窗子系统
 ├── Ragdoll/                          主动布娃娃、布娃娃战斗组件
-└── Traffic/                          交通车辆辅助组件（卡住重置循环、前车避让减速）
+├── Traffic/                          交通车辆辅助组件（卡住重置循环、前车避让减速）
+└── Vehicle/                          可骑载具（摩托车，运动学街机式）
 
 Plugins/PS2DEMImporter/               地形转 landscape spline 道路插件
 Content/Python/                       编辑器 Python 工具链：车道/路口/转弯生成、

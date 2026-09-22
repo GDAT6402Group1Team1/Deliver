@@ -26,6 +26,8 @@
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "Grab/DeliveryGrabbableComponent.h"
+#include "Interaction/DeliveryInteractableComponent.h"
+#include "Interaction/DeliveryInteractionProbeComponent.h"
 #include "TimerManager.h"
 
 ADeliveryCharacter::ADeliveryCharacter()
@@ -82,6 +84,8 @@ ADeliveryCharacter::ADeliveryCharacter()
 	RagdollCombat = CreateDefaultSubobject<UDeliveryRagdollCombatComponent>(TEXT("RagdollCombat"));
 	GrabComponent = CreateDefaultSubobject<UDeliveryGrabComponent>(TEXT("Grab"));
 	GrabbableComponent = CreateDefaultSubobject<UDeliveryGrabbableComponent>(TEXT("Grabbable"));
+	InteractProbe = CreateDefaultSubobject<UDeliveryInteractionProbeComponent>(TEXT("InteractProbe"));
+	InteractAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
 
 	PunchLeftAbilityClass = UGA_DeliverPunchLeft::StaticClass();
 	PunchRightAbilityClass = UGA_DeliverPunchRight::StaticClass();
@@ -248,6 +252,10 @@ void ADeliveryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		EnhancedInputComponent->BindAction(AttackRightAction, ETriggerEvent::Completed, this, &ADeliveryCharacter::AttackRightEnded);
 		EnhancedInputComponent->BindAction(AttackRightAction, ETriggerEvent::Canceled, this, &ADeliveryCharacter::AttackRightEnded);
 	}
+	if (UInputAction* Interact = InteractAction.LoadSynchronous())
+	{
+		EnhancedInputComponent->BindAction(Interact, ETriggerEvent::Started, this, &ADeliveryCharacter::InteractStarted);
+	}
 }
 
 void ADeliveryCharacter::Move(const FInputActionValue& Value)
@@ -404,6 +412,30 @@ void ADeliveryCharacter::DoAttackRight()
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
 		ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Ability_Attack_Punch_Right));
+	}
+}
+
+void ADeliveryCharacter::InteractStarted(const FInputActionValue& /*Value*/)
+{
+	DoInteract();
+}
+
+void ADeliveryCharacter::DoInteract()
+{
+	// 客户端拿本地探测到的目标；在服务器上调 Server RPC 等价于直接调实现。
+	AActor* Target = InteractProbe ? InteractProbe->GetFocusedActor() : nullptr;
+	if (Target)
+	{
+		ServerInteract(Target);
+	}
+}
+
+void ADeliveryCharacter::ServerInteract_Implementation(AActor* Target)
+{
+	UDeliveryInteractableComponent* Interactable = UDeliveryInteractableComponent::FindOn(Target);
+	if (Interactable && Interactable->CanInteract(this))
+	{
+		Interactable->Execute(this);
 	}
 }
 

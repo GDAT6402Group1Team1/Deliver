@@ -15,6 +15,7 @@ class UDeliveryActiveRagdollComponent;
 class UDeliveryRagdollCombatComponent;
 class UDeliveryGrabComponent;
 class UDeliveryGrabbableComponent;
+class UDeliveryInteractionProbeComponent;
 class USkeletalMeshComponent;
 class USpringArmComponent;
 class UCameraComponent;
@@ -52,6 +53,10 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UDeliveryGrabbableComponent> GrabbableComponent;
 
+	/** 探测身边"能按 F 的东西"并推出浮窗提示。纯本地表现，和 Grab 的双键抓取是两套东西。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UDeliveryInteractionProbeComponent> InteractProbe;
+
 protected:
 
 	UPROPERTY(EditAnywhere, Category="Input")
@@ -71,6 +76,14 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> AttackRightAction;
+
+	/**
+	 * 交互键（F）。故意用软引用而不是构造函数里的 ConstructorHelpers：
+	 * IA_Interact 是 setup_motorbike.py 生成的资产，构造函数只在模块加载时跑一次，
+	 * 资产要是这次会话里才新建的就永远解析不到——必须等绑定输入时再加载。
+	 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	TSoftObjectPtr<UInputAction> InteractAction;
 
 	/**
 	 * 服务端两次起跳之间的最小间隔，只用来拦客户端刷包，不是玩法上的冷却。
@@ -138,6 +151,7 @@ protected:
 	void ResolveSingleMousePress();
 	void MousePressed(bool bLeft);
 	void MouseReleased(bool bLeft);
+	void InteractStarted(const FInputActionValue& Value);
 
 public:
 
@@ -159,6 +173,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoAttackRight();
 
+	/** 对当前探测到的目标发起一次交互。客户端只是"我想按这个"，真正的判定在服务器。 */
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoInteract();
+
 	// IDeliveryCombatInterface
 	virtual bool StartMeleeAttack(EMeleeHand Hand) override;
 	virtual TArray<AActor*> GatherMeleeHits(EMeleeHand Hand) const override;
@@ -171,6 +189,10 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerJump();
 
+	/** 服务器复核：目标身上确实有可交互组件、距离也够得着，才真的执行。 */
+	UFUNCTION(Server, Reliable)
+	void ServerInteract(AActor* Target);
+
 	FORCEINLINE UCapsuleComponent* GetCapsuleComponent() const { return CapsuleComponent; }
 	FORCEINLINE USkeletalMeshComponent* GetMesh() const { return Mesh; }
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -179,6 +201,7 @@ public:
 	FORCEINLINE UDeliveryRagdollCombatComponent* GetRagdollCombat() const { return RagdollCombat; }
 	FORCEINLINE UDeliveryGrabComponent* GetGrabComponent() const { return GrabComponent; }
 	FORCEINLINE UDeliveryGrabbableComponent* GetGrabbableComponent() const { return GrabbableComponent; }
+	FORCEINLINE UDeliveryInteractionProbeComponent* GetInteractProbe() const { return InteractProbe; }
 	bool IsGrabChordHeld() const { return bGrabChordActive && bLeftMouseDown && bRightMouseDown; }
 	FORCEINLINE TSubclassOf<UGameplayEffect> GetHealthRegenEffect() const { return HealthRegenEffect; }
 	FORCEINLINE TSubclassOf<UGameplayEffect> GetDamageEffect() const { return DamageEffect; }

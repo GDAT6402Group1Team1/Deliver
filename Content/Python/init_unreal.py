@@ -43,6 +43,16 @@ def register_delivery_menu():
             "importlib.reload(delivery_task_import); delivery_task_import.import_tasks()",
         ),
     )
+    submenu.add_menu_entry(
+        "Delivery",
+        _entry(
+            "Delivery.SetupMotorbike",
+            "Setup Motorbike",
+            "导入摩托车.fbx、建 BP_Motorbike、配好 F 键，并在当前关卡放一辆（幂等，可重复点）",
+            "import importlib, setup_motorbike; "
+            "importlib.reload(setup_motorbike); setup_motorbike.run()",
+        ),
+    )
 
     menus.refresh_all_widgets()
 
