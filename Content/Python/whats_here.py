@@ -13,9 +13,9 @@ import traceback
 
 import unreal
 
-ANCHOR = "Inter_形状13_-0540_I04"   # 以谁为中心
-RADIUS = 2000.0                     # 查多大范围
-MAX_ROWS = 60
+ANCHOR = "Intersection_28"   # 以谁为中心
+RADIUS = 3500.0                     # 查多大范围
+MAX_ROWS = 80
 
 WS = unreal.SplineCoordinateSpace.WORLD
 OUT = unreal.Paths.project_saved_dir() + "whats_here.txt"

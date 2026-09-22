@@ -119,11 +119,38 @@ def mark_edited(sp):
 _mark_failed = []
 
 
+def dedup_pts(pts, eps=2.0):
+    """去掉相邻重合的点。
+
+    两个点坐标相同时，自动切线必然是零，点型改成 CURVE 也救不回来——
+    GetRotationAtDistanceAlongSpline 内部的 MakeFromXZ(切线, Up) 照样退化，
+    前向掉回世界 +X。实测 形状7（生成时打空 140 点、高度全靠插值）
+    的路口段首尾就是这种重合点。
+    去重只丢弃冗余信息，曲线形状不变。
+    """
+    out = []
+    for p in pts:
+        if out:
+            q = out[-1]
+            if ((p.x - q.x) ** 2 + (p.y - q.y) ** 2
+                    + (p.z - q.z) ** 2) ** 0.5 < eps:
+                continue
+        out.append(p)
+    return out
+
+
 def write_spline(sp, pts):
     # modify() 必须在改动之前调：clear/add/update_spline 都是普通函数调用，
     # 只改内存状态、不会把对象标记为已修改，保存时就不被序列化——
     # 实测 8 条转弯只有 1 条存活，而那 1 条恰好是唯一被 set_editor_property
     # 正规写过属性、因而被标脏的 actor。
+    # mark_edited 必须在写点**之前**调。它是 set_editor_property，
+    # 而在组件上改属性会触发这个 actor 重跑构造脚本、把组件整批重建——
+    # 放在最后调的话，刚写进去的点正好落在被丢弃的那批组件上
+    # （名字变成 TRASH_SplineComponent_xxxx，回读全部对不上）。
+    # 这个标记是实例覆盖、会存住，所以第二次跑时属性值没变、
+    # 不再触发重跑，点就留住了——"同一个脚本要跑好几次才生效"就是这么来的。
+    marked = mark_edited(sp)
     try:
         sp.modify(True)
         owner = sp.get_owner()
@@ -132,14 +159,25 @@ def write_spline(sp, pts):
     except Exception:
         pass
     sp.clear_spline_points(False)
-    for p in pts:
+    for p in dedup_pts(pts):
         sp.add_spline_point(p, WS, False)
     for i in range(sp.get_number_of_spline_points()):
         sp.set_spline_point_type(i, unreal.SplinePointType.CURVE_CLAMPED, False)
+    # 首尾两点必须用 CURVE 而不是 CURVE_CLAMPED。
+    # "Clamped" 的定义行为就是把端点和局部极值处的切线归零，而
+    # GetRotationAtDistanceAlongSpline 内部是 MakeFromXZ(切线, Up)——
+    # 切线为零就退化，前向掉回世界 +X。实测端点切线长恒为 0、
+    # 旋转前向恒为 0.0°，而真实走向是 -96°，车的探测球因此在
+    # "未来点被钳到样条末端"的那一两帧甩向正右方。
+    # CURVE 的自动切线指向邻点，非零，曲线形状几乎不变。
+    n_pts = sp.get_number_of_spline_points()
+    if n_pts >= 2:
+        for i in (0, n_pts - 1):
+            sp.set_spline_point_type(i, unreal.SplinePointType.CURVE, False)
     sp.update_spline()
-    # 失败不能吞掉：没打上标记的话点会被构造脚本冲回蓝图默认值，
-    # 而现象是"写进去了又没了"，光看报告的"写入 N 条"根本看不出来。
-    if not mark_edited(sp):
+    # 标记已经在最前面打过了，这里只记失败。没打上的话点会被构造脚本
+    # 冲回蓝图默认值，而现象是"写进去了又没了"，光看"写入 N 条"看不出来。
+    if not marked:
         _mark_failed.append(sp.get_name())
 
 
@@ -347,7 +385,19 @@ def run():
     no_comp = []
     endpoint_drift = []
     missing = bad_dir = 0
+    trashed = 0
     for a in actors:
+        # 已销毁但还没被 GC 回收的 actor 仍会出现在 get_all_level_actors() 里。
+        # 同一个 Python 进程里先跑 gen_traffic_lanes.py（它删掉全部旧 actor）
+        # 再跑这里时，这些"坟墓"和新 actor 标签一模一样，转弯会全部写进
+        # 已销毁的组件（组件名带 TRASH_ 前缀），回读全部对不上、存盘什么都没有。
+        # 实测 rebuild_traffic.py 一次跑完三步时 126 条全军覆没就是这个。
+        try:
+            if not unreal.SystemLibrary.is_valid(a) or a.is_actor_being_destroyed():
+                trashed += 1
+                continue
+        except Exception:
+            pass
         if not any(str(t).startswith(LANE_TAG_PREFIX) for t in a.tags):
             continue
         lbl = a.get_actor_label()
@@ -397,6 +447,9 @@ def run():
             "p_out": p_out, "d_out": d_out,
         })
     w("路口段 %d 个" % len(segs))
+    if trashed:
+        w("跳过已销毁未回收的 actor %d 个（上一步刚删掉的旧车道，GC 还没跑）"
+          % trashed)
     if endpoint_drift:
         endpoint_drift.sort(reverse=True)
         worst, wlbl = endpoint_drift[0]
@@ -651,10 +704,7 @@ def run():
     w("直行副本 = 这条车道没有这个方向的转弯，选中它就等于直行，")
     w("蓝图那边不需要任何特判。")
     w("")
-    w("!! 蓝图那边还没有「三条里挑一条」的逻辑：")
-    w("   TraceForNewPath 现在多半是 get_component_by_class 抓第一个 SplineComponent，")
-    w("   也就是永远只走直行那条。要让转弯真的生效，得在蓝图里加选择逻辑。")
-    w("   先跑 Simulate 看现在的实际行为，再决定怎么改。")
+    w("蓝图侧的选路逻辑已经改好（车会在三条里随机挑一条），这里不再提示。")
     w("关卡尚未保存。")
     flush()
 

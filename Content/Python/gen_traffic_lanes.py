@@ -22,12 +22,22 @@ import traceback
 
 import unreal
 
+ALL_ROADS = True          # True = 关卡里所有道路样条全铺，忽略 CROSSING_WITH。
+                          # 只按 EXCLUDE_ROADS 剔除。河（River/BranchRiver）不是路，
+                          # 必须排除，否则会沿着河铺出一条车道来。
 CROSSING_WITH = "形状 13"  # 非空时自动算出要处理的路：这条路 + 所有与它相交的路。
                           # 用的是和切路口同一套 find_intersections，
                           # 以后改样条也不会过期，不用手动维护名单。
                           # 置成 "" 就退回下面的手写名单。
 ROAD_LABELS = ["形状 13", "形状 39"]   # CROSSING_WITH 为空时才用这个
-EXCLUDE_ROADS = ["形状 43"]            # 这几条路不铺车道，自动名单里也剔掉。
+EXTRA_ROADS = ["形状 40"]              # 无论自动模式算没算到，都追加处理这几条。
+                                      # 自动模式只取"与 形状13 相交的路"，
+                                      # 离得远的新路（形状40）永远进不来。
+                                      # 加在这里比把 CROSSING_WITH 置空、
+                                      # 退回全手写名单好：自动那部分仍然自动。
+EXCLUDE_ROADS = ["形状 43",            # 源样条是坏的：2 个点、首尾同坐标、长度却有 1597
+                 "River", "BranchRiver"]   # 河，不是路
+                                      # 这几条路不铺车道，自动名单里也剔掉。
                                       # 光在关卡里删 actor 不够——自动模式下次
                                       # 会把它们重新算进来，必须在这里也排除。
 LANE_BP = "/Game/PS2DEM/BP_TrafficLine1"
@@ -159,6 +169,26 @@ lines = []
 def w(s=""):
     lines.append(str(s))
     unreal.log("[gen_lanes] %s" % s)
+
+
+def dedup_pts(pts, eps=2.0):
+    """去掉相邻重合的点。
+
+    两个点坐标相同时，自动切线必然是零，点型改成 CURVE 也救不回来——
+    GetRotationAtDistanceAlongSpline 内部的 MakeFromXZ(切线, Up) 照样退化，
+    前向掉回世界 +X。实测 形状7（生成时打空 140 点、高度全靠插值）
+    的路口段首尾就是这种重合点。
+    去重只丢弃冗余信息，曲线形状不变。
+    """
+    out = []
+    for p in pts:
+        if out:
+            q = out[-1]
+            if ((p.x - q.x) ** 2 + (p.y - q.y) ** 2
+                    + (p.z - q.z) ** 2) ** 0.5 < eps:
+                continue
+        out.append(p)
+    return out
 
 
 def surface_layers(world, x, y, z_hint):
@@ -561,10 +591,21 @@ def spawn_lane(eas, cls, pts, label, forward, tag, box_half=None):
     a.tags = [tag]
     sp = a.get_component_by_class(unreal.SplineComponent)
     sp.clear_spline_points(False)
-    for p in pts:
+    for p in dedup_pts(pts):
         sp.add_spline_point(p, WS, False)
     for i in range(sp.get_number_of_spline_points()):
         sp.set_spline_point_type(i, unreal.SplinePointType.CURVE_CLAMPED, False)
+    # 首尾两点必须用 CURVE 而不是 CURVE_CLAMPED。
+    # "Clamped" 的定义行为就是把端点和局部极值处的切线归零，而
+    # GetRotationAtDistanceAlongSpline 内部是 MakeFromXZ(切线, Up)——
+    # 切线为零就退化，前向掉回世界 +X。实测端点切线长恒为 0、
+    # 旋转前向恒为 0.0°，而真实走向是 -96°，车的探测球因此在
+    # "未来点被钳到样条末端"的那一两帧甩向正右方。
+    # CURVE 的自动切线指向邻点，非零，曲线形状几乎不变。
+    n_pts = sp.get_number_of_spline_points()
+    if n_pts >= 2:
+        for i in (0, n_pts - 1):
+            sp.set_spline_point_type(i, unreal.SplinePointType.CURVE, False)
     sp.update_spline()
     if not mark_edited(sp):
         w("!! %s 的 spline_has_been_edited 设置失败，双击后点会被构造脚本冲掉" % label)
@@ -775,9 +816,18 @@ def process_road(eas, world, all_splines, road_label, tag, road_actor,
 
 
 def resolve_roads(all_splines):
-    """要处理哪些路。CROSSING_WITH 非空就自动算，否则用手写的 ROAD_LABELS。"""
+    """要处理哪些路。CROSSING_WITH 非空就自动算，否则用手写的 ROAD_LABELS。
+
+    两种模式最后都会并上 EXTRA_ROADS。
+    """
+    if ALL_ROADS:
+        names = [n for n, _s in all_splines]
+        w("全铺模式：关卡里的道路样条 %d 条全部处理（只按 EXCLUDE_ROADS 剔除）"
+          % len(names))
+        return names
+
     if not CROSSING_WITH:
-        return list(ROAD_LABELS)
+        return add_extras(list(ROAD_LABELS), [n for n, _s in all_splines])
 
     target, others = None, []
     for name, sp in all_splines:
@@ -787,7 +837,7 @@ def resolve_roads(all_splines):
             others.append((name, sp))
     if target is None:
         w("!! 自动模式找不到 %s，退回手写名单 %s" % (CROSSING_WITH, ROAD_LABELS))
-        return list(ROAD_LABELS)
+        return add_extras(list(ROAD_LABELS), [n for n, _s in all_splines])
 
     inters = find_intersections(target, others, target.get_spline_length())
     names = []
@@ -801,7 +851,27 @@ def resolve_roads(all_splines):
     w("自动模式：与 %s 相交的路 %d 条 -> 本次共处理 %d 条"
       % (CROSSING_WITH, len(names), len(roads)))
     w("   %s" % "、".join(roads))
-    return roads
+    return add_extras(roads, [n for n, _s in all_splines])
+
+
+def add_extras(roads, known):
+    """把 EXTRA_ROADS 并进来，顺带报出名字对不上的（关卡里没有这条路）。
+
+    名字打错会静默少铺一整条路，而报告里只是少一行、很难注意到，
+    所以对不上的直接点名。
+    """
+    known_set = set(n.strip() for n in known)
+    added, unknown = [], []
+    for nm in EXTRA_ROADS:
+        nm = nm.strip()
+        if not nm or nm in roads:
+            continue
+        (added if nm in known_set else unknown).append(nm)
+    if added:
+        w("追加 EXTRA_ROADS %d 条：%s" % (len(added), "、".join(added)))
+    if unknown:
+        w("!! EXTRA_ROADS 里这几条在关卡里找不到，已忽略：%s" % "、".join(unknown))
+    return roads + added
 
 
 def drop_excluded(roads):

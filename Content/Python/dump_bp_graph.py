@@ -23,11 +23,15 @@ import unreal
 
 # (蓝图路径, 要导的图名列表)；图名列表为空 = 该蓝图的全部图
 TARGETS = [
-    # 首要目标：构造脚本在往 SplineLeft/SplineRight 里写点，
-    # 把脚本填进去的转弯曲线覆盖成蓝图默认的 100cm 直线。
-    # 空列表 = 导出这个蓝图的全部图（构造脚本 UserConstructionScript 也在里面）。
-    ("/Game/PS2DEM/BP_TrafficLine1_IntersectionChild", []),
-    ("/Game/PS2DEM/BP_TrafficLine1", []),          # 父类，构造脚本多半在这边
+    # 目标：TraceForIntersection 现在查的是 Traffic_Road 通道，
+    # Lane_ 和 Inter_ 的 Box 都在这个通道上，分不出普通车道和路口段。
+    # 要改成只认 IntersectionChild，先得看清它现在的节点和连线。
+    # 探测球体在路口总是朝车的正右方：终点 = 未来点 + GetForwardVector(Rotation)*200，
+    # 方向完全由 GetFuturePostionandRotationAlongSpline 返回的 Rotation 决定，
+    # 那是个自定义函数，先把它导出来看。
+    ("/Game/Blueprint/BP_car_base", ["GetFuturePostionandRotationAlongSpline",
+                                     "TraceForIntersection",
+                                     "TraceForNewPath"]),
 ]
 
 OUT = unreal.Paths.project_saved_dir() + "bp_graph.txt"
