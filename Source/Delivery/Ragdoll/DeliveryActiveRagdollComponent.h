@@ -196,6 +196,13 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0", ClampMax="8.0"))
 	float BouncyPelvisWobbleAngle = 2.2f;
 
+	/** 拖拽倒地角色时稍微屈膝、前倾，让单手能接近地面的身体；不影响普通物品托举。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|抓取", meta=(ClampMin="0.0", ClampMax="45.0"))
+	float DragReachCrouchHeight = 25.0f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|抓取", meta=(ClampMin="0.0", ClampMax="20.0"))
+	float DragReachLeanAngle = 8.0f;
+
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0", ClampMax="20.0"))
 	float LooseTorsoSwingAngle = 7.5f;
 
@@ -482,6 +489,7 @@ protected:
 	FVector WishOnSlope = FVector::ZeroVector;
 	FVector UprightInPelvisSpace = FVector::UpVector;
 	float SmoothedAccelerationAlpha = 0.0f;
+	float DragReachAlpha = 0.0f;
 	float AccelerationLeanRemaining = 0.0f;
 	bool bHadMoveWishLastTick = false;
 	FFoot LeftFoot;

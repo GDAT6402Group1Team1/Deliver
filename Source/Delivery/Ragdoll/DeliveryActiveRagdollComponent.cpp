@@ -1231,6 +1231,10 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	const ADeliveryCharacter* GrabCharacter = Cast<ADeliveryCharacter>(GetOwner());
 	const bool bCarryingProp = GrabCharacter && GrabCharacter->GetGrabComponent()
 		&& GrabCharacter->GetGrabComponent()->IsCarryingProp();
+	const bool bDraggingCharacter = GrabCharacter && GrabCharacter->GetGrabComponent()
+		&& GrabCharacter->GetGrabComponent()->IsDraggingCharacter();
+	DragReachAlpha = FMath::FInterpTo(DragReachAlpha,
+		bDraggingCharacter && !bJumping ? 1.0f : 0.0f, DeltaTime, 7.0f);
 	BraceTorsoForAction(DeltaTime, bBodyDrivenPunchActive, bCarryingProp);
 	FVector GrabGoals[2] = { FVector::ZeroVector, FVector::ZeroVector };
 	uint8 GrabMask = 0;
@@ -1373,6 +1377,9 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	// 髋目标等于平滑后的贴地点，再加上站立高度沿法线抬起来。
 	Target = SmoothedGroundPoint + CurrentGroundNormal
 		* (StandHeight + SmoothBounceHeight * GaitPulse + JumpOffset);
+	// 目标倒地时仅靠站立高度，肩到地面的距离超过手臂长度；平滑屈膝，
+	// 让单手真的够到附近的身体表面，而不是永远差一截、建不了约束。
+	Target -= CurrentGroundNormal * (DragReachCrouchHeight * DragReachAlpha);
 
 	// 直拳的力道来自体重压上去，不是手臂伸得远。手臂本身只有三十几厘米行程，
 	// 全身沿拳路前送这一下才是"打"和"推"的区别。脚会跟着这个目标上步。
@@ -1464,6 +1471,17 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 			+ WishOnSlope * FMath::Tan(LeanRadians)
 			+ SlopeRight * FMath::Tan(WobbleRadians)).GetSafeNormal();
 		Lean = FQuat::FindBetweenNormals(StanceUp, DesiredUp);
+	}
+	if (DragReachAlpha > KINDA_SMALL_NUMBER)
+	{
+		FVector DragForward;
+		if (GrabCharacter && GrabCharacter->GetGrabComponent()
+			&& GrabCharacter->GetGrabComponent()->GetGrabFacingDirection(DragForward))
+		{
+			const FVector LeanUp = (StanceUp + DragForward.GetSafeNormal2D()
+				* FMath::Tan(FMath::DegreesToRadians(DragReachLeanAngle * DragReachAlpha))).GetSafeNormal();
+			Lean = FQuat::FindBetweenNormals(StanceUp, LeanUp) * Lean;
+		}
 	}
 
 	// 纯水平拧身，不弯腰也不侧倾：蓄力时出拳侧的肩膀往后拧，释放后拧回来再带出去一点。
