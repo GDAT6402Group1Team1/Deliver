@@ -13,6 +13,8 @@ class UGameplayEffect;
 class UCapsuleComponent;
 class UDeliveryActiveRagdollComponent;
 class UDeliveryRagdollCombatComponent;
+class UDeliveryGrabComponent;
+class UDeliveryGrabbableComponent;
 class USkeletalMeshComponent;
 class USpringArmComponent;
 class UCameraComponent;
@@ -43,6 +45,12 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDeliveryRagdollCombatComponent> RagdollCombat;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UDeliveryGrabComponent> GrabComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UDeliveryGrabbableComponent> GrabbableComponent;
 
 protected:
 
@@ -125,6 +133,11 @@ protected:
 	void JumpStarted(const FInputActionValue& Value);
 	void AttackLeftStarted(const FInputActionValue& Value);
 	void AttackRightStarted(const FInputActionValue& Value);
+	void AttackLeftEnded(const FInputActionValue& Value);
+	void AttackRightEnded(const FInputActionValue& Value);
+	void ResolveSingleMousePress();
+	void MousePressed(bool bLeft);
+	void MouseReleased(bool bLeft);
 
 public:
 
@@ -164,6 +177,9 @@ public:
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 	FORCEINLINE UDeliveryActiveRagdollComponent* GetActiveRagdoll() const { return ActiveRagdoll; }
 	FORCEINLINE UDeliveryRagdollCombatComponent* GetRagdollCombat() const { return RagdollCombat; }
+	FORCEINLINE UDeliveryGrabComponent* GetGrabComponent() const { return GrabComponent; }
+	FORCEINLINE UDeliveryGrabbableComponent* GetGrabbableComponent() const { return GrabbableComponent; }
+	bool IsGrabChordHeld() const { return bGrabChordActive && bLeftMouseDown && bRightMouseDown; }
 	FORCEINLINE TSubclassOf<UGameplayEffect> GetHealthRegenEffect() const { return HealthRegenEffect; }
 	FORCEINLINE TSubclassOf<UGameplayEffect> GetDamageEffect() const { return DamageEffect; }
 	FORCEINLINE TSubclassOf<UGameplayAbility> GetPunchLeftAbilityClass() const { return PunchLeftAbilityClass; }
@@ -180,4 +196,10 @@ private:
 	float VehicleCameraHoldUntil = 0.0f;
 	bool bVehicleCameraZoomActive = false;
 	void StartVehicleCameraZoom();
+	FTimerHandle MouseChordTimer;
+	bool bLeftMouseDown = false;
+	bool bRightMouseDown = false;
+	bool bGrabChordActive = false;
+	bool bSingleMouseResolved = false;
+	bool bFirstMouseLeft = false;
 };

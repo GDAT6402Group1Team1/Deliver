@@ -5,6 +5,8 @@
 #include "DeliverGameplayTags.h"
 #include "../DeliveryCharacter.h"
 #include "../Ragdoll/DeliveryActiveRagdollComponent.h"
+#include "../Grab/DeliveryGrabComponent.h"
+#include "../Grab/DeliveryGrabbableComponent.h"
 #include "Abilities/GameplayAbility.h"
 #include "Abilities/GA_DeliverPunch.h"
 #include "GameplayEffect.h"
@@ -120,6 +122,14 @@ void UDeliverAbilitySystemComponent::SetStunned(bool bNewStunned)
 	}
 	if (const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(AbilityActorInfo->AvatarActor.Get()))
 	{
+		if (bNewStunned)
+		{
+			if (UDeliveryGrabComponent* Grab = Character->GetGrabComponent()) Grab->ForceRelease();
+		}
+		else if (UDeliveryGrabbableComponent* Grabbable = Character->GetGrabbableComponent())
+		{
+			Grabbable->ReleaseAllGrabbers();
+		}
 		if (UDeliveryActiveRagdollComponent* Ragdoll = Character->GetActiveRagdoll())
 		{
 			// Limp 会关掉全部 Physics Control，人整个瘫下去；恢复时重新接管直立和步态。

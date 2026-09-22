@@ -20,11 +20,14 @@
 
 #include "CollisionQueryParams.h"
 #include "Combat/DeliveryHandPose.h"
+#include "DeliveryCharacter.h"
+#include "Grab/DeliveryGrabComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "Engine/SkeletalMesh.h"
 #include "GameFramework/GameStateBase.h"
+#include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
 #include "PhysicsControlComponent.h"
@@ -417,6 +420,8 @@ void UDeliveryActiveRagdollComponent::ConfigurePhysics()
 	Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 	Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 	Mesh->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
+	// 镜头射线要能选中晕倒角色用于抓取；Visibility 只影响查询，不增加物理碰撞。
+	Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	Mesh->SetEnableGravity(true);
 	Mesh->SetLinearDamping(RigidBodyLinearDamping);
 	Mesh->SetAngularDamping(RigidBodyAngularDamping);
@@ -628,6 +633,7 @@ void UDeliveryActiveRagdollComponent::DestroyControls()
 	TorsoControls.Reset();
 	BraceAlpha = 0.0f;
 	AppliedBraceAlpha = -1.0f;
+	AppliedBraceTargetStrength = -1.0f;
 	PunchTwist = 0.0f;
 	PunchLunge = 0.0f;
 	HitPushAlpha = 0.0f;
@@ -719,6 +725,8 @@ void UDeliveryActiveRagdollComponent::CacheStandingState()
 	PlannedPelvisTarget = Hips;
 	WishOnSlope = FVector::ZeroVector;
 	SmoothedAccelerationAlpha = 0.0f;
+	AccelerationLeanRemaining = 0.0f;
+	bHadMoveWishLastTick = false;
 	StartupPlantRemaining = StartupFootPlantDuration;
 	bWasMoving = false;
 	bPendingStopRecovery = false;
@@ -965,6 +973,8 @@ void UDeliveryActiveRagdollComponent::ReseedFromCurrentPose()
 	SmoothedMoveLead = FVector::ZeroVector;
 	WishOnSlope = FVector::ZeroVector;
 	SmoothedAccelerationAlpha = 0.0f;
+	AccelerationLeanRemaining = 0.0f;
+	bHadMoveWishLastTick = false;
 	MoveInput = FVector2D::ZeroVector;
 	LastWishDirection = FRotator(0.0f, CurrentFacingYaw, 0.0f).Vector();
 
@@ -1122,18 +1132,20 @@ void UDeliveryActiveRagdollComponent::ApplyMeleeImpact(const FVector& Impulse, c
 	}
 }
 
-void UDeliveryActiveRagdollComponent::BraceTorsoForPunch(float DeltaTime, bool bBrace)
+void UDeliveryActiveRagdollComponent::BraceTorsoForAction(float DeltaTime, bool bPunch, bool bCarry)
 {
-	// 上臂挂在胸腔和脊柱上，这几节平时是软的。肩膀要转动上臂，反作用力就得有地方去；
-	// 不绷紧的话反作用力先把躯干拧走，看起来就是上臂没伸出去、只有小臂在甩。
+	// 托举和出拳都要给肩膀稳定支点，否则两只手的电机反作用力会把软躯干来回拧。
 	// 强度要渐变：一帧之内把整段脊柱从软切到硬，上半身会当场僵住。
-	BraceAlpha = FMath::FInterpTo(BraceAlpha, bBrace ? 1.0f : 0.0f, DeltaTime, PunchBraceSpeed);
-	if (FMath::IsNearlyEqual(AppliedBraceAlpha, BraceAlpha, 0.02f)) return;
+	const float BraceTargetStrength = bCarry ? CarryBraceStrength : PunchBraceStrength;
+	BraceAlpha = FMath::FInterpTo(BraceAlpha, bPunch || bCarry ? 1.0f : 0.0f, DeltaTime, PunchBraceSpeed);
+	if (FMath::IsNearlyEqual(AppliedBraceAlpha, BraceAlpha, 0.02f)
+		&& FMath::IsNearlyEqual(AppliedBraceTargetStrength, BraceTargetStrength, 0.1f)) return;
 	AppliedBraceAlpha = BraceAlpha;
+	AppliedBraceTargetStrength = BraceTargetStrength;
 	PhysicsControl->SetControlAngularData(
-		ChestControl, FMath::Lerp(LooseWaistFollowStrength, PunchBraceStrength, BraceAlpha),
+		ChestControl, FMath::Lerp(LooseWaistFollowStrength, BraceTargetStrength, BraceAlpha),
 		StableMuscleDampingRatio, 0.0f, 0.0f, true, true, false);
-	const float Spine = FMath::Lerp(LooseComedyBodyStrength, PunchBraceStrength, BraceAlpha);
+	const float Spine = FMath::Lerp(LooseComedyBodyStrength, BraceTargetStrength, BraceAlpha);
 	for (const FName& Control : TorsoControls)
 	{
 		PhysicsControl->SetControlAngularData(
@@ -1169,8 +1181,16 @@ FVector UDeliveryActiveRagdollComponent::GetWishDir() const
 
 	// 用镜头水平朝向把 WASD 变成世界方向，最后丢掉 Z。沿坡行走时再投影到切平面。
 	const FRotator YawRotation(0.0f, GetAimYaw(), 0.0f);
-	return (YawRotation.Vector() * MoveInput.Y
-		+ FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y) * MoveInput.X).GetSafeNormal2D();
+	FVector Wish = (YawRotation.Vector() * MoveInput.Y
+		+ FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y) * MoveInput.X).GetClampedToMaxSize(1.0f);
+	if (const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner()))
+	{
+		if (const UDeliveryGrabComponent* Grab = Character->GetGrabComponent())
+		{
+			Wish = Grab->FilterApproachWish(Wish);
+		}
+	}
+	return Wish;
 }
 
 float UDeliveryActiveRagdollComponent::GetAimYaw() const
@@ -1208,14 +1228,30 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	{
 		UpdateFeet(DeltaTime, EffectiveWish);
 	}
-	BraceTorsoForPunch(DeltaTime, bBodyDrivenPunchActive);
+	const ADeliveryCharacter* GrabCharacter = Cast<ADeliveryCharacter>(GetOwner());
+	const bool bCarryingProp = GrabCharacter && GrabCharacter->GetGrabComponent()
+		&& GrabCharacter->GetGrabComponent()->IsCarryingProp();
+	BraceTorsoForAction(DeltaTime, bBodyDrivenPunchActive, bCarryingProp);
+	FVector GrabGoals[2] = { FVector::ZeroVector, FVector::ZeroVector };
+	uint8 GrabMask = 0;
+	if (const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner()))
+	{
+		if (const UDeliveryGrabComponent* Grab = Character->GetGrabComponent())
+		{
+			if (Grab->GetHandGoal(true, GrabGoals[0])) GrabMask |= 1;
+			if (Grab->GetHandGoal(false, GrabGoals[1])) GrabMask |= 2;
+		}
+	}
 	BoxingPose.Update(Mesh, PhysicsControl, CurrentFacingYaw, DeltaTime,
 		bBodyDrivenPunchActive ? (PunchHandSide > 0 ? 0 : 1) : -1, bBodyDrivenPunchReleased,
-		bBodyDrivenPunchActive ? PunchAimDirection : FVector::ZeroVector);
+		bBodyDrivenPunchActive ? PunchAimDirection : FVector::ZeroVector, GrabGoals, GrabMask);
 }
 
 void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const FVector& Wish)
 {
+	const ADeliveryCharacter* GrabCharacter = Cast<ADeliveryCharacter>(GetOwner());
+	const bool bCarryingProp = GrabCharacter && GrabCharacter->GetGrabComponent()
+		&& GrabCharacter->GetGrabComponent()->IsCarryingProp();
 	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
 	const FVector Velocity = Mesh->GetPhysicsLinearVelocity(Bones.Hips);
 
@@ -1227,7 +1263,7 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	}
 
 	// 把水平 Wish 和当前速度都投影到坡面上，用它们的差估计髋要沿坡往前领多远。
-	WishOnSlope = FVector::VectorPlaneProject(Wish, CurrentGroundNormal).GetSafeNormal();
+	WishOnSlope = FVector::VectorPlaneProject(Wish, CurrentGroundNormal).GetSafeNormal() * Wish.Size();
 	const FVector VelocityOnSlope = FVector::VectorPlaneProject(Velocity, CurrentGroundNormal);
 	const FVector DesiredVelocity = WishOnSlope * DesiredMoveSpeed;
 	const FVector RawLead = ((DesiredVelocity - VelocityOnSlope) * TargetLeadTime)
@@ -1367,6 +1403,20 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 		// 出拳时身体转向瞄准方向。不转身的话拳头目标会落在肩膀活动范围之外，看起来就只有小臂在动。
 		DesiredYaw = PunchAimDirection.Rotation().Yaw;
 	}
+	else if (const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
+		Character && Character->GetGrabComponent() && Character->GetGrabComponent()->IsGrabbing())
+	{
+		// 手臂追物体世界抓点时，身体也必须面向抓点；只跟镜头转会让手从背后够箱子。
+		FVector ToGrip;
+		if (Character->GetGrabComponent()->GetGrabFacingDirection(ToGrip))
+		{
+			DesiredYaw = ToGrip.Rotation().Yaw;
+		}
+		else if (Character->GetController())
+		{
+			DesiredYaw = Character->GetController()->GetControlRotation().Yaw;
+		}
+	}
 	else if (bHasHitFacing)
 	{
 		// 挨打之后转过去面对来拳方向，而不是保持原朝向挨第二拳。
@@ -1374,9 +1424,10 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	}
 	const bool bTurningToHit = bHasHitFacing && !bBodyDrivenPunchActive;
 	const float YawError = FMath::FindDeltaAngleDegrees(CurrentFacingYaw, DesiredYaw);
-	CurrentFacingYaw = FMath::UnwindDegrees(FMath::FInterpTo(
-		CurrentFacingYaw, CurrentFacingYaw + YawError, DeltaTime,
-		bTurningToHit ? HitReactionFacingTurnSpeed : TurnResponsiveness));
+	CurrentFacingYaw = FMath::UnwindDegrees(bCarryingProp
+		? CurrentFacingYaw + FMath::Clamp(YawError, -CarryTurnRate * DeltaTime, CarryTurnRate * DeltaTime)
+		: FMath::FInterpTo(CurrentFacingYaw, CurrentFacingYaw + YawError, DeltaTime,
+			bTurningToHit ? HitReactionFacingTurnSpeed : TurnResponsiveness));
 	if (!Wish.IsNearlyZero())
 	{
 		LastWishDirection = FRotator(0.0f, CurrentFacingYaw, 0.0f).Vector();
@@ -1388,25 +1439,31 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	FQuat Lean = FQuat::Identity;
 	const FVector SlopeForward = GetSlopeForward(Wish);
 	const FVector SlopeRight = GetSlopeRight(Wish);
+	const bool bHasMoveWish = !Wish.IsNearlyZero();
+	if (bHasMoveWish && !bHadMoveWishLastTick)
+	{
+		AccelerationLeanRemaining = AccelerationLeanDuration;
+	}
+	else if (!bHasMoveWish)
+	{
+		AccelerationLeanRemaining = 0.0f;
+	}
+	bHadMoveWishLastTick = bHasMoveWish;
+	const float StartupLeanAlpha = AccelerationLeanDuration > KINDA_SMALL_NUMBER
+		? AccelerationLeanRemaining / AccelerationLeanDuration : 0.0f;
+	SmoothedAccelerationAlpha = FMath::FInterpTo(
+		SmoothedAccelerationAlpha, StartupLeanAlpha, DeltaTime, DriveTargetSmoothingSpeed);
+	AccelerationLeanRemaining = FMath::Max(0.0f, AccelerationLeanRemaining - DeltaTime);
 	if (!Wish.IsNearlyZero())
 	{
-		const float ForwardSpeed = FVector::DotProduct(VelocityOnSlope, WishOnSlope);
-		const float RawAccelerationAlpha = FMath::Clamp(
-			(DesiredMoveSpeed - ForwardSpeed) / FMath::Max(DesiredMoveSpeed, 1.0f), 0.0f, 1.0f);
-		SmoothedAccelerationAlpha = FMath::FInterpTo(
-			SmoothedAccelerationAlpha, RawAccelerationAlpha, DeltaTime, DriveTargetSmoothingSpeed);
 		const float LeanRadians = FMath::DegreesToRadians(
-			AccelerationLeanAngle * SmoothedAccelerationAlpha * FMath::Clamp(MoveInput.Size(), 0.0f, 1.0f));
-		const float WobbleRadians = FMath::DegreesToRadians(BouncyPelvisWobbleAngle * Wobble);
+			AccelerationLeanAngle * SmoothedAccelerationAlpha * FMath::Clamp(Wish.Size(), 0.0f, 1.0f));
+		const float WobbleRadians = FMath::DegreesToRadians(
+			BouncyPelvisWobbleAngle * Wobble * (bCarryingProp ? 0.2f : 1.0f));
 		const FVector DesiredUp = (StanceUp
 			+ WishOnSlope * FMath::Tan(LeanRadians)
 			+ SlopeRight * FMath::Tan(WobbleRadians)).GetSafeNormal();
 		Lean = FQuat::FindBetweenNormals(StanceUp, DesiredUp);
-	}
-	else
-	{
-		SmoothedAccelerationAlpha = FMath::FInterpTo(
-			SmoothedAccelerationAlpha, 0.0f, DeltaTime, DriveTargetSmoothingSpeed);
 	}
 
 	// 纯水平拧身，不弯腰也不侧倾：蓄力时出拳侧的肩膀往后拧，释放后拧回来再带出去一点。
@@ -1421,7 +1478,8 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 		: FQuat(CurrentGroundNormal, FMath::DegreesToRadians(PunchTwist));
 	const FQuat PelvisRotation = PunchSideRotation * Lean * YawDelta * SlopeAlign * ReferencePelvisRotation;
 	FQuat SpineRelativeRotation = ReferenceSpineRelativeRotation;
-	if (!Wish.IsNearlyZero() && !FMath::IsNearlyZero(Wobble) && !SlopeForward.IsNearlyZero())
+	if (!bCarryingProp && !Wish.IsNearlyZero() && !FMath::IsNearlyZero(Wobble)
+		&& !SlopeForward.IsNearlyZero())
 	{
 		const float SwingRadians = FMath::DegreesToRadians(-LooseTorsoSwingAngle * Wobble);
 		const float TwistRadians = FMath::DegreesToRadians(LooseTorsoSwingAngle * 0.35f * Wobble);
@@ -1439,7 +1497,7 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	PhysicsControl->SetControlTargetPositionAndOrientation(
 		ChestControl, FVector::ZeroVector, SpineRelativeRotation.Rotator(), DeltaTime, true, false, true, false);
 
-	const float StandingAlpha = 1.0f - FMath::Clamp(MoveInput.Size(), 0.0f, 1.0f);
+	const float StandingAlpha = 1.0f - FMath::Clamp(Wish.Size(), 0.0f, 1.0f);
 	const FQuat BodyRotationDelta = PelvisRotation * ReferencePelvisRotation.Inverse();
 	const FQuat HeadCorrection(
 		SlopeRight, FMath::DegreesToRadians(StandingHeadCorrectionAngle * StandingAlpha));
@@ -1511,7 +1569,11 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 			if (BeginStep(bRecoverLeft ? LeftFoot : RightFoot, Wish))
 			{
 				bStepLeftNext = !bRecoverLeft;
+				bPendingStopRecovery = false;
 			}
+			// 坡沿落点暂时探不到地面时保留待补步状态，下帧重试。
+			// 旧逻辑不论成功与否都清标记，一次失败后就再也不补脚。
+			return;
 		}
 		bPendingStopRecovery = false;
 		return;
@@ -1605,11 +1667,11 @@ bool UDeliveryActiveRagdollComponent::PlanFootLanding(FFoot& Foot, const FVector
 		return false;
 	}
 
-	const float ForwardDistance = MoveInput.IsNearlyZero() ? 0.0f : ControlledStrideLength;
+	const float ForwardDistance = ControlledStrideLength * FMath::Clamp(Wish.Size(), 0.0f, 1.0f);
 	const float ForwardSpeed = FVector::DotProduct(
 		FVector::VectorPlaneProject(Mesh->GetPhysicsLinearVelocity(Bones.Hips), CurrentGroundNormal),
 		Forward);
-	const float VelocityLead = MoveInput.IsNearlyZero()
+	const float VelocityLead = Wish.IsNearlyZero()
 		? 0.0f
 		: FMath::Clamp(
 			ForwardSpeed * ControlledStrideDuration * 0.35f,

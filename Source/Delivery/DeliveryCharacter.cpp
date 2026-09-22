@@ -17,12 +17,16 @@
 #include "GAS/DeliverGameplayTags.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
+#include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Delivery.h"
 #include "GAS/DeliverAbilitySystemComponent.h"
 #include "GAS/DeliverPlayerState.h"
 #include "Combat/DeliveryRagdollCombatComponent.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
+#include "Grab/DeliveryGrabComponent.h"
+#include "Grab/DeliveryGrabbableComponent.h"
+#include "TimerManager.h"
 
 ADeliveryCharacter::ADeliveryCharacter()
 {
@@ -65,9 +69,19 @@ ADeliveryCharacter::ADeliveryCharacter()
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> GrabHighlightFinder(
+		TEXT("/Game/Blueprint/Interaction/M_GrabHighlight"));
+	if (GrabHighlightFinder.Succeeded())
+	{
+		FollowCamera->PostProcessSettings.WeightedBlendables.Array.Add(
+			FWeightedBlendable(1.0f, GrabHighlightFinder.Object));
+		FollowCamera->PostProcessBlendWeight = 1.0f;
+	}
 
 	ActiveRagdoll = CreateDefaultSubobject<UDeliveryActiveRagdollComponent>(TEXT("ActiveRagdoll"));
 	RagdollCombat = CreateDefaultSubobject<UDeliveryRagdollCombatComponent>(TEXT("RagdollCombat"));
+	GrabComponent = CreateDefaultSubobject<UDeliveryGrabComponent>(TEXT("Grab"));
+	GrabbableComponent = CreateDefaultSubobject<UDeliveryGrabbableComponent>(TEXT("Grabbable"));
 
 	PunchLeftAbilityClass = UGA_DeliverPunchLeft::StaticClass();
 	PunchRightAbilityClass = UGA_DeliverPunchRight::StaticClass();
@@ -225,10 +239,14 @@ void ADeliveryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	if (AttackLeftAction)
 	{
 		EnhancedInputComponent->BindAction(AttackLeftAction, ETriggerEvent::Started, this, &ADeliveryCharacter::AttackLeftStarted);
+		EnhancedInputComponent->BindAction(AttackLeftAction, ETriggerEvent::Completed, this, &ADeliveryCharacter::AttackLeftEnded);
+		EnhancedInputComponent->BindAction(AttackLeftAction, ETriggerEvent::Canceled, this, &ADeliveryCharacter::AttackLeftEnded);
 	}
 	if (AttackRightAction)
 	{
 		EnhancedInputComponent->BindAction(AttackRightAction, ETriggerEvent::Started, this, &ADeliveryCharacter::AttackRightStarted);
+		EnhancedInputComponent->BindAction(AttackRightAction, ETriggerEvent::Completed, this, &ADeliveryCharacter::AttackRightEnded);
+		EnhancedInputComponent->BindAction(AttackRightAction, ETriggerEvent::Canceled, this, &ADeliveryCharacter::AttackRightEnded);
 	}
 }
 
@@ -251,12 +269,78 @@ void ADeliveryCharacter::JumpStarted(const FInputActionValue& /*Value*/)
 
 void ADeliveryCharacter::AttackLeftStarted(const FInputActionValue& /*Value*/)
 {
-	DoAttackLeft();
+	MousePressed(true);
 }
 
 void ADeliveryCharacter::AttackRightStarted(const FInputActionValue& /*Value*/)
 {
-	DoAttackRight();
+	MousePressed(false);
+}
+
+void ADeliveryCharacter::AttackLeftEnded(const FInputActionValue& /*Value*/)
+{
+	MouseReleased(true);
+}
+
+void ADeliveryCharacter::AttackRightEnded(const FInputActionValue& /*Value*/)
+{
+	MouseReleased(false);
+}
+
+void ADeliveryCharacter::MousePressed(bool bLeft)
+{
+	bool& ThisDown = bLeft ? bLeftMouseDown : bRightMouseDown;
+	if (ThisDown) return;
+	const bool bWasEmpty = !bLeftMouseDown && !bRightMouseDown;
+	ThisDown = true;
+	if (bWasEmpty)
+	{
+		bFirstMouseLeft = bLeft;
+		bSingleMouseResolved = false;
+		GetWorldTimerManager().SetTimer(MouseChordTimer, this,
+			&ADeliveryCharacter::ResolveSingleMousePress, 0.12f, false);
+	}
+	else if (!bSingleMouseResolved && !bGrabChordActive)
+	{
+		GetWorldTimerManager().ClearTimer(MouseChordTimer);
+		bGrabChordActive = true;
+		if (GrabComponent) GrabComponent->RequestBegin();
+	}
+	else if (!bGrabChordActive)
+	{
+		if (bLeft) DoAttackLeft(); else DoAttackRight();
+	}
+}
+
+void ADeliveryCharacter::ResolveSingleMousePress()
+{
+	if (bGrabChordActive || bSingleMouseResolved) return;
+	bSingleMouseResolved = true;
+	if (bFirstMouseLeft && bLeftMouseDown) DoAttackLeft();
+	else if (!bFirstMouseLeft && bRightMouseDown) DoAttackRight();
+}
+
+void ADeliveryCharacter::MouseReleased(bool bLeft)
+{
+	bool& ThisDown = bLeft ? bLeftMouseDown : bRightMouseDown;
+	if (!ThisDown) return;
+	ThisDown = false;
+	if (bGrabChordActive)
+	{
+		if (GrabComponent) GrabComponent->RequestReleaseHand(bLeft);
+		if (!bLeftMouseDown && !bRightMouseDown) bGrabChordActive = false;
+	}
+	else if (!bSingleMouseResolved)
+	{
+		GetWorldTimerManager().ClearTimer(MouseChordTimer);
+		bSingleMouseResolved = true;
+		if (bLeft) DoAttackLeft(); else DoAttackRight();
+	}
+	if (!bLeftMouseDown && !bRightMouseDown)
+	{
+		GetWorldTimerManager().ClearTimer(MouseChordTimer);
+		bSingleMouseResolved = false;
+	}
 }
 
 void ADeliveryCharacter::DoLook(float Yaw, float Pitch)
@@ -307,6 +391,7 @@ void ADeliveryCharacter::DoJumpEnd()
 
 void ADeliveryCharacter::DoAttackLeft()
 {
+	if (GrabComponent && GrabComponent->IsGrabbing()) return;
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
 		ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Ability_Attack_Punch_Left));
@@ -315,6 +400,7 @@ void ADeliveryCharacter::DoAttackLeft()
 
 void ADeliveryCharacter::DoAttackRight()
 {
+	if (GrabComponent && GrabComponent->IsGrabbing()) return;
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
 		ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Ability_Attack_Punch_Right));

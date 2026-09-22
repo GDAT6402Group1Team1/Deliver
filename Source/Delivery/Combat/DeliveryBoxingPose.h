@@ -34,7 +34,8 @@ struct FDeliveryBoxingPose
 		const FDeliveryArmPoseSettings& InSettings = FDeliveryArmPoseSettings());
 	void Update(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* Controls,
 		float FacingYaw, float DeltaTime, int32 PunchArm, bool bReleased,
-		FVector PunchDirection = FVector::ZeroVector);
+		FVector PunchDirection = FVector::ZeroVector,
+		const FVector* GrabGoals = nullptr, uint8 GrabMask = 0);
 	bool IsReady(int32 Side) const { return Side >= 0 && Side < 2 && Arms[Side].bReady; }
 	static FVector SolveElbow(const FVector& Shoulder, const FVector& Hand,
 		const FVector& Pole, float UpperLength, float LowerLength);

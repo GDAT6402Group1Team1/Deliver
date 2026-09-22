@@ -323,7 +323,8 @@ FVector FDeliveryBoxingPose::SolveElbow(const FVector& Shoulder, const FVector& 
 }
 
 void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* Controls,
-	float FacingYaw, float DeltaTime, int32 PunchArm, bool bReleased, FVector PunchDirection)
+	float FacingYaw, float DeltaTime, int32 PunchArm, bool bReleased, FVector PunchDirection,
+	const FVector* GrabGoals, uint8 GrabMask)
 {
 	SettleTime += DeltaTime;
 	const float Settle = FMath::SmoothStep(0.f, 0.5f, SettleTime);
@@ -383,6 +384,13 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 			MaxReach);
 
 		const FVector Shoulder = Mesh->GetBoneLocation(Arm.Upper);
+		const bool bGrab = GrabGoals && (GrabMask & (1 << Side));
+		if (bGrab)
+		{
+			// 仍由这套唯一的手臂电机求解；抓取时只改目标，不叠加第二套位置电机。
+			Reach = MakeReach(GrabGoals[Side] - Shoulder,
+				-FVector::UpVector + Outward * 0.4f, MaxReach);
+		}
 		const FVector Hand = Shoulder + Reach.Direction * Reach.Distance;
 		const FVector Elbow = SolveElbow(Shoulder, Hand, Reach.Pole, Arm.UpperLength, Arm.LowerLength);
 		const FQuat UpperBase = Yaw * Arm.UpperReference;
@@ -397,16 +405,17 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 		const float Strength = FMath::Lerp(
 			FMath::Lerp(Settings.RestStrength, Settings.WindupStrength, WindupAlpha),
 			Settings.PunchStrength, StrikeAlpha);
-		if (!FMath::IsNearlyEqual(Arm.AppliedStrength, Strength, 0.1f))
+		const float AppliedStrength = bGrab ? Settings.GrabStrength : Strength;
+		if (!FMath::IsNearlyEqual(Arm.AppliedStrength, AppliedStrength, 0.1f))
 		{
-			Arm.AppliedStrength = Strength;
+			Arm.AppliedStrength = AppliedStrength;
 			const TPair<FName, float> Links[] = {
 				{ Arm.UpperControl, Settings.UpperArmStrengthScale },
 				{ Arm.LowerControl, 1.f },
 				{ Arm.HandControl, Settings.HandStrengthScale } };
 			for (const TPair<FName, float>& Link : Links)
 			{
-				Controls->SetControlAngularData(Link.Key, Strength * Link.Value, Settings.DampingRatio, 0, 0, true, true, false);
+				Controls->SetControlAngularData(Link.Key, AppliedStrength * Link.Value, Settings.DampingRatio, 0, 0, true, true, false);
 			}
 		}
 		// Target the actual controls: the last two flags select controls=true, sets=false.

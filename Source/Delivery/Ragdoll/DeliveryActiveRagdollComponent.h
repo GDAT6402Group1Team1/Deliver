@@ -186,6 +186,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0", ClampMax="20.0"))
 	float AccelerationLeanAngle = 4.5f;
 
+	/** 起步时短暂前倾；不要按当前速度误差一直前倾，否则下坡失速会形成前扑的正反馈。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.0"))
+	float AccelerationLeanDuration = 0.4f;
+
 	UPROPERTY(EditAnywhere, Category="Ragdoll|移动", meta=(ClampMin="0.1"))
 	float TurnResponsiveness = 5.0f;
 
@@ -220,7 +224,7 @@ protected:
 	float StopRecoveryDistance = 34.0f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float MinimumStepUprightDot = 0.62f;
+	float MinimumStepUprightDot = 0.35f;
 
 	/**
 	 * 允许沿坡面行走的最大坡角（度）。坡角是地面法线与世界向上的夹角：
@@ -337,6 +341,14 @@ protected:
 	/** 躯干绷紧和放松的过渡速度。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="1.0"))
 	float PunchBraceSpeed = 8.0f;
+
+	/** 托举时胸和脊柱提供肩膀支点；只在持物期间渐进提高，不锁住腿。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|抓取", meta=(ClampMin="0.0"))
+	float CarryBraceStrength = 20.0f;
+
+	/** 抱箱转身时限制目标身体角速度，避免手臂被镜头瞬间转向扭到背后。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|抓取", meta=(ClampMin="1.0"))
+	float CarryTurnRate = 160.0f;
 
 	/** 手臂三个姿势的参数：站立走路的 A 姿势、出拳起手的收拳、直拳终点。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳")
@@ -470,6 +482,8 @@ protected:
 	FVector WishOnSlope = FVector::ZeroVector;
 	FVector UprightInPelvisSpace = FVector::UpVector;
 	float SmoothedAccelerationAlpha = 0.0f;
+	float AccelerationLeanRemaining = 0.0f;
+	bool bHadMoveWishLastTick = false;
 	FFoot LeftFoot;
 	FFoot RightFoot;
 	FName PelvisControl;
@@ -479,6 +493,7 @@ protected:
 	TArray<FName> TorsoControls;
 	float BraceAlpha = 0.0f;
 	float AppliedBraceAlpha = -1.0f;
+	float AppliedBraceTargetStrength = -1.0f;
 	/** 平滑后的拧身角度。发给电机的必须是这个，不是阶跃的目标角度。 */
 	float PunchTwist = 0.0f;
 	float PunchLunge = 0.0f;
@@ -541,7 +556,7 @@ protected:
 	void UpdateControlTargets(float DeltaTime);
 	void SetHitReactionStrength(float Multiplier);
 	void SetHitFeetPlanted(bool bPlant);
-	void BraceTorsoForPunch(float DeltaTime, bool bBrace);
+	void BraceTorsoForAction(float DeltaTime, bool bPunch, bool bCarry);
 	void UpdatePelvisTarget(float DeltaTime, const FVector& Wish);
 	void UpdateFeet(float DeltaTime, const FVector& Wish);
 	bool BeginStep(FFoot& Foot, const FVector& Wish);

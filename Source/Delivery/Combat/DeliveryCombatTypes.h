@@ -118,6 +118,10 @@ struct FDeliveryArmPoseSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="肌肉", meta=(ClampMin="0.0"))
 	float PunchStrength = 39.0f;
 
+	/** 持物时持续托举用的手臂强度；低于出拳，避免肩膀把松软躯干反复拧动。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="肌肉", meta=(ClampMin="0.0"))
+	float GrabStrength = 22.0f;
+
 	/** 上臂的强度倍率。肩膀要比小臂硬，才是肩带着手走；否则就是小臂在甩巴掌。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="肌肉", meta=(ClampMin="0.1", ClampMax="4.0"))
 	float UpperArmStrengthScale = 1.95f;
