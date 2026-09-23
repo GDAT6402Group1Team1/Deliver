@@ -7,6 +7,7 @@
 #include "DeliveryInteractionProbeComponent.generated.h"
 
 class UDeliveryInteractableComponent;
+class UPrimitiveComponent;
 
 /**
  * 挂在玩家 Pawn 上的"附近有什么能按 F"的探测器。
@@ -25,12 +26,17 @@ public:
 	UDeliveryInteractionProbeComponent();
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** 当前瞄到的可交互物；没有就是 null。 */
-	UDeliveryInteractableComponent* GetFocused() const { return Focused.Get(); }
+	UDeliveryInteractableComponent* GetFocused() const { return FocusedGeneral.Get(); }
 
 	UFUNCTION(BlueprintPure, Category="Interaction")
 	AActor* GetFocusedActor() const;
+
+	/** Current camera-aimed E target. Kept separate so F interactions never get remapped. */
+	UFUNCTION(BlueprintPure, Category="Interaction")
+	AActor* GetFocusedPickupActor() const;
 
 protected:
 
@@ -40,5 +46,19 @@ protected:
 
 private:
 
-	TWeakObjectPtr<UDeliveryInteractableComponent> Focused;
+	UDeliveryInteractableComponent* FindAimedPickup(const APawn* Owner) const;
+	void SetPickupHighlight(AActor* Actor);
+	void RestorePickupHighlight();
+
+	struct FPrimitiveHighlightState
+	{
+		TWeakObjectPtr<UPrimitiveComponent> Component;
+		bool bRenderCustomDepth = false;
+		int32 StencilValue = 0;
+	};
+
+	TWeakObjectPtr<UDeliveryInteractableComponent> FocusedGeneral;
+	TWeakObjectPtr<UDeliveryInteractableComponent> FocusedPickup;
+	TWeakObjectPtr<AActor> HighlightedActor;
+	TArray<FPrimitiveHighlightState> HighlightStates;
 };

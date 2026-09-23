@@ -30,16 +30,10 @@ if ("IA_Interact", "F") not in mapping_pairs:
     fail("F -> IA_Interact was lost")
 
 for asset_path in (
-    "/Game/Blueprint/Inventory/BP_TestAxe",
+    "/Game/Blueprint/Item/Test/BP_TestAxe",
     "/Game/UI/Inventory/WBP_DeliveryHotbar",
 ):
     if not unreal.EditorAssetLibrary.does_asset_exist(asset_path):
         fail("missing " + asset_path)
 
-unreal.EditorLoadingAndSavingUtils.load_map("/Game/Level/TestForCharacter")
-actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors()
-axes = [a for a in actors if a.get_actor_label().startswith("InventoryTestAxe_")]
-if len(axes) != 6:
-    fail("expected 6 test axes, found %d" % len(axes))
-
-unreal.log("[InventoryValidation] PASS: E pickup, F interaction, UMG, axe BP, 6 map instances")
+unreal.log("[InventoryValidation] PASS: E pickup, F interaction, UMG and drag-and-drop axe BP")

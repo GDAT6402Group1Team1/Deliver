@@ -8,6 +8,13 @@
 
 class APawn;
 
+UENUM(BlueprintType)
+enum class EDeliveryInteractionKey : uint8
+{
+	GeneralF UMETA(DisplayName="F - General Interaction"),
+	PickupE UMETA(DisplayName="E - Pickup / Delivery")
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryInteractSignature, APawn*, Interactor);
 
 /**
@@ -48,6 +55,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Interaction")
 	bool bInteractEnabled = true;
 
+	/** E and F are deliberately separate gameplay paths. Existing interactables default to F. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Interaction")
+	EDeliveryInteractionKey InteractionKey = EDeliveryInteractionKey::GeneralF;
+
+	/** Zero means tap. Delivery pickup/turn-in use 0.5 seconds. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Interaction", meta=(ClampMin="0.0", Units="s"))
+	float HoldDuration = 0.0f;
+
 	UPROPERTY(BlueprintAssignable, Category="Interaction")
 	FDeliveryInteractSignature OnInteract;
 
@@ -61,7 +76,8 @@ public:
 	FVector GetPromptLocation() const;
 
 	/** 离 Seeker 最近、且在各自 InteractRadius 之内的可交互物；没有就返回 null。 */
-	static UDeliveryInteractableComponent* FindBest(const APawn* Seeker);
+	static UDeliveryInteractableComponent* FindBest(
+		const APawn* Seeker, EDeliveryInteractionKey Key = EDeliveryInteractionKey::GeneralF);
 
 	/** 取 Actor 身上第一个可交互组件。服务器收到客户端请求后用它复核。 */
 	static UDeliveryInteractableComponent* FindOn(const AActor* Actor);

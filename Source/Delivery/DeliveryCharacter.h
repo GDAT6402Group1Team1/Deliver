@@ -173,6 +173,7 @@ protected:
 	void MouseReleased(bool bLeft);
 	void InteractStarted(const FInputActionValue& Value);
 	void PickupStarted(const FInputActionValue& Value);
+	void PickupEnded(const FInputActionValue& Value);
 	void InventorySlot1();
 	void InventorySlot2();
 	void InventorySlot3();
@@ -206,6 +207,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoPickup();
 
+	/** Local probe/UI query. Negative progress means this target is not currently being held. */
+	float GetPickupHoldProgress(const AActor* Target) const;
+	bool CanUsePickupTarget(const AActor* Target, bool bCheckTaskAvailability = true) const;
+
 	// IDeliveryCombatInterface
 	virtual bool StartMeleeAttack(EMeleeHand Hand) override;
 	virtual TArray<AActor*> GatherMeleeHits(EMeleeHand Hand) const override;
@@ -224,6 +229,15 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void ServerPickup(AActor* Target);
+
+	UFUNCTION(Server, Reliable)
+	void ServerBeginPickupHold(AActor* Target);
+
+	UFUNCTION(Server, Reliable)
+	void ServerCompletePickupHold(AActor* Target);
+
+	UFUNCTION(Server, Reliable)
+	void ServerCancelPickupHold(AActor* Target);
 
 	FORCEINLINE UCapsuleComponent* GetCapsuleComponent() const { return CapsuleComponent; }
 	FORCEINLINE USkeletalMeshComponent* GetMesh() const { return Mesh; }
@@ -247,6 +261,10 @@ private:
 
 	/** 取得角色水平面向，作为物理出拳方向。Hand 保留给未来左右拳差异化使用。 */
 	bool ComputePunchAim(EMeleeHand Hand, FVector& OutAimDir) const;
+	void BeginPickupInteraction();
+	void UpdatePickupHold();
+	void CancelPickupHold(bool bNotifyServer = true);
+	bool ValidateServerPickupTarget(AActor* Target) const;
 
 	float LastServerJumpTime = -1000.0f;
 	float VehicleCameraBaseArmLength = 0.0f;
@@ -259,6 +277,13 @@ private:
 	bool bGrabChordActive = false;
 	bool bSingleMouseResolved = false;
 	bool bFirstMouseLeft = false;
+	bool bPickupHeld = false;
+	float PickupHoldStartedAt = 0.0f;
+	float PickupHoldDuration = 0.0f;
+	TWeakObjectPtr<AActor> PickupHoldTarget;
+	FTimerHandle PickupHoldTimer;
+	TWeakObjectPtr<AActor> ServerPickupHoldTarget;
+	float ServerPickupHoldStartedAt = -1000.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDeliveryHotbarWidget> HotbarWidget;

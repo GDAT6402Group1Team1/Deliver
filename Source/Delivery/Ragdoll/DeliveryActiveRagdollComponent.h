@@ -467,6 +467,7 @@ protected:
 		/** 左脚为负、右脚为正，或按启动时相对髋的左右决定。 */
 		float SideSign = 1.0f;
 		float Alpha = 1.0f;
+		float Elapsed = 0.0f;
 	};
 
 	FActorComponentTickFunction PostPhysicsTickFunction;
@@ -569,6 +570,7 @@ protected:
 	void BraceTorsoForAction(float DeltaTime, bool bPunch, bool bCarry);
 	void UpdatePelvisTarget(float DeltaTime, const FVector& Wish);
 	void UpdateFeet(float DeltaTime, const FVector& Wish);
+	void KeepFeetOnOwnSide();
 	bool BeginStep(FFoot& Foot, const FVector& Wish);
 	void UpdateFootTarget(FFoot& Foot, float DeltaTime);
 	bool PlanFootLanding(FFoot& Foot, const FVector& Wish);

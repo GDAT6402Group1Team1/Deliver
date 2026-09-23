@@ -21,7 +21,7 @@ void UDeliveryInventoryItemComponent::GetLifetimeReplicatedProps(TArray<FLifetim
 
 void UDeliveryInventoryItemComponent::ApplyDurabilityDamage(float Amount)
 {
-	if (!GetOwner() || !GetOwner()->HasAuthority() || Amount <= 0.0f)
+	if (!bUsesDurability || !GetOwner() || !GetOwner()->HasAuthority() || Amount <= 0.0f)
 	{
 		return;
 	}
@@ -45,10 +45,12 @@ void UDeliveryInventoryItemComponent::ApplyDurabilityDamage(float Amount)
 
 float UDeliveryInventoryItemComponent::GetDurabilityFraction() const
 {
-	return MaxDurability > KINDA_SMALL_NUMBER ? FMath::Clamp(Durability / MaxDurability, 0.0f, 1.0f) : 0.0f;
+	return bUsesDurability && MaxDurability > KINDA_SMALL_NUMBER
+		? FMath::Clamp(Durability / MaxDurability, 0.0f, 1.0f) : 0.0f;
 }
 
 void UDeliveryInventoryItemComponent::OnRep_Durability()
 {
-	Durability = FMath::Clamp(Durability, 0.0f, FMath::Max(0.0f, MaxDurability));
+	Durability = bUsesDurability
+		? FMath::Clamp(Durability, 0.0f, FMath::Max(0.0f, MaxDurability)) : 0.0f;
 }

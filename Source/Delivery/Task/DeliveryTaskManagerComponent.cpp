@@ -208,6 +208,11 @@ bool UDeliveryTaskManagerComponent::CanAcquireItem(const UDeliveryTaskDefinition
 	return GetActiveTask() == nullptr;
 }
 
+bool UDeliveryTaskManagerComponent::IsTaskRegistered(const UDeliveryTaskDefinition* Task) const
+{
+	return Task && FindState(Task) != nullptr;
+}
+
 bool UDeliveryTaskManagerComponent::TryAcquireItem(UDeliveryTaskDefinition* Task, APlayerState* Player)
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority() || !Task)

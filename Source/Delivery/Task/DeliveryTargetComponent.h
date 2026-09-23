@@ -27,7 +27,7 @@ public:
 
 	/** 交付判定距离，从收件人算起。 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Task", meta=(ClampMin="0.0", Units="cm"))
-	float DeliveryRadius = 250.f;
+	float DeliveryRadius = 100.f;
 
 	/** 手里这件快递现在能不能交给我。UI 用它决定要不要显示交付提示。 */
 	UFUNCTION(BlueprintPure, Category="Task")

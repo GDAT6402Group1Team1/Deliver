@@ -30,8 +30,12 @@
 #include "Grab/DeliveryGrabbableComponent.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Interaction/DeliveryInteractionProbeComponent.h"
+#include "Interaction/DeliveryInteractionGeometry.h"
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
+#include "Inventory/DeliveryInventoryItemComponent.h"
+#include "Task/DeliveryItemComponent.h"
+#include "Task/DeliveryTargetComponent.h"
 #include "UI/DeliveryHotbarWidget.h"
 #include "TimerManager.h"
 
@@ -272,6 +276,8 @@ void ADeliveryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	if (UInputAction* Pickup = PickupAction.LoadSynchronous())
 	{
 		EnhancedInputComponent->BindAction(Pickup, ETriggerEvent::Started, this, &ADeliveryCharacter::PickupStarted);
+		EnhancedInputComponent->BindAction(Pickup, ETriggerEvent::Completed, this, &ADeliveryCharacter::PickupEnded);
+		EnhancedInputComponent->BindAction(Pickup, ETriggerEvent::Canceled, this, &ADeliveryCharacter::PickupEnded);
 	}
 
 	// Hotbar is deliberately direct-keyed: 1 is drop, 2-5 swap with the hand.
@@ -466,7 +472,12 @@ void ADeliveryCharacter::InteractStarted(const FInputActionValue& /*Value*/)
 
 void ADeliveryCharacter::PickupStarted(const FInputActionValue& /*Value*/)
 {
-	DoPickup();
+	BeginPickupInteraction();
+}
+
+void ADeliveryCharacter::PickupEnded(const FInputActionValue& /*Value*/)
+{
+	CancelPickupHold();
 }
 
 void ADeliveryCharacter::InventorySlot1() { if (InventoryComponent) InventoryComponent->RequestSlotAction(0); }
@@ -487,11 +498,96 @@ void ADeliveryCharacter::DoInteract()
 
 void ADeliveryCharacter::DoPickup()
 {
-	AActor* Target = InteractProbe ? InteractProbe->GetFocusedActor() : nullptr;
-	if (Target && Target->IsA<ADeliveryHandheldItem>())
+	BeginPickupInteraction();
+}
+
+void ADeliveryCharacter::BeginPickupInteraction()
+{
+	if (bPickupHeld) return;
+	AActor* Target = InteractProbe ? InteractProbe->GetFocusedPickupActor() : nullptr;
+	UDeliveryInteractableComponent* Interactable = UDeliveryInteractableComponent::FindOn(Target);
+	if (!Target || !Interactable || !CanUsePickupTarget(Target)) return;
+
+	if (Interactable->HoldDuration <= KINDA_SMALL_NUMBER)
 	{
-		ServerPickup(Target);
+		if (Target->IsA<ADeliveryHandheldItem>()) ServerPickup(Target);
+		return;
 	}
+
+	bPickupHeld = true;
+	PickupHoldTarget = Target;
+	PickupHoldStartedAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	PickupHoldDuration = Interactable->HoldDuration;
+	ServerBeginPickupHold(Target);
+	GetWorldTimerManager().SetTimer(PickupHoldTimer, this,
+		&ADeliveryCharacter::UpdatePickupHold, 0.02f, true);
+}
+
+void ADeliveryCharacter::UpdatePickupHold()
+{
+	AActor* Target = PickupHoldTarget.Get();
+	if (!bPickupHeld || !Target || !InteractProbe
+		|| InteractProbe->GetFocusedPickupActor() != Target || !CanUsePickupTarget(Target))
+	{
+		CancelPickupHold();
+		return;
+	}
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	if (Now - PickupHoldStartedAt < PickupHoldDuration) return;
+
+	GetWorldTimerManager().ClearTimer(PickupHoldTimer);
+	bPickupHeld = false;
+	PickupHoldTarget.Reset();
+	PickupHoldDuration = 0.0f;
+	ServerCompletePickupHold(Target);
+}
+
+void ADeliveryCharacter::CancelPickupHold(bool bNotifyServer)
+{
+	if (!bPickupHeld) return;
+	AActor* Target = PickupHoldTarget.Get();
+	GetWorldTimerManager().ClearTimer(PickupHoldTimer);
+	bPickupHeld = false;
+	PickupHoldTarget.Reset();
+	PickupHoldDuration = 0.0f;
+	if (bNotifyServer && Target) ServerCancelPickupHold(Target);
+}
+
+float ADeliveryCharacter::GetPickupHoldProgress(const AActor* Target) const
+{
+	if (!bPickupHeld || PickupHoldTarget.Get() != Target || PickupHoldDuration <= KINDA_SMALL_NUMBER)
+	{
+		return -1.0f;
+	}
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	return FMath::Clamp((Now - PickupHoldStartedAt) / PickupHoldDuration, 0.0f, 1.0f);
+}
+
+bool ADeliveryCharacter::CanUsePickupTarget(const AActor* Target, bool bCheckTaskAvailability) const
+{
+	const UDeliveryInteractableComponent* Interactable = UDeliveryInteractableComponent::FindOn(Target);
+	if (!Target || !Interactable || Interactable->InteractionKey != EDeliveryInteractionKey::PickupE
+		|| !Interactable->CanInteract(this)) return false;
+	if (GrabComponent && GrabComponent->IsGrabbing()) return false;
+	if (const UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+		ASC && ASC->HasMatchingGameplayTag(TAG_State_Stunned)) return false;
+	if (ActiveRagdoll && ActiveRagdoll->GetControlMode() == EDeliveryRagdollControlMode::Limp) return false;
+
+	if (const ADeliveryHandheldItem* Item = Cast<ADeliveryHandheldItem>(Target))
+	{
+		if (Item->GetOwner()) return false;
+		if (const UDeliveryItemComponent* DeliveryItem = Item->FindComponentByClass<UDeliveryItemComponent>())
+		{
+			return !bCheckTaskAvailability || DeliveryItem->CanBeAcquired();
+		}
+		return true;
+	}
+	if (const UDeliveryTargetComponent* DeliveryTarget = Target->FindComponentByClass<UDeliveryTargetComponent>())
+	{
+		return InventoryComponent && DeliveryTarget->CanAcceptDelivery(
+			InventoryComponent->GetHeldItem(), GetPlayerState());
+	}
+	return false;
 }
 
 void ADeliveryCharacter::ServerInteract_Implementation(AActor* Target)
@@ -499,7 +595,8 @@ void ADeliveryCharacter::ServerInteract_Implementation(AActor* Target)
 	// F is the existing general interaction key. Inventory pickup belongs exclusively to E.
 	if (Target && Target->IsA<ADeliveryHandheldItem>()) return;
 	UDeliveryInteractableComponent* Interactable = UDeliveryInteractableComponent::FindOn(Target);
-	if (Interactable && Interactable->CanInteract(this))
+	if (Interactable && Interactable->InteractionKey == EDeliveryInteractionKey::GeneralF
+		&& Interactable->CanInteract(this))
 	{
 		Interactable->Execute(this);
 	}
@@ -509,10 +606,80 @@ void ADeliveryCharacter::ServerPickup_Implementation(AActor* Target)
 {
 	ADeliveryHandheldItem* Item = Cast<ADeliveryHandheldItem>(Target);
 	UDeliveryInteractableComponent* Interactable = UDeliveryInteractableComponent::FindOn(Target);
-	if (Item && Interactable && Interactable->CanInteract(this) && InventoryComponent)
+	// Delivery items are hold-only; they may enter through ServerCompletePickupHold, never this tap RPC.
+	if (Item && !Item->FindComponentByClass<UDeliveryItemComponent>() && Interactable
+		&& Interactable->InteractionKey == EDeliveryInteractionKey::PickupE
+		&& Interactable->HoldDuration <= KINDA_SMALL_NUMBER
+		&& ValidateServerPickupTarget(Target) && InventoryComponent)
 	{
 		InventoryComponent->TryPickup(Item);
 	}
+}
+
+bool ADeliveryCharacter::ValidateServerPickupTarget(AActor* Target) const
+{
+	if (!CanUsePickupTarget(Target) || !GetWorld()) return false;
+
+	FVector ViewLocation;
+	FRotator ViewRotation;
+	GetActorEyesViewPoint(ViewLocation, ViewRotation);
+	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
+	// Third-person camera pitch aims from behind/above the pawn, not from its pelvis.
+	// Applying that pitch at the pelvis rejects small floor packages. Validate yaw
+	// here, then physical reach and unobstructed sight; the local probe selects the camera ray.
+	if (!DeliveryInteractionGeometry::IsWithinReachFacing(ToTarget, ViewRotation))
+	{
+		return false;
+	}
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(DeliveryServerInteraction), false, this);
+	if (InventoryComponent && InventoryComponent->GetHeldItem())
+	{
+		Params.AddIgnoredActor(InventoryComponent->GetHeldItem());
+	}
+	FHitResult Hit;
+	const bool bBlocked = GetWorld()->LineTraceSingleByChannel(
+		Hit, ViewLocation, Target->GetActorLocation(), ECC_Visibility, Params);
+	return !bBlocked || Hit.GetActor() == Target;
+}
+
+void ADeliveryCharacter::ServerBeginPickupHold_Implementation(AActor* Target)
+{
+	UDeliveryInteractableComponent* Interactable = UDeliveryInteractableComponent::FindOn(Target);
+	if (!Interactable || Interactable->HoldDuration <= KINDA_SMALL_NUMBER
+		|| !ValidateServerPickupTarget(Target)) return;
+	ServerPickupHoldTarget = Target;
+	ServerPickupHoldStartedAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+}
+
+void ADeliveryCharacter::ServerCompletePickupHold_Implementation(AActor* Target)
+{
+	UDeliveryInteractableComponent* Interactable = UDeliveryInteractableComponent::FindOn(Target);
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	const bool bHeldLongEnough = Interactable && Interactable->HoldDuration > KINDA_SMALL_NUMBER
+		&& Now - ServerPickupHoldStartedAt >= FMath::Max(0.0f, Interactable->HoldDuration - 0.03f);
+	if (ServerPickupHoldTarget.Get() != Target || !bHeldLongEnough || !ValidateServerPickupTarget(Target))
+	{
+		ServerPickupHoldTarget.Reset();
+		return;
+	}
+	ServerPickupHoldTarget.Reset();
+
+	if (ADeliveryHandheldItem* Item = Cast<ADeliveryHandheldItem>(Target))
+	{
+		if (InventoryComponent) InventoryComponent->TryPickup(Item);
+		return;
+	}
+	if (UDeliveryTargetComponent* DeliveryTarget = Target->FindComponentByClass<UDeliveryTargetComponent>())
+	{
+		ADeliveryHandheldItem* Held = InventoryComponent ? InventoryComponent->GetHeldItem() : nullptr;
+		DeliveryTarget->TryDeliver(Held, GetPlayerState());
+	}
+}
+
+void ADeliveryCharacter::ServerCancelPickupHold_Implementation(AActor* Target)
+{
+	if (!Target || ServerPickupHoldTarget.Get() == Target) ServerPickupHoldTarget.Reset();
 }
 
 bool ADeliveryCharacter::ComputePunchAim(EMeleeHand Hand, FVector& OutAimDir) const

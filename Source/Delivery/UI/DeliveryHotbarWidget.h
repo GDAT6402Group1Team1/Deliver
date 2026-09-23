@@ -10,6 +10,7 @@ class UBorder;
 class UDeliveryInventoryComponent;
 class UProgressBar;
 class UTextBlock;
+class UTexture2D;
 
 /** Always-visible, compact five-slot UMG hotbar. Its tree is built here so every pawn gets identical UI. */
 UCLASS(Blueprintable)
@@ -43,4 +44,9 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProgressBar>> DurabilityBars;
+
+	/** Original connected hotbar artwork generated for the game's soft cartoon visual style. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> ConnectedHotbarTexture;
+
 };

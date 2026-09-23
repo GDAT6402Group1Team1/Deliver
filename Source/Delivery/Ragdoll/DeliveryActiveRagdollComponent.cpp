@@ -9,7 +9,7 @@
 坡顶接到平面时，法线和贴地点不会立刻换成新值，而是平滑过渡过去，避免髋的位置和旋转在一帧里抽掉。
 电机把髋拉向这个完整目标 PlannedPelvisTarget。
 脚的落点从同一个 PlannedPelvisTarget 在切平面上推出来，再沿法线投到坡面上。
-摆动过程中每一帧按本帧的髋目标重新计算落点，不要在抬脚那一瞬间把落点算死。
+摆动前 85% 按本帧髋目标重新计算落点，末段固定落点并留出有上限的物理到位时间。
 脚底板的朝向用切平面上的前进方向和法线来建，让脚底板贴着地面。
 选哪只脚迈步，仍然看当前身体姿态。人有没有倾倒，看髋的朝上方向和坡面法线的点积，不用世界竖直向上。
 
@@ -17,6 +17,7 @@
 */
 
 #include "DeliveryActiveRagdollComponent.h"
+#include "Ragdoll/DeliveryFootPlacement.h"
 
 #include "CollisionQueryParams.h"
 #include "Combat/DeliveryHandPose.h"
@@ -1527,6 +1528,8 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 
 void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector& Wish)
 {
+	// Only runs while grounded and controlled; never counters a jump or limp ragdoll.
+	if (GetUprightDot() >= MinimumStepUprightDot) KeepFeetOnOwnSide();
 	UpdateFootTarget(LeftFoot, DeltaTime);
 	UpdateFootTarget(RightFoot, DeltaTime);
 
@@ -1564,6 +1567,17 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
 	const float LeftSide = FVector::DotProduct(Mesh->GetCenterOfMass(LeftFoot.Bone) - Hips, Right);
 	const float RightSide = FVector::DotProduct(Mesh->GetCenterOfMass(RightFoot.Bone) - Hips, Right);
+	// Repair a collapsed stance before normal stepping, including after releasing WASD.
+	// Waiting until a foot is already on the opposite side lets knees become entangled.
+	const float RecoverySide = FMath::Max(2.0f, StableMinimumFootSide * 0.5f);
+	const float LeftClearance = LeftSide * LeftFoot.SideSign;
+	const float RightClearance = RightSide * RightFoot.SideSign;
+	if (FMath::Min(LeftClearance, RightClearance) < RecoverySide)
+	{
+		const bool bLeft = LeftClearance < RightClearance;
+		if (BeginStep(bLeft ? LeftFoot : RightFoot, Wish)) bStepLeftNext = !bLeft;
+		return;
+	}
 
 	if (Wish.IsNearlyZero())
 	{
@@ -1598,23 +1612,6 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 		return;
 	}
 
-	if (LeftSide * LeftFoot.SideSign < -MovingCrossingRecoveryMargin)
-	{
-		if (BeginStep(LeftFoot, Wish))
-		{
-			bStepLeftNext = false;
-		}
-		return;
-	}
-	if (RightSide * RightFoot.SideSign < -MovingCrossingRecoveryMargin)
-	{
-		if (BeginStep(RightFoot, Wish))
-		{
-			bStepLeftNext = true;
-		}
-		return;
-	}
-
 	const float LeftForward = FVector::DotProduct(
 		Mesh->GetCenterOfMass(LeftFoot.Bone) - Hips, Forward);
 	const float RightForward = FVector::DotProduct(
@@ -1639,6 +1636,7 @@ bool UDeliveryActiveRagdollComponent::BeginStep(FFoot& Foot, const FVector& Wish
 	// 记下抬脚时的位置，打开这只脚的位置电机。落点在摆动过程中还会按本帧髋目标重算。
 	Foot.Start = Mesh->GetCenterOfMass(Foot.Bone);
 	Foot.Alpha = 0.0f;
+	Foot.Elapsed = 0.0f;
 	PhysicsControl->SetControlEnabled(Foot.Control, true, true, false);
 	return true;
 }
@@ -1650,8 +1648,14 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FFoot& Foot, float DeltaT
 		return;
 	}
 
-	Foot.Alpha = FMath::Min(1.0f, Foot.Alpha + DeltaTime / FMath::Max(ControlledStrideDuration, 0.05f));
-	PlanFootLanding(Foot, WishOnSlope.IsNearlyZero() ? GetWishDir() : WishOnSlope);
+	Foot.Elapsed += DeltaTime;
+	Foot.Alpha = FMath::Min(1.0f, Foot.Elapsed / FMath::Max(ControlledStrideDuration, 0.05f));
+	// Finish the landing at a fixed point: chasing a moving downhill target until
+	// the last frame and immediately disabling the motor leaves the foot in midair.
+	if (Foot.Alpha < 0.85f)
+	{
+		PlanFootLanding(Foot, WishOnSlope.IsNearlyZero() ? GetWishDir() : WishOnSlope);
+	}
 
 	// 落点已经在上面重算过。这条曲线只描述这一脚怎么从现在的位置走到落点：两端慢起慢停，中间沿法线抬起。
 	const float SmoothAlpha = Foot.Alpha * Foot.Alpha * Foot.Alpha
@@ -1671,7 +1675,14 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FFoot& Foot, float DeltaT
 
 	if (Foot.Alpha >= 1.0f)
 	{
-		// 脚已经落到目标上。关掉位置电机，这只脚改做支撑，靠摩擦和腿部角度电机留在地上。
+		const float Gap = FVector::Dist(Mesh->GetCenterOfMass(Foot.Bone), Position);
+		if (Gap > 18.0f && Foot.Elapsed < ControlledStrideDuration + 0.18f)
+		{
+			Foot.Alpha = 0.999f;
+			return;
+		}
+		// A bounded settling interval gives physics time to arrive without pinning a
+		// blocked leg forever. The side guard below also protects the support leg.
 		PhysicsControl->SetControlEnabled(Foot.Control, false, true, false);
 	}
 }
@@ -1695,9 +1706,17 @@ bool UDeliveryActiveRagdollComponent::PlanFootLanding(FFoot& Foot, const FVector
 		: FMath::Clamp(
 			ForwardSpeed * ControlledStrideDuration * 0.35f,
 			0.0f, ControlledStrideLength * 0.5f);
-	const FVector DestinationOnPlane = PlannedPelvisTarget
+	FVector DestinationOnPlane = PlannedPelvisTarget
 		+ Forward * (ForwardDistance + VelocityLead)
 		+ Right * (Foot.SideSign * StableComedyStance);
+	// Travel lead can point sideways while the body turns. Keep the landing on
+	// this leg's anatomical side before tracing, so height is sampled at the corrected point.
+	const FVector Hips = Mesh->GetCenterOfMass(Bones.Hips);
+	const float SignedSide = FVector::DotProduct(DestinationOnPlane - Hips, Right) * Foot.SideSign;
+	if (SignedSide < StableMinimumFootSide)
+	{
+		DestinationOnPlane += Right * Foot.SideSign * (StableMinimumFootSide - SignedSide);
+	}
 
 	FGroundHit Ground;
 	if (!TraceGround(DestinationOnPlane, CurrentGroundNormal, Ground))
@@ -1729,9 +1748,29 @@ FVector UDeliveryActiveRagdollComponent::GetSlopeForward(const FVector& Wish) co
 	return Forward;
 }
 
-FVector UDeliveryActiveRagdollComponent::GetSlopeRight(const FVector& Wish) const
+FVector UDeliveryActiveRagdollComponent::GetSlopeRight(const FVector& /*Wish*/) const
 {
-	return FVector::CrossProduct(CurrentGroundNormal, GetSlopeForward(Wish)).GetSafeNormal();
+	// Left/right belongs to the body's smoothed facing, not the new movement input.
+	// The latter can flip instantly while the pelvis is still turning on a slope.
+	return DeliveryFootPlacement::SideAxis(CurrentGroundNormal, CurrentFacingYaw);
+}
+
+void UDeliveryActiveRagdollComponent::KeepFeetOnOwnSide()
+{
+	// Correct actual physics bodies, not just the swing target. The planted foot has
+	// no position motor, so downhill sliding can otherwise cross the centreline.
+	const FVector Right = FRotationMatrix(FRotator(0.0f, CurrentFacingYaw, 0.0f)).GetUnitAxis(EAxis::Y);
+	const FVector Hips = Mesh->GetCenterOfMass(Bones.Hips);
+	const FVector HipVelocity = Mesh->GetPhysicsLinearVelocity(Bones.Hips);
+	for (FFoot* Foot : { &LeftFoot, &RightFoot })
+	{
+		const FVector Outward = Right * Foot->SideSign;
+		const float Side = FVector::DotProduct(Mesh->GetCenterOfMass(Foot->Bone) - Hips, Outward);
+		if (Side >= StableMinimumFootSide) continue;
+		const float OutwardSpeed = FVector::DotProduct(Mesh->GetPhysicsLinearVelocity(Foot->Bone) - HipVelocity, Outward);
+		const float Acceleration = DeliveryFootPlacement::SeparationAcceleration(Side, OutwardSpeed, StableMinimumFootSide);
+		Mesh->AddForce(Outward * Acceleration, Foot->Bone, true);
+	}
 }
 
 FQuat UDeliveryActiveRagdollComponent::MakeSlopeAlignedFootRotation(

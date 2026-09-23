@@ -29,6 +29,7 @@ ADeliveryHandheldItem::ADeliveryHandheldItem()
 	InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "PickupPrompt", "[E] 拾取");
 	InteractableComponent->InteractRadius = 100.0f;
 	InteractableComponent->PromptOffset = FVector(0.0f, 0.0f, 45.0f);
+	InteractableComponent->InteractionKey = EDeliveryInteractionKey::PickupE;
 }
 
 void ADeliveryHandheldItem::BeginPlay()
@@ -91,6 +92,7 @@ void ADeliveryHandheldItem::HandleInteract(APawn* Interactor)
 
 void ADeliveryHandheldItem::SetInventoryPresentation(bool bInHand, bool bInInventory, USceneComponent* HandParent)
 {
+	if (HasAuthority()) SetReplicateMovement(false);
 	// A simulated root cannot be attached reliably. Stop physics before changing the
 	// attachment, then explicitly restore visibility because this actor may have just
 	// come out of a hidden backpack slot.
@@ -126,6 +128,7 @@ void ADeliveryHandheldItem::DropFromInventory(const FVector& WorldLocation, cons
 	HeldAnchor.Reset();
 	SetActorTickEnabled(false);
 	SetOwner(nullptr);
+	if (HasAuthority()) SetReplicateMovement(true);
 	SetActorHiddenInGame(false);
 	ItemMesh->SetVisibility(true, true);
 	SetActorEnableCollision(true);

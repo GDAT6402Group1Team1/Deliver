@@ -9,6 +9,7 @@
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryInventoryItemComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "Task/DeliveryItemComponent.h"
 
 UDeliveryInventoryComponent::UDeliveryInventoryComponent()
 {
@@ -77,6 +78,12 @@ bool UDeliveryInventoryComponent::TryPickup(ADeliveryHandheldItem* Item)
 	if (!Character || !Character->HasAuthority() || !IsValid(Item) || !CanMutateInventory()) return false;
 	UDeliveryInventoryItemComponent* ItemData = Item->GetItemComponent();
 	if (!ItemData || Item->GetOwner()) return false;
+	UDeliveryItemComponent* DeliveryTaskItem = Item->FindComponentByClass<UDeliveryItemComponent>();
+	if (ItemData->ItemType == EDeliveryInventoryItemType::DeliveryItem
+		&& DeliveryTaskItem && !DeliveryTaskItem->CanBeAcquired())
+	{
+		return false;
+	}
 
 	const int32 EmptyBackpack = FindEmptyBackpackSlot();
 	const bool bBackpackItem = ItemData->CanEnterBackpack();
@@ -111,6 +118,10 @@ bool UDeliveryInventoryComponent::TryPickup(ADeliveryHandheldItem* Item)
 	}
 
 	ApplyPresentation();
+	if (DeliveryTaskItem)
+	{
+		DeliveryTaskItem->NotifyAcquired(Character->GetPlayerState());
+	}
 	OnInventoryChanged.Broadcast();
 	GetOwner()->ForceNetUpdate();
 	return true;
@@ -195,6 +206,19 @@ void UDeliveryInventoryComponent::RemoveItem(ADeliveryHandheldItem* Item)
 		OnInventoryChanged.Broadcast();
 		GetOwner()->ForceNetUpdate();
 	}
+}
+
+bool UDeliveryInventoryComponent::ConsumeHeldItem(ADeliveryHandheldItem* ExpectedItem)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !ExpectedItem || GetHeldItem() != ExpectedItem)
+	{
+		return false;
+	}
+	Slots[0] = nullptr;
+	ExpectedItem->SetOwner(nullptr);
+	OnInventoryChanged.Broadcast();
+	GetOwner()->ForceNetUpdate();
+	return true;
 }
 
 void UDeliveryInventoryComponent::UseHeldItem()

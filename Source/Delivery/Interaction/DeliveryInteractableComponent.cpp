@@ -2,6 +2,7 @@
 
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "GameFramework/Pawn.h"
+#include "Components/PrimitiveComponent.h"
 
 TArray<TWeakObjectPtr<UDeliveryInteractableComponent>> UDeliveryInteractableComponent::Registry;
 
@@ -33,7 +34,21 @@ bool UDeliveryInteractableComponent::CanInteract(const APawn* Interactor) const
 	{
 		return false;
 	}
-	const float DistSq = FVector::DistSquared(Interactor->GetActorLocation(), GetOwner()->GetActorLocation());
+	FVector InteractionPoint = GetOwner()->GetActorLocation();
+	// E items on the floor are reached at their collision surface, not their pivot.
+	// A short package otherwise needs the pelvis almost directly above its centre.
+	if (InteractionKey == EDeliveryInteractionKey::PickupE)
+	{
+		if (const UPrimitiveComponent* Primitive = Cast<UPrimitiveComponent>(GetOwner()->GetRootComponent()))
+		{
+			FVector Closest;
+			if (Primitive->GetClosestPointOnCollision(Interactor->GetActorLocation(), Closest) > 0.0f)
+			{
+				InteractionPoint = Closest;
+			}
+		}
+	}
+	const float DistSq = FVector::DistSquared(Interactor->GetActorLocation(), InteractionPoint);
 	return DistSq <= FMath::Square(InteractRadius);
 }
 
@@ -48,7 +63,8 @@ FVector UDeliveryInteractableComponent::GetPromptLocation() const
 	return Owner ? Owner->GetActorLocation() + PromptOffset : PromptOffset;
 }
 
-UDeliveryInteractableComponent* UDeliveryInteractableComponent::FindBest(const APawn* Seeker)
+UDeliveryInteractableComponent* UDeliveryInteractableComponent::FindBest(
+	const APawn* Seeker, EDeliveryInteractionKey Key)
 {
 	if (!Seeker)
 	{
@@ -70,7 +86,8 @@ UDeliveryInteractableComponent* UDeliveryInteractableComponent::FindBest(const A
 			continue;
 		}
 		// 同一个进程里可能同时开着编辑器世界和 PIE 世界，别把别的世界的东西提示出来。
-		if (Candidate->GetWorld() != World || !Candidate->CanInteract(Seeker))
+		if (Candidate->GetWorld() != World || Candidate->InteractionKey != Key
+			|| !Candidate->CanInteract(Seeker))
 		{
 			continue;
 		}

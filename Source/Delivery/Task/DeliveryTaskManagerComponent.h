@@ -48,6 +48,8 @@ public:
 	UFUNCTION(BlueprintPure, Category="Task")
 	bool CanAcquireItem(const UDeliveryTaskDefinition* Task) const;
 
+	bool IsTaskRegistered(const UDeliveryTaskDefinition* Task) const;
+
 	/**
 	 * 服务器：玩家拿到了某个任务的快递。首次取件会让任务进入进行中并开始全局计时；
 	 * 之后的换手、捡回都会走到这里，但不会重置计时。返回值表示这次是否真的接取了任务。

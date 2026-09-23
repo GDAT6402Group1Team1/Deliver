@@ -13,6 +13,7 @@
 ## 目前做了什么（按提交历史整理）
 
 ### 角色与移动：主动布娃娃（Active Ragdoll）
+下坡双脚防交叉：落点左右轴跟随 `CurrentFacingYaw`（身体朝向），不随 WASD 方向瞬时翻转；仅在着地可控状态对内滑的脚/小腿刚体施加有上限的水平纠偏加速度。迈步最后 15% 固定落点，最多额外等待 0.18 秒到位；停步后也允许纠正已交叉的脚。回归检查：`Delivery.Ragdoll.FootSeparation`。
 角色不是常规的 Character Movement 驱动，而是**持续物理驱动**——不是"平时动画、
 摔倒才切物理"的教程式布娃娃，而是从 BeginPlay 开始就常驻 Simulate Physics，
 走路、站立、摔倒、起身、抓取、互殴全部发生在同一条刚体链上。设计依据见
@@ -49,6 +50,7 @@
 - Character 上配置了 `HealthRegenEffect` / `DamageEffect`（Instant + SetByCaller Effect.Type.Damage）以及左右拳 GA 类，均在蓝图 `BP_DeliveryMan` 里指定。
 
 ### 任务系统（电话接任务）
+快递 E 交互保留 0.5 秒长按；探测目标与任务可取状态分开，未解锁、未登记、已完成或正在执行其他任务均显示原因。E 的 100cm 距离取物体碰撞表面，服务端朝向校验取水平方向并保留遮挡检查，避免把第三人称相机俯角套到髋位置导致地面小包裹取不到；F 路径不变。`Content/Python/diagnose_package_pickup.py` 可只读检查测试蓝图绑定、长按时间和任务引用。
 完整的结构、接口清单、配置方式、调用链和待确认假设见 **[Document/TaskSystem.md](Document/TaskSystem.md)**，改动前先看这份。要点：
 
 - 任务状态全局共享（多人下解锁/来电/计时/完成对所有人是同一份），挂在 GameState 上的 [DeliveryTaskManagerComponent](Source/Delivery/Task/DeliveryTaskManagerComponent.h)；"当前追踪哪个任务"是每玩家各自的，挂在 PlayerState 上的 [DeliveryTaskTrackerComponent](Source/Delivery/Task/DeliveryTaskTrackerComponent.h)。

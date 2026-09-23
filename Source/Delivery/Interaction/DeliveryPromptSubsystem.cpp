@@ -8,7 +8,10 @@
 #include "GameFramework/PlayerController.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
+#include "Widgets/SBoxPanel.h"
+#include "Widgets/Notifications/SProgressBar.h"
 #include "Widgets/Text/STextBlock.h"
 
 bool UDeliveryPromptSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -36,10 +39,11 @@ UDeliveryPromptSubsystem* UDeliveryPromptSubsystem::Get(const UObject* WorldCont
 	return World ? World->GetSubsystem<UDeliveryPromptSubsystem>() : nullptr;
 }
 
-void UDeliveryPromptSubsystem::PushPrompt(const FText& Text, const FVector& WorldAnchor)
+void UDeliveryPromptSubsystem::PushPrompt(const FText& Text, const FVector& WorldAnchor, float HoldProgress)
 {
 	PromptText = Text;
 	PromptAnchor = WorldAnchor;
+	PromptHoldProgress = HoldProgress < 0.0f ? -1.0f : FMath::Clamp(HoldProgress, 0.0f, 1.0f);
 	LastPushTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	EnsureWidget();
 }
@@ -97,6 +101,18 @@ void UDeliveryPromptSubsystem::EnsureWidget()
 		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
 		return Self ? Self->PromptText : FText::GetEmpty();
 	});
+	const auto ProgressAttr = TAttribute<TOptional<float>>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return Self && Self->PromptHoldProgress >= 0.0f
+			? TOptional<float>(Self->PromptHoldProgress) : TOptional<float>();
+	});
+	const auto ProgressVisibility = TAttribute<EVisibility>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return Self && Self->PromptHoldProgress >= 0.0f
+			? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+	});
 
 	SAssignNew(PromptWidget, SConstraintCanvas)
 	+ SConstraintCanvas::Slot()
@@ -112,12 +128,28 @@ void UDeliveryPromptSubsystem::EnsureWidget()
 			.BorderBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f))
 			.Padding(FMargin(16.0f, 8.0f))
 			[
-				SNew(STextBlock)
-				.Text(TextAttr)
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 20))
-				.ColorAndOpacity(FSlateColor(FLinearColor::White))
-				.ShadowOffset(FVector2D(1.0f, 1.0f))
-				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text(TextAttr)
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 20))
+					.ColorAndOpacity(FSlateColor(FLinearColor::White))
+					.ShadowOffset(FVector2D(1.0f, 1.0f))
+					.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 6.0f, 0.0f, 0.0f))
+				[
+					SNew(SBox)
+					.WidthOverride(150.0f)
+					.HeightOverride(8.0f)
+					.Visibility(ProgressVisibility)
+					[
+						SNew(SProgressBar)
+						.Percent(ProgressAttr)
+						.FillColorAndOpacity(FLinearColor(0.25f, 0.85f, 1.0f, 1.0f))
+					]
+				]
 			]
 		];
 

@@ -31,7 +31,7 @@ public:
 	static UDeliveryPromptSubsystem* Get(const UObject* WorldContextObject);
 
 	/** 每帧调用一次。WorldAnchor 是浮窗要贴住的世界坐标。 */
-	void PushPrompt(const FText& Text, const FVector& WorldAnchor);
+	void PushPrompt(const FText& Text, const FVector& WorldAnchor, float HoldProgress = -1.0f);
 
 private:
 
@@ -42,6 +42,7 @@ private:
 	TSharedPtr<SWidget> PromptWidget;
 	FText PromptText;
 	FVector PromptAnchor = FVector::ZeroVector;
+	float PromptHoldProgress = -1.0f;
 	double LastPushTime = -1000.0;
 
 	/** 超过这么久没人推送就隐藏。取两三帧的量级，够盖住偶尔掉帧，又不会拖出残留。 */

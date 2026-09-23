@@ -33,6 +33,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Task")
 	bool CanBeAcquired() const;
 
+	/** Empty when available; otherwise explains why E cannot start pickup. */
+	FText GetPickupBlockedReason() const;
+
 	/**
 	 * 服务器：玩家拿到了这件快递。首次取件会接取任务并开始全局计时；
 	 * 之后的掉落再捡、换手同样会走到这里，但不会重置计时。

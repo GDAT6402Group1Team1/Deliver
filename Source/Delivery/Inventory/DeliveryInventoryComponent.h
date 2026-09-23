@@ -52,6 +52,8 @@ public:
 	/** Drops only slot 1. Called by the stun transition on the authoritative server. */
 	void DropHeldItem();
 	void RemoveItem(ADeliveryHandheldItem* Item);
+	/** Server-only removal without dropping; used immediately before a successful delivery destroys the actor. */
+	bool ConsumeHeldItem(ADeliveryHandheldItem* ExpectedItem);
 
 	void UseHeldItem();
 

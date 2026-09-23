@@ -37,6 +37,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Item|Durability", meta=(ClampMin="0.0"))
 	float MaxDurability = 100.0f;
 
+	/** Delivery items opt out completely; their hotbar slot has no durability bar. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Item|Durability")
+	bool bUsesDurability = true;
+
 	UPROPERTY(ReplicatedUsing=OnRep_Durability, EditInstanceOnly, BlueprintReadOnly,
 		Category="Item|Durability", meta=(ClampMin="0.0"))
 	float Durability = 100.0f;
@@ -46,6 +50,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Item|Durability")
 	float GetDurabilityFraction() const;
+
+	UFUNCTION(BlueprintPure, Category="Item|Durability")
+	bool UsesDurability() const { return bUsesDurability; }
 
 	UFUNCTION(BlueprintPure, Category="Item")
 	bool CanEnterBackpack() const { return ItemType == EDeliveryInventoryItemType::BackpackItem; }

@@ -9,7 +9,7 @@ import unreal
 PICKUP_IA = "/Game/Input/Actions/IA_Pickup"
 TEMPLATE_IA = "/Game/Input/Actions/IA_Interact"
 IMC_DEFAULT = "/Game/Input/IMC_Default"
-AXE_BP = "/Game/Blueprint/Inventory/BP_TestAxe"
+AXE_BP = "/Game/Blueprint/Item/Test/BP_TestAxe"
 HOTBAR_WBP = "/Game/UI/Inventory/WBP_DeliveryHotbar"
 TEST_MAP = "/Game/Level/TestForCharacter"
 

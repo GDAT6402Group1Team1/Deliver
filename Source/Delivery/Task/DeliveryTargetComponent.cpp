@@ -2,7 +2,10 @@
 
 #include "DeliveryTargetComponent.h"
 
+#include "DeliveryCharacter.h"
 #include "GameFramework/Actor.h"
+#include "Inventory/DeliveryHandheldItem.h"
+#include "Inventory/DeliveryInventoryComponent.h"
 #include "Task/DeliveryItemComponent.h"
 #include "Task/DeliveryTaskDefinition.h"
 #include "Task/DeliveryTaskManagerComponent.h"
@@ -47,6 +50,17 @@ bool UDeliveryTargetComponent::TryDeliver(AActor* ItemActor, APlayerState* Playe
 	if (!Manager || !Manager->TryCompleteDelivery(ExpectedTask, Player))
 	{
 		return false;
+	}
+
+	if (ADeliveryHandheldItem* Handheld = Cast<ADeliveryHandheldItem>(ItemActor))
+	{
+		if (ADeliveryCharacter* Holder = Cast<ADeliveryCharacter>(Handheld->GetOwner()))
+		{
+			if (UDeliveryInventoryComponent* Inventory = Holder->GetInventoryComponent())
+			{
+				Inventory->ConsumeHeldItem(Handheld);
+			}
+		}
 	}
 
 	ItemActor->Destroy();
