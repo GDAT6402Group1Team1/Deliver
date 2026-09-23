@@ -24,8 +24,14 @@ import traceback
 
 import unreal
 
-CAR_BP = "/Game/Blueprint/BP_car_base"
-CAR_CLASS_NAME = "BP_car_base_C"
+VEHICLE_DIR = "/Game/Vehicle"      # 车型都在这儿（不递归，Motorbike 子目录自动排除）
+NAME_PREFIX = "BP_car_base"        # 车型蓝图和已放置实例的类名都按这个前缀认
+CAR_BP = "/Game/Vehicle/BP_car_base"   # 只在 describe_car 里用来列蓝图变量
+SCALE = 0.7                        # 默认缩放
+SCALE_BY_VARIANT = {               # 个别车型模型大小不同，单独给
+    "BP_car_base2": 0.5,
+    "BP_car_base3": 0.8,
+}
 LANE_TAG_PREFIX = "ClaudeGenLane"
 
 ANCHOR_ROAD = "形状13"     # 以这条路为中心往外挑；"" = 全图均匀挑
@@ -128,13 +134,47 @@ def flush():
         pass
 
 
+def find_variants():
+    """列出 VEHICLE_DIR 下的车型蓝图。"""
+    out = []
+    try:
+        paths = unreal.EditorAssetLibrary.list_assets(
+            VEHICLE_DIR, recursive=False, include_folder=False)
+    except Exception as exc:
+        w("!! 列不出 %s：%s" % (VEHICLE_DIR, str(exc)[:60]))
+        return out
+    for pth in paths:
+        name = str(pth).split("/")[-1].split(".")[0]
+        if not name.startswith(NAME_PREFIX):
+            continue
+        asset = unreal.EditorAssetLibrary.load_asset(str(pth).split(".")[0])
+        if asset is not None and isinstance(asset, unreal.Blueprint):
+            out.append((name, asset))
+    out.sort(key=lambda t: t[0])
+    return out
+
+
 def run():
     eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
     actors = eas.get_all_level_actors()
 
+    # --- 0. 先确认车型加载得了，再删旧车 ---
+    # 上一版是先删后载，而车蓝图被移到 /Game/Vehicle 之后旧路径失效，
+    # 结果 20 辆全删了、一辆没放出来。**删除是不可逆的，必须排在校验之后。**
+    variants = find_variants()
+    w("车型 %d 种（%s）：%s"
+      % (len(variants), VEHICLE_DIR, "、".join(n for n, _ in variants)))
+    if not variants:
+        w("!! 一种车型都没加载出来，什么都不做（旧车原样保留）。")
+        w("   检查 VEHICLE_DIR 和 NAME_PREFIX 是不是对的。")
+        flush()
+        return
+    w("")
+
     # --- 1. 删掉所有车 ---
-    cars = [a for a in actors if a.get_class().get_name() == CAR_CLASS_NAME]
-    w("找到 %s 实例 %d 个" % (CAR_CLASS_NAME, len(cars)))
+    cars = [a for a in actors
+            if str(a.get_class().get_name()).startswith(NAME_PREFIX)]
+    w("找到车 %d 辆（类名以 %s 开头）" % (len(cars), NAME_PREFIX))
     for a in cars[:12]:
         loc = a.get_actor_location()
         w("   %-28s (%.0f, %.0f, %.0f)"
@@ -208,17 +248,11 @@ def run():
     flush()
 
     # --- 3. 放车 ---
-    bp = unreal.EditorAssetLibrary.load_asset(CAR_BP)
-    if bp is None:
-        w("!! 载入不了 %s" % CAR_BP)
-        flush()
-        return
-
     speeds = list(range(SPEED_MIN, SPEED_MAX + 1, SPEED_STEP))
     w("车速从 %s 里随机取" % speeds)
     w("")
-    w("%-4s %-30s %-26s %7s %6s %-22s %s"
-      % ("#", "车道段", "位置", "朝向", "车速", "颜色", "上色方式"))
+    w("%-4s %-28s %-16s %-26s %7s %6s %5s %s"
+      % ("#", "车道段", "车型", "位置", "朝向", "车速", "缩放", "上色方式"))
     w("-" * 130)
     made = 0
     described = False
@@ -242,6 +276,7 @@ def run():
                             p.y - dy * BEHIND_BOX,
                             p.z + CAR_Z)
         rot = unreal.Rotator(0.0, 0.0, yaw)
+        vname, bp = random.choice(variants)
         try:
             car = eas.spawn_actor_from_object(bp, loc, rot)
         except Exception as exc:
@@ -266,6 +301,12 @@ def run():
                 w("   %s" % ln)
             w("")
 
+        sc = SCALE_BY_VARIANT.get(vname, SCALE)
+        try:
+            car.set_actor_scale3d(unreal.Vector(sc, sc, sc))
+        except Exception:
+            pass
+
         spd = random.choice(speeds)
         try:
             car.modify(True)
@@ -279,10 +320,9 @@ def run():
         paint_ways[way] = paint_ways.get(way, 0) + 1
 
         made += 1
-        w("%-4d %-30s (%7.0f,%8.0f,%7.0f) %7.1f %6s %-22s %s"
-          % (i, lbl[:30], loc.x, loc.y, loc.z, yaw,
-             ("%d" % spd) if spd > 0 else "失败",
-             "%.2f/%.2f/%.2f" % rgb, way))
+        w("%-4d %-28s %-16s (%7.0f,%8.0f,%7.0f) %7.1f %6s %5.2f %s"
+          % (i, lbl[:28], vname[:16], loc.x, loc.y, loc.z, yaw,
+             ("%d" % spd) if spd > 0 else "失败", sc, way))
 
     w("")
     w("=" * 78)

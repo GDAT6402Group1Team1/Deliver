@@ -78,6 +78,9 @@ protected:
 	/** 车体部件的固定槽位数。用定额的默认子对象而不是运行时 NewObject，避免构造脚本反复重建组件。 */
 	static constexpr int32 MaxBodyParts = 12;
 
+	/** 轮子转轴的固定槽位数。摩托车两个轮，留 4 个余量给以后的三轮/挂斗。 */
+	static constexpr int32 MaxWheels = 4;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UBoxComponent> CollisionBox;
 
@@ -125,6 +128,16 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
 
+	/**
+	 * 轮子转轴。和 SteerPivot/BarPivot/RiderPivot 一样是"挂点"：自己摆到轮心上，
+	 * 轮子网格把这段偏移减回去，于是网格留在原地但从此绕轮心转。
+	 *
+	 * 前轮的转轴要挂在 SteerPivot 下面（跟着龙头转再自转），后轮挂在 MeshAlign 下面。
+	 * 挂哪边由 ApplyBodyMeshes 按这个轮子在不在 SteeringPartIndices 里自己决定。
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TArray<TObjectPtr<USceneComponent>> WheelPivots;
+
 	/** 打满角度跟转的槽位（前轮、前叉）。由 setup_motorbike.py 按几何认出来填，别手填。 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Motorbike|Mesh")
 	TArray<int32> SteeringPartIndices;
@@ -132,6 +145,21 @@ protected:
 	/** 只跟转一部分的槽位（车把）。 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Motorbike|Mesh")
 	TArray<int32> HandlebarPartIndices;
+
+	/**
+	 * 哪几个槽位是轮子。由 setup_motorbike.py 按几何认（正圆且窄），别手填。
+	 * 实测两个轮子的包围盒都是 61.3 x 61.3、宽 27.7，圆度 1.00，和别的部件差得很开。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Motorbike|Mesh")
+	TArray<int32> WheelPartIndices;
+
+	/** 每个轮子的轮心，和 WheelPartIndices 一一对应，MeshAlign 局部空间。 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Motorbike|Mesh")
+	TArray<FVector> WheelCenters;
+
+	/** 轮子半径（导入空间 cm）。决定同样车速下轮子转多快，脚本按包围盒量。 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Motorbike|Mesh", meta=(ClampMin="1.0", Units="cm"))
+	float WheelRadius = 30.0f;
 
 	/** 转向轴位置，MeshAlign 局部空间。同样由脚本量出来填。 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Motorbike|Mesh")
@@ -234,7 +262,52 @@ protected:
 	float GroundAlignSpeed = 7.0f;
 
 	UPROPERTY(EditAnywhere, Category="Motorbike|贴地", meta=(ClampMin="0.0", ClampMax="80.0"))
-	float MaxGroundAlignAngle = 35.0f;
+	float MaxGroundAlignAngle = 40.0f;
+
+	// ---- 爬坡越障 ----
+
+	/**
+	 * 能直接跨上去的台阶高度（马路牙子、门槛）。
+	 *
+	 * 水平推进是带 sweep 的，碰到台阶就是一堵墙、只会掉速。这里做的是和角色移动
+	 * 一样的"抬起来 → 往前 → 落下去"三步：抬 MaxStepHeight、走完这一帧剩下的位移、
+	 * 再往下探回地面。三步里任何一步撞住就整体撤回，当成撞墙处理。
+	 * 别调太大：它同时也是"能凭空抬多高"的上限，过大时车会爬上本该挡住它的矮墙。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", Units="cm"))
+	float MaxStepHeight = 45.0f;
+
+	/**
+	 * 最陡能爬的坡度。比这更陡的面当墙，跨上去也不算站住。
+	 * 和 MaxGroundAlignAngle 保持一致：能爬上去的坡，车身姿态就该跟着贴上去。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", ClampMax="80.0"))
+	float MaxClimbAngle = 40.0f;
+
+	/**
+	 * 贴地高度往上追的速度下限（cm/s）。
+	 *
+	 * 只靠 GroundSnapSpeed 的指数插值上坡会一直欠着一截：坡越陡、车越快，欠得越多，
+	 * 而下一帧的水平 sweep 是在这个"偏低"的位置做的，于是直接撞在坡面上掉速——
+	 * 表现就是"一点爬坡能力都没有"。上坡时保证至少这个爬升率，就不会被自己绊住。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", Units="cm/s"))
+	float MaxClimbRate = 600.0f;
+
+	/**
+	 * 贴地射线往前看多远。上坡/上台阶时提前抬车，免得等撞上了才反应。
+	 * 实际前瞻距离取"这一帧位移的两倍"和这个值里的小者，所以停着不会凭空浮起来。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", Units="cm"))
+	float GroundLookAhead = 90.0f;
+
+	/** 真撞墙（跨不上去）时车速剩下多少。原来写死 0.3。 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float WallHitSpeedScale = 0.3f;
+
+	/** 离地多高还算"贴着地"，超过就交给重力。要大于 MaxStepHeight，否则刚跨上台阶就被判成起飞。 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|贴地", meta=(ClampMin="0.0", Units="cm"))
+	float GroundStickTolerance = 80.0f;
 
 	// ---- 表现 ----
 
@@ -290,6 +363,17 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现")
 	bool bFreeLookCamera = true;
+
+	/**
+	 * 轮子自转的方向。
+	 *
+	 * 推导：MeshAlign 局部 +Y 是车头方向，轮轴是局部 X，绕它转就是 Roll。
+	 * UE 里正 Roll 把 +Z 转向 -Y（"正 Roll 往左倒"那条的同一个约定），
+	 * 也就是轮子顶部往后走 = 倒着滚，所以前进要取负号。
+	 * 万一我这个符号推反了，把它改成 +1 就好，不用重编。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|表现")
+	float WheelSpinSign = -1.0f;
 
 	/** 骑车时镜头的俯角。固定视角下是写死的俯角；自由视角下只当上车那一刻的起始俯角。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现", meta=(ClampMin="-80.0", ClampMax="20.0"))
@@ -446,8 +530,17 @@ private:
 	void UpdateSpeed(float DeltaSeconds);
 	void UpdateSteering(float DeltaSeconds);
 	void UpdateGroundAndMove(float DeltaSeconds);
+
+	/**
+	 * 水平推进被挡住时试着跨上去。成功返回 true（车已经在台阶上了），
+	 * 失败会把车放回调用前的位置，调用方按撞墙处理。
+	 */
+	bool TryStepUp(const FVector& RemainingDelta, const FHitResult& BlockingHit);
 	void UpdateLean(float DeltaSeconds);
 	void UpdateSteerVisual(float DeltaSeconds);
+
+	/** 轮子按车速自转。 */
+	void UpdateWheelSpin(float DeltaSeconds);
 
 	/** 脖子跟着转向偏一点。单独一个函数是因为它改的是骨骼，不是组件变换。 */
 	void UpdateRiderNeck();
@@ -485,6 +578,13 @@ private:
 	float VerticalVelocity = 0.0f;
 	float CurrentLean = 0.0f;
 	float CurrentVisualSteer = 0.0f;
+
+	/** 轮子累计转角（度）。一直累加、不取模——FRotator 自己会归一化。 */
+	float WheelSpinAngle = 0.0f;
+
+	/** 上一帧位置。远端客户端上 CurrentSpeed 恒为 0，只能靠位移反推车速来转轮子。 */
+	FVector LastWheelLocation = FVector::ZeroVector;
+	bool bWheelLocationValid = false;
 	bool bWasGrounded = true;
 
 	/** 本次骑行已经被交通车撞了几下。只在服务器上维护，上/下车时归零。 */

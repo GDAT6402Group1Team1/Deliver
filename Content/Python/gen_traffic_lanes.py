@@ -37,6 +37,11 @@ EXTRA_ROADS = ["形状 40"]              # 无论自动模式算没算到，都�
                                       # 退回全手写名单好：自动那部分仍然自动。
 EXCLUDE_ROADS = ["形状 43",            # 源样条是坏的：2 个点、首尾同坐标、长度却有 1597
                  "River", "BranchRiver"]   # 河，不是路
+NO_JUNCTION_WITH = ["River", "BranchRiver"]
+# **不参与路口判定**的样条。和 EXCLUDE_ROADS 是两件事：
+# EXCLUDE_ROADS 只管"不给谁铺车道"，被排除的样条**仍然参与相交检测**，
+# 于是路过河的地方被当成路口切断了（实测 形状16、形状12 都中招），
+# 车开到桥上反而断线。河上是桥，不是路口，车该直接开过去。
                                       # 这几条路不铺车道，自动名单里也剔掉。
                                       # 光在关卡里删 actor 不够——自动模式下次
                                       # 会把它们重新算进来，必须在这里也排除。
@@ -100,6 +105,19 @@ INTER_HALF_EXTRA = 300.0 # 路口段在算出来的半长上再往两头各加�
 BREAK_HALF_FALLBACK = 900.0   # 认不出交叉路时的兜底
 DETECT_STEP = 250.0
 XY_CROSS = 200.0         # 最近 XY 小于此值才算真的相交（实测真路口都 <120）
+# 强制路口：某个**具体位置**上，就算两条路没真正相交也当成路口（T 形接头）。
+# 队友在路口处切断长样条、再手工补路之后，两条路可能只是"凑得很近"，
+# XY_CROSS=200 够不着。
+#
+# 必须连位置一起指定，不能只写路名：形状1 长 2.19 公里，只按路名放宽阈值的话，
+# 这两条路在**任何**地方靠近 15 米都会被判成路口，凭空多出一堆假路口。
+# 格式：(路A, 路B, 世界X, 世界Y, 生效半径, 该点使用的 XY 阈值)
+FORCE_JUNCTIONS = [
+    ("形状 13", "形状 1", 3094.0, -17726.0, 3000.0, 1500.0),
+]
+# 生效半径 = 以那个世界坐标为圆心多大范围内放宽；半径外一律回到 XY_CROSS。
+# 坐标取自改路之前 Intersection_28 的中心，队友改完路可能挪了位——
+# 所以下面无论成不成都会把该范围内的实测最近距离打进报告，一轮就能校准。
 Z_CROSS = 600.0          # Z 差大于此值是立交，不断开
 MERGE_DIST = 2500.0      # 中心相距小于此值的路口合并成一个
 SEG_EXTEND = 250.0       # 路段(Lane_*)向路口方向延伸多少（两端都延）。
@@ -286,8 +304,30 @@ def classify(actor):
     return False, SIDE_ROAD_WIDTH, SIDE_ROAD_LANES
 
 
-def find_intersections(tsp, roads, total):
-    """返回 [(路口中心沿线距离, 对向道路名)]，已排除立交、已合并相近的。"""
+_no_junction = set(n.strip() for n in NO_JUNCTION_WITH)
+
+
+def forced_entry(a_name, b_name, p):
+    """采样点 p 处，这一对路有没有命中某条强制路口规则。命中返回该条，否则 None。
+
+    路名和位置都要对上——只对路名的话，长路上任何一处靠近都会被放行。
+    """
+    key = frozenset((str(a_name).strip(), str(b_name).strip()))
+    for ra, rb, fx, fy, radius, lim in FORCE_JUNCTIONS:
+        if frozenset((ra.strip(), rb.strip())) != key:
+            continue
+        if ((p.x - fx) ** 2 + (p.y - fy) ** 2) ** 0.5 <= radius:
+            return (ra, rb, fx, fy, radius, lim)
+    return None
+
+
+def find_intersections(tsp, roads, total, self_name=""):
+    """返回 [(路口中心沿线距离, 对向道路名)]，已排除立交、已合并相近的。
+
+    self_name 用来查 FORCE_JUNCTIONS——不传就等于所有路对都用默认阈值。
+    """
+    forced_hits = []
+    forced_seen = {}     # 强制规则覆盖范围内实测到的最近距离，成不成都要报
     raw = []
     d = 0.0
     while d <= total:
@@ -295,9 +335,28 @@ def find_intersections(tsp, roads, total):
         for name, osp in roads:
             q = osp.find_location_closest_to_world_location(p, WS)
             dxy = ((q.x - p.x) ** 2 + (q.y - p.y) ** 2) ** 0.5
-            if dxy < XY_CROSS and abs(q.z - p.z) < Z_CROSS:
+            ent = forced_entry(self_name, name, p)
+            lim = ent[5] if ent else XY_CROSS
+            if ent is not None:
+                k = (ent[0], ent[1], ent[2], ent[3])
+                if k not in forced_seen or dxy < forced_seen[k][0]:
+                    forced_seen[k] = (dxy, d, abs(q.z - p.z), ent[5])
+            if dxy < lim and abs(q.z - p.z) < Z_CROSS:
                 raw.append((d, name, dxy))
+                if ent is not None and dxy >= XY_CROSS:
+                    forced_hits.append((d, name, dxy))
         d += DETECT_STEP
+    # 强制规则的执行情况：成了要说，没成更要说（否则只是报告里少一行，很难发现）
+    for (ra, rb, fx, fy), (best, at_d, dz, lim) in forced_seen.items():
+        other = rb if str(ra).strip() == str(self_name).strip() else ra
+        if best < lim and dz < Z_CROSS:
+            w("   强制路口生效：与 %s 在 (%.0f, %.0f) 附近最近 %.0f cm"
+              "（默认阈值 %.0f 够不着，按 %.0f 放行）"
+              % (other, fx, fy, best, XY_CROSS, lim))
+        else:
+            why = ("阈值 %.0f 不够" % lim) if best >= lim else ("Z 差 %.0f 太大" % dz)
+            w("   !! 强制路口没生效：与 %s 在 (%.0f, %.0f) 半径内实测最近 %.0f cm，%s"
+              % (other, fx, fy, best, why))
 
     groups = []
     for dist, name, dxy in raw:
@@ -681,7 +740,7 @@ def process_road(eas, world, all_splines, road_label, tag, road_actor,
     for name, sp in all_splines:
         if name.strip() == road_label:
             target = sp
-        else:
+        elif name.strip() not in _no_junction:
             others.append((name, sp))
     if target is None:
         w("!! 找不到 %s，跳过" % road_label)
@@ -691,11 +750,12 @@ def process_road(eas, world, all_splines, road_label, tag, road_actor,
     total = tsp.get_spline_length()
     w("")
     w("=" * 60)
-    w("主路 %s   总长 %.0f cm   对照道路 %d 条" % (road_label, total, len(others)))
+    w("主路 %s   总长 %.0f cm   对照道路 %d 条（已排除不判路口的 %s）"
+      % (road_label, total, len(others), "、".join(NO_JUNCTION_WITH) or "无"))
     w("=" * 60)
     roads = others
 
-    inters = find_intersections(tsp, roads, total)
+    inters = find_intersections(tsp, roads, total, road_label)
     w("检测到路口 %d 处（XY<%.0f 且 Z差<%.0f，相距<%.0f 的已合并）"
       % (len(inters), XY_CROSS, Z_CROSS, MERGE_DIST))
     ihalf_preview = [inter_half_for(nm, actor_by_label) for _c, nm in inters]
@@ -833,13 +893,14 @@ def resolve_roads(all_splines):
     for name, sp in all_splines:
         if name.strip() == CROSSING_WITH.strip():
             target = sp
-        else:
+        elif name.strip() not in _no_junction:
             others.append((name, sp))
     if target is None:
         w("!! 自动模式找不到 %s，退回手写名单 %s" % (CROSSING_WITH, ROAD_LABELS))
         return add_extras(list(ROAD_LABELS), [n for n, _s in all_splines])
 
-    inters = find_intersections(target, others, target.get_spline_length())
+    inters = find_intersections(target, others, target.get_spline_length(),
+                                CROSSING_WITH)
     names = []
     for _c, nm in inters:
         # 合并过的路口名字形如 "形状 43+形状 44"，拆开

@@ -62,6 +62,17 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	RiderPivot = CreateDefaultSubobject<USceneComponent>(TEXT("RiderPivot"));
 	RiderPivot->SetupAttachment(MeshAlign);
 
+	// 轮轴也用定额槽位。这里先一律挂 MeshAlign，前轮那个会在 ApplyBodyMeshes 里改挂到
+	// SteerPivot 下面——挂哪边取决于脚本认出来的下标，构造函数这时还不知道。
+	WheelPivots.Reserve(MaxWheels);
+	for (int32 Index = 0; Index < MaxWheels; ++Index)
+	{
+		USceneComponent* Pivot = CreateDefaultSubobject<USceneComponent>(
+			*FString::Printf(TEXT("WheelPivot%d"), Index));
+		Pivot->SetupAttachment(MeshAlign);
+		WheelPivots.Add(Pivot);
+	}
+
 	// 定额槽位而不是运行时创建组件：构造脚本每次重跑都动态建/删组件，在编辑器里很容易
 	// 留下重复实例或者丢掉实例覆盖（这个项目在样条实例数据上已经吃过类似的亏）。
 	BodyParts.Reserve(MaxBodyParts);
@@ -211,6 +222,34 @@ void ADeliveryMotorbike::ApplyBodyMeshes()
 		{
 			Target = BarPivot;
 			bOnSteerAxis = true;
+		}
+
+		// 轮子再往下挂一层自己的轮轴。前轮的轮轴挂在 SteerPivot 下面，
+		// 于是它先跟着龙头转、再绕轮心自转，两件事互不干扰。
+		const int32 WheelSlot = WheelPartIndices.IndexOfByKey(Index);
+		if (WheelSlot != INDEX_NONE && WheelPivots.IsValidIndex(WheelSlot)
+			&& WheelCenters.IsValidIndex(WheelSlot))
+		{
+			USceneComponent* Pivot = WheelPivots[WheelSlot];
+			const FVector Center = WheelCenters[WheelSlot];
+			if (Pivot)
+			{
+				if (Pivot->GetAttachParent() != Target)
+				{
+					Pivot->AttachToComponent(Target, FAttachmentTransformRules::KeepRelativeTransform);
+				}
+				// 轮轴在父级里的位置：挂在 SteerPivot 下时父级原点已经是转向轴，要减掉。
+				Pivot->SetRelativeLocation(bOnSteerAxis ? Center - SteerPivotLocation : Center);
+
+				if (Part->GetAttachParent() != Pivot)
+				{
+					Part->AttachToComponent(Pivot, FAttachmentTransformRules::KeepRelativeTransform);
+				}
+				// 网格把轮心这段偏移减回去，顶点仍落在导入空间原处。
+				Part->SetRelativeLocation(-Center);
+				Part->SetRelativeRotation(FRotator::ZeroRotator);
+				continue;
+			}
 		}
 
 		if (Target && Part->GetAttachParent() != Target)
@@ -814,6 +853,7 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 	UpdateImpactReaction(DeltaSeconds);
 	UpdateLean(DeltaSeconds);
 	UpdateSteerVisual(DeltaSeconds);
+	UpdateWheelSpin(DeltaSeconds);
 
 	if (Driver && IsLocallyControlled())
 	{
@@ -881,14 +921,20 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 		return;
 	}
 
-	// 1) 水平推进。带 sweep，撞墙就掉速而不是穿过去。
+	// 1) 水平推进。带 sweep，撞墙就掉速而不是穿过去；撞的是矮台阶就先试着跨上去。
 	if (!FMath::IsNearlyZero(CurrentSpeed))
 	{
+		const FVector Delta = GetActorForwardVector() * CurrentSpeed * DeltaSeconds;
 		FHitResult MoveHit;
-		AddActorWorldOffset(GetActorForwardVector() * CurrentSpeed * DeltaSeconds, true, &MoveHit);
+		AddActorWorldOffset(Delta, true, &MoveHit);
 		if (MoveHit.bBlockingHit)
 		{
-			CurrentSpeed *= 0.3f;
+			// 这一帧还没走完的那一段，跨上去之后要接着走完。
+			const FVector Remaining = Delta * (1.0f - MoveHit.Time);
+			if (!TryStepUp(Remaining, MoveHit))
+			{
+				CurrentSpeed *= WallHitSpeedScale;
+			}
 		}
 	}
 
@@ -904,13 +950,44 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 		Location - FVector(0.0f, 0.0f, GroundTraceDown),
 		ECC_Visibility, Params);
 
+	// 再往前看一小段。上坡/上台阶时提前抬车，不然等车头撞上坡面才反应就已经掉速了。
+	// 前瞻距离跟着车速走，停着时为 0——否则停在坡底也会莫名浮起来。
+	float DesiredZ = bHitGround ? GroundHit.ImpactPoint.Z + HoverHeight : 0.0f;
+	if (bHitGround && GroundLookAhead > 0.0f)
+	{
+		const float AheadDist = FMath::Min(FMath::Abs(CurrentSpeed) * DeltaSeconds * 2.0f, GroundLookAhead);
+		if (AheadDist > 1.0f)
+		{
+			const FVector Ahead = Location + GetActorForwardVector() * AheadDist;
+			FHitResult AheadHit;
+			if (World->LineTraceSingleByChannel(
+					AheadHit,
+					Ahead + FVector(0.0f, 0.0f, GroundTraceUp),
+					Ahead - FVector(0.0f, 0.0f, GroundTraceDown),
+					ECC_Visibility, Params))
+			{
+				// 只取更高的那个：前方更高就提前爬，前方更低（下坡/悬崖）不提前掉，
+				// 掉下去是重力的事，提前掉会让车在坡顶就开始往下钻。
+				DesiredZ = FMath::Max(DesiredZ, AheadHit.ImpactPoint.Z + HoverHeight);
+			}
+		}
+	}
+
 	if (bHitGround)
 	{
-		const float DesiredZ = GroundHit.ImpactPoint.Z + HoverHeight;
-		// 离地不超过 60cm 才算"还贴着地"，再高就当是飞出去了，交给重力。
-		if (Location.Z <= DesiredZ + 60.0f)
+		// 离地超过这个高度就当是飞出去了，交给重力。阈值必须大于 MaxStepHeight，
+		// 否则刚跨上一级台阶就被判成起飞，车会在台阶上反复弹。
+		if (Location.Z <= DesiredZ + FMath::Max(GroundStickTolerance, MaxStepHeight + 10.0f))
 		{
-			Location.Z = FMath::FInterpTo(Location.Z, DesiredZ, DeltaSeconds, GroundSnapSpeed);
+			float NewZ = FMath::FInterpTo(Location.Z, DesiredZ, DeltaSeconds, GroundSnapSpeed);
+			if (DesiredZ > Location.Z)
+			{
+				// 上坡时给一个爬升率下限。只靠指数插值会一直欠着一截（坡越陡车越快欠得越多），
+				// 而下一帧的水平 sweep 是在那个偏低的位置做的，于是直接撞在坡面上掉速。
+				const float MinClimbZ = FMath::Min(DesiredZ, Location.Z + MaxClimbRate * DeltaSeconds);
+				NewZ = FMath::Max(NewZ, MinClimbZ);
+			}
+			Location.Z = NewZ;
 			VerticalVelocity = 0.0f;
 			bWasGrounded = true;
 		}
@@ -950,6 +1027,59 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 			}
 		}
 	}
+}
+
+bool ADeliveryMotorbike::TryStepUp(const FVector& RemainingDelta, const FHitResult& BlockingHit)
+{
+	if (MaxStepHeight <= 0.0f || RemainingDelta.IsNearlyZero())
+	{
+		return false;
+	}
+
+	// 撞到倒挂的面（天花板、桥底）就别往上抬了，抬也是白抬。
+	if (BlockingHit.ImpactNormal.Z < -0.1f)
+	{
+		return false;
+	}
+
+	const FVector StartLocation = GetActorLocation();
+	const FVector StepUp(0.0f, 0.0f, MaxStepHeight);
+
+	// ① 抬。头顶有东西（低矮的桥洞、车库门）就整体放弃。
+	FHitResult UpHit;
+	AddActorWorldOffset(StepUp, true, &UpHit);
+	if (UpHit.bBlockingHit)
+	{
+		SetActorLocation(StartLocation, false, nullptr, ETeleportType::TeleportPhysics);
+		return false;
+	}
+
+	// ② 往前走完这一帧剩下的位移。抬起来之后还是几乎走不动，说明挡着的是一堵真墙。
+	FHitResult ForwardHit;
+	AddActorWorldOffset(RemainingDelta, true, &ForwardHit);
+	if (ForwardHit.bBlockingHit && ForwardHit.Time < 0.1f)
+	{
+		SetActorLocation(StartLocation, false, nullptr, ETeleportType::TeleportPhysics);
+		return false;
+	}
+
+	// ③ 落回地面。没落到东西也算成功——那是"从台阶上飞出去"，交给贴地/重力那一步。
+	FHitResult DownHit;
+	AddActorWorldOffset(-StepUp, true, &DownHit);
+	if (DownHit.bBlockingHit)
+	{
+		const float StepSlope = FMath::RadiansToDegrees(
+			FMath::Acos(FMath::Clamp(DownHit.ImpactNormal.Z, -1.0f, 1.0f)));
+		if (StepSlope > MaxClimbAngle)
+		{
+			// 落在一个比能爬的坡还陡的面上，不算站住——这多半是墙根的斜角，
+			// 不撤回的话车会顺着墙一点点往上蹭。
+			SetActorLocation(StartLocation, false, nullptr, ETeleportType::TeleportPhysics);
+			return false;
+		}
+	}
+
+	return true;
 }
 
 void ADeliveryMotorbike::UpdateLean(float DeltaSeconds)
@@ -992,6 +1122,41 @@ void ADeliveryMotorbike::UpdateSteerVisual(float DeltaSeconds)
 	}
 
 	UpdateRiderNeck();
+}
+
+void ADeliveryMotorbike::UpdateWheelSpin(float DeltaSeconds)
+{
+	if (WheelPivots.Num() == 0 || DeltaSeconds <= 0.0f)
+	{
+		return;
+	}
+
+	// 远端客户端不跑 UpdateSpeed，CurrentSpeed 恒为 0，轮子会僵在那儿不动。
+	// 那边就用实际位移在车头方向上的分量反推车速——复制过来的位置本来就是真的。
+	const FVector Location = GetActorLocation();
+	float Speed = CurrentSpeed;
+	if (!HasAuthority() && !IsLocallyControlled())
+	{
+		Speed = bWheelLocationValid
+			? FVector::DotProduct(Location - LastWheelLocation, GetActorForwardVector()) / DeltaSeconds
+			: 0.0f;
+	}
+	LastWheelLocation = Location;
+	bWheelLocationValid = true;
+
+	// 纯滚动：接地点速度为 0，所以角速度 = 线速度 / 半径。
+	const float Radius = FMath::Max(WheelRadius, 1.0f);
+	WheelSpinAngle += FMath::RadiansToDegrees(Speed / Radius) * DeltaSeconds * WheelSpinSign;
+
+	for (USceneComponent* Pivot : WheelPivots)
+	{
+		if (Pivot)
+		{
+			// 只动 Roll（绕局部 X = 轮轴）。轮轴组件上没有别的旋转，
+			// 所以不用担心 FRotator 的 Roll→Pitch→Yaw 顺序把它变成点头。
+			Pivot->SetRelativeRotation(FRotator(0.0f, 0.0f, WheelSpinAngle));
+		}
+	}
 }
 
 void ADeliveryMotorbike::UpdateRiderNeck()
