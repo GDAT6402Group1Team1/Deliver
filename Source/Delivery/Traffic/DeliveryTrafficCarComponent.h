@@ -204,6 +204,14 @@ protected:
 
 private:
 	void ProcessVehicleImpacts(float DeltaTime);
+
+	/**
+	 * 撞到玩家骑着的摩托车。和上面撞人的那条分开扫：摩托车碰撞盒是 Pawn 配置
+	 * （ObjectType = ECC_Pawn），而撞人查的是角色布娃娃刚体（ECC_PhysicsBody）。
+	 * 合并成一次查询会把角色胶囊也扫进来，扰动已经调通的撞人逻辑。
+	 */
+	void ProcessMotorbikeImpacts(const FVector& Start, const FVector& End, const FQuat& Rotation,
+		const FVector& CarVelocity, const FCollisionQueryParams& Params);
 	FTransform PreviousImpactTransform = FTransform::Identity;
 	bool bHasPreviousImpactTransform = false;
 	bool bSkipNextImpactSweep = false;

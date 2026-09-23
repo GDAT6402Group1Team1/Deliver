@@ -176,6 +176,12 @@
    等于所有车道都失去右转。
 3. **蓝图被改动（加/删组件）会重跑所有实例的构造脚本，期间写进去的实例覆盖会丢。**
    要写数据就等蓝图定型（编译 + 保存）之后再写。
+4. **`unreal.Rotator` 的构造参数是 `(roll, pitch, yaw)`，和 C++ 的 `FRotator(Pitch, Yaw, Roll)`
+   顺序不一样。** 把 yaw 填进第二个位置就变成 pitch，症状是 actor/组件被竖起来或者东倒西歪，
+   而且"歪的角度"会跟着那个本该是 yaw 的值变——看着像随机，其实是确定的
+   （摩托车就这么在地上立不住过一次）。`spawn_test_cars.py` 里的
+   `unreal.Rotator(0.0, 0.0, yaw)` 是正确写法。**旋转出问题先数参数位置，
+   别先怀疑坐标系或者轴映射**，后者要花几十倍的时间。
 
 地形/路面配套（同目录）：
 - `deform_terrain.py` —— 沿路把地形压平到"路面顶面 −40"。**压平带宽度按大纲文件夹取标称半宽**
@@ -273,8 +279,18 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 ### 可骑摩托车
 [DeliveryMotorbike](Source/Delivery/Vehicle/DeliveryMotorbike.h) —— **运动学街机式载具，不是 Chaos Vehicle**。
 - 为什么不用 Chaos：美术资产是一整套静态网格 + 一个坐姿骑手，没有轮子骨骼、没有物理资产，Chaos 要的东西一样都没有，硬上等于要先回 Blender 重新绑定；而且关卡里的交通车（`BP_car_base`）本来就是运动学沿样条走的，玩家车用同一套假设，不会出现"玩家车被物理弹飞、AI 车纹丝不动"这种两套世界观打架。
-- 每帧自己算速度/转向。水平位移带 sweep 挡墙（撞上掉速不弹开）；竖直方向打射线贴地，**竖直这一步不能用 sweep**——sweep 会被地面挡住，和"我要贴到地面上"互相打架。转向量乘 `Speed/TurnSpeedReference`，所以停着打把不会原地转圈。侧倾只改 `MeshRoot` 的 Roll，不碰碰撞和行驶（UE 里正 Roll 是往左倒，所以右转取负值）。
+- 每帧自己算速度/转向。水平位移带 sweep 挡墙（撞上掉速不弹开）；竖直方向打射线贴地，**竖直这一步不能用 sweep**——sweep 会被地面挡住，和"我要贴到地面上"互相打架。转向量乘 `Speed/TurnSpeedReference`，所以停着打把不会原地转圈。
+- **美术资产分两层挂：`MeshRoot`（只做侧倾 Roll）→ `MeshAlign`（车头朝向 + 居中偏移）→ 车体/骑手。** 不能合成一层：`FRotator` 的施加顺序是 Roll→Pitch→Yaw，侧倾和朝向修正写在同一个组件上时，Roll 会绕"修正之前"的局部 X 轴转，而那根轴在修正 90 度之后是车的横向——本该压弯，实际变成点头。UE 里正 Roll 是往左倒，所以右转取负值。
+- **骑车时镜头写死在车尾后方**（`bUsePawnControlRotation=false` + 只继承 Yaw），鼠标不参与。之前用"控制旋转 + 延时回正"，上车瞬间镜头还停在人物原来的朝向上、车头却朝别处，玩家按 W 看到车"横着走"，方向感整个是错的。载具阶段"W 永远是往屏幕里开"比自由视角重要。控制旋转仍然每帧同步成车头朝向——镜头自己不用它，但下车后角色的弹簧臂要用，同步着视角才连续。
 - 上车顺序：先 `GrabComponent->ForceRelease()`（手里还抓着东西的话，约束会把货物/别的玩家一路拖在车上）→ `StopRagdoll()`（关刚体模拟并把网格挂回胶囊，不停的话被挂到车上的身体会一路抽搐）→ 隐藏 + 关碰撞 + 挂到车上 → `Controller->Possess(bike)`。下车反过来，先摆好位置再 `StartRagdoll()`（它内部带 `PlaceOnGround`，顺序反了人会掉在原地）。
+- **龙头转向分三层，各转各的角度**（`SteerPivot` 前轮前叉打满 / `BarPivot` 车把按 `HandlebarSteerRatio`=0.4 / `RiderPivot` 骑手按 `RiderSteerRatio`=0.25）。三个轴都只是挂点：自己摆到轴心上，孩子把这段偏移减回去，网格留在原地但从此绕这根轴转。
+  为什么车把不跟着打满：骑手是固定的参考姿势，**手不会跟着车把走**，车把转多少就脱手多少。街机赛车的常规做法就是"轮子打满、车把几乎不动"，观感不违和，比上 IK 便宜得多。真要手跟着走，得给骑手配 AnimBP + 两个 Two Bone IK（抓握点从 `SteerPivot` 的世界变换算，C++ 侧不难，但 AnimGraph 必须在编辑器里手连）。
+  骑手绕的是**自己胯部**的竖轴（脚本从 `hips` 骨骼读），不是转向轴——绕车头那根轴转会把整个人往旁边甩（胯离轴心 70 多厘米）。
+  转向角**不乘速度系数**：停着打把车把也该动，那是按键反馈。哪几个部件跟转由 `setup_motorbike.py` 按几何认（车把 = X 最宽的那个，实测 136cm vs 第二名 80cm，且骑手双手正好落在它上面；前轮前叉 = 包围盒中心在车身前 1/4），不写死下标。
+- **被交通车撞**：`UDeliveryTrafficCarComponent` 在原有的逐帧扫掠撞击之外**单开一次 `ECC_Pawn` 查询**（摩托车碰撞盒是 Pawn 配置，而撞人查的是布娃娃刚体 `ECC_PhysicsBody`；并进同一次查询会把角色胶囊也扫进来、扰动那条已经调通的撞人逻辑），命中后调 `ADeliveryMotorbike::NotifyTrafficImpact()`。
+  **共用同一张冷却表 `LastImpactTimeByActor`（0.75 秒）**——一次碰撞会连着好几帧重叠，不设冷却的话"撞两下才下车"会在同一次碰撞里就被扣完。
+  每撞一下：按来车方向给击退速度、按左右分量给撞歪的角速度和车身倾斜（`KnockTilt` 直接叠在转弯侧倾上，**不再插值**，插了会把撞击那一下的尖峰抹平）、镜头两轴不同频率抖动。四个量统一按 `KnockDecay` 指数衰减。
+  撞满 `ImpactsToDismount`（默认 2）次 → `ExitVehicle()`（和按 F 同一条路）→ 再 `KnockDownDriver()`：走既有伤害 GE 把血清零（回血 GE 可能抵消，所以跟着补一次 `SetNumericAttributeBase`，和撞人那边一样），ASC 自己会切 Stunned/Limp，复用现成的倒地表现，不另写一套。**顺序不能反**：`ExitVehicle` 内部的 `StartRagdoll` 会重建刚体，先加的冲量会被冲掉。
 - 骑手网格平时隐藏，有人骑才显示——模型自带骑手，不藏起来路边空车上永远坐着个人。
 - 车体是 9 个 `UStaticMeshComponent` **固定槽位**（`MaxBodyParts = 12`，构造函数里建好），按 `BodyMeshes` 数组填充。没用运行时 `NewObject` 动态建组件，避免构造脚本反复重建组件/丢实例覆盖。
 
@@ -283,12 +299,23 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 导入 FBX → 建 `IA_Interact` 并在 IMC_Default 上映射 F → 建 `/Game/Vehicle/Motorbike/BP_Motorbike` → 在当前关卡出生点前方放一辆。报告写到 `Saved/setup_motorbike.txt`。
 
 这份 `摩托车.fbx`（工程根目录）离线解析出来的三个坑，改导入流程前先读：
-- **坐姿写在骨骼的当前变换里，不在网格顶点里。** 绑定姿势（Cluster 的 `TransformLink`）是站姿——膝盖在髋正下方；骨骼节点的当前变换才是坐姿——大腿前伸下压 131°、小腿回折 55°、两手落在把手宽度上。所以骑手只能按**骨骼网格**导入（UE 的参考骨架取自节点当前变换 = 坐姿）；按静态网格导入只有原始顶点 = 站姿，会得到一个站在车里的人。
+- **坐姿写在骨骼的当前变换里，不在网格顶点里。** 绑定姿势（Cluster 的 `TransformLink`）是站姿——膝盖在髋正下方；骨骼节点的当前变换才是坐姿——大腿前伸下压 131°、小腿回折 55°、两手落在把手宽度上。所以骑手只能按**骨骼网格**导入；按静态网格导入只有原始顶点 = 站姿，会得到一个站在车里的人。
+- **而且骨骼网格导入必须开 `use_t0_as_ref_pose`**，这是坐姿能不能进来的开关。名字像是给有动画的文件用的，实际含义见 `FbxSkeletalMeshImport.cpp:1291`：**关着时参考骨架取自 BindPose（站姿），开着才用 `GetNodeGlobalTransform(Link, 0)`（节点当前变换 = 坐姿）**。没有动画不影响，t0 取的是节点变换、不需要 AnimStack。第一版按字面意思关掉了，导进来的骑手是站着的。
 - **车体那 9 个网格没有蒙皮、挂在场景根节点下**（不在骨架层级里），骨骼网格导入器会直接跳过。所以一份 FBX 必须导两次：骨骼网格拿骑手，静态网格拿车体。静态那次用 `combine_meshes=False`（不然会和站姿骑手焊成一块、永远分不开）+ `transform_vertex_to_absolute=True`（顶点留在场景绝对坐标里，于是 9 个组件都摆在相对变换零点就能原样拼回整车，不用手工还原每个部件的相对位置）。脚本里有检测：部件原点全挤在 10cm 以内就说明这个选项没生效，会在报告里点名并给手动兜底步骤。
-- **UE 5.8 默认用 Interchange 接管 FBX 导入，那条路不读 `FbxImportUI`。** `AssetTools::ImportAssetTasks` 里 `bUseInterchangeFramework = IsInterchangeImportEnabled() && (SpecifiedFactory == nullptr)`，所以导入任务必须显式 `task.factory = unreal.FbxFactory()` 才会回到老的 FBX 导入器、上面那堆选项才有人读。
+- **UE 5.8 默认用 Interchange 接管 FBX 导入，那条路完全不读 `FbxImportUI`。** `AssetTools::ImportAssetTasks` 里 `bUseInterchangeFramework = IsInterchangeImportEnabled() && (SpecifiedFactory == nullptr)`，所以导入任务要显式 `task.factory = unreal.FbxFactory()` 才走老的 FBX 导入器。
+- **但指定 factory 只对"全新导入"管用。** 实测：同一个任务，首次导入走老路（日志 `LogFbx: Bones digested - 37`），而目标资产已存在时用 `replace_existing=True` 重导，**会被路由到 Interchange**（日志 `LogInterchangeEngine`），`FbxImportUI` 的选项整份失效，还会报「使用所选的管线选项，提供的源数据中没有要导入的内容」却照样写出一个资产。所以改骨骼导入选项要**先删掉旧资产再干净导入**（`reimport_rider()` 就是这么做的：摘掉蓝图引用 → 删 SK/Skeleton → 重导 → 挂回去）。
+- **别假设走了哪条路，查一下。** `asset.get_editor_property("asset_import_data")` 的类型就是答案：`FbxSkeletalMeshImportData` = 老路（选项有效），`InterchangeAssetImportData` = Interchange（选项被忽略）。这一条让"选项读回 True、结果却全错"从一个查半天的谜变成一行日志——脚本现在每次重导都打印它。
+
+**第一次跑完踩出来的三条（都已修）：**
+- **骑手的静态副本要靠"排除"而不是"删除"。** `EditorAssetLibrary.delete_asset` 对刚导入、还没存盘的资产会**静默失败**（返回 False 不抛异常），于是 12 个部件全进了 `BodyMeshes`，车上永远站着一个 T-pose 的人（`RiderMesh` 藏得再好也没用，站着的那个是静态网格）。现在在 `_collect_body_meshes()` 里过滤：名字命中 `character_body/eye_*`，或者**整份材质都是骑手材质**（`tripo_mat_*`、`Eyes_Black`；车体用的是 `材质*`）。两道判据都会把每个部件的名字+材质打进报告，万一还有漏网的一眼就能认出来。
+- **导入产物必须显式存盘。** 第一版只存了蓝图，静态网格和骨骼网格全是内存里的脏包，用户一关编辑器就没了（盘上只剩 `BP_Motorbike.uasset`，引用全断）。现在跑完 `save_directory(DEST, only_if_is_dirty=False, recursive=True)`。
+- **车头朝向：模型的车头朝 +Y，Pawn 朝 +X 开，差 90 度。** 从第一次的报告数字反推出了轴映射：`UE_X = FBX_X`、`UE_Y = FBX_Z`、`UE_Z = FBX_Y`（用 166×256×242 逐项对上 FBX 实测尺寸；256 = 车长 134.7×1.9 落在 UE 的 Y 上）。车头是 +FBX_Z 那一侧——依据是骑手的手（Z=34.1）在髋（Z=19.5）前面。所以 `MeshAlign` 要转 **−90°**，脚本按"长边在不在 X 上"自动判定，`MESH_YAW_OVERRIDE` 可强制。注意组件变换是"先转再平移"，**居中偏移也要跟着转过去再取反**，否则转完整车就偏出去了。
 
 其他两条：
 - `IMPORT_SCALE = 1.9` —— FBX 里骑手站立高度 100 个单位，游戏角色胶囊 96 半高（约 192cm）。车体和骑手必须用同一个值，否则比例会错。车体在 FBX 单位下是 135×88×72，乘 1.9 约 256×168×136 cm。
+- 脚本会验证坐姿真的导进来了，判据是**大腿偏离竖直的夹角**（坐姿约 49°、站姿约 4°），临时 spawn 一个 `SkeletalMeshActor` 读参考姿势下的骨骼位置，读完就删。
+  **别用包围盒高度判**——实测坐姿 182cm、站姿 190cm，只差 8cm，拍不出阈值，第一版就是这么一直误报"站姿"的（骨骼网格的包围盒还带动画余量）。骨头指向哪和缩放无关，才是能用的判据。
+- 重跑 `place_in_level()` 会**沿用上一辆车的位置朝向**，摆好之后再调参数不用重新找地方摆；关卡里没有 `PlayerStart` 时（`testfortraffic` 就没有）落点取编辑器视口镜头前方，而不是世界原点。
 - `IA_Interact` 是**复制 `IA_Jump`** 建出来的——`InputAction` 没有暴露给 Python 的工厂，`create_asset` 那条路不通。C++ 侧 `InteractAction` 用 `TSoftObjectPtr` 晚绑而不是 `ConstructorHelpers`：构造函数只在模块加载时跑一次，脚本这次会话里新建的资产永远解析不到，晚绑才能当场生效。
 
 ## 代码结构速览

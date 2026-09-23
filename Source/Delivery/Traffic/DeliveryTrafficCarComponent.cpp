@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "DeliveryCharacter.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
+#include "Vehicle/DeliveryMotorbike.h"
 #include "GAS/DeliverAttributeSet.h"
 #include "GAS/DeliverGameplayTags.h"
 #include "AbilitySystemComponent.h"
@@ -278,7 +279,56 @@ void UDeliveryTrafficCarComponent::ProcessVehicleImpacts(float DeltaTime)
 			ASC->GetNumericAttribute(UDeliverAttributeSet::GetHealthAttribute()));
 		LastImpactTimeByActor.Add(Character, Now);
 	}
+
+	ProcessMotorbikeImpacts(Start, End, Current.GetRotation(), CarVelocity, Params);
+
 	PreviousImpactTransform = Current;
+}
+
+void UDeliveryTrafficCarComponent::ProcessMotorbikeImpacts(
+	const FVector& Start, const FVector& End, const FQuat& Rotation,
+	const FVector& CarVelocity, const FCollisionQueryParams& Params)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// 单独扫一遍，不并进上面那次查询：摩托车的碰撞盒是 Pawn 配置（ObjectType = ECC_Pawn），
+	// 而上面查的是 ECC_PhysicsBody（角色的布娃娃刚体）。把 Pawn 加进同一次查询的话，
+	// 角色胶囊也会跟着被扫到，会扰动那条已经调通的角色撞击逻辑，不值得。
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_Pawn);
+	TArray<FHitResult> Hits;
+	World->SweepMultiByObjectType(Hits, Start, End, Rotation, Objects,
+		FCollisionShape::MakeBox(ImpactHalfExtent.GetAbs()), Params);
+
+	TSet<ADeliveryMotorbike*> SeenBikes;
+	for (const FHitResult& Hit : Hits)
+	{
+		ADeliveryMotorbike* Bike = Cast<ADeliveryMotorbike>(Hit.GetActor());
+		if (!Bike || SeenBikes.Contains(Bike))
+		{
+			continue;
+		}
+		SeenBikes.Add(Bike);
+
+		// 和角色撞击共用同一张冷却表：一次碰撞会连着好几帧都重叠，
+		// 不设冷却的话"撞两下才下车"会在一次碰撞里就被扣完。
+		const float Now = World->GetTimeSeconds();
+		if (const float* LastHit = LastImpactTimeByActor.Find(Bike))
+		{
+			if (Now - *LastHit < RepeatHitCooldown)
+			{
+				continue;
+			}
+		}
+		if (Bike->NotifyTrafficImpact(CarVelocity))
+		{
+			LastImpactTimeByActor.Add(Bike, Now);
+		}
+	}
 }
 
 float UDeliveryTrafficCarComponent::GetDistanceToCarAhead() const

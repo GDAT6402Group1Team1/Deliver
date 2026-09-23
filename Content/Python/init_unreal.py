@@ -53,6 +53,16 @@ def register_delivery_menu():
             "importlib.reload(setup_motorbike); setup_motorbike.run()",
         ),
     )
+    submenu.add_menu_entry(
+        "Delivery",
+        _entry(
+            "Delivery.ReimportMotorbikeRider",
+            "Reimport Motorbike Rider",
+            "只重导骑手骨骼网格（整套重跑会因为车体已存在而跳过导入，改骨骼导入选项时用这个）",
+            "import importlib, setup_motorbike; "
+            "importlib.reload(setup_motorbike); setup_motorbike.reimport_rider()",
+        ),
+    )
 
     menus.refresh_all_widgets()
 

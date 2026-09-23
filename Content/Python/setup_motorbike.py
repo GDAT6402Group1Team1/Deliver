@@ -37,6 +37,7 @@
 不需要手工还原每个部件的相对位置。
 """
 
+import math
 import traceback
 
 import unreal
@@ -56,8 +57,21 @@ RIDER_ASSET_NAME = "SK_MotorbikeRider"
 # 觉得车太大就整体调小这个数，然后重跑 import_assets(force=True) + build_blueprint()。
 IMPORT_SCALE = 1.9
 
-# 骑手那三个网格按静态网格导进来是站姿的废品，识别出来直接删掉。
-RIDER_MESH_NAMES = ("Character_Body", "Eye_Left", "Eye_Right")
+# 骑手那三个网格按静态网格导进来是站姿的废品。**靠排除、不靠删除**：
+# 第一版用 delete_asset 删，它对刚导入还没存盘的资产会静默失败（返回 False 不抛异常），
+# 于是 12 个部件全进了 BodyMeshes，车上永远站着一个 T-pose 的人。
+# 现在改成从 BodyMeshes 里过滤掉，删不删得掉都不影响结果。
+RIDER_NAME_HINTS = ("character_body", "eye_left", "eye_right", "eyes")
+# 名字对不上时的第二道判据：整份材质都是骑手材质的就是骑手部件。
+# 车体用的是 材质*，骑手用的是 tripo_mat_* 和 Eyes_Black。
+RIDER_MATERIAL_HINTS = ("tripo_mat", "eyes_black")
+
+# 车头朝向修正。实测 UE 轴 = FBX 轴的这个映射：UE_X=FBX_X、UE_Y=FBX_Z、UE_Z=FBX_Y
+# （用第一次导入报告里的 166x256x242 和 FBX 实测尺寸逐项对上的）。
+# 车身长边 256cm 落在 UE 的 Y 上，而 Pawn 是朝 +X 开的，所以模型要转 -90 度才对得上。
+# 车头是 +FBX_Z 这一侧 —— 依据是骑手的手（Z=34.1）在髋（Z=19.5）前面。
+# None = 自动：长边在 Y 上就用 -90，否则 0。要强制就直接填 0/90/-90/180。
+MESH_YAW_OVERRIDE = None
 
 INTERACT_IA = "/Game/Input/Actions/IA_Interact"
 TEMPLATE_IA = "/Game/Input/Actions/IA_Jump"   # 复制它来建 IA_Interact
@@ -121,9 +135,18 @@ def _make_task(dest, as_skeletal, combine, name=None):
     if as_skeletal:
         data = ui.get_editor_property("skeletal_mesh_import_data")
         data.set_editor_property("import_morph_targets", False)
-        # 参考姿势必须取自节点当前变换（=坐姿）。打开 t0 会改用动画第 0 帧，
-        # 这份 FBX 没有动画，打开等于把坐姿丢掉。
-        data.set_editor_property("use_t0_as_ref_pose", False)
+        # **必须为 True**，这是坐姿能不能进来的开关，别再关掉。
+        #
+        # 名字叫"用第 0 帧当参考姿势"，听起来像是给有动画的文件用的，第一版因此关掉了，
+        # 结果导进来的骑手是站着的。看引擎源码 FbxSkeletalMeshImport.cpp:1291 才明白：
+        #   * 关着  → GlobalsPerLink 取自 **BindPose**（这份 FBX 的绑定姿势是站姿）
+        #   * 开着  → 用 GetNodeGlobalTransform(Link, 0) 覆盖，也就是**骨骼节点的当前变换**
+        # 而这份 FBX 的坐姿正好写在节点当前变换里，所以要坐姿就必须开。
+        # 没有动画不影响：t0 取的是节点变换，不需要 AnimStack。
+        data.set_editor_property("use_t0_as_ref_pose", True)
+        # 写完读回来确认一次。属性名拼错的话 set 会抛，但万一是别的原因没生效，
+        # 光看"脚本跑过了"证明不了任何事（这个项目在"计数器证明不了结果留住了"上栽过）。
+        w(u"  use_t0_as_ref_pose 读回 = %s" % data.get_editor_property("use_t0_as_ref_pose"))
     else:
         data = ui.get_editor_property("static_mesh_import_data")
         data.set_editor_property("combine_meshes", combine)
@@ -173,23 +196,42 @@ def import_assets(force=False):
     sm_paths = [str(p) for p in sm_task.get_editor_property("imported_object_paths")]
     w(u"  静态网格导入产物 %d 个" % len(sm_paths))
 
-    _drop_standing_rider_copies()
     body = _collect_body_meshes()
     rider = _load_rider()
     w(u"  车体部件 %d 个，骑手 %s" % (len(body), u"有" if rider else u"没有（！）"))
+    _save_imported()
     return body, rider
 
 
-def _drop_standing_rider_copies():
-    """静态网格那一遍也会把骑手导成站姿，用不上，删掉免得以后拿错。"""
-    for path in unreal.EditorAssetLibrary.list_assets(PARTS_DEST, recursive=False):
-        name = path.split("/")[-1].split(".")[0]
-        if any(name.startswith(r) for r in RIDER_MESH_NAMES):
-            try:
-                unreal.EditorAssetLibrary.delete_asset(path)
-                w(u"  删掉站姿骑手副本 %s" % name)
-            except Exception as exc:
-                w(u"  删 %s 失败（无所谓，不会被用到）：%s" % (name, exc))
+def _save_imported():
+    """把导入产物真正写到盘上。第一次跑只存了蓝图，静态网格全是内存里的脏包。"""
+    try:
+        unreal.EditorAssetLibrary.save_directory(DEST, only_if_is_dirty=False, recursive=True)
+        w(u"  资产已存盘")
+    except Exception as exc:
+        w(u"  存盘失败（自己 Ctrl+Shift+S 一下）：%s" % exc)
+
+
+def _material_names(mesh):
+    names = []
+    try:
+        for slot in mesh.get_editor_property("static_materials"):
+            mi = slot.get_editor_property("material_interface")
+            if mi:
+                names.append(mi.get_name().lower())
+    except Exception:
+        pass
+    return names
+
+
+def _is_rider_part(mesh):
+    """这个静态网格是不是骑手（站姿废品）。名字和材质两道判据，命中一条就算。"""
+    name = mesh.get_name().lower()
+    if any(hint in name for hint in RIDER_NAME_HINTS):
+        return True
+    mats = _material_names(mesh)
+    return bool(mats) and all(
+        any(hint in m for hint in RIDER_MATERIAL_HINTS) for m in mats)
 
 
 def _collect_body_meshes():
@@ -198,14 +240,193 @@ def _collect_body_meshes():
         return out
     for path in sorted(unreal.EditorAssetLibrary.list_assets(PARTS_DEST, recursive=False)):
         asset = unreal.EditorAssetLibrary.load_asset(path)
-        if isinstance(asset, unreal.StaticMesh):
-            out.append(asset)
+        if not isinstance(asset, unreal.StaticMesh):
+            continue
+        # 名字和材质都打出来：万一两道判据都没拦住，看日志能一眼认出是谁混进来了。
+        if _is_rider_part(asset):
+            w(u"    跳过骑手静态副本 %s（材质 %s）"
+              % (asset.get_name(), ",".join(_material_names(asset)) or u"无"))
+            continue
+        w(u"    车体部件 %s（材质 %s）"
+          % (asset.get_name(), ",".join(_material_names(asset)) or u"无"))
+        out.append(asset)
     return out
 
 
 def _load_rider():
     asset = unreal.EditorAssetLibrary.load_asset(DEST + "/" + RIDER_ASSET_NAME)
     return asset if isinstance(asset, unreal.SkeletalMesh) else None
+
+
+def _import_data_kind(asset):
+    """这份资产是哪个导入器导进来的。**必须查**，不能假设。
+
+    UE 5.8 里 FBX 有两条导入路：老的 FbxFactory（读 FbxImportUI 那一堆选项）和
+    Interchange（完全不读）。实测**同样的任务，首次导入走老路、replace_existing
+    重导却被路由到了 Interchange**，于是 use_t0_as_ref_pose 明明读回 True，
+    却根本没人看——报告里一片正常，结果全错。
+    看 AssetImportData 的类型就能分辨：Interchange 导的是 InterchangeAssetImportData。
+    """
+    try:
+        data = asset.get_editor_property("asset_import_data")
+        return type(data).__name__ if data else u"无"
+    except Exception as exc:
+        return u"读不到(%s)" % exc
+
+
+def reimport_rider():
+    """重导骑手，不动那 12 个车体静态网格。
+
+    先删掉旧的骨骼网格 + 骨架再导，**不是** replace_existing 重导：
+    带着已有资产做 replace_existing 会被路由到 Interchange，FbxImportUI 的选项
+    （包括决定坐姿的 use_t0_as_ref_pose）会被整份忽略。干净导入才走老的 FbxFactory。
+    """
+    # 删之前先把蓝图里的引用摘掉，否则资产被引用着删不干净。
+    bp = unreal.EditorAssetLibrary.load_asset(BP_PATH)
+    cdo = unreal.get_default_object(bp.generated_class()) if bp else None
+    if cdo:
+        try:
+            cdo.get_editor_property("rider_mesh").set_editor_property("skeletal_mesh_asset", None)
+        except Exception:
+            pass
+
+    for suffix in ("", "_Skeleton", "_PhysicsAsset"):
+        path = DEST + "/" + RIDER_ASSET_NAME + suffix
+        if unreal.EditorAssetLibrary.does_asset_exist(path):
+            ok = unreal.EditorAssetLibrary.delete_asset(path)
+            w(u"  删除旧资产 %s%s" % (path, u"" if ok else u"（失败）"))
+
+    sk_task = _make_task(DEST, True, False, RIDER_ASSET_NAME)
+    _tools().import_asset_tasks([sk_task])
+    paths = [str(p) for p in sk_task.get_editor_property("imported_object_paths")]
+    w(u"重导骑手，产物 %d 个：%s" % (len(paths), ", ".join(paths[:4])))
+
+    rider = _load_rider()
+    if rider:
+        kind = _import_data_kind(rider)
+        w(u"  导入器：%s" % kind)
+        if "Interchange" in kind:
+            w(u"！又被 Interchange 接走了，FbxImportUI 的选项（含 use_t0_as_ref_pose）全部无效。")
+            w(u"  这次的结果不作数，不用看下面的姿势判定。")
+        # 引用被摘过，重新挂回去。
+        if cdo:
+            for prop in ("skeletal_mesh_asset", "skeletal_mesh"):
+                try:
+                    cdo.get_editor_property("rider_mesh").set_editor_property(prop, rider)
+                    break
+                except Exception:
+                    continue
+            try:
+                unreal.BlueprintEditorLibrary.compile_blueprint(bp)
+            except Exception:
+                pass
+            unreal.EditorAssetLibrary.save_loaded_asset(bp)
+            w(u"  骑手已重新挂回 BP_Motorbike")
+
+    _save_imported()
+
+    body = _collect_body_meshes()
+    center = None
+    if body:
+        lo, hi = _combined_bounds(body)
+        center = [(hi[i] + lo[i]) * 0.5 for i in range(3)]
+    _check_rider_is_seated(rider, center)
+    flush()
+    return rider
+
+
+def _find_bone(comp, *needles):
+    """按子串找骨骼名，不写死 `mixamorig:` 前缀（导入器有可能改名）。"""
+    try:
+        count = comp.get_num_bones()
+    except Exception:
+        return None
+    for index in range(count):
+        name = str(comp.get_bone_name(index))
+        low = name.lower()
+        if all(n in low for n in needles):
+            return name
+    return None
+
+
+def _rider_thigh_angle(rider):
+    """大腿和"竖直向下"的夹角，单位度。坐姿约 49°，站姿约 4°。
+
+    这是判坐/站的正经判据：**和缩放、和包围盒余量都无关**，只看骨头指向哪。
+    之前用包围盒高度拍阈值，坐姿实测 182cm、站姿 190cm，根本分不开，一直误报。
+    临时 spawn 一个 SkeletalMeshActor 读参考姿势下的骨骼位置，读完就删。
+    """
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    actor = eas.spawn_actor_from_class(
+        unreal.SkeletalMeshActor, unreal.Vector(0.0, 0.0, 0.0), unreal.Rotator(0.0, 0.0, 0.0))
+    if actor is None:
+        return None
+    try:
+        comp = actor.get_editor_property("skeletal_mesh_component")
+        for prop in ("skeletal_mesh_asset", "skeletal_mesh"):
+            try:
+                comp.set_editor_property(prop, rider)
+                break
+            except Exception:
+                continue
+
+        hip = _find_bone(comp, "upleg")
+        knee = _find_bone(comp, "leftleg") or _find_bone(comp, "leg")
+        if not hip or not knee:
+            return None
+        a = comp.get_socket_location(hip)
+        b = comp.get_socket_location(knee)
+        dx, dy, dz = b.x - a.x, b.y - a.y, b.z - a.z
+        length = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if length < 1e-3:
+            return None
+        # 和 (0,0,-1) 的夹角
+        return math.degrees(math.acos(max(-1.0, min(1.0, -dz / length))))
+    except Exception:
+        return None
+    finally:
+        eas.destroy_actor(actor)
+
+
+def _check_rider_is_seated(rider, bike_center=None):
+    """验证骑手是不是真的坐着、而且坐在车上。把"看起来不对"变成两个可验证的数。
+
+    ① 姿势：FBX 里骑手站立高 99.9 个单位，坐姿时头顶只到约 63 个单位
+       （髋 16.45 / 头骨 52.45 量出来的）。差着近一倍，包围盒足够分得开，
+       不需要去读参考骨架。
+    ② 位置：骨骼网格的原点未必带上 Armature 节点在场景里的位移。带了的话骑手会
+       正好落在车上；没带的话会偏出去几十厘米。拿它和车体包围盒中心比一下就知道。
+    """
+    if not rider:
+        return
+    try:
+        bounds = rider.get_bounds()
+        height = float(bounds.box_extent.z) * 2.0
+        origin = bounds.origin
+    except Exception as exc:
+        w(u"  （量不到骑手包围盒，跳过坐姿检查：%s）" % exc)
+        return
+
+    w(u"  骑手包围盒高度 %.0fcm（仅供参考，坐姿和站姿只差 8cm 左右，分不开）" % height)
+
+    angle = _rider_thigh_angle(rider)
+    if angle is None:
+        w(u"  （读不到骨骼，姿势判定跳过——自己在资产里看一眼）")
+    elif angle >= 25.0:
+        w(u"  姿势判定：坐姿 ✔（大腿偏离竖直 %.0f°，坐姿约 49°、站姿约 4°）" % angle)
+    else:
+        w(u"！骑手是**站着**的（大腿偏离竖直只有 %.0f°，坐姿应约 49°）。" % angle)
+        w(u"  先查上面那行「导入器」：写着 Interchange 就是选项被忽略了，删掉资产重新干净导入；")
+        w(u"  写着 FbxSkeletalMeshImportData 还这样，才轮到回 Blender 把坐姿 Apply as Rest Pose。")
+
+    if bike_center is not None:
+        offset = max(abs(float(origin.x) - bike_center[0]),
+                     abs(float(origin.y) - bike_center[1]))
+        w(u"  骑手中心 (%.0f, %.0f, %.0f)，车体中心 (%.0f, %.0f, %.0f)，水平偏差 %.0fcm"
+          % (origin.x, origin.y, origin.z, bike_center[0], bike_center[1], bike_center[2], offset))
+        if offset > 60.0:
+            w(u"！骑手没坐在车上：骨骼网格的原点没带上 Armature 在场景里的位移。")
+            w(u"  在 BP_Motorbike 的 RiderMesh 上手填一个相对位移补偿即可，车体不用动。")
 
 
 # ---------------------------------------------------------------- 2. 输入
@@ -254,6 +475,8 @@ def setup_input():
     imc.map_key(ia, key)
     unreal.EditorAssetLibrary.save_loaded_asset(imc)
     w(u"  IMC_Default：F → IA_Interact")
+    w(u"  ※ 记得提交 Content/Input/IMC_Default.uasset —— 这个映射被 git 拉取冲掉过一次，")
+    w(u"    现象是浮窗照常显示、按 F 却毫无反应（浮窗不依赖按键绑定，所以很容易看岔）。")
     return ia
 
 
@@ -319,6 +542,85 @@ def _warn_if_not_absolute(meshes):
           u"再重跑 build_blueprint()。" % IMPORT_SCALE)
 
 
+def _pick_steering_parts(body, lo, hi):
+    """认出跟着龙头转的部件，返回 (下标列表, 转向轴位置)。按几何认，不写死下标。
+
+    导入空间里车头朝 +Y（摆正前），所以：
+      * **车把** = X 方向最宽的那个部件。实测它有 136cm 宽，第二名才 80cm，
+        而且骑手两只手正好落在它上面（离线从 FBX 骨骼位置核对过），认得很稳。
+      * **前轮 / 前叉** = 包围盒中心落在车身前四分之一的部件。
+    车架横跨全车、中心在中部，不会被误抓；后轮、座、尾灯都在后半段。
+
+    转向轴取"车把中心 和 最前部件中心"的水平中点——大致就是前叉的位置。
+    用竖直轴而不是带后倾角的真实转向轴：差别在这个尺寸下看不出来，
+    而竖直轴不需要再处理一层旋转补偿。
+    """
+    if not body:
+        return [], (0.0, 0.0, 0.0)
+
+    boxes = []
+    for index, mesh in enumerate(body):
+        mn, mx = _mesh_bounds(mesh)
+        boxes.append({
+            "i": index,
+            "width": float(mx.x - mn.x),
+            "cx": (float(mn.x) + float(mx.x)) * 0.5,
+            "cy": (float(mn.y) + float(mx.y)) * 0.5,
+            "cz": (float(mn.z) + float(mx.z)) * 0.5,
+        })
+
+    length = hi[1] - lo[1]
+    front_line = lo[1] + length * 0.75
+
+    bar = max(boxes, key=lambda b: b["width"])
+    front = [b for b in boxes if b["cy"] >= front_line]
+
+    # 车把单独一组：它只跟转一部分角度（骑手的手不会跟着走，转多了脱把）。
+    full = sorted(b["i"] for b in front if b["i"] != bar["i"])
+
+    front_most = max(boxes, key=lambda b: b["cy"])
+    pivot = ((bar["cx"] + front_most["cx"]) * 0.5,
+             (bar["cy"] + front_most["cy"]) * 0.5,
+             bar["cz"])
+
+    w(u"  打满跟转（前轮/前叉）：%s" % (",".join(str(i) for i in full) or u"无"))
+    w(u"  部分跟转（车把）：%s（宽 %.0fcm）" % (bar["i"], bar["width"]))
+    w(u"  转向轴 (%.0f, %.0f, %.0f)" % pivot)
+    return full, [bar["i"]], pivot
+
+
+def _rider_hips_location(rider):
+    """骑手胯部在导入空间里的位置，骑手绕这根竖轴扭身。
+
+    不用转向轴：绕车头那根轴转会把整个人往旁边甩（胯离轴心 70 多厘米），
+    绕自己胯部转才是"扭身"，屁股留在座上、肩和手往车把那边跟一点。
+    """
+    if not rider:
+        return None
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    actor = eas.spawn_actor_from_class(
+        unreal.SkeletalMeshActor, unreal.Vector(0.0, 0.0, 0.0), unreal.Rotator(0.0, 0.0, 0.0))
+    if actor is None:
+        return None
+    try:
+        comp = actor.get_editor_property("skeletal_mesh_component")
+        for prop in ("skeletal_mesh_asset", "skeletal_mesh"):
+            try:
+                comp.set_editor_property(prop, rider)
+                break
+            except Exception:
+                continue
+        hips = _find_bone(comp, "hips")
+        if not hips:
+            return None
+        loc = comp.get_socket_location(hips)
+        return (float(loc.x), float(loc.y), float(loc.z))
+    except Exception:
+        return None
+    finally:
+        eas.destroy_actor(actor)
+
+
 def build_blueprint(body=None, rider=None):
     body = body if body is not None else _collect_body_meshes()
     rider = rider if rider is not None else _load_rider()
@@ -346,22 +648,69 @@ def build_blueprint(body=None, rider=None):
     lo, hi = _combined_bounds(body)
     size = [hi[i] - lo[i] for i in range(3)]
     center = [(hi[i] + lo[i]) * 0.5 for i in range(3)]
-    w(u"  整车尺寸 %.0f x %.0f x %.0f cm（长/宽/高），中心 (%.0f, %.0f, %.0f)"
+    w(u"  导入空间下的整车包围盒 %.0f x %.0f x %.0f cm，中心 (%.0f, %.0f, %.0f)"
       % (size[0], size[1], size[2], center[0], center[1], center[2]))
 
-    # 把整车挪到"包围盒中心落在 actor 原点"。于是车底正好在原点下方 高度/2 处，
-    # HoverHeight 取同一个值，车轮就贴着地。
-    mesh_root = cdo.get_editor_property("mesh_root")
-    mesh_root.set_editor_property(
-        "relative_location", unreal.Vector(-center[0], -center[1], -center[2]))
+    yaw = MESH_YAW_OVERRIDE
+    if yaw is None:
+        # 长边不在 X 上就说明车头没朝 +X。车头是 +Y 那一侧（见常量处的推导），转 -90 归位。
+        yaw = -90.0 if size[1] > size[0] else 0.0
+    w(u"  车头朝向修正 %.0f 度%s" % (yaw, u"（自动判定）" if MESH_YAW_OVERRIDE is None else u"（手动指定）"))
 
-    hover = size[2] * 0.5
+    # 旋转之后再算 actor 空间下的尺寸和居中偏移。
+    # 组件变换是"先转再平移"，所以要把中心点也转过去再取反，否则转完就偏出去了。
+    rot = math.radians(yaw)
+    cos_y, sin_y = math.cos(rot), math.sin(rot)
+    rotated_center = (center[0] * cos_y - center[1] * sin_y,
+                      center[0] * sin_y + center[1] * cos_y,
+                      center[2])
+    if abs(size[0] * cos_y) < abs(size[1] * sin_y):
+        actor_size = [size[1], size[0], size[2]]
+    else:
+        actor_size = [size[0], size[1], size[2]]
+    w(u"  摆正后：长 %.0f 宽 %.0f 高 %.0f cm" % (actor_size[0], actor_size[1], actor_size[2]))
+
+    # MeshRoot 只管侧倾，位置必须清零。
+    # 早一版把居中偏移写在 MeshRoot 上，那个覆盖会留在已有的蓝图里，
+    # 和 MeshAlign 的偏移叠起来会把整车推出去一倍距离。
+    mesh_root = cdo.get_editor_property("mesh_root")
+    mesh_root.set_editor_property("relative_location", unreal.Vector(0.0, 0.0, 0.0))
+    mesh_root.set_editor_property("relative_rotation", unreal.Rotator(0.0, 0.0, 0.0))
+
+    # 朝向和居中都落在 MeshAlign 上。
+    #
+    # 注意 unreal.Rotator 的构造参数是 (roll, pitch, yaw)，**和 C++ 的 FRotator(Pitch, Yaw, Roll)
+    # 顺序不一样**。把 yaw 填进第二个位置会变成 pitch，车会被竖起来立在车头上
+    # ——这个坑已经踩过一次，别再改回去。参照 spawn_test_cars.py 里的写法。
+    mesh_align = cdo.get_editor_property("mesh_align")
+    mesh_align.set_editor_property("relative_rotation", unreal.Rotator(0.0, 0.0, yaw))
+    mesh_align.set_editor_property(
+        "relative_location",
+        unreal.Vector(-rotated_center[0], -rotated_center[1], -rotated_center[2]))
+
+    steer_indices, bar_indices, pivot = _pick_steering_parts(body, lo, hi)
+    cdo.set_editor_property("steering_part_indices", steer_indices)
+    cdo.set_editor_property("handlebar_part_indices", bar_indices)
+    cdo.set_editor_property("steer_pivot_location", unreal.Vector(pivot[0], pivot[1], pivot[2]))
+
+    hips = _rider_hips_location(rider)
+    if hips:
+        cdo.set_editor_property("rider_pivot_location", unreal.Vector(hips[0], hips[1], hips[2]))
+        w(u"  骑手扭身轴（胯部）(%.0f, %.0f, %.0f)" % hips)
+    else:
+        w(u"  （读不到 hips 骨骼，骑手扭身轴留在原点——骑手会绕车身中心转，不自然但不致命）")
+
+    hover = actor_size[2] * 0.5
     cdo.set_editor_property("hover_height", hover)
 
     # 碰撞盒比车身矮 6cm：底面离地留一点缝，不然贴地的 sweep 会被地面刮到。
     box = cdo.get_editor_property("collision_box")
     box.set_editor_property("box_extent", unreal.Vector(
-        max(size[0] * 0.5, 20.0), max(size[1] * 0.5, 15.0), max(size[2] * 0.5 - 6.0, 10.0)))
+        max(actor_size[0] * 0.5, 20.0),
+        max(actor_size[1] * 0.5, 15.0),
+        max(actor_size[2] * 0.5 - 6.0, 10.0)))
+
+    _check_rider_is_seated(rider, center)
 
     if rider:
         rider_comp = cdo.get_editor_property("rider_mesh")
@@ -413,13 +762,39 @@ def place_in_level(bp=None):
     if EXPECTED_LEVEL.lower() not in level_name.lower():
         w(u"  注意：当前打开的是 %s，不是 %s。车会放进当前这张图。" % (level_name, EXPECTED_LEVEL))
 
+    # 重跑时保留上一辆的位置朝向：摆过一次之后再跑脚本（改参数、换网格）
+    # 不该把车弹回出生点，不然每次调完参数都要重新找地方摆。
+    kept = None
     removed = 0
     for actor in eas.get_all_level_actors():
         if TAG in [str(t) for t in actor.tags]:
+            if kept is None:
+                kept = (actor.get_actor_location(), actor.get_actor_rotation())
             eas.destroy_actor(actor)
             removed += 1
     if removed:
-        w(u"  先删掉之前放的 %d 辆" % removed)
+        w(u"  先删掉之前放的 %d 辆（沿用它的位置朝向）" % removed)
+
+    hover = 60.0
+    try:
+        hover = float(unreal.get_default_object(bp.generated_class()).get_editor_property("hover_height"))
+    except Exception:
+        pass
+
+    if kept is not None:
+        loc, rot = kept
+        # 只留 yaw：车永远是正着立在地上的，俯仰和侧倾都该是 0。
+        # 上一辆要是被放歪了（比如之前那个 Rotator 参数顺序的 bug），别把歪的姿态继承下来。
+        rot = unreal.Rotator(0.0, 0.0, rot.yaw)
+        actor = eas.spawn_actor_from_class(bp.generated_class(), loc, rot)
+        if actor is None:
+            w(u"！放置失败。")
+            return None
+        actor.set_actor_label("Motorbike_Test")
+        actor.tags = [TAG]
+        w(u"  已放回原位 (%.0f, %.0f, %.0f)" % (loc.x, loc.y, loc.z))
+        w(u"  关卡还没保存，自己 Ctrl+S。")
+        return actor
 
     origin = unreal.Vector(0.0, 0.0, 0.0)
     yaw = 0.0
@@ -434,23 +809,29 @@ def place_in_level(bp=None):
                                base.z)
         w(u"  以出生点 %s 前方 %.0fcm 为落点" % (start.get_actor_label(), SPAWN_AHEAD))
     else:
-        w(u"  关卡里没有 PlayerStart，落点用世界原点。")
-
-    hover = 60.0
-    try:
-        hover = float(unreal.get_default_object(bp.generated_class()).get_editor_property("hover_height"))
-    except Exception:
-        pass
+        # testfortraffic 里没有 PlayerStart。放世界原点等于扔进虚空里让人自己找，
+        # 改成放在编辑器视口镜头前方——你现在看着哪儿，车就出现在哪儿。
+        try:
+            ues = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
+            cam_loc, cam_rot = ues.get_level_viewport_camera_info()
+            yaw = cam_rot.yaw
+            fwd = unreal.MathLibrary.get_forward_vector(cam_rot)
+            origin = unreal.Vector(cam_loc.x + fwd.x * 600.0,
+                                   cam_loc.y + fwd.y * 600.0,
+                                   cam_loc.z)
+            w(u"  关卡里没有 PlayerStart，落点取编辑器视口镜头前方 600cm。")
+        except Exception as exc:
+            w(u"  关卡里没有 PlayerStart，也取不到视口镜头（%s），落点用世界原点。" % exc)
 
     ground = _ground_z(world, origin.x, origin.y, origin.z)
     if ground is None:
-        w(u"  落点打不到地面，Z 用出生点高度。")
+        w(u"  落点打不到地面，Z 用参考点高度。")
         z = origin.z
     else:
         z = ground + hover + 5.0
 
     actor = eas.spawn_actor_from_class(
-        bp.generated_class(), unreal.Vector(origin.x, origin.y, z), unreal.Rotator(0.0, yaw, 0.0))
+        bp.generated_class(), unreal.Vector(origin.x, origin.y, z), unreal.Rotator(0.0, 0.0, yaw))
     if actor is None:
         w(u"！放置失败。")
         return None
