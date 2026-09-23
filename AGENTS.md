@@ -27,6 +27,7 @@
 - [Source/Delivery/Ragdoll/DeliveryActiveRagdollComponent.h](Source/Delivery/Ragdoll/DeliveryActiveRagdollComponent.h) —— 直立参考体、电机强度、倒下/起身判定、坡地位移。髋目标以地面命中点为基准，站立高度用髋到视觉脚底的距离（不能用髋到地面的距离，否则停步悬空）；前倾只在加速时施加，匀速下坡不持续压低重心。
 - 下坡姿态恢复：前倾按起步时长（默认 0.4 秒）衰减，不再按目标速度与实际速度的差持续施加；否则一旦前扑失速就会持续前倾。迈步最低直立点积降到 0.35，让中等幅度前倾时仍能迈步找回支撑，完全倒下时仍不盲目迈步。
 - 停步补脚的落点如果暂时探不到地面，保留补步请求并在下一帧重试；不能在失败时也清掉标记，否则坡沿的一次探测失败会让脚永远不再补位。
+- 陡坡翻滚：服务器从髋部向下探测原始坡面法线（不受可行走坡角过滤）；坡角默认 ≥48°、实际顺坡速度 ≥120 cm/s 持续 0.18 秒，暂时关闭电机并给胸部一次轻微翻滚角冲量。到 ≤30° 的缓坡/平地、速度 ≤140 cm/s 且稳定 0.45 秒后，按现有姿势重新播种电机起身。此状态与 HP 晕倒分开；晕倒优先，不可被坡地自动起身解除。坡度、速度和计时均可在组件上调。
 - [Source/Delivery/DeliveryCharacter.h](Source/Delivery/DeliveryCharacter.h) —— 第三人称 Pawn，组装胶囊/网格/相机/布娃娃/战斗组件，实现 `IAbilitySystemInterface` 与 `IDeliveryCombatInterface`。移动与跳跃走网络复制（`ServerSetMoveInput` 为 Unreliable，`ServerJump` 为 Reliable，带最小跳跃间隔）。
 - 电瓶车受击：地面探测只查 `WorldStatic/WorldDynamic`，排除 `Vehicle`；离地时暂停髋部世界空间电机，重新探到地面后恢复。撞击镜头只在受击玩家本机平滑拉远约 120 cm 并回归，不改全局相机遮挡。
 
@@ -55,7 +56,7 @@
 - Character 上的 `HealthRegenEffect` / `DamageEffect`（Instant + SetByCaller `Effect.Type.Damage`）及左右拳 GA 类，均在蓝图 `BP_DeliveryMan` 中指定，C++ 侧只留 `TSubclassOf` 插槽。
 
 ### 4. 任务系统（电话接任务）
-快递 E 交互保留 0.5 秒长按；探测目标与任务可取状态分开，未解锁、未登记、已完成或正在执行其他任务均显示原因。E 的 100cm 距离取物体碰撞表面，服务端朝向校验取水平方向并保留遮挡检查，避免把第三人称相机俯角套到髋位置导致地面小包裹取不到；F 路径不变。`Content/Python/diagnose_package_pickup.py` 可只读检查测试蓝图绑定、长按时间和任务引用。
+快递 E 交互保留 0.5 秒长按；探测目标与任务可取状态分开，未解锁、未登记、已完成或正在执行其他任务均显示原因。E 的 100cm 距离取角色碰撞体表面到物品碰撞体表面的实际间距，服务端朝向校验取水平方向并保留遮挡检查，避免用髋部原点或第三人称相机俯角导致地面小物品取不到；F 路径不变。`Content/Python/diagnose_package_pickup.py` 可只读检查测试蓝图绑定、长按时间和任务引用。
 **结构、接口清单、配置方式、完整调用链、待确认假设都写在 [Document/TaskSystem.md](Document/TaskSystem.md)——改任务系统前先读这份。** 要点：
 
 - 任务状态全局共享（多人下解锁/来电/接取/计时/完成对所有玩家是同一份数据），权威在 GameState 上的 [DeliveryTaskManagerComponent](Source/Delivery/Task/DeliveryTaskManagerComponent.h)；只有"当前追踪哪个任务"是每玩家各自的，在 PlayerState 上的 [DeliveryTaskTrackerComponent](Source/Delivery/Task/DeliveryTaskTrackerComponent.h)。

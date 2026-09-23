@@ -96,7 +96,7 @@ struct FDeliveryRagdollBones
  * 全身物理角色：网格刚体持续模拟，Physics Control 当作关节肌肉，用目标位置和目标旋转去拉身体。
  *
  * 走路不是动画位移，也不是 IK。髋先走、脚后追。问地的方向沿坡面法线，只处理较缓的斜面。
- * 陡坡、台阶和用手攀爬都不在这套范围内。
+ * 陡坡改由服务器触发短暂的全物理翻滚；台阶和用手攀爬不在步态范围内。
  */
 UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
@@ -240,6 +240,32 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0", ClampMax="75.0"))
 	float MaxWalkableSlopeDegrees = 58.0f;
+
+	/** 顺坡移动超过此坡角时，不再强迫脚迈步，而是进入物理翻滚。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|陡坡翻滚", meta=(ClampMin="20.0", ClampMax="75.0"))
+	float TumbleSlopeDegrees = 48.0f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|陡坡翻滚", meta=(ClampMin="0.0"))
+	float TumbleDownhillSpeed = 120.0f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|陡坡翻滚", meta=(ClampMin="0.0"))
+	float TumbleEntryDelay = 0.18f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|陡坡翻滚", meta=(ClampMin="0.0", ClampMax="60.0"))
+	float TumbleRecoverySlopeDegrees = 30.0f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|陡坡翻滚", meta=(ClampMin="0.0"))
+	float TumbleRecoverySpeed = 140.0f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|陡坡翻滚", meta=(ClampMin="0.0"))
+	float TumbleMinimumDuration = 0.9f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|陡坡翻滚", meta=(ClampMin="0.0"))
+	float TumbleRecoveryDelay = 0.45f;
+
+	/** 起滚时给胸部一次轻微角速度；之后只靠重力和碰撞滚动。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|陡坡翻滚", meta=(ClampMin="0.0"))
+	float TumbleStartAngularSpeed = 2.0f;
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|肌肉", meta=(ClampMin="0.0"))
 	float RootLinearStrength = 4.6f;
@@ -536,6 +562,12 @@ protected:
 	bool bStepLeftNext = true;
 	bool bIsActive = false;
 	bool bIsLimp = false;
+	bool bExternalLimpRequested = false;
+	bool bSlopeTumbling = false;
+	float TumbleEntryTime = 0.0f;
+	float TumbleElapsed = 0.0f;
+	float TumbleRecoveryTime = 0.0f;
+	float TumbleCooldownTime = 0.0f;
 	bool bJumping = false;
 	bool bBodyDrivenPunchActive = false;
 	bool bBodyDrivenPunchReleased = false;
@@ -581,6 +613,9 @@ protected:
 	FVector GetWholeBodyCenterOfMass() const;
 	float GetUprightDot() const;
 	bool TraceGround(const FVector& Around, const FVector& AlongNormal, FGroundHit& OutHit) const;
+	bool TraceTumbleSurface(FGroundHit& OutHit) const;
+	void UpdateSlopeTumble(float DeltaTime);
+	void ApplyLimpState(bool bLimp);
 	FVector GetWishDir() const;
 	float GetAimYaw() const;
 	void SyncOwnerToPelvis(float DeltaTime);

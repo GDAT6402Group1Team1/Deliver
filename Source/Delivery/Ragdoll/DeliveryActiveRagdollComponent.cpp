@@ -13,7 +13,7 @@
 脚底板的朝向用切平面上的前进方向和法线来建，让脚底板贴着地面。
 选哪只脚迈步，仍然看当前身体姿态。人有没有倾倒，看髋的朝上方向和坡面法线的点积，不用世界竖直向上。
 
-髋先走，脚后追。这套方法只处理比较缓的斜面。陡坡、台阶和用手攀爬都不做。
+髋先走，脚后追。这套步态只处理比较缓的斜面；陡坡切成全物理翻滚。
 */
 
 #include "DeliveryActiveRagdollComponent.h"
@@ -268,6 +268,10 @@ void UDeliveryActiveRagdollComponent::TickComponent(
 	if (GetOwner()->GetLocalRole() == ROLE_AutonomousProxy)
 	{
 		ApplyNetworkSnapshot(DeltaTime);
+	}
+	if (GetOwner()->HasAuthority())
+	{
+		UpdateSlopeTumble(DeltaTime);
 	}
 
 	if (!bIsLimp)
@@ -790,6 +794,9 @@ void UDeliveryActiveRagdollComponent::StartRagdoll()
 
 	bIsActive = true;
 	bIsLimp = false;
+	bExternalLimpRequested = false;
+	bSlopeTumbling = false;
+	TumbleEntryTime = TumbleElapsed = TumbleRecoveryTime = TumbleCooldownTime = 0.0f;
 	SetComponentTickEnabled(true);
 	PostPhysicsTickFunction.SetTickFunctionEnable(true);
 	UpdateControlTargets(0.0f);
@@ -818,6 +825,9 @@ void UDeliveryActiveRagdollComponent::StopRagdoll()
 	DestroyControls();
 	bIsActive = false;
 	bIsLimp = false;
+	bExternalLimpRequested = false;
+	bSlopeTumbling = false;
+	TumbleEntryTime = TumbleElapsed = TumbleRecoveryTime = TumbleCooldownTime = 0.0f;
 	MoveInput = FVector2D::ZeroVector;
 	StartupPlantRemaining = 0.0f;
 	bWasMoving = false;
@@ -845,6 +855,16 @@ void UDeliveryActiveRagdollComponent::StopRagdoll()
 
 void UDeliveryActiveRagdollComponent::SetLimp(bool bLimp)
 {
+	bExternalLimpRequested = bLimp;
+	ApplyLimpState(bExternalLimpRequested || bSlopeTumbling);
+}
+
+void UDeliveryActiveRagdollComponent::ApplyLimpState(bool bLimp)
+{
+	if (bIsActive && bIsLimp == bLimp)
+	{
+		return;
+	}
 	AActor* Owner = GetOwner();
 	const EDeliveryRagdollControlMode NewMode = bLimp
 		? EDeliveryRagdollControlMode::Limp
@@ -1896,6 +1916,99 @@ bool UDeliveryActiveRagdollComponent::TraceGround(
 	return false;
 }
 
+bool UDeliveryActiveRagdollComponent::TraceTumbleSurface(FGroundHit& OutHit) const
+{
+	if (!Mesh || !GetWorld())
+	{
+		return false;
+	}
+	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(RagdollTumbleGround), false, GetOwner());
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	FHitResult Hit;
+	if (!GetWorld()->LineTraceSingleByObjectType(Hit, Hips + FVector(0, 0, 25),
+		Hips - FVector(0, 0, 220), Objects, Params)
+		|| Hit.ImpactNormal.Z < FMath::Cos(FMath::DegreesToRadians(75.0f))
+		|| Hips.Z - Hit.ImpactPoint.Z > StandHeight * 1.5f + 20.0f)
+	{
+		return false;
+	}
+	OutHit.Point = Hit.ImpactPoint;
+	OutHit.Normal = Hit.ImpactNormal.GetSafeNormal();
+	return true;
+}
+
+void UDeliveryActiveRagdollComponent::UpdateSlopeTumble(float DeltaTime)
+{
+	if (!bIsActive || !Mesh || !GetOwner())
+	{
+		return;
+	}
+	if (bExternalLimpRequested)
+	{
+		// 受伤晕倒始终优先；坡地计时不能在 HP 恢复之前自行开电机。
+		bSlopeTumbling = false;
+		TumbleEntryTime = TumbleElapsed = TumbleRecoveryTime = 0.0f;
+		return;
+	}
+
+	FGroundHit Surface;
+	const bool bOnSurface = TraceTumbleSurface(Surface);
+	const float SlopeDegrees = bOnSurface
+		? FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Surface.Normal.Z, 0.0f, 1.0f)))
+		: 0.0f;
+	const FVector Velocity = Mesh->GetPhysicsLinearVelocity(Bones.Hips);
+	const FVector Downhill = bOnSurface
+		? FVector(Surface.Normal.X, Surface.Normal.Y, 0.0f).GetSafeNormal()
+		: FVector::ZeroVector;
+	const float DownhillSpeed = FVector::DotProduct(Velocity, Downhill);
+
+	if (!bSlopeTumbling)
+	{
+		TumbleCooldownTime = FMath::Max(0.0f, TumbleCooldownTime - DeltaTime);
+		const bool bShouldTumble = TumbleCooldownTime <= 0.0f && !bJumping && bOnSurface
+			&& SlopeDegrees >= TumbleSlopeDegrees && DownhillSpeed >= TumbleDownhillSpeed;
+		TumbleEntryTime = bShouldTumble ? TumbleEntryTime + DeltaTime : 0.0f;
+		if (TumbleEntryTime < TumbleEntryDelay)
+		{
+			return;
+		}
+		bSlopeTumbling = true;
+		TumbleElapsed = TumbleRecoveryTime = 0.0f;
+		TumbleEntryTime = 0.0f;
+		if (ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner()))
+		{
+			if (UDeliveryGrabComponent* Grab = Character->GetGrabComponent())
+			{
+				Grab->ForceRelease();
+			}
+		}
+		EndBodyDrivenPunch();
+		ApplyLimpState(true);
+		if (HasPhysicsBody(Mesh, Bones.Spine) && !Downhill.IsNearlyZero())
+		{
+			Mesh->AddAngularImpulseInRadians(
+				FVector::CrossProduct(Downhill, FVector::UpVector) * TumbleStartAngularSpeed,
+				Bones.Spine, true);
+		}
+		return;
+	}
+
+	TumbleElapsed += DeltaTime;
+	const bool bSafeToRise = bOnSurface && SlopeDegrees <= TumbleRecoverySlopeDegrees
+		&& Velocity.Size2D() <= TumbleRecoverySpeed;
+	TumbleRecoveryTime = bSafeToRise ? TumbleRecoveryTime + DeltaTime : 0.0f;
+	if (TumbleElapsed >= TumbleMinimumDuration && TumbleRecoveryTime >= TumbleRecoveryDelay)
+	{
+		bSlopeTumbling = false;
+		TumbleRecoveryTime = 0.0f;
+		TumbleCooldownTime = 1.0f;
+		ApplyLimpState(false);
+	}
+}
+
 void UDeliveryActiveRagdollComponent::SyncOwnerToPelvis(float DeltaTime)
 {
 	if (!Mesh || !Capsule)
@@ -1922,7 +2035,7 @@ void UDeliveryActiveRagdollComponent::OnRep_ControlMode()
 		{
 			StartRagdoll();
 		}
-		SetLimp(true);
+		ApplyLimpState(true);
 		break;
 	default:
 		StopRagdoll();

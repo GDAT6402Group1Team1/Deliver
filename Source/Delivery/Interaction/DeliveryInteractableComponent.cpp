@@ -35,8 +35,11 @@ bool UDeliveryInteractableComponent::CanInteract(const APawn* Interactor) const
 		return false;
 	}
 	FVector InteractionPoint = GetOwner()->GetActorLocation();
+	FVector InteractorPoint = Interactor->GetActorLocation();
 	// E items on the floor are reached at their collision surface, not their pivot.
-	// A short package otherwise needs the pelvis almost directly above its centre.
+	// Measure the actual gap between the item and the player's collision surface.
+	// Measuring from the pawn origin (the pelvis) makes a floor item appear farther
+	// than one metre away even when it is directly beside the player's feet.
 	if (InteractionKey == EDeliveryInteractionKey::PickupE)
 	{
 		if (const UPrimitiveComponent* Primitive = Cast<UPrimitiveComponent>(GetOwner()->GetRootComponent()))
@@ -47,8 +50,16 @@ bool UDeliveryInteractableComponent::CanInteract(const APawn* Interactor) const
 				InteractionPoint = Closest;
 			}
 		}
+		if (const UPrimitiveComponent* InteractorPrimitive = Cast<UPrimitiveComponent>(Interactor->GetRootComponent()))
+		{
+			FVector Closest;
+			if (InteractorPrimitive->GetClosestPointOnCollision(InteractionPoint, Closest) > 0.0f)
+			{
+				InteractorPoint = Closest;
+			}
+		}
 	}
-	const float DistSq = FVector::DistSquared(Interactor->GetActorLocation(), InteractionPoint);
+	const float DistSq = FVector::DistSquared(InteractorPoint, InteractionPoint);
 	return DistSq <= FMath::Square(InteractRadius);
 }
 
