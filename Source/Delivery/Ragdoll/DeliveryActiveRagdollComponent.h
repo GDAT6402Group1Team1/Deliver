@@ -359,9 +359,17 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="1.0"))
 	float PunchTwistSpeed = 10.0f;
 
-	/** 释放时全身沿拳路前送多远。直拳的力道主要来自这一下体重前压。 */
+	/** 释放时髋部少量前压；原地出拳以支撑位置为基准，避免逐帧向前漂移。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0", ClampMax="60.0"))
-	float PunchLungeDistance = 24.0f;
+	float PunchLungeDistance = 4.0f;
+
+	/** 原地出拳时脚的位置支撑强度；外力仍可推动身体。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float PunchFootSupportStrength = 0.75f;
+
+	/** 髋部被推离支撑点超过此距离就松开脚，避免受击时被吊住。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="10.0"))
+	float PunchSupportBreakDistance = 45.0f;
 
 	/** 前送和收回的速度。要比拧身快，身体先压出去，拳头才跟着有重量。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="1.0"))
@@ -554,6 +562,10 @@ protected:
 	float HitFacingYaw = 0.0f;
 	bool bHasHitFacing = false;
 	bool bHitFeetPlanted = false;
+	bool bPunchFeetPlanted = false;
+	bool bPunchSupportInterrupted = false;
+	FVector PunchSupportLocation = FVector::ZeroVector;
+	float PunchSupportYaw = 0.0f;
 	FDeliveryRagdollSnapshot PreviousSnapshot;
 	FDeliveryRagdollSnapshot TargetSnapshot;
 	bool bHasNetworkSnapshot = false;
@@ -599,6 +611,7 @@ protected:
 	void UpdateControlTargets(float DeltaTime);
 	void SetHitReactionStrength(float Multiplier);
 	void SetHitFeetPlanted(bool bPlant);
+	void SetPunchFeetPlanted(bool bPlant);
 	void BraceTorsoForAction(float DeltaTime, bool bPunch, bool bCarry);
 	void UpdatePelvisTarget(float DeltaTime, const FVector& Wish);
 	void UpdateFeet(float DeltaTime, const FVector& Wish);

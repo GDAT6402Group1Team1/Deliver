@@ -137,6 +137,9 @@ bool FDeliveryBoxingAssetTest::RunTest(const FString&)
 		Step(10,Side,true);
 		const FVector Strike = TargetFist(Arm);
 		const TPair<FVector, FVector> StrikeBones = TargetBones(Arm);
+		Step(1,-1,false);
+		TestTrue(TEXT("retraction eases away from full extension"),
+			FVector::Distance(TargetFist(Arm), Strike) < 0.04f * Length);
 		Step(60,-1,false);
 		const FVector Relaxed = TargetFist(Arm);
 		AddInfo(FString::Printf(
@@ -152,11 +155,10 @@ bool FDeliveryBoxingAssetTest::RunTest(const FString&)
 		TestTrue(TEXT("the upper arm points down the punch"), StrikeBones.Key.X > 0.85f);
 		TestTrue(TEXT("idle arm hangs well below the shoulder"), Rest.Z < -0.6f * Length);
 		TestTrue(TEXT("idle arm stays beside the body"), Rest.X < 0.3f * Length);
-		// A guard, not a wind-up behind the back: the fist has to sit on the line the punch
-		// will travel, otherwise it can only get to the target by swinging around the shoulder.
-		TestTrue(TEXT("windup holds the fist in front of the chest"), Windup.X > 0.25f * Length);
+		TestTrue(TEXT("windup draws the fist behind the shoulder"), Windup.X < -0.15f * Length);
+		TestTrue(TEXT("windup moves backward from rest"), Windup.X < Rest.X - 0.2f * Length);
 		TestTrue(TEXT("windup keeps the elbow bent"), Windup.Size() < 0.6f * Length);
-		TestTrue(TEXT("windup lifts the fist to shoulder height"), Windup.Z > 0);
+		TestTrue(TEXT("windup stays close to shoulder height"), FMath::Abs(Windup.Z) < 0.15f * Length);
 		TestTrue(TEXT("the other arm keeps hanging"), OtherWindup.Z < -0.6f * Length);
 		TestTrue(TEXT("strike sends the whole arm forward"), Strike.X > 0.8f * Length);
 		TestTrue(TEXT("strike keeps the fist at shoulder height"), FMath::Abs(Strike.Z) < 0.2f * Length);

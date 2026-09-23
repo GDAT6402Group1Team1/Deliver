@@ -46,36 +46,33 @@ struct FDeliveryArmPoseSettings
 	float ThumbCurlAngle = 26.0f;
 
 	/**
-	 * 收拳：拳头相对肩膀前后多远。负值表示收在肩前，也就是拳击的护架姿势。
-	 * 拉到肩后（正值）时拳头必须绕过肩膀才能到身前，绕哪边都不像直拳：
-	 * 绕外侧是抡巴掌，绕上方是手刀。
+	 * 收拳：正值把拳头拉到肩后，负值是肩前护架。
+	 * 后收时保留少量外侧和下方距离，避免前送经过肩关节原点导致肘部翻转。
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="收拳", meta=(ClampMin="-0.6", ClampMax="0.8"))
-	float WindupBack = -0.32f;
+	float WindupBack = 0.24f;
 
 	/**
-	 * 收拳：拳头比肩高多少。要和终点落在同一条射线上，比例按行程来：
-	 * PunchDrop = -WindupUp * PunchReach / |WindupBack|。对不上，前送就会一边走一边找高度。
+	 * 收拳：拳头比肩高多少。略低于肩，后收到前送的高度差保持很小。
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="收拳", meta=(ClampMin="-0.3", ClampMax="0.6"))
-	float WindupUp = 0.02f;
+	float WindupUp = -0.06f;
 
 	/**
-	 * 收拳：拳头向身体外侧拉开多少。负值表示收向中线。同样按行程对齐：
-	 * PunchInward = -WindupOutward * PunchReach / |WindupBack|。对不上就是横着划弧。
+	 * 收拳：拳头向身体外侧拉开多少。给肩旁留出通过空间，不能拉成大幅横摆。
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="收拳", meta=(ClampMin="-0.4", ClampMax="0.7"))
-	float WindupOutward = -0.016f;
+	float WindupOutward = 0.16f;
 
 	/** 直拳终点：拳头离肩多远。1 表示手臂打直。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="直拳", meta=(ClampMin="0.5", ClampMax="1.0"))
 	float PunchReach = 1.0f;
 
-	/** 直拳终点：向身体中线收多少。和 WindupOutward 按行程对齐，拳头才走直线。 */
+	/** 直拳终点：向身体中线收多少。后收点到此点按位置直线插值。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="直拳", meta=(ClampMin="0.0", ClampMax="0.3"))
 	float PunchInward = 0.05f;
 
-	/** 直拳终点：拳头比肩低多少。负值表示比肩高。和 WindupUp 按行程对齐。 */
+	/** 直拳终点：拳头比肩低多少。负值表示比肩高。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="直拳", meta=(ClampMin="-0.2", ClampMax="0.3"))
 	float PunchDrop = -0.062f;
 
@@ -93,7 +90,7 @@ struct FDeliveryArmPoseSettings
 
 	/** 收拳、放手、前送、收回的速度，单位是每秒完成的姿势比例。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="节奏", meta=(ClampMin="0.5"))
-	float WindupSpeed = 5.0f;
+	float WindupSpeed = 4.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="节奏", meta=(ClampMin="0.5"))
 	float WindupReleaseSpeed = 3.0f;
@@ -103,7 +100,7 @@ struct FDeliveryArmPoseSettings
 	 * 看起来就是摆了摆手；留出让整条手臂真正走完这段弧线的时间。
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="节奏", meta=(ClampMin="0.5"))
-	float PunchExtendSpeed = 13.0f;
+	float PunchExtendSpeed = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="节奏", meta=(ClampMin="0.5"))
 	float PunchRetractSpeed = 4.0f;

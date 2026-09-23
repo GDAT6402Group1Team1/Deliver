@@ -647,6 +647,8 @@ void UDeliveryActiveRagdollComponent::DestroyControls()
 	HitPushDirection = FVector::ZeroVector;
 	bHasHitFacing = false;
 	bHitFeetPlanted = false;
+	bPunchFeetPlanted = false;
+	bPunchSupportInterrupted = false;
 	LeftFoot.Control = NAME_None;
 	RightFoot.Control = NAME_None;
 }
@@ -887,6 +889,8 @@ void UDeliveryActiveRagdollComponent::ApplyLimpState(bool bLimp)
 	bIsLimp = bLimp;
 	if (bLimp)
 	{
+		SetPunchFeetPlanted(false);
+		bPunchSupportInterrupted = true;
 		MoveInput = FVector2D::ZeroVector;
 	}
 	else if (bIsActive)
@@ -1022,6 +1026,7 @@ void UDeliveryActiveRagdollComponent::ReseedFromCurrentPose()
 
 void UDeliveryActiveRagdollComponent::CancelFootSteps()
 {
+	SetPunchFeetPlanted(false);
 	LeftFoot.Alpha = 1.0f;
 	RightFoot.Alpha = 1.0f;
 	if (!PhysicsControl)
@@ -1071,6 +1076,11 @@ void UDeliveryActiveRagdollComponent::SetHitReactionStrength(float Multiplier)
 
 void UDeliveryActiveRagdollComponent::SetHitFeetPlanted(bool bPlant)
 {
+	if (bPlant)
+	{
+		SetPunchFeetPlanted(false);
+		bPunchSupportInterrupted = true;
+	}
 	if (!PhysicsControl || !Mesh || bHitFeetPlanted == bPlant
 		|| LeftFoot.Control.IsNone() || RightFoot.Control.IsNone())
 	{
@@ -1106,6 +1116,42 @@ void UDeliveryActiveRagdollComponent::SetHitFeetPlanted(bool bPlant)
 		bWasMoving = false;
 		bPendingStopRecovery = false;
 	}
+}
+
+void UDeliveryActiveRagdollComponent::SetPunchFeetPlanted(bool bPlant)
+{
+	if (bPunchFeetPlanted == bPlant || !PhysicsControl || !Mesh
+		|| LeftFoot.Control.IsNone() || RightFoot.Control.IsNone()) return;
+	bPunchFeetPlanted = bPlant;
+	if (bPlant)
+	{
+		PunchSupportLocation = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
+		PunchSupportYaw = CurrentFacingYaw;
+		StartupPlantRemaining = 0.0f;
+	}
+	for (FFoot* Foot : { &LeftFoot, &RightFoot })
+	{
+		FPhysicsControlMultiplier Multiplier;
+		Multiplier.LinearStrengthMultiplier = FVector(bPlant ? PunchFootSupportStrength : 1.0f);
+		PhysicsControl->SetControlMultiplier(Foot->Control, Multiplier, false, true, false);
+		if (bPlant)
+		{
+			Foot->Start = Mesh->GetCenterOfMass(Foot->Bone);
+			Foot->Target = Foot->Start;
+			FGroundHit Ground;
+			if (TraceGround(Foot->Start, FVector::UpVector, Ground))
+			{
+				Foot->Target = Ground.Point + Ground.Normal * Foot->GroundOffset;
+			}
+			Foot->Alpha = 1.0f;
+			PhysicsControl->SetControlTargetPositionAndOrientation(
+				Foot->Control, Foot->Target, Foot->TargetRotation.Rotator(),
+				0.0f, true, true, true, false);
+		}
+		PhysicsControl->SetControlEnabled(Foot->Control, bPlant, true, false);
+	}
+	bWasMoving = false;
+	bPendingStopRecovery = !bPlant;
 }
 
 void UDeliveryActiveRagdollComponent::ApplyMeleeImpact(const FVector& Impulse, const FVector& ImpactPoint)
@@ -1181,6 +1227,7 @@ void UDeliveryActiveRagdollComponent::BeginBodyDrivenPunch(FVector AimDirection,
 	PunchHandSide = FMath::Sign(HandSide);
 	bBodyDrivenPunchActive = !PunchAimDirection.IsNearlyZero();
 	bBodyDrivenPunchReleased = false;
+	bPunchSupportInterrupted = false;
 }
 
 void UDeliveryActiveRagdollComponent::ReleaseBodyDrivenPunch()
@@ -1192,6 +1239,7 @@ void UDeliveryActiveRagdollComponent::EndBodyDrivenPunch()
 {
 	bBodyDrivenPunchActive = false;
 	bBodyDrivenPunchReleased = false;
+	SetPunchFeetPlanted(false);
 }
 
 FVector UDeliveryActiveRagdollComponent::GetWishDir() const
@@ -1241,12 +1289,24 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	}
 
 	const FVector Wish = GetWishDir();
+	if (bPunchFeetPlanted && FVector::Dist2D(
+		Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace), PunchSupportLocation) > PunchSupportBreakDistance)
+	{
+		bPunchSupportInterrupted = true;
+	}
+	// Only support a stationary, grounded punch. Walking, jumping and getting hit
+	// release these targets so the feet cannot pin a moving or falling body.
+	SetPunchFeetPlanted(bBodyDrivenPunchActive && !bPunchSupportInterrupted
+		&& !bHitFeetPlanted && !bIsLimp && IsGrounded() && Wish.IsNearlyZero()
+		&& GetUprightDot() > 0.65f
+		&& (bPunchFeetPlanted || Mesh->GetPhysicsLinearVelocity(Bones.Hips).Size2D() < 80.0f)
+		&& FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentFacingYaw, PunchAimDirection.Rotation().Yaw)) < 35.0f);
 	const FVector EffectiveWish = StartupPlantRemaining > 0.0f || bHitFeetPlanted
 		? FVector::ZeroVector : Wish;
 	UpdatePelvisTarget(DeltaTime, EffectiveWish);
 	// 空中不跑步态：髋已经被抬高，这时规划落点会让脚去追够不到的地面点。
 	// 腿改由各自的父空间角度电机拉回站立姿势，落地后再恢复迈步。
-	if (!bHitFeetPlanted && !bJumping && !bPelvisAirborne)
+	if (!bHitFeetPlanted && !bPunchFeetPlanted && !bJumping && !bPelvisAirborne)
 	{
 		UpdateFeet(DeltaTime, EffectiveWish);
 	}
@@ -1403,8 +1463,12 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	// 让单手真的够到附近的身体表面，而不是永远差一截、建不了约束。
 	Target -= CurrentGroundNormal * (DragReachCrouchHeight * DragReachAlpha);
 
-	// 直拳的力道来自体重压上去，不是手臂伸得远。手臂本身只有三十几厘米行程，
-	// 全身沿拳路前送这一下才是"打"和"推"的区别。脚会跟着这个目标上步。
+	// 原地支撑时固定髋目标的水平基准，少量前压不再累积成整个人向前上步。
+	if (bPunchFeetPlanted)
+	{
+		Target = PunchSupportLocation + CurrentGroundNormal
+			* FVector::DotProduct(Target - PunchSupportLocation, CurrentGroundNormal);
+	}
 	PunchLunge = FMath::FInterpTo(PunchLunge,
 		bBodyDrivenPunchActive && bBodyDrivenPunchReleased ? 1.0f : 0.0f, DeltaTime, PunchLungeSpeed);
 	if (PunchLunge > KINDA_SMALL_NUMBER && !PunchAimDirection.IsNearlyZero())
@@ -1430,7 +1494,7 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	if (bBodyDrivenPunchActive && !PunchAimDirection.IsNearlyZero())
 	{
 		// 出拳时身体转向瞄准方向。不转身的话拳头目标会落在肩膀活动范围之外，看起来就只有小臂在动。
-		DesiredYaw = PunchAimDirection.Rotation().Yaw;
+		DesiredYaw = bPunchFeetPlanted ? PunchSupportYaw : PunchAimDirection.Rotation().Yaw;
 	}
 	else if (const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
 		Character && Character->GetGrabComponent() && Character->GetGrabComponent()->IsGrabbing())
@@ -1488,7 +1552,7 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 		const float LeanRadians = FMath::DegreesToRadians(
 			AccelerationLeanAngle * SmoothedAccelerationAlpha * FMath::Clamp(Wish.Size(), 0.0f, 1.0f));
 		const float WobbleRadians = FMath::DegreesToRadians(
-			BouncyPelvisWobbleAngle * Wobble * (bCarryingProp ? 0.2f : 1.0f));
+			BouncyPelvisWobbleAngle * Wobble * (bCarryingProp || bBodyDrivenPunchActive ? 0.2f : 1.0f));
 		const FVector DesiredUp = (StanceUp
 			+ WishOnSlope * FMath::Tan(LeanRadians)
 			+ SlopeRight * FMath::Tan(WobbleRadians)).GetSafeNormal();
@@ -1510,21 +1574,23 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	// 正的 Yaw 会把左肩转向前方，所以左拳（PunchHandSide 为正）蓄力要给负角度。
 	const float DesiredPunchTwist = !bBodyDrivenPunchActive ? 0.0f
 		: PunchHandSide * (bBodyDrivenPunchReleased ? PunchFollowThroughAngle : -PunchSideStanceAngle);
-	// 这个目标角度是阶跃的：出拳、释放、收拳各跳一次。骨盆电机很硬，把阶跃直接喂进去
+	// 这个目标角度是阶跃的：出拳、释放、收拳各跳一次。胸腰电机很硬，把阶跃直接喂进去
 	// 会把整个上半身连着伸出去的手臂横甩过去，看着就是在扇耳光。必须平滑。
 	PunchTwist = FMath::FInterpTo(PunchTwist, DesiredPunchTwist, DeltaTime, PunchTwistSpeed);
 	const FQuat PunchSideRotation = FMath::IsNearlyZero(PunchTwist)
 		? FQuat::Identity
 		: FQuat(CurrentGroundNormal, FMath::DegreesToRadians(PunchTwist));
-	const FQuat PelvisRotation = PunchSideRotation * Lean * YawDelta * SlopeAlign * ReferencePelvisRotation;
-	FQuat SpineRelativeRotation = ReferenceSpineRelativeRotation;
-	if (!bCarryingProp && !Wish.IsNearlyZero() && !FMath::IsNearlyZero(Wobble)
+	const FQuat PelvisRotation = Lean * YawDelta * SlopeAlign * ReferencePelvisRotation;
+	// 蓄力和释放的拧身由腰胸完成，骨盆不跟着左右扭动两条腿。
+	FQuat SpineRelativeRotation = (PelvisRotation.Inverse() * PunchSideRotation
+		* PelvisRotation * ReferenceSpineRelativeRotation).GetNormalized();
+	if (!bCarryingProp && !bBodyDrivenPunchActive && !Wish.IsNearlyZero() && !FMath::IsNearlyZero(Wobble)
 		&& !SlopeForward.IsNearlyZero())
 	{
 		const float SwingRadians = FMath::DegreesToRadians(-LooseTorsoSwingAngle * Wobble);
 		const float TwistRadians = FMath::DegreesToRadians(LooseTorsoSwingAngle * 0.35f * Wobble);
 		const FQuat SpineWorldRotation =
-			FQuat(CurrentGroundNormal, TwistRadians)
+			PunchSideRotation * FQuat(CurrentGroundNormal, TwistRadians)
 			* FQuat(SlopeForward, SwingRadians)
 			* PelvisRotation
 			* ReferenceSpineRelativeRotation;

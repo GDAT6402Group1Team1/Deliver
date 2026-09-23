@@ -32,9 +32,11 @@
 - 电瓶车受击：地面探测只查 `WorldStatic/WorldDynamic`，排除 `Vehicle`；离地时暂停髋部世界空间电机，重新探到地面后恢复。撞击镜头只在受击玩家本机平滑拉远约 120 cm 并回归，不改全局相机遮挡。
 
 ### 2. 互殴系统（近战）
+- 出拳手感追加调校：释放冲量当前为 1200（上一版 900），后收比例 0.24，蓄力姿态速度 4、伸拳速度 10；前送沿用快速释放曲线，收拳单独使用 SmoothStep 两端缓速。保留下半身支撑与 4 cm 髋部前压，不提高伤害数值。
 - [Source/Delivery/Ragdoll/DeliveryRagdollCombatComponent.h](Source/Delivery/Ragdoll/DeliveryRagdollCombatComponent.h) —— 在布娃娃刚体链上执行出拳动作。
 - [Source/Delivery/Combat/DeliveryCombatInterface.h](Source/Delivery/Combat/DeliveryCombatInterface.h) —— `StartMeleeAttack` / `GatherMeleeHits` / `EndMeleeAttack` / `IsMeleeAttacking`，Character 实现，GA 调用。
-- [Source/Delivery/Combat/DeliveryCombatTypes.h](Source/Delivery/Combat/DeliveryCombatTypes.h) —— `FDeliveryArmPoseSettings`：A 姿势、收拳、直拳三段姿态的参数化定义，握拳靠手指弯曲角度模拟（无手指刚体）。注意多组参数之间有比例耦合关系（如 `WindupUp`/`WindupOutward` 需按 `PunchReach` 换算对齐，否则出拳轨迹会偏成横扫或找高度）。
+- [Source/Delivery/Combat/DeliveryCombatTypes.h](Source/Delivery/Combat/DeliveryCombatTypes.h) —— `FDeliveryArmPoseSettings`：A 姿势、后收蓄力、直拳三段姿态的参数化定义，握拳靠手指弯曲角度模拟（无手指刚体）。蓄力目标在肩后略向外、略向下；释放时直接插值手的位置，向外偏移用于避免拳路经过肩关节原点。
+- 出拳下半身稳定：拧身改由胸腰完成，不再扭动骨盆；髋部前压默认从 24 cm 降到 4 cm，手部释放冲量从 1800 降到 900，蓄力默认 0.32 秒。原地、着地且直立时短暂启用脚部位置电机并固定髋目标的水平基准；移动、跳跃、受击、晕倒或明显偏离支撑点时解除，不关闭物理模拟。行走时出拳保留步态，只减小髋部摆动。
 - [Source/Delivery/Combat/DeliveryHandPose.h](Source/Delivery/Combat/DeliveryHandPose.h)、[DeliveryBoxingPose.h](Source/Delivery/Combat/DeliveryBoxingPose.h)（含单测）。
 - 左右拳通过 GAS 技能 [GA_DeliverPunch](Source/Delivery/GAS/Abilities/GA_DeliverPunch.h) 触发，对应 tag `Ability.Attack.Punch.Left/Right`。
 

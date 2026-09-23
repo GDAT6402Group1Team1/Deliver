@@ -50,19 +50,19 @@ protected:
 
 	/** 释放瞬间给前臂和拳头沿瞄准方向的速度变化，让拳头是被抡出去的而不是被牵着走。 */
 	UPROPERTY(EditAnywhere, Category="Punch", meta=(ClampMin="0.0"))
-	float PunchImpulse = 1800.f;
+	float PunchImpulse = 1200.f;
 
 	/** 收拳到释放之间的时间。太短就看不出抡的过程。 */
 	UPROPERTY(EditAnywhere, Category="Punch", meta=(ClampMin="0.0", ClampMax="0.6"))
-	float WindupDelay = 0.26f;
+	float WindupDelay = 0.32f;
 
 	/** 前送接近最远点时进入命中窗口。 */
 	UPROPERTY(EditAnywhere, Category="Punch", meta=(ClampMin="0.0"))
-	float HitWindowDelay = 0.4f;
+	float HitWindowDelay = 0.48f;
 
 	/** 整段攻击多久结束。结束时手臂肌肉重新打开。 */
 	UPROPERTY(EditAnywhere, Category="Punch", meta=(ClampMin="0.0"))
-	float PunchEndDelay = 0.72f;
+	float PunchEndDelay = 0.76f;
 
 	/** 检测点相对拳头骨骼沿瞄准方向的前伸距离（厘米）。 */
 	UPROPERTY(EditAnywhere, Category="Punch", meta=(ClampMin="0.0"))

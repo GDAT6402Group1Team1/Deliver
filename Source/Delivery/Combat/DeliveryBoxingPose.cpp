@@ -354,7 +354,10 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 		const float WindupAlpha = FMath::SmoothStep(0.f, 1.f, Arm.Windup);
 		// 收拳可以两头都缓，前送不行：缓入等于出手先慢慢加速，那是推不是打。
 		// 一出手就给最大速度，末端再减速，收在伸直的位置上。
-		const float StrikeAlpha = 1.f - FMath::Square(1.f - Arm.Extension);
+		// 前送快速释放，回收则在两端减速，避免快收完时突然落回垂手姿势。
+		const float StrikeAlpha = bStrike
+			? 1.f - FMath::Square(1.f - Arm.Extension)
+			: FMath::SmoothStep(0.f, 1.f, Arm.Extension);
 		const FVector Outward = Right * (Side == 0 ? -1.f : 1.f);
 		const float Length = Arm.UpperLength + Arm.LowerLength;
 		const float MaxReach = Length * 0.99f;
@@ -366,8 +369,8 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 				+ Forward * FMath::Tan(FMath::DegreesToRadians(Settings.RestForwardAngle))) * Length * Settings.RestReach,
 			-Forward + Outward * 0.35f, MaxReach);
 
-		// 收拳和终点都沿瞄准方向，不沿身体正前方。瞄准偏一点时，护架如果还对着身体前方，
-		// 前送就得先把方向转过来，拳头会横着划过去。
+		// 先沿瞄准方向向侧后方收拳，再从此点向前打出。少量外侧距离
+		// 让手经过肩旁而非穿过肩关节原点，保持屈肘方向连续。
 		const FVector WindupOffset =
 			(-PunchForward * Settings.WindupBack + FVector::UpVector * Settings.WindupUp
 				+ Outward * Settings.WindupOutward) * Length;
