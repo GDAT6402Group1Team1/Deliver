@@ -23,6 +23,7 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Delivery.h"
 #include "GAS/DeliverAbilitySystemComponent.h"
+#include "GAS/DeliverAttributeSet.h"
 #include "GAS/DeliverPlayerState.h"
 #include "Combat/DeliveryRagdollCombatComponent.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
@@ -146,6 +147,21 @@ ADeliveryCharacter::ADeliveryCharacter()
 		Mesh->SetAnimation(StandPoseFinder.Object);
 		Mesh->SetPlayRate(0.0f);
 	}
+}
+
+bool ADeliveryCharacter::IsIncapacitated() const
+{
+	const UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (!ASC)
+	{
+		return false;
+	}
+	if (ASC->HasMatchingGameplayTag(TAG_State_Stunned))
+	{
+		return true;
+	}
+	// Tag 是跟着 GE 走的，血刚归零到 ASC 挂上 Tag 之间有一两帧空窗，这里补一刀。
+	return ASC->GetNumericAttribute(UDeliverAttributeSet::GetHealthAttribute()) <= 0.0f;
 }
 
 void ADeliveryCharacter::NotifyVehicleImpact()

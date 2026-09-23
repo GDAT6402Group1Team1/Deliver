@@ -225,6 +225,15 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerPickup(AActor* Target);
 
+	/**
+	 * 是不是正躺着（血空/晕倒）。倒地的人不该还能按 F 上车、按 E 捡东西。
+	 *
+	 * 判据用复制过来的 State.Stunned Tag 而不是 ASC 上那个 bStunned——后者只在服务器上维护，
+	 * 客户端读永远是 false，本机的提示浮窗会照样弹出来。血量兜底一条，防止 Tag 还没同步到。
+	 */
+	UFUNCTION(BlueprintPure, Category="State")
+	bool IsIncapacitated() const;
+
 	FORCEINLINE UCapsuleComponent* GetCapsuleComponent() const { return CapsuleComponent; }
 	FORCEINLINE USkeletalMeshComponent* GetMesh() const { return Mesh; }
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }

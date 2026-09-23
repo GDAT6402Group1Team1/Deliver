@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Interaction/DeliveryInteractionProbeComponent.h"
+#include "DeliveryCharacter.h"
 #include "GameFramework/Pawn.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
@@ -21,6 +22,15 @@ void UDeliveryInteractionProbeComponent::TickComponent(
 	const APawn* Owner = Cast<APawn>(GetOwner());
 	// 不是本机操控的 Pawn 就别探测：包括别人的角色，也包括自己上了车之后被丢下的那具身体。
 	if (!Owner || !Owner->IsLocallyControlled())
+	{
+		Focused = nullptr;
+		return;
+	}
+
+	// 倒在地上的人不该还能按 F 上车 / 按 E 捡东西。清掉 Focused 就同时挡住了提示浮窗
+	// 和按键——DoInteract/DoPickup 拿的都是这里的结果，不用在每个调用点各写一遍。
+	const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(Owner);
+	if (Character && Character->IsIncapacitated())
 	{
 		Focused = nullptr;
 		return;

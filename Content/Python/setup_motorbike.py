@@ -286,7 +286,12 @@ def reimport_rider():
     cdo = unreal.get_default_object(bp.generated_class()) if bp else None
     if cdo:
         try:
-            cdo.get_editor_property("rider_mesh").set_editor_property("skeletal_mesh_asset", None)
+            for prop in ("skinned_asset", "skeletal_mesh_asset", "skeletal_mesh"):
+                try:
+                    cdo.get_editor_property("rider_mesh").set_editor_property(prop, None)
+                    break
+                except Exception:
+                    continue
         except Exception:
             pass
 
@@ -310,7 +315,7 @@ def reimport_rider():
             w(u"  这次的结果不作数，不用看下面的姿势判定。")
         # 引用被摘过，重新挂回去。
         if cdo:
-            for prop in ("skeletal_mesh_asset", "skeletal_mesh"):
+            for prop in ("skinned_asset", "skeletal_mesh_asset", "skeletal_mesh"):
                 try:
                     cdo.get_editor_property("rider_mesh").set_editor_property(prop, rider)
                     break
@@ -714,7 +719,9 @@ def build_blueprint(body=None, rider=None):
 
     if rider:
         rider_comp = cdo.get_editor_property("rider_mesh")
-        for prop in ("skeletal_mesh_asset", "skeletal_mesh"):
+        # RiderMesh 是 PoseableMeshComponent（USkinnedMeshComponent），网格属性叫 skinned_asset；
+        # 后两个是它在旧版本/SkeletalMeshComponent 上的名字，留着当兜底。
+        for prop in ("skinned_asset", "skeletal_mesh_asset", "skeletal_mesh"):
             try:
                 rider_comp.set_editor_property(prop, rider)
                 break

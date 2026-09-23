@@ -11,7 +11,8 @@ class UBoxComponent;
 class UCameraComponent;
 class UDeliveryInteractableComponent;
 class UInputAction;
-class USkeletalMeshComponent;
+class UMaterialInterface;
+class UPoseableMeshComponent;
 class USpringArmComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
@@ -140,8 +141,36 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Motorbike|Mesh")
 	FVector RiderPivotLocation = FVector::ZeroVector;
 
+	/**
+	 * 骑手网格。用 PoseableMesh 而不是 SkeletalMesh：
+	 *
+	 * 骑手根本不需要动画——坐姿就写在这份资产的参考姿势里，本来就是"停在参考姿势上"。
+	 * 而要让脖子跟着转向偏一点，就得在 C++ 里改单根骨骼；SkeletalMeshComponent 没有
+	 * 改单根骨骼的接口，它每帧都会把单节点动画（= 参考姿势）重新求值盖回去，
+	 * 想改只能配 AnimBP + Transform(Modify)Bone，而 AnimGraph 必须在编辑器里手连。
+	 * PoseableMesh 就是为"纯 C++ 摆骨骼、不跑动画"准备的，SetBoneTransformByName 直接可用。
+	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-	TObjectPtr<USkeletalMeshComponent> RiderMesh;
+	TObjectPtr<UPoseableMeshComponent> RiderMesh;
+
+	/**
+	 * 有人骑的时候，把骑手网格的材质换成驾驶员自己身上那套。
+	 *
+	 * 车模型自带的骑手那个 tripo_mat 里**一张贴图都没有**，进游戏就是一块灰白。
+	 *
+	 * 能直接换是因为两边是同一个基础角色：玩家网格（Characters/A/renwu）和骑手
+	 * 槽位名完全一致（tripo_mat_c9b1ab96 / 材质 / 材质_001…材质_006 / Eyes_Black），
+	 * UV 也是同一套，所以按名字对应贴过去就是玩家本人的样子，不会错位。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Motorbike|表现")
+	bool bUseDriverMaterials = true;
+
+	/**
+	 * 手动指定骑手每个槽位的材质，按槽位下标对应。填了的槽位优先于上面的自动映射，
+	 * 留空（None）的槽位仍然走自动映射。美术想单独给骑手配一套时用这个，不用改代码。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Motorbike|表现")
+	TArray<TObjectPtr<UMaterialInterface>> RiderMaterialOverrides;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<USpringArmComponent> CameraBoom;
@@ -228,13 +257,41 @@ protected:
 
 	/** 车把转前轮的百分之多少。1 = 跟前轮一样打满（手会明显脱把）。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float HandlebarSteerRatio = 0.4f;
+	float HandlebarSteerRatio = 0.65f;
 
 	/** 骑手扭身跟转的比例。调大了脚会离开脚踏。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float RiderSteerRatio = 0.25f;
+	float RiderSteerRatio = 0.45f;
 
-	/** 骑车时镜头的俯角。镜头写死在车尾后方，不跟鼠标。 */
+	/**
+	 * 脖子跟着转向额外偏转的比例（叠在骑手扭身之上）。
+	 *
+	 * 人转弯是先看向弯心、身体再跟上，只转身不转头像个木头人。脖子这一层很便宜：
+	 * 头是骨骼链末端，转它不影响手和脚的位置，不会像扭身那样把脚扭离脚踏。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|表现", meta=(ClampMin="0.0", ClampMax="2.0"))
+	float RiderNeckSteerRatio = 0.6f;
+
+	/** 脖子骨骼名。这份资产是 Mixamo 骨架，所以带 mixamorig: 前缀。换模型时改这里。 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|表现")
+	FName RiderNeckBone = TEXT("mixamorig:Neck");
+
+	/**
+	 * 骑车时鼠标能不能转视角。
+	 *
+	 * 关掉 = 回到最早那套**固定车尾视角**：弹簧臂 `bUsePawnControlRotation=false`、只继承 Yaw、
+	 * 俯仰吃 `CameraPitch` 的相对角度，鼠标完全不参与，"W 永远是往屏幕里开"。
+	 * 那套的全部设置都还留在代码里（见 ApplyCameraMode），这个开关就是回退按钮，
+	 * 在 BP_Motorbike 上取消勾选即可，不用重编。
+	 *
+	 * 开着 = 自由视角：弹簧臂吃控制旋转，鼠标绕车转圈、可以回头看。
+	 * 代价是 W 按的是**车头**方向而不是屏幕里的方向——镜头转到侧面时按 W，车还是往它自己
+	 * 车头那边开。载具游戏普遍如此，但和固定视角的手感确实不一样，所以才留了开关。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|表现")
+	bool bFreeLookCamera = true;
+
+	/** 骑车时镜头的俯角。固定视角下是写死的俯角；自由视角下只当上车那一刻的起始俯角。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现", meta=(ClampMin="-80.0", ClampMax="20.0"))
 	float CameraPitch = -12.0f;
 
@@ -290,10 +347,25 @@ protected:
 
 	/** 被撞下车时把人抛出去的水平速度。调大人飞得更远、更不容易和车纠缠。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|被撞", meta=(ClampMin="0.0", Units="cm/s"))
-	float KnockDownLaunchSpeed = 900.0f;
+	float KnockDownLaunchSpeed = 1400.0f;
 
 	UPROPERTY(EditAnywhere, Category="Motorbike|被撞", meta=(ClampMin="0.0", Units="cm/s"))
-	float KnockDownLaunchUp = 420.0f;
+	float KnockDownLaunchUp = 550.0f;
+
+	/**
+	 * 抛射力度随来车速度淡入的参考车速：来车到这个速度就是满力度（上面那两个值）。
+	 * 关卡里的交通车 MaxSpeed 是 600~1500 随机的，取 1200 让大部分快车都接近满力度、
+	 * 慢车明显轻一些，而不是不管多慢都一个飞法。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|被撞", meta=(ClampMin="1.0", Units="cm/s"))
+	float KnockDownSpeedReference = 1200.0f;
+
+	/**
+	 * 来车速度接近 0 时的最低抛射比例。不能给 0：那样慢慢蹭一下人就原地瘫软，
+	 * 看着像自己躺下的，不像被撞的。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|被撞", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float KnockDownLaunchMinScale = 0.35f;
 
 	UPROPERTY(EditAnywhere, Category="Motorbike|上下车")
 	FText DrivePromptText;
@@ -301,8 +373,34 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Motorbike|上下车")
 	FText ExitPromptText;
 
+	/**
+	 * "按 F 下车"提示在上车后显示多久。
+	 * 一直挂着的话它会长在屏幕中间挡视野，而这条信息只在刚上车那会儿有用。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|上下车", meta=(ClampMin="0.0", Units="s"))
+	float ExitPromptDuration = 2.0f;
+
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> MoveAction;
+
+	/**
+	 * 局内切换视角的按键。默认 P——扫过 IMC_Default 的名字表，里面只有
+	 * A/D/E/F/J/S/SpaceBar/W（J 是电话），P 是空的。
+	 *
+	 * 故意用 BindKey 直接绑键，而不是再建一个 InputAction + 在 IMC_Default 上映射：
+	 * 那个资产从来没被提交过，每次 git 拉取都会把映射冲掉（F 键就这么没过两次），
+	 * 直接绑键没有这个失败模式。物品栏 1~5 也是同样的理由直接绑的。
+	 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	FKey CameraToggleKey;
+
+	/** 手柄右摇杆看向。只有 bFreeLookCamera 开着才起作用。 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	TObjectPtr<UInputAction> LookAction;
+
+	/** 鼠标看向。和角色身上用的是同两个 IA，手感一致。 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	TObjectPtr<UInputAction> MouseLookAction;
 
 	/**
 	 * 交互键（F）。用软引用晚绑：IA_Interact 是由 setup_motorbike.py 生成的，
@@ -315,6 +413,13 @@ protected:
 private:
 
 	void MoveInput(const FInputActionValue& Value);
+	void LookInput(const FInputActionValue& Value);
+
+	/** 局内切一次视角模式，并在屏幕上提示现在是哪种。 */
+	void ToggleCameraMode();
+
+	/** 按 bFreeLookCamera 把弹簧臂配成自由视角或固定车尾视角。上车时和 BeginPlay 各调一次。 */
+	void ApplyCameraMode();
 	void InteractPressed(const FInputActionValue& Value);
 
 	UFUNCTION(Server, Unreliable)
@@ -335,16 +440,26 @@ private:
 	/** 按有没有驾驶员刷新骑手网格和可交互状态。服务器和客户端都会走到。 */
 	void ApplyDriverPresentation();
 
+	/** 把驾驶员身上的材质映射到骑手网格的槽位上；没人骑就还原成资产自带的。 */
+	void ApplyRiderMaterials();
+
 	void UpdateSpeed(float DeltaSeconds);
 	void UpdateSteering(float DeltaSeconds);
 	void UpdateGroundAndMove(float DeltaSeconds);
 	void UpdateLean(float DeltaSeconds);
 	void UpdateSteerVisual(float DeltaSeconds);
+
+	/** 脖子跟着转向偏一点。单独一个函数是因为它改的是骨骼，不是组件变换。 */
+	void UpdateRiderNeck();
 	void UpdateImpactReaction(float DeltaSeconds);
-	void PushExitPrompt();
+	/** 把 NoticeText 推给浮窗子系统（约定是每帧推一次，停推 0.25 秒自动消失）。 */
+	void PushNotice();
+
+	/** 让某句提示在屏幕上停留 Seconds 秒。上车提示和切视角提示共用这一套。 */
+	void ShowNotice(const FText& Text, float Seconds);
 
 	/** 把人打倒：血清零交给既有的晕倒流程，再补一记冲量把他抛离车身。 */
-	void KnockDownDriver(ADeliveryCharacter* Rider, const FVector& LaunchDirection);
+	void KnockDownDriver(ADeliveryCharacter* Rider, const FVector& LaunchDirection, float LaunchScale);
 
 	/**
 	 * 这一次下车希望把人放在哪一侧（+1 右 / -1 左 / 0 用默认）。
@@ -381,4 +496,16 @@ private:
 	float KnockTilt = 0.0f;
 	float ShakeAmount = 0.0f;
 	float ShakePhase = 0.0f;
+
+	/** 当前这句提示还剩多少秒。上车那一帧由 ExitPromptDuration 起算，只在本机上用。 */
+	float NoticeRemaining = 0.0f;
+	FText NoticeText;
+	bool bHadDriverLastFrame = false;
+
+	/**
+	 * 脖子骨骼在参考姿势下的组件空间变换。转头是在它之上叠一个偏转，所以必须先记住原值——
+	 * 每帧读"当前值"再转会一直累加，头会一路转到背后去。
+	 */
+	FTransform NeckRefTransform = FTransform::Identity;
+	bool bNeckRefCached = false;
 };

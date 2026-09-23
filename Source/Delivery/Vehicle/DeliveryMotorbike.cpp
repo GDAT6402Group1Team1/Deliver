@@ -4,7 +4,9 @@
 #include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/PoseableMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Materials/MaterialInterface.h"
 #include "Components/StaticMeshComponent.h"
 #include "CollisionQueryParams.h"
 #include "Delivery.h"
@@ -74,19 +76,20 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 		BodyParts.Add(Part);
 	}
 
-	RiderMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("RiderMesh"));
+	RiderMesh = CreateDefaultSubobject<UPoseableMeshComponent>(TEXT("RiderMesh"));
 	RiderMesh->SetupAttachment(RiderPivot);
 	RiderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	RiderMesh->SetGenerateOverlapEvents(false);
-	// 骑手没有动画蓝图，就停在参考姿势上——这份 FBX 的参考姿势本来就是坐姿。
-	RiderMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+	// PoseableMesh 默认就停在参考姿势上——这份 FBX 的参考姿势本来就是坐姿，
+	// 不需要动画，只需要能在 C++ 里单独拧一下脖子。
 	RiderMesh->SetVisibility(false);
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = 650.0f;
 	CameraBoom->SocketOffset = FVector(0.0f, 0.0f, 120.0f);
-	// 镜头死死跟在车尾后方，不吃控制旋转、不吃鼠标。
+	// 这里配的是**固定车尾视角**那一套，也是 bFreeLookCamera 关掉时回退到的状态。
+	// 运行时由 ApplyCameraMode() 按开关改写，两套设置都完整保留着。
 	//
 	// 之前用 bUsePawnControlRotation=true + 延时回正，结果是上车瞬间镜头还停在人物
 	// 原来的朝向上，车头却朝别处——玩家按 W 看到车"横着走"，方向感整个是错的。
@@ -116,7 +119,20 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	{
 		MoveAction = MoveActionFinder.Object;
 	}
+
+	// 和角色身上用的是同两个 IA，鼠标/手柄灵敏度手感一致，也省得再建资产。
+	static ConstructorHelpers::FObjectFinder<UInputAction> LookActionFinder(TEXT("/Game/Input/Actions/IA_Look"));
+	if (LookActionFinder.Succeeded())
+	{
+		LookAction = LookActionFinder.Object;
+	}
+	static ConstructorHelpers::FObjectFinder<UInputAction> MouseLookActionFinder(TEXT("/Game/Input/Actions/IA_MouseLook"));
+	if (MouseLookActionFinder.Succeeded())
+	{
+		MouseLookAction = MouseLookActionFinder.Object;
+	}
 	InteractAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
+	CameraToggleKey = EKeys::P;
 }
 
 void ADeliveryMotorbike::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -143,6 +159,7 @@ void ADeliveryMotorbike::BeginPlay()
 	}
 
 	ApplyDriverPresentation();
+	ApplyCameraMode();
 }
 
 void ADeliveryMotorbike::ApplyBodyMeshes()
@@ -224,6 +241,60 @@ void ADeliveryMotorbike::ApplyDriverPresentation()
 		// 有人骑着的时候别人不该再看到"按 F 驾驶"。
 		Interactable->bInteractEnabled = !bHasDriver;
 	}
+	ApplyRiderMaterials();
+}
+
+void ADeliveryMotorbike::ApplyRiderMaterials()
+{
+	if (!RiderMesh)
+	{
+		return;
+	}
+
+	// 没人骑（或者关掉了这个功能）就还原成骨骼网格资产自带的那套。
+	// EmptyOverrideMaterials 是"清掉组件级覆盖"，不用自己记原来是什么。
+	if (!Driver || !bUseDriverMaterials)
+	{
+		RiderMesh->EmptyOverrideMaterials();
+		return;
+	}
+
+	USkeletalMeshComponent* DriverMesh = Driver->GetMesh();
+	if (!DriverMesh)
+	{
+		return;
+	}
+
+	// **按槽位名一一对应。**
+	// 玩家网格（Characters/A/renwu）和车模型自带的骑手是同一个基础角色，槽位名完全一样：
+	// tripo_mat_c9b1ab96 / 材质 / 材质_001…材质_006 / Eyes_Black。区别只在玩家那边给这 9 个槽
+	// 配了 character_hat（绿帽）、character_cloth（黄衣）、character_pants（浅蓝裤）、
+	// character_shoe1/shoe2（深蓝鞋）、socks、skin、eyes、prime，骑手这边九个槽共用一个
+	// 没有任何贴图的 tripo_mat。
+	//
+	// 别按下标猜，更别"所有非眼睛槽都用同一个材质"——后者会把整个人涂成衣服那一种黄色。
+	// 同一个基础角色也意味着 UV 是同一套，贴过去就是玩家本人的样子，不会错位。
+	const TArray<FName> DriverSlots = DriverMesh->GetMaterialSlotNames();
+	const TArray<FName> RiderSlots = RiderMesh->GetMaterialSlotNames();
+
+	for (int32 Index = 0; Index < RiderSlots.Num(); ++Index)
+	{
+		UMaterialInterface* Chosen = RiderMaterialOverrides.IsValidIndex(Index)
+			? RiderMaterialOverrides[Index].Get() : nullptr;
+
+		if (!Chosen)
+		{
+			const int32 DriverIndex = DriverSlots.IndexOfByKey(RiderSlots[Index]);
+			// 名字对不上才退回同下标：万一哪天有一边被重导成不同的槽位名，
+			// 至少还是九个槽对九个槽，不会全糊成一色。
+			Chosen = DriverMesh->GetMaterial(DriverIndex != INDEX_NONE ? DriverIndex : Index);
+		}
+
+		if (Chosen)
+		{
+			RiderMesh->SetMaterial(Index, Chosen);
+		}
+	}
 }
 
 void ADeliveryMotorbike::OnRep_Driver()
@@ -239,6 +310,13 @@ void ADeliveryMotorbike::HandleInteractRequested(APawn* Interactor)
 bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 {
 	if (!HasAuthority() || Driver || !IsValid(NewDriver))
+	{
+		return false;
+	}
+
+	// 血空/晕倒的人不能上车。客户端那边探测组件已经不给提示了，这里是服务器权威的那一道：
+	// 按键走的是 ServerInteract -> Execute，客户端状态不可信，必须在这儿再判一次。
+	if (NewDriver->IsIncapacitated())
 	{
 		return false;
 	}
@@ -272,6 +350,8 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	if (APlayerController* PC = Cast<APlayerController>(DriverController))
 	{
 		// 先对齐再混合，否则过渡的起点是人物原来的朝向，看着像镜头甩了一下。
+		// 自由视角下这也是鼠标的起始朝向：上车先给你摆到车尾后方，再交给鼠标。
+		ApplyCameraMode();
 		PC->SetControlRotation(FRotator(CameraPitch, GetActorRotation().Yaw, 0.0f));
 		PC->SetViewTargetWithBlend(this, 0.35f);
 	}
@@ -291,9 +371,10 @@ bool ADeliveryMotorbike::NotifyTrafficImpact(const FVector& CarVelocity)
 		return false;
 	}
 
+	const float ImpactSpeed = CarVelocity.Size2D();
 	++TrafficImpactCount;
 	UE_LOG(LogDelivery, Log, TEXT("%s：被交通车撞击 %d/%d 次（来车速度 %.0f cm/s）"),
-		*GetName(), TrafficImpactCount, ImpactsToDismount, CarVelocity.Size2D());
+		*GetName(), TrafficImpactCount, ImpactsToDismount, ImpactSpeed);
 
 	const FVector Direction = CarVelocity.GetSafeNormal2D();
 	if (!Direction.IsNearlyZero())
@@ -301,7 +382,7 @@ bool ADeliveryMotorbike::NotifyTrafficImpact(const FVector& CarVelocity)
 		// 被撞歪的正负取"来车方向相对车身的左右分量"：从右边撞来就往左歪，反之亦然。
 		const float Side = FVector::DotProduct(Direction, GetActorRightVector());
 
-		KnockVelocity += Direction * FMath::Min(CarVelocity.Size2D() * KnockbackFraction, MaxKnockbackSpeed);
+		KnockVelocity += Direction * FMath::Min(ImpactSpeed * KnockbackFraction, MaxKnockbackSpeed);
 		KnockYawRate += Side * KnockYawPerHit;
 		// UE 里正 Roll 是往左倒；从右边撞来（Side<0）应该往左倒，所以取负号。
 		KnockTilt += -Side * KnockTiltPerHit;
@@ -337,13 +418,17 @@ bool ADeliveryMotorbike::NotifyTrafficImpact(const FVector& CarVelocity)
 			{
 				LaunchDir = (GetActorRightVector() * AwaySign * 1.6f + Direction).GetSafeNormal2D();
 			}
-			KnockDownDriver(Rider, LaunchDir);
+			// 撞得越快飞得越远，但保底也要飞一点：慢车蹭一下不该看起来像自己躺下的。
+			const float LaunchScale = FMath::Lerp(
+				KnockDownLaunchMinScale, 1.0f,
+				FMath::Clamp(ImpactSpeed / FMath::Max(KnockDownSpeedReference, 1.0f), 0.0f, 1.0f));
+			KnockDownDriver(Rider, LaunchDir, LaunchScale);
 		}
 	}
 	return true;
 }
 
-void ADeliveryMotorbike::KnockDownDriver(ADeliveryCharacter* Rider, const FVector& LaunchDirection)
+void ADeliveryMotorbike::KnockDownDriver(ADeliveryCharacter* Rider, const FVector& LaunchDirection, float LaunchScale)
 {
 	if (!IsValid(Rider))
 	{
@@ -383,7 +468,9 @@ void ADeliveryMotorbike::KnockDownDriver(ADeliveryCharacter* Rider, const FVecto
 	const FVector Direction = LaunchDirection.GetSafeNormal2D();
 	if (!Direction.IsNearlyZero())
 	{
-		const FVector Launch = Direction * KnockDownLaunchSpeed + FVector::UpVector * KnockDownLaunchUp;
+		const float Scale = FMath::Clamp(LaunchScale, 0.0f, 1.0f);
+		const FVector Launch =
+			(Direction * KnockDownLaunchSpeed + FVector::UpVector * KnockDownLaunchUp) * Scale;
 		// 只推髋部的话冲量会被整条受约束刚体链分摊掉大半，人几乎飞不起来；
 		// 撞人那边也是这么给全身的。
 		Mesh->AddImpulse(Launch, TEXT("Hips"), true);
@@ -395,7 +482,8 @@ void ADeliveryMotorbike::KnockDownDriver(ADeliveryCharacter* Rider, const FVecto
 	// 所以复用角色自己"被车撞"的镜头脉冲。
 	Rider->NotifyVehicleImpact();
 
-	UE_LOG(LogDelivery, Log, TEXT("%s：驾驶员 %s 被撞下车并打晕"), *GetName(), *GetNameSafe(Rider));
+	UE_LOG(LogDelivery, Log, TEXT("%s：驾驶员 %s 被撞下车并打晕（抛射力度 %.0f%%）"),
+		*GetName(), *GetNameSafe(Rider), FMath::Clamp(LaunchScale, 0.0f, 1.0f) * 100.0f);
 }
 
 void ADeliveryMotorbike::UpdateImpactReaction(float DeltaSeconds)
@@ -444,9 +532,19 @@ void ADeliveryMotorbike::UpdateImpactReaction(float DeltaSeconds)
 	if (CameraBoom)
 	{
 		// 两个轴用不同频率，不然抖动看着像单纯在点头。
-		const float Pitch = CameraPitch + FMath::Sin(ShakePhase) * ShakeAngle * ShakeAmount;
 		const float Roll = FMath::Sin(ShakePhase * 1.7f) * ShakeAngle * ShakeAmount;
-		CameraBoom->SetRelativeRotation(FRotator(Pitch, 0.0f, Roll));
+		if (bFreeLookCamera)
+		{
+			// 自由视角下 Pitch/Yaw 都归控制旋转管，写进相对角度会被 GetTargetRotation() 顶掉，
+			// 硬要抖就得每帧去改控制旋转、和玩家的鼠标打架。所以只留 Roll 这一轴
+			// （bInheritRoll=false 时弹簧臂取的正是相对 Roll）——左右晃一样读得出"被撞了"。
+			CameraBoom->SetRelativeRotation(FRotator(0.0f, 0.0f, Roll));
+		}
+		else
+		{
+			const float Pitch = CameraPitch + FMath::Sin(ShakePhase) * ShakeAngle * ShakeAmount;
+			CameraBoom->SetRelativeRotation(FRotator(Pitch, 0.0f, Roll));
+		}
 	}
 }
 
@@ -561,7 +659,24 @@ void ADeliveryMotorbike::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ADeliveryMotorbike::MoveInput);
 		EnhancedInput->BindAction(MoveAction, ETriggerEvent::Completed, this, &ADeliveryMotorbike::MoveInput);
 	}
-	// 没有绑 Look：骑车时镜头固定在车尾后方，鼠标不参与（见构造函数里的说明）。
+	// Look 一直绑着，但 LookInput 里会看 bFreeLookCamera——关掉开关时鼠标就是不起作用，
+	// 不用在绑定这一层做分支（SetupPlayerInputComponent 只在 Possess 时跑一次，
+	// 而开关是可以在运行时改的）。
+	if (LookAction)
+	{
+		EnhancedInput->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADeliveryMotorbike::LookInput);
+	}
+	if (MouseLookAction)
+	{
+		EnhancedInput->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &ADeliveryMotorbike::LookInput);
+	}
+
+	// 直接绑键，不走 InputAction + IMC 映射：IMC_Default 从来没被提交过，
+	// 每次 git 拉取都会把新加的映射冲掉（F 键就这么没过两次）。
+	if (CameraToggleKey.IsValid())
+	{
+		PlayerInputComponent->BindKey(CameraToggleKey, IE_Pressed, this, &ADeliveryMotorbike::ToggleCameraMode);
+	}
 	if (UInputAction* Interact = InteractAction.LoadSynchronous())
 	{
 		EnhancedInput->BindAction(Interact, ETriggerEvent::Started, this, &ADeliveryMotorbike::InteractPressed);
@@ -577,6 +692,72 @@ void ADeliveryMotorbike::MoveInput(const FInputActionValue& Value)
 	if (!HasAuthority())
 	{
 		ServerSetDriveInput(ThrottleInput, SteerInput);
+	}
+}
+
+void ADeliveryMotorbike::LookInput(const FInputActionValue& Value)
+{
+	if (!bFreeLookCamera)
+	{
+		return;
+	}
+	const FVector2D Axis = Value.Get<FVector2D>();
+	// 俯仰的上下限走 PlayerCameraManager 的 ViewPitchMin/Max，和角色那边同一套限制。
+	AddControllerYawInput(Axis.X);
+	AddControllerPitchInput(Axis.Y);
+}
+
+void ADeliveryMotorbike::ToggleCameraMode()
+{
+	bFreeLookCamera = !bFreeLookCamera;
+	ApplyCameraMode();
+
+	// 切换的那一帧要把控制旋转接上，否则视角会跳一下：
+	// 切到固定视角时 SyncControlRotation 会把它拉回车头朝向（下车后角色的弹簧臂要用）；
+	// 切到自由视角时保留当前的镜头朝向当起点，鼠标从"你现在看到的地方"接着转。
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (!bFreeLookCamera)
+		{
+			SyncControlRotation();
+		}
+		else
+		{
+			PC->SetControlRotation(FRotator(CameraPitch, GetActorRotation().Yaw, PC->GetControlRotation().Roll));
+		}
+	}
+
+	ShowNotice(bFreeLookCamera
+		? NSLOCTEXT("Delivery", "MotorbikeFreeLook", "自由视角（P 切换）")
+		: NSLOCTEXT("Delivery", "MotorbikeFixedLook", "固定视角（P 切换）"), 1.5f);
+}
+
+void ADeliveryMotorbike::ApplyCameraMode()
+{
+	if (!CameraBoom)
+	{
+		return;
+	}
+
+	if (bFreeLookCamera)
+	{
+		// 弹簧臂吃控制旋转。Pitch/Yaw 必须都设成继承，否则 GetTargetRotation() 会拿
+		// 组件的相对角度把控制旋转那一轴顶掉，鼠标就只剩一个轴能转。
+		CameraBoom->bUsePawnControlRotation = true;
+		CameraBoom->bInheritPitch = true;
+		CameraBoom->bInheritYaw = true;
+		// Roll 仍然不继承——留着这一轴给被撞时的镜头抖动用（见 UpdateImpactReaction）。
+		CameraBoom->bInheritRoll = false;
+		CameraBoom->SetRelativeRotation(FRotator::ZeroRotator);
+	}
+	else
+	{
+		// 固定车尾视角：原样还原最早那套。
+		CameraBoom->bUsePawnControlRotation = false;
+		CameraBoom->bInheritPitch = false;
+		CameraBoom->bInheritYaw = true;
+		CameraBoom->bInheritRoll = false;
+		CameraBoom->SetRelativeRotation(FRotator(CameraPitch, 0.0f, 0.0f));
 	}
 }
 
@@ -636,8 +817,29 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 
 	if (Driver && IsLocallyControlled())
 	{
-		SyncControlRotation();
-		PushExitPrompt();
+		// 自由视角下控制旋转**就是**镜头，每帧同步成车头朝向等于把玩家的鼠标抹掉。
+		if (!bFreeLookCamera)
+		{
+			SyncControlRotation();
+		}
+
+		// 刚上车那一下才提示"按 F 下车"，之后自己消失——它吊在车顶上方，一直挂着挡视野，
+		// 而这条信息玩家看一次就记住了。下次上车重新计时。
+		if (!bHadDriverLastFrame)
+		{
+			ShowNotice(ExitPromptText, ExitPromptDuration);
+		}
+		if (NoticeRemaining > 0.0f)
+		{
+			NoticeRemaining -= DeltaSeconds;
+			PushNotice();
+		}
+		bHadDriverLastFrame = true;
+	}
+	else
+	{
+		bHadDriverLastFrame = false;
+		NoticeRemaining = 0.0f;
 	}
 }
 
@@ -788,6 +990,44 @@ void ADeliveryMotorbike::UpdateSteerVisual(float DeltaSeconds)
 	{
 		RiderPivot->SetRelativeRotation(FRotator(0.0f, CurrentVisualSteer * RiderSteerRatio, 0.0f));
 	}
+
+	UpdateRiderNeck();
+}
+
+void ADeliveryMotorbike::UpdateRiderNeck()
+{
+	// 没人骑的时候骑手是隐藏的，白算一遍骨骼没意义。
+	if (!RiderMesh || !Driver || RiderNeckBone.IsNone() || FMath::IsNearlyZero(RiderNeckSteerRatio))
+	{
+		return;
+	}
+	if (RiderMesh->GetBoneIndex(RiderNeckBone) == INDEX_NONE)
+	{
+		return;
+	}
+
+	// 参考姿势下的组件空间变换只取一次。每帧拿"当前值"再叠偏转的话会一直累加，
+	// 头会一圈一圈转到背后去。第一次进来时骨骼还没被动过，取到的正是参考姿势。
+	if (!bNeckRefCached)
+	{
+		NeckRefTransform = RiderMesh->GetBoneTransformByName(RiderNeckBone, EBoneSpaces::ComponentSpace);
+		bNeckRefCached = true;
+	}
+
+	// 在**组件空间**绕 Z 轴转，不在骨骼局部空间转：
+	// Mixamo 骨架里脖子骨的局部轴朝哪根本没法先验地知道（要在编辑器里试），
+	// 而骑手网格的组件空间 Z 就是人的头顶方向（顶点是 FBX 绝对坐标、Z 向上），
+	// 绕它转 = 左右转头，和骨骼怎么摆无关。
+	const float NeckYaw = CurrentVisualSteer * RiderNeckSteerRatio;
+	const FQuat Delta(FVector::UpVector, FMath::DegreesToRadians(NeckYaw));
+
+	FTransform Posed = NeckRefTransform;
+	// 先乘偏转、再乘原朝向 = 绕组件空间的轴转；反过来乘就变成绕骨骼自己的轴了。
+	Posed.SetRotation(Delta * NeckRefTransform.GetRotation());
+	// 位置保持参考姿势：只让头绕脖子这个关节转，不把脑袋平移走。
+	Posed.SetLocation(NeckRefTransform.GetLocation());
+
+	RiderMesh->SetBoneTransformByName(RiderNeckBone, Posed, EBoneSpaces::ComponentSpace);
 }
 
 void ADeliveryMotorbike::SyncControlRotation()
@@ -800,12 +1040,18 @@ void ADeliveryMotorbike::SyncControlRotation()
 	}
 }
 
-void ADeliveryMotorbike::PushExitPrompt()
+void ADeliveryMotorbike::ShowNotice(const FText& Text, float Seconds)
+{
+	NoticeText = Text;
+	NoticeRemaining = Seconds;
+}
+
+void ADeliveryMotorbike::PushNotice()
 {
 	if (UDeliveryPromptSubsystem* Prompt = UDeliveryPromptSubsystem::Get(this))
 	{
 		const FVector Anchor = GetActorLocation()
 			+ (Interactable ? Interactable->PromptOffset : FVector(0.0f, 0.0f, 180.0f));
-		Prompt->PushPrompt(ExitPromptText, Anchor);
+		Prompt->PushPrompt(NoticeText, Anchor);
 	}
 }

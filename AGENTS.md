@@ -287,6 +287,22 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
   **共用同一张冷却表 `LastImpactTimeByActor`（0.75 秒）**——一次碰撞会连着好几帧重叠，不设冷却的话"撞两下才下车"会在同一次碰撞里就被扣完。
   每撞一下：按来车方向给击退速度、按左右分量给撞歪的角速度和车身倾斜（`KnockTilt` 直接叠在转弯侧倾上，**不再插值**，插了会把撞击那一下的尖峰抹平）、镜头两轴不同频率抖动。四个量统一按 `KnockDecay` 指数衰减。
   撞满 `ImpactsToDismount`（默认 2）次 → `ExitVehicle()`（和按 F 同一条路）→ 再 `KnockDownDriver()`：走既有伤害 GE 把血清零（回血 GE 可能抵消，所以跟着补一次 `SetNumericAttributeBase`，和撞人那边一样），ASC 自己会切 Stunned/Limp，复用现成的倒地表现，不另写一套。**顺序不能反**：`ExitVehicle` 内部的 `StartRagdoll` 会重建刚体，先加的冲量会被冲掉。
+  被掀下车时那记抛射的力度**按来车速度缩放**（`KnockDownSpeedReference` 1200 cm/s 到满、`KnockDownLaunchMinScale` 0.35 保底）：交通车的 `MaxSpeed` 本来就是 600~1500 随机的，一律同一个飞法就看不出"被快车撞"和"被慢车蹭"的区别；保底不能给 0，否则慢车蹭一下人是原地瘫软，看着像自己躺下的。
+- **晕倒的人不能按 F 上车。** 判据是 `ADeliveryCharacter::IsIncapacitated()`——读**复制过来的 `State.Stunned` Tag**，不是 ASC 上那个 `bStunned`（它只在服务器维护，客户端恒 false，本机提示照样会弹），血量 ≤0 兜一刀防 Tag 还没同步。两处都要判：探测组件里清掉 `Focused`（同时挡住提示浮窗和按键，`DoInteract`/`DoPickup` 拿的都是它，不用每个调用点各写一遍），`TryEnter` 里再判一次（按键走 Server RPC，客户端状态不可信）。
+- **"按 F 下车"只在上车后显示 `ExitPromptDuration`（2 秒）。** 它吊在车顶上方、一直挂着挡视野，而这条信息玩家看一次就记住了；"按 F 驾驶"那条本来就只在 `InteractRadius` 内出现（`FindBest` → `CanInteract` 逐个比距离），不需要额外做什么。
+- **骑车时骑手的材质换成驾驶员自己那套**（`bUseDriverMaterials`，默认开）：骑手那 9 个槽共用一个 `tripo_mat_c9b1ab96`，**里面一张贴图都没有**，进游戏是一块灰白。
+  **映射按槽位名一一对应。** 玩家网格 `Content/Characters/A/renwu` 和车模型自带的骑手**是同一个基础角色**（都是 Tripo 出的），槽位名完全一致：`tripo_mat_c9b1ab96` / `材质` / `材质_001`…`材质_006` / `Eyes_Black`；区别只在玩家那边给这 9 个槽配了 `character_hat`（绿帽）/`cloth`（黄衣）/`pants`（浅蓝裤）/`shoe1`/`shoe2`（深蓝鞋）/`socks`/`skin`/`eyes`/`prime`。同一个基础角色也意味着 UV 是同一套，贴过去就是玩家本人的样子。`RiderMaterialOverrides` 按下标手填可覆盖；没人骑时 `EmptyOverrideMaterials()` 还原。
+  **踩过的坑**：第一版写成"名字里带 eye 的配眼睛，其余所有槽都用第一个非眼睛材质"，结果整个人被涂成衣服那一种黄色。起因是先用 `grep`/ASCII 扫 `.uasset` 判断槽位数，**`材质_00x` 是以 UTF-16 存在名字表里的，ASCII 扫描一条都看不见**，于是误判骑手只有 2 个槽。查 `.uasset` 里的中文名要按 UTF-16 扫，别用 `strings`。
+- **骑车时的镜头有两套，局内按 `P` 随时切**（`CameraToggleKey`，默认 `EKeys::P`；`bFreeLookCamera` 是初始模式，默认开 = 自由视角）。两套设置都完整写在 `ApplyCameraMode()` 里，没有哪一套是被删掉的。
+  - 切视角走 `BindKey` **直接绑键**，不新建 InputAction + 在 IMC_Default 上映射：那个资产从来没被提交过，每次 git 拉取都会把映射冲掉（F 键就这么没过两次）。物品栏 1~5 也是同样理由直接绑的。P 是扫 `IMC_Default` 的**名字表**确认空闲的（里面只有 A/D/E/F/J/S/SpaceBar/W，J 是电话）——注意只能按 FName 表扫，按 ASCII 正则乱扫单字母会把一堆无关字符串认成按键。
+  - 切换那一帧要接控制旋转，否则视角会跳：切到固定视角调 `SyncControlRotation()`，切到自由视角保留当前朝向当起点。
+  - **自由视角**（开）：弹簧臂 `bUsePawnControlRotation=true`，`bInheritPitch/Yaw` 都必须设成 true——`USpringArmComponent::GetTargetRotation()` 会拿组件的相对角度把没继承的那一轴顶掉，只开一个就只剩一个轴能转。鼠标/右摇杆复用角色身上同两个 IA（`IA_Look` / `IA_MouseLook`），俯仰上下限走 `PlayerCameraManager` 的 `ViewPitchMin/Max`。**Tick 里必须停掉 `SyncControlRotation()`**：自由视角下控制旋转就是镜头，每帧同步成车头朝向等于把鼠标抹掉。
+  - **固定车尾视角**（关）：`bUsePawnControlRotation=false`、只继承 Yaw、俯仰吃 `CameraPitch` 的相对角度，鼠标完全不参与，"W 永远是往屏幕里开"。
+  - 代价写在这里免得以后重新纠结：自由视角下 **W 按的是车头方向、不是屏幕里的方向**，镜头转到侧面时按 W 车还是往自己车头那边开。载具游戏普遍如此，但和固定视角手感确实不同，这就是留开关的原因。
+  - **被撞抖镜头在自由视角下只剩 Roll 一轴**：Pitch/Yaw 归控制旋转管，写进相对角度会被顶掉，硬抖就得每帧改控制旋转、和玩家鼠标打架。`bInheritRoll` 保持 false，弹簧臂那一轴取的正是相对 Roll，左右晃一样读得出"被撞了"。
+- **骑手的 `RiderMesh` 是 `UPoseableMeshComponent`，不是 `USkeletalMeshComponent`。** 骑手根本不需要动画（坐姿就写在参考姿势里），但要让脖子跟着转向偏一点就得在 C++ 里改单根骨骼，而 SkeletalMeshComponent 没有改单根骨骼的接口、每帧都会把单节点动画重新求值盖回去，想改只能配 AnimBP + Transform(Modify)Bone，AnimGraph 必须在编辑器里手连。PoseableMesh 正是为"纯 C++ 摆骨骼、不跑动画"准备的。
+  **换了组件类型就要重跑一次 Setup Motorbike**：网格是写在 BP_Motorbike 的 CDO 上的，类变了那份实例覆盖会丢。脚本里挂网格的属性名也跟着改了——`UPoseableMeshComponent`（`USkinnedMeshComponent`）叫 `skinned_asset`，不是 `skeletal_mesh_asset`，`setup_motorbike.py` 里三处都按 `skinned_asset → skeletal_mesh_asset → skeletal_mesh` 依次试。
+- **脖子转向（`RiderNeckSteerRatio`，默认 0.6，骨骼 `mixamorig:Neck`）在组件空间绕 Z 转，不在骨骼局部空间转。** Mixamo 骨架里脖子骨的局部轴朝哪没法先验知道（要在编辑器里试），而骑手网格的组件空间 Z 就是头顶方向（顶点是 FBX 绝对坐标、Z 向上），绕它转一定是左右转头。**参考姿势的变换必须只取一次并缓存**：每帧读"当前值"再叠偏转会一直累加，头会一圈圈转到背后去。乘法顺序也别反——`Delta * Ref` 是绕组件空间的轴，`Ref * Delta` 是绕骨骼自己的轴。
 - 骑手网格平时隐藏，有人骑才显示——模型自带骑手，不藏起来的话路边空车上永远坐着个人。
 - 车体是 9 个 `UStaticMeshComponent` **固定槽位**（`MaxBodyParts=12`，构造函数里建好），按 `BodyMeshes` 数组填充。没用运行时 `NewObject` 建组件，避免构造脚本反复重建/丢实例覆盖。
 
