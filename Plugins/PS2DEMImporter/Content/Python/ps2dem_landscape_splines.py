@@ -19,19 +19,19 @@ TRACE_BOTTOM_CM = -1_000_000.0
 
 TYPE_CONFIG = {
     "MainRoad": {
-        "default_width_m": 6.0,
+        "default_width_m": 18.0,
         "falloff_factor": 1.0,
         "raise_heights": True,
         "lower_heights": True,
     },
     "BranchRoad": {
-        "default_width_m": 3.5,
+        "default_width_m": 10.8,
         "falloff_factor": 1.0,
         "raise_heights": True,
         "lower_heights": True,
     },
     "River": {
-        "default_width_m": 12.0,
+        "default_width_m": 16.0,
         "falloff_factor": 1.0,
         "raise_heights": False,
         "lower_heights": True,

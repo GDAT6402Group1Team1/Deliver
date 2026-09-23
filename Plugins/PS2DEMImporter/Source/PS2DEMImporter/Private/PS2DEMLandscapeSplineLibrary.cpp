@@ -45,6 +45,14 @@ bool IsGenerated(const UObject* Object)
     return Object && Object->GetName().StartsWith(GeneratedPrefix);
 }
 
+bool IsGeneratedRouteType(const UObject* Object, const FString& RouteType)
+{
+    return IsGenerated(Object)
+        && (RouteType.IsEmpty()
+            || Object->GetName().StartsWith(
+                FString::Printf(TEXT("PS2DEM_%s_"), *RouteType)));
+}
+
 ALandscape* RootLandscape(ALandscapeProxy* Proxy)
 {
     if (!Proxy)
@@ -109,15 +117,15 @@ bool RouteConfigFromActor(AActor* Actor, FRouteConfig& OutConfig)
 
     if (Actor->Tags.Contains(FName(TEXT("MainRoad"))))
     {
-        OutConfig = {TEXT("MainRoad"), 6.0f, true, true};
+        OutConfig = {TEXT("MainRoad"), 18.0f, true, true};
     }
     else if (Actor->Tags.Contains(FName(TEXT("BranchRoad"))))
     {
-        OutConfig = {TEXT("BranchRoad"), 3.5f, true, true};
+        OutConfig = {TEXT("BranchRoad"), 10.8f, true, true};
     }
     else if (Actor->Tags.Contains(FName(TEXT("River"))))
     {
-        OutConfig = {TEXT("River"), 12.0f, false, true};
+        OutConfig = {TEXT("River"), 16.0f, false, true};
     }
     else
     {
@@ -147,7 +155,7 @@ struct FSelectedRoute
     FRouteConfig Config;
 };
 
-TArray<FSelectedRoute> GetSelectedRoutes()
+TArray<FSelectedRoute> GetSelectedRoutes(const FString& RequiredRouteType = FString())
 {
     TArray<FSelectedRoute> Routes;
     if (!GEditor)
@@ -160,6 +168,10 @@ TArray<FSelectedRoute> GetSelectedRoutes()
         AActor* Actor = Cast<AActor>(*It);
         FRouteConfig Config;
         if (!RouteConfigFromActor(Actor, Config))
+        {
+            continue;
+        }
+        if (!RequiredRouteType.IsEmpty() && Config.Type != RequiredRouteType)
         {
             continue;
         }
@@ -237,7 +249,9 @@ ULandscapeEditLayerSplines* GetOrCreateSplineLayer(ALandscape* Landscape, FStrin
     return Cast<ULandscapeEditLayerSplines>(Landscape->GetEditLayer(LayerIndex));
 }
 
-int32 RemoveGenerated(ULandscapeSplinesComponent* Splines)
+int32 RemoveGenerated(
+    ULandscapeSplinesComponent* Splines,
+    const FString& RequiredRouteType = FString())
 {
     if (!Splines)
     {
@@ -249,7 +263,7 @@ int32 RemoveGenerated(ULandscapeSplinesComponent* Splines)
     const TArray<TObjectPtr<ULandscapeSplineSegment>> SegmentsCopy = Splines->GetSegments();
     for (ULandscapeSplineSegment* Segment : SegmentsCopy)
     {
-        if (!IsGenerated(Segment))
+        if (!IsGeneratedRouteType(Segment, RequiredRouteType))
         {
             continue;
         }
@@ -274,7 +288,7 @@ int32 RemoveGenerated(ULandscapeSplinesComponent* Splines)
     const TArray<TObjectPtr<ULandscapeSplineControlPoint>> PointsCopy = Splines->GetControlPoints();
     for (ULandscapeSplineControlPoint* Point : PointsCopy)
     {
-        if (!IsGenerated(Point))
+        if (!IsGeneratedRouteType(Point, RequiredRouteType))
         {
             continue;
         }
@@ -433,9 +447,10 @@ bool SegmentMatchesType(const ULandscapeSplineSegment* Segment, const FString& R
     return IsGenerated(Segment)
         && Segment->GetName().StartsWith(FString::Printf(TEXT("PS2DEM_%s_"), *RouteType));
 }
-}
 
-bool UPS2DEMLandscapeSplineLibrary::ConvertSelectedRoutesToLandscapeSplines(bool bShowConfirmation)
+bool ConvertSelectedRoutesToLandscapeSplinesImpl(
+    bool bShowConfirmation,
+    const FString& RequiredRouteType)
 {
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     if (!World)
@@ -445,11 +460,14 @@ bool UPS2DEMLandscapeSplineLibrary::ConvertSelectedRoutesToLandscapeSplines(bool
         return false;
     }
 
-    const TArray<FSelectedRoute> Routes = GetSelectedRoutes();
+    const TArray<FSelectedRoute> Routes = GetSelectedRoutes(RequiredRouteType);
     if (Routes.IsEmpty())
     {
+        const FText NoRoutesMessage = RequiredRouteType.IsEmpty()
+            ? LOCTEXT("NoRoutes", "Select one or more imported MainRoad, BranchRoad or River actors.")
+            : LOCTEXT("NoRiverRoutes", "Select one or more imported River actors.");
         ShowMessage(LOCTEXT("ConvertFailedTitle", "PS2DEM Landscape Spline Import Failed"),
-            LOCTEXT("NoRoutes", "Select one or more imported MainRoad, BranchRoad or River actors."));
+            NoRoutesMessage);
         return false;
     }
 
@@ -461,12 +479,18 @@ bool UPS2DEMLandscapeSplineLibrary::ConvertSelectedRoutesToLandscapeSplines(bool
         return false;
     }
 
-    if (bShowConfirmation && FMessageDialog::Open(
-        EAppMsgType::YesNo,
-        FText::Format(
+    const FText ConfirmationMessage = RequiredRouteType.IsEmpty()
+        ? FText::Format(
             LOCTEXT("ConvertConfirm", "Convert {0} selected route(s) into persistent Landscape Splines on '{1}'?\n\nExisting PS2DEM-generated Landscape Spline points and segments will be replaced. If the old regular 'PS2DEM_Splines' deformation layer exists, it will be removed and recreated as a Spline Edit Layer. Hand-made Landscape Splines will be preserved."),
             FText::AsNumber(Routes.Num()),
-            FText::FromString(Landscape->GetActorLabel())),
+            FText::FromString(Landscape->GetActorLabel()))
+        : FText::Format(
+            LOCTEXT("ConvertRiverConfirm", "Convert {0} selected River route(s) into persistent Landscape Splines on '{1}'?\n\nOnly PS2DEM-generated River points and segments will be replaced. Generated roads and hand-made Landscape Splines will be preserved."),
+            FText::AsNumber(Routes.Num()),
+            FText::FromString(Landscape->GetActorLabel()));
+    if (bShowConfirmation && FMessageDialog::Open(
+        EAppMsgType::YesNo,
+        ConfirmationMessage,
         LOCTEXT("ConvertTitle", "Convert to Landscape Splines")) != EAppReturnType::Yes)
     {
         return false;
@@ -493,7 +517,7 @@ bool UPS2DEMLandscapeSplineLibrary::ConvertSelectedRoutesToLandscapeSplines(bool
         return false;
     }
 
-    const int32 Removed = RemoveGenerated(Splines);
+    const int32 Removed = RemoveGenerated(Splines, RequiredRouteType);
     int32 CreatedSegments = 0;
     int32 SurfaceMisses = 0;
     for (int32 Index = 0; Index < Routes.Num(); ++Index)
@@ -523,6 +547,18 @@ bool UPS2DEMLandscapeSplineLibrary::ConvertSelectedRoutesToLandscapeSplines(bool
         ShowMessage(LOCTEXT("ConvertDoneTitle", "PS2DEM Landscape Spline Import"), Completion);
     }
     return true;
+}
+}
+
+bool UPS2DEMLandscapeSplineLibrary::ConvertSelectedRoutesToLandscapeSplines(bool bShowConfirmation)
+{
+    return ConvertSelectedRoutesToLandscapeSplinesImpl(bShowConfirmation, FString());
+}
+
+bool UPS2DEMLandscapeSplineLibrary::ConvertSelectedRiverRoutesToLandscapeSplines(
+    bool bShowConfirmation)
+{
+    return ConvertSelectedRoutesToLandscapeSplinesImpl(bShowConfirmation, TEXT("River"));
 }
 
 void UPS2DEMLandscapeSplineLibrary::AssignSelectedMeshToGeneratedLandscapeSplines(

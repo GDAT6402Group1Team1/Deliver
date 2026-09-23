@@ -48,6 +48,7 @@
 - `Import / Reimport Buildings`：自动替换 A/B/C 建筑白盒。
 - `Import / Reimport Splines`：自动替换 MainRoad、BranchRoad、River 普通路线 Spline。
 - `Convert / Rebuild Landscape Splines`：把选中的 PS2DEM 普通路线转换成可编辑、可保存、可挂 Mesh 的原生 Landscape Spline。
+- `Convert / Rebuild Selected Rivers`：只重建选中的 River，保留已生成的主干道、支路和手工 Landscape Spline。
 - `Remove Generated Landscape Splines...`：只删除工具生成的 Landscape Spline，不碰手工样条。
 - `Assign Selected Mesh to Main Roads / Branch Roads / Rivers`：把内容浏览器中唯一选中的 Static Mesh 批量绑定给对应类型。
 - `Diagnose Splines / Landscape...`：只读比较选中路线、当前 UE 地表和 R16 高度，并输出逐点 JSON 日志。
@@ -68,7 +69,7 @@ UE 5.8 官方公开流程仍要求在 Landscape 面板中确认新 Landscape 的
 
 ## Photoshop 路线组
 
-PSD 中建立 `MainRoad`、`BranchRoad`、`River` 三个组。组内每个 Shape/路径图层代表一条路线，可以使用钢笔贝塞尔曲线。运行 `ExportSplines.jsx` 后会输出 `splines.json`：主路宽度 6m、支路 3.5m、河流 12m。UE 中首先生成普通可编辑 Spline Actor，不会在导入时直接修改地形。
+PSD 中建立 `MainRoad`、`BranchRoad`、`River` 三个组。组内每个 Shape/路径图层代表一条路线，可以使用钢笔贝塞尔曲线。运行 `ExportSplines.jsx` 后会输出 `splines.json`：主路宽度 18m、支路 10.8m、河流 16m。UE 中首先生成普通可编辑 Spline Actor，不会在导入时直接修改地形。
 
 ## 转换为 Landscape Spline
 
@@ -79,6 +80,8 @@ PSD 中建立 `MainRoad`、`BranchRoad`、`River` 三个组。组内每个 Shape
 3. 选择 `PS2DEM → Convert / Rebuild Landscape Splines`，确认后执行。
 4. 插件会自动创建真正的 Spline Edit Layer。若旧版本留下了同名的普通 `PS2DEM_Splines` 层，会先清除旧形变，再迁移为 Spline Edit Layer。
 5. 进入 `Landscape Mode → Manage → Splines` 可继续移动控制点或手动调整参数。满意后再保存关卡；插件不会自动保存。
+
+如果只修改了河流，选中新的 River 普通 Spline 和目标 Landscape，然后执行 `Convert / Rebuild Selected Rivers`。这个入口只替换 PS2DEM 生成的 River 控制点和线段，不会删除已经转换好的道路。
 
 变形规则：
 
