@@ -35,6 +35,16 @@ void UDeliveryInteractionProbeComponent::TickComponent(
 		return;
 	}
 
+	// An incapacitated pawn cannot interact. Clear both input targets and the old highlight.
+	const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(Owner);
+	if (Character && Character->IsIncapacitated())
+	{
+		FocusedGeneral = nullptr;
+		FocusedPickup = nullptr;
+		RestorePickupHighlight();
+		return;
+	}
+
 	UDeliveryInteractableComponent* Pickup = FindAimedPickup(Owner);
 	UDeliveryInteractableComponent* General = UDeliveryInteractableComponent::FindBest(
 		Owner, EDeliveryInteractionKey::GeneralF);
@@ -50,7 +60,7 @@ void UDeliveryInteractionProbeComponent::TickComponent(
 			float Progress = -1.0f;
 			if (Pickup)
 			{
-				if (const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(Owner))
+				if (Character)
 				{
 					Progress = Character->GetPickupHoldProgress(Pickup->GetOwner());
 				}
