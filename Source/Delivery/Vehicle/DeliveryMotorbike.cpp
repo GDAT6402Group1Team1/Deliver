@@ -4,7 +4,7 @@
 #include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/BoxComponent.h"
-#include "Components/PoseableMeshComponent.h"
+#include "Vehicle/DeliveryRiderAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Components/StaticMeshComponent.h"
@@ -89,13 +89,21 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 		BodyParts.Add(Part);
 	}
 
-	RiderMesh = CreateDefaultSubobject<UPoseableMeshComponent>(TEXT("RiderMesh"));
+	RiderMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("RiderMesh"));
 	RiderMesh->SetupAttachment(RiderPivot);
 	RiderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	RiderMesh->SetGenerateOverlapEvents(false);
-	// PoseableMesh 默认就停在参考姿势上——这份 FBX 的参考姿势本来就是坐姿，
-	// 不需要动画，只需要能在 C++ 里单独拧一下脖子。
+	// 动画蓝图以坐姿参考骨架为起点，程序化求身体惯性，再用 IK 固定手脚。
+	RiderMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+	RiderMesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	RiderMesh->bEnableUpdateRateOptimizations = false;
 	RiderMesh->SetVisibility(false);
+	LeftHandGrip = CreateDefaultSubobject<USceneComponent>(TEXT("LeftHandGrip"));
+	RightHandGrip = CreateDefaultSubobject<USceneComponent>(TEXT("RightHandGrip"));
+	LeftFootPeg = CreateDefaultSubobject<USceneComponent>(TEXT("LeftFootPeg"));
+	RightFootPeg = CreateDefaultSubobject<USceneComponent>(TEXT("RightFootPeg"));
+	LeftHandGrip->SetupAttachment(BarPivot); RightHandGrip->SetupAttachment(BarPivot);
+	LeftFootPeg->SetupAttachment(MeshAlign); RightFootPeg->SetupAttachment(MeshAlign);
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
@@ -154,18 +162,24 @@ void ADeliveryMotorbike::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ADeliveryMotorbike, Driver);
+	DOREPLIFETIME(ADeliveryMotorbike, ReplicatedRiderMotion);
 }
 
 void ADeliveryMotorbike::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	ApplyBodyMeshes();
+	if (bAutoCalibrateRiderContacts) CalibrateRiderContacts();
 }
 
 void ADeliveryMotorbike::BeginPlay()
 {
 	Super::BeginPlay();
 	ApplyBodyMeshes();
+	if (bAutoCalibrateRiderContacts) CalibrateRiderContacts();
+	RiderMesh->SetAnimInstanceClass(RiderAnimationClass ? RiderAnimationClass.Get() : UDeliveryRiderAnimInstance::StaticClass());
+	// 先算完车体/车把的变换，再让动画读取接触点，避免手比车把慢一帧。
+	RiderMesh->AddTickPrerequisiteActor(this);
 
 	if (Interactable)
 	{
@@ -507,6 +521,7 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	}
 
 	Driver = NewDriver;
+	ResetRiderMotion();
 
 	// 手上还抓着东西就先松开：抓取是用物理约束把目标连在手骨上的，
 	// 驾驶员一会儿要被停掉物理并隐藏，约束留着会把货物/别的玩家一路拖在车上。
@@ -600,6 +615,11 @@ bool ADeliveryMotorbike::NotifyTrafficImpact(const FVector& CarVelocity)
 		*GetName(), TrafficImpactCount, ImpactsToDismount, ImpactSpeed);
 
 	const FVector Direction = CarVelocity.GetSafeNormal2D();
+	RiderImpact = FVector2D(FVector::DotProduct(Direction, GetActorForwardVector()),
+		FVector::DotProduct(Direction, GetActorRightVector()))
+		* FMath::Clamp(ImpactSpeed / FMath::Max(KnockDownSpeedReference, 1.f), .2f, 1.f);
+	ReplicatedRiderMotion.Impact = RiderImpact;
+	ForceNetUpdate();
 	if (!Direction.IsNearlyZero())
 	{
 		// 被撞歪的正负取"来车方向相对车身的左右分量"：从右边撞来就往左歪，反之亦然。
@@ -784,6 +804,7 @@ void ADeliveryMotorbike::ExitVehicle()
 
 	ADeliveryCharacter* Leaving = Driver;
 	Driver = nullptr;
+	ResetRiderMotion();
 	AController* BikeController = GetController();
 
 	Leaving->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
@@ -1035,6 +1056,7 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 	}
 
 	UpdateImpactReaction(DeltaSeconds);
+	UpdateRiderMotion(DeltaSeconds);
 	UpdateLean(DeltaSeconds);
 	UpdateSteerVisual(DeltaSeconds);
 	UpdateWheelSpin(DeltaSeconds);
@@ -1275,9 +1297,12 @@ void ADeliveryMotorbike::UpdateLean(float DeltaSeconds)
 		return;
 	}
 
-	const float SpeedFactor = FMath::Clamp(FMath::Abs(CurrentSpeed) / TurnSpeedReference, 0.0f, 1.0f);
-	// UE 里正 Roll 是往左倒，摩托车要往转弯内侧压，所以右转（SteerInput>0）取负值。
-	const float TargetLean = -SteerInput * MaxLeanAngle * SpeedFactor;
+	const bool bRemote = !HasAuthority() && !IsLocallyControlled();
+	const float VisualSpeed = bRemote ? ReplicatedRiderMotion.Speed * MaxSpeed : CurrentSpeed;
+	const float VisualSteer = bRemote ? ReplicatedRiderMotion.Steer : SteerInput;
+	const float SpeedFactor = FMath::Clamp(FMath::Abs(VisualSpeed) / TurnSpeedReference, 0.0f, 1.0f);
+	// 远端也用复制的驾驶输入表现车身侧倾；不把这些值写回实际驾驶状态。
+	const float TargetLean = -VisualSteer * MaxLeanAngle * SpeedFactor;
 	CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaSeconds, LeanSpeed);
 	// 被撞歪的倾斜直接叠在转弯侧倾上：它自己按 KnockDecay 衰减，不用再插值一次，
 	// 不然撞击那一下的尖峰会被抹平，看着就不像挨了一下。
@@ -1293,7 +1318,8 @@ void ADeliveryMotorbike::UpdateSteerVisual(float DeltaSeconds)
 
 	// 和车身实际转向不同，龙头**不乘速度系数**：停着打把车把也该跟着动，
 	// 那是玩家按键有没有被接收到的即时反馈。车身不转、龙头转，观感上也正确。
-	const float Target = FMath::Clamp(SteerInput, -1.0f, 1.0f) * MaxVisualSteerAngle;
+	const float VisualSteer = !HasAuthority() && !IsLocallyControlled() ? ReplicatedRiderMotion.Steer : SteerInput;
+	const float Target = FMath::Clamp(VisualSteer, -1.0f, 1.0f) * MaxVisualSteerAngle;
 	CurrentVisualSteer = FMath::FInterpTo(CurrentVisualSteer, Target, DeltaSeconds, SteerVisualSpeed);
 
 	// 局部 Yaw：+X 转向 +Y 就是往右打，和 SteerInput>0 = 按 D 对得上。
@@ -1304,10 +1330,9 @@ void ADeliveryMotorbike::UpdateSteerVisual(float DeltaSeconds)
 	}
 	if (RiderPivot)
 	{
-		RiderPivot->SetRelativeRotation(FRotator(0.0f, CurrentVisualSteer * RiderSteerRatio, 0.0f));
+		// 转身由胸腰骨骼完成，整具骑手不再绕座位转，脚踏目标因而保持稳定。
+		RiderPivot->SetRelativeRotation(FRotator::ZeroRotator);
 	}
-
-	UpdateRiderNeck();
 }
 
 void ADeliveryMotorbike::UpdateWheelSpin(float DeltaSeconds)
@@ -1343,42 +1368,6 @@ void ADeliveryMotorbike::UpdateWheelSpin(float DeltaSeconds)
 			Pivot->SetRelativeRotation(FRotator(0.0f, 0.0f, WheelSpinAngle));
 		}
 	}
-}
-
-void ADeliveryMotorbike::UpdateRiderNeck()
-{
-	// 没人骑的时候骑手是隐藏的，白算一遍骨骼没意义。
-	if (!RiderMesh || !Driver || RiderNeckBone.IsNone() || FMath::IsNearlyZero(RiderNeckSteerRatio))
-	{
-		return;
-	}
-	if (RiderMesh->GetBoneIndex(RiderNeckBone) == INDEX_NONE)
-	{
-		return;
-	}
-
-	// 参考姿势下的组件空间变换只取一次。每帧拿"当前值"再叠偏转的话会一直累加，
-	// 头会一圈一圈转到背后去。第一次进来时骨骼还没被动过，取到的正是参考姿势。
-	if (!bNeckRefCached)
-	{
-		NeckRefTransform = RiderMesh->GetBoneTransformByName(RiderNeckBone, EBoneSpaces::ComponentSpace);
-		bNeckRefCached = true;
-	}
-
-	// 在**组件空间**绕 Z 轴转，不在骨骼局部空间转：
-	// Mixamo 骨架里脖子骨的局部轴朝哪根本没法先验地知道（要在编辑器里试），
-	// 而骑手网格的组件空间 Z 就是人的头顶方向（顶点是 FBX 绝对坐标、Z 向上），
-	// 绕它转 = 左右转头，和骨骼怎么摆无关。
-	const float NeckYaw = CurrentVisualSteer * RiderNeckSteerRatio;
-	const FQuat Delta(FVector::UpVector, FMath::DegreesToRadians(NeckYaw));
-
-	FTransform Posed = NeckRefTransform;
-	// 先乘偏转、再乘原朝向 = 绕组件空间的轴转；反过来乘就变成绕骨骼自己的轴了。
-	Posed.SetRotation(Delta * NeckRefTransform.GetRotation());
-	// 位置保持参考姿势：只让头绕脖子这个关节转，不把脑袋平移走。
-	Posed.SetLocation(NeckRefTransform.GetLocation());
-
-	RiderMesh->SetBoneTransformByName(RiderNeckBone, Posed, EBoneSpaces::ComponentSpace);
 }
 
 void ADeliveryMotorbike::SyncControlRotation()

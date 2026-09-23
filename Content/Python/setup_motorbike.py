@@ -766,14 +766,17 @@ def build_blueprint(body=None, rider=None):
 
     if rider:
         rider_comp = cdo.get_editor_property("rider_mesh")
-        # RiderMesh 是 PoseableMeshComponent（USkinnedMeshComponent），网格属性叫 skinned_asset；
-        # 后两个是它在旧版本/SkeletalMeshComponent 上的名字，留着当兜底。
+        # 当前为 SkeletalMeshComponent；保留旧属性名兼容历史工具版本。
         for prop in ("skinned_asset", "skeletal_mesh_asset", "skeletal_mesh"):
             try:
                 rider_comp.set_editor_property(prop, rider)
                 break
             except Exception:
                 continue
+        anim = unreal.load_asset("/Game/Vehicle/Motorbike/ABP_MotorbikeRider")
+        if anim:
+            cdo.set_editor_property("rider_animation_class", anim.generated_class())
+            rider_comp.set_anim_instance_class(anim.generated_class())
         w(u"  骑手网格已挂上（%s）" % rider.get_name())
     else:
         w(u"！没有骑手骨骼网格，车上不会有人。")

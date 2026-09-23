@@ -301,10 +301,7 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 - 美术资产分两层：`MeshRoot`（只做侧倾 Roll）→ `MeshAlign`（车头朝向 + 居中）→ 车体/骑手。合成一层会出错：`FRotator` 顺序是 Roll→Pitch→Yaw，Roll 会绕"朝向修正之前"的局部 X 转，修正 90 度后那根轴是车的横向，压弯变点头。
 - 骑车时镜头写死在车尾后方（`bUsePawnControlRotation=false`，只继承 Yaw），鼠标不参与——用控制旋转 + 延时回正时，上车瞬间镜头还停在人物原朝向上，按 W 看到车"横着走"。控制旋转仍每帧同步成车头朝向，供下车后的角色弹簧臂使用。
 - 上车顺序：`GrabComponent->ForceRelease()`（不松手的话约束会把货物/别的玩家拖在车上）→ `StopRagdoll()`（关刚体并把网格挂回胶囊）→ 隐藏 + 关碰撞 + 挂到车上 → `Controller->Possess(bike)`。下车反过来，先摆好位置再 `StartRagdoll()`（它内部带 `PlaceOnGround`）。
-- **龙头转向分三层，各转各的角度**（`SteerPivot` 前轮前叉打满 / `BarPivot` 车把按 `HandlebarSteerRatio`=0.5 / `RiderPivot` 骑手按 `RiderSteerRatio`=0.25）。三个轴都只是挂点：自己摆到轴心上，孩子把这段偏移减回去，网格留在原地但从此绕这根轴转。
-  为什么车把不跟着打满：骑手是固定的参考姿势，**手不会跟着车把走**，车把转多少就脱手多少。街机赛车的常规做法就是"轮子打满、车把几乎不动"，观感不违和，比上 IK 便宜得多。真要手跟着走，得给骑手配 AnimBP + 两个 Two Bone IK（抓握点从 `SteerPivot` 的世界变换算，C++ 侧不难，但 AnimGraph 必须在编辑器里手连）。
-  骑手绕的是**自己胯部**的竖轴（脚本从 `hips` 骨骼读），不是转向轴——绕车头那根轴转会把整个人往旁边甩（胯离轴心 70 多厘米）。
-  转向角**不乘速度系数**：停着打把车把也该动，那是按键反馈。哪几个部件跟转由 `setup_motorbike.py` 按几何认（车把 = X 最宽的那个，实测 136cm vs 第二名 80cm，且骑手双手正好落在它上面；前轮前叉 = 包围盒中心在车身前 1/4），不写死下标。
+- **车把与骑手独立求解**：SteerPivot 前叉、BarPivot 车把继续沿用原转角；RiderPivot 不再整人旋转。双手目标挂 BarPivot，双脚目标挂 MeshAlign，由骑手动画代理解四肢 IK。转向角仍不乘速度系数，停车打把也有反馈。
 - **被交通车撞**：`UDeliveryTrafficCarComponent` 在原有的逐帧扫掠撞击之外**单开一次 `ECC_Pawn` 查询**（摩托车碰撞盒是 Pawn 配置，而撞人查的是布娃娃刚体 `ECC_PhysicsBody`；并进同一次查询会把角色胶囊也扫进来、扰动那条已经调通的撞人逻辑），命中后调 `ADeliveryMotorbike::NotifyTrafficImpact()`。
   **共用同一张冷却表 `LastImpactTimeByActor`（0.75 秒）**——一次碰撞会连着好几帧重叠，不设冷却的话"撞两下才下车"会在同一次碰撞里就被扣完。
   每撞一下：按来车方向给击退速度、按左右分量给撞歪的角速度和车身倾斜（`KnockTilt` 直接叠在转弯侧倾上，**不再插值**，插了会把撞击那一下的尖峰抹平）、镜头两轴不同频率抖动。四个量统一按 `KnockDecay` 指数衰减。
@@ -322,11 +319,14 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
   - **固定车尾视角**（关）：`bUsePawnControlRotation=false`、只继承 Yaw、俯仰吃 `CameraPitch` 的相对角度，鼠标完全不参与，"W 永远是往屏幕里开"。
   - 代价写在这里免得以后重新纠结：自由视角下 **W 按的是车头方向、不是屏幕里的方向**，镜头转到侧面时按 W 车还是往自己车头那边开。载具游戏普遍如此，但和固定视角手感确实不同，这就是留开关的原因。
   - **被撞抖镜头在自由视角下只剩 Roll 一轴**：Pitch/Yaw 归控制旋转管，写进相对角度会被顶掉，硬抖就得每帧改控制旋转、和玩家鼠标打架。`bInheritRoll` 保持 false，弹簧臂那一轴取的正是相对 Roll，左右晃一样读得出"被撞了"。
-- **骑手的 `RiderMesh` 是 `UPoseableMeshComponent`，不是 `USkeletalMeshComponent`。** 骑手根本不需要动画（坐姿就写在参考姿势里），但要让脖子跟着转向偏一点就得在 C++ 里改单根骨骼，而 SkeletalMeshComponent 没有改单根骨骼的接口、每帧都会把单节点动画重新求值盖回去，想改只能配 AnimBP + Transform(Modify)Bone，AnimGraph 必须在编辑器里手连。PoseableMesh 正是为"纯 C++ 摆骨骼、不跑动画"准备的。
-  **换了组件类型就要重跑一次 Setup Motorbike**：网格是写在 BP_Motorbike 的 CDO 上的，类变了那份实例覆盖会丢。脚本里挂网格的属性名也跟着改了——`UPoseableMeshComponent`（`USkinnedMeshComponent`）叫 `skinned_asset`，不是 `skeletal_mesh_asset`，`setup_motorbike.py` 里三处都按 `skinned_asset → skeletal_mesh_asset → skeletal_mesh` 依次试。
-- **脖子转向（`RiderNeckSteerRatio`，默认 0.6，骨骼 `mixamorig:Neck`）在组件空间绕 Z 转，不在骨骼局部空间转。** Mixamo 骨架里脖子骨的局部轴朝哪没法先验知道（要在编辑器里试），而骑手网格的组件空间 Z 就是头顶方向（顶点是 FBX 绝对坐标、Z 向上），绕它转一定是左右转头。**参考姿势的变换必须只取一次并缓存**：每帧读"当前值"再叠偏转会一直累加，头会一圈圈转到背后去。乘法顺序也别反——`Delta * Ref` 是绕组件空间的轴，`Ref * Delta` 是绕骨骼自己的轴。
+- **骑手已改为 SkeletalMesh + ABP_MotorbikeRider**：原生父类 DeliveryRiderAnimInstance 用动画代理从坐姿参考骨架生成姿态，不使用旧 PoseableMesh 直接拧脖子的实现。详细流程、调参和验证见 [Document/MotorbikeRider.md](Document/MotorbikeRider.md)。
+  迎风后仰：HeadWindSway 默认 18°乘 WindExaggeration（默认 1.7），用 .72 基准 + .28 波动得到约 13～31°的后仰回摆目标，避免顶住 35°限幅。直行无周期性左右摇头/扭腰；身体前后阵风系数 .3，转弯侧倾乘 1.35，侧向阵风系数 .65，头部增加滞后的转弯侧向回摆。侧摆由转向强度淡入，直行归零；头部在 IK 后叠加，手脚仍固定。停车回正，倒车不套用前进迎风后仰。测试检查后仰方向、前后变化、横向稳定、接触点和停车回正。
+  可达性缩幅只查双腿；手臂改由腰部连续补偿后解 IK。把手臂放进全身缩幅会在边界突然清零整套身体动作，强化版测试曾产生 5.178 cm 单帧跳变，修正后为 0.761 cm。停车应比较带握把补偿的中立姿势，下车才是裸参考姿势。
+  最新加强档覆盖上述幅度：前后阵风 .55、转弯侧倾 1.6、侧向阵风 .95、头部侧摆 .6，头部后仰目标约 14～42°/限幅45°。按用户要求，允许手部5cm间隙以释放上身摆动，HandSlack弹簧平滑随风压淡入/停车归零，脚仍严格贴合。测试通过：匀速角度变化13.39°、最大手部间隙4.901cm、最大单帧头部位移1.345cm；角度连续性和脚部贴合断言也通过。
+  资产迁移只运行 Content/Python/setup_motorbike_rider.py，保留材质和模型，不改地图及输入。不要为了迁移组件重跑整套地图放置脚本。
+  车辆读取速度、加速度、转向、颠簸和撞击，服务器复制表现输入；本机预测、远端弹簧平滑。动画每帧从参考坐姿重新计算胸腰、头部，再补腰部可达性和四肢 IK，不累积旋转、不拉长手臂。旧 RiderSteerRatio/RiderNeckSteerRatio/RiderNeckBone 仅保留序列化兼容，不再控制动作。
 - 骑手网格平时隐藏，有人骑才显示——模型自带骑手，不藏起来的话路边空车上永远坐着个人。
-  - **车把脱手程度取决于 `HandlebarSteerRatio` 和 `RiderSteerRatio` 的差，不是车把的绝对角度**：骑手的手固定在参考姿势上、跟着身体走，车把和身体差多少度就脱多少度。所以"车把转多了脱手"不能只把车把调回去——0.65/0.45 差 0.20（约 4.4°）比最早的 0.40/0.25 差 0.15（约 3.3°）还明显；现在 0.50/0.45 差只剩 0.05（约 1.1°），车把比最早转得还多，脱手反而更轻。
+  - 手脚贴合由接触目标和 IK 保证，不再靠车把转角与整人转角的差值近似。骨架/目标改变后须重新运行 Delivery.Vehicle.Rider 测试。
 - **轮子自转默认关着**（`bSpinWheels=false`）。整套逻辑都留着，勾上就生效，不用重编也不用重跑脚本。
 - **轮子按车速自转**（`WheelPartIndices` / `WheelCenters` / `WheelRadius`，都由脚本按几何写，别手填）。每个轮子再多挂一层自己的轮轴 `WheelPivots[k]`，**前轮那一层挂在 `SteerPivot` 下面**：先跟着龙头转、再绕轮心自转，两件事互不干扰；挂在 SteerPivot 下时轮心要减掉 `SteerPivotLocation`，因为父级原点已经是转向轴。
   - 认轮子的判据两条缺一不可：**正圆**（长/高比 > 0.9）且**窄**（宽 < 直径 × 0.6）。实测两个轮子都是 61.3×61.3、宽 27.7、圆度 1.00；第三名 `车.007` 圆度 0.96 但宽 63.3 比直径还大，靠"窄"这条挡掉，只用圆度会误抓。

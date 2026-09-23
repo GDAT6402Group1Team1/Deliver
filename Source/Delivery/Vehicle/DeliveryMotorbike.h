@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
+#include "Vehicle/DeliveryRiderPose.h"
 #include "DeliveryMotorbike.generated.h"
 
 class ADeliveryCharacter;
@@ -12,7 +13,9 @@ class UCameraComponent;
 class UDeliveryInteractableComponent;
 class UInputAction;
 class UMaterialInterface;
-class UPoseableMeshComponent;
+class USkeletalMeshComponent;
+class UAnimInstance;
+struct FDeliveryRiderFrame;
 class USpringArmComponent;
 class USkeletalMesh;
 class UStaticMesh;
@@ -37,6 +40,8 @@ UCLASS()
 class DELIVERY_API ADeliveryMotorbike : public APawn
 {
 	GENERATED_BODY()
+	friend class FDeliveryRiderContactsTest;
+	friend class FDeliveryRiderRuntimeTest;
 
 public:
 
@@ -76,6 +81,22 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Motorbike")
 	float GetCurrentSpeed() const { return CurrentSpeed; }
+
+	/** 主线程供骑手动画读取本帧输入和四个组件空间接触点。 */
+	void BuildRiderAnimationFrame(FDeliveryRiderFrame& OutFrame) const;
+
+	/** 从模型坐姿自动标定手把/脚踏目标；也可关闭自动标定后手调四个组件。 */
+	UFUNCTION(BlueprintCallable, CallInEditor, Category="Motorbike|骑手动画")
+	void CalibrateRiderContacts();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Motorbike|骑手动画")
+	FDeliveryRiderSettings RiderAnimationSettings;
+
+	UPROPERTY(EditAnywhere, Category="Motorbike|骑手动画")
+	bool bAutoCalibrateRiderContacts = true;
+
+	UPROPERTY(EditAnywhere, Category="Motorbike|骑手动画")
+	TSubclassOf<UAnimInstance> RiderAnimationClass;
 
 	/**
 	 * 骑手骨骼网格的兜底来源。
@@ -190,16 +211,21 @@ protected:
 	FVector RiderPivotLocation = FVector::ZeroVector;
 
 	/**
-	 * 骑手网格。用 PoseableMesh 而不是 SkeletalMesh：
-	 *
-	 * 骑手根本不需要动画——坐姿就写在这份资产的参考姿势里，本来就是"停在参考姿势上"。
-	 * 而要让脖子跟着转向偏一点，就得在 C++ 里改单根骨骼；SkeletalMeshComponent 没有
-	 * 改单根骨骼的接口，它每帧都会把单节点动画（= 参考姿势）重新求值盖回去，
-	 * 想改只能配 AnimBP + Transform(Modify)Bone，而 AnimGraph 必须在编辑器里手连。
-	 * PoseableMesh 就是为"纯 C++ 摆骨骼、不跑动画"准备的，SetBoneTransformByName 直接可用。
+	 * 独立骑手骨骼网格：AnimBP 的原生代理从参考坐姿生成身体惯性，再求手脚 IK。
+	 * 不参与车体碰撞，也不直接修改原角色布娃娃。材质仍按驾驶者映射。
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-	TObjectPtr<UPoseableMeshComponent> RiderMesh;
+	TObjectPtr<USkeletalMeshComponent> RiderMesh;
+
+	/** 双手目标跟随 BarPivot，双脚目标跟随 MeshAlign；身体骨骼晃动不移动这些点。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<USceneComponent> LeftHandGrip;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<USceneComponent> RightHandGrip;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<USceneComponent> LeftFootPeg;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<USceneComponent> RightFootPeg;
 
 	/**
 	 * 有人骑的时候，把骑手网格的材质换成驾驶员自己身上那套。
@@ -349,31 +375,23 @@ protected:
 	float SteerVisualSpeed = 9.0f;
 
 	/**
-	 * 车把转前轮的百分之多少。1 = 跟前轮一样打满（手会明显脱把）。
-	 *
-	 * **真正决定脱手程度的是它和 RiderSteerRatio 的差**，不是它自己的绝对值：
-	 * 骑手的手是固定在参考姿势上的，手跟着身体走，车把和身体差多少度就脱多少度。
-	 * 0.65 配 0.45 时差 0.20（约 4.4°），比最早的 0.40 配 0.25（差 0.15、约 3.3°）还明显，
-	 * 所以"把车把调回去"要连着差值一起看：现在 0.50 配 0.45，差只剩 0.05（约 1.1°），
-	 * 车把转得比最早那版还多，脱手反而比最早还轻。
+	 * 车把转前轮的百分之多少。手部目标跟随实际车把，不再依赖整人转角近似贴合。
+	 * 增大后需验证骑手骨架能否够到，不能用无限拉长手臂来补偿不合理的目标。
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float HandlebarSteerRatio = 0.5f;
 
-	/** 骑手扭身跟转的比例。调大了脚会离开脚踏。 */
+	/** 历史资产兼容字段，不再执行整人扭转；新参数见 RiderAnimationSettings。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float RiderSteerRatio = 0.45f;
 
 	/**
-	 * 脖子跟着转向额外偏转的比例（叠在骑手扭身之上）。
-	 *
-	 * 人转弯是先看向弯心、身体再跟上，只转身不转头像个木头人。脖子这一层很便宜：
-	 * 头是骨骼链末端，转它不影响手和脚的位置，不会像扭身那样把脚扭离脚踏。
+	 * 历史资产兼容字段。头部现由动画代理计算反向稳定，不再叠旧版脖子转角。
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现", meta=(ClampMin="0.0", ClampMax="2.0"))
 	float RiderNeckSteerRatio = 0.6f;
 
-	/** 脖子骨骼名。这份资产是 Mixamo 骨架，所以带 mixamorig: 前缀。换模型时改这里。 */
+	/** 历史资产兼容字段；换骨架需修改 DeliveryRiderPose 的骨骼映射并重新验证。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现")
 	FName RiderNeckBone = TEXT("mixamorig:Neck");
 
@@ -587,7 +605,8 @@ private:
 	void UpdateWheelSpin(float DeltaSeconds);
 
 	/** 脖子跟着转向偏一点。单独一个函数是因为它改的是骨骼，不是组件变换。 */
-	void UpdateRiderNeck();
+	void UpdateRiderMotion(float DeltaSeconds);
+	void ResetRiderMotion();
 	void UpdateImpactReaction(float DeltaSeconds);
 	/** 把 NoticeText 推给浮窗子系统（约定是每帧推一次，停推 0.25 秒自动消失）。 */
 	void PushNotice();
@@ -649,10 +668,10 @@ private:
 	FText NoticeText;
 	bool bHadDriverLastFrame = false;
 
-	/**
-	 * 脖子骨骼在参考姿势下的组件空间变换。转头是在它之上叠一个偏转，所以必须先记住原值——
-	 * 每帧读"当前值"再转会一直累加，头会一路转到背后去。
-	 */
-	FTransform NeckRefTransform = FTransform::Identity;
-	bool bNeckRefCached = false;
+	UPROPERTY(Replicated)
+	FDeliveryRiderMotion ReplicatedRiderMotion;
+	FDeliveryRiderMotion LocalRiderMotion;
+	FVector2D RiderImpact = FVector2D::ZeroVector;
+	float RiderSampleSpeed = 0, RiderSampleZ = 0, RiderSampleVerticalSpeed = 0, RiderNetElapsed = 0;
+	bool bRiderSampleValid = false;
 };
