@@ -23,6 +23,20 @@ bool FDeliveryFootPlacementTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Inward sliding is braked before crossing"), DeliveryFootPlacement::SeparationAcceleration(12, -40, 16) > 0.0f);
 	TestEqual(TEXT("Correction remains bounded"), DeliveryFootPlacement::SeparationAcceleration(-100, -100, 16), 1200.0f);
 	TestEqual(TEXT("Already escaping foot is not accelerated further"), DeliveryFootPlacement::SeparationAcceleration(12, 100, 16), 0.0f);
+	float SmoothAlpha = 0.0f;
+	const FVector MidSwing = DeliveryFootPlacement::SwingPosition(FVector::ZeroVector,
+		FVector(100, 0, 0), FVector::UpVector, 0.5f, 20.0f, SmoothAlpha);
+	TestTrue(TEXT("半步时水平移动到中点并抬脚"),
+		FMath::IsNearlyEqual(MidSwing.X, 50.0f) && FMath::IsNearlyEqual(MidSwing.Z, 20.0f));
+	TestTrue(TEXT("半步时平滑比例为一半"), FMath::IsNearlyEqual(SmoothAlpha, 0.5f));
+	const FVector OnSide = DeliveryFootPlacement::KeepOnSide(FVector(0, -4, 0),
+		FVector::ZeroVector, FVector::RightVector, 1.0f, 16.0f);
+	TestTrue(TEXT("摆动目标不跨过所属一侧"), FMath::IsNearlyEqual(OnSide.Y, 16.0f));
+	const FVector Landing = DeliveryFootPlacement::LandingOnPlane(FVector::ZeroVector,
+		FVector::ForwardVector, FVector::RightVector, FVector::ZeroVector,
+		1.0f, 100.0f, 0.0f, 32.0f, 16.0f);
+	TestTrue(TEXT("落点在前方且仍在本侧"),
+		FMath::IsNearlyEqual(Landing.X, 100.0f) && FMath::IsNearlyEqual(Landing.Y, 32.0f));
 	return true;
 }
 #endif

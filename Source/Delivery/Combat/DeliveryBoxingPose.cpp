@@ -1,270 +1,20 @@
+// 阅读顺序：Create 建立手臂电机，Update 用纯拳路计算目标，再把目标旋转交给电机。
+// 物理资产补全单独放在 DeliveryBoxingPhysicsAsset.cpp，游戏中的每帧动作在这里。
 #include "DeliveryBoxingPose.h"
+#include "DeliveryPunchTrajectory.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "PhysicsControlComponent.h"
-#include "PhysicsEngine/PhysicsAsset.h"
-#include "PhysicsEngine/SkeletalBodySetup.h"
-#include "PhysicsEngine/PhysicsConstraintTemplate.h"
-#include "PhysicsEngine/SphylElem.h"
 #include "Delivery.h"
 
-namespace
-{
-	/** 关节限位是否已经放到出拳需要的范围。够宽就不用再复制一份物理资产。 */
-	bool JointIsOpenedUp(const FConstraintInstance& Joint, float SwingLimit, float TwistLimit)
-	{
-		const bool bSwingOpen = Joint.GetAngularSwing1Motion() == ACM_Free
-			|| (Joint.GetAngularSwing1Motion() == ACM_Limited && Joint.GetAngularSwing1Limit() >= SwingLimit - 0.5f);
-		const bool bTwistOpen = Joint.GetAngularTwistMotion() == ACM_Free
-			|| (Joint.GetAngularTwistMotion() == ACM_Limited && Joint.GetAngularTwistLimit() >= TwistLimit - 0.5f);
-		return bSwingOpen && bTwistOpen;
-	}
-
-	void OpenUpJoint(FConstraintInstance& Joint, float SwingLimit, float TwistLimit)
-	{
-		Joint.SetAngularSwing1Limit(ACM_Limited, SwingLimit);
-		Joint.SetAngularSwing2Limit(ACM_Limited, SwingLimit);
-		Joint.SetAngularTwistLimit(ACM_Limited, TwistLimit);
-	}
-
-	/** 一个姿势：肩到手的方向、距离，加上肘部要鼓向哪边。 */
-	struct FArmReach
-	{
-		FVector Direction;
-		float Distance;
-		FVector Pole;
-	};
-
-	FArmReach MakeReach(const FVector& Offset, const FVector& Pole, float MaxDistance)
-	{
-		return { Offset.GetSafeNormal(), FMath::Min(float(Offset.Size()), MaxDistance), Pole.GetSafeNormal() };
-	}
-
-	/**
-	 * 先转方向再插值长度。直接插值手的位置会让手贴着肋骨划过去。
-	 * DistanceAlpha 可以比 Alpha 慢：手臂在方向还没转到位时保持收着，
-	 * 划出去的弧线半径就小，最后才伸直。
-	 */
-	FArmReach BlendReach(const FArmReach& From, const FArmReach& To, float Alpha, float DistanceAlpha)
-	{
-		FArmReach Out;
-		Out.Direction = FMath::Lerp(From.Direction, To.Direction, Alpha).GetSafeNormal();
-		if (Out.Direction.IsNearlyZero()) Out.Direction = To.Direction;
-		Out.Distance = FMath::Lerp(From.Distance, To.Distance, DistanceAlpha);
-		Out.Pole = FMath::Lerp(From.Pole, To.Pole, Alpha).GetSafeNormal();
-		if (Out.Pole.IsNearlyZero()) Out.Pole = To.Pole;
-		return Out;
-	}
-
-	USkeletalBodySetup* AddBoneCapsule(UPhysicsAsset* Asset, const FName Bone,
-		const FTransform& BoneTM, const FVector& WorldEnd, const float RadiusScale, const float MinRadius, const float MaxRadius)
-	{
-		FVector LocalEnd = BoneTM.InverseTransformPosition(WorldEnd);
-		if (LocalEnd.SizeSquared() < 1.0f)
-		{
-			LocalEnd = FVector(0.0f, 0.0f, 8.0f);
-		}
-
-		USkeletalBodySetup* Body = NewObject<USkeletalBodySetup>(Asset, NAME_None, RF_Transient);
-		Body->BoneName = Bone;
-		Body->PhysicsType = PhysType_Default;
-		FKSphylElem Capsule;
-		Capsule.Center = LocalEnd * 0.5f;
-		Capsule.Radius = FMath::Clamp(LocalEnd.Size() * RadiusScale, MinRadius, MaxRadius);
-		Capsule.Length = FMath::Max(1.0f, LocalEnd.Size() - 2.0f * Capsule.Radius);
-		Capsule.Rotation = FQuat::FindBetweenNormals(FVector::UpVector, LocalEnd.GetSafeNormal()).Rotator();
-		Body->AggGeom.SphylElems.Add(Capsule);
-		Body->CreatePhysicsMeshes();
-		Asset->SkeletalBodySetups.Add(Body);
-		Asset->UpdateBodySetupIndexMap();
-		return Body;
-	}
-
-	void AddBallSocket(UPhysicsAsset* Asset, const FName Child, const FName Parent,
-		const FTransform& ChildTM, const FTransform& ParentTM, const float SwingLimit, const float TwistLimit)
-	{
-		UPhysicsConstraintTemplate* Constraint = NewObject<UPhysicsConstraintTemplate>(Asset, NAME_None, RF_Transient);
-		FConstraintInstance& Joint = Constraint->DefaultInstance;
-		Joint.JointName = Child;
-		Joint.ConstraintBone1 = Child;
-		Joint.ConstraintBone2 = Parent;
-		const FTransform WorldFrame(ChildTM.GetRotation(), ChildTM.GetLocation());
-		Joint.SetRefFrame(EConstraintFrame::Frame1, WorldFrame.GetRelativeTransform(ChildTM));
-		Joint.SetRefFrame(EConstraintFrame::Frame2, WorldFrame.GetRelativeTransform(ParentTM));
-		Joint.SetLinearLimits(LCM_Locked, LCM_Locked, LCM_Locked, 0);
-		OpenUpJoint(Joint, SwingLimit, TwistLimit);
-		Joint.SetDisableCollision(true);
-		Asset->ConstraintSetup.Add(Constraint);
-	}
-
-	bool HasConstraintBetween(const UPhysicsAsset* Asset, const FName A, const FName B)
-	{
-		for (const UPhysicsConstraintTemplate* Template : Asset->ConstraintSetup)
-		{
-			if (!Template)
-			{
-				continue;
-			}
-			const FConstraintInstance& Joint = Template->DefaultInstance;
-			const bool bAB = Joint.ConstraintBone1 == A && Joint.ConstraintBone2 == B;
-			const bool bBA = Joint.ConstraintBone1 == B && Joint.ConstraintBone2 == A;
-			if (bAB || bBA)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-
-	FVector FindHandTip(const USkeletalMeshComponent* Mesh, const FString& Side, const FTransform& HandTM)
-	{
-		const FName Candidates[] = {
-			FName(*(Side + TEXT("Hand_end"))),
-			FName(*(Side + TEXT("Hand_end_end"))),
-			FName(*(Side + TEXT("HandThumb1")))
-		};
-		for (const FName Tip : Candidates)
-		{
-			if (Mesh->GetBoneIndex(Tip) != INDEX_NONE)
-			{
-				return Mesh->GetSocketTransform(Tip).GetLocation();
-			}
-		}
-		return HandTM.GetLocation() + HandTM.GetUnitAxis(EAxis::X) * 8.0f;
-	}
-}
-
-void FDeliveryBoxingPose::CompletePhysicsAsset(USkeletalMeshComponent* Mesh, const FDeliveryArmPoseSettings& Settings)
-{
-	UPhysicsAsset* Source = Mesh->GetPhysicsAsset();
-	if (!Source) return;
-	UPhysicsAsset* Asset = nullptr;
-	for (const FString Side : { FString(TEXT("Left")), FString(TEXT("Right")) })
-	{
-		const FName Upper(*(Side + TEXT("Arm"))), Lower(*(Side + TEXT("ForeArm"))), Hand(*(Side + TEXT("Hand")));
-		if (Mesh->GetBoneIndex(Upper) == INDEX_NONE || Mesh->GetBoneIndex(Lower) == INDEX_NONE
-			|| Mesh->GetBoneIndex(Hand) == INDEX_NONE)
-		{
-			continue;
-		}
-
-		UPhysicsAsset* Current = Asset ? Asset : Source;
-		if (Current->FindBodyIndex(Upper) == INDEX_NONE)
-		{
-			continue;
-		}
-
-		const bool bNeedsHand = Current->FindBodyIndex(Hand) == INDEX_NONE;
-		const bool bNeedsForearm = Current->FindBodyIndex(Lower) == INDEX_NONE;
-		bool bNeedsJointRange = false;
-		for (const UPhysicsConstraintTemplate* Template : Current->ConstraintSetup)
-		{
-			const FConstraintInstance& Joint = Template->DefaultInstance;
-			if (Joint.ConstraintBone1 == Upper)
-			{
-				bNeedsJointRange |= !JointIsOpenedUp(Joint, Settings.ShoulderSwingLimit, Settings.ShoulderTwistLimit);
-			}
-			else if (Joint.ConstraintBone1 == Lower)
-			{
-				bNeedsJointRange |= !JointIsOpenedUp(Joint, Settings.ElbowSwingLimit, Settings.ElbowTwistLimit);
-			}
-		}
-		if (!bNeedsHand && !bNeedsForearm && !bNeedsJointRange)
-		{
-			continue;
-		}
-		if (!Asset)
-		{
-			Asset = DuplicateObject<UPhysicsAsset>(Source, Mesh);
-			Asset->SetFlags(RF_Transient);
-		}
-
-		// 肩和肘按出拳需要的活动范围放开。默认锥角只有几十度，上臂抬不到肩前，
-		// 收拳会停在肚子前面，出拳也只剩小臂在折。
-		bool bShoulderFound = false;
-		for (UPhysicsConstraintTemplate* Template : Asset->ConstraintSetup)
-		{
-			FConstraintInstance& Joint = Template->DefaultInstance;
-			if (Joint.ConstraintBone1 == Upper)
-			{
-				OpenUpJoint(Joint, Settings.ShoulderSwingLimit, Settings.ShoulderTwistLimit);
-				bShoulderFound = true;
-			}
-			else if (Joint.ConstraintBone1 == Lower)
-			{
-				OpenUpJoint(Joint, Settings.ElbowSwingLimit, Settings.ElbowTwistLimit);
-			}
-		}
-		if (!bShoulderFound)
-		{
-			// 没找到肩关节就没法放开限位，出拳会被物理资产原本的锥角卡住。
-			UE_LOG(LogDelivery, Warning, TEXT("Boxing: no %s shoulder joint owned by %s"), *Side, *Upper.ToString());
-		}
-
-		const FTransform UpperTM = Mesh->GetSocketTransform(Upper);
-		const FTransform LowerTM = Mesh->GetSocketTransform(Lower);
-		const FTransform HandTM = Mesh->GetSocketTransform(Hand);
-
-		// renwu 这类资产常常只有上臂。没有手/小臂刚体时右拳 CanDrivePunch 会直接失败。
-		if (bNeedsHand)
-		{
-			AddBoneCapsule(Asset, Hand, HandTM, FindHandTip(Mesh, Side, HandTM), 0.22f, 1.5f, 3.5f);
-			UE_LOG(LogDelivery, Log, TEXT("Boxing: added runtime %s hand"), *Side);
-		}
-		if (bNeedsForearm)
-		{
-			AddBoneCapsule(Asset, Lower, LowerTM, HandTM.GetLocation(), 0.12f, 2.0f, 4.0f);
-
-			// Replace the old hand-to-upper-arm joint with a wrist, then add an elbow.
-			bool bWristFound = false;
-			for (UPhysicsConstraintTemplate* Template : Asset->ConstraintSetup)
-			{
-				FConstraintInstance& Joint = Template->DefaultInstance;
-				const bool bHandFirst = Joint.ConstraintBone1 == Hand && Joint.ConstraintBone2 == Upper;
-				const bool bHandSecond = Joint.ConstraintBone2 == Hand && Joint.ConstraintBone1 == Upper;
-				if (!bHandFirst && !bHandSecond) continue;
-				Joint.ConstraintBone1 = Hand;
-				Joint.ConstraintBone2 = Lower;
-				const FTransform WorldFrame(HandTM.GetRotation(), HandTM.GetLocation());
-				Joint.SetRefFrame(EConstraintFrame::Frame1, WorldFrame.GetRelativeTransform(HandTM));
-				Joint.SetRefFrame(EConstraintFrame::Frame2, WorldFrame.GetRelativeTransform(LowerTM));
-				Joint.SetAngularSwing1Limit(ACM_Limited, 15);
-				Joint.SetAngularSwing2Limit(ACM_Limited, 15);
-				Joint.SetAngularTwistLimit(ACM_Limited, 15);
-				Joint.SetDisableCollision(true);
-				bWristFound = true;
-			}
-			if (!bWristFound)
-			{
-				AddBallSocket(Asset, Hand, Lower, HandTM, LowerTM, 15.0f, 15.0f);
-			}
-			if (!HasConstraintBetween(Asset, Lower, Upper))
-			{
-				AddBallSocket(Asset, Lower, Upper, LowerTM, UpperTM,
-					Settings.ElbowSwingLimit, Settings.ElbowTwistLimit);
-			}
-			Asset->DisableCollision(Asset->FindBodyIndex(Lower), Asset->FindBodyIndex(Upper));
-			if (Asset->FindBodyIndex(Hand) != INDEX_NONE)
-			{
-				Asset->DisableCollision(Asset->FindBodyIndex(Lower), Asset->FindBodyIndex(Hand));
-			}
-			UE_LOG(LogDelivery, Log, TEXT("Boxing: added runtime %s elbow and forearm"), *Side);
-		}
-		else if (bNeedsHand && !HasConstraintBetween(Asset, Hand, Lower) && Asset->FindBodyIndex(Lower) != INDEX_NONE)
-		{
-			AddBallSocket(Asset, Hand, Lower, HandTM, LowerTM, 15.0f, 15.0f);
-			Asset->DisableCollision(Asset->FindBodyIndex(Lower), Asset->FindBodyIndex(Hand));
-		}
-	}
-	if (Asset)
-	{
-		Asset->UpdateBoundsBodiesArray();
-		Mesh->SetPhysicsAsset(Asset, true);
-	}
-}
+using DeliveryPunchTrajectory::FArmReach;
+using DeliveryPunchTrajectory::MakeReach;
+using DeliveryPunchTrajectory::BlendReach;
 
 void FDeliveryBoxingPose::Create(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* Controls,
 	const FDeliveryArmPoseSettings& InSettings)
 {
+	// 每只手臂分别记下“刚进游戏时”的骨骼方向与长度；后续只改变目标姿势，
+	// 不在出拳时改骨骼长度。每段骨骼都需要一个可模拟物理的刚体和一个旋转电机。
 	Settings = InSettings;
 	SettleTime = 0;
 	ReferenceYaw = Mesh->GetOwner()->GetActorRotation().Yaw;
@@ -312,6 +62,9 @@ void FDeliveryBoxingPose::Create(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 FVector FDeliveryBoxingPose::SolveElbow(const FVector& Shoulder, const FVector& Hand,
 	const FVector& Pole, float UpperLength, float LowerLength)
 {
+	// 已知肩、手、上臂长和前臂长，求肘的位置。Along 是肘沿肩→手方向
+	// 前进的距离；Height 是肘离这条直线的距离；Pole 决定肘向哪一侧弯。
+	// 把手的距离夹在可达范围内，避免完全伸直时出现无解或数值抖动。
 	const FVector Direction = (Hand - Shoulder).GetSafeNormal();
 	const float Distance = FMath::Clamp(FVector::Distance(Hand, Shoulder),
 		FMath::Abs(UpperLength - LowerLength) + 0.01f, UpperLength + LowerLength - 0.01f);
@@ -326,6 +79,8 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 	float FacingYaw, float DeltaTime, int32 PunchArm, bool bReleased, FVector PunchDirection,
 	const FVector* GrabGoals, uint8 GrabMask)
 {
+	// 同一条更新路径同时处理自然垂手、向后蓄力、向前出拳、收拳和抓取。
+	// 先算手在肩附近的目标，再求肘与三段骨骼的朝向，最后交给物理电机。
 	SettleTime += DeltaTime;
 	const float Settle = FMath::SmoothStep(0.f, 0.5f, SettleTime);
 	const FQuat Yaw(FVector::UpVector, FMath::DegreesToRadians(FacingYaw - ReferenceYaw));
@@ -352,12 +107,11 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 		Arm.Extension = FMath::FInterpConstantTo(Arm.Extension, bStrike ? 1.f : 0.f, DeltaTime,
 			bStrike ? Settings.PunchExtendSpeed : Settings.PunchRetractSpeed);
 		const float WindupAlpha = FMath::SmoothStep(0.f, 1.f, Arm.Windup);
-		// 收拳可以两头都缓，前送不行：缓入等于出手先慢慢加速，那是推不是打。
-		// 一出手就给最大速度，末端再减速，收在伸直的位置上。
-		// 前送快速释放，回收则在两端减速，避免快收完时突然落回垂手姿势。
+		// 出拳前段快速向前，末端减速；收拳则两端都放缓。
+		// 若出拳起点也缓入，看起来会像慢慢把对方推开，而不是挥拳。
 		const float StrikeAlpha = bStrike
-			? 1.f - FMath::Square(1.f - Arm.Extension)
-			: FMath::SmoothStep(0.f, 1.f, Arm.Extension);
+			? DeliveryPunchTrajectory::StrikeProgress(Arm.Extension)
+			: DeliveryPunchTrajectory::RetractProgress(Arm.Extension);
 		const FVector Outward = Right * (Side == 0 ? -1.f : 1.f);
 		const float Length = Arm.UpperLength + Arm.LowerLength;
 		const float MaxReach = Length * 0.99f;
@@ -371,16 +125,14 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 
 		// 先沿瞄准方向向侧后方收拳，再从此点向前打出。少量外侧距离
 		// 让手经过肩旁而非穿过肩关节原点，保持屈肘方向连续。
-		const FVector WindupOffset =
-			(-PunchForward * Settings.WindupBack + FVector::UpVector * Settings.WindupUp
-				+ Outward * Settings.WindupOutward) * Length;
+		const FVector WindupOffset = DeliveryPunchTrajectory::WindupOffset(PunchForward,
+			Outward, Length, Settings.WindupBack, Settings.WindupUp, Settings.WindupOutward);
 		Reach = BlendReach(Reach, MakeReach(WindupOffset, -FVector::UpVector + Outward * 0.4f, MaxReach),
 			WindupAlpha, WindupAlpha);
 
 		// 前送走肩到手的直线：直接插值偏移。BlendReach 先转方向再伸长，方向差一丁点就是弧。
-		const FVector PunchOffset =
-			(PunchForward * Settings.PunchReach - Outward * Settings.PunchInward
-				- FVector::UpVector * Settings.PunchDrop) * Length;
+		const FVector PunchOffset = DeliveryPunchTrajectory::StrikeOffset(PunchForward,
+			Outward, Length, Settings.PunchReach, Settings.PunchInward, Settings.PunchDrop);
 		Reach = MakeReach(
 			FMath::Lerp(Reach.Direction * Reach.Distance, PunchOffset, StrikeAlpha),
 			FMath::Lerp(Reach.Pole, (-FVector::UpVector * 0.85f + Outward * 0.3f).GetSafeNormal(), StrikeAlpha),
@@ -395,6 +147,8 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 				-FVector::UpVector + Outward * 0.4f, MaxReach);
 		}
 		const FVector Hand = Shoulder + Reach.Direction * Reach.Distance;
+		// 目标“拳头在哪里”还不能直接驱动整条手臂：先求肘，再把肩→肘、
+		// 肘→手两个方向分别换成上臂、前臂的目标旋转。
 		const FVector Elbow = SolveElbow(Shoulder, Hand, Reach.Pole, Arm.UpperLength, Arm.LowerLength);
 		const FQuat UpperBase = Yaw * Arm.UpperReference;
 		const FQuat LowerBase = Yaw * Arm.LowerReference;
@@ -421,8 +175,8 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 				Controls->SetControlAngularData(Link.Key, AppliedStrength * Link.Value, Settings.DampingRatio, 0, 0, true, true, false);
 			}
 		}
-		// Target the actual controls: the last two flags select controls=true, sets=false.
-		// 传 DeltaTime 让电机顺带拿到目标角速度，快动作才不会一直落后。
+		// 写给实际的三个控制器（不是控制器集合）；DeltaTime 让电机知道目标转动速度，
+		// 快速出拳时能及时跟上。实际手臂依旧由刚体模拟，不会直接传送到目标姿势。
 		Controls->SetControlTargetOrientation(Arm.UpperControl, FQuat::Slerp(UpperBase, Upper, Settle).Rotator(), DeltaTime, true, false, true, false);
 		Controls->SetControlTargetOrientation(Arm.LowerControl, FQuat::Slerp(LowerBase, Lower, Settle).Rotator(), DeltaTime, true, false, true, false);
 		Controls->SetControlTargetOrientation(Arm.HandControl, FQuat::Slerp(Yaw * Arm.HandReference, Wrist, Settle).Rotator(), DeltaTime, true, false, true, false);

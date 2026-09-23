@@ -17,6 +17,7 @@
 ## 目前已实现的内容（从 git 历史与代码整理）
 
 ### 1. 角色移动 —— 主动布娃娃（Active Ragdoll），非常规 Character Movement
+代码阅读顺序：`DeliveryActiveRagdollComponent.cpp` 保留状态和每帧入口；同目录的 `DeliveryActiveRagdollSetup.cpp`、`DeliveryActiveRagdollStance.cpp`、`DeliveryActiveRagdollGait.cpp`、`DeliveryActiveRagdollGround.cpp`、`DeliveryActiveRagdollCombat.cpp`、`DeliveryActiveRagdollNetwork.cpp` 分别处理物理控制初始化、身体目标、脚步、地面/翻滚、物理受击和复制。它们仍实现同一个组件，蓝图参数与复制字段都在原头文件。无场景依赖的落点和摆动公式在 `DeliveryFootPlacement.h`，拳路公式在 `Combat/DeliveryPunchTrajectory.h`；拳击资产补全单独在 `Combat/DeliveryBoxingPhysicsAsset.cpp`。改物理时先看每帧入口及调用顺序。
 下坡双脚防交叉：落点左右轴跟随 `CurrentFacingYaw`（身体朝向），不随 WASD 方向瞬时翻转；仅在着地可控状态对内滑的脚/小腿刚体施加有上限的水平纠偏加速度。迈步最后 15% 固定落点，最多额外等待 0.18 秒到位；停步后也允许纠正已交叉的脚。回归检查：`Delivery.Ragdoll.FootSeparation`。
 角色采用"持续物理驱动"：从 BeginPlay 起 Simulate Physics 常驻打开，走路/站立/
 摔倒/起身/抓取/互殴都在同一条刚体链上完成，而不是"平时动画、摔倒才切物理"的
@@ -33,7 +34,7 @@
 
 ### 2. 互殴系统（近战）
 - 出拳手感追加调校：释放冲量当前为 1200（上一版 900），后收比例 0.24，蓄力姿态速度 4、伸拳速度 10；前送沿用快速释放曲线，收拳单独使用 SmoothStep 两端缓速。保留下半身支撑与 4 cm 髋部前压，不提高伤害数值。
-- [Source/Delivery/Ragdoll/DeliveryRagdollCombatComponent.h](Source/Delivery/Ragdoll/DeliveryRagdollCombatComponent.h) —— 在布娃娃刚体链上执行出拳动作。
+- [Source/Delivery/Combat/DeliveryRagdollCombatComponent.h](Source/Delivery/Combat/DeliveryRagdollCombatComponent.h) —— 在布娃娃刚体链上执行出拳动作。
 - [Source/Delivery/Combat/DeliveryCombatInterface.h](Source/Delivery/Combat/DeliveryCombatInterface.h) —— `StartMeleeAttack` / `GatherMeleeHits` / `EndMeleeAttack` / `IsMeleeAttacking`，Character 实现，GA 调用。
 - [Source/Delivery/Combat/DeliveryCombatTypes.h](Source/Delivery/Combat/DeliveryCombatTypes.h) —— `FDeliveryArmPoseSettings`：A 姿势、后收蓄力、直拳三段姿态的参数化定义，握拳靠手指弯曲角度模拟（无手指刚体）。蓄力目标在肩后略向外、略向下；释放时直接插值手的位置，向外偏移用于避免拳路经过肩关节原点。
 - 出拳下半身稳定：拧身改由胸腰完成，不再扭动骨盆；髋部前压默认从 24 cm 降到 4 cm，手部释放冲量从 1800 降到 900，蓄力默认 0.32 秒。原地、着地且直立时短暂启用脚部位置电机并固定髋目标的水平基准；移动、跳跃、受击、晕倒或明显偏离支撑点时解除，不关闭物理模拟。行走时出拳保留步态，只减小髋部摆动。

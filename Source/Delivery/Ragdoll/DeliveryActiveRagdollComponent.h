@@ -614,6 +614,10 @@ protected:
 	void SetPunchFeetPlanted(bool bPlant);
 	void BraceTorsoForAction(float DeltaTime, bool bPunch, bool bCarry);
 	void UpdatePelvisTarget(float DeltaTime, const FVector& Wish);
+	void UpdateJumpHeight(float DeltaTime);
+	void UpdateFacingYaw(float DeltaTime, const FVector& Wish, bool bCarryingProp);
+	void WriteBodyRotationTargets(float DeltaTime, const FVector& Wish,
+		float Wobble, bool bCarryingProp, const FVector& Target);
 	void UpdateFeet(float DeltaTime, const FVector& Wish);
 	void KeepFeetOnOwnSide();
 	bool BeginStep(FFoot& Foot, const FVector& Wish);

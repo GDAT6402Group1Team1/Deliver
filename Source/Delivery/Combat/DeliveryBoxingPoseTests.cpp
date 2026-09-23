@@ -1,4 +1,5 @@
 #include "DeliveryBoxingPose.h"
+#include "DeliveryPunchTrajectory.h"
 #if WITH_DEV_AUTOMATION_TESTS
 #include "DeliveryHandPose.h"
 #include "Misc/AutomationTest.h"
@@ -10,6 +11,22 @@
 #include "PhysicsEngine/PhysicsConstraintTemplate.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "PhysicsControlComponent.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryPunchTrajectoryTest, "Delivery.Boxing.TrajectoryMath",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDeliveryPunchTrajectoryTest::RunTest(const FString&)
+{
+	// 以肩为原点核对三段拳路。修改姿势参数时，这些方向关系不能颠倒。
+	const FVector Back = DeliveryPunchTrajectory::WindupOffset(FVector::ForwardVector,
+		FVector::RightVector, 100.0f, 0.24f, -0.06f, 0.16f);
+	const FVector Forward = DeliveryPunchTrajectory::StrikeOffset(FVector::ForwardVector,
+		FVector::RightVector, 100.0f, 1.0f, 0.05f, -0.062f);
+	TestTrue(TEXT("蓄力位置在肩后且远离身体中线"), Back.X < 0.0f && Back.Y > 0.0f);
+	TestTrue(TEXT("直拳终点在肩前"), Forward.X > 0.0f);
+	TestTrue(TEXT("前送中段已越过半程"), DeliveryPunchTrajectory::StrikeProgress(0.5f) > 0.5f);
+	TestTrue(TEXT("回收两端比中间慢"), DeliveryPunchTrajectory::RetractProgress(0.1f) < 0.1f);
+	return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryBoxingGeometryTest, "Delivery.Boxing.StraightReach",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
