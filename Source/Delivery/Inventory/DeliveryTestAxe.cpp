@@ -2,6 +2,7 @@
 
 #include "Inventory/DeliveryTestAxe.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/Texture2D.h"
 #include "Inventory/DeliveryInventoryItemComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -21,6 +22,9 @@ ADeliveryTestAxe::ADeliveryTestAxe()
 		AxeHead->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 	ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "TestAxe", "斧头");
+	static ConstructorHelpers::FObjectFinder<UTexture2D> AxeIcon(
+		TEXT("/Game/UI/Inventory/Textures/T_ItemIconAxe.T_ItemIconAxe"));
+	if (AxeIcon.Succeeded()) ItemComponent->Icon = AxeIcon.Object;
 	ItemComponent->ItemType = EDeliveryInventoryItemType::BackpackItem;
 	ItemComponent->MaxDurability = 100.0f;
 	ItemComponent->Durability = 100.0f;

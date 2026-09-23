@@ -44,7 +44,9 @@
 - 非 Shipping 的 PIE 诊断命令在 [DeliveryGrabDebugCommands.cpp](Source/Delivery/Grab/DeliveryGrabDebugCommands.cpp)：`Delivery.Grab.TestSetup` 将另一玩家放到面前并设为 Limp，`TestGrab` 走真实候选/服务器抓取路径，`TestStatus` 报告关节与坐标，`TestPull` 后退 2 秒，`TestRelease` 松手。用于重复验证，不改地图。
 - 托举时的上半身稳定：`IsCarryingProp()` 只对已抓住的普通物品成立；胸和脊柱电机渐进加到 `CarryBraceStrength`（默认 20），手臂用单独的 `GrabStrength`（默认 22）而非出拳的 39；取消故意添加的胸部摆动、把髋部摆动降到 20%，并将抱箱转身角速度限制为默认 160°/s。晕倒玩家拖拽、普通行走与出拳仍沿用各自设置。
 - [DeliveryGrabbableComponent](Source/Delivery/Grab/DeliveryGrabbableComponent.h)：显式 opt-in；普通物品的可模拟物理 Primitive 必须是 Actor 根。普通物品被抓时由服务器暂时关闭物理模拟，以默认 20 的跟随速度平滑扫掠到胸口前方并平滑转向身体朝向，同时暂时忽略 `Pawn`/`PhysicsBody`（避免箱子顶开手臂）；松手后恢复物理与原碰撞响应，并保留有限释放速度。客户端通过复制的携带状态同步物理开关与 Actor 位移。最多两人同时抓同一物品，服务器取两人的托举目标中点与朝向合向量产生争抢效果；对向拉扯时合向量为零则保留当前箱子朝向（这是游戏化位置争抢，不再是双方手约束的真实力学拉扯）。晕倒角色始终保持全物理拖拽。 [DeliveryGrabbableProp](Source/Delivery/Grab/DeliveryGrabbableProp.h) 是默认 3 kg 的测试/道具基类。
-- 抓取状态、左右手姿态和物品位置由服务器复制；`LeftHandGap`/`RightHandGap` 是 PIE 运行时的手—箱表面距离诊断值。瞄准先用镜头射线，再从身边准星附近的无遮挡物品中找候选；默认 140 cm，本机只高亮一个**尚未抓取的候选目标**，进入预测抓取或实际托举后立即恢复原显示，松手重新瞄准才高亮。`CustomDepth/Stencil` + `M_GrabHighlight` 负责提示，项目要开启 `r.CustomDepth=3`。不提交测试地图。
+- 抓取状态、左右手姿态和物品位置由服务器复制；`LeftHandGap`/`RightHandGap` 是 PIE 运行时的手—箱表面距离诊断值。瞄准先用镜头射线，再从身边准星附近的无遮挡物品中找候选；默认 140 cm，本机只高亮一个**尚未抓取的候选目标**，进入预测抓取或实际托举后立即恢复原显示，松手重新瞄准才高亮。`CustomDepth/Stencil` + `M_GrabHighlight` 负责提示，项目要开启 `r.CustomDepth=3`。测试蓝图 `/Game/Blueprint/Item/Test/BP_TestGrabBox` 可自行拖入地图，不占物品栏。不提交测试地图。
+
+五格 Hotbar 用 `DeliveryInventoryItemComponent::Icon` 显示图片，不显示物品名或数字。测试斧头与快递的生成图标源图在 `Content/UI/Inventory/Source`，导入贴图在 `Content/UI/Inventory/Textures`；空格不显示图标，普通道具仍显示耐久条。
 
 ### 3. GAS（Gameplay Ability System）
 - [DeliverAbilitySystemComponent](Source/Delivery/GAS/DeliverAbilitySystemComponent.h) 挂在 **PlayerState**（[DeliverPlayerState](Source/Delivery/GAS/DeliverPlayerState.h)）而非 Character 上，随 PlayerState 复制；`ADeliveryCharacter::OnRep_PlayerState` 里处理绑定。

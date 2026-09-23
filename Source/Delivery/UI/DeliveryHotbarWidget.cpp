@@ -7,16 +7,15 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/Image.h"
 #include "Components/ProgressBar.h"
 #include "Components/SizeBox.h"
-#include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/Texture2D.h"
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Inventory/DeliveryInventoryItemComponent.h"
-#include "Styling/CoreStyle.h"
 
 void UDeliveryHotbarWidget::SetInventory(UDeliveryInventoryComponent* InInventory)
 {
@@ -47,8 +46,7 @@ void UDeliveryHotbarWidget::BuildWidgetTree()
 	if (!WidgetTree || SlotBorders.Num() == UDeliveryInventoryComponent::SlotCount) return;
 	WidgetTree->RootWidget = nullptr;
 	SlotBorders.Reset();
-	SlotNames.Reset();
-	SlotNumbers.Reset();
+	SlotIcons.Reset();
 	DurabilityBars.Reset();
 	ConnectedHotbarTexture = LoadObject<UTexture2D>(nullptr,
 		TEXT("/Game/UI/Inventory/Textures/T_HotbarConnectedCartoon.T_HotbarConnectedCartoon"));
@@ -92,24 +90,17 @@ void UDeliveryHotbarWidget::BuildWidgetTree()
 		UVerticalBox* Column = WidgetTree->ConstructWidget<UVerticalBox>();
 		Border->SetContent(Column);
 
-		UTextBlock* Number = WidgetTree->ConstructWidget<UTextBlock>();
-		Number->SetText(FText::AsNumber(Index + 1));
-		Number->SetColorAndOpacity(Index == 0 ? FLinearColor(1.0f, 0.86f, 0.36f) : FLinearColor(0.62f, 0.67f, 0.71f));
-		Number->SetJustification(ETextJustify::Left);
-		Number->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", Index == 0 ? 14 : 12));
-		Column->AddChildToVerticalBox(Number)->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 0.0f));
-		SlotNumbers.Add(Number);
-
-		UTextBlock* Name = WidgetTree->ConstructWidget<UTextBlock>();
-		Name->SetJustification(ETextJustify::Center);
-		Name->SetColorAndOpacity(FLinearColor::White);
-		Name->SetAutoWrapText(true);
-		Name->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", Index == 0 ? 13 : 11));
-		UVerticalBoxSlot* NameSlot = Column->AddChildToVerticalBox(Name);
-		NameSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-		NameSlot->SetHorizontalAlignment(HAlign_Center);
-		NameSlot->SetVerticalAlignment(VAlign_Center);
-		SlotNames.Add(Name);
+		USizeBox* IconSize = WidgetTree->ConstructWidget<USizeBox>();
+		IconSize->SetWidthOverride(52.0f);
+		IconSize->SetHeightOverride(52.0f);
+		UImage* Icon = WidgetTree->ConstructWidget<UImage>();
+		Icon->SetVisibility(ESlateVisibility::Collapsed);
+		IconSize->SetContent(Icon);
+		UVerticalBoxSlot* IconSlot = Column->AddChildToVerticalBox(IconSize);
+		IconSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		IconSlot->SetHorizontalAlignment(HAlign_Center);
+		IconSlot->SetVerticalAlignment(VAlign_Center);
+		SlotIcons.Add(Icon);
 
 		UProgressBar* Durability = WidgetTree->ConstructWidget<UProgressBar>();
 		Durability->SetPercent(0.0f);
@@ -127,13 +118,15 @@ void UDeliveryHotbarWidget::Refresh()
 	{
 		ADeliveryHandheldItem* Item = Inventory->GetItemInSlot(Index);
 		UDeliveryInventoryItemComponent* Data = Item ? Item->GetItemComponent() : nullptr;
-		const FText EmptyLabel = Index == 0
-			? NSLOCTEXT("DeliveryHotbar", "EmptyHand", "空手")
-			: NSLOCTEXT("DeliveryHotbar", "EmptySlot", "空");
-		SlotNames[Index]->SetText(Data ? Data->DisplayName : EmptyLabel);
+		UTexture2D* IconTexture = Data ? Data->Icon.Get() : nullptr;
+		SlotIcons[Index]->SetVisibility(IconTexture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		if (IconTexture && SlotIcons[Index]->GetBrush().GetResourceObject() != IconTexture)
+		{
+			SlotIcons[Index]->SetBrushFromTexture(IconTexture, false);
+		}
 		const bool bShowDurability = Data && Data->UsesDurability();
 		DurabilityBars[Index]->SetVisibility(bShowDurability
-			? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
+			? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 		if (bShowDurability) DurabilityBars[Index]->SetPercent(Data->GetDurabilityFraction());
 
 		FLinearColor Base = FLinearColor(1.0f, 1.0f, 1.0f, Data ? 0.10f : 0.0f);

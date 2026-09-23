@@ -41,7 +41,9 @@
 - [DeliveryGrabDebugCommands.cpp](Source/Delivery/Grab/DeliveryGrabDebugCommands.cpp) 提供非 Shipping 的 PIE 命令 `Delivery.Grab.TestSetup / TestGrab / TestStatus / TestPull / TestRelease`，分别准备倒地目标、走真实抓取路径、报告状态、后退 2 秒和释放；无需修改测试地图。
 - 托举普通物品后才启用持物稳定姿态：胸和脊柱电机平滑增强（`CarryBraceStrength` 默认 20），手臂持物强度 `GrabStrength` 默认 22，不再使用出拳强度 39；关闭胸部步行摇摆，髋部摇摆保留 20%，转身限速默认 160°/s。普通行走、出拳、晕倒玩家拖拽不受影响。
 - [DeliveryGrabbableComponent](Source/Delivery/Grab/DeliveryGrabbableComponent.h)：普通物品的可模拟物理 Primitive 要是 Actor 根；抓取时服务器暂时关闭物理，以默认 20 的速度平滑扫掠到胸口前方并平滑对齐身体朝向，暂时忽略 `Pawn`/`PhysicsBody` 碰撞，以免箱子把手臂顶开；释放后恢复物理、原碰撞响应并继承有限速度。携带状态与移动复制给客户端。两人抓同一物品时服务器取两个托举目标的中点及朝向合向量，正面对拉导致朝向合向量接近零时保持箱子现朝向；这是游戏化争抢，不是双方约束的真实力学拉扯。晕倒玩家仍全物理拖拽。[DeliveryGrabbableProp](Source/Delivery/Grab/DeliveryGrabbableProp.h) 默认测试质量 3 kg。NPC/背包/单手持有系统尚未接入。
-- `LeftHandGap`/`RightHandGap` 在 PIE 显示手到物品表面的距离。镜头射线优先，身边准星附近的无遮挡目标可作为后备；默认 140 cm，本机 `CustomDepth/Stencil` + `M_GrabHighlight` 只提示一个未抓取候选目标，预测抓取或托举时清除高亮，松手重新瞄准才恢复；`DefaultEngine.ini` 开启 `r.CustomDepth=3`。不提交测试地图。
+- `LeftHandGap`/`RightHandGap` 在 PIE 显示手到物品表面的距离。镜头射线优先，身边准星附近的无遮挡目标可作为后备；默认 140 cm，本机 `CustomDepth/Stencil` + `M_GrabHighlight` 只提示一个未抓取候选目标，预测抓取或托举时清除高亮，松手重新瞄准才恢复；`DefaultEngine.ini` 开启 `r.CustomDepth=3`。测试蓝图 `/Game/Blueprint/Item/Test/BP_TestGrabBox` 可自行拖入地图，不占物品栏。不提交测试地图。
+
+五格 Hotbar 用 `DeliveryInventoryItemComponent::Icon` 显示图片，不显示物品名或数字。测试斧头与快递的生成图标源图在 `Content/UI/Inventory/Source`，导入贴图在 `Content/UI/Inventory/Textures`；空格不显示图标，普通道具仍显示耐久条。
 
 ### GAS（Gameplay Ability System）接入
 - [DeliverAbilitySystemComponent](Source/Delivery/GAS/DeliverAbilitySystemComponent.h) 挂载在 [DeliverPlayerState](Source/Delivery/GAS/DeliverPlayerState.h) 上（而非 Character），随 PlayerState 复制。

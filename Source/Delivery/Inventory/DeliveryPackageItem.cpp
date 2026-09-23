@@ -2,6 +2,7 @@
 
 #include "Inventory/DeliveryPackageItem.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/Texture2D.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Inventory/DeliveryInventoryItemComponent.h"
 #include "Task/DeliveryItemComponent.h"
@@ -13,6 +14,9 @@ ADeliveryPackageItem::ADeliveryPackageItem()
 	DeliveryItemComponent = CreateDefaultSubobject<UDeliveryItemComponent>(TEXT("DeliveryTaskItem"));
 	ItemComponent->ItemType = EDeliveryInventoryItemType::DeliveryItem;
 	ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "DeliveryPackage", "快递");
+	static ConstructorHelpers::FObjectFinder<UTexture2D> PackageIcon(
+		TEXT("/Game/UI/Inventory/Textures/T_ItemIconPackage.T_ItemIconPackage"));
+	if (PackageIcon.Succeeded()) ItemComponent->Icon = PackageIcon.Object;
 	ItemComponent->bUsesDurability = false;
 	ItemComponent->MaxDurability = 0.0f;
 	ItemComponent->Durability = 0.0f;

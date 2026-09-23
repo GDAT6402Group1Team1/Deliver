@@ -8,8 +8,8 @@
 
 class UBorder;
 class UDeliveryInventoryComponent;
+class UImage;
 class UProgressBar;
-class UTextBlock;
 class UTexture2D;
 
 /** Always-visible, compact five-slot UMG hotbar. Its tree is built here so every pawn gets identical UI. */
@@ -37,10 +37,7 @@ private:
 	TArray<TObjectPtr<UBorder>> SlotBorders;
 
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UTextBlock>> SlotNames;
-
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UTextBlock>> SlotNumbers;
+	TArray<TObjectPtr<UImage>> SlotIcons;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UProgressBar>> DurabilityBars;
