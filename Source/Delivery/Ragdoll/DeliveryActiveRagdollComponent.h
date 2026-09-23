@@ -513,6 +513,8 @@ protected:
 	/** 本帧要叠加到髋部目标上的抬升量，沿地面法线方向。 */
 	float JumpOffset = 0.0f;
 	float ReferenceFacingYaw = 0.0f;
+	/** Stable physical-body facing. Simulated proxies need this for held-item presentation. */
+	UPROPERTY(Replicated)
 	float CurrentFacingYaw = 0.0f;
 	float StartupPlantRemaining = 0.0f;
 	float SnapshotAccumulator = 0.0f;

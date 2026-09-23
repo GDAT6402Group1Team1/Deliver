@@ -113,6 +113,7 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 .cursor/mcp.json
+.mcp.json
 Config/DefaultEditorPerProjectUserSettings.ini
 Config/DefaultEditorPerProjectUserSettings.ini
 Delivery.uproject

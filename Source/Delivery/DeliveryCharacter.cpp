@@ -4,6 +4,7 @@
 #include "Animation/AnimSequence.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "CollisionQueryParams.h"
 #include "Engine/CollisionProfile.h"
@@ -17,6 +18,7 @@
 #include "GAS/DeliverGameplayTags.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
+#include "InputCoreTypes.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Delivery.h"
@@ -28,6 +30,9 @@
 #include "Grab/DeliveryGrabbableComponent.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Interaction/DeliveryInteractionProbeComponent.h"
+#include "Inventory/DeliveryHandheldItem.h"
+#include "Inventory/DeliveryInventoryComponent.h"
+#include "UI/DeliveryHotbarWidget.h"
 #include "TimerManager.h"
 
 ADeliveryCharacter::ADeliveryCharacter()
@@ -62,6 +67,11 @@ ADeliveryCharacter::ADeliveryCharacter()
 	Mesh->SetSimulatePhysics(false);
 	Mesh->SetEnableGravity(false);
 
+	// Runtime equivalent of an authored skeleton socket: the BP can tune this grip
+	// without editing the shared skeleton asset. Held items smooth-follow it post physics.
+	HeldItemAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("RightHandItemAnchor"));
+	HeldItemAnchor->SetupAttachment(Mesh, TEXT("RightHand"));
+
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = 400.0f;
@@ -85,7 +95,10 @@ ADeliveryCharacter::ADeliveryCharacter()
 	GrabComponent = CreateDefaultSubobject<UDeliveryGrabComponent>(TEXT("Grab"));
 	GrabbableComponent = CreateDefaultSubobject<UDeliveryGrabbableComponent>(TEXT("Grabbable"));
 	InteractProbe = CreateDefaultSubobject<UDeliveryInteractionProbeComponent>(TEXT("InteractProbe"));
+	InventoryComponent = CreateDefaultSubobject<UDeliveryInventoryComponent>(TEXT("Inventory"));
 	InteractAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
+	PickupAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Pickup.IA_Pickup")));
+	HotbarWidgetClass = TSoftClassPtr<UDeliveryHotbarWidget>(FSoftClassPath(TEXT("/Game/UI/Inventory/WBP_DeliveryHotbar.WBP_DeliveryHotbar_C")));
 
 	PunchLeftAbilityClass = UGA_DeliverPunchLeft::StaticClass();
 	PunchRightAbilityClass = UGA_DeliverPunchRight::StaticClass();
@@ -256,6 +269,29 @@ void ADeliveryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	{
 		EnhancedInputComponent->BindAction(Interact, ETriggerEvent::Started, this, &ADeliveryCharacter::InteractStarted);
 	}
+	if (UInputAction* Pickup = PickupAction.LoadSynchronous())
+	{
+		EnhancedInputComponent->BindAction(Pickup, ETriggerEvent::Started, this, &ADeliveryCharacter::PickupStarted);
+	}
+
+	// Hotbar is deliberately direct-keyed: 1 is drop, 2-5 swap with the hand.
+	PlayerInputComponent->BindKey(EKeys::One, IE_Pressed, this, &ADeliveryCharacter::InventorySlot1);
+	PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ADeliveryCharacter::InventorySlot2);
+	PlayerInputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ADeliveryCharacter::InventorySlot3);
+	PlayerInputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ADeliveryCharacter::InventorySlot4);
+	PlayerInputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ADeliveryCharacter::InventorySlot5);
+
+	if (!HotbarWidget && IsLocallyControlled())
+	{
+		UClass* WidgetClass = HotbarWidgetClass.LoadSynchronous();
+		if (!WidgetClass) WidgetClass = UDeliveryHotbarWidget::StaticClass();
+		HotbarWidget = CreateWidget<UDeliveryHotbarWidget>(Cast<APlayerController>(Controller), WidgetClass);
+		if (HotbarWidget)
+		{
+			HotbarWidget->SetInventory(InventoryComponent);
+			HotbarWidget->AddToViewport(10);
+		}
+	}
 }
 
 void ADeliveryCharacter::Move(const FInputActionValue& Value)
@@ -402,6 +438,11 @@ void ADeliveryCharacter::DoJumpEnd()
 void ADeliveryCharacter::DoAttackLeft()
 {
 	if (GrabComponent && GrabComponent->IsGrabbing()) return;
+	if (InventoryComponent && InventoryComponent->HasHeldItem())
+	{
+		InventoryComponent->UseHeldItem();
+		return;
+	}
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
 		ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Ability_Attack_Punch_Left));
@@ -411,6 +452,7 @@ void ADeliveryCharacter::DoAttackLeft()
 void ADeliveryCharacter::DoAttackRight()
 {
 	if (GrabComponent && GrabComponent->IsGrabbing()) return;
+	if (InventoryComponent && InventoryComponent->HasHeldItem()) return;
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
 		ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(TAG_Ability_Attack_Punch_Right));
@@ -422,6 +464,17 @@ void ADeliveryCharacter::InteractStarted(const FInputActionValue& /*Value*/)
 	DoInteract();
 }
 
+void ADeliveryCharacter::PickupStarted(const FInputActionValue& /*Value*/)
+{
+	DoPickup();
+}
+
+void ADeliveryCharacter::InventorySlot1() { if (InventoryComponent) InventoryComponent->RequestSlotAction(0); }
+void ADeliveryCharacter::InventorySlot2() { if (InventoryComponent) InventoryComponent->RequestSlotAction(1); }
+void ADeliveryCharacter::InventorySlot3() { if (InventoryComponent) InventoryComponent->RequestSlotAction(2); }
+void ADeliveryCharacter::InventorySlot4() { if (InventoryComponent) InventoryComponent->RequestSlotAction(3); }
+void ADeliveryCharacter::InventorySlot5() { if (InventoryComponent) InventoryComponent->RequestSlotAction(4); }
+
 void ADeliveryCharacter::DoInteract()
 {
 	// 客户端拿本地探测到的目标；在服务器上调 Server RPC 等价于直接调实现。
@@ -432,12 +485,33 @@ void ADeliveryCharacter::DoInteract()
 	}
 }
 
+void ADeliveryCharacter::DoPickup()
+{
+	AActor* Target = InteractProbe ? InteractProbe->GetFocusedActor() : nullptr;
+	if (Target && Target->IsA<ADeliveryHandheldItem>())
+	{
+		ServerPickup(Target);
+	}
+}
+
 void ADeliveryCharacter::ServerInteract_Implementation(AActor* Target)
 {
+	// F is the existing general interaction key. Inventory pickup belongs exclusively to E.
+	if (Target && Target->IsA<ADeliveryHandheldItem>()) return;
 	UDeliveryInteractableComponent* Interactable = UDeliveryInteractableComponent::FindOn(Target);
 	if (Interactable && Interactable->CanInteract(this))
 	{
 		Interactable->Execute(this);
+	}
+}
+
+void ADeliveryCharacter::ServerPickup_Implementation(AActor* Target)
+{
+	ADeliveryHandheldItem* Item = Cast<ADeliveryHandheldItem>(Target);
+	UDeliveryInteractableComponent* Interactable = UDeliveryInteractableComponent::FindOn(Target);
+	if (Item && Interactable && Interactable->CanInteract(this) && InventoryComponent)
+	{
+		InventoryComponent->TryPickup(Item);
 	}
 }
 

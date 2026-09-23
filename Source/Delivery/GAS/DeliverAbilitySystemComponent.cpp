@@ -7,6 +7,7 @@
 #include "../Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "../Grab/DeliveryGrabComponent.h"
 #include "../Grab/DeliveryGrabbableComponent.h"
+#include "../Inventory/DeliveryInventoryComponent.h"
 #include "Abilities/GameplayAbility.h"
 #include "Abilities/GA_DeliverPunch.h"
 #include "GameplayEffect.h"
@@ -125,6 +126,7 @@ void UDeliverAbilitySystemComponent::SetStunned(bool bNewStunned)
 		if (bNewStunned)
 		{
 			if (UDeliveryGrabComponent* Grab = Character->GetGrabComponent()) Grab->ForceRelease();
+			if (UDeliveryInventoryComponent* Inventory = Character->GetInventoryComponent()) Inventory->DropHeldItem();
 		}
 		else if (UDeliveryGrabbableComponent* Grabbable = Character->GetGrabbableComponent())
 		{

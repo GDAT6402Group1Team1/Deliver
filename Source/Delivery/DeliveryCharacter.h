@@ -16,11 +16,14 @@ class UDeliveryRagdollCombatComponent;
 class UDeliveryGrabComponent;
 class UDeliveryGrabbableComponent;
 class UDeliveryInteractionProbeComponent;
+class UDeliveryInventoryComponent;
+class UDeliveryHotbarWidget;
 class USkeletalMeshComponent;
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 class UGameplayAbility;
+class USceneComponent;
 struct FInputActionValue;
 
 /** 第三人称Pawn：胶囊跟镜头，身体由主动滑稽布娃娃驱动。 */
@@ -57,6 +60,13 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UDeliveryInteractionProbeComponent> InteractProbe;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UDeliveryInventoryComponent> InventoryComponent;
+
+	/** Right-hand item grip anchor. Designers can tune this in BP without changing every item. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<USceneComponent> HeldItemAnchor;
+
 protected:
 
 	UPROPERTY(EditAnywhere, Category="Input")
@@ -84,6 +94,14 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, Category="Input")
 	TSoftObjectPtr<UInputAction> InteractAction;
+
+	/** 拾取键（E）。和 F 通用交互严格分开。 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	TSoftObjectPtr<UInputAction> PickupAction;
+
+	/** 可在编辑器里继续美化的 UMG 子类；资产缺失时回退到原生 Hotbar。 */
+	UPROPERTY(EditDefaultsOnly, Category="UI")
+	TSoftClassPtr<UDeliveryHotbarWidget> HotbarWidgetClass;
 
 	/**
 	 * 服务端两次起跳之间的最小间隔，只用来拦客户端刷包，不是玩法上的冷却。
@@ -154,6 +172,12 @@ protected:
 	void MousePressed(bool bLeft);
 	void MouseReleased(bool bLeft);
 	void InteractStarted(const FInputActionValue& Value);
+	void PickupStarted(const FInputActionValue& Value);
+	void InventorySlot1();
+	void InventorySlot2();
+	void InventorySlot3();
+	void InventorySlot4();
+	void InventorySlot5();
 
 public:
 
@@ -179,6 +203,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoInteract();
 
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoPickup();
+
 	// IDeliveryCombatInterface
 	virtual bool StartMeleeAttack(EMeleeHand Hand) override;
 	virtual TArray<AActor*> GatherMeleeHits(EMeleeHand Hand) const override;
@@ -195,6 +222,9 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerInteract(AActor* Target);
 
+	UFUNCTION(Server, Reliable)
+	void ServerPickup(AActor* Target);
+
 	FORCEINLINE UCapsuleComponent* GetCapsuleComponent() const { return CapsuleComponent; }
 	FORCEINLINE USkeletalMeshComponent* GetMesh() const { return Mesh; }
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -204,6 +234,8 @@ public:
 	FORCEINLINE UDeliveryGrabComponent* GetGrabComponent() const { return GrabComponent; }
 	FORCEINLINE UDeliveryGrabbableComponent* GetGrabbableComponent() const { return GrabbableComponent; }
 	FORCEINLINE UDeliveryInteractionProbeComponent* GetInteractProbe() const { return InteractProbe; }
+	FORCEINLINE UDeliveryInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
+	FORCEINLINE USceneComponent* GetHeldItemAnchor() const { return HeldItemAnchor; }
 	bool IsGrabChordHeld() const { return bGrabChordActive && bLeftMouseDown && bRightMouseDown; }
 	FORCEINLINE TSubclassOf<UGameplayEffect> GetHealthRegenEffect() const { return HealthRegenEffect; }
 	FORCEINLINE TSubclassOf<UGameplayEffect> GetDamageEffect() const { return DamageEffect; }
@@ -227,4 +259,7 @@ private:
 	bool bGrabChordActive = false;
 	bool bSingleMouseResolved = false;
 	bool bFirstMouseLeft = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDeliveryHotbarWidget> HotbarWidget;
 };

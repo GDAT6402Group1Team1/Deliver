@@ -185,6 +185,7 @@ void UDeliveryActiveRagdollComponent::GetLifetimeReplicatedProps(
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(UDeliveryActiveRagdollComponent, ReplicatedControlMode);
 	DOREPLIFETIME(UDeliveryActiveRagdollComponent, ReplicatedSnapshot);
+	DOREPLIFETIME_CONDITION(UDeliveryActiveRagdollComponent, CurrentFacingYaw, COND_SimulatedOnly);
 }
 
 void UDeliveryActiveRagdollComponent::RegisterComponentTickFunctions(bool bRegister)

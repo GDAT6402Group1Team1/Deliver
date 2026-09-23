@@ -16,6 +16,7 @@
 #include "PhysicsEngine/PhysicsConstraintComponent.h"
 #include "PhysicsEngine/SkeletalBodySetup.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
+#include "Inventory/DeliveryInventoryComponent.h"
 
 namespace
 {
@@ -136,6 +137,7 @@ void UDeliveryGrabComponent::RequestBegin()
 {
 	ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
 	if (!Character || !Character->IsLocallyControlled() || IsGrabbing()
+		|| (Character->GetInventoryComponent() && Character->GetInventoryComponent()->HasHeldItem())
 		|| (Character->GetRagdollCombat() && Character->GetRagdollCombat()->IsPunching())) return;
 	AActor* Candidate = nullptr;
 	FVector HitPoint;
@@ -167,6 +169,7 @@ void UDeliveryGrabComponent::BeginOnServer(AActor* Target, const FVector& HitPoi
 	UDeliveryGrabbableComponent* Grabbable = IsValid(Target)
 		? Target->FindComponentByClass<UDeliveryGrabbableComponent>() : nullptr;
 	if (!Character || !Character->HasAuthority() || GrabTarget || !Grabbable
+		|| (Character->GetInventoryComponent() && Character->GetInventoryComponent()->HasHeldItem())
 		|| !FMath::IsFinite(HitPoint.X) || !FMath::IsFinite(HitPoint.Y) || !FMath::IsFinite(HitPoint.Z)
 		|| (Character->GetRagdollCombat() && Character->GetRagdollCombat()->IsPunching())
 		|| !Character->GetActiveRagdoll()
