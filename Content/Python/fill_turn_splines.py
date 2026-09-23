@@ -682,10 +682,22 @@ def run():
         except Exception as exc:
             bad.append((lbl, comp.get_name(), "回读异常 %s" % str(exc)[:40]))
             continue
-        if got_n != want_n or drift > 1.0:
+        # 点数比期望的少是正常的：写入时会去掉相邻重合点（dedup_pts），
+        # 而 want_n 记的是去重**之前**的采样点数。圆弧在很短的弯上会采出
+        # 几个相距不到 2cm 的点，去掉它们不改变形状——真正要看的是**终点**。
+        # 拿去重前的点数当判据的话，这类会被报成"对不上"，白查一轮
+        # （实测 362 条里误报 15 条，终点偏离全都只有 0~2cm）。
+        if drift > 1.0:
             bad.append((lbl, comp.get_name(),
-                        "期望 %d 点/终点(%.0f,%.0f)，实际 %d 点/终点偏离 %.0f"
-                        % (want_n, want_end.x, want_end.y, got_n, drift)))
+                        "期望终点(%.0f,%.0f)，实际偏离 %.0f（%d 点）"
+                        % (want_end.x, want_end.y, drift, got_n)))
+        elif got_n > want_n:
+            # 反过来多出点就不正常了，去重只会变少
+            bad.append((lbl, comp.get_name(),
+                        "点数变多了：期望 %d，实际 %d" % (want_n, got_n)))
+        elif got_n < 3:
+            bad.append((lbl, comp.get_name(),
+                        "只剩 %d 个点，去重去过头了" % got_n))
     w("同一次运行内回读 %d 条转弯：%s"
       % (len(written), "全部一致" if not bad else "**%d 条对不上**" % len(bad)))
     for lbl, cn, why in bad[:8]:

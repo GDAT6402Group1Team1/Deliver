@@ -547,6 +547,47 @@ def _warn_if_not_absolute(meshes):
           u"再重跑 build_blueprint()。" % IMPORT_SCALE)
 
 
+def _pick_wheels(body):
+    """认出轮子，返回 (下标列表, 轮心列表, 半径)。按几何认，不写死下标。
+
+    判据两条，缺一不可：
+      * **正圆**——长(Y)和高(Z)的比 > 0.9。轮子是唯一会满足这条的部件。
+      * **窄**——宽(X) < 直径的 0.6。挡住的是车架/油箱那种"看着也挺方"的部件：
+        实测 车.007 圆度 0.96 但宽 63.3 比直径 61.8 还大，一眼不是轮子。
+    实测两个轮子都是 61.3 x 61.3、宽 27.7、圆度 1.00，第三名圆度 0.85，分得很开。
+
+    半径按包围盒取，不按顶点——轮胎是凸的，包围盒就是直径。
+    """
+    if not body:
+        return [], [], 30.0
+
+    picked, centers, radii = [], [], []
+    for index, mesh in enumerate(body):
+        mn, mx = _mesh_bounds(mesh)
+        w_x = float(mx.x - mn.x)
+        l_y = float(mx.y - mn.y)
+        h_z = float(mx.z - mn.z)
+        diameter = max(l_y, h_z)
+        if diameter <= 0.0:
+            continue
+        roundness = min(l_y, h_z) / diameter
+        if roundness > 0.9 and w_x < diameter * 0.6:
+            picked.append(index)
+            centers.append(((float(mn.x) + float(mx.x)) * 0.5,
+                            (float(mn.y) + float(mx.y)) * 0.5,
+                            (float(mn.z) + float(mx.z)) * 0.5))
+            radii.append(diameter * 0.5)
+            w(u"  轮子：槽位 %d（直径 %.0fcm 宽 %.0fcm 圆度 %.2f 轮心 %.0f,%.0f,%.0f）"
+              % (index, diameter, w_x, roundness, centers[-1][0], centers[-1][1], centers[-1][2]))
+
+    if not picked:
+        w(u"！没认出轮子，车轮不会转（不影响行驶）。")
+        return [], [], 30.0
+
+    radius = sum(radii) / len(radii)
+    return picked, centers, radius
+
+
 def _pick_steering_parts(body, lo, hi):
     """认出跟着龙头转的部件，返回 (下标列表, 转向轴位置)。按几何认，不写死下标。
 
@@ -692,6 +733,12 @@ def build_blueprint(body=None, rider=None):
     mesh_align.set_editor_property(
         "relative_location",
         unreal.Vector(-rotated_center[0], -rotated_center[1], -rotated_center[2]))
+
+    wheel_indices, wheel_centers, wheel_radius = _pick_wheels(body)
+    cdo.set_editor_property("wheel_part_indices", wheel_indices)
+    cdo.set_editor_property("wheel_centers",
+                            [unreal.Vector(c[0], c[1], c[2]) for c in wheel_centers])
+    cdo.set_editor_property("wheel_radius", wheel_radius)
 
     steer_indices, bar_indices, pivot = _pick_steering_parts(body, lo, hi)
     cdo.set_editor_property("steering_part_indices", steer_indices)

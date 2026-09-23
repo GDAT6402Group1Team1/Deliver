@@ -301,6 +301,20 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 [DeliveryMotorbike](Source/Delivery/Vehicle/DeliveryMotorbike.h) —— **运动学街机式载具，不是 Chaos Vehicle**。
 - 为什么不用 Chaos：美术资产是一整套静态网格 + 一个坐姿骑手，没有轮子骨骼、没有物理资产，Chaos 要的东西一样都没有，硬上等于要先回 Blender 重新绑定；而且关卡里的交通车（`BP_car_base`）本来就是运动学沿样条走的，玩家车用同一套假设，不会出现"玩家车被物理弹飞、AI 车纹丝不动"这种两套世界观打架。
 - 每帧自己算速度/转向。水平位移带 sweep 挡墙（撞上掉速不弹开）；竖直方向打射线贴地，**竖直这一步不能用 sweep**——sweep 会被地面挡住，和"我要贴到地面上"互相打架。转向量乘 `Speed/TurnSpeedReference`，所以停着打把不会原地转圈。
+- **爬坡越障**（`Motorbike|爬坡越障`）。原来"一点爬坡能力都没有"是三个独立原因叠在一起，缺一条都修不好：
+  1. **台阶被 sweep 当成墙**。水平推进是 `AddActorWorldOffset(..., bSweep=true)`，马路牙子和墙一样只会让它掉速。补了和角色移动同款的三步跨越 `TryStepUp()`：**抬 `MaxStepHeight`（45）→ 走完这一帧剩下的位移 → 往下探回地面**，任何一步撞住就整体撤回当撞墙。三个撤回条件都有来由：头顶撞到（桥洞）、抬起来还是几乎走不动（真墙）、落点比 `MaxClimbAngle` 还陡（墙根斜角，不撤的话车会顺着墙往上蹭）。
+  2. **贴地高度上坡时一直欠着一截**。`FInterpTo(Location.Z, DesiredZ, GroundSnapSpeed)` 是指数收敛，坡越陡车越快欠得越多，而**下一帧的水平 sweep 是在那个偏低的位置做的**，于是直接撞在坡面上掉速——自己把自己绊住了。加了爬升率下限 `MaxClimbRate`（600 cm/s），上坡时保证至少这个速度往上追。
+  3. **反应太晚**。贴地射线只查脚下，等车头撞上坡面才开始抬。加了 `GroundLookAhead`（90cm）的前瞻射线，**只取更高的那个**——前方更高就提前爬，前方更低（下坡/悬崖）不提前掉，否则车在坡顶就开始往下钻。前瞻距离跟车速走，停着时为 0，不然停在坡底会莫名浮起来。
+  - `GroundStickTolerance`（80）替掉了原来写死的 60，且实际取值是 `max(它, MaxStepHeight + 10)`：**这个阈值必须大于 `MaxStepHeight`**，否则刚跨上一级台阶就被判成"飞出去了"，车会在台阶上反复弹。
+  - `MaxGroundAlignAngle` 跟着 `MaxClimbAngle` 一起提到 40（原 35）：能爬上去的坡，车身姿态就该跟着贴上去。
+  - `MaxStepHeight` 别调太大——它同时是"能凭空抬多高"的上限，过大时车会爬上本该挡住它的矮墙。
+- **爬坡越障**（`Motorbike|爬坡越障`）。原来"一点爬坡能力都没有"是三个独立原因叠在一起，缺一条都修不好：
+  1. **台阶被 sweep 当成墙**。水平推进带 sweep，马路牙子和墙一样只会让它掉速。补了和角色移动同款的三步跨越 `TryStepUp()`：**抬 `MaxStepHeight`（45）→ 走完这一帧剩下的位移 → 往下探回地面**，任何一步撞住就整体撤回当撞墙。三个撤回条件都有来由：头顶撞到（桥洞）、抬起来还是几乎走不动（真墙）、落点比 `MaxClimbAngle` 还陡（墙根斜角，不撤的话车会顺着墙往上蹭）。
+  2. **贴地高度上坡时一直欠着一截**。`FInterpTo(Location.Z, DesiredZ, GroundSnapSpeed)` 是指数收敛，坡越陡车越快欠得越多，而**下一帧的水平 sweep 是在那个偏低的位置做的**，于是直接撞在坡面上掉速——自己把自己绊住了。加了爬升率下限 `MaxClimbRate`（600 cm/s）。
+  3. **反应太晚**。贴地射线只查脚下，等车头撞上坡面才开始抬。加了 `GroundLookAhead`（90cm）的前瞻射线，**只取更高的那个**——前方更高就提前爬，前方更低（下坡/悬崖）不提前掉，否则车在坡顶就开始往下钻。前瞻距离跟车速走，停着时为 0，不然停在坡底会莫名浮起来。
+  - `GroundStickTolerance`（80）替掉了原来写死的 60，且实际取 `max(它, MaxStepHeight + 10)`：**这个阈值必须大于 `MaxStepHeight`**，否则刚跨上一级台阶就被判成"飞出去了"，车会在台阶上反复弹。
+  - `MaxGroundAlignAngle` 跟着 `MaxClimbAngle` 一起提到 40（原 35）：能爬上去的坡，车身姿态就该跟着贴上去。
+  - `MaxStepHeight` 别调太大——它同时是"能凭空抬多高"的上限，过大时车会爬上本该挡住它的矮墙。
 - **美术资产分两层挂：`MeshRoot`（只做侧倾 Roll）→ `MeshAlign`（车头朝向 + 居中偏移）→ 车体/骑手。** 不能合成一层：`FRotator` 的施加顺序是 Roll→Pitch→Yaw，侧倾和朝向修正写在同一个组件上时，Roll 会绕"修正之前"的局部 X 轴转，而那根轴在修正 90 度之后是车的横向——本该压弯，实际变成点头。UE 里正 Roll 是往左倒，所以右转取负值。
 - **骑车时镜头写死在车尾后方**（`bUsePawnControlRotation=false` + 只继承 Yaw），鼠标不参与。之前用"控制旋转 + 延时回正"，上车瞬间镜头还停在人物原来的朝向上、车头却朝别处，玩家按 W 看到车"横着走"，方向感整个是错的。载具阶段"W 永远是往屏幕里开"比自由视角重要。控制旋转仍然每帧同步成车头朝向——镜头自己不用它，但下车后角色的弹簧臂要用，同步着视角才连续。
 - 上车顺序：先 `GrabComponent->ForceRelease()`（手里还抓着东西的话，约束会把货物/别的玩家一路拖在车上）→ `StopRagdoll()`（关刚体模拟并把网格挂回胶囊，不停的话被挂到车上的身体会一路抽搐）→ 隐藏 + 关碰撞 + 挂到车上 → `Controller->Possess(bike)`。下车反过来，先摆好位置再 `StartRagdoll()`（它内部带 `PlaceOnGround`，顺序反了人会掉在原地）。
@@ -329,6 +343,10 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
   **换了组件类型就要重跑一次 Setup Motorbike**：网格是写在 BP_Motorbike 的 CDO 上的，类变了那份实例覆盖会丢。脚本里挂网格的属性名也跟着改了——`UPoseableMeshComponent`（`USkinnedMeshComponent`）叫 `skinned_asset`，不是 `skeletal_mesh_asset`，`setup_motorbike.py` 里三处都按 `skinned_asset → skeletal_mesh_asset → skeletal_mesh` 依次试。
 - **脖子转向（`RiderNeckSteerRatio`，默认 0.6，骨骼 `mixamorig:Neck`）在组件空间绕 Z 转，不在骨骼局部空间转。** Mixamo 骨架里脖子骨的局部轴朝哪没法先验知道（要在编辑器里试），而骑手网格的组件空间 Z 就是头顶方向（顶点是 FBX 绝对坐标、Z 向上），绕它转一定是左右转头。**参考姿势的变换必须只取一次并缓存**：每帧读"当前值"再叠偏转会一直累加，头会一圈圈转到背后去。乘法顺序也别反——`Delta * Ref` 是绕组件空间的轴，`Ref * Delta` 是绕骨骼自己的轴。
 - 骑手网格平时隐藏，有人骑才显示——模型自带骑手，不藏起来路边空车上永远坐着个人。
+- **轮子按车速自转**（`WheelPartIndices` / `WheelCenters` / `WheelRadius`，都由脚本按几何写，别手填）。每个轮子再多挂一层自己的轮轴 `WheelPivots[k]`，**前轮那一层挂在 `SteerPivot` 下面**：先跟着龙头转、再绕轮心自转，两件事互不干扰；挂在 SteerPivot 下时轮心要减掉 `SteerPivotLocation`，因为父级原点已经是转向轴。
+  - 认轮子的判据两条缺一不可：**正圆**（长/高比 > 0.9）且**窄**（宽 < 直径 × 0.6）。实测两个轮子都是 61.3×61.3、宽 27.7、圆度 1.00；第三名 `车.007` 圆度 0.96 但宽 63.3 比直径还大，靠"窄"这条挡掉，只用圆度会误抓。
+  - 转速 = 线速度 / 半径（纯滚动，接地点速度为 0），只写 Roll（绕 MeshAlign 局部 X = 轮轴）。**方向要取负**：局部 +Y 是车头，UE 里正 Roll 把 +Z 转向 -Y，也就是轮顶往后 = 倒着滚。符号做成了 `WheelSpinSign`，推反了改成 +1 即可，不用重编。
+  - **远端客户端上 `CurrentSpeed` 恒为 0**（那边不跑 `UpdateSpeed`），轮子会僵住，所以非权威非本地时改用"实际位移在车头方向上的分量 / dt"反推车速。
 - 车体是 9 个 `UStaticMeshComponent` **固定槽位**（`MaxBodyParts = 12`，构造函数里建好），按 `BodyMeshes` 数组填充。没用运行时 `NewObject` 动态建组件，避免构造脚本反复重建组件/丢实例覆盖。
 
 ### 摩托车资产接入（`Content/Python/setup_motorbike.py`）
