@@ -20,8 +20,11 @@
 改动前建议先读一遍）。
 
 核心实现：
-- [DeliveryActiveRagdollComponent](Source/Delivery/Ragdoll/DeliveryActiveRagdollComponent.h) —— 主动布娃娃的核心组件（直立参考体、电机强度、倒下/起身判定、坡度上的位移处理）。
+- [DeliveryActiveRagdollComponent](Source/Delivery/Ragdoll/DeliveryActiveRagdollComponent.h) —— 主动布娃娃的核心组件（直立参考体、电机强度、倒下/起身判定、坡度上的位移处理）。髋目标从地面命中点抬起，站立高度取髋到视觉脚底的距离，以免停步悬空；前倾只在加速时施加，匀速下坡不持续前倾。
+- 下坡姿态恢复：起步前倾只持续默认 0.4 秒，不再由速度误差维持；迈步最低直立点积降到 0.35，使中等前倾时还能补步找回支撑，完全倒下时仍禁止盲目迈步。
+- 坡沿停步补脚若暂时探不到落点，保留补步请求到下一帧重试；失败时不再把请求直接清掉。
 - [DeliveryCharacter](Source/Delivery/DeliveryCharacter.h) —— 第三人称 Pawn，胶囊体+镜头，身体由 `ActiveRagdoll` 驱动；同时实现 `IAbilitySystemInterface` 和 `IDeliveryCombatInterface`。
+- 电瓶车受击：地面探测只查 `WorldStatic/WorldDynamic`，排除 `Vehicle`；离地暂停髋部世界空间电机，落地恢复。撞击镜头仅在受击者本机平滑拉远约 120 cm 并回归。
 - 跳跃、移动网络复制已实现（`ServerJump`、`ServerSetMoveInput`，带最小跳跃间隔限制）。
 
 ### 互殴系统（近战战斗）
@@ -29,6 +32,15 @@
 - [DeliveryCombatInterface](Source/Delivery/Combat/DeliveryCombatInterface.h) —— 近战流程接口（`StartMeleeAttack` / `GatherMeleeHits` / `EndMeleeAttack` / `IsMeleeAttacking`），由 Character 实现，GA 调用。
 - [DeliveryHandPose](Source/Delivery/Combat/DeliveryHandPose.h) / [DeliveryBoxingPose](Source/Delivery/Combat/DeliveryBoxingPose.h)（含单测 `DeliveryBoxingPoseTests.cpp`）—— 拳头握拳姿势、拳击收拳/直拳三段姿态的参数化定义，详见 [DeliveryCombatTypes.h](Source/Delivery/Combat/DeliveryCombatTypes.h) 里 `FDeliveryArmPoseSettings` 的大段中文注释（每个参数为什么这样设、调错了会变成什么效果——巴掌、手刀、横扫弧线等）。
 - 左右出拳通过 GAS 技能触发：[GA_DeliverPunch](Source/Delivery/GAS/Abilities/GA_DeliverPunch.h)，对应 Gameplay Tag `Ability.Attack.Punch.Left/Right`。
+
+### 抓取系统（双手托举物品 + 单手物理拖人）
+- [DeliveryGrabComponent](Source/Delivery/Grab/DeliveryGrabComponent.h)：左右键 0.2 秒组合抓取（原 0.12 秒，嫌窗口太紧不好按成"同时"而放宽），单键出拳，双键保持时持续寻找目标。普通物品通过服务器校验后立即视为双手持有；`FindUndersideGripPoints` 从任意物体底面两侧取真实碰撞支撑点，存为局部抓点；`CarryCenterWorld` 将抓点中点对齐胸口前的双手支撑位置，依据真实尺寸、Pivot 和缩放反推物体中心，所以物体位于手上方。首次抓取先将箱子对齐身体朝向；单人时双手追同一个胸口相对持物目标，不追箱子平滑移动后的延迟位置；双人争抢仍追共享箱子的实际抓点。拖晕倒玩家时由服务端选最近的一只手及目标身体碰撞表面，用服务端实际表面复核距离、朝向、眼位或相机视线；第一个抓人者通过遮挡检查后，把目标的整条物理刚体链平移到抓点贴手，再建立锁定的单手 Physics Constraint，不要求短手先碰到。第二个抓人者保留有限力的柔性 joint，靠近到 `DragAttachDistance` 再锁定，避免瞬移打断第一人的拖拽。双键触发，任意一键松开即释放。拖人期间髋目标平滑降低默认 25 cm、向抓点前倾默认 8° 以接近地面，不影响托举箱子。
+- 拖人抓点与 joint 的目标侧锚点使用同一个物理刚体局部坐标，避免骨骼 socket 滞后；锁定 joint 启用 15 cm 容差的紧急投影，不施加持续投影力。服务器拖拽（`ApplyDragAssist`）分两步：①**被抓骨骼直接跟手**——每帧把它的线速度设成"手的速度 + 手与抓点缺口 / `DragGripResponseTime`（默认 0.05 s）"，上限 `DragGripMaxSpeed`（默认 1500 cm/s）；抓人者跳跃时保留该骨骼原竖直速度，被抓者不跟着跳。②**其余刚体跟随被抓部位**水平移动，按 `DragBodyFollowWeight`（默认 0.6）施加有上限的加速度（`DragFollowSpeed` 480 cm/s、`DragFollowAcceleration` 3200 cm/s²），被抓部位领先、其余部位带滞后跟上。肩到抓点超过 `DragMaxShoulderDistance`（默认 200 cm，如对方卡墙角）自动松手。抓点取物理胶囊表面后向该刚体质心收进 `DragGripInset`（默认 4 cm，最多一半深度），补偿胶囊比可见网格胖出的部分。服务器每秒打一条 `Drag assist: bone=… handGap=… handSpeed=… gripSpeed=…` 日志，`handGap` 应保持在几厘米内。第二名抓取者在柔性收拢阶段不参与，锁定后同样生效。
+  **踩过的坑（2026-09-23，按时间顺序）**：(1) 牵引按"手骨骼速度 + 手到抓点误差"计算且只作用于被抓骨骼——joint 锁死后手钉在对方身上，两项恒为 0，拖不动，只有手臂被拉长；(2) 改成"肩膀为固定端的绳子 + 髋部速度前馈"后能拖，但锁定 joint 两端质量悬殊（约 1 kg 的手 vs 几十公斤趴地的人），Chaos 按质量比分摊误差，`handGap` 实测 25–80 cm，隔空拖；(3) 再加有上限的三维弹簧力把抓点拉向手，力一直打满仍被地面摩擦拖住，缺口随步速变大。结论：贴手这件事不能靠力或 joint 硬度，必须对被抓骨骼做速度伺服；参考量永远取抓人者自己的身体/手，不取被 joint 锁住后的相对量。
+- [DeliveryGrabDebugCommands.cpp](Source/Delivery/Grab/DeliveryGrabDebugCommands.cpp) 提供非 Shipping 的 PIE 命令 `Delivery.Grab.TestSetup / TestGrab / TestStatus / TestPull / TestRelease`，分别准备倒地目标、走真实抓取路径、报告状态、后退 2 秒和释放；无需修改测试地图。
+- 托举普通物品后才启用持物稳定姿态：胸和脊柱电机平滑增强（`CarryBraceStrength` 默认 20），手臂持物强度 `GrabStrength` 默认 22，不再使用出拳强度 39；关闭胸部步行摇摆，髋部摇摆保留 20%，转身限速默认 160°/s。普通行走、出拳、晕倒玩家拖拽不受影响。
+- [DeliveryGrabbableComponent](Source/Delivery/Grab/DeliveryGrabbableComponent.h)：普通物品的可模拟物理 Primitive 要是 Actor 根；抓取时服务器暂时关闭物理，以默认 20 的速度平滑扫掠到胸口前方并平滑对齐身体朝向，暂时忽略 `Pawn`/`PhysicsBody` 碰撞，以免箱子把手臂顶开；释放后恢复物理、原碰撞响应并继承有限速度。携带状态与移动复制给客户端。两人抓同一物品时服务器取两个托举目标的中点及朝向合向量，正面对拉导致朝向合向量接近零时保持箱子现朝向；这是游戏化争抢，不是双方约束的真实力学拉扯。晕倒玩家仍全物理拖拽。[DeliveryGrabbableProp](Source/Delivery/Grab/DeliveryGrabbableProp.h) 默认测试质量 3 kg。NPC/背包/单手持有系统尚未接入。
+- `LeftHandGap`/`RightHandGap` 在 PIE 显示手到物品表面的距离。镜头射线优先，身边准星附近的无遮挡目标可作为后备；默认 140 cm，本机 `CustomDepth/Stencil` + `M_GrabHighlight` 只提示一个未抓取候选目标，预测抓取或托举时清除高亮，松手重新瞄准才恢复；`DefaultEngine.ini` 开启 `r.CustomDepth=3`。不提交测试地图。
 
 ### GAS（Gameplay Ability System）接入
 - [DeliverAbilitySystemComponent](Source/Delivery/GAS/DeliverAbilitySystemComponent.h) 挂载在 [DeliverPlayerState](Source/Delivery/GAS/DeliverPlayerState.h) 上（而非 Character），随 PlayerState 复制。
@@ -50,9 +62,14 @@
 - UI、背包/交互、金钱、存档都还没做，对接点见文档第七节。
 
 ### 地图与交通场景
+- 旧关卡车实例的 `bReplicateMovement=false` 会覆盖蓝图默认值；交通组件在服务端和客户端均调用 `SetReplicateMovement(true)`，否则客户端会丢弃服务器位置更新。
+- 撞击优先走 `DamageEffect` GE；若回复 GE 抵消本次扣血，服务器补正 HP，确保强撞必定触发晕倒。
+- 强撞且受击者在地面时，髋部竖直速度一次性补到默认 400 cm/s（约 82 cm 高、0.8 秒飞行）；弱撞与空中再撞不追加升力。`StrongHitTakeoffSpeed` 可在蓝图组件上调，之后依靠重力落地。
+- 上抛竖直速度变化要施加到髋以下整条刚体链；只给髋部会被全身约束分摊，视觉上几乎不腾空。
 - 已导入地图，接入 **PS2UE / PS2DEMImporter** 插件（PS2 地形/道路生成工具，见 `Plugins/PS2DEMImporter`）用于生成 landscape spline 道路。
 - 交通路口、红绿灯（`trafficlight`）、道路与门的破碎效果等场景内容持续在搭建中（`Content/trafficlight`、`Content/PS2DEM` 下的 `BP_Intersection`、`BP_TrafficLine*` 等蓝图）。车辆沿样条行驶、Overlap 检测路口的核心逻辑在 `BP_car_base` 蓝图事件图里（C++ 侧没有基类）。
 - [DeliveryTrafficCarComponent](Source/Delivery/Traffic/DeliveryTrafficCarComponent.h) —— 挂在 `BP_car_base` 上的辅助组件（已在编辑器里以 `Delivery Traffic Car` 组件接入，C++ 侧之前一度只编进了 Game 目标、编辑器看不到，重新编译 `DeliveryEditor` target 后才在编辑器注册），不接管移动，只做两件蓝图不好独立维护的事：
+- `BP_car_base` 现在只在服务器执行 `BeginPlay`/`Drive` 行驶链并复制 Actor 移动；地图里已摆放的旧车实例覆盖过 `bReplicates=false`，组件在服务器 `BeginPlay` 强制启用复制与移动复制，无需改地图。组件额外在服务器扫车辆轨迹命中角色 `PhysicsBody`，按有效质量与相对速度施加水平速度变化及 HP 伤害，同车同角色有 0.75 秒去重。强撞 HP 归零走现有晕倒/回血到 50% 起身流程（`StunRecoverHealthPercent`，原 40%，已放宽）。组件运行时让车身忽略 `Camera` 通道，场景遮挡不变；撞击参数可在蓝图组件详情中调。
   - ①车辆按预设样条链接力行驶，走完所有预设路径、没能 Overlap 接上下一段车道时会脱离样条按最后方向"裸奔"冲出画面。这个状态对应 `BP_car_base::DriveForward` 里对 `CurrentFollowSpline` 的有效性判断（`IsValid` 分支）：有效分支正常跟随+调 `TraceForIntersection`，无效分支走直线裸奔+调 `TraceForNewPath` 重新搜路——蓝图在这两个分支上分别调用 `UpdateRouteFollowState(true/false)`，每帧告诉组件当前是否在跟随预设路线。连续脱离超过 5 秒（`RouteLostTimeout`）就广播 `OnRouteLost`；`BP_car_base` 在 `BeginPlay` 记录出生位置+朝向（`SpawnLocation`/`SpawnRotation`，两个新增变量），绑定 `OnRouteLost` 后把车瞬移回出生点（位置和朝向都要恢复，只重置位置会导致车用错误朝向继续搜路），再调 `NotifyResetToStart()` 清空计时——注意 `BP_car_base` 本身并没有"起始样条"这个概念（关卡里所有车实例的 `CurrentFollowSpline` 默认都是 `None`，全靠 `TraceForNewPath` 在出生点附近自己找路），所以重置到出生点位置朝向、交给现有自愈机制重新接管，比试图记一个不存在的"起始车道"更稳妥。
   - ②`TickComponent` 里做前方球形扫描，探测到前方另一辆挂了同组件的车时把 `GetSpeedMultiplier()` 平滑降到 0，蓝图在 `DriveForward` 调 `GetFuturePostionandRotationAlongSpline` 时把这个系数接到 `RelativeSpeedMult` 上，实现"遇前车减速到停、前车让开后恢复"。两条车道汇入同一点时双方会互相判定为"前车"、永久互相礼让形成死锁，所以加了 `MaxBlockedTime`（默认 3 秒）超时兜底：卡够久就放弃避让强行通过。探测距离/半径（`ForwardTraceDistance`/`ForwardTraceRadius`）调大过（600→1000、120→150）、速度系数变化速率（`SpeedMultiplierChangeRate`）调小过（1.5→0.6），让车能提前发现前车、慢慢减速，而不是靠近了才急刹。
   - `BP_car_base` 自身的车速逻辑（`CurrentSpeed`/`Acceleration`/`Deceleration`，都在 `EventGraph` 里，和本组件无关但一起排查/修过）：

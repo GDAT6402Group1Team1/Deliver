@@ -118,10 +118,12 @@ protected:
 
 	/**
 	 * 晕倒后回血到最大生命值的百分之多少就自动醒来。HP 归零即晕倒，晕倒期间不再受伤害，
-	 * 靠 GE_HealthRegen 按 HealthRegenRate（6/秒）回血：0% → 40% 约 6.7 秒。
+	 * 靠 GE_HealthRegen 按 HealthRegenRate（6/秒）回血：0% → 50% 约 8.3 秒（原 40%，约 6.7 秒，
+	 * 嫌被拖拽的人醒得太快而放宽）。这是全局阈值，不区分"躺着没人管"还是"正被拖走"，
+	 * 拖拽本身不会暂停或减慢这段回血，所以调这个值会让所有晕倒（互殴、车撞等）都变长，不只是被拖的情况。
 	 */
 	UPROPERTY(EditDefaultsOnly, Category="Ability", meta=(ClampMin="1.0", ClampMax="100.0"))
-	float StunRecoverHealthPercent = 40.0f;
+	float StunRecoverHealthPercent = 50.0f;
 
 public:
 

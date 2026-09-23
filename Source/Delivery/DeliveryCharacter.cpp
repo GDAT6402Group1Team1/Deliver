@@ -305,8 +305,10 @@ void ADeliveryCharacter::MousePressed(bool bLeft)
 	{
 		bFirstMouseLeft = bLeft;
 		bSingleMouseResolved = false;
+		// 组合抓取判定窗口：先按下的键在这段时间内等第二只键，超时才按单键出拳解析。
+		// 从 0.12s 放宽到 0.2s，给玩家更宽松的时间把 LMB+RMB 按成"同时"。
 		GetWorldTimerManager().SetTimer(MouseChordTimer, this,
-			&ADeliveryCharacter::ResolveSingleMousePress, 0.12f, false);
+			&ADeliveryCharacter::ResolveSingleMousePress, 0.2f, false);
 	}
 	else if (!bSingleMouseResolved && !bGrabChordActive)
 	{

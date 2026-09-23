@@ -23,8 +23,11 @@
 都写在 [Document/Ragdoll.html](Document/Ragdoll.html) 里——**改动布娃娃/战斗相关代码前务必先看这份文档**。
 
 关键文件：
-- [Source/Delivery/Ragdoll/DeliveryActiveRagdollComponent.h](Source/Delivery/Ragdoll/DeliveryActiveRagdollComponent.h) —— 直立参考体、电机强度、倒下/起身判定、坡地位移。
+- [Source/Delivery/Ragdoll/DeliveryActiveRagdollComponent.h](Source/Delivery/Ragdoll/DeliveryActiveRagdollComponent.h) —— 直立参考体、电机强度、倒下/起身判定、坡地位移。髋目标以地面命中点为基准，站立高度用髋到视觉脚底的距离（不能用髋到地面的距离，否则停步悬空）；前倾只在加速时施加，匀速下坡不持续压低重心。
+- 下坡姿态恢复：前倾按起步时长（默认 0.4 秒）衰减，不再按目标速度与实际速度的差持续施加；否则一旦前扑失速就会持续前倾。迈步最低直立点积降到 0.35，让中等幅度前倾时仍能迈步找回支撑，完全倒下时仍不盲目迈步。
+- 停步补脚的落点如果暂时探不到地面，保留补步请求并在下一帧重试；不能在失败时也清掉标记，否则坡沿的一次探测失败会让脚永远不再补位。
 - [Source/Delivery/DeliveryCharacter.h](Source/Delivery/DeliveryCharacter.h) —— 第三人称 Pawn，组装胶囊/网格/相机/布娃娃/战斗组件，实现 `IAbilitySystemInterface` 与 `IDeliveryCombatInterface`。移动与跳跃走网络复制（`ServerSetMoveInput` 为 Unreliable，`ServerJump` 为 Reliable，带最小跳跃间隔）。
+- 电瓶车受击：地面探测只查 `WorldStatic/WorldDynamic`，排除 `Vehicle`；离地时暂停髋部世界空间电机，重新探到地面后恢复。撞击镜头只在受击玩家本机平滑拉远约 120 cm 并回归，不改全局相机遮挡。
 
 ### 2. 互殴系统（近战）
 - [Source/Delivery/Ragdoll/DeliveryRagdollCombatComponent.h](Source/Delivery/Ragdoll/DeliveryRagdollCombatComponent.h) —— 在布娃娃刚体链上执行出拳动作。
@@ -32,6 +35,15 @@
 - [Source/Delivery/Combat/DeliveryCombatTypes.h](Source/Delivery/Combat/DeliveryCombatTypes.h) —— `FDeliveryArmPoseSettings`：A 姿势、收拳、直拳三段姿态的参数化定义，握拳靠手指弯曲角度模拟（无手指刚体）。注意多组参数之间有比例耦合关系（如 `WindupUp`/`WindupOutward` 需按 `PunchReach` 换算对齐，否则出拳轨迹会偏成横扫或找高度）。
 - [Source/Delivery/Combat/DeliveryHandPose.h](Source/Delivery/Combat/DeliveryHandPose.h)、[DeliveryBoxingPose.h](Source/Delivery/Combat/DeliveryBoxingPose.h)（含单测）。
 - 左右拳通过 GAS 技能 [GA_DeliverPunch](Source/Delivery/GAS/Abilities/GA_DeliverPunch.h) 触发，对应 tag `Ability.Attack.Punch.Left/Right`。
+
+### 2b. 抓取系统（双手托举物品 + 单手物理拖人）
+- [DeliveryGrabComponent](Source/Delivery/Grab/DeliveryGrabComponent.h)：左右键 0.2 秒内组合抓取（原 0.12 秒，放宽窗口方便按成"同时"），单键出拳；双键持续按住时不断重试寻找目标。普通物品不再要求短手先碰到地面上的箱子：服务端通过抓取校验后立即记为双手持有。`FindUndersideGripPoints` 从任意物体底部两侧向碰撞体查询支撑点，抓点只在开始时算一次并存成物体局部坐标；`CarryCenterWorld` 把这两个抓点的中点放到胸口前的双手支撑位置，按物体真实尺寸、Pivot 和缩放反推中心，因此物体在手上方。首次抓取先将箱子朝向与身体对齐。单人时双手直接追这个胸口相对目标，而不是追箱子滞后的世界位置，以免手臂持续反拉躯干。两人争抢时手仍追共享箱子的实际抓点。晕倒玩家则由服务端选离身体碰撞表面最近的一只手和刚体，以服务端真实表面重新核对距离、朝向和视线（眼位或服务器相机）；第一个抓人者通过遮挡检查后，服务器把倒地角色整条物理刚体链平移，使抓点直接贴到手上，再立即建立锁定的单手 Physics Constraint，不要求短手预先碰到。第二个抓人者不能瞬移已被拖拽的角色，保留有限力的柔性连接，靠近到 `DragAttachDistance` 再锁定以形成争抢。双键任意一键松开即断开。拖人期间髋目标平滑降低默认 25 cm 并向抓点前倾默认 8°，不影响普通物品托举。
+- 拖人抓点存于被抓刚体的物理坐标系，joint 的目标侧锚点也用同一局部点，避免骨骼 socket 姿态滞后于 Chaos 刚体。两具布娃娃的锁定 joint 在地面摩擦下仍可能产生较大位置误差，因此启用 15 cm 容差的紧急关节投影（不加持续投影力）。服务器拖拽（`ApplyDragAssist`）分两步：①**被抓骨骼直接跟手**——每帧把它的线速度设成"手的速度 + 手与抓点缺口 / `DragGripResponseTime`（默认 0.05 s）"，上限 `DragGripMaxSpeed`（默认 1500 cm/s）；抓人者跳跃时保留该骨骼原竖直速度，被抓者不跟着跳。②**其余刚体跟随被抓部位**水平移动，按 `DragBodyFollowWeight`（默认 0.6）施加有上限的加速度（`DragFollowSpeed` 480 cm/s、`DragFollowAcceleration` 3200 cm/s²），被抓部位领先、其余部位带滞后跟上。肩到抓点超过 `DragMaxShoulderDistance`（默认 200 cm，如对方卡墙角）自动松手。抓点取物理胶囊表面后向该刚体质心收进 `DragGripInset`（默认 4 cm，最多一半深度），补偿胶囊比可见网格胖出的部分。服务器每秒打一条 `Drag assist: bone=… handGap=… handSpeed=… gripSpeed=…` 日志，`handGap` 应保持在几厘米内。第二名抓取者在柔性收拢阶段不参与，锁定后同样生效。
+  **踩过的坑（2026-09-23，按时间顺序）**：(1) 牵引按"手骨骼速度 + 手到抓点误差"计算且只作用于被抓骨骼——joint 锁死后手钉在对方身上，两项恒为 0，拖不动，只有手臂被拉长；(2) 改成"肩膀为固定端的绳子 + 髋部速度前馈"后能拖，但锁定 joint 两端质量悬殊（约 1 kg 的手 vs 几十公斤趴地的人），Chaos 按质量比分摊误差，`handGap` 实测 25–80 cm，隔空拖；(3) 再加有上限的三维弹簧力把抓点拉向手，力一直打满仍被地面摩擦拖住，缺口随步速变大。结论：贴手这件事不能靠力或 joint 硬度，必须对被抓骨骼做速度伺服；参考量永远取抓人者自己的身体/手，不取被 joint 锁住后的相对量。
+- 非 Shipping 的 PIE 诊断命令在 [DeliveryGrabDebugCommands.cpp](Source/Delivery/Grab/DeliveryGrabDebugCommands.cpp)：`Delivery.Grab.TestSetup` 将另一玩家放到面前并设为 Limp，`TestGrab` 走真实候选/服务器抓取路径，`TestStatus` 报告关节与坐标，`TestPull` 后退 2 秒，`TestRelease` 松手。用于重复验证，不改地图。
+- 托举时的上半身稳定：`IsCarryingProp()` 只对已抓住的普通物品成立；胸和脊柱电机渐进加到 `CarryBraceStrength`（默认 20），手臂用单独的 `GrabStrength`（默认 22）而非出拳的 39；取消故意添加的胸部摆动、把髋部摆动降到 20%，并将抱箱转身角速度限制为默认 160°/s。晕倒玩家拖拽、普通行走与出拳仍沿用各自设置。
+- [DeliveryGrabbableComponent](Source/Delivery/Grab/DeliveryGrabbableComponent.h)：显式 opt-in；普通物品的可模拟物理 Primitive 必须是 Actor 根。普通物品被抓时由服务器暂时关闭物理模拟，以默认 20 的跟随速度平滑扫掠到胸口前方并平滑转向身体朝向，同时暂时忽略 `Pawn`/`PhysicsBody`（避免箱子顶开手臂）；松手后恢复物理与原碰撞响应，并保留有限释放速度。客户端通过复制的携带状态同步物理开关与 Actor 位移。最多两人同时抓同一物品，服务器取两人的托举目标中点与朝向合向量产生争抢效果；对向拉扯时合向量为零则保留当前箱子朝向（这是游戏化位置争抢，不再是双方手约束的真实力学拉扯）。晕倒角色始终保持全物理拖拽。 [DeliveryGrabbableProp](Source/Delivery/Grab/DeliveryGrabbableProp.h) 是默认 3 kg 的测试/道具基类。
+- 抓取状态、左右手姿态和物品位置由服务器复制；`LeftHandGap`/`RightHandGap` 是 PIE 运行时的手—箱表面距离诊断值。瞄准先用镜头射线，再从身边准星附近的无遮挡物品中找候选；默认 140 cm，本机只高亮一个**尚未抓取的候选目标**，进入预测抓取或实际托举后立即恢复原显示，松手重新瞄准才高亮。`CustomDepth/Stencil` + `M_GrabHighlight` 负责提示，项目要开启 `r.CustomDepth=3`。不提交测试地图。
 
 ### 3. GAS（Gameplay Ability System）
 - [DeliverAbilitySystemComponent](Source/Delivery/GAS/DeliverAbilitySystemComponent.h) 挂在 **PlayerState**（[DeliverPlayerState](Source/Delivery/GAS/DeliverPlayerState.h)）而非 Character 上，随 PlayerState 复制；`ADeliveryCharacter::OnRep_PlayerState` 里处理绑定。
@@ -57,7 +69,12 @@
 - 已导入地图并接入 **PS2DEMImporter**（`Plugins/PS2DEMImporter`，PS2 地形/道路生成插件）用于把地形转换为 landscape spline 道路。
 - 交通路口、红绿灯、道路与门的破碎效果正在搭建：`Content/PS2DEM`（`BP_Intersection`、`BP_TrafficLine*`）、`Content/trafficlight`。车辆沿样条行驶、进路口的 Overlap 检测都写在 `BP_car_base` 事件图里，C++ 侧原本没有对应基类。
 - [Source/Delivery/Traffic/DeliveryTrafficCarComponent.h](Source/Delivery/Traffic/DeliveryTrafficCarComponent.h) —— 挂在 `BP_car_base` 上的辅助组件，不接管移动本身：车辆走完所有预设样条、没接上下一段车道时会脱离路线按最后方向裸奔冲出画面；蓝图每帧用 `UpdateRouteFollowState(bool)` 告诉组件这一帧还在不在跟随预设样条，连续脱离满 5 秒（`RouteLostTimeout`）广播 `OnRouteLost` 让蓝图把车放回起始样条起点、形成循环车流；同时自己在 `TickComponent` 里做前方球形扫描，探测到前方另一辆挂了同组件的车就把 `GetSpeedMultiplier()` 平滑降到 0，蓝图乘到目标速度上即可实现遇前车减速到停、让开后恢复。
+- `BP_car_base` 现为服务器驱动并复制 Actor 移动；`BeginPlay`/`Drive` 仅 Authority 执行。关卡里旧车实例覆盖过 `bReplicates=false`，因此交通组件在服务器 `BeginPlay` 再调用 `SetReplicates(true)`/`SetReplicateMovement(true)`，无需改地图。组件仅在服务器按车轨迹扫 `PhysicsBody`，同车同角色 0.75 秒去重，按相对速度和有效质量算伤害/水平冲量；强撞 HP 归零沿用现有晕倒与 50% 回血起身（`StunRecoverHealthPercent`，原 40%，已放宽）。车组件运行时忽略 `Camera` 通道，墙和地形仍会挡镜头。撞击参数在组件蓝图详情中可调。
 - 测试地图：`Content/Level/TestForCharacter.umap`（角色/互殴）、`Content/Level/testfortraffic.umap`（交通路口）。
+- 旧关卡实例的 `bReplicateMovement=false` 也会覆盖蓝图默认值；组件在服务端和客户端均调用 `SetReplicateMovement(true)`，否则客户端会丢弃服务器位置更新。
+- 撞击优先走 `DamageEffect` GE；若回复 GE 抵消本次扣血，服务器会把 HP 补正到应有结果，确保强撞必定触发晕倒。
+- 强撞且受击者在地面时，额外把髋部竖直速度一次性补到默认 400 cm/s（约 82 cm 高、0.8 秒飞行），弱撞与空中再撞不追加升力；`StrongHitTakeoffSpeed` 可在蓝图组件上调。之后由重力自然落地，不持续加力或切换动画。
+- 上抛的竖直速度变化施加到髋以下整条物理刚体链，不能只给髋部：单个刚体的冲量会被约束与全身质量分摊，视觉上几乎飞不起来。
 
 
 ### 5b. 交通线生成工具链（`Content/Python`，编辑器 Python）

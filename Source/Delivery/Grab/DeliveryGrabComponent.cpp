@@ -292,7 +292,18 @@ bool UDeliveryGrabComponent::FindClosestDragGrip(const ADeliveryCharacter* Targe
 			OutPoint = Surface;
 		}
 	}
-	return OutSide != INDEX_NONE;
+	if (OutSide == INDEX_NONE) return false;
+	// 抓点取自物理资产碰撞体（胶囊）表面，胶囊通常比可见网格略胖一圈；
+	// 抓点停在胶囊表面，手在画面上就会离衣服/皮肤差几厘米。向该刚体质心收进一点，
+	// 最多收到表面到质心距离的一半，细的四肢不会被收穿。
+	const FVector Center = TargetMesh->GetCenterOfMass(OutBone);
+	const FVector Inward = Center - OutPoint;
+	const float Depth = Inward.Size();
+	if (Depth > KINDA_SMALL_NUMBER)
+	{
+		OutPoint += Inward / Depth * FMath::Min(DragGripInset, Depth * 0.5f);
+	}
+	return true;
 }
 
 UPrimitiveComponent* UDeliveryGrabComponent::GetTargetBody() const
@@ -559,6 +570,64 @@ void UDeliveryGrabComponent::TryAttach(int32 Side)
 	Character->ForceNetUpdate();
 }
 
+bool UDeliveryGrabComponent::ApplyDragAssist(ADeliveryCharacter* Character, int32 Side)
+{
+	USkeletalMeshComponent* TargetMesh = Cast<USkeletalMeshComponent>(GetTargetBody());
+	USkeletalMeshComponent* GrabberMesh = Character ? Character->GetMesh() : nullptr;
+	if (!TargetMesh || !GrabberMesh || !TargetMesh->IsSimulatingPhysics(GrabBone)) return true;
+
+	FName ShoulderBone = GrabberMesh->GetParentBone(GrabberMesh->GetParentBone(HandBones[Side]));
+	if (ShoulderBone.IsNone()) ShoulderBone = TEXT("Spine");
+	const FVector Shoulder = GrabberMesh->GetBoneLocation(ShoulderBone);
+	const FVector Grip = GripWorld(Side);
+	if (FVector::Dist(Shoulder, Grip) > DragMaxShoulderDistance) return false;
+	const FVector Hand = GrabberMesh->GetBoneLocation(HandBones[Side]);
+	const float HandGap = FVector::Dist(Hand, Grip);
+
+	// ① 被抓的那根骨骼直接跟手走（速度伺服），不再靠力。
+	// 实测：锁死 joint 两端质量悬殊（约 1 kg 的手 vs 几十公斤趴地的人），会被拉开 25–80 cm；
+	// 改成有上限的弹簧力后仍被地面摩擦和身体其余部分拖住、力一直打满，缺口照样随步速变大。
+	// 所以每帧直接把这根骨骼的速度设成"手的速度 + 缺口 / 响应时间"：缺口在一两帧内收回，
+	// 手走多快它就跟多快。身体其余部分仍然是物理的，靠关节 + 下面的跟随力被它带着走。
+	const FVector HandVelocity = GrabberMesh->GetPhysicsLinearVelocity(HandBones[Side]);
+	FVector GripVelocity = HandVelocity + (Hand - Grip) / FMath::Max(DragGripResponseTime, 0.01f);
+	if (Character->GetActiveRagdoll() && Character->GetActiveRagdoll()->IsJumping())
+	{
+		// 设计要求：抓人时可以跳，被抓的人不跟着跳起。
+		GripVelocity.Z = TargetMesh->GetPhysicsLinearVelocity(GrabBone).Z;
+	}
+	GripVelocity = GripVelocity.GetClampedToMaxSize(DragGripMaxSpeed);
+	TargetMesh->SetPhysicsLinearVelocity(GripVelocity, false, GrabBone);
+
+	// ② 其余刚体跟随"被抓的部位"水平移动，按 DragBodyFollowWeight 分配。
+	// 不帮忙的话，十几块刚体的地面摩擦全压在被抓部位和它的关节上，关节会被拉长。
+	const FVector Lead = FVector::VectorPlaneProject(GripVelocity, FVector::UpVector)
+		.GetClampedToMaxSize(DragFollowSpeed);
+	if (DragBodyFollowWeight > 0.0f)
+	{
+		for (FBodyInstance* Body : TargetMesh->Bodies)
+		{
+			const UBodySetup* Setup = Body ? Body->GetBodySetup() : nullptr;
+			// 用组件接口判断是否模拟：FBodyInstance::IsInstanceSimulatingPhysics 内联到
+			// PhysicsCore 模块的符号，本模块没依赖 PhysicsCore，会链接失败（LNK2019）。
+			if (!Setup || Setup->BoneName == GrabBone || !TargetMesh->IsSimulatingPhysics(Setup->BoneName)) continue;
+			const FVector Actual = FVector::VectorPlaneProject(Body->GetUnrealWorldVelocity(), FVector::UpVector);
+			const FVector Acceleration = ((Lead - Actual) * 8.0f)
+				.GetClampedToMaxSize(DragFollowAcceleration) * DragBodyFollowWeight;
+			Body->AddForce(Acceleration, true, true);
+		}
+	}
+
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	if (Now - LastDragLogTime >= 1.0f)
+	{
+		LastDragLogTime = Now;
+		UE_LOG(LogDelivery, Log, TEXT("Drag assist: grabber=%s bone=%s handGap=%.1f handSpeed=%.1f gripSpeed=%.1f"),
+			*GetNameSafe(Character), *GrabBone.ToString(), HandGap, HandVelocity.Size(), GripVelocity.Size());
+	}
+	return true;
+}
+
 void UDeliveryGrabComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -639,39 +708,13 @@ void UDeliveryGrabComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		if (!HandConstraints[Side]) TryAttach(Side);
 		if (HandConstraints[Side])
 		{
-			if (bGrabCharacter)
+			if (bGrabCharacter && !bDragReeling[Side] && !ApplyDragAssist(Character, Side))
 			{
-				// Chaos can leave a long soft error between two heavy ragdolls even with a locked joint.
-				// Give the limp victim a capped horizontal pull toward the actual hand; the joint
-				// still supplies the contact/rotation and a second grabber can pull the other way.
-				USkeletalMeshComponent* TargetMesh = Cast<USkeletalMeshComponent>(GetTargetBody());
-				if (TargetMesh)
-				{
-					const FVector Hand = Character->GetMesh()->GetBoneLocation(HandBones[Side]);
-					const FVector Error = FVector::VectorPlaneProject(Hand - GripWorld(Side), FVector::UpVector);
-					// Feed the grabber's actual travel velocity forward. A pure error spring
-					// capped below walking speed leaves the victim permanently behind the hand.
-					const FVector GrabberVelocity = FVector::VectorPlaneProject(
-						Character->GetMesh()->GetPhysicsLinearVelocity(TEXT("Hips")), FVector::UpVector);
-					const FVector DesiredVelocity = (GrabberVelocity + Error * 4.0f)
-						.GetClampedToMaxSize(DragFollowSpeed);
-					const FVector ActualVelocity = FVector::VectorPlaneProject(
-						TargetMesh->GetPhysicsLinearVelocity(TEXT("Hips")), FVector::UpVector);
-					const FVector Acceleration = ((DesiredVelocity - ActualVelocity) * 8.0f)
-						.GetClampedToMaxSize(DragFollowAcceleration);
-					// Apply the same acceleration to every simulated body, not just the pelvis:
-					// a single pelvis force is dissipated by the prone body's many ground contacts.
-					if (const UPhysicsAsset* Asset = TargetMesh->GetPhysicsAsset())
-					{
-						for (const USkeletalBodySetup* Setup : Asset->SkeletalBodySetups)
-						{
-							if (Setup && TargetMesh->IsSimulatingPhysics(Setup->BoneName))
-							{
-								TargetMesh->AddForce(Acceleration, Setup->BoneName, true);
-							}
-						}
-					}
-				}
+				UE_LOG(LogDelivery, Warning, TEXT("Drag released: %s is too far from %s's shoulder"),
+					*GetNameSafe(GrabTarget.Get()), *GetNameSafe(Character));
+				ReleaseHandOnServer(Side);
+				if (!GrabTarget) return;
+				continue;
 			}
 			if (bDragReeling[Side] && Separation <= DragAttachDistance)
 			{
