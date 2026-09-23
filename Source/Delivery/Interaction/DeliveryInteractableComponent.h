@@ -79,6 +79,10 @@ public:
 	static UDeliveryInteractableComponent* FindBest(
 		const APawn* Seeker, EDeliveryInteractionKey Key = EDeliveryInteractionKey::GeneralF);
 
+	/** 收集本世界、当前距离内可按 E 的目标；摄像机瞄准与遮挡由玩家探测器决定。 */
+	static void GetReachablePickupCandidates(
+		const APawn* Seeker, TArray<UDeliveryInteractableComponent*>& OutCandidates);
+
 	/** 取 Actor 身上第一个可交互组件。服务器收到客户端请求后用它复核。 */
 	static UDeliveryInteractableComponent* FindOn(const AActor* Actor);
 

@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Interaction/DeliveryInteractableComponent.h"
+#include "Interaction/DeliveryInteractionGeometry.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Inventory/DeliveryHandheldItem.h"
@@ -15,8 +16,8 @@
 UDeliveryInteractionProbeComponent::UDeliveryInteractionProbeComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	// 走近/走远的判定不需要每帧重算，10Hz 眼睛看不出差别。
-	PrimaryComponentTick.TickInterval = 0.1f;
+	// 小物体瞄准变化较快；20Hz 让 E 提示和按键目标及时跟上准星。
+	PrimaryComponentTick.TickInterval = 0.05f;
 	SetIsReplicatedByDefault(false);
 }
 
@@ -99,20 +100,38 @@ UDeliveryInteractableComponent* UDeliveryInteractionProbeComponent::FindAimedPic
 	if (!Character || !Camera || !World) return nullptr;
 
 	const FVector Start = Camera->GetComponentLocation();
-	const FVector End = Start + Camera->GetForwardVector() * 3000.0f;
+	const FVector AimDirection = Camera->GetForwardVector().GetSafeNormal();
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(DeliveryPickupAim), false, Owner);
 	if (Character->GetInventoryComponent()) Params.AddIgnoredActor(Character->GetInventoryComponent()->GetHeldItem());
-	FHitResult Hit;
-	if (!World->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, ECC_Visibility,
-		FCollisionShape::MakeSphere(10.0f), Params))
+	TArray<UDeliveryInteractableComponent*> Candidates;
+	UDeliveryInteractableComponent::GetReachablePickupCandidates(Owner, Candidates);
+	UDeliveryInteractableComponent* Best = nullptr;
+	float BestMiss = TNumericLimits<float>::Max();
+	for (UDeliveryInteractableComponent* Candidate : Candidates)
 	{
-		return nullptr;
-	}
+		AActor* Target = Candidate->GetOwner();
+		if (!Character->CanUsePickupTarget(Target, false)) continue;
 
-	UDeliveryInteractableComponent* Candidate = UDeliveryInteractableComponent::FindOn(Hit.GetActor());
-	return Candidate && Candidate->InteractionKey == EDeliveryInteractionKey::PickupE
-		&& Candidate->CanInteract(Owner) && Character->CanUsePickupTarget(Hit.GetActor(), false)
-		? Candidate : nullptr;
+		FVector BoundsCenter, BoundsExtent;
+		Target->GetActorBounds(true, BoundsCenter, BoundsExtent);
+		// 准星不必刚好压中小模型；尺寸越大的物体，允许的横向偏差略大。
+		// 长按时给原目标一点额外余量，避免 0.5 秒内因轻微相机晃动而取消。
+		const FVector AimPoint = BoundsCenter + FVector::UpVector * (BoundsExtent.Z * 0.5f);
+		const float Miss = DeliveryInteractionGeometry::AimMissDistance(Start, AimDirection, AimPoint);
+		const float Allowance = 35.0f + FMath::Min(BoundsExtent.Size(), 25.0f)
+			+ (FocusedPickup.Get() == Candidate ? 15.0f : 0.0f);
+		if (Miss < 0.0f || Miss > Allowance || Miss >= BestMiss) continue;
+
+		// 容错只扩大瞄准范围，不允许隔着墙拾取；从镜头射到物体上半部，
+		// 避免射向地面上的 Actor 原点时先打中地板。
+		FHitResult Hit;
+		const bool bBlocked = World->LineTraceSingleByChannel(
+			Hit, Start, AimPoint, ECC_Visibility, Params);
+		if (bBlocked && Hit.GetActor() != Target) continue;
+		Best = Candidate;
+		BestMiss = Miss;
+	}
+	return Best;
 }
 
 void UDeliveryInteractionProbeComponent::SetPickupHighlight(AActor* Actor)

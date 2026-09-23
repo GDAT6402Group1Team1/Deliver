@@ -7,6 +7,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryPickupFacingTest,
 
 bool FDeliveryPickupFacingTest::RunTest(const FString& Parameters)
 {
+	const FVector RayStart = FVector::ZeroVector;
+	const FVector RayForward = FVector::ForwardVector;
+	TestTrue(TEXT("准星旁的小物体能计算出有限偏差"),
+		FMath::IsNearlyEqual(DeliveryInteractionGeometry::AimMissDistance(
+			RayStart, RayForward, FVector(300.0f, 40.0f, 0.0f)), 40.0f));
+	TestTrue(TEXT("镜头后方目标不参与拾取"),
+		DeliveryInteractionGeometry::AimMissDistance(
+			RayStart, RayForward, FVector(-30.0f, 0.0f, 0.0f)) < 0.0f);
 	const FVector FloorPackage(30.0f, 0.0f, -90.0f);
 	TestTrue(TEXT("Old pelvis-centred camera cone rejected reachable floor package"),
 		FVector::DotProduct(FRotator::ZeroRotator.Vector(), FloorPackage.GetSafeNormal()) < 0.35f);

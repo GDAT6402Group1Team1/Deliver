@@ -653,9 +653,12 @@ bool ADeliveryCharacter::ValidateServerPickupTarget(AActor* Target) const
 	{
 		Params.AddIgnoredActor(InventoryComponent->GetHeldItem());
 	}
+	FVector BoundsCenter, BoundsExtent;
+	Target->GetActorBounds(true, BoundsCenter, BoundsExtent);
+	const FVector VisiblePoint = BoundsCenter + FVector::UpVector * (BoundsExtent.Z * 0.5f);
 	FHitResult Hit;
 	const bool bBlocked = GetWorld()->LineTraceSingleByChannel(
-		Hit, ViewLocation, Target->GetActorLocation(), ECC_Visibility, Params);
+		Hit, ViewLocation, VisiblePoint, ECC_Visibility, Params);
 	return !bBlocked || Hit.GetActor() == Target;
 }
 

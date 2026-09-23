@@ -59,7 +59,7 @@
 - Character 上的 `HealthRegenEffect` / `DamageEffect`（Instant + SetByCaller `Effect.Type.Damage`）及左右拳 GA 类，均在蓝图 `BP_DeliveryMan` 中指定，C++ 侧只留 `TSubclassOf` 插槽。
 
 ### 4. 任务系统（电话接任务）
-快递 E 交互保留 0.5 秒长按；探测目标与任务可取状态分开，未解锁、未登记、已完成或正在执行其他任务均显示原因。E 的 100cm 距离取角色碰撞体表面到物品碰撞体表面的实际间距，服务端朝向校验取水平方向并保留遮挡检查，避免用髋部原点或第三人称相机俯角导致地面小物品取不到；F 路径不变。`Content/Python/diagnose_package_pickup.py` 可只读检查测试蓝图绑定、长按时间和任务引用。
+快递 E 交互保留 0.5 秒长按；探测目标与任务可取状态分开，未解锁、未登记、已完成或正在执行其他任务均显示原因。E 的 100cm 距离取角色碰撞体表面到物品碰撞体表面的实际间距。本机以 20Hz 从范围内候选中选准星附近且无遮挡的物体，小物体允许有限瞄准偏差，长按中的原目标有额外容差；服务端仍复核水平朝向、实际距离和到物体上半部的无遮挡视线，避免地板挡住指向物体原点的射线。F 路径不变。`Content/Python/diagnose_package_pickup.py` 可只读检查测试蓝图绑定、长按时间和任务引用。
 **结构、接口清单、配置方式、完整调用链、待确认假设都写在 [Document/TaskSystem.md](Document/TaskSystem.md)——改任务系统前先读这份。** 要点：
 
 - 任务状态全局共享（多人下解锁/来电/接取/计时/完成对所有玩家是同一份数据），权威在 GameState 上的 [DeliveryTaskManagerComponent](Source/Delivery/Task/DeliveryTaskManagerComponent.h)；只有"当前追踪哪个任务"是每玩家各自的，在 PlayerState 上的 [DeliveryTaskTrackerComponent](Source/Delivery/Task/DeliveryTaskTrackerComponent.h)。
@@ -277,7 +277,7 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 **交互（`Source/Delivery/Interaction/`）** —— 通用的"走近按 F"框架，摩托车是第一个用户。
 **和 `Grab/` 是两回事**：Grab 是双键按住、用物理约束把东西抓在手上的连续动作，这里是一次性按键交互。
 - [DeliveryInteractableComponent](Source/Delivery/Interaction/DeliveryInteractableComponent.h) —— 挂在可交互 Actor 上，持有提示词/半径/浮窗高度，交互时广播 `OnInteract`。查找用的是**静态注册表**而不是球形 Overlap：可交互物就几个，遍历代价忽略不计，而碰撞查询在本项目已经栽过一次（见 5 节交通组件"通道配错导致探测恒为空"）。
-- [DeliveryInteractionProbeComponent](Source/Delivery/Interaction/DeliveryInteractionProbeComponent.h) —— 挂在玩家 Pawn 上（`ADeliveryCharacter` 构造函数里已加），10Hz 探测最近目标并推浮窗。只在 `IsLocallyControlled()` 的 Pawn 上跑，所以上车之后被丢下的那具身体不会再提示。
+- [DeliveryInteractionProbeComponent](Source/Delivery/Interaction/DeliveryInteractionProbeComponent.h) —— 挂在玩家 Pawn 上（`ADeliveryCharacter` 构造函数里已加），20Hz 更新本机 E/F 目标及提示。只在 `IsLocallyControlled()` 的 Pawn 上跑，所以上车之后被丢下的那具身体不会再提示。
 - [DeliveryPromptSubsystem](Source/Delivery/Interaction/DeliveryPromptSubsystem.h) —— 浮窗本体，**C++ Slate 直接挂视口**，没有 WBP 资产。中文靠 Slate 自带字体回退（引擎自带 `DroidSansFallback.ttf`）渲染。调用约定是"每帧推一次"，停推 0.25 秒自动消失——这样调用方不需要成对写 Show/Hide，不会因为某条退出分支漏掉 Hide 把提示永久留在屏幕上。世界坐标→屏幕坐标用 `UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition`（自带 DPI 折算），为此 Build.cs 加了 `Slate`/`SlateCore`/`UMG`。
 - 交互键走服务器复核：客户端 `ADeliveryCharacter::DoInteract()` 把本地探到的目标发 `ServerInteract(Target)`，服务器重新查组件 + 距离才执行。
 

@@ -114,6 +114,29 @@ UDeliveryInteractableComponent* UDeliveryInteractableComponent::FindBest(
 	return Best;
 }
 
+void UDeliveryInteractableComponent::GetReachablePickupCandidates(
+	const APawn* Seeker, TArray<UDeliveryInteractableComponent*>& OutCandidates)
+{
+	OutCandidates.Reset();
+	if (!Seeker) return;
+
+	for (int32 Index = Registry.Num() - 1; Index >= 0; --Index)
+	{
+		UDeliveryInteractableComponent* Candidate = Registry[Index].Get();
+		if (!Candidate)
+		{
+			Registry.RemoveAtSwap(Index);
+			continue;
+		}
+		if (Candidate->GetWorld() == Seeker->GetWorld()
+			&& Candidate->InteractionKey == EDeliveryInteractionKey::PickupE
+			&& Candidate->CanInteract(Seeker))
+		{
+			OutCandidates.Add(Candidate);
+		}
+	}
+}
+
 UDeliveryInteractableComponent* UDeliveryInteractableComponent::FindOn(const AActor* Actor)
 {
 	return Actor ? Actor->FindComponentByClass<UDeliveryInteractableComponent>() : nullptr;
