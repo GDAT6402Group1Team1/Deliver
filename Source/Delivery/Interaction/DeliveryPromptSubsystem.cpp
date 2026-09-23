@@ -48,6 +48,20 @@ void UDeliveryPromptSubsystem::PushPrompt(const FText& Text, const FVector& Worl
 	EnsureWidget();
 }
 
+void UDeliveryPromptSubsystem::PushCornerHint(const FText& Text, bool bDimmed)
+{
+	CornerText = Text;
+	bCornerDimmed = bDimmed;
+	LastCornerPushTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	EnsureWidget();
+}
+
+bool UDeliveryPromptSubsystem::IsCornerFresh() const
+{
+	const UWorld* World = GetWorld();
+	return World && (World->GetTimeSeconds() - LastCornerPushTime) < PromptTimeout;
+}
+
 bool UDeliveryPromptSubsystem::IsPromptFresh() const
 {
 	const UWorld* World = GetWorld();
@@ -150,6 +164,47 @@ void UDeliveryPromptSubsystem::EnsureWidget()
 						.FillColorAndOpacity(FLinearColor(0.25f, 0.85f, 1.0f, 1.0f))
 					]
 				]
+			]
+		];
+
+	// 左下角那一条。和上面的世界浮窗共用一个 Canvas，但锚点/时间戳完全独立。
+	const auto CornerVisibility = TAttribute<EVisibility>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return (Self && Self->IsCornerFresh()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+	});
+	const auto CornerTextAttr = TAttribute<FText>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return Self ? Self->CornerText : FText::GetEmpty();
+	});
+	const auto CornerColorAttr = TAttribute<FSlateColor>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		// 冷却中压暗，玩家不用读秒也知道现在按了没用。
+		return FSlateColor(Self && Self->bCornerDimmed
+			? FLinearColor(0.55f, 0.55f, 0.55f, 1.0f) : FLinearColor::White);
+	});
+
+	StaticCastSharedPtr<SConstraintCanvas>(PromptWidget)->AddSlot()
+		// 锚在视口左下角；对齐点也取左下，于是 Offset 就是"离左边多远、离底边多高"。
+		.Anchors(FAnchors(0.0f, 1.0f))
+		.AutoSize(true)
+		.Alignment(FVector2D(0.0f, 1.0f))
+		.Offset(FMargin(28.0f, -28.0f, 0.0f, 0.0f))
+		[
+			SNew(SBorder)
+			.Visibility(CornerVisibility)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f))
+			.Padding(FMargin(12.0f, 6.0f))
+			[
+				SNew(STextBlock)
+				.Text(CornerTextAttr)
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 15))
+				.ColorAndOpacity(CornerColorAttr)
+				.ShadowOffset(FVector2D(1.0f, 1.0f))
+				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
 			]
 		];
 

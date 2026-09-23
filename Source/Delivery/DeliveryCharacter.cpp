@@ -34,6 +34,7 @@
 #include "Interaction/DeliveryInteractionGeometry.h"
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
+#include "Vehicle/DeliveryVehicleSummonComponent.h"
 #include "Inventory/DeliveryInventoryItemComponent.h"
 #include "Task/DeliveryItemComponent.h"
 #include "Task/DeliveryTargetComponent.h"
@@ -101,6 +102,8 @@ ADeliveryCharacter::ADeliveryCharacter()
 	GrabbableComponent = CreateDefaultSubobject<UDeliveryGrabbableComponent>(TEXT("Grabbable"));
 	InteractProbe = CreateDefaultSubobject<UDeliveryInteractionProbeComponent>(TEXT("InteractProbe"));
 	InventoryComponent = CreateDefaultSubobject<UDeliveryInventoryComponent>(TEXT("Inventory"));
+	VehicleSummon = CreateDefaultSubobject<UDeliveryVehicleSummonComponent>(TEXT("VehicleSummon"));
+	SummonVehicleKey = EKeys::R;
 	InteractAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
 	PickupAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Pickup.IA_Pickup")));
 	HotbarWidgetClass = TSoftClassPtr<UDeliveryHotbarWidget>(FSoftClassPath(TEXT("/Game/UI/Inventory/WBP_DeliveryHotbar.WBP_DeliveryHotbar_C")));
@@ -303,6 +306,16 @@ void ADeliveryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	PlayerInputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ADeliveryCharacter::InventorySlot4);
 	PlayerInputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ADeliveryCharacter::InventorySlot5);
 
+	if (SummonVehicleKey.IsValid())
+	{
+		PlayerInputComponent->BindKey(SummonVehicleKey, IE_Pressed, this, &ADeliveryCharacter::SummonVehiclePressed);
+		if (VehicleSummon)
+		{
+			// 提示里的键名从实际绑的键取，改了 SummonVehicleKey 提示会跟着变，不会说一套做一套。
+			VehicleSummon->SetDisplayKeyName(SummonVehicleKey.GetDisplayName(false));
+		}
+	}
+
 	if (!HotbarWidget && IsLocallyControlled())
 	{
 		UClass* WidgetClass = HotbarWidgetClass.LoadSynchronous();
@@ -501,6 +514,15 @@ void ADeliveryCharacter::InventorySlot2() { if (InventoryComponent) InventoryCom
 void ADeliveryCharacter::InventorySlot3() { if (InventoryComponent) InventoryComponent->RequestSlotAction(2); }
 void ADeliveryCharacter::InventorySlot4() { if (InventoryComponent) InventoryComponent->RequestSlotAction(3); }
 void ADeliveryCharacter::InventorySlot5() { if (InventoryComponent) InventoryComponent->RequestSlotAction(4); }
+
+void ADeliveryCharacter::SummonVehiclePressed()
+{
+	// 倒着的人别想召唤车。和按 F 上车同一条规矩。
+	if (VehicleSummon && !IsIncapacitated())
+	{
+		VehicleSummon->RequestSummon();
+	}
+}
 
 void ADeliveryCharacter::DoInteract()
 {

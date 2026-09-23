@@ -14,6 +14,7 @@ class UInputAction;
 class UMaterialInterface;
 class UPoseableMeshComponent;
 class USpringArmComponent;
+class USkeletalMesh;
 class UStaticMesh;
 class UStaticMeshComponent;
 struct FInputActionValue;
@@ -51,6 +52,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Motorbike")
 	bool TryEnter(ADeliveryCharacter* NewDriver);
 
+	/**
+	 * 服务器：把车挪到指定位置（召唤）。会自己往下探地面、清掉残余车速和被撞状态。
+	 * 车上有人时拒绝——不能把别人正骑着的车抽走。找不到地面也拒绝，免得把车塞进虚空。
+	 */
+	UFUNCTION(BlueprintCallable, Category="Motorbike")
+	bool SummonTo(const FVector& DesiredLocation, float DesiredYaw);
+
 	/** 服务器：下车，把驾驶员放回车边的地面。 */
 	UFUNCTION(BlueprintCallable, Category="Motorbike")
 	void ExitVehicle();
@@ -68,6 +76,18 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Motorbike")
 	float GetCurrentSpeed() const { return CurrentSpeed; }
+
+	/**
+	 * 骑手骨骼网格的兜底来源。
+	 *
+	 * RiderMesh 组件上的资产引用是存在 BP_Motorbike 的 CDO 里的，**组件类型一变就会丢**
+	 * （SkeletalMesh → PoseableMesh 那次就丢了），于是又得重跑一次 setup_motorbike.py。
+	 * 这里按软引用晚绑兜底：组件上没挂东西就自己加载这个路径，脚本变成可选的。
+	 * 和 InteractAction 用 TSoftObjectPtr 是同一个理由——构造函数只在模块加载时跑一次，
+	 * 软引用才能在运行时才解析。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|Mesh")
+	TSoftObjectPtr<USkeletalMesh> RiderMeshAsset;
 
 	/** 车体部件网格。FBX 里摩托车是 9 个独立静态网格，导入脚本会把它们填到这里。 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Motorbike|Mesh")
@@ -328,9 +348,17 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现", meta=(ClampMin="0.1"))
 	float SteerVisualSpeed = 9.0f;
 
-	/** 车把转前轮的百分之多少。1 = 跟前轮一样打满（手会明显脱把）。 */
+	/**
+	 * 车把转前轮的百分之多少。1 = 跟前轮一样打满（手会明显脱把）。
+	 *
+	 * **真正决定脱手程度的是它和 RiderSteerRatio 的差**，不是它自己的绝对值：
+	 * 骑手的手是固定在参考姿势上的，手跟着身体走，车把和身体差多少度就脱多少度。
+	 * 0.65 配 0.45 时差 0.20（约 4.4°），比最早的 0.40 配 0.25（差 0.15、约 3.3°）还明显，
+	 * 所以"把车把调回去"要连着差值一起看：现在 0.50 配 0.45，差只剩 0.05（约 1.1°），
+	 * 车把转得比最早那版还多，脱手反而比最早还轻。
+	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float HandlebarSteerRatio = 0.65f;
+	float HandlebarSteerRatio = 0.5f;
 
 	/** 骑手扭身跟转的比例。调大了脚会离开脚踏。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现", meta=(ClampMin="0.0", ClampMax="1.0"))
@@ -363,6 +391,13 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现")
 	bool bFreeLookCamera = true;
+
+	/**
+	 * 轮子要不要自转。暂时关掉——整套逻辑（认轮子、轮轴分层、按车速算转速）都留着，
+	 * 想开回来只要在 BP_Motorbike 上勾一下，不用重编、也不用重跑 Setup Motorbike。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|表现")
+	bool bSpinWheels = false;
 
 	/**
 	 * 轮子自转的方向。
@@ -521,6 +556,15 @@ private:
 	/** 把 BodyMeshes 里的网格铺到固定槽位上，多余的槽位清空。 */
 	void ApplyBodyMeshes();
 
+	/**
+	 * 没填的几何参数自己按包围盒量出来（轮子、车把、前轮前叉、转向轴）。
+	 *
+	 * 判据和 setup_motorbike.py 里那套**一模一样**，只是搬到了运行时：
+	 * 这样脚本从"每次改完都必须跑"变成"可选的、跑了能在报告里看数字"。
+	 * 只填空的那些，已经有值的一律不碰——脚本量过的、或者手工调过的都算数。
+	 */
+	void AutoConfigureFromMeshes();
+
 	/** 按有没有驾驶员刷新骑手网格和可交互状态。服务器和客户端都会走到。 */
 	void ApplyDriverPresentation();
 
@@ -550,6 +594,9 @@ private:
 
 	/** 让某句提示在屏幕上停留 Seconds 秒。上车提示和切视角提示共用这一套。 */
 	void ShowNotice(const FText& Text, float Seconds);
+
+	/** 骑行期间常驻左下角的操作提示（切视角那条）。 */
+	void PushCameraHint();
 
 	/** 把人打倒：血清零交给既有的晕倒流程，再补一记冲量把他抛离车身。 */
 	void KnockDownDriver(ADeliveryCharacter* Rider, const FVector& LaunchDirection, float LaunchScale);

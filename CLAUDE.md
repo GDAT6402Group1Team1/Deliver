@@ -318,7 +318,7 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 - **美术资产分两层挂：`MeshRoot`（只做侧倾 Roll）→ `MeshAlign`（车头朝向 + 居中偏移）→ 车体/骑手。** 不能合成一层：`FRotator` 的施加顺序是 Roll→Pitch→Yaw，侧倾和朝向修正写在同一个组件上时，Roll 会绕"修正之前"的局部 X 轴转，而那根轴在修正 90 度之后是车的横向——本该压弯，实际变成点头。UE 里正 Roll 是往左倒，所以右转取负值。
 - **骑车时镜头写死在车尾后方**（`bUsePawnControlRotation=false` + 只继承 Yaw），鼠标不参与。之前用"控制旋转 + 延时回正"，上车瞬间镜头还停在人物原来的朝向上、车头却朝别处，玩家按 W 看到车"横着走"，方向感整个是错的。载具阶段"W 永远是往屏幕里开"比自由视角重要。控制旋转仍然每帧同步成车头朝向——镜头自己不用它，但下车后角色的弹簧臂要用，同步着视角才连续。
 - 上车顺序：先 `GrabComponent->ForceRelease()`（手里还抓着东西的话，约束会把货物/别的玩家一路拖在车上）→ `StopRagdoll()`（关刚体模拟并把网格挂回胶囊，不停的话被挂到车上的身体会一路抽搐）→ 隐藏 + 关碰撞 + 挂到车上 → `Controller->Possess(bike)`。下车反过来，先摆好位置再 `StartRagdoll()`（它内部带 `PlaceOnGround`，顺序反了人会掉在原地）。
-- **龙头转向分三层，各转各的角度**（`SteerPivot` 前轮前叉打满 / `BarPivot` 车把按 `HandlebarSteerRatio`=0.4 / `RiderPivot` 骑手按 `RiderSteerRatio`=0.25）。三个轴都只是挂点：自己摆到轴心上，孩子把这段偏移减回去，网格留在原地但从此绕这根轴转。
+- **龙头转向分三层，各转各的角度**（`SteerPivot` 前轮前叉打满 / `BarPivot` 车把按 `HandlebarSteerRatio`=0.5 / `RiderPivot` 骑手按 `RiderSteerRatio`=0.25）。三个轴都只是挂点：自己摆到轴心上，孩子把这段偏移减回去，网格留在原地但从此绕这根轴转。
   为什么车把不跟着打满：骑手是固定的参考姿势，**手不会跟着车把走**，车把转多少就脱手多少。街机赛车的常规做法就是"轮子打满、车把几乎不动"，观感不违和，比上 IK 便宜得多。真要手跟着走，得给骑手配 AnimBP + 两个 Two Bone IK（抓握点从 `SteerPivot` 的世界变换算，C++ 侧不难，但 AnimGraph 必须在编辑器里手连）。
   骑手绕的是**自己胯部**的竖轴（脚本从 `hips` 骨骼读），不是转向轴——绕车头那根轴转会把整个人往旁边甩（胯离轴心 70 多厘米）。
   转向角**不乘速度系数**：停着打把车把也该动，那是按键反馈。哪几个部件跟转由 `setup_motorbike.py` 按几何认（车把 = X 最宽的那个，实测 136cm vs 第二名 80cm，且骑手双手正好落在它上面；前轮前叉 = 包围盒中心在车身前 1/4），不写死下标。
@@ -343,14 +343,37 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
   **换了组件类型就要重跑一次 Setup Motorbike**：网格是写在 BP_Motorbike 的 CDO 上的，类变了那份实例覆盖会丢。脚本里挂网格的属性名也跟着改了——`UPoseableMeshComponent`（`USkinnedMeshComponent`）叫 `skinned_asset`，不是 `skeletal_mesh_asset`，`setup_motorbike.py` 里三处都按 `skinned_asset → skeletal_mesh_asset → skeletal_mesh` 依次试。
 - **脖子转向（`RiderNeckSteerRatio`，默认 0.6，骨骼 `mixamorig:Neck`）在组件空间绕 Z 转，不在骨骼局部空间转。** Mixamo 骨架里脖子骨的局部轴朝哪没法先验知道（要在编辑器里试），而骑手网格的组件空间 Z 就是头顶方向（顶点是 FBX 绝对坐标、Z 向上），绕它转一定是左右转头。**参考姿势的变换必须只取一次并缓存**：每帧读"当前值"再叠偏转会一直累加，头会一圈圈转到背后去。乘法顺序也别反——`Delta * Ref` 是绕组件空间的轴，`Ref * Delta` 是绕骨骼自己的轴。
 - 骑手网格平时隐藏，有人骑才显示——模型自带骑手，不藏起来路边空车上永远坐着个人。
+  - **车把脱手程度取决于 `HandlebarSteerRatio` 和 `RiderSteerRatio` 的差，不是车把的绝对角度**：骑手的手固定在参考姿势上、跟着身体走，车把和身体差多少度就脱多少度。所以"车把转多了脱手"不能只把车把调回去——0.65/0.45 差 0.20（约 4.4°）比最早的 0.40/0.25 差 0.15（约 3.3°）还明显；现在 0.50/0.45 差只剩 0.05（约 1.1°），车把比最早转得还多，脱手反而更轻。
+- **轮子自转默认关着**（`bSpinWheels=false`）。整套逻辑都留着，勾上就生效，不用重编也不用重跑脚本。
 - **轮子按车速自转**（`WheelPartIndices` / `WheelCenters` / `WheelRadius`，都由脚本按几何写，别手填）。每个轮子再多挂一层自己的轮轴 `WheelPivots[k]`，**前轮那一层挂在 `SteerPivot` 下面**：先跟着龙头转、再绕轮心自转，两件事互不干扰；挂在 SteerPivot 下时轮心要减掉 `SteerPivotLocation`，因为父级原点已经是转向轴。
   - 认轮子的判据两条缺一不可：**正圆**（长/高比 > 0.9）且**窄**（宽 < 直径 × 0.6）。实测两个轮子都是 61.3×61.3、宽 27.7、圆度 1.00；第三名 `车.007` 圆度 0.96 但宽 63.3 比直径还大，靠"窄"这条挡掉，只用圆度会误抓。
   - 转速 = 线速度 / 半径（纯滚动，接地点速度为 0），只写 Roll（绕 MeshAlign 局部 X = 轮轴）。**方向要取负**：局部 +Y 是车头，UE 里正 Roll 把 +Z 转向 -Y，也就是轮顶往后 = 倒着滚。符号做成了 `WheelSpinSign`，推反了改成 +1 即可，不用重编。
   - **远端客户端上 `CurrentSpeed` 恒为 0**（那边不跑 `UpdateSpeed`），轮子会僵住，所以非权威非本地时改用"实际位移在车头方向上的分量 / dt"反推车速。
 - 车体是 9 个 `UStaticMeshComponent` **固定槽位**（`MaxBodyParts = 12`，构造函数里建好），按 `BodyMeshes` 数组填充。没用运行时 `NewObject` 动态建组件，避免构造脚本反复重建组件/丢实例覆盖。
 
+### 召唤载具（按 R）
+[DeliveryVehicleSummonComponent](Source/Delivery/Vehicle/DeliveryVehicleSummonComponent.h) —— 挂在玩家 Pawn 上，按 R 把最近一辆没人骑的摩托车挪到身前，冷却 10 秒。
+- **单独一个组件**而不是塞进 `ADeliveryCharacter`：它需要**按固定频率 Tick**来刷左下角提示，而角色的 Tick 是 `bStartWithTickEnabled=false`、只在被车撞的镜头拉远期间才临时打开的，借它推 HUD 会把那套按需开关搅乱。
+- 冷却是**服务器权威**的：`ReadyServerTime` 服务器写、`COND_OwnerOnly` 只复制给拥有者，客户端只拿来显示，不做预测（召唤本来就要等一个来回）。**探不到地面的召唤不计冷却**——玩家什么都没得到，不该被罚等 10 秒。
+- 落位交给 `ADeliveryMotorbike::SummonTo()`，车自己往下打地面射线，并**清空 `CurrentSpeed` / `VerticalVelocity` / 油门转向 / 被撞状态**：残余车速会让车刚出现就从脚边滑走，残余被撞状态会让它一边抖一边歪着出现。车上有人时拒绝，不能把别人正骑的车抽走。
+- `PlaceDistance` 默认 230cm，要大于车长（256cm）的一半再留余量，否则车会压在玩家身上把布娃娃顶翻。
+
+### 屏幕左下角常驻提示
+`UDeliveryPromptSubsystem::PushCornerHint()` 和世界浮窗 `PushPrompt()` 是**两个独立槽位**，各有各的时间戳，同一个 SConstraintCanvas 上两个锚点。分开是必须的：合在一起的话走到车边时"按 R 召唤"会被"按 F 驾驶"顶掉。同样是"每帧推一次、停推 0.25 秒自动消失"的约定，所以不需要成对写 Show/Hide。
+- 步行时由 `UDeliveryVehicleSummonComponent` 推召唤提示（冷却中压暗成灰色 + 读秒）；骑行时由 `ADeliveryMotorbike::PushCameraHint()` 推"按 P 切换视角（当前：自由/固定）"。
+- **两者天然不会打架**：上车后控制器去 Possess 摩托车，被丢在车上的那具身体 `IsLocallyControlled()` 变成 false，召唤组件自动停推。
+- 提示里的键名一律从**实际绑定的 FKey** 取 `GetDisplayName()`，改了 `SummonVehicleKey` / `CameraToggleKey` 提示会跟着变，不会说一套做一套。
+- 图里一辆摩托车都没有时不推召唤提示——告诉玩家一个按了什么都不会发生的键没有意义。
+
 ### 摩托车资产接入（`Content/Python/setup_motorbike.py`）
 菜单 **Delivery → Setup Motorbike**，或控制台 `py setup_motorbike.py`。四步幂等、可单独重跑：
+**摩托车现在是自配置的，`setup_motorbike.py` 从"每次改完必须跑"降级成可选。** 这是被"又要重跑一次脚本"逼出来的结论，别再往回走：
+- **凡是脚本算得出来的几何，C++ 自己也能算。** `AutoConfigureFromMeshes()` 在 `ApplyBodyMeshes()` 开头跑，用和脚本**一模一样**的判据（轮子=正圆且窄、车把=X 最宽、前轮前叉=中心落在前 1/4、转向轴=车把与最前部件的水平中点）从 `UStaticMesh::GetBoundingBox()` 现场量。顶点本来就在 FBX 场景绝对坐标里（导入时 `transform_vertex_to_absolute=True`），包围盒即整车里的位置，不用再拼相对变换。
+- **只填空的**：已经有值的一律不碰，脚本量过的和在 BP 上手调过的都算数。
+- **组件上的资产引用要有软引用兜底。** `RiderMesh` 的网格引用存在 BP CDO 里，**组件类型一变就会丢**（`USkeletalMeshComponent` → `UPoseableMeshComponent` 那次就丢了，表现是"车上突然没人"），只能靠重跑脚本修。现在 `RiderMeshAsset`（`TSoftObjectPtr`）在组件为空时自动加载。和 `InteractAction` 用软引用是同一个理由：构造函数只在模块加载时跑一次，软引用才能在运行时解析。
+- **不要改成"编辑器启动时自动跑脚本"**：`place_in_level()` 会挪动/重放关卡里的车，每次开编辑器都重来一遍；而且打包后根本没有 Python，自配置在打包版里一样有效，自动跑脚本没有。
+- 脚本保留的价值：导入 FBX、建 BP 和 IA、摆进关卡、以及在报告里把量出来的数字打给人看。**改 C++ 默认值（手感、镜头、爬坡参数等）从来都不需要跑它。**
+
 导入 FBX → 建 `IA_Interact` 并在 IMC_Default 上映射 F → 建 `/Game/Vehicle/Motorbike/BP_Motorbike` → 在当前关卡出生点前方放一辆。报告写到 `Saved/setup_motorbike.txt`。
 
 这份 `摩托车.fbx`（工程根目录）离线解析出来的三个坑，改导入流程前先读：
@@ -373,6 +396,39 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 - 重跑 `place_in_level()` 会**沿用上一辆车的位置朝向**，摆好之后再调参数不用重新找地方摆；关卡里没有 `PlayerStart` 时（`testfortraffic` 就没有）落点取编辑器视口镜头前方，而不是世界原点。
 - `IA_Interact` 是**复制 `IA_Jump`** 建出来的——`InputAction` 没有暴露给 Python 的工厂，`create_asset` 那条路不通。C++ 侧 `InteractAction` 用 `TSoftObjectPtr` 晚绑而不是 `ConstructorHelpers`：构造函数只在模块加载时跑一次，脚本这次会话里新建的资产永远解析不到，晚绑才能当场生效。
 
+## 开发环境与编译
+
+- **引擎：UE 5.8。** 编译走 `Build.bat`，目标是 **`DeliveryEditor`**（不是 `Delivery`——只编后者的话
+  新的 C++ 组件不会在编辑器里注册，`DeliveryTrafficCarComponent` 就因为这个"在编辑器里找不到"过一次）：
+
+  ```
+  "<引擎目录>/Engine/Build/BatchFiles/Build.bat" DeliveryEditor Win64 Development -Project="<工程目录>/Delivery.uproject" -WaitMutex
+  ```
+
+  引擎目录**每台机器不一样**，Epic 默认装在 `C:\Program Files\Epic Games\UE_5.8`。
+
+- **编辑器开着就编不了**：会直接报 `Unable to build while Live Coding is active`。
+  可靠做法是**先关编辑器再编**；在编辑器里按 Ctrl+Alt+F11 走 Live Coding 也行，但它对
+  新增 UPROPERTY / 改类布局这类改动不可靠，结构一变就该用完整编译。
+  等人关编辑器时别写 `sleep` 轮询，起个后台任务等 `UnrealEditor` 进程退出再编。
+
+- **什么改动需要做什么**：
+
+  | 改了什么 | 要做什么 |
+  |---|---|
+  | C++ 里的默认值（手感、镜头、参数） | 只要重编；BP 没覆盖过的默认值重开就生效 |
+  | 新增/删除 UPROPERTY、改组件类型 | 重编；**改组件类型会丢 BP CDO 上那个组件的实例覆盖**（见摩托车一节的软引用兜底） |
+  | 只在 BP 上调参数 | 什么都不用做 |
+  | 导入新资产、建新 BP/IA、往关卡里摆东西 | 跑对应的编辑器 Python 脚本 |
+
+- **编辑器 Python** 从编辑器控制台跑 `py 脚本名.py`，常用的也挂在菜单 **Delivery** 下。
+  Python **只在编辑器里有**，打包版里没有——所以运行时要用的东西不能依赖脚本，
+  得让 C++ 自己算（摩托车的 `AutoConfigureFromMeshes()` 就是这个原因）。
+
+- **`Content/Input/IMC_Default.uasset` 至今没有被提交过。** 它里面有 F 键到 `IA_Interact` 的映射，
+  每次 `git pull` 都会被冲掉，症状极具迷惑性：浮窗照常显示、按 F 毫无反应（浮窗不依赖按键绑定）。
+  新加的按键因此一律用 `BindKey` 直接绑（物品栏 1~5、切视角 P、召唤 R），不走 IMC。
+
 ## 代码结构速览
 
 ```
@@ -384,10 +440,11 @@ Source/Delivery/
 ├── Combat/                          战斗类型、姿势定义、战斗接口
 ├── GAS/                             AbilitySystemComponent、AttributeSet、PlayerState、GameplayTags、Abilities/
 ├── Grab/                            双键抓取：抓取组件、可抓取组件、可抓道具
-├── Interaction/                     走近按 F：可交互组件、探测组件、Slate 浮窗子系统
+├── Interaction/                     走近按 F：可交互组件、探测组件、Slate 浮窗子系统（含左下角常驻提示）
+├── Inventory/                       五格物品栏、手持道具
 ├── Ragdoll/                         主动布娃娃、布娃娃战斗组件
 ├── Traffic/                         交通车辆辅助组件（卡住重置循环、前车避让减速）
-└── Vehicle/                         可骑载具（摩托车，运动学街机式）
+└── Vehicle/                         可骑载具（摩托车，运动学街机式）+ 按 R 召唤载具组件
 ```
 
 `Content/Python/` 是编辑器 Python 工具链（车道/路口/转弯生成、地形压平、裙边、以及一整套只读诊断脚本），

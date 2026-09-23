@@ -33,13 +33,25 @@ public:
 	/** 每帧调用一次。WorldAnchor 是浮窗要贴住的世界坐标。 */
 	void PushPrompt(const FText& Text, const FVector& WorldAnchor, float HoldProgress = -1.0f);
 
+	/**
+	 * 屏幕左下角的常驻提示（"按 R 召唤摩托车"这类）。和世界浮窗是两个独立的槽位，
+	 * 各有各的时间戳，互不覆盖——不然走到车边上时召唤提示就被"按 F 驾驶"顶掉了。
+	 * 同样是"每帧推一次"的约定。bDimmed 用来表示这个功能当前不可用（冷却中）。
+	 */
+	void PushCornerHint(const FText& Text, bool bDimmed = false);
+
 private:
 
 	void EnsureWidget();
 	bool ComputeScreenPosition(FVector2D& OutPosition) const;
 	bool IsPromptFresh() const;
 
+	bool IsCornerFresh() const;
+
 	TSharedPtr<SWidget> PromptWidget;
+	FText CornerText;
+	bool bCornerDimmed = false;
+	double LastCornerPushTime = -1000.0;
 	FText PromptText;
 	FVector PromptAnchor = FVector::ZeroVector;
 	float PromptHoldProgress = -1.0f;

@@ -12,6 +12,8 @@
 #include "Delivery.h"
 #include "DeliveryCharacter.h"
 #include "Engine/CollisionProfile.h"
+#include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -144,6 +146,8 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	}
 	InteractAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
 	CameraToggleKey = EKeys::P;
+	RiderMeshAsset = TSoftObjectPtr<USkeletalMesh>(
+		FSoftObjectPath(TEXT("/Game/Vehicle/Motorbike/SK_MotorbikeRider.SK_MotorbikeRider")));
 }
 
 void ADeliveryMotorbike::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -173,8 +177,144 @@ void ADeliveryMotorbike::BeginPlay()
 	ApplyCameraMode();
 }
 
+void ADeliveryMotorbike::AutoConfigureFromMeshes()
+{
+	// 骑手网格：组件上没挂就按软引用补一个。组件类型改过之后 CDO 里那份引用会丢，
+	// 不兜底的话表现是"车上突然没人了"，而且只能靠重跑脚本修。
+	if (RiderMesh && !RiderMesh->GetSkinnedAsset())
+	{
+		if (USkeletalMesh* Loaded = RiderMeshAsset.LoadSynchronous())
+		{
+			RiderMesh->SetSkinnedAssetAndUpdate(Loaded);
+			UE_LOG(LogDelivery, Log, TEXT("%s：骑手网格是按软引用兜底加载的（%s）。"),
+				*GetName(), *Loaded->GetName());
+		}
+	}
+
+	// 下面全是"只填空的"：脚本量过的、或者在 BP 上手调过的，一律不碰。
+	const bool bNeedWheels = WheelPartIndices.Num() == 0;
+	const bool bNeedSteer = SteeringPartIndices.Num() == 0 && HandlebarPartIndices.Num() == 0;
+	if (!bNeedWheels && !bNeedSteer)
+	{
+		return;
+	}
+
+	// 顶点留在 FBX 场景绝对坐标里（导入时 transform_vertex_to_absolute=True），
+	// 所以每个部件的包围盒本身就是它在整车里的位置，不用再拼一次相对变换。
+	TArray<FBox> Boxes;
+	Boxes.SetNum(BodyMeshes.Num());
+	FBox Whole(ForceInit);
+	int32 ValidCount = 0;
+	for (int32 Index = 0; Index < BodyMeshes.Num(); ++Index)
+	{
+		if (const UStaticMesh* Mesh = BodyMeshes[Index].Get())
+		{
+			Boxes[Index] = Mesh->GetBoundingBox();
+			Whole += Boxes[Index];
+			++ValidCount;
+		}
+		else
+		{
+			Boxes[Index] = FBox(ForceInit);
+		}
+	}
+	if (ValidCount == 0)
+	{
+		return;
+	}
+
+	if (bNeedWheels)
+	{
+		// 轮子 = 正圆（长/高比 > 0.9）且窄（宽 < 直径 * 0.6）。
+		// 两条缺一不可：车架那种部件圆度能到 0.96，但它比直径还宽。
+		float RadiusSum = 0.0f;
+		for (int32 Index = 0; Index < Boxes.Num(); ++Index)
+		{
+			if (!Boxes[Index].IsValid)
+			{
+				continue;
+			}
+			const FVector Size = Boxes[Index].GetSize();
+			const float Diameter = FMath::Max(Size.Y, Size.Z);
+			if (Diameter <= KINDA_SMALL_NUMBER)
+			{
+				continue;
+			}
+			const float Roundness = FMath::Min(Size.Y, Size.Z) / Diameter;
+			if (Roundness > 0.9f && Size.X < Diameter * 0.6f)
+			{
+				WheelPartIndices.Add(Index);
+				WheelCenters.Add(Boxes[Index].GetCenter());
+				RadiusSum += Diameter * 0.5f;
+			}
+		}
+		if (WheelPartIndices.Num() > 0)
+		{
+			WheelRadius = RadiusSum / WheelPartIndices.Num();
+			UE_LOG(LogDelivery, Log, TEXT("%s：自动认出 %d 个轮子，半径 %.0fcm。"),
+				*GetName(), WheelPartIndices.Num(), WheelRadius);
+		}
+	}
+
+	if (bNeedSteer)
+	{
+		// 车把 = X 方向最宽的那个（实测 136cm，第二名才 80cm，分得很开）。
+		int32 BarIndex = INDEX_NONE;
+		float BestWidth = -1.0f;
+		int32 FrontMost = INDEX_NONE;
+		float BestFrontY = -FLT_MAX;
+		for (int32 Index = 0; Index < Boxes.Num(); ++Index)
+		{
+			if (!Boxes[Index].IsValid)
+			{
+				continue;
+			}
+			const float Width = Boxes[Index].GetSize().X;
+			if (Width > BestWidth)
+			{
+				BestWidth = Width;
+				BarIndex = Index;
+			}
+			const float CenterY = Boxes[Index].GetCenter().Y;
+			if (CenterY > BestFrontY)
+			{
+				BestFrontY = CenterY;
+				FrontMost = Index;
+			}
+		}
+		if (BarIndex != INDEX_NONE && FrontMost != INDEX_NONE)
+		{
+			// 前轮/前叉 = 包围盒中心落在车身前四分之一的部件。导入空间里车头朝 +Y。
+			const float FrontLine = Whole.Min.Y + Whole.GetSize().Y * 0.75f;
+			for (int32 Index = 0; Index < Boxes.Num(); ++Index)
+			{
+				if (Boxes[Index].IsValid && Index != BarIndex
+					&& Boxes[Index].GetCenter().Y >= FrontLine)
+				{
+					SteeringPartIndices.Add(Index);
+				}
+			}
+			HandlebarPartIndices.Add(BarIndex);
+
+			// 转向轴取"车把中心"和"最前部件中心"的水平中点，大致就是前叉的位置。
+			// 用竖直轴而不是带后倾角的真实转向轴：这个尺寸下看不出差别，且省一层旋转补偿。
+			const FVector BarCenter = Boxes[BarIndex].GetCenter();
+			const FVector FrontCenter = Boxes[FrontMost].GetCenter();
+			SteerPivotLocation = FVector(
+				(BarCenter.X + FrontCenter.X) * 0.5f,
+				(BarCenter.Y + FrontCenter.Y) * 0.5f,
+				BarCenter.Z);
+			UE_LOG(LogDelivery, Log,
+				TEXT("%s：自动认出车把槽位 %d（宽 %.0fcm）、跟转槽位 %d 个。"),
+				*GetName(), BarIndex, BestWidth, SteeringPartIndices.Num());
+		}
+	}
+}
+
 void ADeliveryMotorbike::ApplyBodyMeshes()
 {
+	AutoConfigureFromMeshes();
+
 	// 三个转轴都只是"挂点"：自己摆到轴心上，孩子再把这段偏移减回去，
 	// 于是网格留在原地不动，但从此绕这根轴转。
 	if (SteerPivot)
@@ -399,6 +539,50 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	SteerInput = 0.0f;
 	TrafficImpactCount = 0;
 	ApplyDriverPresentation();
+	return true;
+}
+
+bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredYaw)
+{
+	UWorld* World = GetWorld();
+	if (!HasAuthority() || !World || Driver)
+	{
+		return false;
+	}
+
+	// 往下探一条地面射线再落位。直接按给的 Z 放会把车埋进坡里或者吊在半空，
+	// 而贴地那一步是按 GroundSnapSpeed 慢慢收敛的，刚召唤出来会看到车往下沉一截。
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(MotorbikeSummon), false, this);
+	FHitResult GroundHit;
+	const bool bHit = World->LineTraceSingleByChannel(
+		GroundHit,
+		DesiredLocation + FVector(0.0f, 0.0f, GroundTraceUp + 200.0f),
+		DesiredLocation - FVector(0.0f, 0.0f, GroundTraceDown),
+		ECC_Visibility, Params);
+	if (!bHit)
+	{
+		return false;
+	}
+
+	const FVector Target(DesiredLocation.X, DesiredLocation.Y, GroundHit.ImpactPoint.Z + HoverHeight);
+	SetActorLocationAndRotation(Target, FRotator(0.0f, DesiredYaw, 0.0f),
+		false, nullptr, ETeleportType::TeleportPhysics);
+
+	// 残余状态必须清干净：车速还在的话它会立刻从玩家脚边滑走，
+	// 被撞状态还在的话会一边抖一边歪着出现。
+	CurrentSpeed = 0.0f;
+	VerticalVelocity = 0.0f;
+	ThrottleInput = 0.0f;
+	SteerInput = 0.0f;
+	KnockVelocity = FVector::ZeroVector;
+	KnockYawRate = 0.0f;
+	KnockTilt = 0.0f;
+	ShakeAmount = 0.0f;
+	TrafficImpactCount = 0;
+	bWheelLocationValid = false;
+
+	UE_LOG(LogDelivery, Log, TEXT("%s：被召唤到 (%.0f, %.0f, %.0f)"),
+		*GetName(), Target.X, Target.Y, Target.Z);
 	return true;
 }
 
@@ -874,6 +1058,8 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 			NoticeRemaining -= DeltaSeconds;
 			PushNotice();
 		}
+		// 左下角那条是常驻的，和车顶上方那条世界浮窗是两个独立槽位，不会互相顶掉。
+		PushCameraHint();
 		bHadDriverLastFrame = true;
 	}
 	else
@@ -1126,7 +1312,7 @@ void ADeliveryMotorbike::UpdateSteerVisual(float DeltaSeconds)
 
 void ADeliveryMotorbike::UpdateWheelSpin(float DeltaSeconds)
 {
-	if (WheelPivots.Num() == 0 || DeltaSeconds <= 0.0f)
+	if (!bSpinWheels || WheelPivots.Num() == 0 || DeltaSeconds <= 0.0f)
 	{
 		return;
 	}
@@ -1203,6 +1389,21 @@ void ADeliveryMotorbike::SyncControlRotation()
 	{
 		PC->SetControlRotation(FRotator(CameraPitch, GetActorRotation().Yaw, 0.0f));
 	}
+}
+
+void ADeliveryMotorbike::PushCameraHint()
+{
+	UDeliveryPromptSubsystem* Prompt = UDeliveryPromptSubsystem::Get(this);
+	if (!Prompt || !CameraToggleKey.IsValid())
+	{
+		return;
+	}
+	// 键名从实际绑的键取，改了 CameraToggleKey 提示会跟着变。
+	Prompt->PushCornerHint(FText::Format(
+		bFreeLookCamera
+			? NSLOCTEXT("Delivery", "MotorbikeHintFree", "按 {0} 切换视角（当前：自由）")
+			: NSLOCTEXT("Delivery", "MotorbikeHintFixed", "按 {0} 切换视角（当前：固定）"),
+		CameraToggleKey.GetDisplayName(false)), false);
 }
 
 void ADeliveryMotorbike::ShowNotice(const FText& Text, float Seconds)

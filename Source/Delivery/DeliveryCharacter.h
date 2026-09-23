@@ -17,6 +17,7 @@ class UDeliveryGrabComponent;
 class UDeliveryGrabbableComponent;
 class UDeliveryInteractionProbeComponent;
 class UDeliveryInventoryComponent;
+class UDeliveryVehicleSummonComponent;
 class UDeliveryHotbarWidget;
 class USkeletalMeshComponent;
 class USpringArmComponent;
@@ -63,6 +64,10 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UDeliveryInventoryComponent> InventoryComponent;
 
+	/** 按 R 把摩托车叫到身边，带冷却，并负责左下角那条常驻提示。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UDeliveryVehicleSummonComponent> VehicleSummon;
+
 	/** Right-hand item grip anchor. Designers can tune this in BP without changing every item. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<USceneComponent> HeldItemAnchor;
@@ -98,6 +103,16 @@ protected:
 	/** 拾取键（E）。和 F 通用交互严格分开。 */
 	UPROPERTY(EditAnywhere, Category="Input")
 	TSoftObjectPtr<UInputAction> PickupAction;
+
+	/**
+	 * 召唤载具的按键，默认 R。
+	 *
+	 * 和物品栏 1~5、载具切视角的 P 一样**直接 BindKey**，不新建 InputAction、不动 IMC_Default：
+	 * 那个资产从来没被提交过，每次 git 拉取都会把新加的映射冲掉（F 键就这么没过两次）。
+	 * R 是扫 IMC_Default 的 FName 表确认空闲的（里面只有 A/D/E/F/J/S/SpaceBar/W）。
+	 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	FKey SummonVehicleKey;
 
 	/** 可在编辑器里继续美化的 UMG 子类；资产缺失时回退到原生 Hotbar。 */
 	UPROPERTY(EditDefaultsOnly, Category="UI")
@@ -179,6 +194,7 @@ protected:
 	void InventorySlot3();
 	void InventorySlot4();
 	void InventorySlot5();
+	void SummonVehiclePressed();
 
 public:
 
