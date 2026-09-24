@@ -25,7 +25,7 @@ TAG_PREFIX = "ClaudeGenLane"
 NEIGHBOUR_MAX = 800.0
 Z_WARN = 100.0          # 落差超过这个值才详查
 EDGE_POINTS = 4         # 接缝两侧各详查几个点
-Z_OFFSET = 2.0          # 生成时点比路面高出的量（2026-09-24 从 15 降到 2）
+Z_OFFSET = 15.0         # 生成时点比路面高出的量
 SURFACE_MAX_LAYERS = 40   # 裙边能叠很多层，16 不够用（实测有点位耗尽预算）
 
 WS = unreal.SplineCoordinateSpace.WORLD
