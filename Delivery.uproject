@@ -33,7 +33,7 @@
 		},
 		{
 			"Name": "PS2DEMImporter",
-			"Enabled": true,
+			"Enabled": false,
 			"SupportedTargetPlatforms": [
 				"Win64"
 			]
