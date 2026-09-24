@@ -46,7 +46,26 @@ import unreal
 
 FBX_NAME = u"摩托车.fbx"
 DEST = "/Game/Vehicle/Motorbike"
-PARTS_DEST = DEST + "/Parts"
+# 车体网格的**正式位置**。原来在 DEST + "/Parts"，队友在 673f3cb「调整地图」
+# （2026-09-24）里把 9 个网格移到了这里，老位置只剩 1.5KB 的 ObjectRedirector。
+# 跟着走而不是搬回来：搬回来下次拉取还会再被移一遍。
+BODY_DEST = "/Game/model/vehicles/motor"
+
+# 老位置。仍然搜一遍，万一还有没被搬走的部件。注意重定向器**跟不过去**：
+# UObjectRedirector 是 intrinsic 类，DestinationObject 连 UPROPERTY 都不是，
+# Python 侧读不到目标路径——所以靠的是上面这个显式目录，不是解析重定向。
+LEGACY_PARTS_DEST = DEST + "/Parts"
+
+# 搜索顺序：先正式位置，同名部件以先找到的为准。
+BODY_DIRS = [BODY_DEST, LEGACY_PARTS_DEST]
+
+# 导入落点**故意留在老目录**，不跟着 BODY_DEST 走。
+# 原因：BODY_DEST 里那 9 个网格已经被队友重新指过材质（plastic_white / glass_window
+# 等 Content/materials 里的公共材质），是整理过的成品；而导入任务带 replace_existing，
+# 落点设成 BODY_DEST 的话，任何一次 import_assets(force=True) 都会把成品覆盖成
+# 一套重新自动生成材质（材质_0xx）的原始网格。落在老目录里就碰不到成品，
+# 而搜索顺序（BODY_DIRS）又让成品优先，正常流程不受影响。
+PARTS_DEST = LEGACY_PARTS_DEST
 BP_NAME = "BP_Motorbike"
 BP_PATH = DEST + "/" + BP_NAME
 RIDER_ASSET_NAME = "SK_MotorbikeRider"
@@ -176,10 +195,14 @@ def import_assets(force=False):
         w(u"！找不到 %s，先把模型文件放回工程根目录。" % fbx)
         return [], None
 
-    already = unreal.EditorAssetLibrary.does_directory_exist(PARTS_DEST) and \
-        len(unreal.EditorAssetLibrary.list_assets(PARTS_DEST, recursive=False)) > 0
-    if already and not force:
-        w(u"车体资产已存在，跳过导入（要重导就 import_assets(force=True)）。")
+    # 跳过判据必须和 _collect_body_meshes() 用**同一套标准**。
+    # 原来问的是"目录存在且非空"，而收集问的是"是不是 StaticMesh"——
+    # 队友把网格移走、只剩重定向器和材质之后，两者就开始互相打架：
+    # 第 1 步说"资产已存在，跳过导入"，第 3 步说"没有车体网格"。
+    existing = _collect_body_meshes(quiet=True)
+    if existing and not force:
+        w(u"车体资产已存在（%d 个），跳过导入（要重导就 import_assets(force=True)）。"
+          % len(existing))
         return _collect_body_meshes(), _load_rider()
 
     w(u"导入 %s（缩放 %.2f）" % (fbx, IMPORT_SCALE))
@@ -234,22 +257,43 @@ def _is_rider_part(mesh):
         any(hint in m for hint in RIDER_MATERIAL_HINTS) for m in mats)
 
 
-def _collect_body_meshes():
+def _collect_body_meshes(quiet=False):
+    """按 BODY_DIRS 的顺序找车体静态网格，同名部件以先找到的为准。"""
+    def say(msg):
+        if not quiet:
+            w(msg)
+
     out = []
-    if not unreal.EditorAssetLibrary.does_directory_exist(PARTS_DEST):
-        return out
-    for path in sorted(unreal.EditorAssetLibrary.list_assets(PARTS_DEST, recursive=False)):
-        asset = unreal.EditorAssetLibrary.load_asset(path)
-        if not isinstance(asset, unreal.StaticMesh):
+    seen = set()
+    for directory in BODY_DIRS:
+        if not unreal.EditorAssetLibrary.does_directory_exist(directory):
             continue
-        # 名字和材质都打出来：万一两道判据都没拦住，看日志能一眼认出是谁混进来了。
-        if _is_rider_part(asset):
-            w(u"    跳过骑手静态副本 %s（材质 %s）"
-              % (asset.get_name(), ",".join(_material_names(asset)) or u"无"))
-            continue
-        w(u"    车体部件 %s（材质 %s）"
-          % (asset.get_name(), ",".join(_material_names(asset)) or u"无"))
-        out.append(asset)
+        for path in sorted(unreal.EditorAssetLibrary.list_assets(directory, recursive=False)):
+            asset = unreal.EditorAssetLibrary.load_asset(path)
+            if asset is None:
+                continue
+            # 按**类名**认重定向器，不能写 isinstance(asset, unreal.ObjectRedirector)：
+            # UObjectRedirector 是 intrinsic 类，Python 绑定里没有这个类型，
+            # 写了会直接 AttributeError 把整个脚本打断（实测过一次）。
+            if asset.get_class().get_name() == "ObjectRedirector":
+                # 资产被人在编辑器里移走了，原地留下的壳子。不是错误，
+                # 只是说明真货在别的目录——报出来免得下次又对着空目录查半天。
+                say(u"    %s 是重定向器（资产已被移走），忽略" % path)
+                continue
+            if not isinstance(asset, unreal.StaticMesh):
+                continue
+            name = asset.get_name()
+            if name in seen:
+                continue
+            # 名字和材质都打出来：万一两道判据都没拦住，看日志能一眼认出是谁混进来了。
+            if _is_rider_part(asset):
+                say(u"    跳过骑手静态副本 %s（材质 %s）"
+                    % (name, ",".join(_material_names(asset)) or u"无"))
+                continue
+            say(u"    车体部件 %s（%s，材质 %s）"
+                % (name, directory, ",".join(_material_names(asset)) or u"无"))
+            seen.add(name)
+            out.append(asset)
     return out
 
 
@@ -791,20 +835,109 @@ def build_blueprint(body=None, rider=None):
 
 # ---------------------------------------------------------------- 4. 放进关卡
 
-def _ground_z(world, x, y, z):
-    hit = unreal.SystemLibrary.line_trace_single(
-        world, unreal.Vector(x, y, z + 2000.0), unreal.Vector(x, y, z - 5000.0),
-        unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [], unreal.DrawDebugTrace.NONE, True)
-    if hit is None:
-        return None
+# 挑"地面"那一层时，允许命中点比参考高度高出多少。
+# 出生点本来就站在地面上，所以真正的地面必然在它脚下附近；
+# 高出这个值的一律当成屋顶/天桥/上层楼板。
+GROUND_PICK_MARGIN = 80.0
+
+
+def _ground_layers(world, x, y, z):
+    """这条竖线上从上到下所有命中层，返回 [(高度, 是谁), ...]。
+
+    为什么要全部而不是第一个：原来用 line_trace_single 从参考点**上方 20 米**
+    往下打、取第一个命中，只要出生点上方有屋顶/天桥/上层楼板，车就被放到
+    那个东西上面去了（实测在 TestForCharacter 里被放到 4105，人在下面）。
+    和车道生成踩的"一竖线上有多层路面"是同一类问题。
+    """
     try:
-        d = hit.to_dict()   # HitResult 的属性是 protected，只能走 to_dict
-    except Exception:
+        res = unreal.SystemLibrary.line_trace_multi(
+            world, unreal.Vector(x, y, z + 2000.0), unreal.Vector(x, y, z - 5000.0),
+            unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [],
+            unreal.DrawDebugTrace.NONE, True)
+    except Exception as exc:
+        w(u"  多重射线不可用（%s），退回单次射线。" % exc)
         return None
-    if d.get("blocking_hit") is False:
+    hits = res[-1] if isinstance(res, tuple) else res
+    layers = []
+    for hit in (hits or []):
+        try:
+            d = hit.to_dict()   # HitResult 的属性是 protected，只能走 to_dict
+        except Exception:
+            continue
+        point = d.get("impact_point") or d.get("location")
+        if point is None:
+            continue
+        actor = d.get("hit_actor")
+        layers.append((point.z, actor.get_actor_label() if actor else u"?"))
+    return layers
+
+
+def _ground_z(world, x, y, z):
+    """落点高度：取参考高度脚下那一层，不是最上面那一层。"""
+    layers = _ground_layers(world, x, y, z)
+    if layers is None:
+        # 多重射线用不了时的退路，行为和以前一样（可能挑到屋顶）。
+        hit = unreal.SystemLibrary.line_trace_single(
+            world, unreal.Vector(x, y, z + 2000.0), unreal.Vector(x, y, z - 5000.0),
+            unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [],
+            unreal.DrawDebugTrace.NONE, True)
+        if hit is None:
+            return None
+        try:
+            d = hit.to_dict()
+        except Exception:
+            return None
+        if d.get("blocking_hit") is False:
+            return None
+        point = d.get("impact_point") or d.get("location")
+        return point.z if point else None
+
+    if not layers:
         return None
-    point = d.get("impact_point") or d.get("location")
-    return point.z if point else None
+
+    for h, who in layers:
+        w(u"    竖线上命中 Z=%.0f（%s）" % (h, who))
+
+    below = [(h, who) for h, who in layers if h <= z + GROUND_PICK_MARGIN]
+    if not below:
+        # Visibility 探不到，再用角色那套通道探一次做对照。
+        # 摩托车贴地走 ECC_Visibility，角色布娃娃走 WorldStatic+WorldDynamic 对象查询——
+        # 地面要是对 Visibility 是 Ignore、对 WorldStatic 是 Block，就会出现
+        # "人站得稳、车探不到地"。两者都打一遍，日志里一眼能分出是哪种。
+        try:
+            res = unreal.SystemLibrary.line_trace_multi_for_objects(
+                world, unreal.Vector(x, y, z + 2000.0), unreal.Vector(x, y, z - 5000.0),
+                [unreal.ObjectTypeQuery.OBJECT_TYPE_QUERY1,
+                 unreal.ObjectTypeQuery.OBJECT_TYPE_QUERY2],
+                False, [], unreal.DrawDebugTrace.NONE, True)
+            obj_hits = res[-1] if isinstance(res, tuple) else res
+            found = []
+            for hit in (obj_hits or []):
+                d = hit.to_dict()
+                pt = d.get("impact_point") or d.get("location")
+                if pt is None or pt.z > z + GROUND_PICK_MARGIN:
+                    continue
+                a = d.get("hit_actor")
+                found.append((pt.z, a.get_actor_label() if a else u"?"))
+            if found:
+                pick, who = max(found, key=lambda t: t[0])
+                w(u"  Visibility 探不到地面，但 WorldStatic/WorldDynamic 探到了："
+                  u"Z=%.0f（%s）。" % (pick, who))
+                w(u"  这说明那块地面对 Visibility 通道是 Ignore——**摩托车运行时的贴地"
+                  u"射线也走 Visibility，进 PIE 同样会探空往下掉**，得去改那个资产的碰撞响应。")
+                return pick
+            w(u"  WorldStatic/WorldDynamic 也探不到，这个位置下方是真的空的。")
+        except Exception as exc:
+            w(u"  对象通道探测失败（%s）。" % exc)
+        # 参考点下方什么都没有。**绝不能退而取上方的层**——实测在 TestForCharacter 里
+        # 整条竖线只命中一个 house4（Z=4076，比出生点 3397 还高 679），
+        # 取它等于把车放到房顶上。这种情况老老实实返回 None，让调用方另想办法。
+        w(u"  参考高度 %.0f 下方没有任何命中（只有上方的 %s @ Z=%.0f），这里没有地面。"
+          % (z, layers[0][1], layers[0][0]))
+        return None
+    pick, who = max(below, key=lambda t: t[0])
+    w(u"  取参考高度 %.0f 脚下最高的一层：Z=%.0f（%s）" % (z, pick, who))
+    return pick
 
 
 def place_in_level(bp=None):
@@ -854,6 +987,7 @@ def place_in_level(bp=None):
         return actor
 
     origin = unreal.Vector(0.0, 0.0, 0.0)
+    fallback_xy = None   # 参考点自己的 XY，落点没地面时退回来再探
     yaw = 0.0
     starts = [a for a in eas.get_all_level_actors() if isinstance(a, unreal.PlayerStart)]
     if starts:
@@ -864,6 +998,7 @@ def place_in_level(bp=None):
         origin = unreal.Vector(base.x + forward.x * SPAWN_AHEAD,
                                base.y + forward.y * SPAWN_AHEAD,
                                base.z)
+        fallback_xy = (base.x, base.y)
         w(u"  以出生点 %s 前方 %.0fcm 为落点" % (start.get_actor_label(), SPAWN_AHEAD))
     else:
         # testfortraffic 里没有 PlayerStart。放世界原点等于扔进虚空里让人自己找，
@@ -881,8 +1016,15 @@ def place_in_level(bp=None):
             w(u"  关卡里没有 PlayerStart，也取不到视口镜头（%s），落点用世界原点。" % exc)
 
     ground = _ground_z(world, origin.x, origin.y, origin.z)
+    if ground is None and fallback_xy is not None:
+        # 前方 450cm 处可能已经探出了平台/街道边缘。回到参考点自己的 XY 再试一次：
+        # 出生点脚下总该有地面，没有的话这张图的出生点本身就是悬空的。
+        w(u"  落点处没有地面，改用参考点自己的 XY 再探一次。")
+        ground = _ground_z(world, fallback_xy[0], fallback_xy[1], origin.z)
+        if ground is not None:
+            origin = unreal.Vector(fallback_xy[0], fallback_xy[1], origin.z)
     if ground is None:
-        w(u"  落点打不到地面，Z 用参考点高度。")
+        w(u"  还是没有地面，Z 直接用参考点高度 %.0f（进 PIE 后车会自己贴地）。" % origin.z)
         z = origin.z
     else:
         z = ground + hover + 5.0

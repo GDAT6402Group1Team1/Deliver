@@ -356,6 +356,10 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 
 导入 FBX → 建 `IA_Interact` 并在 IMC_Default 上映射 F → 建 `/Game/Vehicle/Motorbike/BP_Motorbike` → 在当前关卡出生点前方放一辆。报告写到 `Saved/setup_motorbike.txt`。
 
+**车体网格的位置（2026-09-24 改过）**：正式位置是 `/Game/model/vehicles/motor`，不再是 `/Game/Vehicle/Motorbike/Parts`（队友在 `673f3cb 调整地图` 里移走了，老目录只剩 1.5KB 的 `ObjectRedirector`）。脚本因此炸过一次，症状是报告前后矛盾：第 1 步"资产已存在，跳过导入"、第 3 步"没有车体网格"——跳过判据问"目录非空"、收集判据问 `isinstance(..., StaticMesh)`。现在两处统一走 `_collect_body_meshes()`，按 `BODY_DIRS`（新位置优先、老位置兜底）搜索，遇到重定向器点名。重定向器跟不过去：`UObjectRedirector` 是 intrinsic 类，`DestinationObject` 不是 `UPROPERTY`，只能靠显式目录列表。
+
+
+
 ### 召唤载具（按 R）
 [DeliveryVehicleSummonComponent](Source/Delivery/Vehicle/DeliveryVehicleSummonComponent.h) —— 挂在玩家 Pawn 上，按 R 把最近一辆没人骑的摩托车挪到身前，冷却 10 秒。
 - **单独一个组件**而不是塞进 `ADeliveryCharacter`：它需要**按固定频率 Tick**来刷左下角提示，而角色的 Tick 是 `bStartWithTickEnabled=false`、只在被车撞的镜头拉远期间才临时打开的，借它推 HUD 会把那套按需开关搅乱。

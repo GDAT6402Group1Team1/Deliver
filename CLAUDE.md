@@ -386,6 +386,8 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 
 导入 FBX → 建 `IA_Interact` 并在 IMC_Default 上映射 F → 建 `/Game/Vehicle/Motorbike/BP_Motorbike` → 在当前关卡出生点前方放一辆。报告写到 `Saved/setup_motorbike.txt`。
 
+**车体网格的位置（2026-09-24 改过）**：正式位置是 `/Game/model/vehicles/motor`，不再是 `/Game/Vehicle/Motorbike/Parts`。队友在 `673f3cb 调整地图` 里把 9 个网格移了过去，老目录只剩 1.5KB 的 `ObjectRedirector`（真网格 20KB~280KB，看文件大小就能分辨）。脚本因此炸过一次，症状是**报告里前后自相矛盾**：第 1 步"车体资产已存在，跳过导入"、第 3 步"没有车体网格"——因为跳过判据问的是"目录非空"（重定向器和材质都算），而收集判据问的是 `isinstance(asset, unreal.StaticMesh)`（重定向器不是）。现在两处统一走 `_collect_body_meshes()`，并按 `BODY_DIRS`（新位置优先、老位置兜底）搜索，遇到重定向器会在报告里点名。**重定向器跟不过去**：`UObjectRedirector` 是 intrinsic 类，`DestinationObject` 连 `UPROPERTY` 都不是，Python 读不到目标路径——所以靠的是显式目录列表，不是解析重定向。
+
 这份 `摩托车.fbx`（工程根目录）离线解析出来的三个坑，改导入流程前先读：
 - **坐姿写在骨骼的当前变换里，不在网格顶点里。** 绑定姿势（Cluster 的 `TransformLink`）是站姿——膝盖在髋正下方；骨骼节点的当前变换才是坐姿——大腿前伸下压 131°、小腿回折 55°、两手落在把手宽度上。所以骑手只能按**骨骼网格**导入；按静态网格导入只有原始顶点 = 站姿，会得到一个站在车里的人。
 - **而且骨骼网格导入必须开 `use_t0_as_ref_pose`**，这是坐姿能不能进来的开关。名字像是给有动画的文件用的，实际含义见 `FbxSkeletalMeshImport.cpp:1291`：**关着时参考骨架取自 BindPose（站姿），开着才用 `GetNodeGlobalTransform(Link, 0)`（节点当前变换 = 坐姿）**。没有动画不影响，t0 取的是节点变换、不需要 AnimStack。第一版按字面意思关掉了，导进来的骑手是站着的。
