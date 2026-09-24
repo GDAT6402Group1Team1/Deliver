@@ -171,6 +171,49 @@ void UDeliveryActiveRagdollComponent::UpdateSlopeTumble(float DeltaTime)
 		bSlopeTumbling = false;
 		TumbleRecoveryTime = 0.0f;
 		TumbleCooldownTime = 1.0f;
+	}
+}
+
+void UDeliveryActiveRagdollComponent::UpdateLimpRecovery(float DeltaTime)
+{
+	if (!bIsActive || !Mesh)
+	{
+		return;
+	}
+	if (ReplicatedControlMode == EDeliveryRagdollControlMode::Recovering && !bIsLimp)
+	{
+		// 起身是否结束由服务器按真实物理姿态决定；客户端在此之前只播放快照。
+		FGroundHit StandingSurface;
+		const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
+		const bool bStanding = !bRisingFromLimp && TraceTumbleSurface(StandingSurface)
+			&& GetUprightDot() >= 0.55f
+			&& FVector::DotProduct(Hips - StandingSurface.Point, StandingSurface.Normal)
+				>= StandHeight * 0.65f
+			&& Mesh->GetPhysicsLinearVelocity(Bones.Hips).Size() <= LimpRecoveryMaxSpeed;
+		LimpRecoveryStandingTime = bStanding ? LimpRecoveryStandingTime + DeltaTime : 0.0f;
+		if (LimpRecoveryStandingTime >= 0.2f)
+		{
+			LimpRecoveryStandingTime = 0.0f;
+			ReplicatedControlMode = EDeliveryRagdollControlMode::Active;
+			GetOwner()->ForceNetUpdate();
+		}
+		return;
+	}
+	if (!bIsLimp || bExternalLimpRequested || bSlopeTumbling)
+	{
+		LimpRecoveryStableTime = 0.0f;
+		return;
+	}
+
+	FGroundHit Surface;
+	const bool bOnSafeGround = TraceTumbleSurface(Surface)
+		&& Surface.Normal.Z >= FMath::Cos(FMath::DegreesToRadians(TumbleRecoverySlopeDegrees));
+	const FVector Velocity = Mesh->GetPhysicsLinearVelocity(Bones.Hips);
+	const bool bSettled = bOnSafeGround && Velocity.Size() <= LimpRecoveryMaxSpeed;
+	LimpRecoveryStableTime = bSettled ? LimpRecoveryStableTime + DeltaTime : 0.0f;
+	if (LimpRecoveryStableTime >= LimpRecoveryStableDuration)
+	{
+		LimpRecoveryStableTime = 0.0f;
 		ApplyLimpState(false);
 	}
 }

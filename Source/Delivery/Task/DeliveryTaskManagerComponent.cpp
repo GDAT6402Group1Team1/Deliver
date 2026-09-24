@@ -291,6 +291,48 @@ bool UDeliveryTaskManagerComponent::TryCompleteDelivery(UDeliveryTaskDefinition*
 	return true;
 }
 
+const TArray<UDeliveryTaskDefinition*>& UDeliveryTaskManagerComponent::GetAllTaskDefinitions() const
+{
+	// TObjectPtr<T> 和 T* 的内存布局一致，这个 reinterpret 是 UE 里的常规写法，
+	// 用来避免为了一个只读清单再拷一份数组
+	return reinterpret_cast<const TArray<UDeliveryTaskDefinition*>&>(TaskDefinitions);
+}
+
+bool UDeliveryTaskManagerComponent::NotifyItemLost(UDeliveryTaskDefinition* Task)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !Task)
+	{
+		return false;
+	}
+
+	FDeliveryTaskState* State = FindState(Task);
+	if (!State || State->Status != EDeliveryTaskStatus::InProgress)
+	{
+		// 已完成的任务交付时本来就会销毁快递，不该被当成丢件
+		return false;
+	}
+
+	// 清干净：退回等于这次取件没发生过。特殊事件也要清，
+	// 否则重新取件后沿途再触发一次会把倍率叠上去
+	State->StartServerTime = 0.f;
+	State->CompleteServerTime = 0.f;
+	State->bOverdueCallPlayed = false;
+	State->SpecialEvents.Reset();
+	State->Deliverer = nullptr;
+	SetTaskStatus(*State, EDeliveryTaskStatus::AwaitingPickup);
+
+	// 催促电话的定时器是给这一次取件排的，退回之后不该再响
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(OverdueTimerHandle);
+	}
+
+	UE_LOG(LogDelivery, Warning, TEXT("[Task] %s 的快递丢失，任务退回待取件，计时重置"),
+		*Task->TaskId.ToString());
+
+	return true;
+}
+
 void UDeliveryTaskManagerComponent::ReportSpecialEvent(UDeliveryTaskDefinition* Task, FGameplayTag EventTag)
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority() || !EventTag.IsValid())

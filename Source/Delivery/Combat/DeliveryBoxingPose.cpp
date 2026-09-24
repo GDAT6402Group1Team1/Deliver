@@ -46,15 +46,18 @@ void FDeliveryBoxingPose::Create(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 		Data.bUseSkeletalAnimation = false;
 		Data.bUseAccelerationDriveMode = true;
 		Data.bOnlyControlChildObject = true;
-		const auto CreateControl = [&](FName Bone, FQuat Rotation)
+		const auto CreateControl = [&](FName Parent, FName Bone, FQuat Rotation)
 		{
 			FPhysicsControlTarget Target;
 			Target.TargetOrientation = Rotation.Rotator();
-			return Controls->CreateControl(nullptr, NAME_None, Mesh, Bone, Data, Target, TEXT("Boxing"));
+			return Controls->CreateControl(Parent.IsNone() ? nullptr : Mesh, Parent,
+				Mesh, Bone, Data, Target, TEXT("Boxing"));
 		};
-		Arm.UpperControl = CreateControl(Arm.Upper, Arm.UpperReference);
-		Arm.LowerControl = CreateControl(Arm.Lower, Arm.LowerReference);
-		Arm.HandControl = CreateControl(Arm.Hand, Arm.HandReference);
+		Arm.UpperControl = CreateControl(NAME_None, Arm.Upper, Arm.UpperReference);
+		Arm.LowerControl = CreateControl(Arm.Upper, Arm.Lower,
+			Arm.UpperReference.Inverse() * Arm.LowerReference);
+		Arm.HandControl = CreateControl(Arm.Lower, Arm.Hand,
+			Arm.LowerReference.Inverse() * Arm.HandReference);
 		Arm.bReady = !Arm.UpperControl.IsNone() && !Arm.LowerControl.IsNone() && !Arm.HandControl.IsNone();
 	}
 }
@@ -177,8 +180,15 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 		}
 		// 写给实际的三个控制器（不是控制器集合）；DeltaTime 让电机知道目标转动速度，
 		// 快速出拳时能及时跟上。实际手臂依旧由刚体模拟，不会直接传送到目标姿势。
-		Controls->SetControlTargetOrientation(Arm.UpperControl, FQuat::Slerp(UpperBase, Upper, Settle).Rotator(), DeltaTime, true, false, true, false);
-		Controls->SetControlTargetOrientation(Arm.LowerControl, FQuat::Slerp(LowerBase, Lower, Settle).Rotator(), DeltaTime, true, false, true, false);
-		Controls->SetControlTargetOrientation(Arm.HandControl, FQuat::Slerp(Yaw * Arm.HandReference, Wrist, Settle).Rotator(), DeltaTime, true, false, true, false);
+		const FQuat UpperTarget = FQuat::Slerp(UpperBase, Upper, Settle).GetNormalized();
+		const FQuat LowerTarget = FQuat::Slerp(LowerBase, Lower, Settle).GetNormalized();
+		const FQuat HandTarget = FQuat::Slerp(Yaw * Arm.HandReference, Wrist, Settle).GetNormalized();
+		// 肘、腕跟随物理父刚体，而不是各自追一个独立世界朝向。
+		// 父肢体受撞偏转时，仍保持同一套可达的相对关节目标。
+		Controls->SetControlTargetOrientation(Arm.UpperControl, UpperTarget.Rotator(), DeltaTime, true, false, true, false);
+		Controls->SetControlTargetOrientation(Arm.LowerControl,
+			(UpperTarget.Inverse() * LowerTarget).Rotator(), DeltaTime, true, false, true, false);
+		Controls->SetControlTargetOrientation(Arm.HandControl,
+			(LowerTarget.Inverse() * HandTarget).Rotator(), DeltaTime, true, false, true, false);
 	}
 }

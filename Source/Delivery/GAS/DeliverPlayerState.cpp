@@ -3,6 +3,7 @@
 #include "DeliverPlayerState.h"
 #include "DeliverAbilitySystemComponent.h"
 #include "DeliverAttributeSet.h"
+#include "Economy/DeliveryWalletComponent.h"
 #include "Task/DeliveryTaskTrackerComponent.h"
 
 ADeliverPlayerState::ADeliverPlayerState()
@@ -15,6 +16,9 @@ ADeliverPlayerState::ADeliverPlayerState()
 
 	// 创建 任务追踪组件
 	TaskTracker = CreateDefaultSubobject<UDeliveryTaskTrackerComponent>(TEXT("TaskTracker"));
+
+	// 创建 钱包
+	Wallet = CreateDefaultSubobject<UDeliveryWalletComponent>(TEXT("Wallet"));
 }
 
 void ADeliverPlayerState::PostInitializeComponents()

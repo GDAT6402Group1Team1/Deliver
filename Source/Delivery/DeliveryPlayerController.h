@@ -34,6 +34,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Phone")
 	void RequestHangUpCall();
 
+	/**
+	 * 开关手机界面。**蓝图在这里实现**（把手机 Widget 加进/移出视口）。
+	 *
+	 * C++ 侧只负责按键：下面的 TogglePhoneKey 走 BindKey 直接绑，
+	 * 不再依赖 IMC_Default 里的 J → IA_TogglePhone 映射。
+	 * 那个资产从来没有被提交过，每次 git pull 都会被冲掉，而症状极具迷惑性——
+	 * 手机面板本身的显示逻辑不依赖按键绑定，所以表现是"UI 突然坏了"
+	 * 而不是"按键没绑"，很难往这个方向想。F 键已经因此丢过两次。
+	 * 物品栏 1~5、切视角 P、召唤 R 都是同样理由直接绑的。
+	 */
+	UFUNCTION(BlueprintImplementableEvent, Category="Phone")
+	void TogglePhoneUI();
+
+	/** 开关手机的按键。改这里提示里的键名会跟着变，不会说一套做一套。 */
+	UPROPERTY(EditAnywhere, Category="Input|Input Mappings")
+	FKey TogglePhoneKey;
+
 protected:
 
 	UFUNCTION(Server, Reliable)
@@ -66,6 +83,9 @@ protected:
 	FKey InteractKey;
 
 	virtual void SetupInputComponent() override;
+
+	/** TogglePhoneKey 按下时的转发。BindKey 需要一个无参成员函数，不能直接绑 BlueprintImplementableEvent。 */
+	void HandleTogglePhonePressed();
 
 private:
 

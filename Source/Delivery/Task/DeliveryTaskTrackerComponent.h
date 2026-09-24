@@ -49,6 +49,26 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Task")
 	FOnDeliveryTrackedTaskChanged OnTrackedTaskChanged;
 
+	/**
+	 * 当前该去哪。地图指引、方向箭头、距离提示都从这里取。
+	 *
+	 * 目的地按任务状态自动切换，调用方不需要自己判：
+	 *   待取件 → PickupLocationId（去取货）
+	 *   进行中 → DeliveryLocationId（去送货）
+	 *   其他状态（未解锁 / 已完成）→ 返回 false
+	 *
+	 * 解析走 UDeliveryLocationRegistry，也就是关卡里挂了 UDeliveryLocationComponent
+	 * 的那些点。策划表里填了 ID、关卡里却没有对应的点时返回 false 并在日志里点名——
+	 * 这种配置漏项如果静默失败，表现是"箭头不显示"，几乎不可能查到根因。
+	 */
+	UFUNCTION(BlueprintPure, Category="Task")
+	bool GetTrackedTaskDestination(FVector& OutLocation, FName& OutLocationId) const;
+
+	/** 同上，但指定任务而不是当前追踪的那个。任务列表 UI 里显示各任务距离时用。 */
+	UFUNCTION(BlueprintPure, Category="Task")
+	bool GetTaskDestination(const UDeliveryTaskDefinition* Task, FVector& OutLocation,
+		FName& OutLocationId) const;
+
 protected:
 
 	UFUNCTION(Server, Reliable)

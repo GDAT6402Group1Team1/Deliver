@@ -6,7 +6,7 @@
 class USkeletalMeshComponent;
 class UPhysicsControlComponent;
 
-/** Physical two-link arms. Targets use world space, never the skeleton's non-physical parent. */
+/** Upper arms use world targets; elbows and wrists use their explicit physical parent bodies. */
 struct FDeliveryBoxingPose
 {
 	struct FArm
