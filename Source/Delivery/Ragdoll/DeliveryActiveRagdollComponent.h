@@ -582,6 +582,7 @@ protected:
 	int32 DiagnosticRecoveryMode = -1;
 	float DiagnosticRecoveryUntil = 0.0f;
 	float DiagnosticRecoveryNextLog = 0.0f;
+	float DiagnosticUpperBodyNextLog = 0.0f;
 	FVector DiagnosticPrePhysicsPosition = FVector::ZeroVector;
 	FVector DiagnosticPrePhysicsVelocity = FVector::ZeroVector;
 	bool bDiagnosticPrePhysicsValid = false;

@@ -171,6 +171,59 @@ void UDeliveryActiveRagdollComponent::TraceRecoveryPhysics(bool bAfterPhysics, f
 	if (!Body) return;
 	const float Now = GetWorld()->GetTimeSeconds();
 	const int32 Mode = static_cast<int32>(ReplicatedControlMode);
+	// Also sample after the pelvis recovery window: an upright hip does not prove
+	// that the shoulders/elbows/wrists have returned to their targets.
+	if (bAfterPhysics && !bIsLimp && Now >= DiagnosticUpperBodyNextLog)
+	{
+		DiagnosticUpperBodyNextLog = Now + 1.0f;
+		for (const FDeliveryBoxingPose::FArm& Arm : BoxingPose.Arms)
+		{
+			if (!Arm.bReady) continue;
+			const TPair<FName, FName> Links[] = {
+				{ Arm.Upper, Arm.UpperControl }, { Arm.Lower, Arm.LowerControl }, { Arm.Hand, Arm.HandControl } };
+			for (const TPair<FName, FName>& Link : Links)
+			{
+				const FBodyInstance* LinkBody = Mesh->GetBodyInstance(Link.Key);
+				FPhysicsControlTarget Target;
+				FPhysicsControlData Data;
+				FPhysicsControlMultiplier Multiplier;
+				if (!LinkBody || !PhysicsControl->GetControlTarget(Link.Value, Target)
+					|| !PhysicsControl->GetControlData(Link.Value, Data)
+					|| !PhysicsControl->GetControlMultiplier(Link.Value, Multiplier)) continue;
+				FQuat Actual = LinkBody->GetUnrealWorldTransform().GetRotation();
+				const FName ParentBone = Link.Key == Arm.Lower ? Arm.Upper
+					: Link.Key == Arm.Hand ? Arm.Lower : NAME_None;
+				if (!ParentBone.IsNone())
+				{
+					if (const FBodyInstance* ParentBody = Mesh->GetBodyInstance(ParentBone))
+					{
+						Actual = ParentBody->GetUnrealWorldTransform().GetRotation().Inverse() * Actual;
+					}
+				}
+				const float Error = FMath::RadiansToDegrees(Actual.AngularDistance(Target.TargetOrientation.Quaternion()));
+				if (Error < 30.0f && PhysicsControl->GetControlEnabled(Link.Value)) continue;
+				UE_LOG(LogDelivery, Log, TEXT("UpperBodyTrace actor=%s world=%s time=%.3f mode=%d bone=%s enabled=%d errorDeg=%.1f strength=%.2f multiplier=%.2f actual=%s target=%s angularV=%s"),
+					*GetNameSafe(GetOwner()), *GetNameSafe(GetWorld()), Now, Mode, *Link.Key.ToString(),
+					PhysicsControl->GetControlEnabled(Link.Value), Error, Data.AngularStrength,
+					Multiplier.AngularStrengthMultiplier, *Actual.Rotator().ToCompactString(),
+					*Target.TargetOrientation.ToCompactString(), *LinkBody->GetUnrealWorldAngularVelocityInRadians().ToCompactString());
+			}
+		}
+		const FBodyInstance* Chest = Mesh->GetBodyInstance(Bones.Spine);
+		FPhysicsControlTarget ChestTarget;
+		if (Chest && PhysicsControl->GetControlTarget(ChestControl, ChestTarget))
+		{
+			const FQuat Relative = Body->GetUnrealWorldTransform().GetRotation().Inverse()
+				* Chest->GetUnrealWorldTransform().GetRotation();
+			const float Error = FMath::RadiansToDegrees(Relative.AngularDistance(ChestTarget.TargetOrientation.Quaternion()));
+			if (Error >= 30.0f)
+			{
+				UE_LOG(LogDelivery, Log, TEXT("UpperBodyTrace actor=%s world=%s time=%.3f mode=%d bone=%s chestToPelvisErrorDeg=%.1f enabled=%d"),
+					*GetNameSafe(GetOwner()), *GetNameSafe(GetWorld()), Now, Mode, *Bones.Spine.ToString(),
+					Error, PhysicsControl->GetControlEnabled(ChestControl));
+			}
+		}
+	}
 	if (!bAfterPhysics)
 	{
 		if (Mode != DiagnosticRecoveryMode)
