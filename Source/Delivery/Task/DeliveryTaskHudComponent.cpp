@@ -20,7 +20,7 @@
 namespace
 {
 	/** 钱包挂在 PlayerState 上，而 PlayerState 是复制过来的，可能比控制器晚到。 */
-	constexpr float BindRetrySeconds = 0.5f;
+	constexpr float TaskHudBindRetrySeconds = 0.5f;
 
 	/** 把秒数排成 4:32。负数（超时）前面加 +，表示已经多用了这么久。 */
 	FText FormatClock(float Seconds)
@@ -95,7 +95,7 @@ void UDeliveryTaskHudComponent::BindToWallet()
 		if (UWorld* World = GetWorld())
 		{
 			World->GetTimerManager().SetTimer(
-				BindRetryTimer, this, &UDeliveryTaskHudComponent::BindToWallet, BindRetrySeconds, false);
+				BindRetryTimer, this, &UDeliveryTaskHudComponent::BindToWallet, TaskHudBindRetrySeconds, false);
 		}
 
 		return;

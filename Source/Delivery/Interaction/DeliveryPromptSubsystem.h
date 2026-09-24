@@ -40,6 +40,17 @@ public:
 	 */
 	void PushCornerHint(const FText& Text, bool bDimmed = false);
 
+	/**
+	 * 屏幕顶部中央的任务条（"送到 独居老头家 / ↗ 120 米 · 剩余 4:32"）。
+	 *
+	 * 第三个独立槽位。不和左下角挤：左下角归"当前能按什么键"（召唤、切视角），
+	 * 顶部归"当前在做什么任务"。两者同时出现是常态，共用一个槽会互相顶掉。
+	 *
+	 * bUrgent 为 true 时标红，用于超时和来电这类需要立刻注意的状态。
+	 * 同样是"每帧推一次"的约定。
+	 */
+	void PushObjective(const FText& Title, const FText& Detail, bool bUrgent = false);
+
 private:
 
 	void EnsureWidget();
@@ -47,11 +58,17 @@ private:
 	bool IsPromptFresh() const;
 
 	bool IsCornerFresh() const;
+	bool IsObjectiveFresh() const;
 
 	TSharedPtr<SWidget> PromptWidget;
 	FText CornerText;
 	bool bCornerDimmed = false;
 	double LastCornerPushTime = -1000.0;
+
+	FText ObjectiveTitle;
+	FText ObjectiveDetail;
+	bool bObjectiveUrgent = false;
+	double LastObjectivePushTime = -1000.0;
 	FText PromptText;
 	FVector PromptAnchor = FVector::ZeroVector;
 	float PromptHoldProgress = -1.0f;

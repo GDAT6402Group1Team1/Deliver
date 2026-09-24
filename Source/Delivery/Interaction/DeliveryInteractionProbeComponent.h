@@ -10,7 +10,7 @@ class UDeliveryInteractableComponent;
 class UPrimitiveComponent;
 
 /**
- * 挂在玩家 Pawn 上的本地交互探测器：F 找附近通用目标，E 找准星附近的可拾取目标。
+ * 挂在玩家 Pawn 上的本地交互探测器：F 找附近通用目标，E 在范围内优先选准星附近目标，否则选最近目标。
  *
  * 纯本地表现：只在本机操控的 Pawn 上跑，找到最近的可交互物就把浮窗推给
  * UDeliveryPromptSubsystem。真正的交互要走服务器复核（见 ADeliveryCharacter::ServerInteract），
@@ -34,7 +34,7 @@ public:
 	UFUNCTION(BlueprintPure, Category="Interaction")
 	AActor* GetFocusedActor() const;
 
-	/** 当前摄像机准星附近的 E 目标；与 F 目标分开保存，不会改动 F 绑定。 */
+	/** 当前范围内的 E 目标；与 F 目标分开保存，不会改动 F 绑定。 */
 	UFUNCTION(BlueprintPure, Category="Interaction")
 	AActor* GetFocusedPickupActor() const;
 
@@ -46,7 +46,7 @@ protected:
 
 private:
 
-	UDeliveryInteractableComponent* FindAimedPickup(const APawn* Owner) const;
+	UDeliveryInteractableComponent* FindPreferredPickup(const APawn* Owner) const;
 	void SetPickupHighlight(AActor* Actor);
 	void RestorePickupHighlight();
 

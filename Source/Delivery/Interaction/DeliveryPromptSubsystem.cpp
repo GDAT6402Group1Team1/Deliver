@@ -56,6 +56,21 @@ void UDeliveryPromptSubsystem::PushCornerHint(const FText& Text, bool bDimmed)
 	EnsureWidget();
 }
 
+void UDeliveryPromptSubsystem::PushObjective(const FText& Title, const FText& Detail, bool bUrgent)
+{
+	ObjectiveTitle = Title;
+	ObjectiveDetail = Detail;
+	bObjectiveUrgent = bUrgent;
+	LastObjectivePushTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	EnsureWidget();
+}
+
+bool UDeliveryPromptSubsystem::IsObjectiveFresh() const
+{
+	const UWorld* World = GetWorld();
+	return World && (World->GetTimeSeconds() - LastObjectivePushTime) < PromptTimeout;
+}
+
 bool UDeliveryPromptSubsystem::IsCornerFresh() const
 {
 	const UWorld* World = GetWorld();
@@ -205,6 +220,72 @@ void UDeliveryPromptSubsystem::EnsureWidget()
 				.ColorAndOpacity(CornerColorAttr)
 				.ShadowOffset(FVector2D(1.0f, 1.0f))
 				.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+			]
+		];
+
+	const auto ObjectiveVisibility = TAttribute<EVisibility>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return (Self && Self->IsObjectiveFresh()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+	});
+	const auto ObjectiveTitleAttr = TAttribute<FText>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return Self ? Self->ObjectiveTitle : FText::GetEmpty();
+	});
+	const auto ObjectiveDetailAttr = TAttribute<FText>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return Self ? Self->ObjectiveDetail : FText::GetEmpty();
+	});
+	const auto ObjectiveTitleColor = TAttribute<FSlateColor>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		// 超时和来电标红：这两种状态玩家必须立刻看见，其余时候不抢注意力
+		return FSlateColor(Self && Self->bObjectiveUrgent
+			? FLinearColor(1.0f, 0.45f, 0.35f, 1.0f) : FLinearColor::White);
+	});
+	const auto ObjectiveDetailVisibility = TAttribute<EVisibility>::CreateLambda([WeakThis]()
+	{
+		// 副行为空时整行折叠，否则标题下面会多出一块空白
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return (Self && !Self->ObjectiveDetail.IsEmpty()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+	});
+
+	StaticCastSharedPtr<SConstraintCanvas>(PromptWidget)->AddSlot()
+		// 锚在视口顶边中央；对齐点取上中，于是 Offset.Top 就是"离顶边多远"
+		.Anchors(FAnchors(0.5f, 0.0f))
+		.AutoSize(true)
+		.Alignment(FVector2D(0.5f, 0.0f))
+		.Offset(FMargin(0.0f, 28.0f, 0.0f, 0.0f))
+		[
+			SNew(SBorder)
+			.Visibility(ObjectiveVisibility)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f))
+			.Padding(FMargin(18.0f, 8.0f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text(ObjectiveTitleAttr)
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 17))
+					.ColorAndOpacity(ObjectiveTitleColor)
+					.ShadowOffset(FVector2D(1.0f, 1.0f))
+					.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+				]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+					.Padding(FMargin(0.0f, 3.0f, 0.0f, 0.0f))
+				[
+					SNew(STextBlock)
+					.Visibility(ObjectiveDetailVisibility)
+					.Text(ObjectiveDetailAttr)
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
+					.ColorAndOpacity(FSlateColor(FLinearColor(0.85f, 0.85f, 0.85f, 1.0f)))
+					.ShadowOffset(FVector2D(1.0f, 1.0f))
+					.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+				]
 			]
 		];
 

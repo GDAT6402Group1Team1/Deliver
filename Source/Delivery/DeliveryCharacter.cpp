@@ -662,32 +662,8 @@ void ADeliveryCharacter::ServerPickup_Implementation(AActor* Target)
 
 bool ADeliveryCharacter::ValidateServerPickupTarget(AActor* Target) const
 {
-	if (!CanUsePickupTarget(Target) || !GetWorld()) return false;
-
-	FVector ViewLocation;
-	FRotator ViewRotation;
-	GetActorEyesViewPoint(ViewLocation, ViewRotation);
-	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
-	// Third-person camera pitch aims from behind/above the pawn, not from its pelvis.
-	// Applying that pitch at the pelvis rejects small floor packages. Validate yaw
-	// here, then physical reach and unobstructed sight; the local probe selects the camera ray.
-	if (!DeliveryInteractionGeometry::IsWithinReachFacing(ToTarget, ViewRotation))
-	{
-		return false;
-	}
-
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(DeliveryServerInteraction), false, this);
-	if (InventoryComponent && InventoryComponent->GetHeldItem())
-	{
-		Params.AddIgnoredActor(InventoryComponent->GetHeldItem());
-	}
-	FVector BoundsCenter, BoundsExtent;
-	Target->GetActorBounds(true, BoundsCenter, BoundsExtent);
-	const FVector VisiblePoint = BoundsCenter + FVector::UpVector * (BoundsExtent.Z * 0.5f);
-	FHitResult Hit;
-	const bool bBlocked = GetWorld()->LineTraceSingleByChannel(
-		Hit, ViewLocation, VisiblePoint, ECC_Visibility, Params);
-	return !bBlocked || Hit.GetActor() == Target;
+	// E interactions use range and gameplay eligibility, independent of camera or facing.
+	return Target && Target->GetWorld() == GetWorld() && CanUsePickupTarget(Target);
 }
 
 void ADeliveryCharacter::ServerBeginPickupHold_Implementation(AActor* Target)

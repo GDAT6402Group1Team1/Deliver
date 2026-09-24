@@ -1,13 +1,13 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Interaction/DeliveryInteractionProbeComponent.h"
-#include "Camera/CameraComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "DeliveryCharacter.h"
+#include "Camera/CameraComponent.h"
+#include "Interaction/DeliveryInteractionGeometry.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Interaction/DeliveryInteractableComponent.h"
-#include "Interaction/DeliveryInteractionGeometry.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Inventory/DeliveryHandheldItem.h"
@@ -16,7 +16,7 @@
 UDeliveryInteractionProbeComponent::UDeliveryInteractionProbeComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	// 小物体瞄准变化较快；20Hz 让 E 提示和按键目标及时跟上准星。
+	// 20Hz 更新范围内的 E 目标。
 	PrimaryComponentTick.TickInterval = 0.05f;
 	SetIsReplicatedByDefault(false);
 }
@@ -46,7 +46,7 @@ void UDeliveryInteractionProbeComponent::TickComponent(
 		return;
 	}
 
-	UDeliveryInteractableComponent* Pickup = FindAimedPickup(Owner);
+	UDeliveryInteractableComponent* Pickup = FindPreferredPickup(Owner);
 	UDeliveryInteractableComponent* General = UDeliveryInteractableComponent::FindBest(
 		Owner, EDeliveryInteractionKey::GeneralF);
 	FocusedPickup = Pickup;
@@ -92,44 +92,55 @@ AActor* UDeliveryInteractionProbeComponent::GetFocusedPickupActor() const
 	return Target ? Target->GetOwner() : nullptr;
 }
 
-UDeliveryInteractableComponent* UDeliveryInteractionProbeComponent::FindAimedPickup(const APawn* Owner) const
+UDeliveryInteractableComponent* UDeliveryInteractionProbeComponent::FindPreferredPickup(const APawn* Owner) const
 {
 	const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(Owner);
-	const UCameraComponent* Camera = Character ? Character->GetFollowCamera() : nullptr;
-	UWorld* World = GetWorld();
-	if (!Character || !Camera || !World) return nullptr;
+	if (!Character) return nullptr;
 
-	const FVector Start = Camera->GetComponentLocation();
-	const FVector AimDirection = Camera->GetForwardVector().GetSafeNormal();
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(DeliveryPickupAim), false, Owner);
-	if (Character->GetInventoryComponent()) Params.AddIgnoredActor(Character->GetInventoryComponent()->GetHeldItem());
 	TArray<UDeliveryInteractableComponent*> Candidates;
 	UDeliveryInteractableComponent::GetReachablePickupCandidates(Owner, Candidates);
 	UDeliveryInteractableComponent* Best = nullptr;
+	float BestDistance = TNumericLimits<float>::Max();
+	bool bBestUsable = false;
+	bool bBestAimed = false;
 	float BestMiss = TNumericLimits<float>::Max();
+	const UCameraComponent* Camera = Character->GetFollowCamera();
 	for (UDeliveryInteractableComponent* Candidate : Candidates)
 	{
 		AActor* Target = Candidate->GetOwner();
 		if (!Character->CanUsePickupTarget(Target, false)) continue;
-
-		FVector BoundsCenter, BoundsExtent;
-		Target->GetActorBounds(true, BoundsCenter, BoundsExtent);
-		// 准星不必刚好压中小模型；尺寸越大的物体，允许的横向偏差略大。
-		// 长按时给原目标一点额外余量，避免 0.5 秒内因轻微相机晃动而取消。
-		const FVector AimPoint = BoundsCenter + FVector::UpVector * (BoundsExtent.Z * 0.5f);
-		const float Miss = DeliveryInteractionGeometry::AimMissDistance(Start, AimDirection, AimPoint);
-		const float Allowance = 35.0f + FMath::Min(BoundsExtent.Size(), 25.0f)
+		const bool bUsable = Character->CanUsePickupTarget(Target);
+		// Keep the held interaction stable while it remains valid and in range.
+		if (bUsable && Character->GetPickupHoldProgress(Target) >= 0.0f) return Candidate;
+		FVector Closest = Target->GetActorLocation();
+		if (const UPrimitiveComponent* Primitive = Cast<UPrimitiveComponent>(Target->GetRootComponent()))
+		{
+			FVector Surface;
+			if (Primitive->GetClosestPointOnCollision(Owner->GetActorLocation(), Surface) > 0.0f)
+				Closest = Surface;
+		}
+		const float Distance = FVector::DistSquared(Owner->GetActorLocation(), Closest);
+		// Blocked packages remain discoverable for their explanatory prompt,
+		// but must not hide a usable pickup or delivery target.
+		FVector Center, Extent;
+		Target->GetActorBounds(true, Center, Extent);
+		const float Miss = Camera ? DeliveryInteractionGeometry::AimMissDistance(
+			Camera->GetComponentLocation(), Camera->GetForwardVector().GetSafeNormal(),
+			Center + FVector::UpVector * (Extent.Z * 0.5f)) : -1.0f;
+		const float Allowance = 35.0f + FMath::Min(Extent.Size(), 25.0f)
 			+ (FocusedPickup.Get() == Candidate ? 15.0f : 0.0f);
-		if (Miss < 0.0f || Miss > Allowance || Miss >= BestMiss) continue;
-
-		// 容错只扩大瞄准范围，不允许隔着墙拾取；从镜头射到物体上半部，
-		// 避免射向地面上的 Actor 原点时先打中地板。
-		FHitResult Hit;
-		const bool bBlocked = World->LineTraceSingleByChannel(
-			Hit, Start, AimPoint, ECC_Visibility, Params);
-		if (bBlocked && Hit.GetActor() != Target) continue;
-		Best = Candidate;
-		BestMiss = Miss;
+		const bool bAimed = Miss >= 0.0f && Miss <= Allowance;
+		// Aim only ranks reachable targets. Never reject a target for missing the crosshair.
+		const bool bBetterRank = bAimed != bBestAimed ? bAimed
+			: (bAimed && Miss != BestMiss ? Miss < BestMiss : Distance < BestDistance);
+		if (!Best || (bUsable && !bBestUsable) || (bUsable == bBestUsable && bBetterRank))
+		{
+			Best = Candidate;
+			BestDistance = Distance;
+			bBestUsable = bUsable;
+			bBestAimed = bAimed;
+			BestMiss = Miss;
+		}
 	}
 	return Best;
 }
