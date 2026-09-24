@@ -31,7 +31,7 @@ bool UGA_DeliverPunch::CanActivateAbility(
 	const ADeliveryCharacter* StunCheckCharacter = Cast<ADeliveryCharacter>(ActorInfo->AvatarActor.Get());
 	const UDeliveryActiveRagdollComponent* StunCheckRagdoll = StunCheckCharacter
 		? StunCheckCharacter->GetActiveRagdoll() : nullptr;
-	if (StunCheckRagdoll && StunCheckRagdoll->GetControlMode() == EDeliveryRagdollControlMode::Limp)
+	if (StunCheckRagdoll && StunCheckRagdoll->GetControlMode() != EDeliveryRagdollControlMode::Active)
 	{
 		return false;
 	}

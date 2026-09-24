@@ -17,7 +17,8 @@ enum class EDeliveryRagdollControlMode : uint8
 {
 	Disabled,
 	Active,
-	Limp
+	Limp,
+	Recovering
 };
 
 USTRUCT()
@@ -132,7 +133,7 @@ public:
 
 	/** 开始直拳：记录攻击方向和手侧。 */
 	void BeginBodyDrivenPunch(FVector AimDirection, float HandSide);
-	bool CanDrivePunch(float HandSide) const { return bIsActive && !bIsLimp && BoxingPose.IsReady(HandSide > 0 ? 0 : 1); }
+	bool CanDrivePunch(float HandSide) const { return bIsActive && ReplicatedControlMode == EDeliveryRagdollControlMode::Active && BoxingPose.IsReady(HandSide > 0 ? 0 : 1); }
 	FVector GetBodyForward() const { return FRotator(0, CurrentFacingYaw, 0).Vector(); }
 
 	/** 释放直拳：标记前送阶段。 */
@@ -429,6 +430,21 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Ragdoll|稳定", meta=(ClampMin="0.0", ClampMax="2.0"))
 	float StartupFootPlantDuration = 0.3f;
 
+	/** 晕倒解除后，必须在可站地面上低速保持这段时间才重新开启电机。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|恢复", meta=(ClampMin="0.0"))
+	float LimpRecoveryStableDuration = 0.35f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|恢复", meta=(ClampMin="0.0"))
+	float LimpRecoveryMaxSpeed = 140.0f;
+
+	/** 电机重新开启后，髋目标从当前离地高度升到站姿高度的时间。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|恢复", meta=(ClampMin="0.05"))
+	float LimpRecoveryRiseDuration = 0.75f;
+
+	/** 刚恢复控制时的电机力度比例，随后随起身过程平滑回到 1。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|恢复", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float LimpRecoveryInitialDriveStrength = 0.2f;
+
 	/** 跳跃最高点相对站立高度的抬升量。默认约为角色身高的一半。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|跳跃", meta=(ClampMin="0.0"))
 	float JumpHeight = 90.0f;
@@ -552,7 +568,25 @@ protected:
 	UPROPERTY(Replicated)
 	float CurrentFacingYaw = 0.0f;
 	float StartupPlantRemaining = 0.0f;
+	float LimpRecoveryStableTime = 0.0f;
+	float LimpRecoveryStandingTime = 0.0f;
+	float LimpRecoveryRiseAlpha = 1.0f;
+	float LimpRecoveryStartHeight = 0.0f;
+	bool bRisingFromLimp = false;
+	bool bClientRecoveryPlayback = false;
+	bool bClientRecoveryAwaitingSnapshot = false;
+	uint16 ClientRecoveryHandoffSequence = 0;
 	float SnapshotAccumulator = 0.0f;
+#if !UE_BUILD_SHIPPING
+	// Read-only recovery telemetry; no replicated or gameplay state.
+	int32 DiagnosticRecoveryMode = -1;
+	float DiagnosticRecoveryUntil = 0.0f;
+	float DiagnosticRecoveryNextLog = 0.0f;
+	FVector DiagnosticPrePhysicsPosition = FVector::ZeroVector;
+	FVector DiagnosticPrePhysicsVelocity = FVector::ZeroVector;
+	bool bDiagnosticPrePhysicsValid = false;
+	void TraceRecoveryPhysics(bool bAfterPhysics, float DeltaTime);
+#endif
 	float SnapshotReceivedAt = 0.0f;
 	float LastMoveInputTime = 0.0f;
 	float HitReactionEndTime = 0.0f;
@@ -569,6 +603,8 @@ protected:
 	FDeliveryRagdollSnapshot PreviousSnapshot;
 	FDeliveryRagdollSnapshot TargetSnapshot;
 	bool bHasNetworkSnapshot = false;
+	uint16 LastOwnerCorrectionSequence = 0;
+	bool bHasOwnerCorrectionSequence = false;
 	bool bWasMoving = false;
 	bool bPendingStopRecovery = false;
 	bool bStepLeftNext = true;
@@ -632,10 +668,13 @@ protected:
 	bool TraceGround(const FVector& Around, const FVector& AlongNormal, FGroundHit& OutHit) const;
 	bool TraceTumbleSurface(FGroundHit& OutHit) const;
 	void UpdateSlopeTumble(float DeltaTime);
+	void UpdateLimpRecovery(float DeltaTime);
+	void SetLimpRecoveryDriveStrength(float Alpha);
 	void ApplyLimpState(bool bLimp);
 	FVector GetWishDir() const;
 	float GetAimYaw() const;
 	void SyncOwnerToPelvis(float DeltaTime);
 	void CaptureNetworkSnapshot();
 	void ApplyNetworkSnapshot(float DeltaTime);
+	void FinishClientRecoveryPlayback();
 };

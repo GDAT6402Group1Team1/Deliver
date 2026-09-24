@@ -118,7 +118,12 @@ bool UDeliveryActiveRagdollComponent::BeginStep(FFoot& Foot, const FVector& Wish
 	Foot.Start = Mesh->GetCenterOfMass(Foot.Bone);
 	Foot.Alpha = 0.0f;
 	Foot.Elapsed = 0.0f;
-	PhysicsControl->SetControlEnabled(Foot.Control, true, true, false);
+	// 关闭期间控制器仍保存上一次迈步的世界目标。被撞走后直接启用，
+	// 会先拉回旧脚位；下一帧又把新旧目标差 / DeltaTime 当作巨大速度。
+	// 在同一次调用中播种当前脚位、清零目标速度并启用，不能等下一帧。
+	PhysicsControl->SetControlTargetPositionAndOrientation(
+		Foot.Control, Foot.Start, Foot.TargetRotation.Rotator(),
+		0.0f, true, true, true, false);
 	return true;
 }
 

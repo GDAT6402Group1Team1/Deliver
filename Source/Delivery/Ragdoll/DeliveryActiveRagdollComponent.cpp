@@ -31,6 +31,7 @@
 #include "Net/UnrealNetwork.h"
 #include "PhysicsControlComponent.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysicsEngine/BodyInstance.h"
 #include "Math/RotationMatrix.h"
 #include "../Delivery.h"
 
@@ -114,6 +115,9 @@ void UDeliveryActiveRagdollComponent::TickComponent(
 	// 这样镜头和交互位置跟着真实身体走，而不是跟着电机的目标点走。
 	if (ThisTickFunction == &PostPhysicsTickFunction)
 	{
+#if !UE_BUILD_SHIPPING
+		TraceRecoveryPhysics(true, DeltaTime);
+#endif
 		if (GetOwner()->HasAuthority())
 		{
 			SnapshotAccumulator += DeltaTime;
@@ -132,7 +136,7 @@ void UDeliveryActiveRagdollComponent::TickComponent(
 	}
 
 	// 旁观其他玩家的客户端不驱动这具布娃娃，只平滑播放服务器发来的刚体快照。
-	if (GetOwner()->GetLocalRole() == ROLE_SimulatedProxy)
+	if (GetOwner()->GetLocalRole() == ROLE_SimulatedProxy || bClientRecoveryPlayback)
 	{
 		ApplyNetworkSnapshot(DeltaTime);
 		return;
@@ -146,6 +150,7 @@ void UDeliveryActiveRagdollComponent::TickComponent(
 	if (GetOwner()->HasAuthority())
 	{
 		UpdateSlopeTumble(DeltaTime);
+		UpdateLimpRecovery(DeltaTime);
 	}
 
 	if (!bIsLimp)
@@ -153,7 +158,59 @@ void UDeliveryActiveRagdollComponent::TickComponent(
 		// 只给仍有意识的角色写入站立、脚步和手臂目标；晕倒时让刚体自由运动。
 		UpdateControlTargets(DeltaTime);
 	}
+#if !UE_BUILD_SHIPPING
+	TraceRecoveryPhysics(false, DeltaTime);
+#endif
 }
+
+#if !UE_BUILD_SHIPPING
+void UDeliveryActiveRagdollComponent::TraceRecoveryPhysics(bool bAfterPhysics, float DeltaTime)
+{
+	if (!GetOwner()->HasAuthority() || !Mesh || !PhysicsControl || !GetWorld()) return;
+	const FBodyInstance* Body = Mesh->GetBodyInstance(Bones.Hips);
+	if (!Body) return;
+	const float Now = GetWorld()->GetTimeSeconds();
+	const int32 Mode = static_cast<int32>(ReplicatedControlMode);
+	if (!bAfterPhysics)
+	{
+		if (Mode != DiagnosticRecoveryMode)
+		{
+			if (DiagnosticRecoveryMode != -1 || bIsLimp || bRisingFromLimp)
+			{
+				DiagnosticRecoveryUntil = Now + 8.0f;
+				DiagnosticRecoveryNextLog = Now;
+				UE_LOG(LogDelivery, Log, TEXT("RecoveryTrace transition actor=%s world=%s time=%.3f mode=%d->%d"),
+					*GetNameSafe(GetOwner()), *GetNameSafe(GetWorld()), Now, DiagnosticRecoveryMode, Mode);
+			}
+			DiagnosticRecoveryMode = Mode;
+		}
+		bDiagnosticPrePhysicsValid = Now < DiagnosticRecoveryUntil;
+		if (bDiagnosticPrePhysicsValid)
+		{
+			DiagnosticPrePhysicsPosition = Body->GetUnrealWorldTransform().GetLocation();
+			DiagnosticPrePhysicsVelocity = Body->GetUnrealWorldVelocity();
+		}
+		return;
+	}
+	if (!bDiagnosticPrePhysicsValid) return;
+	bDiagnosticPrePhysicsValid = false;
+	const FVector Position = Body->GetUnrealWorldTransform().GetLocation();
+	const float StepXY = FVector::Dist2D(Position, DiagnosticPrePhysicsPosition);
+	if (Now < DiagnosticRecoveryNextLog && StepXY < 20.0f) return;
+	DiagnosticRecoveryNextLog = Now + 0.1f;
+	FPhysicsControlTarget DriveTarget;
+	PhysicsControl->GetControlTarget(PelvisControl, DriveTarget);
+	UE_LOG(LogDelivery, Log, TEXT("RecoveryTrace actor=%s world=%s time=%.3f dt=%.4f mode=%d limp=%d rise=%.2f airborne=%d drive=%d pre=%s post=%s mesh=%s actorPos=%s preV=%s postV=%s target=%s targetV=%s stepXY=%.1f feet=%d,%d"),
+		*GetNameSafe(GetOwner()), *GetNameSafe(GetWorld()), Now, DeltaTime, Mode,
+		bIsLimp, LimpRecoveryRiseAlpha, bPelvisAirborne, PhysicsControl->GetControlEnabled(PelvisControl),
+		*DiagnosticPrePhysicsPosition.ToCompactString(), *Position.ToCompactString(),
+		*Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace).ToCompactString(),
+		*GetOwner()->GetActorLocation().ToCompactString(),
+		*DiagnosticPrePhysicsVelocity.ToCompactString(), *Body->GetUnrealWorldVelocity().ToCompactString(),
+		*DriveTarget.TargetPosition.ToCompactString(), *DriveTarget.TargetVelocity.ToCompactString(), StepXY,
+		PhysicsControl->GetControlEnabled(LeftFoot.Control), PhysicsControl->GetControlEnabled(RightFoot.Control));
+}
+#endif
 
 
 void UDeliveryActiveRagdollComponent::StartRagdoll()
@@ -172,11 +229,11 @@ void UDeliveryActiveRagdollComponent::StartRagdoll()
 
 	if (bIsActive)
 	{
-		const bool bWasLimp = bIsLimp;
-		bIsLimp = false;
-		if (bWasLimp)
+		if (bIsLimp)
 		{
-			ReseedFromCurrentPose();
+			// 客户端收到 Active 复制状态时也走同一条渐进起身路径。
+			ApplyLimpState(false);
+			return;
 		}
 		if (PhysicsControl)
 		{
@@ -212,6 +269,12 @@ void UDeliveryActiveRagdollComponent::StartRagdoll()
 	bIsActive = true;
 	bIsLimp = false;
 	bExternalLimpRequested = false;
+	LimpRecoveryStableTime = 0.0f;
+	LimpRecoveryStandingTime = 0.0f;
+	bRisingFromLimp = false;
+	bClientRecoveryPlayback = false;
+	bClientRecoveryAwaitingSnapshot = false;
+	LimpRecoveryRiseAlpha = 1.0f;
 	bSlopeTumbling = false;
 	TumbleEntryTime = TumbleElapsed = TumbleRecoveryTime = TumbleCooldownTime = 0.0f;
 	SetComponentTickEnabled(true);
@@ -244,6 +307,12 @@ void UDeliveryActiveRagdollComponent::StopRagdoll()
 	bIsActive = false;
 	bIsLimp = false;
 	bExternalLimpRequested = false;
+	LimpRecoveryStableTime = 0.0f;
+	LimpRecoveryStandingTime = 0.0f;
+	bRisingFromLimp = false;
+	bClientRecoveryPlayback = false;
+	bClientRecoveryAwaitingSnapshot = false;
+	LimpRecoveryRiseAlpha = 1.0f;
 	bSlopeTumbling = false;
 	TumbleEntryTime = TumbleElapsed = TumbleRecoveryTime = TumbleCooldownTime = 0.0f;
 	MoveInput = FVector2D::ZeroVector;
@@ -252,6 +321,7 @@ void UDeliveryActiveRagdollComponent::StopRagdoll()
 	bPendingStopRecovery = false;
 	SnapshotAccumulator = 0.0f;
 	bHasNetworkSnapshot = false;
+	bHasOwnerCorrectionSequence = false;
 	PreviousSnapshot = FDeliveryRagdollSnapshot();
 	TargetSnapshot = FDeliveryRagdollSnapshot();
 	SetComponentTickEnabled(false);
@@ -274,7 +344,15 @@ void UDeliveryActiveRagdollComponent::StopRagdoll()
 void UDeliveryActiveRagdollComponent::SetLimp(bool bLimp)
 {
 	bExternalLimpRequested = bLimp;
-	ApplyLimpState(bExternalLimpRequested || bSlopeTumbling);
+	if (bLimp)
+	{
+		ApplyLimpState(true);
+	}
+	else if (!bIsActive)
+	{
+		StartRagdoll();
+	}
+	// HP 恢复可能发生在空中或仍高速翻滚时；由 Tick 的落地稳定判定开启电机。
 }
 
 void UDeliveryActiveRagdollComponent::ApplyLimpState(bool bLimp)
@@ -288,7 +366,7 @@ void UDeliveryActiveRagdollComponent::ApplyLimpState(bool bLimp)
 	AActor* Owner = GetOwner();
 	const EDeliveryRagdollControlMode NewMode = bLimp
 		? EDeliveryRagdollControlMode::Limp
-		: EDeliveryRagdollControlMode::Active;
+		: EDeliveryRagdollControlMode::Recovering;
 	if (Owner)
 	{
 		if (Owner->HasAuthority())
@@ -307,6 +385,14 @@ void UDeliveryActiveRagdollComponent::ApplyLimpState(bool bLimp)
 	bIsLimp = bLimp;
 	if (bLimp)
 	{
+		LimpRecoveryStableTime = 0.0f;
+		LimpRecoveryStandingTime = 0.0f;
+		LimpRecoveryRiseAlpha = 1.0f;
+		bRisingFromLimp = false;
+		// 晕倒前若正在受击，不能把锁脚和削弱电机的限时状态带进下一次起身。
+		HitReactionEndTime = 0.0f;
+		SetHitFeetPlanted(false);
+		SetHitReactionStrength(1.0f);
 		SetPunchFeetPlanted(false);
 		bPunchSupportInterrupted = true;
 		MoveInput = FVector2D::ZeroVector;
@@ -316,9 +402,21 @@ void UDeliveryActiveRagdollComponent::ApplyLimpState(bool bLimp)
 		// 必须在开电机之前：控制器里存的目标还是倒下前的，
 		// 先按现在的姿势重新播种，人才会就地站起来而不是弹回原位。
 		ReseedFromCurrentPose();
+		const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
+		LimpRecoveryStartHeight = FMath::Clamp(
+			FVector::DotProduct(Hips - SmoothedGroundPoint, CurrentGroundNormal),
+			20.0f, StandHeight);
+		LimpRecoveryRiseAlpha = 0.0f;
+		LimpRecoveryStandingTime = 0.0f;
+		bRisingFromLimp = true;
 	}
 	if (PhysicsControl && bIsActive)
 	{
+		if (!bLimp)
+		{
+			// All 控制组即将重新启用。先把力度降下来，避免第一物理帧全身电机同时猛拉。
+			SetLimpRecoveryDriveStrength(0.0f);
+		}
 		PhysicsControl->SetControlsInSetEnabled(TEXT("All"), !bLimp);
 		if (!bLimp)
 		{
@@ -335,6 +433,21 @@ void UDeliveryActiveRagdollComponent::ApplyLimpState(bool bLimp)
 			}
 		}
 	}
+}
+
+void UDeliveryActiveRagdollComponent::SetLimpRecoveryDriveStrength(float Alpha)
+{
+	if (!PhysicsControl)
+	{
+		return;
+	}
+	const float Strength = FMath::Lerp(
+		FMath::Clamp(LimpRecoveryInitialDriveStrength, 0.0f, 1.0f), 1.0f,
+		FMath::InterpEaseInOut(0.0f, 1.0f, FMath::Clamp(Alpha, 0.0f, 1.0f), 2.0f));
+	FPhysicsControlMultiplier Multiplier;
+	Multiplier.LinearStrengthMultiplier = FVector(Strength);
+	Multiplier.AngularStrengthMultiplier = Strength;
+	PhysicsControl->SetControlMultipliersInSet(TEXT("All"), Multiplier, false);
 }
 
 void UDeliveryActiveRagdollComponent::SetMoveInput(FVector2D RightForward)
@@ -374,7 +487,7 @@ bool UDeliveryActiveRagdollComponent::IsGrounded() const
 bool UDeliveryActiveRagdollComponent::TryStartJump()
 {
 	// 仅在可站立时启动一次跳跃；后续抬高目标的时间曲线由 UpdateJumpHeight 推进。
-	if (bIsLimp || !IsGrounded())
+	if (ReplicatedControlMode != EDeliveryRagdollControlMode::Active || bIsLimp || !IsGrounded())
 	{
 		return false;
 	}

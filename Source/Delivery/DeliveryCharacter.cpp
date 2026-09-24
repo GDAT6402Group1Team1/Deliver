@@ -305,6 +305,12 @@ void ADeliveryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	PlayerInputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ADeliveryCharacter::InventorySlot3);
 	PlayerInputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ADeliveryCharacter::InventorySlot4);
 	PlayerInputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ADeliveryCharacter::InventorySlot5);
+	// Match the direct hotbar actions on gamepad. D-pad up remains the phone action in IMC_Default.
+	PlayerInputComponent->BindKey(EKeys::Gamepad_DPad_Down, IE_Pressed, this, &ADeliveryCharacter::InventorySlot1);
+	PlayerInputComponent->BindKey(EKeys::Gamepad_DPad_Left, IE_Pressed, this, &ADeliveryCharacter::InventorySlot2);
+	PlayerInputComponent->BindKey(EKeys::Gamepad_DPad_Right, IE_Pressed, this, &ADeliveryCharacter::InventorySlot3);
+	PlayerInputComponent->BindKey(EKeys::Gamepad_LeftShoulder, IE_Pressed, this, &ADeliveryCharacter::InventorySlot4);
+	PlayerInputComponent->BindKey(EKeys::Gamepad_RightShoulder, IE_Pressed, this, &ADeliveryCharacter::InventorySlot5);
 
 	if (SummonVehicleKey.IsValid())
 	{
@@ -609,7 +615,7 @@ bool ADeliveryCharacter::CanUsePickupTarget(const AActor* Target, bool bCheckTas
 	if (GrabComponent && GrabComponent->IsGrabbing()) return false;
 	if (const UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
 		ASC && ASC->HasMatchingGameplayTag(TAG_State_Stunned)) return false;
-	if (ActiveRagdoll && ActiveRagdoll->GetControlMode() == EDeliveryRagdollControlMode::Limp) return false;
+	if (ActiveRagdoll && ActiveRagdoll->GetControlMode() != EDeliveryRagdollControlMode::Active) return false;
 
 	if (const ADeliveryHandheldItem* Item = Cast<ADeliveryHandheldItem>(Target))
 	{

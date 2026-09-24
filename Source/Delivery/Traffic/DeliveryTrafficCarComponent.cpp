@@ -545,12 +545,11 @@ void UDeliveryTrafficCarComponent::ProcessVehicleImpacts(float DeltaTime)
 			// 只推髋部会被整条受约束刚体链分摊得几乎看不出升高，竖直分量须给全身刚体。
 			TakeoffDeltaV = FMath::Max(0.0f, StrongHitTakeoffSpeed - BodyVelocity.Z);
 		}
-		Mesh->AddImpulse(HorizontalVelocityChange, TEXT("Hips"), true);
-		if (TakeoffDeltaV > 0.0f)
-		{
-			Mesh->AddImpulseToAllBodiesBelow(FVector::UpVector * TakeoffDeltaV,
-				TEXT("Hips"), true, true);
-		}
+		// 整条刚体链获得同一速度变化。只推动髋部会在约束两端瞬间制造
+		// 数百 cm/s 的相对速度，强撞时可能把四肢拧进极端姿态。
+		Mesh->AddImpulseToAllBodiesBelow(
+			HorizontalVelocityChange + FVector::UpVector * TakeoffDeltaV,
+			TEXT("Hips"), true, true);
 		Character->NotifyVehicleImpact();
 		UE_LOG(LogTemp, Log, TEXT("DeliveryVehicleImpact car=%s target=%s deltaV=%.1f launchZ=%.1f damage=%.1f healthAfter=%.1f"),
 			*GetNameSafe(Owner), *GetNameSafe(Character), DeltaV, TakeoffDeltaV,

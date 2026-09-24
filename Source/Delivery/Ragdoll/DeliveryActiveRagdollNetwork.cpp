@@ -5,6 +5,9 @@
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysicsEngine/SkeletalBodySetup.h"
+#include "PhysicsControlComponent.h"
 
 void UDeliveryActiveRagdollComponent::SyncOwnerToPelvis(float DeltaTime)
 {
@@ -28,14 +31,44 @@ void UDeliveryActiveRagdollComponent::OnRep_ControlMode()
 	switch (ReplicatedControlMode)
 	{
 	case EDeliveryRagdollControlMode::Active:
-		StartRagdoll();
+		if (bIsActive && (bClientRecoveryPlayback || bIsLimp))
+		{
+			if (GetOwner()->GetLocalRole() == ROLE_SimulatedProxy)
+			{
+				bClientRecoveryPlayback = false;
+				bIsLimp = false;
+				PhysicsControl->SetControlsInSetEnabled(TEXT("All"), false);
+			}
+			else
+			{
+				// 等 Active 之后的新快照抵达，避免用上一包倒地姿态开启本地电机。
+				bClientRecoveryPlayback = true;
+				bClientRecoveryAwaitingSnapshot = true;
+				ClientRecoveryHandoffSequence = TargetSnapshot.Sequence;
+			}
+		}
+		else
+		{
+			StartRagdoll();
+		}
 		break;
 	case EDeliveryRagdollControlMode::Limp:
+		bClientRecoveryPlayback = false;
+		bClientRecoveryAwaitingSnapshot = false;
 		if (!bIsActive)
 		{
 			StartRagdoll();
 		}
 		ApplyLimpState(true);
+		break;
+	case EDeliveryRagdollControlMode::Recovering:
+		if (!bIsActive)
+		{
+			StartRagdoll();
+		}
+		ApplyLimpState(true);
+		bClientRecoveryPlayback = true;
+		bClientRecoveryAwaitingSnapshot = false;
 		break;
 	default:
 		StopRagdoll();
@@ -98,26 +131,67 @@ void UDeliveryActiveRagdollComponent::OnRep_RagdollSnapshot()
 	TargetSnapshot = ReplicatedSnapshot;
 	SnapshotReceivedAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 	bHasNetworkSnapshot = true;
+	if (bClientRecoveryAwaitingSnapshot
+		&& TargetSnapshot.Sequence != ClientRecoveryHandoffSequence)
+	{
+		FinishClientRecoveryPlayback();
+	}
+}
+
+void UDeliveryActiveRagdollComponent::FinishClientRecoveryPlayback()
+{
+	if (!bClientRecoveryAwaitingSnapshot || !PhysicsControl || !Mesh
+		|| TargetSnapshot.Bodies.IsEmpty()
+		|| ReplicatedControlMode != EDeliveryRagdollControlMode::Active)
+	{
+		return;
+	}
+	// 电机仍关闭时先应用完整的新姿态；之后以它为起点接管本地行走。
+	for (const FDeliveryRagdollBodyState& State : TargetSnapshot.Bodies)
+	{
+		if (FBodyInstance* Body = Mesh->GetBodyInstance(State.Bone))
+		{
+			Body->SetBodyTransform(FTransform(State.Rotation.Quaternion(), FVector(State.Position)),
+				ETeleportType::TeleportPhysics);
+			Body->SetLinearVelocity(FVector(State.LinearVelocity), false);
+			Body->SetAngularVelocityInRadians(FVector(State.AngularVelocity), false);
+		}
+	}
+	bClientRecoveryAwaitingSnapshot = false;
+	bClientRecoveryPlayback = false;
+	bIsLimp = false;
+	bRisingFromLimp = false;
+	LimpRecoveryRiseAlpha = 1.0f;
+	ReseedFromCurrentPose();
+	SetLimpRecoveryDriveStrength(1.0f);
+	PhysicsControl->SetControlsInSetEnabled(TEXT("All"), true);
+	PhysicsControl->SetControlEnabled(LeftFoot.Control, false, true, false);
+	PhysicsControl->SetControlEnabled(RightFoot.Control, false, true, false);
+	bHasOwnerCorrectionSequence = false;
+	UpdateControlTargets(0.0f);
 }
 
 void UDeliveryActiveRagdollComponent::ApplyNetworkSnapshot(float DeltaTime)
 {
 	// 远端玩家：在上/下两包之间插值；包暂时没到时用速度短暂外推。
-	// 本机玩家：保留本地即时响应，但逐步纠正与服务器的误差；误差过大时直接纠正。
+	// 本机玩家的电机也在模拟，不能把每块刚体分别传送到服务端姿态。
 	if (!bHasNetworkSnapshot || !Mesh || TargetSnapshot.Bodies.IsEmpty() || !GetWorld())
 	{
 		return;
 	}
 
-	const bool bOwnerPrediction = GetOwner()->GetLocalRole() == ROLE_AutonomousProxy;
+	const bool bAutonomous = GetOwner()->GetLocalRole() == ROLE_AutonomousProxy;
+	const bool bRecoveryPlayback = bClientRecoveryPlayback
+		|| ReplicatedControlMode == EDeliveryRagdollControlMode::Recovering;
+	const bool bOwnerPrediction = bAutonomous && !bIsLimp && !bRecoveryPlayback;
 	const float SnapshotInterval = 1.0f / FMath::Max(NetworkSnapshotRate, 1.0f);
 	const float TimeSinceReceive = GetWorld()->GetTimeSeconds() - SnapshotReceivedAt;
-	const float InterpolationAlpha = bOwnerPrediction
+	const float InterpolationAlpha = bAutonomous && !bRecoveryPlayback
 		? 1.0f
 		: FMath::Clamp(TimeSinceReceive / SnapshotInterval, 0.0f, 1.0f);
 
 	float ExtrapolationTime = FMath::Max(0.0f, TimeSinceReceive - SnapshotInterval);
-	if (bOwnerPrediction)
+	if (bAutonomous)
 	{
 		if (const AGameStateBase* GameState = GetWorld()->GetGameState())
 		{
@@ -127,25 +201,55 @@ void UDeliveryActiveRagdollComponent::ApplyNetworkSnapshot(float DeltaTime)
 	}
 	ExtrapolationTime = FMath::Min(ExtrapolationTime, MaxSnapshotExtrapolation);
 	// 外推必须有上限，网络暂停时不能让身体无限沿旧速度飞走。
-
-	bool bHardCorrection = false;
 	if (bOwnerPrediction)
 	{
-		if (const FBodyInstance* PelvisBody = Mesh->GetBodyInstance(TargetSnapshot.Bodies[0].Bone))
+		// 每个新快照只校正一次整体位置。逐刚体 TeleportPhysics 会在起身时
+		// 不断改变关节两端的相对变换，与本地电机/约束形成高频拉扯。
+		if (bHasOwnerCorrectionSequence && LastOwnerCorrectionSequence == TargetSnapshot.Sequence)
 		{
-			const FVector TargetPelvis = FVector(TargetSnapshot.Bodies[0].Position)
-				+ FVector(TargetSnapshot.Bodies[0].LinearVelocity) * ExtrapolationTime;
-			bHardCorrection = FVector::Dist(
-				PelvisBody->GetUnrealWorldTransform().GetLocation(), TargetPelvis)
-				> OwnerHardCorrectionDistance;
+			return;
 		}
+		LastOwnerCorrectionSequence = TargetSnapshot.Sequence;
+		bHasOwnerCorrectionSequence = true;
+		const FDeliveryRagdollBodyState* PelvisState = TargetSnapshot.Bodies.FindByPredicate(
+			[this](const FDeliveryRagdollBodyState& State) { return State.Bone == Bones.Hips; });
+		const FBodyInstance* PelvisBody = PelvisState ? Mesh->GetBodyInstance(Bones.Hips) : nullptr;
+		const UPhysicsAsset* PhysicsAsset = Mesh->GetPhysicsAsset();
+		if (!PelvisState || !PelvisBody || !PhysicsAsset)
+		{
+			return;
+		}
+		const FVector TargetPelvis = FVector(PelvisState->Position)
+			+ FVector(PelvisState->LinearVelocity) * ExtrapolationTime;
+		const FVector Error = TargetPelvis - PelvisBody->GetUnrealWorldTransform().GetLocation();
+		if (Error.SizeSquared() <= FMath::Square(5.0f))
+		{
+			return;
+		}
+		const bool bHardCorrection = Error.Size() > OwnerHardCorrectionDistance;
+		const float Alpha = bHardCorrection ? 1.0f
+			: 1.0f - FMath::Exp(-OwnerCorrectionSpeed * SnapshotInterval);
+		const FVector Translation = bHardCorrection
+			? Error : (Error * Alpha).GetClampedToMaxSize(12.0f);
+		for (const TObjectPtr<USkeletalBodySetup>& Setup : PhysicsAsset->SkeletalBodySetups)
+		{
+			if (Setup)
+			{
+				if (FBodyInstance* Body = Mesh->GetBodyInstance(Setup->BoneName))
+				{
+					FTransform Transform = Body->GetUnrealWorldTransform();
+					Transform.AddToTranslation(Translation);
+					Body->SetBodyTransform(Transform, ETeleportType::TeleportPhysics);
+				}
+			}
+		}
+		return;
 	}
 
 	const int32 BodyCount = FMath::Min(
 		PreviousSnapshot.Bodies.Num(), TargetSnapshot.Bodies.Num());
-	const float CorrectionAlpha = bOwnerPrediction && !bHardCorrection
-		? 1.0f - FMath::Exp(-OwnerCorrectionSpeed * DeltaTime)
-		: 1.0f;
+	const float CorrectionAlpha = bAutonomous && !bRecoveryPlayback
+		? 1.0f - FMath::Exp(-OwnerCorrectionSpeed * DeltaTime) : 1.0f;
 
 	for (int32 Index = 0; Index < BodyCount; ++Index)
 	{

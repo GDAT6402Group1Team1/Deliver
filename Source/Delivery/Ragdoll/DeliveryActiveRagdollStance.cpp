@@ -39,13 +39,14 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 		&& GetUprightDot() > 0.65f
 		&& (bPunchFeetPlanted || Mesh->GetPhysicsLinearVelocity(Bones.Hips).Size2D() < 80.0f)
 		&& FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentFacingYaw, PunchAimDirection.Rotation().Yaw)) < 35.0f);
-	const FVector EffectiveWish = StartupPlantRemaining > 0.0f || bHitFeetPlanted
+	const FVector EffectiveWish = ReplicatedControlMode == EDeliveryRagdollControlMode::Recovering
+		|| bRisingFromLimp || StartupPlantRemaining > 0.0f || bHitFeetPlanted
 		? FVector::ZeroVector : Wish;
 	// 先确定本帧髋部打算移动到哪里；脚的目标和身体朝向都以这个结果为基准。
 	UpdatePelvisTarget(DeltaTime, EffectiveWish);
 	// 空中不跑步态：髋已经被抬高，这时规划落点会让脚去追够不到的地面点。
 	// 腿改由各自的父空间角度电机拉回站立姿势，落地后再恢复迈步。
-	if (!bHitFeetPlanted && !bPunchFeetPlanted && !bJumping && !bPelvisAirborne)
+	if (!bRisingFromLimp && !bHitFeetPlanted && !bPunchFeetPlanted && !bJumping && !bPelvisAirborne)
 	{
 		UpdateFeet(DeltaTime, EffectiveWish);
 	}
@@ -81,6 +82,17 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 		&& GrabCharacter->GetGrabComponent()->IsCarryingProp();
 	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
 	const FVector Velocity = Mesh->GetPhysicsLinearVelocity(Bones.Hips);
+	if (bRisingFromLimp)
+	{
+		LimpRecoveryRiseAlpha = FMath::Min(1.0f,
+			LimpRecoveryRiseAlpha + DeltaTime / FMath::Max(LimpRecoveryRiseDuration, 0.05f));
+		SetLimpRecoveryDriveStrength(LimpRecoveryRiseAlpha);
+		if (LimpRecoveryRiseAlpha >= 1.0f)
+		{
+			bRisingFromLimp = false;
+			bPendingStopRecovery = true;
+		}
+	}
 
 	FGroundHit GroundUnderHips;
 	bool bHasHipGround = TraceGround(Hips, CurrentGroundNormal, GroundUnderHips);
@@ -177,8 +189,12 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	UpdateJumpHeight(DeltaTime);
 
 	// 髋目标等于平滑后的贴地点，再加上站立高度沿法线抬起来。
+	const float TargetStandHeight = bRisingFromLimp
+		? FMath::Lerp(LimpRecoveryStartHeight, StandHeight,
+			FMath::InterpEaseInOut(0.0f, 1.0f, LimpRecoveryRiseAlpha, 2.0f))
+		: StandHeight;
 	Target = SmoothedGroundPoint + CurrentGroundNormal
-		* (StandHeight + SmoothBounceHeight * GaitPulse + JumpOffset);
+		* (TargetStandHeight + SmoothBounceHeight * GaitPulse + JumpOffset);
 	// 目标倒地时仅靠站立高度，肩到地面的距离超过手臂长度；平滑屈膝，
 	// 让单手真的够到附近的身体表面，而不是永远差一截、建不了约束。
 	Target -= CurrentGroundNormal * (DragReachCrouchHeight * DragReachAlpha);
