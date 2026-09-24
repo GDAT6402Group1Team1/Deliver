@@ -69,7 +69,14 @@ SIDE_ROAD_WIDTH, SIDE_ROAD_LANES = 1080.0, 2
 MAIN_ROAD_OFFSETS = [-540.0, -180.0, 180.0, 540.0]
 SIDE_ROAD_OFFSETS = [-180.0, 180.0]   # 次路 1080 宽 2 车道，三等分 -> +-宽度/6
 SAMPLE_STEP = 500.0
-Z_OFFSET = 15.0
+# 车道点比路面高出多少。**2026-09-24 从 15 降到 2**，同时用
+# lower_lane_splines.py 把已经生成好的样条整体下移了 13（纯平移，线形不变）。
+# 为什么原来是 15：没有记录——这是本文件里唯一一个没写理由的常量，
+# 从用法反推最可能只是为了让样条在编辑器里不被路面遮住。
+# 为什么要降：车的运行时高度**直接取自样条**（BP_car_base 沿样条 SetActorLocation），
+# 所以这个偏移会一比一变成车的浮空。留 2 而不是 0，是给路面起伏和
+# z-fighting 留一点余量。
+Z_OFFSET = 2.0
 LEFT_HAND_TRAFFIC = True
 
 # --- 路口切断参数 ---

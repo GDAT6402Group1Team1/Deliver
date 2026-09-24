@@ -23,7 +23,7 @@ import traceback
 import unreal
 
 TAG_PREFIX = "ClaudeGenLane"
-Z_OFFSET = 15.0          # 和 gen_traffic_lanes.py 保持一致：车道点应在路面上方这么高
+Z_OFFSET = 2.0           # 和 gen_traffic_lanes.py 保持一致（2026-09-24 从 15 降到 2）
 SAMPLE_STEP = 500.0      # 沿每条样条每隔多远采一个点
 MAX_SAMPLES_PER = 24     # 单条样条最多采几个点，防止长路段把预算吃光
 
