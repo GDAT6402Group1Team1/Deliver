@@ -124,6 +124,7 @@ void UDeliveryTrafficCarComponent::BeginPlay()
 		{
 			ScaleInTargetScale = Owner->GetActorScale3D();
 			ScaleInElapsed = 0.0f;
+			ScaleInTicks = 0;
 			bScaleInRunning = true;
 			Owner->SetActorScale3D(ScaleInTargetScale * ScaleInStartRatio);
 		}
@@ -176,7 +177,7 @@ int32 UDeliveryTrafficCarComponent::GetWaveIndex() const
 	return 0;
 }
 
-void UDeliveryTrafficCarComponent::UpdateScaleAnim(float DeltaTime)
+void UDeliveryTrafficCarComponent::UpdateScaleAnim(float RawDeltaTime)
 {
 	AActor* OwnerActor = GetOwner();
 	if (!OwnerActor)
@@ -185,6 +186,11 @@ void UDeliveryTrafficCarComponent::UpdateScaleAnim(float DeltaTime)
 		bScaleOutRunning = false;
 		return;
 	}
+
+	// 钳住单帧步长。关卡启动那一两帧动辄卡几百毫秒，不钳的话 0.5 秒的淡入
+	// 在第一个 tick 就走完了，第一波车等于没有淡入（第二三波十几秒后生成、
+	// 那时帧率已稳，所以只有它们看得见）。钳完之后淡入一定要经过约 10 个 tick。
+	const float DeltaTime = FMath::Min(RawDeltaTime, MaxScaleAnimStep);
 
 	// --- 缩小消失 ---
 	if (bScaleOutRunning)
@@ -220,12 +226,17 @@ void UDeliveryTrafficCarComponent::UpdateScaleAnim(float DeltaTime)
 	const float Ratio = FMath::Lerp(ScaleInStartRatio, 1.0f, Eased);
 	Owner->SetActorScale3D(ScaleInTargetScale * Ratio);
 
+	++ScaleInTicks;
 	if (Alpha >= 1.0f)
 	{
 		// 结尾精确设回目标值，不留插值误差——否则每辆车的最终缩放会差一点点，
 		// 而这些车的缩放是按车型定死的（0.5 / 0.7 / 0.8），差一点就看得出来。
 		Owner->SetActorScale3D(ScaleInTargetScale);
 		bScaleInRunning = false;
+		// ticks=1 就说明这一次淡入被单帧吃掉了（开局卡顿），这是加 MaxScaleAnimStep 的理由；
+		// 正常应当是 10 个 tick 上下。留着这行日志，以后再有人说"没看到淡入"能直接查。
+		UE_LOG(LogDelivery, Log, TEXT("%s: 缩放淡入完成 wave=%d ticks=%d"),
+			*GetNameSafe(Owner), GetWaveIndex(), ScaleInTicks);
 	}
 }
 
@@ -331,7 +342,13 @@ void UDeliveryTrafficCarComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	}
 
 	// 红灯期间前车是合法地长时间静止，不是死锁，用更宽松的超时，避免后车提前放弃避让压上去。
-	const float EffectiveMaxBlockedTime = bStoppedAtIntersection ? MaxBlockedTimeAtIntersection : MaxBlockedTime;
+	//
+	// 注意顺序：bLeaderStoppedAtIntersection 是上一帧扫描留下的值，所以必须先算
+	// EffectiveMaxBlockedTime 再调 GetDistanceToCarAhead()——反过来写就变成"这一帧的
+	// 前车状态配这一帧的超时"，读起来像是对的，实际上让第一帧的判断依赖尚未初始化的值。
+	// 差一帧对 3~10 秒量级的超时没有影响。
+	const bool bAnyoneAtLight = bStoppedAtIntersection || bLeaderStoppedAtIntersection;
+	const float EffectiveMaxBlockedTime = bAnyoneAtLight ? MaxBlockedTimeAtIntersection : MaxBlockedTime;
 
 	const float DistanceAhead = GetDistanceToCarAhead();
 
@@ -419,6 +436,7 @@ void UDeliveryTrafficCarComponent::NotifyResetToStart()
 			// 目标缩放用 BeginPlay 记的那份，不要用当前值——万一上一次淡入没走完
 			// 就触发了重生，当前值是缩到一半的尺寸，拿它当目标会越缩越小。
 			ScaleInElapsed = 0.0f;
+			ScaleInTicks = 0;
 			bScaleInRunning = true;
 			Owner->SetActorScale3D(ScaleInTargetScale * ScaleInStartRatio);
 		}
@@ -434,6 +452,7 @@ void UDeliveryTrafficCarComponent::NotifyResetToStart()
 	// 裸奔计时要等它重新加速到 MaxSpeed 才开始，红灯标记也不能留着重置前的判断结果。
 	bHasReachedMaxSpeed = false;
 	bStoppedAtIntersection = false;
+	bLeaderStoppedAtIntersection = false;
 
 	DebugSpeedMultiplier = 1.0f;
 	DebugDistanceAhead = -1.0f;
@@ -610,7 +629,7 @@ void UDeliveryTrafficCarComponent::ProcessMotorbikeImpacts(
 	}
 }
 
-float UDeliveryTrafficCarComponent::GetDistanceToCarAhead() const
+float UDeliveryTrafficCarComponent::GetDistanceToCarAhead()
 {
 	const AActor* Owner = GetOwner();
 	if (!Owner)
@@ -636,10 +655,13 @@ float UDeliveryTrafficCarComponent::GetDistanceToCarAhead() const
 	// 取最近的一辆，多辆车同时在扫描范围内时应该跟最前面那个的距离减速。
 	float Nearest = -1.0f;
 	AActor* NearestCar = nullptr;
+	UDeliveryTrafficCarComponent* NearestComp = nullptr;
 	for (const FHitResult& Hit : Hits)
 	{
 		AActor* HitActor = Hit.GetActor();
-		if (HitActor && HitActor != Owner && HitActor->FindComponentByClass<UDeliveryTrafficCarComponent>())
+		UDeliveryTrafficCarComponent* HitComp =
+			HitActor ? HitActor->FindComponentByClass<UDeliveryTrafficCarComponent>() : nullptr;
+		if (HitActor && HitActor != Owner && HitComp)
 		{
 			// 起始就重叠时 Distance 是 0，当成贴脸处理（0 会让 Target 直接算成 0，正是想要的）。
 			const float D = Hit.bStartPenetrating ? 0.0f : Hit.Distance;
@@ -647,9 +669,14 @@ float UDeliveryTrafficCarComponent::GetDistanceToCarAhead() const
 			{
 				Nearest = D;
 				NearestCar = HitActor;
+				NearestComp = HitComp;
 			}
 		}
 	}
+
+	// 顺手把前车的红灯状态记下来，死锁超时要用。扫不到车时清成 false，
+	// 否则前车开走之后这辆车还会一直以为"前面在等红灯"而拿着宽松超时。
+	bLeaderStoppedAtIntersection = NearestComp && NearestComp->IsStoppedAtIntersection();
 
 	// 前车比自己慢的话，把它提到自己的速度、自己再降 100：两边各让一步，
 	// 后车不用一路跟着爬，前车也不至于被一脚顶到很快。

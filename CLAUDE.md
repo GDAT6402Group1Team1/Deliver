@@ -107,6 +107,7 @@
     （不搬的话克隆体全是类默认速度）。出生变换在 `BeginPlay` 当场记下，
     到点再取会拿到半路上的位置。
   - **红灯期间的避让死锁超时放宽到 8 秒（2026-09-17）**：新增 `MaxBlockedTimeAtIntersection = 8.0f` 和 `UpdateStoppedAtIntersection(bool)`。蓝图在 `TraceForIntersection` 的 `SetStopatInter` 之后、以及 `OnRouteLost` 的 `SetStopatInter(false)` 之后各调一次。红灯时前车是"合法地长时间不动"、不是死锁，还按 `MaxBlockedTime`（3 秒）就放弃避让的话，后车会在红灯没结束时压上去；`LightDuration` 是 3 秒，8 秒足够覆盖一整个红灯。
+  - **红灯超时改为沿车队传递、并放宽到 10 秒（2026-09-24）**：原来的判据只看**本车自己**的 `StopatInter`，而 `TraceForIntersection` 的前瞻距离和车速成正比——队伍里第二辆之后的车已经被前车逼停、前瞻缩到接近 0，根本探不到路口盒，自己的 `bStoppedAtIntersection` 恒为 false，于是只有队首享受宽松超时，后面几辆照样 3 秒就放弃避让怼上前车。现在组件公开 `IsStoppedAtIntersection()`，`GetDistanceToCarAhead()` 扫描时顺手记下最近那辆车的红灯状态（`bLeaderStoppedAtIntersection`，扫不到车时清 false，否则前车开走后还会一直以为"前面在等红灯"），超时判据变成 `bStoppedAtIntersection || bLeaderStoppedAtIntersection`，红灯状态就能一辆辆往后传。阈值同时从 8 秒提到 **10 秒**：要盖住的不只是一个 3 秒红灯，还有前面几辆依次起步、拉开距离的时间，排队越长最后一辆等得越久。`GetDistanceToCarAhead()` 因此去掉了 `const`（它本来就会写前车的 `MaxSpeed`，并非纯查询）。
   - 车辆碰撞盒保持 `Overlap` **没改成 `Block`**：车是运动学的（`bSimulatePhysics=false`，靠 `SetActorLocation` 沿样条走），Block 在不开 sweep 的情况下根本不起作用；而开了 sweep 会和样条跟随打架（样条要它往前、sweep 把它顶回来）导致抖动。"后车停在后方不超车"靠的是修好之后真正生效的前车探测 + 减速，不是物理阻挡。
 
 - 测试地图：`Content/Level/TestForCharacter.umap`（角色/互殴测试）、`Content/Level/testfortraffic.umap`（交通路口测试）。

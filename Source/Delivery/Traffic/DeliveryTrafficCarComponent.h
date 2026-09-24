@@ -79,6 +79,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Traffic|避让")
 	void UpdateStoppedAtIntersection(bool bInStoppedAtIntersection);
 
+	/**
+	 * 本车是不是正被红灯拦住。后车查前车用——红灯状态要能沿着车队往后传。
+	 *
+	 * 为什么必须往后传：TraceForIntersection 的前瞻距离和车速成正比，队伍里
+	 * 第二辆之后的车已经被前车逼停、前瞻缩到接近 0，根本探不到路口盒，
+	 * 自己的 bStoppedAtIntersection 一直是 false。只看自己的话，队首拿宽松超时、
+	 * 后面几辆还是 MaxBlockedTime，红灯没结束就放弃避让怼上去。
+	 */
+	UFUNCTION(BlueprintPure, Category = "Traffic|避让")
+	bool IsStoppedAtIntersection() const { return bStoppedAtIntersection; }
+
 	/** 连续脱离预设路线超过 RouteLostTimeout 秒时广播；蓝图绑定这个事件，把车放回起始样条起点即可形成循环车流。 */
 	UPROPERTY(BlueprintAssignable, Category = "Traffic|循环")
 	FDeliveryTrafficCarRouteLostSignature OnRouteLost;
@@ -170,6 +181,20 @@ protected:
 	float ScaleInStartRatio = 0.01f;
 
 	/**
+	 * 单帧最多推进多少秒的淡入进度。
+	 *
+	 * 关卡启动那一两帧经常卡顿几百毫秒，DeltaTime 一次就把 0.5 秒的淡入走完，
+	 * 于是第一波车"啪"地就是整车——而第二三波是十几秒后生成的，那时帧率已经稳了，
+	 * 所以只有后面两波看得见淡入。钳住单帧步长之后，再大的卡顿也只推进 0.05 秒，
+	 * 淡入一定要经过约 10 个 tick 才走完，开局和中途表现一致。
+	 *
+	 * 代价：卡顿时淡入会比 0.5 秒的墙钟时间长一些。这是想要的——它是表现动画，
+	 * 按帧走比按真实时间走更稳。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|出现消失", meta = (ClampMin = "0.001"))
+	float MaxScaleAnimStep = 0.05f;
+
+	/**
 	 * 裸奔超时要瞬移回出生点之前，先缩小消失一下，而不是当场闪走。
 	 * 缩完才广播 OnRouteLost——顺序反过来的话车会先闪到出生点、再在那儿缩小，
 	 * 看着像"在终点重生了一次又消失"。
@@ -257,14 +282,21 @@ protected:
 	float MaxBlockedTime = 3.0f;
 
 	/**
-	 * 本车正被红灯拦住（蓝图的 StopatInter 为 true）时改用的死锁超时，比 MaxBlockedTime 宽松。
+	 * 本车**或前车**被红灯拦住时改用的死锁超时，比 MaxBlockedTime 宽松。
 	 *
 	 * 红灯期间前车是"合法地长时间不动"，不是死锁；如果还按 MaxBlockedTime（3 秒）
 	 * 就放弃避让，后车会在红灯没结束时直接压上去。红绿灯周期 LightDuration 是 3 秒，
-	 * 这里给到 8 秒，足够覆盖一整个红灯而又不至于真死锁时永远卡死。
+	 * 这里给到 10 秒：一整个红灯 + 前面几辆依次起步、拉开距离的时间都要盖住，
+	 * 排队越长最后一辆等得越久，所以留的余量比单个灯周期大得多。
+	 *
+	 * "或前车"这一条是后补的：TraceForIntersection 的前瞻距离和车速成正比，
+	 * 队伍里第二辆之后的车已经被逼停、前瞻缩到接近 0，探不到路口盒，
+	 * 自己的 StopatInter 永远是 false。只看自己的话只有队首享受宽松超时，
+	 * 后面几辆照样 3 秒就放弃避让怼上去。现在红灯状态靠 IsStoppedAtIntersection()
+	 * 沿车队一辆辆往后传。
 	 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|避让", meta = (ClampMin = "0.0"))
-	float MaxBlockedTimeAtIntersection = 8.0f;
+	float MaxBlockedTimeAtIntersection = 10.0f;
 
 	/** 打开后在场景里画出前方探测用的胶囊范围，方便在编辑器里调探测距离和半径。 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|避让")
@@ -328,9 +360,11 @@ private:
 	 * 出现 = 从 ScaleInStartRatio 倍推回 ScaleInTargetScale；
 	 * 消失 = 反过来缩回去，缩完广播 OnRouteLost。
 	 */
-	void UpdateScaleAnim(float DeltaTime);
+	void UpdateScaleAnim(float RawDeltaTime);
 	FVector ScaleInTargetScale = FVector::OneVector;
 	float ScaleInElapsed = 0.0f;
+	/** 这次淡入走了几个 tick。=1 说明被单帧吃掉了，见 MaxScaleAnimStep。 */
+	int32 ScaleInTicks = 0;
 	bool bScaleInRunning = false;
 	float ScaleOutElapsed = 0.0f;
 	bool bScaleOutRunning = false;
@@ -375,10 +409,18 @@ private:
 	bool bStoppedAtIntersection = false;
 
 	/**
+	 * 上一次前车探测中，最近那辆车是不是正被红灯拦住。
+	 * 由 GetDistanceToCarAhead() 在扫描时顺手记下——那里本来就拿到了前车的组件，
+	 * 不用再扫一遍。红灯状态靠它一辆辆往后传：第二辆从队首继承、第三辆从第二辆继承。
+	 */
+	bool bLeaderStoppedAtIntersection = false;
+
+	/**
 	 * 前方最近一辆挂了本组件的车的距离（从探测起点算），没有则返回 -1。
 	 * 返回距离而不是 bool，是为了让减速可以随距离渐进，而不是"探测到就一脚刹死"。
 	 */
-	float GetDistanceToCarAhead() const;
+	/** 顺带更新 bLeaderStoppedAtIntersection，所以不是 const（它本来也会写前车的 MaxSpeed）。 */
+	float GetDistanceToCarAhead();
 
 public:
 
