@@ -175,6 +175,126 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 
 ---
 
+### 4.6 `UDeliveryWalletComponent`（每玩家，PlayerState 上）
+
+挂在 `ADeliverPlayerState` 上，和 ASC 同理——钱要在角色死亡/重生/上下载具之后还在，
+而 Character 在这些事件里会被销毁重建。
+
+| 成员 | 说明 |
+|---|---|
+| `FindWallet(Actor)` | 静态。从 Pawn / Controller / PlayerState 任意一个找到钱包 |
+| `GetBalance()` | 余额 |
+| `AddBalance(Amount)` | 加钱，负数为扣款。**只在服务器有效**，余额夹到 0 以上 |
+| `TrySpend(Amount)` | 余额不足时不扣并返回 false |
+| `OnBalanceChanged(NewBalance, Delta)` | 余额变化 |
+| `OnTaskPaid(Task, Reward)` | 送达入账，带完整奖励明细，UI 做结算飘字直接接这个 |
+
+**入账是自动的，任务系统那边一行都不用改。** 组件自己订阅 GameState 上的
+`OnTaskCompleted`，那个委托自带 `APlayerState* Deliverer`，多人抢单时钱记给谁天然就对。
+`Balance` 用 `COND_OwnerOnly` 复制——别人的余额不该出现在你的客户端上。
+
+不做客户端预测：钱预测错了要回滚，而送达本来就要等服务器确认，没有延迟收益。
+
+**PlayerState 可能比 GameState 先 BeginPlay**，这时订阅不到任务管理器。组件会每 0.5 秒
+重试一次直到成功——不重试的话这个玩家整局收不到钱，而且完全没有报错。
+
+服务器上 `OnRep` 不触发，所以 `AddBalance` 里手动广播一次 `OnBalanceChanged`；
+漏了的话就是"只有客户端有反应"那类很难查的 bug。
+
+### 4.7 `UDeliveryLocationRegistry` + `UDeliveryLocationComponent`（地点 ID 解析）
+
+把任务定义里的地点编号解析成关卡里的实际位置。没有这一层的话，"这个任务要送到哪"
+在代码里是答不出来的，地图指引、方向箭头、距离提示全都无从做起。
+
+- **`UDeliveryLocationComponent`**（SceneComponent）：挂在取件点/收件点/收件人 NPC 上，
+  填 `LocationId`，`BeginPlay` 时自己注册。三种点共用一个组件，因为在数据上它们是同一种
+  东西：一个需要被解析成世界坐标的外部编号。继承 SceneComponent 是为了能带相对偏移——
+  收件点挂在整栋楼上时，楼的原点可能在中心甚至地下，指引箭头该指门口。
+- **`UDeliveryLocationRegistry`**（WorldSubsystem）：`ResolveActor` / `ResolveLocation` /
+  `ResolveAllActors` / `GetRegisteredIds`。
+
+**查找走注册表而不是遍历关卡**，和交互系统同一个理由：这个项目已经被"碰撞查询静默失效"
+坑过一次（交通组件的前车探测通道配错、恒为 false，肉眼完全看不出来）。注册表没有这个
+失败模式——没注册就是查不到。
+
+追踪组件上新增了两个取目的地的接口：
+
+| 成员 | 说明 |
+|---|---|
+| `GetTrackedTaskDestination(OutLocation, OutLocationId)` | 当前追踪任务该去哪 |
+| `GetTaskDestination(Task, ...)` | 指定任务的目的地，任务列表显示距离时用 |
+
+**目的地按任务状态自动切换**，调用方不要自己判：待取件 → `PickupLocationId`，
+进行中 → `DeliveryLocationId`，其他状态返回 false。判错了的表现是"箭头指向已经拿过的
+地方"，而且四个界面会各错各的。
+
+策划表里填了 ID、关卡里却没有对应的点时返回 false **并在日志里点名**。静默失败的话
+表现只是"箭头不显示"，根因几乎查不到。
+
+### 4.8 快递丢失的恢复
+
+`UDeliveryTaskManagerComponent::NotifyItemLost(Task)` —— 把进行中的任务退回待取件。
+
+不处理的话任务会永远卡在进行中，而且因为"同时只有一个进行中任务"是取件规则，
+**整局再也接不了任何别的任务**，一次意外就把这局玩废了。
+
+三个决定和理由：
+
+- **退回而不是判失败** —— 和"四个状态无失败态"一致。退回不是惩罚，是重来一次。
+- **不在取件点重新生成一份** —— 那需要把 `DeliveryItemId` 解析成可生成的类，那一步还没做。
+  退回之后关卡里原本那份快递还在原地（手摆的话），玩家按指引回取件点就能重新拿。
+  如果快递是运行时生成的，生成方要自己在退回后再生成一份。
+- **计时重置、特殊事件清空** —— 退回等于这次取件没发生过。保留旧计时的话，玩家要为一次
+  不是自己造成的意外承担时间损失；事件不清的话重新取件后再触发一次会把倍率叠上去。
+
+检测在 `UDeliveryItemComponent::EndPlay`：Actor 被销毁（`EEndPlayReason::Destroyed`，
+掉出世界会走到这条）且任务仍在进行中时上报。关卡切换/退出游戏不触发——那时整张图都在拆，
+改任务状态没有意义，GameState 还可能已经先没了。
+
+**"正常交付"和"意外丢失"靠执行顺序区分，不需要额外的标志位**：`TryDeliver` 是先把任务
+标成已完成、再销毁快递的，所以走到 `EndPlay` 时状态已经不是进行中，`NotifyItemLost`
+会自己返回 false。**改动这两处的先后顺序会让每次成功交付都被误判成丢件。**
+
+组件上有 `bReportLostOnDestroy` 开关（默认开），给"用完就换一份"那类流程关掉用。
+
+### 4.9 `UDeliveryGuidanceLibrary`（指引换算）
+
+把"该去哪"换算成 UI 直接能用的量，返回 `FDeliveryGuidance`：
+
+| 字段 | 说明 |
+|---|---|
+| `bValid` | 有没有可指引的目的地。false 时其余字段不要用 |
+| `WorldLocation` / `LocationId` | 目的地坐标和解析用的 ID |
+| `Distance` | 直线距离（厘米） |
+| `RelativeYaw` | 相对镜头的水平夹角，−180~180。0 正前、正数在右、负数在左 |
+| `bInFront` | 在不在镜头前方。决定箭头画屏幕边缘还是目标上方 |
+| `HeightOffset` | 高度差，正数说明在上方，可以提示"在楼上" |
+
+三个入口：`GetTrackedTaskGuidance`、`GetTaskGuidance(Task)`、`MakeGuidanceToLocation`。
+另有 `FormatDistance` 把厘米格式化成"12 米" / "1.5 公里"。
+
+**角度基于镜头而不是角色**：玩家看的是镜头，而骑车时镜头和车头还可能不一致
+（摩托车有自由视角/固定视角两套）。用角色朝向算的话，自由视角下箭头会指错。
+夹角只算水平面——带上 Z 的话目标在正下方时角度会乱跳，而边缘箭头本来只需要"往左还是往右"。
+
+### 4.10 奖励结算的单元测试
+
+`Task/DeliveryRewardTests.cpp`。跑法：编辑器 → Tools → Session Frontend → Automation →
+筛 `Delivery.Task`，或控制台 `Automation RunTests Delivery.Task`。
+
+`EvaluateReward` 是纯函数——只读任务资产，不碰组件状态、网络和世界，所以能在不开关卡的
+情况下把边界跑全。它同时是整个任务系统里**最容易配错又最难在游戏里发现**的一块：
+档位顺序配反、超时边界差一秒、特殊事件重复计数，在 PIE 里都只表现为"钱好像不太对"。
+
+覆盖：档位按配置顺序命中第一条、阈值是闭区间、超过最后一档不再恶化、`bOverdue` 的判据是
+用时超过时限（**和命中哪一档是两回事**，这两个概念混过一次）、特殊事件相乘且重复只计一次、
+没配档位时按底薪原样发、`FinalReward` 是四舍五入不是截断。
+
+测试里的 Tag 借用已注册的原生 Tag。用 `RequestGameplayTag` 现造的话，没注册的会返回空 Tag，
+而**两个空 Tag 互相相等，测试会假通过**。
+
+---
+
 ## 五、配置方式
 
 ### 5.1 建一个任务
@@ -250,6 +370,10 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 | `Delivery.Task.Acquire [TaskId]` | 模拟取件。不填 TaskId 就取第一个待取件的 |
 | `Delivery.Task.Deliver` | 模拟交付当前进行中的任务，打印奖励算式 |
 | `Delivery.Task.Event <Tag>` | 给进行中的任务上报特殊事件，验证奖励倍率 |
+| `Delivery.Task.Validate` | **配置对账**：地点 ID 能不能解析、收件点和快递有没有接上。摆点时用 |
+| `Delivery.Task.LoseItem` | 模拟快递丢失，任务退回待取件 |
+| `Delivery.Wallet.Dump` / `Delivery.Wallet.Add <金额>` | 看余额 / 加钱扣款（只在服务器有效） |
+| `Delivery.Locations.Dump` | 列出关卡注册了哪些地点 ID，并验证当前追踪任务能否解析出目的地 |
 
 都是权威操作，要用 Standalone 或 Play As Listen Server 跑。
 双人测试时在服务器窗口 Acquire、客户端窗口 Dump，可以验证复制和客户端计时基准。
@@ -315,13 +439,13 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 | 缺口 | 说明 |
 |---|---|
 | UI / 手机界面 | 所有数据和事件都已暴露，直接接委托即可，不需要改 C++ |
-| 地图引导 | 只暴露了 `GetTrackedTask()`，引导箭头/地图标记怎么画还没定 |
-| 金钱结算 | `OnTaskCompleted` 里拿 `FinalReward` 自己加钱，钱包系统还没有 |
+| 地图引导 | 目的地坐标和方向/距离换算都有了（4.7 / 4.9），**箭头和地图标记的美术表现还没做** |
+| ~~金钱结算~~ | **已做**：`UDeliveryWalletComponent` 挂 PlayerState，自己订阅 `OnTaskCompleted` 入账，见 4.6 |
 | 快递 Actor 本体 | 手持、掉落、放车后备箱由交互/背包系统实现，任务系统只认 `DeliveryItemComponent` |
 | 存档 | 目前状态全在内存，重开关卡即重置 |
 | 解锁条件 | 内置只有"前置任务已完成"一条，其他条件继承 `UDeliveryTaskUnlockCondition` 扩展 |
-| 外部 ID 的解析 | `DeliveryItemId` / `PickupLocationId` / `DeliveryLocationId` / `ReceiverNpcId` / `SpecialEventId` 目前只存字符串。等交互和关卡系统落地后再决定怎么解析（场景 Actor 打 Tag 按 ID 查，还是转成资产引用）。**地图引导要取件点/送达点坐标，依赖这一步** |
-| **快递丢失的处理** | 快递掉出世界/被删之后，任务会永远卡在进行中，而且因为"同时只有一个进行中任务"，整局再也接不了别的任务。需要定：重生快递、加放弃接口、还是先不管 |
+| 外部 ID 的解析 | **地点类已做**：`PickupLocationId` / `DeliveryLocationId` / `ReceiverNpcId` 由 `UDeliveryLocationRegistry` 解析，见 4.7。`DeliveryItemId` / `SpecialEventId` 仍只存字符串 |
+| ~~快递丢失的处理~~ | **已做**：`NotifyItemLost` 把任务退回待取件、计时重置；`UDeliveryItemComponent` 在 Actor 被销毁时自动上报。见 4.8 |
 | 自动化测试 | 奖励结算是纯函数，最值得测，可复用互殴系统 `DeliveryBoxingPoseTests.cpp` 那套框架 |
 
 ---

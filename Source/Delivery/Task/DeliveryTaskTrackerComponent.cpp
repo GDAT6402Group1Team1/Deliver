@@ -2,11 +2,13 @@
 
 #include "DeliveryTaskTrackerComponent.h"
 
+#include "Delivery.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
+#include "Task/DeliveryLocationRegistry.h"
 #include "Task/DeliveryTaskDefinition.h"
 #include "Task/DeliveryTaskManagerComponent.h"
 #include "TimerManager.h"
@@ -168,4 +170,67 @@ void UDeliveryTaskTrackerComponent::HandleTaskStatusChanged(UDeliveryTaskDefinit
 void UDeliveryTaskTrackerComponent::OnRep_TrackedTask()
 {
 	OnTrackedTaskChanged.Broadcast(TrackedTask);
+}
+
+bool UDeliveryTaskTrackerComponent::GetTrackedTaskDestination(FVector& OutLocation, FName& OutLocationId) const
+{
+	return GetTaskDestination(TrackedTask, OutLocation, OutLocationId);
+}
+
+bool UDeliveryTaskTrackerComponent::GetTaskDestination(const UDeliveryTaskDefinition* Task,
+	FVector& OutLocation, FName& OutLocationId) const
+{
+	OutLocation = FVector::ZeroVector;
+	OutLocationId = NAME_None;
+
+	if (!Task)
+	{
+		return false;
+	}
+
+	const UDeliveryTaskManagerComponent* Manager = UDeliveryTaskManagerComponent::Get(this);
+	if (!Manager)
+	{
+		return false;
+	}
+
+	// 目的地跟着状态走：还没取件就去取件点，取了就去收件点。
+	// 放在这里而不是让每个 UI 各判一遍——判错了的表现是"箭头指向已经拿过的地方"，
+	// 而且四个界面会各错各的
+	switch (Manager->GetTaskStatus(Task))
+	{
+	case EDeliveryTaskStatus::AwaitingPickup:
+		OutLocationId = Task->PickupLocationId;
+		break;
+
+	case EDeliveryTaskStatus::InProgress:
+		OutLocationId = Task->DeliveryLocationId;
+		break;
+
+	default:
+		// 未解锁的不该被指引，已完成的没有目的地
+		return false;
+	}
+
+	if (OutLocationId.IsNone())
+	{
+		UE_LOG(LogDelivery, Warning, TEXT("[Task] %s 没有填地点 ID，无法生成指引"),
+			*Task->TaskId.ToString());
+
+		return false;
+	}
+
+	const UDeliveryLocationRegistry* Registry = UDeliveryLocationRegistry::Get(this);
+	if (!Registry || !Registry->ResolveLocation(OutLocationId, OutLocation))
+	{
+		// 静默失败的话，表现只是"箭头不显示"，根因几乎查不到——必须出声
+		UE_LOG(LogDelivery, Warning,
+			TEXT("[Task] %s 的地点 ID \"%s\" 在关卡里找不到对应的点。"
+				 "检查那个点上有没有挂 DeliveryLocationComponent、ID 填得对不对"),
+			*Task->TaskId.ToString(), *OutLocationId.ToString());
+
+		return false;
+	}
+
+	return true;
 }

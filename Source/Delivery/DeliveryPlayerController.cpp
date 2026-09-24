@@ -24,6 +24,9 @@ ADeliveryPlayerController::ADeliveryPlayerController()
 		MobileExcludedMappingContexts.Add(MouseLookIMC.Object);
 	}
 
+	// J 开关手机。走 BindKey 直接绑，不进 IMC——理由见头文件里 TogglePhoneUI 的注释
+	TogglePhoneKey = EKeys::J;
+
 	// 软引用晚绑：IA_Interact 是脚本生成的资产，构造函数只在模块加载时跑一次，
 	// 用 ConstructorHelpers 的话新建出来的资产在同一次会话里永远解析不到。
 	InteractAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
@@ -108,6 +111,18 @@ void ADeliveryPlayerController::SetupInputComponent()
 
 		EnsureInteractMapping(Subsystem);
 	}
+
+	if (InputComponent && TogglePhoneKey.IsValid())
+	{
+		InputComponent->BindKey(TogglePhoneKey, IE_Pressed, this,
+			&ADeliveryPlayerController::HandleTogglePhonePressed);
+	}
+}
+
+void ADeliveryPlayerController::HandleTogglePhonePressed()
+{
+	// 纯本机 UI 开关，不用过服务器
+	TogglePhoneUI();
 }
 
 void ADeliveryPlayerController::RequestAnswerCall()
