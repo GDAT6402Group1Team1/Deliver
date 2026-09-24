@@ -43,3 +43,23 @@ bool UDeliveryItemComponent::NotifyAcquired(APlayerState* Player)
 
 	return Manager && Manager->TryAcquireItem(OwningTask, Player);
 }
+
+void UDeliveryItemComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// 只管"这个 Actor 被销毁了"。关卡切换、退出游戏、PIE 结束时整张图都在拆，
+	// 那时候改任务状态没有意义，而且 GameState 可能已经先一步没了
+	const bool bActorDestroyed = EndPlayReason == EEndPlayReason::Destroyed;
+
+	if (bReportLostOnDestroy && bActorDestroyed && GetOwner() && GetOwner()->HasAuthority())
+	{
+		// 交付成功那条路上，TryDeliver 是先把任务标成已完成、再销毁快递的，
+		// 所以走到这里时状态已经不是进行中，NotifyItemLost 会自己返回 false。
+		// 这个先后顺序就是"正常交付"和"意外丢失"的判据，不需要额外加标志位
+		if (UDeliveryTaskManagerComponent* Manager = UDeliveryTaskManagerComponent::Get(this))
+		{
+			Manager->NotifyItemLost(OwningTask);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
+}

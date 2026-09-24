@@ -43,4 +43,17 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Task")
 	bool NotifyAcquired(APlayerState* Player);
+
+	/**
+	 * 这份快递被销毁时，要不要把任务退回待取件。
+	 *
+	 * 默认开。关掉的场合：快递是"用完就换一份"的流程的一部分，销毁属于正常步骤。
+	 * 交付时的销毁不受影响——那时任务已经是已完成，NotifyItemLost 会自己忽略。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Task")
+	bool bReportLostOnDestroy = true;
+
+protected:
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 };

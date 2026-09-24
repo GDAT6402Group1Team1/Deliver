@@ -66,6 +66,25 @@ public:
 	void ReportSpecialEvent(UDeliveryTaskDefinition* Task, FGameplayTag EventTag);
 
 	/**
+	 * 快递没了（掉出世界、被误删、关卡里被销毁），把任务退回待取件。
+	 *
+	 * 不处理的话这个任务会永远卡在进行中，而且因为"同时只有一个进行中任务"
+	 * 是取件规则，整局再也接不了任何别的任务——一次意外就把这局玩废了。
+	 *
+	 * **选择退回而不是判失败**，和"四个状态无失败态"一致：退回不是惩罚，是重来一次。
+	 * 也不在取件点重新生成一份——那需要把 DeliveryItemId 解析成可生成的类，
+	 * 而那一步还没做；退回之后关卡里原本那份快递还在原地（如果是手摆的），
+	 * 玩家按指引回取件点就能重新拿。
+	 *
+	 * **计时会重置**：退回等于这次取件没发生过，下次取件重新记时间戳。
+	 * 保留旧计时的话，玩家要为一次不是自己造成的意外承担时间损失。
+	 *
+	 * 只在服务器有效。已完成的任务不受影响（交付时快递本来就会被销毁）。
+	 */
+	UFUNCTION(BlueprintCallable, Category="Task")
+	bool NotifyItemLost(UDeliveryTaskDefinition* Task);
+
+	/**
 	 * 服务器：重新评估所有未解锁任务的解锁条件。
 	 * 任务完成后会自动调一次；外部系统（剧情、金钱）改变了解锁条件时也要主动调。
 	 */
@@ -83,6 +102,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Task")
 	void GetTasksByStatus(EDeliveryTaskStatus Status, TArray<UDeliveryTaskDefinition*>& OutTasks) const;
+
+	/**
+	 * 关卡配置里的全部任务，含未解锁的。
+	 *
+	 * **这是配置清单，不是玩家可见的任务列表**——手机 UI 要按状态过滤（未解锁的
+	 * 不显示灰条，见设计文档第九节第 6 条）。这个接口是给校验和工具用的。
+	 */
+	UFUNCTION(BlueprintPure, Category="Task")
+	const TArray<UDeliveryTaskDefinition*>& GetAllTaskDefinitions() const;
 
 	/** UI 每帧拿倒计时和配色用。未取件的任务返回 bRunning=false。 */
 	UFUNCTION(BlueprintPure, Category="Task")

@@ -12,6 +12,7 @@
   Delivery.Task.Acquire [TaskId]  模拟取件，不填 TaskId 就取第一个待取件的任务
   Delivery.Task.Deliver           模拟把进行中的任务交付掉
   Delivery.Task.Event <Tag>       上报一个特殊事件，用来验证奖励倍率
+  Delivery.Task.LoseItem          模拟快递丢失，任务退回待取件（验证丢件恢复）
   Delivery.Phone.Call [Id] [overdue]  强制打一通电话进来，测 UI 用
   Delivery.Phone.Answer           接听当前来电
   Delivery.Phone.HangUp           挂断（响铃时是拒接）
@@ -341,6 +342,29 @@ namespace DeliveryTaskDebug
 		}
 	}
 
+	void LoseItemCommand(const TArray<FString>& /*Args*/, UWorld* World)
+	{
+		UDeliveryTaskManagerComponent* Manager = GetManagerChecked(World);
+		if (!Manager)
+		{
+			return;
+		}
+
+		UDeliveryTaskDefinition* Active = Manager->GetActiveTask();
+		if (!Active)
+		{
+			Print(TEXT("[Task] 现在没有进行中的任务，没什么可丢的"));
+			return;
+		}
+
+		if (Manager->NotifyItemLost(Active))
+		{
+			Print(FString::Printf(
+				TEXT("[Task] %s 的快递已按丢失处理：退回待取件，计时重置。"
+					 "用 Delivery.Task.Dump 核对状态"), *Active->TaskId.ToString()));
+		}
+	}
+
 	void EventCommand(const TArray<FString>& Args, UWorld* World)
 	{
 		UDeliveryTaskManagerComponent* Manager = GetManagerChecked(World);
@@ -411,5 +435,10 @@ static FAutoConsoleCommandWithWorldAndArgs GDeliveryTaskEventCmd(
 	TEXT("Delivery.Task.Event"),
 	TEXT("给进行中的任务上报一个特殊事件 Tag，验证奖励倍率"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&DeliveryTaskDebug::EventCommand));
+
+static FAutoConsoleCommandWithWorldAndArgs GDeliveryTaskLoseItemCmd(
+	TEXT("Delivery.Task.LoseItem"),
+	TEXT("模拟进行中任务的快递丢失，任务退回待取件"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&DeliveryTaskDebug::LoseItemCommand));
 
 #endif // !UE_BUILD_SHIPPING

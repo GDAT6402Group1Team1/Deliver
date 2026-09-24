@@ -11,6 +11,7 @@ class UDeliverAbilitySystemComponent;
 class UDeliverAttributeSet;
 class UAbilitySystemComponent;
 class UDeliveryTaskTrackerComponent;
+class UDeliveryWalletComponent;
 
 /**
  * PlayerState
@@ -37,6 +38,9 @@ public:
 	// 获取本玩家的任务追踪组件（任务状态本身是全局的，挂在 GameState 上）
 	UDeliveryTaskTrackerComponent* GetTaskTracker() const { return TaskTracker; }
 
+	// 获取钱包（和 ASC 同理挂在这里：钱要在角色死亡/重生/上下载具之后还在）
+	UDeliveryWalletComponent* GetWallet() const { return Wallet; }
+
 protected:
 
 	/** 子组件 **/
@@ -51,6 +55,10 @@ protected:
 	// 当前追踪的任务（每个玩家各自选，只有被追踪的任务显示地图引导）
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Task")
 	TObjectPtr<UDeliveryTaskTrackerComponent> TaskTracker;
+
+	// 钱包。自己订阅 GameState 上任务管理器的 OnTaskCompleted 入账，不需要别处调用
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Economy")
+	TObjectPtr<UDeliveryWalletComponent> Wallet;
 
 	/** 回调 **/
 	// 角色被控制时的回调
