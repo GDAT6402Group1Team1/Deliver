@@ -340,7 +340,7 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
   **映射按槽位名一一对应。** 玩家网格 `Content/Characters/A/renwu` 和车模型自带的骑手**是同一个基础角色**（都是 Tripo 出的），槽位名完全一致：`tripo_mat_c9b1ab96` / `材质` / `材质_001`…`材质_006` / `Eyes_Black`；区别只在玩家那边给这 9 个槽配了 `character_hat`（绿帽）/`cloth`（黄衣）/`pants`（浅蓝裤）/`shoe1`/`shoe2`（深蓝鞋）/`socks`/`skin`/`eyes`/`prime`。同一个基础角色也意味着 UV 是同一套，贴过去就是玩家本人的样子。`RiderMaterialOverrides` 按下标手填可覆盖；没人骑时 `EmptyOverrideMaterials()` 还原。
   **踩过的坑**：第一版写成"名字里带 eye 的配眼睛，其余所有槽都用第一个非眼睛材质"，结果整个人被涂成衣服那一种黄色。起因是先用 `grep`/ASCII 扫 `.uasset` 判断槽位数，**`材质_00x` 是以 UTF-16 存在名字表里的，ASCII 扫描一条都看不见**，于是误判骑手只有 2 个槽。查 `.uasset` 里的中文名要按 UTF-16 扫，别用 `strings`。
 - **骑车时的镜头有两套，局内按 `P` 随时切**（`CameraToggleKey`，默认 `EKeys::P`；`bFreeLookCamera` 是初始模式，默认开 = 自由视角）。两套设置都完整写在 `ApplyCameraMode()` 里，没有哪一套是被删掉的。
-  - 切视角走 `BindKey` **直接绑键**，不新建 InputAction + 在 IMC_Default 上映射：那个资产从来没被提交过，每次 git 拉取都会把映射冲掉（F 键就这么没过两次）。物品栏 1~5 也是同样理由直接绑的。P 是扫 `IMC_Default` 的**名字表**确认空闲的（里面只有 A/D/E/F/J/S/SpaceBar/W，J 是电话）——注意只能按 FName 表扫，按 ASCII 正则乱扫单字母会把一堆无关字符串认成按键。
+  - 切视角仍走 `BindKey` **直接绑键**，物品栏 1~5、召唤 R 也是旧的直接绑定；这些功能没有对应 IA，不能只改 IMC。`IMC_Default` 现已提交，角色和摩托车共用其中的移动、视角、攻击与交互 IA。查 `.uasset` 按键时只能按 FName 名字表扫，按 ASCII 正则乱扫单字母会把一堆无关字符串认成按键。
   - 切换那一帧要接控制旋转，否则视角会跳：切到固定视角调 `SyncControlRotation()`，切到自由视角保留当前朝向当起点。
   - **自由视角**（开）：弹簧臂 `bUsePawnControlRotation=true`，`bInheritPitch/Yaw` 都必须设成 true——`USpringArmComponent::GetTargetRotation()` 会拿组件的相对角度把没继承的那一轴顶掉，只开一个就只剩一个轴能转。鼠标/右摇杆复用角色身上同两个 IA（`IA_Look` / `IA_MouseLook`），俯仰上下限走 `PlayerCameraManager` 的 `ViewPitchMin/Max`。**Tick 里必须停掉 `SyncControlRotation()`**：自由视角下控制旋转就是镜头，每帧同步成车头朝向等于把鼠标抹掉。
   - **固定车尾视角**（关）：`bUsePawnControlRotation=false`、只继承 Yaw、俯仰吃 `CameraPitch` 的相对角度，鼠标完全不参与，"W 永远是往屏幕里开"。
@@ -437,9 +437,10 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
   Python **只在编辑器里有**，打包版里没有——所以运行时要用的东西不能依赖脚本，
   得让 C++ 自己算（摩托车的 `AutoConfigureFromMeshes()` 就是这个原因）。
 
-- **`Content/Input/IMC_Default.uasset` 至今没有被提交过。** 它里面有 F 键到 `IA_Interact` 的映射，
-  每次 `git pull` 都会被冲掉，症状极具迷惑性：浮窗照常显示、按 F 毫无反应（浮窗不依赖按键绑定）。
-  新加的按键因此一律用 `BindKey` 直接绑（物品栏 1~5、切视角 P、召唤 R），不走 IMC。
+- **`Content/Input/IMC_Default.uasset` 已提交。** 手柄布局：左摇杆移动、右摇杆视角、A/× 跳跃、
+  LT/L2 左拳、RT/R2 右拳（双扳机沿用双键抓取）、X/□ 拾取、Y/△ 交互、十字键上打开电话；
+  键鼠映射并存。用 `Content/Python/setup_gamepad_input.py` 可幂等补回这些手柄映射。
+  物品栏 1~5、切视角 P、召唤 R 仍是 `BindKey` 直接绑定，不属于 IMC/IA，后续适配对应手柄功能时要单独处理。
 
 ## 代码结构速览
 
