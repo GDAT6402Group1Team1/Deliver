@@ -59,6 +59,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Delivery|Location")
 	TArray<AActor*> ResolveAllActors(FName LocationId) const;
 
+	/** 同一个 ID 下的所有地点组件。任务目标高亮要从组件读取它对应的建筑 Actor。 */
+	UFUNCTION(BlueprintPure, Category="Delivery|Location")
+	TArray<UDeliveryLocationComponent*> ResolveAllComponents(FName LocationId) const;
+
 	/** 关卡里现在注册了哪些 ID。调试和"策划表里的 ID 有没有对应的点"这类校验用。 */
 	UFUNCTION(BlueprintPure, Category="Delivery|Location")
 	TArray<FName> GetRegisteredIds() const;

@@ -8,6 +8,7 @@
 
 class UInputAction;
 class UInputMappingContext;
+class UPostProcessComponent;
 
 /**
  * PlayerController that only installs Enhanced Input mapping contexts.
@@ -53,6 +54,8 @@ public:
 
 protected:
 
+	virtual void BeginPlay() override;
+
 	UFUNCTION(Server, Reliable)
 	void ServerAnswerCall();
 
@@ -81,6 +84,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Input|Input Mappings")
 	FKey InteractKey;
+
+	/** 本机任务地点和抓取候选共用的透视高亮后处理。 */
+	UPROPERTY(VisibleAnywhere, Category="Delivery|Highlight")
+	TObjectPtr<UPostProcessComponent> HighlightPostProcess;
 
 	virtual void SetupInputComponent() override;
 

@@ -8,6 +8,7 @@
 #include "DeliveryTaskTrackerComponent.generated.h"
 
 class UDeliveryTaskDefinition;
+class UMeshComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeliveryTrackedTaskChanged, UDeliveryTaskDefinition*, Task);
 
@@ -29,6 +30,7 @@ public:
 	UDeliveryTaskTrackerComponent();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/** 从 Pawn / Controller / PlayerState 任意一个拿到这个玩家的追踪组件。 */
@@ -91,4 +93,22 @@ protected:
 
 	UFUNCTION()
 	void OnRep_TrackedTask();
+
+private:
+
+	/** 只在本机拥有这个 PlayerState 时给当前目的地模型加透视高亮。 */
+	void RefreshDestinationHighlight();
+	void ClearDestinationHighlight();
+	bool IsLocalTracker() const;
+
+	struct FDestinationHighlightState
+	{
+		TWeakObjectPtr<UMeshComponent> Component;
+		bool bRenderCustomDepth = false;
+		int32 StencilValue = 0;
+	};
+
+	TArray<FDestinationHighlightState> DestinationHighlightStates;
+	FName HighlightedLocationId;
+	FTimerHandle HighlightRefreshTimer;
 };

@@ -40,6 +40,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Delivery|Location")
 	FText DisplayName;
 
+	/**
+	 * 当前任务指向这个地点时，需要透视高亮的场景 Actor。
+	 *
+	 * 留空时默认高亮本组件的 Owner，适合把 LocationComponent 直接挂在建筑模型上。
+	 * 如果地点是门口单独摆的 Marker，就在关卡实例上把实际建筑填进这个数组。
+	 * 支持多个 Actor，因为一栋建筑可能由主体、屋顶和招牌几个模型组成。
+	 */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Delivery|Location|Highlight")
+	TArray<TObjectPtr<AActor>> HighlightActors;
+
+	/** 取本地点应该高亮的 Actor；HighlightActors 为空时返回 Owner。 */
+	void GetHighlightActors(TArray<AActor*>& OutActors) const;
+
 protected:
 
 	virtual void BeginPlay() override;

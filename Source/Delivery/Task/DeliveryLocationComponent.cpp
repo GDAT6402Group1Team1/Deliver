@@ -9,6 +9,26 @@ UDeliveryLocationComponent::UDeliveryLocationComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
+void UDeliveryLocationComponent::GetHighlightActors(TArray<AActor*>& OutActors) const
+{
+	OutActors.Reset();
+	for (AActor* Actor : HighlightActors)
+	{
+		if (IsValid(Actor))
+		{
+			OutActors.AddUnique(Actor);
+		}
+	}
+
+	if (OutActors.IsEmpty())
+	{
+		if (AActor* Owner = GetOwner())
+		{
+			OutActors.Add(Owner);
+		}
+	}
+}
+
 void UDeliveryLocationComponent::BeginPlay()
 {
 	Super::BeginPlay();

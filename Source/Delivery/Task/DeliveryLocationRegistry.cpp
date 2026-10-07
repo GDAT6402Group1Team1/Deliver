@@ -135,6 +135,27 @@ TArray<AActor*> UDeliveryLocationRegistry::ResolveAllActors(FName LocationId) co
 	return Result;
 }
 
+TArray<UDeliveryLocationComponent*> UDeliveryLocationRegistry::ResolveAllComponents(FName LocationId) const
+{
+	TArray<UDeliveryLocationComponent*> Result;
+
+	const TArray<TWeakObjectPtr<UDeliveryLocationComponent>>* Entries = Locations.Find(LocationId);
+	if (!Entries)
+	{
+		return Result;
+	}
+
+	for (const TWeakObjectPtr<UDeliveryLocationComponent>& Entry : *Entries)
+	{
+		if (UDeliveryLocationComponent* Component = Entry.Get())
+		{
+			Result.AddUnique(Component);
+		}
+	}
+
+	return Result;
+}
+
 TArray<FName> UDeliveryLocationRegistry::GetRegisteredIds() const
 {
 	TArray<FName> Result;

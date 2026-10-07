@@ -49,6 +49,17 @@ namespace
 
 		return State ? State->FindComponentByClass<UDeliveryTaskTrackerComponent>() : nullptr;
 	}
+
+	void MakeCompassCardinal(float CardinalWorldYaw, float ViewYaw, float HalfVisibleAngle,
+		float& OutOffset, bool& bOutVisible)
+	{
+		const float RelativeYaw = FRotator::NormalizeAxis(CardinalWorldYaw - ViewYaw);
+		const float UnclampedOffset = RelativeYaw / HalfVisibleAngle;
+		bOutVisible = FMath::Abs(UnclampedOffset) <= 1.f;
+		// 和任务目标使用同一种坐标约定：超出罗盘显示角度后停在左右边缘，
+		// 不能继续给 UMG 一个大于 1 的位置让图标直接跑出 Canvas。
+		OutOffset = FMath::Clamp(UnclampedOffset, -1.f, 1.f);
+	}
 }
 
 FDeliveryGuidance UDeliveryGuidanceLibrary::MakeGuidanceToLocation(const UObject* WorldContextObject,
@@ -118,6 +129,49 @@ FDeliveryGuidance UDeliveryGuidanceLibrary::GetTrackedTaskGuidance(const UObject
 	const UDeliveryTaskTrackerComponent* Tracker = FindLocalTracker(WorldContextObject);
 
 	return Tracker ? GetTaskGuidance(WorldContextObject, Tracker->GetTrackedTask()) : FDeliveryGuidance();
+}
+
+FDeliveryCompassGuidance UDeliveryGuidanceLibrary::GetTrackedTaskCompass(
+	const UObject* WorldContextObject, float VisibleAngle, float NorthWorldYaw)
+{
+	FDeliveryCompassGuidance Result;
+
+	FVector ViewLocation = FVector::ZeroVector;
+	FRotator ViewRotation = FRotator::ZeroRotator;
+	if (!GetViewPoint(WorldContextObject, ViewLocation, ViewRotation))
+	{
+		return Result;
+	}
+
+	const float HalfVisibleAngle = FMath::Max(FMath::Abs(VisibleAngle) * 0.5f, 1.f);
+	const float ViewYaw = FRotator::NormalizeAxis(ViewRotation.Yaw);
+	const float NorthYaw = FRotator::NormalizeAxis(NorthWorldYaw);
+
+	Result.bValid = true;
+	// 世界里的 yaw 是从 +X 顺时针朝 +Y 增长。减掉地图北方后，正好就是
+	// 玩家熟悉的 N=0 / E=90 / S=180 / W=270。
+	Result.HeadingDegrees = FMath::Fmod(ViewYaw - NorthYaw + 360.f, 360.f);
+
+	MakeCompassCardinal(NorthYaw, ViewYaw, HalfVisibleAngle,
+		Result.NorthOffset, Result.bNorthVisible);
+	MakeCompassCardinal(NorthYaw + 90.f, ViewYaw, HalfVisibleAngle,
+		Result.EastOffset, Result.bEastVisible);
+	MakeCompassCardinal(NorthYaw + 180.f, ViewYaw, HalfVisibleAngle,
+		Result.SouthOffset, Result.bSouthVisible);
+	MakeCompassCardinal(NorthYaw - 90.f, ViewYaw, HalfVisibleAngle,
+		Result.WestOffset, Result.bWestVisible);
+
+	const FDeliveryGuidance Guidance = GetTrackedTaskGuidance(WorldContextObject);
+	if (Guidance.bValid)
+	{
+		Result.bHasTarget = true;
+		Result.TargetRelativeYaw = Guidance.RelativeYaw;
+		const float UnclampedOffset = Guidance.RelativeYaw / HalfVisibleAngle;
+		Result.bTargetInStrip = FMath::Abs(UnclampedOffset) <= 1.f;
+		Result.TargetOffset = FMath::Clamp(UnclampedOffset, -1.f, 1.f);
+	}
+
+	return Result;
 }
 
 FText UDeliveryGuidanceLibrary::FormatDistance(float Centimeters)

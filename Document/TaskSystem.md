@@ -209,9 +209,11 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 - **`UDeliveryLocationComponent`**（SceneComponent）：挂在取件点/收件点/收件人 NPC 上，
   填 `LocationId`，`BeginPlay` 时自己注册。三种点共用一个组件，因为在数据上它们是同一种
   东西：一个需要被解析成世界坐标的外部编号。继承 SceneComponent 是为了能带相对偏移——
-  收件点挂在整栋楼上时，楼的原点可能在中心甚至地下，指引箭头该指门口。
+  收件点挂在整栋楼上时，楼的原点可能在中心甚至地下，指引箭头该指门口。`HighlightActors`
+  指定任务指向这里时要透视高亮的建筑模型；留空默认高亮组件 Owner。地点是门口单独摆的
+  Marker 时要在关卡实例中显式填实际建筑，可填多个 Actor。
 - **`UDeliveryLocationRegistry`**（WorldSubsystem）：`ResolveActor` / `ResolveLocation` /
-  `ResolveAllActors` / `GetRegisteredIds`。
+  `ResolveAllActors` / `ResolveAllComponents` / `GetRegisteredIds`。
 
 **查找走注册表而不是遍历关卡**，和交互系统同一个理由：这个项目已经被"碰撞查询静默失效"
 坑过一次（交通组件的前车探测通道配错、恒为 false，肉眼完全看不出来）。注册表没有这个
@@ -227,6 +229,12 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 **目的地按任务状态自动切换**，调用方不要自己判：待取件 → `PickupLocationId`，
 进行中 → `DeliveryLocationId`，其他状态返回 false。判错了的表现是"箭头指向已经拿过的
 地方"，而且四个界面会各错各的。
+
+同一套状态切换也驱动本机建筑透视高亮：`TaskTracker` 给目标建筑的 Mesh 开启
+`CustomDepth/Stencil=1`，`DeliveryPlayerController` 自动启用现有的
+`/Game/Blueprint/Interaction/M_GrabHighlight` 后处理材质。完成任务、改追踪目标或从取件切到
+送货时先恢复上一栋建筑原有的 CustomDepth/Stencil，再高亮新目标。只有本机拥有的 Tracker
+执行渲染改动，多人玩家各看各的追踪目标。
 
 策划表里填了 ID、关卡里却没有对应的点时返回 false **并在日志里点名**。静默失败的话
 表现只是"箭头不显示"，根因几乎查不到。
@@ -271,6 +279,13 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 | `HeightOffset` | 高度差，正数说明在上方，可以提示"在楼上" |
 
 三个入口：`GetTrackedTaskGuidance`、`GetTaskGuidance(Task)`、`MakeGuidanceToLocation`。
+
+顶部水平罗盘条使用 `GetTrackedTaskCompass(VisibleAngle, NorthWorldYaw)`。返回的目标和
+N/E/S/W 偏移统一是水平轴上的标准化位置：`-1` 为左边、`0` 为镜头正前方、`+1` 为右边；
+UMG 将偏移乘以罗盘条半宽后写入 `Render Translation X`。目标和四个方向超出显示角度后都会
+夹在边缘；`bTargetInStrip` / `bNorthVisible` 等字段只表示它是否在真实显示角度内，想始终贴边
+显示时忽略这些显隐字段。默认世界 `+X` 是北；关卡方向不一致时只改
+`NorthWorldYaw`，不要在四个刻度上分别加补偿。
 另有 `FormatDistance` 把厘米格式化成"12 米" / "1.5 公里"。
 
 **角度基于镜头而不是角色**：玩家看的是镜头，而骑车时镜头和车头还可能不一致

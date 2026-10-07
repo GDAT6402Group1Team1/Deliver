@@ -3,11 +3,14 @@
 #include "DeliveryTaskTrackerComponent.h"
 
 #include "Delivery.h"
+#include "Components/MeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
+#include "Task/DeliveryLocationComponent.h"
 #include "Task/DeliveryLocationRegistry.h"
 #include "Task/DeliveryTaskDefinition.h"
 #include "Task/DeliveryTaskManagerComponent.h"
@@ -31,12 +34,33 @@ void UDeliveryTaskTrackerComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (!GetOwner() || !GetOwner()->HasAuthority() || !GetWorld())
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	// PlayerState、GameState 和关卡地点的注册顺序没有保证。低频重试既能覆盖初始注册，
+	// 也能覆盖 World Partition 后续流入的新建筑；不是本机玩家的 Tracker 会立即返回。
+	GetWorld()->GetTimerManager().SetTimer(
+		HighlightRefreshTimer, this, &UDeliveryTaskTrackerComponent::RefreshDestinationHighlight,
+		0.25f, true, 0.0f);
+
+	if (!GetOwner() || !GetOwner()->HasAuthority())
 	{
 		return;
 	}
 
 	GetWorld()->GetTimerManager().SetTimerForNextTick(this, &UDeliveryTaskTrackerComponent::BindToManager);
+}
+
+void UDeliveryTaskTrackerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(HighlightRefreshTimer);
+	}
+	ClearDestinationHighlight();
+	Super::EndPlay(EndPlayReason);
 }
 
 void UDeliveryTaskTrackerComponent::BindToManager()
@@ -123,6 +147,7 @@ void UDeliveryTaskTrackerComponent::SetTrackedTask(UDeliveryTaskDefinition* Task
 
 	// 服务器不会走 OnRep，这里直接广播一次
 	OnTrackedTaskChanged.Broadcast(TrackedTask);
+	RefreshDestinationHighlight();
 }
 
 void UDeliveryTaskTrackerComponent::RefreshAutoSelection()
@@ -165,11 +190,144 @@ void UDeliveryTaskTrackerComponent::HandleTaskStatusChanged(UDeliveryTaskDefinit
 	{
 		RefreshAutoSelection();
 	}
+
+	// 同一个任务从待取件切到进行中时 TrackedTask 指针不变，不会触发 OnRep；
+	// 高亮必须在这里从取件建筑切到送货建筑。
+	RefreshDestinationHighlight();
 }
 
 void UDeliveryTaskTrackerComponent::OnRep_TrackedTask()
 {
 	OnTrackedTaskChanged.Broadcast(TrackedTask);
+	RefreshDestinationHighlight();
+}
+
+bool UDeliveryTaskTrackerComponent::IsLocalTracker() const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		const APlayerController* Controller = It->Get();
+		if (Controller && Controller->IsLocalController() && Controller->PlayerState == GetOwner())
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void UDeliveryTaskTrackerComponent::RefreshDestinationHighlight()
+{
+	if (!IsLocalTracker())
+	{
+		ClearDestinationHighlight();
+		return;
+	}
+
+	const UDeliveryTaskManagerComponent* Manager = UDeliveryTaskManagerComponent::Get(this);
+	FName DesiredLocationId;
+	if (Manager && TrackedTask)
+	{
+		switch (Manager->GetTaskStatus(TrackedTask))
+		{
+		case EDeliveryTaskStatus::AwaitingPickup:
+			DesiredLocationId = TrackedTask->PickupLocationId;
+			break;
+		case EDeliveryTaskStatus::InProgress:
+			DesiredLocationId = TrackedTask->DeliveryLocationId;
+			break;
+		default:
+			break;
+		}
+	}
+
+	if (DesiredLocationId.IsNone())
+	{
+		ClearDestinationHighlight();
+		return;
+	}
+
+	// 已经成功高亮同一个地点时不用每 0.25 秒反复改 RenderState。
+	if (HighlightedLocationId == DesiredLocationId && !DestinationHighlightStates.IsEmpty())
+	{
+		return;
+	}
+
+	if (HighlightedLocationId != DesiredLocationId)
+	{
+		ClearDestinationHighlight();
+	}
+
+	const UDeliveryLocationRegistry* Registry = UDeliveryLocationRegistry::Get(this);
+	if (!Registry)
+	{
+		return;
+	}
+
+	TArray<AActor*> HighlightActors;
+	for (const UDeliveryLocationComponent* Location : Registry->ResolveAllComponents(DesiredLocationId))
+	{
+		if (!Location)
+		{
+			continue;
+		}
+		TArray<AActor*> LocationActors;
+		Location->GetHighlightActors(LocationActors);
+		for (AActor* Actor : LocationActors)
+		{
+			HighlightActors.AddUnique(Actor);
+		}
+	}
+
+	for (AActor* Actor : HighlightActors)
+	{
+		if (!Actor)
+		{
+			continue;
+		}
+
+		TArray<UMeshComponent*> Meshes;
+		Actor->GetComponents(Meshes);
+		for (UMeshComponent* Mesh : Meshes)
+		{
+			if (!Mesh)
+			{
+				continue;
+			}
+
+			FDestinationHighlightState& State = DestinationHighlightStates.AddDefaulted_GetRef();
+			State.Component = Mesh;
+			State.bRenderCustomDepth = Mesh->bRenderCustomDepth;
+			State.StencilValue = Mesh->CustomDepthStencilValue;
+			Mesh->SetCustomDepthStencilValue(1);
+			Mesh->SetRenderCustomDepth(true);
+		}
+	}
+
+	if (!DestinationHighlightStates.IsEmpty())
+	{
+		HighlightedLocationId = DesiredLocationId;
+	}
+}
+
+void UDeliveryTaskTrackerComponent::ClearDestinationHighlight()
+{
+	for (const FDestinationHighlightState& State : DestinationHighlightStates)
+	{
+		if (UMeshComponent* Mesh = State.Component.Get())
+		{
+			Mesh->SetRenderCustomDepth(State.bRenderCustomDepth);
+			Mesh->SetCustomDepthStencilValue(State.StencilValue);
+		}
+	}
+	DestinationHighlightStates.Reset();
+	HighlightedLocationId = NAME_None;
 }
 
 bool UDeliveryTaskTrackerComponent::GetTrackedTaskDestination(FVector& OutLocation, FName& OutLocationId) const

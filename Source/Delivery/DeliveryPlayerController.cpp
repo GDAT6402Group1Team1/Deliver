@@ -2,16 +2,31 @@
 
 #include "DeliveryPlayerController.h"
 #include "Delivery.h"
+#include "Components/PostProcessComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "InputAction.h"
 #include "InputCoreTypes.h"
 #include "InputMappingContext.h"
+#include "Materials/MaterialInterface.h"
 #include "Task/DeliveryPhoneCallQueueComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 ADeliveryPlayerController::ADeliveryPlayerController()
 {
+	HighlightPostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("HighlightPostProcess"));
+	HighlightPostProcess->bUnbound = true;
+	HighlightPostProcess->bEnabled = false;
+	HighlightPostProcess->Priority = 100.0f;
+	HighlightPostProcess->BlendWeight = 1.0f;
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> HighlightMaterial(
+		TEXT("/Game/Blueprint/Interaction/M_GrabHighlight.M_GrabHighlight"));
+	if (HighlightMaterial.Succeeded())
+	{
+		HighlightPostProcess->Settings.AddBlendable(HighlightMaterial.Object, 1.0f);
+	}
+
 	static ConstructorHelpers::FObjectFinder<UInputMappingContext> DefaultIMC(TEXT("/Game/Input/IMC_Default"));
 	if (DefaultIMC.Succeeded())
 	{
@@ -31,6 +46,17 @@ ADeliveryPlayerController::ADeliveryPlayerController()
 	// 用 ConstructorHelpers 的话新建出来的资产在同一次会话里永远解析不到。
 	InteractAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
 	InteractKey = EKeys::F;
+}
+
+void ADeliveryPlayerController::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// PlayerController 在服务器上也会为远端玩家存在；只有本机控制器需要渲染后处理。
+	if (HighlightPostProcess)
+	{
+		HighlightPostProcess->bEnabled = IsLocalController();
+	}
 }
 
 namespace
