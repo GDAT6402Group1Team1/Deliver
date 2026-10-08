@@ -51,6 +51,13 @@ public:
 	 */
 	void PushObjective(const FText& Title, const FText& Detail, bool bUrgent = false);
 
+	/**
+	 * 屏幕下方中央的对白字幕。和三个短时提示槽不同，它会一直保留到 ClearSubtitle，
+	 * 因为一句话说完后通常还要停留到通话结束，不能靠 0.25 秒刷新维持。
+	 */
+	void SetSubtitle(const FText& Speaker, const FText& Text);
+	void ClearSubtitle();
+
 private:
 
 	void EnsureWidget();
@@ -69,6 +76,9 @@ private:
 	FText ObjectiveDetail;
 	bool bObjectiveUrgent = false;
 	double LastObjectivePushTime = -1000.0;
+	FText SubtitleSpeaker;
+	FText SubtitleText;
+	bool bSubtitleVisible = false;
 	FText PromptText;
 	FVector PromptAnchor = FVector::ZeroVector;
 	float PromptHoldProgress = -1.0f;

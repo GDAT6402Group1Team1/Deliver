@@ -15,28 +15,29 @@
 挂在 **PlayerState** 上（`UDeliveryTaskTrackerComponent`）。
 
 **2. 计时不用 Tick，用时间戳。**
-取件那一刻记下服务器时间，之后谁都不再碰它，倒计时是"当前服务器时间 − 起始时间戳"算出来的。
+接通任务解锁电话那一刻记下服务器时间，之后谁都不再碰它，倒计时是
+"当前服务器时间 − 起始时间戳"算出来的。
 这样快递掉落、被别人抢走、塞进车后备箱、持有者晕倒，**计时根本碰不到**，
 不需要为每种情况写一遍"计时不停"的逻辑，也不会有客户端各算各的问题。
 超时后这个差值继续变大，UI 直接把负的剩余时间显示成 `+00:01`。
 
-**3.「同时只有一个进行中任务」不是一个状态，是一条取件规则。**
-它落在 `CanAcquireItem()` 里：只要世界上存在进行中的任务，其他任务的快递就拿不起来。
-所以不需要额外的互斥标记，也不可能出现两个任务同时计时。
+**3. 全世界同时只有一个已经接单并计时的任务。**
+接听任务电话时 `StartTaskTimerFromAcceptedCall()` 检查互斥；当前订单结束前，后续任务解锁来电
+保留在 PhoneQueue 中暂停。`CanAcquireItem()` 同时阻止拿起其他任务的快递，因此不会有两单同时计时。
 
 ---
 
 ## 二、状态机
 
 ```
-                解锁条件满足                有人取到快递              交付完成
+                解锁条件满足                  有人取到快递              交付完成
    Locked ──────────────────► AwaitingPickup ──────────► InProgress ──────────► Completed
-（未解锁）      ＋解锁来电入队   （待取件）      ＋开始全局计时  （进行中）    ＋结算奖励
-                                不计时、不过期                 ＋超时定时器    ＋重新评估解锁
+（未解锁）      ＋解锁来电入队   （待取件）         状态切换     （进行中）    ＋结算奖励
+                              接听电话即开始计时      计时不重置
 ```
 
 - **没有失败态**。超时只影响奖励倍率，任务继续，颜色保持红色，倒计时转正计时。
-- 未取件的任务可以永远挂着，不计时也不消失。
+- 解锁但尚未接听的任务不计时；接听后即使还没取餐也持续计时。
 - 首次超时打一次催促电话（`bOverdueCallPlayed` 置位），同一任务不会打第二次。
 
 ---
@@ -73,7 +74,8 @@
 
 | 接口 | 说明 |
 |---|---|
-| `bool TryAcquireItem(Task, APlayerState* Player)` | 玩家拿到快递。首次取件才会接取任务并开始计时，返回 true；换手/捡回返回 false |
+| `bool StartTaskTimerFromAcceptedCall(Task)` | 接通任务解锁电话时开始计时；幂等，已有其他计时任务时拒绝 |
+| `bool TryAcquireItem(Task, APlayerState* Player)` | 玩家拿到快递。正常情况只切到 InProgress、不重置计时；漏接时以取件时刻兜底开始 |
 | `bool TryCompleteDelivery(Task, APlayerState* Deliverer)` | 完成交付。结算奖励、结束任务、重新评估后续任务解锁 |
 | `void ReportSpecialEvent(Task, FGameplayTag EventTag)` | 上报影响奖励的特殊事件。同一 Tag 只记一次 |
 | `void ReevaluateUnlocks()` | 重新评估所有未解锁任务。完成任务后自动调用；外部条件变化时需手动调 |
@@ -84,7 +86,8 @@
 |---|---|
 | `bool CanAcquireItem(Task) const` | 这件快递现在能不能被拿起来（交互系统在拾取前问这句） |
 | `EDeliveryTaskStatus GetTaskStatus(Task) const` | 任务状态 |
-| `UDeliveryTaskDefinition* GetActiveTask() const` | 当前进行中的任务，全世界最多一个 |
+| `UDeliveryTaskDefinition* GetActiveTask() const` | 当前已取件、进行中的任务 |
+| `UDeliveryTaskDefinition* GetTimedTask() const` | 当前已接单并计时的任务；可能仍在 AwaitingPickup |
 | `void GetTasksByStatus(Status, TArray<...>& Out) const` | 按状态取任务列表（手机列表用 `AwaitingPickup`） |
 | `FDeliveryTaskTimeSnapshot GetTimeSnapshot(Task) const` | 倒计时快照：已用时、剩余（超时为负）、是否超时、绿/黄/红 |
 | `FDeliveryRewardBreakdown EvaluateReward(Task, Elapsed, Events) const` | 纯计算，结算和预览都走它 |
@@ -114,6 +117,7 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 | 接口 | 说明 |
 |---|---|
 | `EnqueueCall(Task, CallType)` | 服务器：来电入队。同任务同类型不会重复入队 |
+| `TryStartNextCall()` | 没有订单计时时启动队首；任务完成后自动调用 |
 | `AnswerCurrentCall()` | 服务器：接听，只在 Ringing 时有效 |
 | `HangUpCurrentCall()` | 服务器：挂断。Ringing 时算拒接（记未接），InCall 时算提前结束 |
 | `EDeliveryPhoneCallState GetCallState()` | `Idle` / `Ringing` / `InCall`，UI 靠它切界面 |
@@ -136,8 +140,19 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 不等客户端播完回报——否则某一个人的播放进度就决定了所有人什么时候进下一通。
 客户端只负责把当前状态表现出来。
 
+本机 `ADeliveryPlayerController` 已自动监听 `OnPhoneStateChanged`：进入 `InCall` 时从当前任务的
+`UnlockCall / OverdueCall` 取 `Dialogue`，交给 `DeliveryDialogueVoiceComponent` 生成电子拟声；
+回到 `Ringing / Idle` 或提前挂断时停止。PlayerController 还会把 `OnGlyphRevealed` 逐字累积到
+`DeliveryPromptSubsystem` 的屏幕下方字幕槽，显示来电人姓名并自动换行；挂断时清空。
+字幕播放完成事件不能用于推进全局电话状态。
+
 **接听是全局的**：任意一个玩家接听，所有人一起进入通话；挂断同理。
 这和"任意玩家取件则全体任务进入进行中"是同一套逻辑。
+
+接听 `TaskUnlocked` 类型电话还会在服务器调用 `StartTaskTimerFromAcceptedCall`。响铃阶段和未接电话
+不启动计时；通话本身耗费的时间也计入订单。当前订单完成之前，后续任务解锁来电留在队列里不响；
+当前订单的 `Overdue` 催促电话会插到暂停来电之前。漏接任务仍允许直接取餐，并以取餐时刻兜底启动，
+避免尚未实现“回拨未接电话”界面时把任务永久锁死。
 
 ### 4.3 `UDeliveryTaskTrackerComponent`（每玩家，PlayerState 上）
 
@@ -243,7 +258,7 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 
 `UDeliveryTaskManagerComponent::NotifyItemLost(Task)` —— 把进行中的任务退回待取件。
 
-不处理的话任务会永远卡在进行中，而且因为"同时只有一个进行中任务"是取件规则，
+不处理的话任务会永远卡在进行中，而且因为同一时间只有一个计时任务，
 **整局再也接不了任何别的任务**，一次意外就把这局玩废了。
 
 三个决定和理由：
@@ -252,8 +267,7 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 - **不在取件点重新生成一份** —— 那需要把 `DeliveryItemId` 解析成可生成的类，那一步还没做。
   退回之后关卡里原本那份快递还在原地（手摆的话），玩家按指引回取件点就能重新拿。
   如果快递是运行时生成的，生成方要自己在退回后再生成一份。
-- **计时重置、特殊事件清空** —— 退回等于这次取件没发生过。保留旧计时的话，玩家要为一次
-  不是自己造成的意外承担时间损失；事件不清的话重新取件后再触发一次会把倍率叠上去。
+- **计时、催促状态、特殊事件都保留** —— 订单从接听电话起已经开始，丢件和重新取件仍是同一趟。
 
 检测在 `UDeliveryItemComponent::EndPlay`：Actor 被销毁（`EEndPlayReason::Destroyed`，
 掉出世界会走到这条）且任务仍在进行中时上报。关卡切换/退出游戏不触发——那时整张图都在拆，
@@ -401,12 +415,13 @@ UMG 将偏移乘以罗盘条半宽后写入 `Render Translation X`。目标和�
 关卡开始
   └ TaskManager::BeginPlay → ReevaluateUnlocks()
       └ 条件满足的任务 → AwaitingPickup → PhoneQueue::EnqueueCall(解锁来电)
-          └ 客户端 OnCallStarted → UI 响铃播台词
+          └ 玩家接听 → StartTaskTimerFromAcceptedCall，记 StartServerTime，挂超时定时器
+              └ InCall → 本机电子语音 + 逐字字幕
 
 玩家走到快递前
-  └ 交互系统 → ItemComponent::CanBeAcquired()   （有别的任务在进行中就会被拦住）
+  └ 交互系统 → ItemComponent::CanBeAcquired()   （有别的任务在计时就会被拦住）
       └ 拾取成功 → ItemComponent::NotifyAcquired(PS)
-          └ TaskManager::TryAcquireItem() → InProgress，记 StartServerTime，挂超时定时器
+          └ TaskManager::TryAcquireItem() → InProgress，沿用接电话时的 StartServerTime
               └ 所有玩家 Tracker 自动切到该任务；UI 靠 GetTimeSnapshot 每帧刷倒计时
 
 （途中：掉落、换手、进后备箱、晕倒 —— 任务系统完全不参与，计时照走）
@@ -460,7 +475,7 @@ UMG 将偏移乘以罗盘条半宽后写入 `Render Translation X`。目标和�
 | 存档 | 目前状态全在内存，重开关卡即重置 |
 | 解锁条件 | 内置只有"前置任务已完成"一条，其他条件继承 `UDeliveryTaskUnlockCondition` 扩展 |
 | 外部 ID 的解析 | **地点类已做**：`PickupLocationId` / `DeliveryLocationId` / `ReceiverNpcId` 由 `UDeliveryLocationRegistry` 解析，见 4.7。`DeliveryItemId` / `SpecialEventId` 仍只存字符串 |
-| ~~快递丢失的处理~~ | **已做**：`NotifyItemLost` 把任务退回待取件、计时重置；`UDeliveryItemComponent` 在 Actor 被销毁时自动上报。见 4.8 |
+| ~~快递丢失的处理~~ | **已做**：`NotifyItemLost` 把任务退回待取件，接单计时继续；`UDeliveryItemComponent` 在 Actor 被销毁时自动上报。见 4.8 |
 | 自动化测试 | 奖励结算是纯函数，最值得测，可复用互殴系统 `DeliveryBoxingPoseTests.cpp` 那套框架 |
 
 ---
@@ -469,7 +484,7 @@ UMG 将偏移乘以罗盘条半宽后写入 `Render Translation X`。目标和�
 
 功能说明里没写死、我按最合理的方式定的地方，验收时重点看这几条：
 
-1. **取件后所有玩家的追踪都切到进行中任务**，不只是取件的那个人。理由：此时其他任务的快递也拿不起来，追踪别的没有意义。
+1. **接听任务电话后所有玩家的追踪都切到该任务**，不只是接听的那个人。理由：计时已经开始，其他任务的快递也拿不起来，追踪别的没有意义。
 2. ~~没有做挂断接口~~ —— **已实现接听/挂断**：任意玩家接听即全局接通，挂断同理；响铃超时记为未接来电，自动进下一通。所有计时仍在服务器。
 3. **换手/掉落再捡不算重新接取，也不重置计时**；`NotifyAcquired` 此时返回 false（表示"没有发生接取"，不表示"拾取失败"）。
 4. **同一个特殊事件 Tag 只计一次**，防止沿途反复触发把倍率叠爆。

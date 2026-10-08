@@ -4,16 +4,16 @@
 状态机只有四个状态，没有失败态：
 
 Locked        解锁条件没满足。
-AwaitingPickup 解锁了、来电已入队，但还没人取件。不计时、不过期。
-InProgress    有人取过件。全局计时中，全世界同时只允许一个。
+AwaitingPickup 解锁了、来电已入队。接通电话后从这里开始计时。
+InProgress    有人取过件。沿用接电话时的计时，全世界同时只允许一个计时任务。
 Completed     交付完成。
 
-关于计时：取件那一刻记下服务器时间戳，之后谁都不再碰它。倒计时是"现在减去它"算出来的，
+关于计时：接通任务解锁电话时记下服务器时间戳，之后谁都不再碰它。倒计时是"现在减去它"算出来的，
 不是每帧累加的。这样快递掉地上、被别人抢走、塞进车后备箱、持有者晕倒，计时都不会停，
 也不需要为这些情况各写一遍同步逻辑——它们根本碰不到计时。
 
-关于"只有一个进行中任务"：这条规则落在 CanAcquireItem 上。只要世界上存在进行中的任务，
-其他任务的快递就拿不起来，所以不需要额外的互斥状态，也不会出现两个任务同时计时。
+关于"只有一个计时任务"：后续任务解锁来电会在电话队列里暂停；CanAcquireItem 同时阻止
+拿起其他任务的快递，所以不会出现两份订单一起倒计时。
 
 关于客户端：所有状态变化都通过复制 Tasks 数组下发，OnRep 里跟上一次的快照做差分，
 补广播出跟服务器同样的事件，所以 UI 只需要监听这三个委托，不用区分自己跑在哪一端。
@@ -204,8 +204,57 @@ bool UDeliveryTaskManagerComponent::CanAcquireItem(const UDeliveryTaskDefinition
 		return false;
 	}
 
-	// 已经有任务在进行时，别的任务的快递一律拿不起来
-	return GetActiveTask() == nullptr;
+	// 已接听的任务优先。漏接电话时仍允许直接取件，TryAcquireItem 会以取件时刻兜底启动计时。
+	const UDeliveryTaskDefinition* TimedTask = GetTimedTask();
+	return TimedTask == nullptr || TimedTask == Task;
+}
+
+bool UDeliveryTaskManagerComponent::StartTaskTimerFromAcceptedCall(UDeliveryTaskDefinition* Task)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !Task)
+	{
+		return false;
+	}
+
+	FDeliveryTaskState* State = FindState(Task);
+	if (!State || State->Status != EDeliveryTaskStatus::AwaitingPickup)
+	{
+		return false;
+	}
+
+	if (State->bTimerStarted)
+	{
+		return true;
+	}
+
+	if (const UDeliveryTaskDefinition* TimedTask = GetTimedTask())
+	{
+		return TimedTask == Task;
+	}
+
+	State->bTimerStarted = true;
+	State->StartServerTime = GetServerTimeSeconds();
+	State->CompleteServerTime = 0.f;
+	State->bOverdueCallPlayed = false;
+	State->SpecialEvents.Reset();
+	State->Deliverer = nullptr;
+	KnownStates.Add(State->Definition, *State);
+
+	// 状态仍是 AwaitingPickup，但 UI/Tracker 需要立刻知道这项任务已经正式接单。
+	OnTaskStatusChanged.Broadcast(Task, State->Status);
+	GetOwner()->ForceNetUpdate();
+
+	if (Task->TimeLimitSeconds > 0.f && GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			OverdueTimerHandle,
+			FTimerDelegate::CreateUObject(this, &UDeliveryTaskManagerComponent::HandleOverdue, Task),
+			Task->TimeLimitSeconds,
+			false);
+	}
+
+	UE_LOG(LogDelivery, Log, TEXT("[Task] %s 已接听，开始计时"), *Task->TaskId.ToString());
+	return true;
 }
 
 bool UDeliveryTaskManagerComponent::IsTaskRegistered(const UDeliveryTaskDefinition* Task) const
@@ -232,24 +281,15 @@ bool UDeliveryTaskManagerComponent::TryAcquireItem(UDeliveryTaskDefinition* Task
 		return false;
 	}
 
-	State->StartServerTime = GetServerTimeSeconds();
-	State->CompleteServerTime = 0.f;
-	State->bOverdueCallPlayed = false;
-	State->SpecialEvents.Reset();
-	State->Deliverer = nullptr;
-	SetTaskStatus(*State, EDeliveryTaskStatus::InProgress);
-
-	// 到点只打一次催促电话，任务不会因此结束，之后转正计时
-	if (Task->TimeLimitSeconds > 0.f && GetWorld())
+	// 正常流程在接电话时已经开始。漏接电话但直接找到餐品时从这里兜底，避免无计时订单。
+	if (!State->bTimerStarted && !StartTaskTimerFromAcceptedCall(Task))
 	{
-		GetWorld()->GetTimerManager().SetTimer(
-			OverdueTimerHandle,
-			FTimerDelegate::CreateUObject(this, &UDeliveryTaskManagerComponent::HandleOverdue, Task),
-			Task->TimeLimitSeconds,
-			false);
+		return false;
 	}
 
-	UE_LOG(LogDelivery, Log, TEXT("[Task] %s 接取，取件玩家 %s"),
+	SetTaskStatus(*State, EDeliveryTaskStatus::InProgress);
+
+	UE_LOG(LogDelivery, Log, TEXT("[Task] %s 已取件，玩家 %s（计时未重置）"),
 		*Task->TaskId.ToString(), Player ? *Player->GetPlayerName() : TEXT("None"));
 
 	return true;
@@ -287,6 +327,10 @@ bool UDeliveryTaskManagerComponent::TryCompleteDelivery(UDeliveryTaskDefinition*
 
 	// 后续任务的解锁条件可能刚好被这次完成满足，立刻进电话队列
 	ReevaluateUnlocks();
+	if (UDeliveryPhoneCallQueueComponent* Phone = GetPhoneQueue())
+	{
+		Phone->TryStartNextCall();
+	}
 
 	return true;
 }
@@ -312,22 +356,12 @@ bool UDeliveryTaskManagerComponent::NotifyItemLost(UDeliveryTaskDefinition* Task
 		return false;
 	}
 
-	// 清干净：退回等于这次取件没发生过。特殊事件也要清，
-	// 否则重新取件后沿途再触发一次会把倍率叠上去
-	State->StartServerTime = 0.f;
+	// 只退回取件阶段。订单从接电话起就是同一次尝试，计时、催促状态和特殊事件全部保留。
 	State->CompleteServerTime = 0.f;
-	State->bOverdueCallPlayed = false;
-	State->SpecialEvents.Reset();
 	State->Deliverer = nullptr;
 	SetTaskStatus(*State, EDeliveryTaskStatus::AwaitingPickup);
 
-	// 催促电话的定时器是给这一次取件排的，退回之后不该再响
-	if (GetWorld())
-	{
-		GetWorld()->GetTimerManager().ClearTimer(OverdueTimerHandle);
-	}
-
-	UE_LOG(LogDelivery, Warning, TEXT("[Task] %s 的快递丢失，任务退回待取件，计时重置"),
+	UE_LOG(LogDelivery, Warning, TEXT("[Task] %s 的快递丢失，任务退回待取件，计时继续"),
 		*Task->TaskId.ToString());
 
 	return true;
@@ -353,7 +387,10 @@ void UDeliveryTaskManagerComponent::ReportSpecialEvent(UDeliveryTaskDefinition* 
 void UDeliveryTaskManagerComponent::HandleOverdue(UDeliveryTaskDefinition* Task)
 {
 	FDeliveryTaskState* State = FindState(Task);
-	if (!State || State->Status != EDeliveryTaskStatus::InProgress || State->bOverdueCallPlayed)
+	if (!State || !State->bTimerStarted ||
+		(State->Status != EDeliveryTaskStatus::AwaitingPickup &&
+		 State->Status != EDeliveryTaskStatus::InProgress) ||
+		State->bOverdueCallPlayed)
 	{
 		return;
 	}
@@ -388,6 +425,21 @@ UDeliveryTaskDefinition* UDeliveryTaskManagerComponent::GetActiveTask() const
 	return nullptr;
 }
 
+UDeliveryTaskDefinition* UDeliveryTaskManagerComponent::GetTimedTask() const
+{
+	for (const FDeliveryTaskState& State : Tasks)
+	{
+		if (State.bTimerStarted &&
+			(State.Status == EDeliveryTaskStatus::AwaitingPickup ||
+			 State.Status == EDeliveryTaskStatus::InProgress))
+		{
+			return State.Definition;
+		}
+	}
+
+	return nullptr;
+}
+
 void UDeliveryTaskManagerComponent::GetTasksByStatus(EDeliveryTaskStatus Status, TArray<UDeliveryTaskDefinition*>& OutTasks) const
 {
 	OutTasks.Reset();
@@ -411,7 +463,8 @@ FDeliveryTaskTimeSnapshot UDeliveryTaskManagerComponent::GetTimeSnapshot(const U
 		return Snapshot;
 	}
 
-	if (State->Status == EDeliveryTaskStatus::InProgress)
+	if ((State->Status == EDeliveryTaskStatus::AwaitingPickup ||
+		 State->Status == EDeliveryTaskStatus::InProgress) && State->bTimerStarted)
 	{
 		Snapshot.bRunning = true;
 		Snapshot.ElapsedSeconds = FMath::Max(0.f, GetServerTimeSeconds() - State->StartServerTime);
@@ -422,7 +475,7 @@ FDeliveryTaskTimeSnapshot UDeliveryTaskManagerComponent::GetTimeSnapshot(const U
 	}
 	else
 	{
-		// 未取件不计时
+		// 还没接听任务电话，也没有通过取件兜底开始计时
 		return Snapshot;
 	}
 
@@ -518,11 +571,12 @@ void UDeliveryTaskManagerComponent::OnRep_Tasks()
 
 		const FDeliveryTaskState* Known = KnownStates.Find(State.Definition);
 		const bool bStatusChanged = !Known || Known->Status != State.Status;
+		const bool bTimerJustStarted = State.bTimerStarted && (!Known || !Known->bTimerStarted);
 		const bool bJustOverdue = State.bOverdueCallPlayed && (!Known || !Known->bOverdueCallPlayed);
 
 		KnownStates.Add(State.Definition, State);
 
-		if (bStatusChanged)
+		if (bStatusChanged || bTimerJustStarted)
 		{
 			OnTaskStatusChanged.Broadcast(State.Definition, State.Status);
 

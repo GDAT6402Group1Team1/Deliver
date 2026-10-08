@@ -10,7 +10,9 @@
 #include "InputCoreTypes.h"
 #include "InputMappingContext.h"
 #include "Materials/MaterialInterface.h"
+#include "Interaction/DeliveryPromptSubsystem.h"
 #include "Task/DeliveryPhoneCallQueueComponent.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 ADeliveryPlayerController::ADeliveryPlayerController()
@@ -59,6 +61,129 @@ void ADeliveryPlayerController::BeginPlay()
 	if (HighlightPostProcess)
 	{
 		HighlightPostProcess->bEnabled = IsLocalController();
+	}
+
+	BindPhoneVoice();
+	if (IsLocalController() && DialogueVoice)
+	{
+		DialogueVoice->OnGlyphRevealed.AddUniqueDynamic(this,
+			&ADeliveryPlayerController::HandlePhoneVoiceGlyphRevealed);
+	}
+}
+
+void ADeliveryPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(PhoneVoiceBindRetryTimer);
+	}
+
+	if (UDeliveryPhoneCallQueueComponent* Phone = UDeliveryPhoneCallQueueComponent::Get(this))
+	{
+		Phone->OnPhoneStateChanged.RemoveDynamic(this,
+			&ADeliveryPlayerController::HandlePhoneVoiceStateChanged);
+	}
+
+	if (DialogueVoice)
+	{
+		DialogueVoice->OnGlyphRevealed.RemoveDynamic(this,
+			&ADeliveryPlayerController::HandlePhoneVoiceGlyphRevealed);
+		DialogueVoice->StopSpeaking();
+	}
+	if (UDeliveryPromptSubsystem* Prompt = UDeliveryPromptSubsystem::Get(this))
+	{
+		Prompt->ClearSubtitle();
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ADeliveryPlayerController::BindPhoneVoice()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	UDeliveryPhoneCallQueueComponent* Phone = UDeliveryPhoneCallQueueComponent::Get(this);
+	if (!Phone)
+	{
+		// 客户端的 GameState/组件可能还没复制到。只在本机重试，不让远端 Controller 做表现。
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(PhoneVoiceBindRetryTimer, this,
+				&ADeliveryPlayerController::BindPhoneVoice, 0.5f, false);
+		}
+		return;
+	}
+
+	Phone->OnPhoneStateChanged.AddUniqueDynamic(this,
+		&ADeliveryPlayerController::HandlePhoneVoiceStateChanged);
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(PhoneVoiceBindRetryTimer);
+	}
+
+	// 绑定发生时电话可能已经响了或已经接通。主动同步一次，避免晚加入/晚复制的客户端没声音。
+	FDeliveryPhoneCall CurrentCall;
+	if (Phone->GetCurrentCall(CurrentCall))
+	{
+		HandlePhoneVoiceStateChanged(Phone->GetCallState(), CurrentCall);
+	}
+}
+
+void ADeliveryPlayerController::HandlePhoneVoiceStateChanged(
+	EDeliveryPhoneCallState NewState, const FDeliveryPhoneCall& Call)
+{
+	if (!IsLocalController() || !DialogueVoice)
+	{
+		return;
+	}
+
+	if (NewState != EDeliveryPhoneCallState::InCall)
+	{
+		DialogueVoice->StopSpeaking();
+		ActiveVoiceCallId = 0;
+		ActivePhoneCallerName = FText::GetEmpty();
+		ActivePhoneSubtitle.Reset();
+		if (UDeliveryPromptSubsystem* Prompt = UDeliveryPromptSubsystem::Get(this))
+		{
+			Prompt->ClearSubtitle();
+		}
+		return;
+	}
+
+	// OnRep_Queue / OnRep_CallState 可能在同一帧各触发一次，同一通不能从头播放两遍。
+	if (Call.CallId <= 0 || Call.CallId == ActiveVoiceCallId)
+	{
+		return;
+	}
+
+	ActiveVoiceCallId = Call.CallId;
+	const FDeliveryPhoneCallContent Content =
+		UDeliveryPhoneCallQueueComponent::GetCallContent(Call);
+	ActivePhoneCallerName = Content.CallerName;
+	ActivePhoneSubtitle.Reset();
+	if (UDeliveryPromptSubsystem* Prompt = UDeliveryPromptSubsystem::Get(this))
+	{
+		Prompt->ClearSubtitle();
+	}
+	DialogueVoice->SpeakText(Content.Dialogue);
+}
+
+void ADeliveryPlayerController::HandlePhoneVoiceGlyphRevealed(
+	const FString& Glyph, int32 GlyphIndex)
+{
+	if (!IsLocalController() || ActiveVoiceCallId <= 0)
+	{
+		return;
+	}
+
+	ActivePhoneSubtitle.Append(Glyph);
+	if (UDeliveryPromptSubsystem* Prompt = UDeliveryPromptSubsystem::Get(this))
+	{
+		Prompt->SetSubtitle(ActivePhoneCallerName, FText::FromString(ActivePhoneSubtitle));
 	}
 }
 

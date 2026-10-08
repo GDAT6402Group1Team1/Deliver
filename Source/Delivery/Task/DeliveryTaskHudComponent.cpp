@@ -186,7 +186,7 @@ bool UDeliveryTaskHudComponent::PushCallState(UDeliveryPhoneCallQueueComponent* 
 	case EDeliveryPhoneCallState::InCall:
 		Prompt->PushObjective(
 			FText::Format(LOCTEXT("InCall", "通话中：{0}"), Content.CallerName),
-			Content.Dialogue,
+			FText::GetEmpty(),
 			/*bUrgent=*/false);
 
 		return true;
@@ -259,9 +259,9 @@ bool UDeliveryTaskHudComponent::PushTaskState()
 	}
 
 	bool bUrgent = false;
-	if (!bPickup)
+	const FDeliveryTaskTimeSnapshot Time = Manager->GetTimeSnapshot(Task);
+	if (Time.bRunning)
 	{
-		const FDeliveryTaskTimeSnapshot Time = Manager->GetTimeSnapshot(Task);
 		Parts.Add(FString::Printf(TEXT("剩余 %s"), *FormatClock(Time.RemainingSeconds).ToString()));
 		bUrgent = Time.bOverdue || Time.RemainingSeconds < UrgentRemainingSeconds;
 	}

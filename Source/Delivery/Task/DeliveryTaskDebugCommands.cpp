@@ -360,7 +360,7 @@ namespace DeliveryTaskDebug
 		if (Manager->NotifyItemLost(Active))
 		{
 			Print(FString::Printf(
-				TEXT("[Task] %s 的快递已按丢失处理：退回待取件，计时重置。"
+				TEXT("[Task] %s 的快递已按丢失处理：退回待取件，计时继续。"
 					 "用 Delivery.Task.Dump 核对状态"), *Active->TaskId.ToString()));
 		}
 	}

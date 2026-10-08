@@ -19,7 +19,7 @@ enum class EDeliveryTaskStatus : uint8
 {
 	/** 解锁条件未满足，手机里看不到。 */
 	Locked UMETA(DisplayName="未解锁"),
-	/** 已解锁、来电已入队，但还没人取件。不计时、不过期，可以一直挂着。 */
+	/** 已解锁、来电已入队但还没人取件；接听后会在此状态开始计时。 */
 	AwaitingPickup UMETA(DisplayName="待取件"),
 	/** 有人取过件，全局计时中。同一时间全世界只允许一个。 */
 	InProgress UMETA(DisplayName="进行中"),
@@ -142,12 +142,13 @@ struct FDeliveryTaskState
 	UPROPERTY(BlueprintReadOnly, Category="Task")
 	EDeliveryTaskStatus Status = EDeliveryTaskStatus::Locked;
 
-	/**
-	 * 第一次取件时的服务器时间。倒计时是"当前服务器时间减去它"算出来的，不是每帧累加的，
-	 * 所以快递掉落、换手、进后备箱、玩家晕倒都不会让计时停下，也不用为此写任何同步。
-	 */
+	/** 接通任务解锁电话时的服务器时间；漏接后直接取件时以取件时刻兜底。 */
 	UPROPERTY(BlueprintReadOnly, Category="Task")
 	float StartServerTime = 0.f;
+
+	/** StartServerTime 可能合法地等于 0，所以不能拿时间戳本身充当是否已开始的标记。 */
+	UPROPERTY(BlueprintReadOnly, Category="Task")
+	bool bTimerStarted = false;
 
 	/** 交付完成时的服务器时间，用于结算时间评价。 */
 	UPROPERTY(BlueprintReadOnly, Category="Task")
@@ -172,7 +173,7 @@ struct FDeliveryTaskTimeSnapshot
 {
 	GENERATED_BODY()
 
-	/** 任务是否在计时（只有 InProgress 为 true）。 */
+	/** 任务是否在计时（接听后，AwaitingPickup 和 InProgress 都可能为 true）。 */
 	UPROPERTY(BlueprintReadOnly, Category="Task")
 	bool bRunning = false;
 

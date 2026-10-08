@@ -17,7 +17,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeliveryTrackedTaskChanged, UDeli
  * 任务状态是全局共享的，但追踪哪一个是各人各选，只有被追踪的任务显示地图引导。
  *
  * 选择权威在服务器：客户端 UI 走 RequestTrackTask 发请求，结果复制回来。
- * 自动选择规则（有人取件、只剩一个任务、追踪的任务完成了）也在服务器统一处理，
+	 * 自动选择规则（有人接单、只剩一个任务、追踪的任务完成了）也在服务器统一处理，
  * 避免两端各算一遍得出不同结果。
  */
 UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
@@ -44,7 +44,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Task")
 	void RequestTrackTask(UDeliveryTaskDefinition* Task);
 
-	/** 这个任务现在允不允许被选为追踪目标。有任务进行中时只能追踪它。 */
+	/** 这个任务现在允不允许被选为追踪目标。有任务已接单计时时只能追踪它。 */
 	UFUNCTION(BlueprintPure, Category="Task")
 	bool CanTrackTask(const UDeliveryTaskDefinition* Task) const;
 

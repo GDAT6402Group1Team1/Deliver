@@ -19,7 +19,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeliveryTaskOverdue, UDeliveryTas
  * 全局任务状态的唯一权威，挂在 GameState 上，所以多人模式下所有人共享同一份解锁、计时和完成结果。
  * 所有改状态的接口只在服务器生效；客户端通过复制 + OnRep 得到同样的事件。
  *
- * 计时不用 Tick：取件时记一个服务器时间戳，之后所有人按"当前服务器时间 - 时间戳"算，
+ * 计时不用 Tick：接通任务电话时记一个服务器时间戳，之后所有人按"当前服务器时间 - 时间戳"算，
  * 快递掉落、换手、进后备箱、玩家晕倒都影响不到它，正好符合"计时不停"的规则。
  */
 UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
@@ -41,6 +41,12 @@ public:
 	/** —— 取件与交付（服务器）—— */
 
 	/**
+	 * 接通任务解锁电话时开始计时。幂等：同一任务重复调用不会重置。
+	 * 已有另一项任务在计时时返回 false。
+	 */
+	bool StartTaskTimerFromAcceptedCall(UDeliveryTaskDefinition* Task);
+
+	/**
 	 * 这件快递现在能不能被拿起来。交互 / 背包系统在允许拾取前问这一句。
 	 * 规则：已经进行中的那个任务的快递随便捡（掉了还能捡回来）；
 	 * 只要世界上存在进行中的任务，其他任务的快递一律拿不起来。
@@ -51,8 +57,8 @@ public:
 	bool IsTaskRegistered(const UDeliveryTaskDefinition* Task) const;
 
 	/**
-	 * 服务器：玩家拿到了某个任务的快递。首次取件会让任务进入进行中并开始全局计时；
-	 * 之后的换手、捡回都会走到这里，但不会重置计时。返回值表示这次是否真的接取了任务。
+	 * 服务器：玩家拿到了某个任务的快递。首次取件让任务进入进行中，但不会重置接电话时
+	 * 已经开始的计时；漏接后直接取件时才以取件时刻兜底启动。换手、捡回不会重置。
 	 */
 	UFUNCTION(BlueprintCallable, Category="Task")
 	bool TryAcquireItem(UDeliveryTaskDefinition* Task, APlayerState* Player);
@@ -68,16 +74,15 @@ public:
 	/**
 	 * 快递没了（掉出世界、被误删、关卡里被销毁），把任务退回待取件。
 	 *
-	 * 不处理的话这个任务会永远卡在进行中，而且因为"同时只有一个进行中任务"
-	 * 是取件规则，整局再也接不了任何别的任务——一次意外就把这局玩废了。
+	 * 不处理的话这个任务会永远卡在进行中，而且因为同一时间只允许一个计时任务，
+	 * 整局再也接不了任何别的任务——一次意外就把这局玩废了。
 	 *
 	 * **选择退回而不是判失败**，和"四个状态无失败态"一致：退回不是惩罚，是重来一次。
 	 * 也不在取件点重新生成一份——那需要把 DeliveryItemId 解析成可生成的类，
 	 * 而那一步还没做；退回之后关卡里原本那份快递还在原地（如果是手摆的），
 	 * 玩家按指引回取件点就能重新拿。
 	 *
-	 * **计时会重置**：退回等于这次取件没发生过，下次取件重新记时间戳。
-	 * 保留旧计时的话，玩家要为一次不是自己造成的意外承担时间损失。
+	 * **计时不会重置**：订单在接电话时已经开始，掉件、销毁、重新取件都属于同一趟订单。
 	 *
 	 * 只在服务器有效。已完成的任务不受影响（交付时快递本来就会被销毁）。
 	 */
@@ -100,6 +105,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Task")
 	UDeliveryTaskDefinition* GetActiveTask() const;
 
+	/** 当前已经接单并在计时的任务；待取件和进行中都算，全世界最多一个。 */
+	UFUNCTION(BlueprintPure, Category="Task")
+	UDeliveryTaskDefinition* GetTimedTask() const;
+
 	UFUNCTION(BlueprintPure, Category="Task")
 	void GetTasksByStatus(EDeliveryTaskStatus Status, TArray<UDeliveryTaskDefinition*>& OutTasks) const;
 
@@ -112,7 +121,7 @@ public:
 	UFUNCTION(BlueprintPure, Category="Task")
 	const TArray<UDeliveryTaskDefinition*>& GetAllTaskDefinitions() const;
 
-	/** UI 每帧拿倒计时和配色用。未取件的任务返回 bRunning=false。 */
+	/** UI 每帧拿倒计时和配色用。接听前 bRunning=false，接听后待取件阶段也为 true。 */
 	UFUNCTION(BlueprintPure, Category="Task")
 	FDeliveryTaskTimeSnapshot GetTimeSnapshot(const UDeliveryTaskDefinition* Task) const;
 
@@ -189,7 +198,7 @@ protected:
 	 */
 	void UpdateUnlockPolling();
 
-	/** 同一时间只有一个进行中任务，一个句柄就够。 */
+	/** 同一时间只有一个已经接单并计时的任务，一个句柄就够。 */
 	FTimerHandle OverdueTimerHandle;
 
 	FTimerHandle UnlockPollTimerHandle;

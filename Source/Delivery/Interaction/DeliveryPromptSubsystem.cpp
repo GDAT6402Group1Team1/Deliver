@@ -65,6 +65,21 @@ void UDeliveryPromptSubsystem::PushObjective(const FText& Title, const FText& De
 	EnsureWidget();
 }
 
+void UDeliveryPromptSubsystem::SetSubtitle(const FText& Speaker, const FText& Text)
+{
+	SubtitleSpeaker = Speaker;
+	SubtitleText = Text;
+	bSubtitleVisible = !Text.IsEmpty();
+	EnsureWidget();
+}
+
+void UDeliveryPromptSubsystem::ClearSubtitle()
+{
+	SubtitleSpeaker = FText::GetEmpty();
+	SubtitleText = FText::GetEmpty();
+	bSubtitleVisible = false;
+}
+
 bool UDeliveryPromptSubsystem::IsObjectiveFresh() const
 {
 	const UWorld* World = GetWorld();
@@ -285,6 +300,72 @@ void UDeliveryPromptSubsystem::EnsureWidget()
 					.ColorAndOpacity(FSlateColor(FLinearColor(0.85f, 0.85f, 0.85f, 1.0f)))
 					.ShadowOffset(FVector2D(1.0f, 1.0f))
 					.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+				]
+			]
+		];
+
+	const auto SubtitleVisibility = TAttribute<EVisibility>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return (Self && Self->bSubtitleVisible)
+			? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+	});
+	const auto SubtitleSpeakerAttr = TAttribute<FText>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return Self ? Self->SubtitleSpeaker : FText::GetEmpty();
+	});
+	const auto SubtitleTextAttr = TAttribute<FText>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return Self ? Self->SubtitleText : FText::GetEmpty();
+	});
+	const auto SubtitleSpeakerVisibility = TAttribute<EVisibility>::CreateLambda([WeakThis]()
+	{
+		const UDeliveryPromptSubsystem* Self = WeakThis.Get();
+		return (Self && !Self->SubtitleSpeaker.IsEmpty())
+			? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+	});
+
+	StaticCastSharedPtr<SConstraintCanvas>(PromptWidget)->AddSlot()
+		// 下方居中并向上留出 Hotbar 空间。限制宽度后长句会自动换行。
+		.Anchors(FAnchors(0.5f, 1.0f))
+		.AutoSize(true)
+		.Alignment(FVector2D(0.5f, 1.0f))
+		.Offset(FMargin(0.0f, -105.0f, 0.0f, 0.0f))
+		[
+			SNew(SBox)
+			.WidthOverride(920.0f)
+			[
+				SNew(SBorder)
+				.Visibility(SubtitleVisibility)
+				.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+				.BorderBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.68f))
+				.Padding(FMargin(22.0f, 10.0f))
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+					[
+						SNew(STextBlock)
+						.Visibility(SubtitleSpeakerVisibility)
+						.Text(SubtitleSpeakerAttr)
+						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 15))
+						.ColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.72f, 0.28f, 1.0f)))
+						.Justification(ETextJustify::Center)
+					]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill)
+						.Padding(FMargin(0.0f, 4.0f, 0.0f, 0.0f))
+					[
+						SNew(STextBlock)
+						.Text(SubtitleTextAttr)
+						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 20))
+						.ColorAndOpacity(FSlateColor(FLinearColor::White))
+						.Justification(ETextJustify::Center)
+						.AutoWrapText(true)
+						.WrapTextAt(870.0f)
+						.ShadowOffset(FVector2D(1.0f, 1.0f))
+						.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.9f))
+					]
 				]
 			]
 		];

@@ -7,6 +7,7 @@
 #include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Task/DeliveryTaskDefinition.h"
+#include "Task/DeliveryTaskManagerComponent.h"
 #include "TimerManager.h"
 
 UDeliveryPhoneCallQueueComponent::UDeliveryPhoneCallQueueComponent()
@@ -91,16 +92,47 @@ void UDeliveryPhoneCallQueueComponent::EnqueueCall(UDeliveryTaskDefinition* Task
 		}
 	}
 
-	FDeliveryPhoneCall& Call = Queue.AddDefaulted_GetRef();
+	FDeliveryPhoneCall Call;
 	Call.Task = Task;
 	Call.CallType = CallType;
 	Call.CallId = NextCallId++;
 
-	// 原来是空队列，这通就是队首，立刻开始响
-	if (Queue.Num() == 1)
+	if (CallType == EDeliveryPhoneCallType::Overdue)
 	{
-		StartRinging();
+		// 催促电话属于当前订单，不能被后续订单的暂停来电堵在后面。
+		// 当前正在响/通话时保留队首，在它后面插入；待机时直接插到最前。
+		Queue.Insert(Call, CallState == EDeliveryPhoneCallState::Idle ? 0 : FMath::Min(1, Queue.Num()));
 	}
+	else
+	{
+		Queue.Add(Call);
+	}
+
+	TryStartNextCall();
+}
+
+void UDeliveryPhoneCallQueueComponent::TryStartNextCall()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !GetWorld() ||
+		CallState != EDeliveryPhoneCallState::Idle || Queue.IsEmpty())
+	{
+		return;
+	}
+
+	const FDeliveryPhoneCall& Next = Queue[0];
+	if (Next.CallType == EDeliveryPhoneCallType::TaskUnlocked)
+	{
+		const UDeliveryTaskManagerComponent* Manager =
+			GetOwner()->FindComponentByClass<UDeliveryTaskManagerComponent>();
+		const UDeliveryTaskDefinition* TimedTask = Manager ? Manager->GetTimedTask() : nullptr;
+		if (TimedTask && TimedTask != Next.Task)
+		{
+			// 当前订单完成后 Manager 会再次调用本函数。队列保留，不丢来电。
+			return;
+		}
+	}
+
+	StartRinging();
 }
 
 void UDeliveryPhoneCallQueueComponent::StartRinging()
@@ -125,7 +157,18 @@ bool UDeliveryPhoneCallQueueComponent::AnswerCurrentCall()
 		return false;
 	}
 
-	const float TalkDuration = FMath::Max(0.5f, GetCallContent(Queue[0]).DurationSeconds);
+	const FDeliveryPhoneCall& Call = Queue[0];
+	if (Call.CallType == EDeliveryPhoneCallType::TaskUnlocked)
+	{
+		UDeliveryTaskManagerComponent* Manager =
+			GetOwner()->FindComponentByClass<UDeliveryTaskManagerComponent>();
+		if (!Manager || !Manager->StartTaskTimerFromAcceptedCall(Call.Task))
+		{
+			return false;
+		}
+	}
+
+	const float TalkDuration = FMath::Max(0.5f, GetCallContent(Call).DurationSeconds);
 
 	SetCallState(EDeliveryPhoneCallState::InCall, TalkDuration);
 
@@ -182,14 +225,8 @@ void UDeliveryPhoneCallQueueComponent::FinishCurrentCall(bool bMissed)
 		OnCallMissed.Broadcast(Finished);
 	}
 
-	if (Queue.Num() > 0)
-	{
-		StartRinging();
-	}
-	else
-	{
-		SetCallState(EDeliveryPhoneCallState::Idle, 0.f);
-	}
+	SetCallState(EDeliveryPhoneCallState::Idle, 0.f);
+	TryStartNextCall();
 }
 
 void UDeliveryPhoneCallQueueComponent::SetCallState(EDeliveryPhoneCallState NewState, float Duration)

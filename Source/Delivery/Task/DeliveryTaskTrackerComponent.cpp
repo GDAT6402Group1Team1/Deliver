@@ -104,8 +104,8 @@ bool UDeliveryTaskTrackerComponent::CanTrackTask(const UDeliveryTaskDefinition* 
 		return false;
 	}
 
-	// 有任务在进行时，别的任务的快递本来就拿不起来，追踪它们没有意义
-	if (const UDeliveryTaskDefinition* Active = Manager->GetActiveTask())
+	// 接听后这项订单已经开始计时，无论取没取餐都只追踪它。
+	if (const UDeliveryTaskDefinition* Active = Manager->GetTimedTask())
 	{
 		return Task == Active;
 	}
@@ -158,8 +158,8 @@ void UDeliveryTaskTrackerComponent::RefreshAutoSelection()
 		return;
 	}
 
-	// 有人取件之后全世界只剩这一个任务可做，所有人的追踪都切过去
-	if (UDeliveryTaskDefinition* Active = Manager->GetActiveTask())
+	// 有人接单之后全世界只剩这一个任务可做，所有人的追踪都切过去
+	if (UDeliveryTaskDefinition* Active = Manager->GetTimedTask())
 	{
 		SetTrackedTask(Active);
 		return;

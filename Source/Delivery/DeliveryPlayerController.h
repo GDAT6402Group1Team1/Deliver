@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "Task/DeliveryTaskTypes.h"
 #include "DeliveryPlayerController.generated.h"
 
 class UInputAction;
@@ -60,6 +61,7 @@ public:
 protected:
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UFUNCTION(Server, Reliable)
 	void ServerAnswerCall();
@@ -104,9 +106,25 @@ protected:
 
 private:
 
+	/** GameState 可能比本机 PlayerController 晚就绪，绑定不到时短暂重试。 */
+	void BindPhoneVoice();
+
+	/** 电话进入 InCall 时在本机播放任务台词；离开通话立即停声。 */
+	UFUNCTION()
+	void HandlePhoneVoiceStateChanged(EDeliveryPhoneCallState NewState, const FDeliveryPhoneCall& Call);
+
+	/** 程序化语音每揭示一个字符，就把它追加到屏幕下方字幕。 */
+	UFUNCTION()
+	void HandlePhoneVoiceGlyphRevealed(const FString& Glyph, int32 GlyphIndex);
+
 	/** 已有 IMC 里都没映射交互键时，建一份临时的补上。 */
 	void EnsureInteractMapping(class UEnhancedInputLocalPlayerSubsystem* Subsystem);
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInputMappingContext> RuntimeInteractContext;
+
+	FTimerHandle PhoneVoiceBindRetryTimer;
+	int32 ActiveVoiceCallId = 0;
+	FText ActivePhoneCallerName;
+	FString ActivePhoneSubtitle;
 };

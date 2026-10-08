@@ -63,8 +63,8 @@
 **结构、接口清单、配置方式、完整调用链、待确认假设都写在 [Document/TaskSystem.md](Document/TaskSystem.md)——改任务系统前先读这份。** 要点：
 
 - 任务状态全局共享（多人下解锁/来电/接取/计时/完成对所有玩家是同一份数据），权威在 GameState 上的 [DeliveryTaskManagerComponent](Source/Delivery/Task/DeliveryTaskManagerComponent.h)；只有"当前追踪哪个任务"是每玩家各自的，在 PlayerState 上的 [DeliveryTaskTrackerComponent](Source/Delivery/Task/DeliveryTaskTrackerComponent.h)。
-- 计时是服务器时间戳相减算出来的，不是 Tick 累加：快递掉落、换手、进车后备箱、持有者晕倒都影响不到计时，这是"计时不停"规则的实现方式，别改成累加。
-- "全世界同时只有一个进行中任务"落在 `CanAcquireItem()` 这条取件规则上，没有额外的互斥状态。
+- 计时在**接通任务解锁电话**时开始，用服务器时间戳相减，不是 Tick 累加；通话、前往取餐、掉落、换手、进车后备箱、持有者晕倒都影响不到计时。漏接后直接取餐会以取餐时刻兜底，避免任务锁死。
+- 全世界同时只有一个已接单并计时的任务：后续任务解锁来电会在 PhoneQueue 里暂停，当前任务的超时催促电话可插队；`CanAcquireItem()` 同时阻止拿起其他任务的快递。
 - 四个状态、无失败态：`Locked / AwaitingPickup / InProgress / Completed`。超时只打一次催促电话 + 降低奖励倍率，任务不会结束，倒计时转正计时。
 - 电话队列 [DeliveryPhoneCallQueueComponent](Source/Delivery/Task/DeliveryPhoneCallQueueComponent.h) 由服务器按每通电话配置的时长推进，不等客户端播完回报（队列是全局共享的）。
 - 一个任务 = 一份 [DeliveryTaskDefinition](Source/Delivery/Task/DeliveryTaskDefinition.h) 资产；关卡任务清单填在 GameState 蓝图的 `TaskDefinitions` 数组里，顺序即同时解锁时的来电顺序。
@@ -75,7 +75,7 @@
 - **地点 ID 解析**：[DeliveryLocationRegistry](Source/Delivery/Task/DeliveryLocationRegistry.h)（WorldSubsystem）+ [DeliveryLocationComponent](Source/Delivery/Task/DeliveryLocationComponent.h)。关卡里的取件点/收件点/收件人 NPC 挂后者、填 `LocationId`（和 `Tasks.csv` 一致），任务定义里那几个裸 `FName` 才能变成世界坐标。三种点共用一个组件，因为在数据上它们是同一种东西；继承 SceneComponent 是为了能带相对偏移（收件点挂在整栋楼上时楼的原点可能在地下，箭头该指门口）。查找走注册表而不是遍历关卡，和交互系统同一个理由：碰撞查询在本项目静默失效过一次。
 - **任务地点透视高亮**：本机 `TaskTracker` 按任务状态自动高亮当前目的地（待取件→`PickupLocationId`，进行中→`DeliveryLocationId`），沿用 `CustomDepth/Stencil=1` + `/Game/Blueprint/Interaction/M_GrabHighlight`。`DeliveryPlayerController` 自动给本机启用该后处理，不需要在地图的 PostProcessVolume 里手加。`DeliveryLocationComponent.HighlightActors` 为空时高亮 Owner；地点是门口独立 Marker 时，必须在关卡实例里把实际建筑 Actor 填进数组，可填多个组成同一建筑的模型。任务完成、改追踪或切换阶段会恢复模型原来的 CustomDepth/Stencil 状态。
 - **"该去哪"**：`Tracker::GetTrackedTaskDestination()`。**目的地按任务状态自动切换**（待取件→取件点，进行中→收件点），调用方不要自己判——判错的表现是"箭头指向已经拿过的地方"，四个界面会各错各的。ID 在关卡里找不到对应点时返回 false 并在日志点名；静默失败的话表现只是"箭头不显示"，根因几乎查不到。
-- **丢件恢复**：`NotifyItemLost` 把进行中的任务退回待取件、计时重置、特殊事件清空；`UDeliveryItemComponent::EndPlay` 在 Actor 被销毁时自动上报（掉出世界会走到）。不处理的话任务永远卡在进行中，而"同时只有一个进行中任务"会让整局再也接不了别的任务。**"正常交付"和"意外丢失"靠执行顺序区分**——`TryDeliver` 先标已完成再销毁快递，所以 `EndPlay` 时状态已不是进行中，`NotifyItemLost` 自己返回 false；**调换这两步会让每次成功交付都被误判成丢件**。
+- **丢件恢复**：`NotifyItemLost` 把进行中的任务退回待取件，但接电话时开始的计时、催促状态和特殊事件继续保留；`UDeliveryItemComponent::EndPlay` 在 Actor 被销毁时自动上报（掉出世界会走到）。**"正常交付"和"意外丢失"靠执行顺序区分**——`TryDeliver` 先标已完成再销毁快递，所以 `EndPlay` 时状态已不是进行中，`NotifyItemLost` 自己返回 false；**调换这两步会让每次成功交付都被误判成丢件**。
 - **指引换算**：[DeliveryGuidanceLibrary](Source/Delivery/Task/DeliveryGuidanceLibrary.h) 返回距离、相对镜头的水平夹角、在不在前方、高度差，UI 画屏幕边缘箭头直接用。**角度基于镜头不是角色**——骑车时镜头和车头可能不一致（摩托车有自由/固定两套视角），用角色朝向算的话自由视角下箭头会指错。
 - 顶部水平罗盘条用 `DeliveryGuidanceLibrary::GetTrackedTaskCompass`：目标与 N/E/S/W 都返回同一条水平轴上的 `-1~1` 偏移，乘罗盘条半宽即可。默认 `+X` 为北，可用 `NorthWorldYaw` 对齐关卡；背后的任务目标会夹在左右边缘持续提示。
 - **手机开关键 J 已从 `IMC_Default` 搬到 `BindKey`**（`ADeliveryPlayerController::TogglePhoneKey` → `BlueprintImplementableEvent TogglePhoneUI()`，蓝图实现加/移视口）。理由和物品栏 1~5、切视角 P、召唤 R 一样：`IMC_Default.uasset` 从来没被提交过，每次 `git pull` 都会冲掉，而症状极具迷惑性——手机面板的显示逻辑不依赖按键绑定，表现是"UI 突然坏了"而不是"按键没绑"。F 键已经因此丢过两次。**蓝图那边要把原来绑 `IA_TogglePhone` 的逻辑改挂到 `TogglePhoneUI` 事件上。**
@@ -394,7 +394,11 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 让它有近似“口型”的腔调但不形成可识别语音。同一句用稳定 Hash 选音、音色和节奏，重复播放不会
 每次随机变调。五种内置声线是
 `Normal / Low / High / Robot / Angry`。电话/NPC UI 调 `SpeakText*`，绑定 `OnGlyphRevealed`
-逐字显示，不能各自再建一套 Audio Component。非 Shipping 验收命令：
+逐字显示，不能各自再建一套 Audio Component。电话任务已经由本机 PlayerController 自动监听
+`OnPhoneStateChanged`：进入 `InCall` 播放任务资产的 `Dialogue`，离开通话立即停止；服务器的
+`DurationSeconds` 仍是结束通话的唯一权威，不能拿本机 `OnLineFinished` 推进队列。逐字事件由
+PlayerController 自动累积到 `DeliveryPromptSubsystem` 的屏幕下方字幕槽，带来电人姓名、自动换行，
+挂断时清空，不要求 WBP 额外绑定。非 Shipping 验收命令：
 `Delivery.Voice.Test [normal|low|high|robot|angry]`、`Delivery.Voice.Say <文字>`、
 `Delivery.Voice.Stop`。完整接口和扩展边界见 [Document/AudioSystem.md](Document/AudioSystem.md)。
 

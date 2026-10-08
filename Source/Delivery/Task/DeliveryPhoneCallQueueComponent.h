@@ -21,6 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeliveryPhoneCallMissed, const FD
  *                            └──(响铃超时没人接，记未接)──────────────────┤
  *                                                                        ▼
  *                                                        出队 → 下一通 Ringing，没有则 Idle
+ * 后续任务解锁来电会在已有订单计时期间留在队列中暂停；当前订单的催促电话可以插队。
  *
  * 队列和状态都是全局共享的：任意一个玩家接听，所有人一起进入通话；挂断同理。
  * 这和"任意玩家取件则全体任务进入进行中"是同一套逻辑。
@@ -45,6 +46,9 @@ public:
 
 	/** 服务器：来电入队。同一任务同一类型不会重复入队。 */
 	void EnqueueCall(UDeliveryTaskDefinition* Task, EDeliveryPhoneCallType CallType);
+
+	/** 当前没有通话且没有其他订单计时时，尝试让队首开始响铃。任务完成后由 Manager 调用。 */
+	void TryStartNextCall();
 
 	/**
 	 * 服务器：接听当前来电，只有 Ringing 状态下有效。

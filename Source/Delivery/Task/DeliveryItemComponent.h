@@ -28,7 +28,7 @@ public:
 
 	/**
 	 * 交互系统在允许玩家拾取之前问这一句。
-	 * 世界上已经有进行中任务时，其他任务的快递会在这里被拦住。
+	 * 世界上已经有接单计时任务时，其他任务的快递会在这里被拦住。
 	 */
 	UFUNCTION(BlueprintPure, Category="Task")
 	bool CanBeAcquired() const;
@@ -37,9 +37,9 @@ public:
 	FText GetPickupBlockedReason() const;
 
 	/**
-	 * 服务器：玩家拿到了这件快递。首次取件会接取任务并开始全局计时；
-	 * 之后的掉落再捡、换手同样会走到这里，但不会重置计时。
-	 * 返回值表示这次是否真的接取了任务（仅首次为 true）。
+	 * 服务器：玩家拿到了这件快递。首次取件会进入进行中，但沿用接电话时的计时；
+	 * 漏接时才以取件时刻兜底开始。掉落再捡、换手不会重置。
+	 * 返回值表示这次是否首次进入进行中。
 	 */
 	UFUNCTION(BlueprintCallable, Category="Task")
 	bool NotifyAcquired(APlayerState* Player);
