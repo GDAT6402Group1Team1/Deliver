@@ -384,6 +384,20 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 - 提示里的键名一律从**实际绑定的 FKey** 取 `GetDisplayName()`，改了 `SummonVehicleKey` / `CameraToggleKey` 提示会跟着变，不会说一套做一套。
 - 图里一辆摩托车都没有时不推召唤提示——告诉玩家一个按了什么都不会发生的键没有意义。
 
+### 8. 人物电子语音系统
+
+[DeliveryDialogueVoiceComponent](Source/Delivery/Audio/DeliveryDialogueVoiceComponent.h) 默认挂在
+`ADeliveryPlayerController` 上，用 `USynthComponent` 在运行时合成独游常见的 text blip 电子语音，
+不依赖音频资产。只在本机 Controller 启动、不复制；多人只同步台词状态，每台客户端自行发声。
+文字按字符计时，普通字符从固定小音阶选音，中文/英文标点只产生停顿，问句末尾上扬、普通句尾下降；
+单个字内部还有快速滑音、失谐副振荡器、短噪声音头、弱颤音和四组 Hash 选择的弱共振峰，
+让它有近似“口型”的腔调但不形成可识别语音。同一句用稳定 Hash 选音、音色和节奏，重复播放不会
+每次随机变调。五种内置声线是
+`Normal / Low / High / Robot / Angry`。电话/NPC UI 调 `SpeakText*`，绑定 `OnGlyphRevealed`
+逐字显示，不能各自再建一套 Audio Component。非 Shipping 验收命令：
+`Delivery.Voice.Test [normal|low|high|robot|angry]`、`Delivery.Voice.Say <文字>`、
+`Delivery.Voice.Stop`。完整接口和扩展边界见 [Document/AudioSystem.md](Document/AudioSystem.md)。
+
 ## 开发环境与编译
 
 - **引擎：UE 5.8。** 编译走 `Build.bat`，目标是 **`DeliveryEditor`**（不是 `Delivery`——只编后者的话
@@ -426,6 +440,7 @@ Source/Delivery/
 ├── DeliveryGameMode.{h,cpp}          最小 GameMode，具体逻辑在蓝图里
 ├── DeliveryGameState.{h,cpp}         承载全局共享状态：任务管理器 + 电话队列
 ├── DeliveryPlayerController.{h,cpp}
+├── Audio/                            本机程序化人物语音、预设与控制台验收命令
 ├── Combat/                           姿势/类型定义、战斗接口、单测
 ├── GAS/                              ASC、AttributeSet、PlayerState、Tags、Abilities/
 ├── Grab/                             双键抓取：抓取组件、可抓取组件、可抓道具
@@ -441,6 +456,7 @@ Content/Python/                       编辑器 Python 工具链：车道/路口
 Content/Blueprint/                    角色/GameMode/PlayerController 蓝图（C++ 与资产的粘合层）
 Document/Ragdoll.html                 布娃娃系统设计文档（原理+对照表+实现步骤+建模要求）
 Document/TaskSystem.md                任务系统设计文档（状态机+类结构+接口清单+配置方式）
+Document/AudioSystem.md               人物电子语音（合成器+文本节奏+蓝图接口+验收命令）
 ```
 
 ## 给 agent 的约定

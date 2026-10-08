@@ -419,6 +419,20 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 - 重跑 `place_in_level()` 会**沿用上一辆车的位置朝向**，摆好之后再调参数不用重新找地方摆；关卡里没有 `PlayerStart` 时（`testfortraffic` 就没有）落点取编辑器视口镜头前方，而不是世界原点。
 - `IA_Interact` 是**复制 `IA_Jump`** 建出来的——`InputAction` 没有暴露给 Python 的工厂，`create_asset` 那条路不通。C++ 侧 `InteractAction` 用 `TSoftObjectPtr` 晚绑而不是 `ConstructorHelpers`：构造函数只在模块加载时跑一次，脚本这次会话里新建的资产永远解析不到，晚绑才能当场生效。
 
+### 人物电子语音系统
+
+[DeliveryDialogueVoiceComponent](Source/Delivery/Audio/DeliveryDialogueVoiceComponent.h) 默认挂在
+`ADeliveryPlayerController` 上，用 `USynthComponent` 在运行时合成独游常见的 text blip 电子语音，
+不依赖音频资产。只在本机 Controller 启动、不复制；多人只同步台词状态，每台客户端自行发声。
+文字按字符计时，普通字符从固定小音阶选音，中文/英文标点只产生停顿，问句末尾上扬、普通句尾下降；
+单个字内部还有快速滑音、失谐副振荡器、短噪声音头、弱颤音和四组 Hash 选择的弱共振峰，
+让它有近似“口型”的腔调但不形成可识别语音。同一句用稳定 Hash 选音、音色和节奏，重复播放不会
+每次随机变调。五种内置声线是
+`Normal / Low / High / Robot / Angry`。电话/NPC UI 调 `SpeakText*`，绑定 `OnGlyphRevealed`
+逐字显示，不能各自再建一套 Audio Component。非 Shipping 验收命令：
+`Delivery.Voice.Test [normal|low|high|robot|angry]`、`Delivery.Voice.Say <文字>`、
+`Delivery.Voice.Stop`。完整接口和扩展边界见 [Document/AudioSystem.md](Document/AudioSystem.md)。
+
 ## 开发环境与编译
 
 - **引擎：UE 5.8。** 编译走 `Build.bat`，目标是 **`DeliveryEditor`**（不是 `Delivery`——只编后者的话
@@ -461,6 +475,7 @@ Source/Delivery/
 ├── DeliveryGameMode.{h,cpp}         最小 GameMode，具体类在蓝图里配
 ├── DeliveryGameState.{h,cpp}        承载全局共享状态（任务管理器 + 电话队列）
 ├── DeliveryPlayerController.{h,cpp}
+├── Audio/                            本机程序化人物语音、预设与控制台验收命令
 ├── Combat/                          战斗类型、姿势定义、战斗接口
 ├── GAS/                             AbilitySystemComponent、AttributeSet、PlayerState、GameplayTags、Abilities/
 ├── Grab/                            双键抓取：抓取组件、可抓取组件、可抓道具

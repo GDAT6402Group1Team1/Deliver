@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "DeliveryPlayerController.h"
+#include "Audio/DeliveryDialogueVoiceComponent.h"
 #include "Delivery.h"
 #include "Components/PostProcessComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -14,6 +15,8 @@
 
 ADeliveryPlayerController::ADeliveryPlayerController()
 {
+	DialogueVoice = CreateDefaultSubobject<UDeliveryDialogueVoiceComponent>(TEXT("DialogueVoice"));
+
 	HighlightPostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("HighlightPostProcess"));
 	HighlightPostProcess->bUnbound = true;
 	HighlightPostProcess->bEnabled = false;

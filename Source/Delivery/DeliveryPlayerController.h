@@ -9,6 +9,7 @@
 class UInputAction;
 class UInputMappingContext;
 class UPostProcessComponent;
+class UDeliveryDialogueVoiceComponent;
 
 /**
  * PlayerController that only installs Enhanced Input mapping contexts.
@@ -21,6 +22,10 @@ class ADeliveryPlayerController : public APlayerController
 public:
 
 	ADeliveryPlayerController();
+
+	/** 本机人物电子语音生成器。电话/NPC UI 都复用这一份。 */
+	UFUNCTION(BlueprintPure, Category="Delivery|Voice")
+	UDeliveryDialogueVoiceComponent* GetDialogueVoice() const { return DialogueVoice; }
 
 	/**
 	 * 接听当前来电。客户端调用会自动转成 Server RPC。
@@ -88,6 +93,9 @@ protected:
 	/** 本机任务地点和抓取候选共用的透视高亮后处理。 */
 	UPROPERTY(VisibleAnywhere, Category="Delivery|Highlight")
 	TObjectPtr<UPostProcessComponent> HighlightPostProcess;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|Voice", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UDeliveryDialogueVoiceComponent> DialogueVoice;
 
 	virtual void SetupInputComponent() override;
 
