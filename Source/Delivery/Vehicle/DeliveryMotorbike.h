@@ -42,6 +42,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	GENERATED_BODY()
 	friend class FDeliveryRiderContactsTest;
 	friend class FDeliveryRiderRuntimeTest;
+	friend class FDeliveryVehicleSummonTest;
 
 public:
 

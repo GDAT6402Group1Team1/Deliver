@@ -16,6 +16,8 @@ UDeliveryVehicleSummonComponent::UDeliveryVehicleSummonComponent()
 	// 只用来刷左下角那条提示，10Hz 足够，读秒的小数位也看不出跳。
 	PrimaryComponentTick.TickInterval = 0.1f;
 	SetIsReplicatedByDefault(true);
+	DefaultVehicleClass = TSoftClassPtr<ADeliveryMotorbike>(FSoftObjectPath(
+		TEXT("/Game/Vehicle/Motorbike/BP_Motorbike.BP_Motorbike_C")));
 
 	ReadyHintFormat = NSLOCTEXT("Delivery", "SummonReady", "按 {0} 召唤摩托车");
 	CooldownHintFormat = NSLOCTEXT("Delivery", "SummonCooling", "召唤冷却 {0}s");
@@ -57,8 +59,7 @@ void UDeliveryVehicleSummonComponent::PushHint()
 		return;
 	}
 
-	// 图里根本没有摩托车时不提示：告诉玩家一个按了什么都不会发生的键没有意义。
-	// 客户端上车也是复制过来的，所以这个判断在两端都成立。
+	// 空地图也能生成默认车型，因此不能只按场景里有没有车决定提示。
 	bool bAnyBike = false;
 	if (const UWorld* World = GetWorld())
 	{
@@ -68,7 +69,7 @@ void UDeliveryVehicleSummonComponent::PushHint()
 			break;
 		}
 	}
-	if (!bAnyBike)
+	if (!bAnyBike && DefaultVehicleClass.IsNull())
 	{
 		return;
 	}
@@ -145,23 +146,55 @@ void UDeliveryVehicleSummonComponent::ServerSummon_Implementation()
 		return;
 	}
 
-	ADeliveryMotorbike* Bike = FindSummonTarget();
-	if (!Bike)
-	{
-		return;
-	}
-
 	// 放在玩家正前方、车头朝着玩家的朝向——召唤出来就是"可以直接骑上去往前开"的姿态。
 	const FRotator OwnerRot = Owner->GetActorRotation();
 	const FVector Forward = FRotator(0.0f, OwnerRot.Yaw, 0.0f).Vector();
 	const FVector Target = Owner->GetActorLocation() + Forward * PlaceDistance;
 
+	ADeliveryMotorbike* Bike = FindSummonTarget();
+	bool bSpawnedBike = false;
+	if (!Bike)
+	{
+		// 只补地图缺车的情况。已有车被占用或超出搜索范围时不能靠新生成绕过规则。
+		for (TActorIterator<ADeliveryMotorbike> It(World); It; ++It)
+		{
+			if (IsValid(*It))
+			{
+				UE_LOG(LogDelivery, Log, TEXT("召唤失败：没有可召回的空闲摩托车。"));
+				return;
+			}
+		}
+		UClass* VehicleClass = DefaultVehicleClass.LoadSynchronous();
+		if (!VehicleClass)
+		{
+			UE_LOG(LogDelivery, Warning, TEXT("召唤失败：地图没有摩托车，默认车型无法加载：%s"),
+				*DefaultVehicleClass.ToString());
+			return;
+		}
+		FActorSpawnParameters SpawnParams;
+		// SummonTo 负责探地落位；失败时销毁临时车辆，不留下空中车或消耗冷却。
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Bike = World->SpawnActor<ADeliveryMotorbike>(VehicleClass, Target,
+			FRotator(0.0f, OwnerRot.Yaw, 0.0f), SpawnParams);
+		if (!Bike)
+		{
+			UE_LOG(LogDelivery, Warning, TEXT("召唤失败：无法生成默认摩托车。"));
+			return;
+		}
+		bSpawnedBike = true;
+	}
+
 	// 失败（探不到地面）就不进冷却：玩家没得到任何东西，不该被罚等 10 秒。
 	if (!Bike->SummonTo(Target, OwnerRot.Yaw))
 	{
 		UE_LOG(LogDelivery, Log, TEXT("召唤失败：%s 的落点探不到地面，不计冷却。"), *Bike->GetName());
+		if (bSpawnedBike)
+		{
+			Bike->Destroy();
+		}
 		return;
 	}
+	Bike->ForceNetUpdate();
 
 	ReadyServerTime = Now + Cooldown;
 }

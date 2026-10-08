@@ -55,6 +55,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Vehicle|Summon", meta=(ClampMin="0.0", Units="cm"))
 	float SearchRadius = 0.0f;
 
+	/** 地图没有摩托车时由服务器生成的车型；已有车时仍只召回空车。留空可禁用生成。 */
+	UPROPERTY(EditDefaultsOnly, Category="Vehicle|Summon")
+	TSoftClassPtr<ADeliveryMotorbike> DefaultVehicleClass;
+
 	/** 左下角提示文案。%s 会被替换成按键名。 */
 	UPROPERTY(EditDefaultsOnly, Category="Vehicle|Summon")
 	FText ReadyHintFormat;

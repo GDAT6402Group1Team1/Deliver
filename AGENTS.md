@@ -371,7 +371,7 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 
 
 ### 召唤载具（按 R）
-[DeliveryVehicleSummonComponent](Source/Delivery/Vehicle/DeliveryVehicleSummonComponent.h) —— 挂在玩家 Pawn 上，按 R 把最近一辆没人骑的摩托车挪到身前，冷却 10 秒。
+[DeliveryVehicleSummonComponent](Source/Delivery/Vehicle/DeliveryVehicleSummonComponent.h) —— 挂在玩家 Pawn 上，按 R 把最近一辆没人骑的摩托车挪到身前，冷却 10 秒。地图没有摩托车时，服务器通过 `DefaultVehicleClass`（默认 `/Game/Vehicle/Motorbike/BP_Motorbike`）生成首辆车；已有车被占用或超出搜索范围时不额外生成。生成后仍走 `SummonTo` 探地，失败销毁临时车且不计冷却。回归检查：`Delivery.Vehicle.Summon.EmptyMap`。
 - **单独一个组件**而不是塞进 `ADeliveryCharacter`：它需要**按固定频率 Tick**来刷左下角提示，而角色的 Tick 是 `bStartWithTickEnabled=false`、只在被车撞的镜头拉远期间才临时打开的，借它推 HUD 会把那套按需开关搅乱。
 - 冷却是**服务器权威**的：`ReadyServerTime` 服务器写、`COND_OwnerOnly` 只复制给拥有者，客户端只拿来显示，不做预测（召唤本来就要等一个来回）。**探不到地面的召唤不计冷却**——玩家什么都没得到，不该被罚等 10 秒。
 - 落位交给 `ADeliveryMotorbike::SummonTo()`，车自己往下打地面射线，并**清空 `CurrentSpeed` / `VerticalVelocity` / 油门转向 / 被撞状态**：残余车速会让车刚出现就从脚边滑走，残余被撞状态会让它一边抖一边歪着出现。车上有人时拒绝，不能把别人正骑的车抽走。
@@ -382,7 +382,7 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 - 步行时由 `UDeliveryVehicleSummonComponent` 推召唤提示（冷却中压暗成灰色 + 读秒）；骑行时由 `ADeliveryMotorbike::PushCameraHint()` 推"按 P 切换视角（当前：自由/固定）"。
 - **两者天然不会打架**：上车后控制器去 Possess 摩托车，被丢在车上的那具身体 `IsLocallyControlled()` 变成 false，召唤组件自动停推。
 - 提示里的键名一律从**实际绑定的 FKey** 取 `GetDisplayName()`，改了 `SummonVehicleKey` / `CameraToggleKey` 提示会跟着变，不会说一套做一套。
-- 图里一辆摩托车都没有时不推召唤提示——告诉玩家一个按了什么都不会发生的键没有意义。
+- 配置了默认车型时，即使地图没有摩托车也显示召唤提示；仅在场景无车且 `DefaultVehicleClass` 留空时隐藏。
 
 ### 8. 人物电子语音系统
 
