@@ -16,9 +16,13 @@ namespace
 	{
 		struct FBandPass
 		{
-			void Configure(float Frequency, float Q, float SampleRate)
+			// 形参前缀 In：内层 FBandPass 嵌在 FDeliveryVoiceGenerator 里，
+			// 而外层有同名字段 Frequency / SampleRate。Clang 的 -Wshadow 会报
+			// "declaration shadows a field"，UE 又开了 -Werror，于是 Mac 上直接编译失败
+			// （MSVC 对应的 C4458 默认不致命，所以 Windows 那边编得过）。
+			void Configure(float InFrequency, float Q, float InSampleRate)
 			{
-				const float Omega = TwoPi * FMath::Clamp(Frequency, 80.f, SampleRate * 0.42f) / SampleRate;
+				const float Omega = TwoPi * FMath::Clamp(InFrequency, 80.f, InSampleRate * 0.42f) / InSampleRate;
 				const float SinOmega = FMath::Sin(Omega);
 				const float Alpha = SinOmega / (2.f * FMath::Max(Q, 0.1f));
 				const float A0 = 1.f + Alpha;
