@@ -10,6 +10,7 @@
 class ADeliveryCharacter;
 class UBoxComponent;
 class UCameraComponent;
+class UAudioComponent;
 class UDeliveryInteractableComponent;
 class UInputAction;
 class UMaterialInterface;
@@ -20,6 +21,7 @@ class USpringArmComponent;
 class USkeletalMesh;
 class UStaticMesh;
 class UStaticMeshComponent;
+class USoundBase;
 struct FInputActionValue;
 
 /**
@@ -255,6 +257,32 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UDeliveryInteractableComponent> Interactable;
+
+	/** 行驶循环音。声音资产本身需要设置为循环，C++ 负责启停和随车速调音。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<UAudioComponent> EngineAudio;
+
+	UPROPERTY(EditAnywhere, Category="Motorbike|Audio")
+	TObjectPtr<USoundBase> EngineLoopSound;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Audio")
+	TObjectPtr<USoundBase> EnterVehicleSound;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Audio")
+	TObjectPtr<USoundBase> ExitVehicleSound;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Audio")
+	TObjectPtr<USoundBase> TrafficImpactSound;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Audio")
+	TObjectPtr<USoundBase> SummonSound;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Audio")
+	TObjectPtr<USoundBase> CameraToggleSound;
+
+	UPROPERTY(EditAnywhere, Category="Motorbike|Audio", meta=(ClampMin="0.1"))
+	float EngineIdlePitch = 0.75f;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Audio", meta=(ClampMin="0.1"))
+	float EngineMaxPitch = 1.5f;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Audio", meta=(ClampMin="0.0"))
+	float EngineIdleVolume = 0.35f;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Audio", meta=(ClampMin="0.0"))
+	float EngineMaxVolume = 1.0f;
 
 	// ---- 行驶参数 ----
 
@@ -566,6 +594,10 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestExit();
 
+	/** 服务器确认的上下车/碰撞/召唤事件在所有客户端各自播放一次空间音。 */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayAudioEvent(uint8 EventIndex);
+
 	UFUNCTION()
 	void HandleInteractRequested(APawn* Interactor);
 
@@ -604,6 +636,7 @@ private:
 
 	/** 轮子按车速自转。 */
 	void UpdateWheelSpin(float DeltaSeconds);
+	void UpdateMotorbikeAudio();
 
 	/** 脖子跟着转向偏一点。单独一个函数是因为它改的是骨骼，不是组件变换。 */
 	void UpdateRiderMotion(float DeltaSeconds);

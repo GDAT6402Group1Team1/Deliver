@@ -2,6 +2,7 @@
 
 #include "DeliveryPlayerController.h"
 #include "Audio/DeliveryDialogueVoiceComponent.h"
+#include "Components/AudioComponent.h"
 #include "Delivery.h"
 #include "Components/PostProcessComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -10,6 +11,8 @@
 #include "InputCoreTypes.h"
 #include "InputMappingContext.h"
 #include "Materials/MaterialInterface.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
 #include "Task/DeliveryPhoneCallQueueComponent.h"
 #include "TimerManager.h"
@@ -73,6 +76,7 @@ void ADeliveryPlayerController::BeginPlay()
 
 void ADeliveryPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	StopIncomingCallAudio();
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(PhoneVoiceBindRetryTimer);
@@ -136,14 +140,57 @@ void ADeliveryPlayerController::BindPhoneVoice()
 void ADeliveryPlayerController::HandlePhoneVoiceStateChanged(
 	EDeliveryPhoneCallState NewState, const FDeliveryPhoneCall& Call)
 {
-	if (!IsLocalController() || !DialogueVoice)
+	if (!IsLocalController())
 	{
 		return;
 	}
 
+	// 状态复制可能让同一状态回调多次，只在真正的状态边沿播放一次操作音。
+	if (!bPhoneAudioStateInitialized)
+	{
+		bPhoneAudioStateInitialized = true;
+		LastPhoneAudioState = NewState;
+		if (NewState == EDeliveryPhoneCallState::Ringing && IncomingCallSound)
+		{
+			IncomingCallAudio = UGameplayStatics::SpawnSound2D(
+				this, IncomingCallSound, 1.0f, 1.0f, 0.0f, nullptr, false, false);
+		}
+	}
+	else if (NewState != LastPhoneAudioState)
+	{
+		const EDeliveryPhoneCallState PreviousState = LastPhoneAudioState;
+		LastPhoneAudioState = NewState;
+
+		if (NewState == EDeliveryPhoneCallState::Ringing)
+		{
+			StopIncomingCallAudio();
+			if (IncomingCallSound)
+			{
+				IncomingCallAudio = UGameplayStatics::SpawnSound2D(
+					this, IncomingCallSound, 1.0f, 1.0f, 0.0f, nullptr, false, false);
+			}
+		}
+		else
+		{
+			StopIncomingCallAudio();
+			if (NewState == EDeliveryPhoneCallState::InCall && AnswerCallSound)
+			{
+				UGameplayStatics::PlaySound2D(this, AnswerCallSound);
+			}
+			else if (NewState == EDeliveryPhoneCallState::Idle
+				&& PreviousState != EDeliveryPhoneCallState::Idle && HangUpCallSound)
+			{
+				UGameplayStatics::PlaySound2D(this, HangUpCallSound);
+			}
+		}
+	}
+
 	if (NewState != EDeliveryPhoneCallState::InCall)
 	{
-		DialogueVoice->StopSpeaking();
+		if (DialogueVoice)
+		{
+			DialogueVoice->StopSpeaking();
+		}
 		ActiveVoiceCallId = 0;
 		ActivePhoneCallerName = FText::GetEmpty();
 		ActivePhoneSubtitle.Reset();
@@ -169,7 +216,20 @@ void ADeliveryPlayerController::HandlePhoneVoiceStateChanged(
 	{
 		Prompt->ClearSubtitle();
 	}
-	DialogueVoice->SpeakText(Content.Dialogue);
+	if (DialogueVoice)
+	{
+		DialogueVoice->SpeakText(Content.Dialogue);
+	}
+}
+
+void ADeliveryPlayerController::StopIncomingCallAudio()
+{
+	if (IncomingCallAudio)
+	{
+		IncomingCallAudio->Stop();
+		IncomingCallAudio->DestroyComponent();
+		IncomingCallAudio = nullptr;
+	}
 }
 
 void ADeliveryPlayerController::HandlePhoneVoiceGlyphRevealed(
@@ -276,6 +336,10 @@ void ADeliveryPlayerController::SetupInputComponent()
 void ADeliveryPlayerController::HandleTogglePhonePressed()
 {
 	// 纯本机 UI 开关，不用过服务器
+	if (PhoneToggleSound)
+	{
+		UGameplayStatics::PlaySound2D(this, PhoneToggleSound);
+	}
 	TogglePhoneUI();
 }
 

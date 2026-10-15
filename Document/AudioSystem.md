@@ -52,6 +52,66 @@ Controller/Pawn 查找组件。
 当前一通电话就是一段单向台词，因此不需要对话树；等出现玩家选项、多角色轮流说话、条件分支时，
 再增加独立的 Conversation DataAsset，电话队列只引用它，不把分支状态塞进任务状态机。
 
+## 游戏事件音效槽
+
+第一版不设全局音频管理器。声音跟着真正拥有事件和网络判定的对象走，蓝图只需要填写资产；
+所有字段都是 `USoundBase`，因此可以放 Sound Wave、Sound Cue 或 MetaSound Source。
+
+| 在哪里填写 | 字段 | 触发时机 |
+|---|---|---|
+| `BP_DeliveryMan` Class Defaults → `Audio / Interaction` | `PickupSuccessSound` | E 键取普通物品或任务快递，并且服务器确认放进背包成功 |
+| 同上 | `DeliverySuccessSound` | E 键交付，并且 `TryDeliver` 真正完成任务 |
+| `BP_DeliveryMan` 的 `RagdollCombat` 组件 → `Punch / Audio` | `LeftPunchSound` / `RightPunchSound` | 左/右拳蓄力结束、拳头真正前送的瞬间 |
+| `BP_DeliveryMan` 的 `GrabComponent` → `Grab / Audio` | `GrabStartSound` / `GrabReleaseSound` | 双键找到可抓目标并开始本机预测 / 松手 |
+| `BP_DeliveryManPC` Class Defaults → `Delivery / Audio / Phone` | `PhoneToggleSound` | J 键切换手机界面 |
+| 同上 | `IncomingCallSound` | 电话进入 `Ringing`；资产应自行循环，离开响铃状态时程序停止 |
+| 同上 | `AnswerCallSound` / `HangUpCallSound` | 电话状态切到 `InCall` / 从响铃或通话回到 `Idle` |
+| `BP_Motorbike` Class Defaults → `Motorbike / Audio` | `EngineLoopSound` | 有驾驶员时循环，离车停止；按车速在 Idle/Max Pitch 与 Volume 之间插值 |
+| 同上 | `EnterVehicleSound` / `ExitVehicleSound` | 服务器确认上下车后，以车的位置向所有客户端播放 |
+| 同上 | `TrafficImpactSound` | 交通车撞击被服务器记账时，以车的位置向所有客户端播放 |
+| 同上 | `SummonSound` | R 召唤成功落位后，以车的位置向所有客户端播放 |
+| 同上 | `CameraToggleSound` | 本机按 P 切换固定/自由视角 |
+
+取件和交付音放在服务器成功返回之后，再通过 owning-client RPC 播放，所以失败的按键不会误响。
+左右拳和抓取属于即时操作反馈，跟本机预测播放，避免多等一次网络往返。车辆发动机是挂在车上的
+3D `AudioComponent`；`EngineLoopSound` 必须在 Sound Wave、Sound Cue 或 MetaSound 内开启循环，
+C++ 不会把一个非循环资产强行循环。通用 F 交互暂时没有统一声音：上车已经走车辆音效，而门、NPC、
+机关需要不同声音，等它们各自有明确行为后放到各自执行成功的位置更合适。
+
+### 当前生成的占位资产
+
+`/Game/Sound/SFX` 已有六个纯程序生成的占位 SoundWave，不使用外部采样，因此没有第三方授权问题。
+第二版不再只叠基础波形：电话音使用带动态音色变化的双算子 FM，任务提示使用非整数泛音钟体；
+统一经过 10.5kHz 低通、轻微软削波、短立体声反射和微弱合唱延迟，保留电子感但减少尖锐、单薄的蜂鸣感：
+
+- `SFX_Phone_Toggle`：手机开关的短促双向滑音。
+- `SFX_Phone_Ring`：两秒循环的三音电子铃声，导入脚本会自动开启 Looping。
+- `SFX_Phone_Answer` / `SFX_Phone_HangUp`：上行接通与下行挂断。
+- `SFX_Task_Pickup`：双音取件确认。
+- `SFX_Task_Delivered`：四音上行交付成功提示。
+
+前四个已绑定到 `BP_DeliveryManPC`，后两个已绑定到 `BP_DeliveryMan`。原始 48kHz 立体声 WAV
+保存在 `Design/Audio/GeneratedSFX`，合成与导入脚本是 `Content/Python/generate_gameplay_sfx.py`。
+调整脚本里的音高、时长或波形后，在编辑器 Python 控制台运行：
+
+```python
+import importlib, generate_gameplay_sfx as sfx; importlib.reload(sfx); sfx.run()
+```
+
+它会覆盖更新这六个 SoundWave、重新开启铃声循环并恢复蓝图默认绑定。
+
+PIE 控制台可直接试听，不必走一遍任务流程：
+
+```text
+Delivery.Audio.Test toggle
+Delivery.Audio.Test ring
+Delivery.Audio.Test answer
+Delivery.Audio.Test hangup
+Delivery.Audio.Test pickup
+Delivery.Audio.Test delivered
+Delivery.Audio.Stop
+```
+
 ## 节奏规则
 
 - 普通字符发声；空格、换行、中文/英文标点不发声。

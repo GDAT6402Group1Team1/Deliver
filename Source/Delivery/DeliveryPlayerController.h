@@ -11,6 +11,8 @@ class UInputAction;
 class UInputMappingContext;
 class UPostProcessComponent;
 class UDeliveryDialogueVoiceComponent;
+class UAudioComponent;
+class USoundBase;
 
 /**
  * PlayerController that only installs Enhanced Input mapping contexts.
@@ -99,6 +101,20 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|Voice", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UDeliveryDialogueVoiceComponent> DialogueVoice;
 
+	/** 手机界面每次开/关时的按键反馈。需要区分开和关时可在 TogglePhoneUI 蓝图事件里另外播放。 */
+	UPROPERTY(EditDefaultsOnly, Category="Delivery|Audio|Phone")
+	TObjectPtr<USoundBase> PhoneToggleSound;
+
+	/** 来电铃声。资产本身应设置循环；离开 Ringing 状态时 C++ 会主动停止。 */
+	UPROPERTY(EditDefaultsOnly, Category="Delivery|Audio|Phone")
+	TObjectPtr<USoundBase> IncomingCallSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Delivery|Audio|Phone")
+	TObjectPtr<USoundBase> AnswerCallSound;
+
+	UPROPERTY(EditDefaultsOnly, Category="Delivery|Audio|Phone")
+	TObjectPtr<USoundBase> HangUpCallSound;
+
 	virtual void SetupInputComponent() override;
 
 	/** TogglePhoneKey 按下时的转发。BindKey 需要一个无参成员函数，不能直接绑 BlueprintImplementableEvent。 */
@@ -124,6 +140,13 @@ private:
 	TObjectPtr<UInputMappingContext> RuntimeInteractContext;
 
 	FTimerHandle PhoneVoiceBindRetryTimer;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> IncomingCallAudio;
+
+	void StopIncomingCallAudio();
+	bool bPhoneAudioStateInitialized = false;
+	EDeliveryPhoneCallState LastPhoneAudioState = EDeliveryPhoneCallState::Idle;
 	int32 ActiveVoiceCallId = 0;
 	FText ActivePhoneCallerName;
 	FString ActivePhoneSubtitle;

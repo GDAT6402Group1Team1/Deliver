@@ -25,6 +25,7 @@ class UCameraComponent;
 class UInputAction;
 class UGameplayAbility;
 class USceneComponent;
+class USoundBase;
 struct FInputActionValue;
 
 /** 第三人称Pawn：胶囊跟镜头，身体由主动滑稽布娃娃驱动。 */
@@ -134,6 +135,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Camera|Vehicle Impact", meta=(ClampMin="0.1"))
 	float VehicleImpactCameraReturnSpeed = 3.0f;
 
+	/** E 键取件真正成功后只给操作玩家播放。 */
+	UPROPERTY(EditDefaultsOnly, Category="Audio|Interaction")
+	TObjectPtr<USoundBase> PickupSuccessSound;
+
+	/** E 键把当前快递真正交付成功后只给操作玩家播放。 */
+	UPROPERTY(EditDefaultsOnly, Category="Audio|Interaction")
+	TObjectPtr<USoundBase> DeliverySuccessSound;
+
 	// 在 BP_DeliveryMan 里指定 GE_HealthRegen
 	UPROPERTY(EditDefaultsOnly, Category="Ability")
 	TSubclassOf<UGameplayEffect> HealthRegenEffect;
@@ -166,6 +175,12 @@ public:
 
 	UFUNCTION(Client, Reliable)
 	void ClientVehicleImpactCamera();
+
+	UFUNCTION(Client, Reliable)
+	void ClientPickupSucceeded();
+
+	UFUNCTION(Client, Reliable)
+	void ClientDeliverySucceeded();
 
 	// PlayerState复制时调用
 	virtual void OnRep_PlayerState() override;

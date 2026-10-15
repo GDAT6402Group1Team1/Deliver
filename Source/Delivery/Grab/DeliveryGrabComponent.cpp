@@ -17,6 +17,7 @@
 #include "PhysicsEngine/SkeletalBodySetup.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Inventory/DeliveryInventoryComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 namespace
 {
@@ -142,6 +143,7 @@ void UDeliveryGrabComponent::RequestBegin()
 	AActor* Candidate = nullptr;
 	FVector HitPoint;
 	if (!FindCandidate(Candidate, HitPoint)) return;
+	const bool bNewPredictedGrab = PredictedTarget.Get() != Candidate;
 	PredictedTarget = Candidate;
 	PredictedGripPoint = HitPoint;
 	if (Candidate->IsA<ADeliveryCharacter>())
@@ -154,6 +156,10 @@ void UDeliveryGrabComponent::RequestBegin()
 	else PredictedHands = LeftBit | RightBit;
 	LocallyReleasedHands = 0;
 	PredictionExpiresAt = GetWorld()->GetTimeSeconds() + 0.5f;
+	if (bNewPredictedGrab && GrabStartSound)
+	{
+		UGameplayStatics::PlaySound2D(this, GrabStartSound);
+	}
 	if (Character->HasAuthority()) BeginOnServer(Candidate, HitPoint);
 	else ServerRequestBegin(Candidate, HitPoint);
 }
@@ -747,6 +753,8 @@ void UDeliveryGrabComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
 void UDeliveryGrabComponent::RequestReleaseHand(bool bLeft)
 {
+	const bool bHadLocalGrab = IsGrabbing() || PredictedTarget.IsValid();
+	const bool bFirstLocalRelease = LocallyReleasedHands == 0;
 	const uint8 Bit = bLeft ? LeftBit : RightBit;
 	const bool bDraggingCharacter = IsDraggingCharacter()
 		|| (PredictedTarget.IsValid() && PredictedTarget->IsA<ADeliveryCharacter>());
@@ -761,6 +769,10 @@ void UDeliveryGrabComponent::RequestReleaseHand(bool bLeft)
 		LocallyReleasedHands |= Bit;
 	}
 	if (!PredictedHands) PredictedTarget.Reset();
+	if (bHadLocalGrab && bFirstLocalRelease && GrabReleaseSound)
+	{
+		UGameplayStatics::PlaySound2D(this, GrabReleaseSound);
+	}
 	if (GetOwner() && GetOwner()->HasAuthority()) ReleaseHandOnServer(bLeft ? 0 : 1);
 	else ServerReleaseHand(bLeft);
 }

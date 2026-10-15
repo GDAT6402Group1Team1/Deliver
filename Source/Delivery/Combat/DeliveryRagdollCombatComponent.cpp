@@ -6,6 +6,8 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "TimerManager.h"
 
@@ -78,6 +80,15 @@ void UDeliveryRagdollCombatComponent::FirePunchDrive()
 	Mesh->AddImpulse(CachedAimDir * PunchImpulse, bLeft ? LeftHandBone : RightHandBone, true);
 	Mesh->AddImpulse(CachedAimDir * PunchImpulse * 0.5f, bLeft ? LeftForearmBone : RightForearmBone, true);
 	Mesh->AddImpulse(CachedAimDir * PunchImpulse * 0.1f, bLeft ? LeftArmBone : RightArmBone, true);
+
+	// 操作音跟本机预测走，左右键反馈不会多等一次网络往返。
+	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	USoundBase* PunchSound = bLeft ? LeftPunchSound : RightPunchSound;
+	if (OwnerPawn && OwnerPawn->IsLocallyControlled() && PunchSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			this, PunchSound, Mesh->GetBoneLocation(bLeft ? LeftHandBone : RightHandBone));
+	}
 }
 
 FTransform UDeliveryRagdollCombatComponent::GetPunchTraceTransform() const

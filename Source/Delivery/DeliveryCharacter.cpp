@@ -19,6 +19,7 @@
 #include "InputAction.h"
 #include "InputActionValue.h"
 #include "InputCoreTypes.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Delivery.h"
@@ -656,7 +657,10 @@ void ADeliveryCharacter::ServerPickup_Implementation(AActor* Target)
 		&& Interactable->HoldDuration <= KINDA_SMALL_NUMBER
 		&& ValidateServerPickupTarget(Target) && InventoryComponent)
 	{
-		InventoryComponent->TryPickup(Item);
+		if (InventoryComponent->TryPickup(Item))
+		{
+			ClientPickupSucceeded();
+		}
 	}
 }
 
@@ -690,13 +694,35 @@ void ADeliveryCharacter::ServerCompletePickupHold_Implementation(AActor* Target)
 
 	if (ADeliveryHandheldItem* Item = Cast<ADeliveryHandheldItem>(Target))
 	{
-		if (InventoryComponent) InventoryComponent->TryPickup(Item);
+		if (InventoryComponent && InventoryComponent->TryPickup(Item))
+		{
+			ClientPickupSucceeded();
+		}
 		return;
 	}
 	if (UDeliveryTargetComponent* DeliveryTarget = Target->FindComponentByClass<UDeliveryTargetComponent>())
 	{
 		ADeliveryHandheldItem* Held = InventoryComponent ? InventoryComponent->GetHeldItem() : nullptr;
-		DeliveryTarget->TryDeliver(Held, GetPlayerState());
+		if (DeliveryTarget->TryDeliver(Held, GetPlayerState()))
+		{
+			ClientDeliverySucceeded();
+		}
+	}
+}
+
+void ADeliveryCharacter::ClientPickupSucceeded_Implementation()
+{
+	if (PickupSuccessSound)
+	{
+		UGameplayStatics::PlaySound2D(this, PickupSuccessSound);
+	}
+}
+
+void ADeliveryCharacter::ClientDeliverySucceeded_Implementation()
+{
+	if (DeliverySuccessSound)
+	{
+		UGameplayStatics::PlaySound2D(this, DeliverySuccessSound);
 	}
 }
 

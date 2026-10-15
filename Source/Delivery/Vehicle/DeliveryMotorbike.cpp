@@ -3,6 +3,7 @@
 #include "Vehicle/DeliveryMotorbike.h"
 #include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
 #include "Vehicle/DeliveryRiderAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -26,6 +27,7 @@
 #include "InputActionValue.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -48,6 +50,10 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	CollisionBox->SetSimulatePhysics(false);
 	CollisionBox->SetEnableGravity(false);
 	RootComponent = CollisionBox;
+
+	EngineAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("EngineAudio"));
+	EngineAudio->SetupAttachment(RootComponent);
+	EngineAudio->bAutoActivate = false;
 
 	MeshRoot = CreateDefaultSubobject<USceneComponent>(TEXT("MeshRoot"));
 	MeshRoot->SetupAttachment(RootComponent);
@@ -189,6 +195,11 @@ void ADeliveryMotorbike::BeginPlay()
 
 	ApplyDriverPresentation();
 	ApplyCameraMode();
+	if (EngineAudio)
+	{
+		EngineAudio->SetSound(EngineLoopSound);
+		EngineAudio->Stop();
+	}
 }
 
 void ADeliveryMotorbike::AutoConfigureFromMeshes()
@@ -554,6 +565,7 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	SteerInput = 0.0f;
 	TrafficImpactCount = 0;
 	ApplyDriverPresentation();
+	MulticastPlayAudioEvent(0);
 	return true;
 }
 
@@ -598,6 +610,7 @@ bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredY
 
 	UE_LOG(LogDelivery, Log, TEXT("%s：被召唤到 (%.0f, %.0f, %.0f)"),
 		*GetName(), Target.X, Target.Y, Target.Z);
+	MulticastPlayAudioEvent(2);
 	return true;
 }
 
@@ -610,6 +623,7 @@ bool ADeliveryMotorbike::NotifyTrafficImpact(const FVector& CarVelocity)
 	}
 
 	const float ImpactSpeed = CarVelocity.Size2D();
+	MulticastPlayAudioEvent(3);
 	++TrafficImpactCount;
 	UE_LOG(LogDelivery, Log, TEXT("%s：被交通车撞击 %d/%d 次（来车速度 %.0f cm/s）"),
 		*GetName(), TrafficImpactCount, ImpactsToDismount, ImpactSpeed);
@@ -832,6 +846,58 @@ void ADeliveryMotorbike::ExitVehicle()
 	SteerInput = 0.0f;
 	TrafficImpactCount = 0;
 	ApplyDriverPresentation();
+	MulticastPlayAudioEvent(1);
+}
+
+void ADeliveryMotorbike::MulticastPlayAudioEvent_Implementation(uint8 EventIndex)
+{
+	USoundBase* Sound = nullptr;
+	switch (EventIndex)
+	{
+	case 0: Sound = EnterVehicleSound; break;
+	case 1: Sound = ExitVehicleSound; break;
+	case 2: Sound = SummonSound; break;
+	case 3: Sound = TrafficImpactSound; break;
+	default: break;
+	}
+
+	if (Sound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation());
+	}
+}
+
+void ADeliveryMotorbike::UpdateMotorbikeAudio()
+{
+	if (!EngineAudio)
+	{
+		return;
+	}
+
+	if (!Driver || !EngineLoopSound)
+	{
+		if (EngineAudio->IsPlaying())
+		{
+			EngineAudio->Stop();
+		}
+		return;
+	}
+
+	if (EngineAudio->Sound != EngineLoopSound)
+	{
+		EngineAudio->SetSound(EngineLoopSound);
+	}
+	if (!EngineAudio->IsPlaying())
+	{
+		EngineAudio->Play();
+	}
+
+	const float VisualSpeed = !HasAuthority() && !IsLocallyControlled()
+		? ReplicatedRiderMotion.Speed * MaxSpeed : CurrentSpeed;
+	const float SpeedAlpha = FMath::Clamp(
+		FMath::Abs(VisualSpeed) / FMath::Max(MaxSpeed, 1.0f), 0.0f, 1.0f);
+	EngineAudio->SetPitchMultiplier(FMath::Lerp(EngineIdlePitch, EngineMaxPitch, SpeedAlpha));
+	EngineAudio->SetVolumeMultiplier(FMath::Lerp(EngineIdleVolume, EngineMaxVolume, SpeedAlpha));
 }
 
 FVector ADeliveryMotorbike::FindExitLocation(float PreferredSideSign) const
@@ -955,6 +1021,10 @@ void ADeliveryMotorbike::ToggleCameraMode()
 {
 	bFreeLookCamera = !bFreeLookCamera;
 	ApplyCameraMode();
+	if (CameraToggleSound)
+	{
+		UGameplayStatics::PlaySound2D(this, CameraToggleSound);
+	}
 
 	// 切换的那一帧要把控制旋转接上，否则视角会跳一下：
 	// 切到固定视角时 SyncControlRotation 会把它拉回车头朝向（下车后角色的弹簧臂要用）；
@@ -1060,6 +1130,7 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 	UpdateLean(DeltaSeconds);
 	UpdateSteerVisual(DeltaSeconds);
 	UpdateWheelSpin(DeltaSeconds);
+	UpdateMotorbikeAudio();
 
 	if (Driver && IsLocallyControlled())
 	{

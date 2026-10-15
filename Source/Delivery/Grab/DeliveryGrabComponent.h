@@ -8,6 +8,7 @@
 class ADeliveryCharacter;
 class UDeliveryGrabbableComponent;
 class UPhysicsConstraintComponent;
+class USoundBase;
 class UPrimitiveComponent;
 
 /** Props use server-positioned carry; stunned characters retain server-owned hand constraints. */
@@ -49,6 +50,13 @@ public:
 	float RightHandGap = 0.0f;
 
 protected:
+	/** 双键成功选到可抓目标时的本机反馈。 */
+	UPROPERTY(EditAnywhere, Category="Grab|Audio")
+	TObjectPtr<USoundBase> GrabStartSound;
+
+	UPROPERTY(EditAnywhere, Category="Grab|Audio")
+	TObjectPtr<USoundBase> GrabReleaseSound;
+
 	UPROPERTY(EditAnywhere, Category="Grab", meta=(ClampMin="0.0"))
 	float GrabDistance = 140.0f;
 	UPROPERTY(EditAnywhere, Category="Grab", meta=(ClampMin="0.0"))

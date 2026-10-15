@@ -9,6 +9,7 @@
 
 class USkeletalMeshComponent;
 class UDeliveryActiveRagdollComponent;
+class USoundBase;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliverPunchHitWindow, EMeleeHand, Hand);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliverPunchEnded, EMeleeHand, Hand);
@@ -88,6 +89,13 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Punch")
 	FName RightHandBone = TEXT("RightHand");
+
+	/** 左/右拳分开留槽，方便用略不同的挥拳音加强手感。 */
+	UPROPERTY(EditAnywhere, Category="Punch|Audio")
+	TObjectPtr<USoundBase> LeftPunchSound;
+
+	UPROPERTY(EditAnywhere, Category="Punch|Audio")
+	TObjectPtr<USoundBase> RightPunchSound;
 
 	UPROPERTY(Transient)
 	TObjectPtr<USkeletalMeshComponent> Mesh;

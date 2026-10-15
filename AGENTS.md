@@ -402,6 +402,17 @@ PlayerController 自动累积到 `DeliveryPromptSubsystem` 的屏幕下方字幕
 `Delivery.Voice.Test [normal|low|high|robot|angry]`、`Delivery.Voice.Say <文字>`、
 `Delivery.Voice.Stop`。完整接口和扩展边界见 [Document/AudioSystem.md](Document/AudioSystem.md)。
 
+游戏事件音效不经过一套全局管理器，统一以 `USoundBase` 插槽放在真正拥有事件的类上：
+`BP_DeliveryMan` 填成功取件/交付，`RagdollCombat` 填左右拳，`GrabComponent` 填抓取/松手，
+`BP_DeliveryManPC` 填手机切换/来电/接听/挂断，`BP_Motorbike` 填发动机循环、上下车、交通撞击、
+召唤和切视角。取件/交付只在服务器判定成功后由所属客户端播放；车辆权威事件多播空间音；
+左右拳和抓取走本机预测保证反馈及时。发动机音频资产自身必须循环，C++ 按车速调 Pitch/Volume。
+字段表和填写位置见 [Document/AudioSystem.md](Document/AudioSystem.md#游戏事件音效槽)。
+电话与任务已有六个程序生成的占位 SoundWave（`/Game/Sound/SFX`），并已绑定到
+`BP_DeliveryManPC` / `BP_DeliveryMan`；原始 WAV 在 `Design/Audio/GeneratedSFX`，可用
+`Content/Python/generate_gameplay_sfx.py` 重生成和重导入，不含第三方采样。当前第二版为 48kHz
+立体声：电话音使用动态 FM，任务提示使用非整数泛音钟体，并带短反射、低通和轻微软削波。
+
 ## 开发环境与编译
 
 - **引擎：UE 5.8。** 编译走 `Build.bat`，目标是 **`DeliveryEditor`**（不是 `Delivery`——只编后者的话
