@@ -16,7 +16,7 @@ ADeliveryHandheldItem::ADeliveryHandheldItem()
 	PrimaryActorTick.TickGroup = TG_PostPhysics;
 	bReplicates = true;
 	SetReplicateMovement(true);
-	NetUpdateFrequency = 20.0f;
+	SetNetUpdateFrequency(20.0f);
 
 	ItemMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ItemMesh"));
 	ItemMesh->SetCollisionProfileName(TEXT("PhysicsActor"));

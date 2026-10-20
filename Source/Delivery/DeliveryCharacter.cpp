@@ -48,8 +48,8 @@ ADeliveryCharacter::ADeliveryCharacter()
 	PrimaryActorTick.bStartWithTickEnabled = false;
 	bReplicates = true;
 	SetReplicateMovement(true);
-	NetUpdateFrequency = 20.0f;
-	MinNetUpdateFrequency = 10.0f;
+	SetNetUpdateFrequency(20.0f);
+	SetMinNetUpdateFrequency(10.0f);
 
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
