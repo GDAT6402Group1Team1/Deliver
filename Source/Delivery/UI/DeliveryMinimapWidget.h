@@ -22,6 +22,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Minimap", meta=(ClampMin="1000", Units="cm"))
 	float MapWorldWidth = 18000.f;
 
+	// 地图朝上的方向不在这里存：读 UDeliveryMapSettings::MapNorthWorldYaw，
+	// 和罗盘的 N/E/S/W 共用同一个值（见那个文件开头的说明）。
+	// 原来这里有个 MapUpWorldYaw，和罗盘节点上的 NorthWorldYaw 是同一个事实的两份抄件
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Minimap", meta=(ClampMin="1000", Units="cm"))
 	float CaptureHeight = 20000.f;
 
@@ -59,6 +63,16 @@ private:
 	TArray<FLegacyCaptureState> LegacyCaptures;
 	FSlateBrush MapBrush;
 	float HeadingYaw = 0.f;
+
+	/**
+	 * 当前任务目的地相对玩家的偏移，**地图空间、单位 cm**（X=图上右，Y=图上上）。
+	 *
+	 * 在 Tick 里算好存下来，不在 NativePaint 里查任务系统：Paint 是 const、
+	 * 每帧可能被调多次（还有预通道），把 gameplay 查询放进去既浪费也容易出意外。
+	 * 现有的 HeadingYaw 也是这个路子。
+	 */
+	FVector2f TargetMapOffsetCm = FVector2f::ZeroVector;
+	bool bHasMapTarget = false;
 	float CaptureElapsed = 1.f;
 	float LegacyScanElapsed = 1.f;
 	TWeakObjectPtr<APawn> LastPawn;

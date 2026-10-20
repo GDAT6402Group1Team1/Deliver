@@ -4,6 +4,8 @@
 
 #include "Components/CanvasPanelSlot.h"
 #include "Components/SceneCaptureComponent2D.h"
+#include "DeliveryMapSettings.h"
+#include "Task/DeliveryTaskTrackerComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
@@ -116,7 +118,10 @@ void UDeliveryMinimapWidget::EnsureCapture()
 	Capture->bCaptureEveryFrame = false;
 	Capture->bCaptureOnMovement = false;
 	Capture->bAlwaysPersistRenderingState = true;
-	Capture->SetWorldRotation(FRotator(-90.f, 0.f, 0.f));
+	// 俯拍：Pitch −90 看正下方。此时 Yaw 绕的就是视线轴，所以它直接等于"图像转多少度"。
+	// 这里设一次是为了创建时就对，真正每帧生效的是下面更新里那一句——
+	// 改 WBP 默认值不用重编，靠的就是每帧重设
+	Capture->SetWorldRotation(FRotator(-90.f, UDeliveryMapSettings::GetMapNorthWorldYaw(), 0.f));
 	Capture->RegisterComponent();
 	SuspendLegacyCaptures();
 }
@@ -155,7 +160,35 @@ void UDeliveryMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 			HeadingYaw = Ragdoll->GetBodyForward().Rotation().Yaw;
 		}
 	}
+	// —— 任务目的地在地图上的位置 ——
+	//
+	// 换到**地图空间**再存：图上的"上"是世界 yaw MapNorthWorldYaw，"右"是它 +90。
+	// 把世界偏移投影到这两根轴上，Paint 里就只剩"乘个比例尺 + 夹到圆内"，
+	// 不用再碰朝向——朝向这件事只在这里算一次，和相机读的是同一个值。
+	bHasMapTarget = false;
+	if (const UDeliveryTaskTrackerComponent* Tracker =
+		UDeliveryTaskTrackerComponent::FindTracker(GetOwningPlayer()))
+	{
+		FVector Destination;
+		FName LocationId;
+		if (Tracker->GetTrackedTaskDestination(Destination, LocationId))
+		{
+			const float NorthRad = FMath::DegreesToRadians(UDeliveryMapSettings::GetMapNorthWorldYaw());
+			const float NorthCos = FMath::Cos(NorthRad), NorthSin = FMath::Sin(NorthRad);
+			const FVector Delta = Destination - Pawn->GetActorLocation();
+
+			// 图上"上"= (cos N, sin N)，"右"= (−sin N, cos N)：和相机那边
+			// FRotator(-90, N, 0) 推出来的镜头 up/right 是同一组向量
+			TargetMapOffsetCm = FVector2f(
+				static_cast<float>(Delta.X) * -NorthSin + static_cast<float>(Delta.Y) * NorthCos,
+				static_cast<float>(Delta.X) * NorthCos + static_cast<float>(Delta.Y) * NorthSin);
+			bHasMapTarget = true;
+		}
+	}
+
 	Capture->OrthoWidth = FMath::Max(1000.f, MapWorldWidth);
+	// 每帧重设旋转：改项目设置里的 MapNorthWorldYaw 立刻生效，不用重编也不用重开关卡
+	Capture->SetWorldRotation(FRotator(-90.f, UDeliveryMapSettings::GetMapNorthWorldYaw(), 0.f));
 	Capture->SetWorldLocation(Pawn->GetActorLocation() + FVector(0, 0, CaptureHeight));
 	if (LastPawn.Get() != Pawn)
 	{
@@ -204,13 +237,63 @@ int32 UDeliveryMinimapWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		MapTexture ? FColor::White : FColor(40, 48, 52));
 	// 白描边 + 红色双面尖头，轮廓参考定位标记，尖端代表实际前方。
 	const float MarkerScale = FMath::Min(Size.X, Size.Y) / 320.f;
-	DirectionMarker(OutDrawElements, Base + 4, AllottedGeometry, Centre + FVector2f(0, 1), HeadingYaw,
+	// 箭头角度要减掉地图的朝上角：地图转了多少度，世界 yaw 在图上就偏多少度。
+	// 相机和箭头读同一个 MapNorthWorldYaw，所以不存在"转了相机忘了转箭头"
+	const float MarkerHeading = HeadingYaw - UDeliveryMapSettings::GetMapNorthWorldYaw();
+
+	DirectionMarker(OutDrawElements, Base + 4, AllottedGeometry, Centre + FVector2f(0, 1), MarkerHeading,
 		MarkerScale * 1.22f, FColor(20, 20, 20), FColor(20, 20, 20));
-	DirectionMarker(OutDrawElements, Base + 5, AllottedGeometry, Centre, HeadingYaw,
+	DirectionMarker(OutDrawElements, Base + 5, AllottedGeometry, Centre, MarkerHeading,
 		MarkerScale * 1.12f, FColor::White, FColor::White);
-	DirectionMarker(OutDrawElements, Base + 6, AllottedGeometry, Centre, HeadingYaw,
+	DirectionMarker(OutDrawElements, Base + 6, AllottedGeometry, Centre, MarkerHeading,
 		MarkerScale, FColor(239, 58, 44), FColor(183, 32, 26));
-	return Base + 6;
+
+	// —— 任务目的地 ——
+	//
+	// 圈内画在真实位置、圈外夹到边缘。**比例尺是 2*MapRadius / MapWorldWidth**：
+	// Disc() 把整张 RT 的 UV 0..1 铺在直径 2*MapRadius 上，而 RT 的宽度就是
+	// OrthoWidth = MapWorldWidth。用半径去除会小一半，表现是目标点总比真实位置离中心近。
+	if (bHasMapTarget && MapWorldWidth > 1.f)
+	{
+		const float PixelsPerCm = (2.f * MapRadius) / MapWorldWidth;
+		// 屏幕 Y 向下，地图空间 Y 向上，所以这里取负
+		FVector2f Offset(TargetMapOffsetCm.X * PixelsPerCm, -TargetMapOffsetCm.Y * PixelsPerCm);
+
+		const float Dot = 5.5f * MarkerScale;
+		// 留出标记自身的半径，否则夹到边缘时有一半露在圆外面
+		const float MaxLength = FMath::Max(1.f, MapRadius - Dot - 2.f);
+		const float Length = Offset.Size();
+		const bool bOutside = Length > MaxLength;
+		if (bOutside && Length > KINDA_SMALL_NUMBER)
+		{
+			Offset *= MaxLength / Length;
+		}
+
+		const FVector2f At = Centre + Offset;
+		// 深海军蓝描边，和罗盘图钉、人物标记同一套视觉语言
+		const FColor Edge(2, 12, 30);
+		const FColor Fill(255, 150, 30);
+
+		if (bOutside)
+		{
+			// 夹到边缘时画成朝外的三角：圆点在边上停着看不出"还在更远处"，
+			// 而三角的尖端天然表达"继续往这边走"。
+			// DirectionMarker 的 heading 是从屏幕正上方顺时针量的，
+			// 所以方向 (dx,dy) 对应 atan2(dx, −dy)
+			const float Heading = FMath::RadiansToDegrees(FMath::Atan2(Offset.X, -Offset.Y));
+			DirectionMarker(OutDrawElements, Base + 7, AllottedGeometry, At, Heading,
+				MarkerScale * 0.62f, Edge, Edge);
+			DirectionMarker(OutDrawElements, Base + 8, AllottedGeometry, At, Heading,
+				MarkerScale * 0.48f, Fill, Fill);
+		}
+		else
+		{
+			Disc(OutDrawElements, Base + 7, AllottedGeometry, At, Dot + 1.8f, White, Edge);
+			Disc(OutDrawElements, Base + 8, AllottedGeometry, At, Dot, White, Fill);
+		}
+	}
+
+	return Base + 8;
 }
 
 void UDeliveryMinimapWidget::NativeDestruct()

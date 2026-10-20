@@ -144,7 +144,7 @@
 - **"该去哪"**：`Tracker::GetTrackedTaskDestination()`。**目的地按任务状态自动切换**（待取件→取件点，进行中→收件点），调用方不要自己判——判错的表现是"箭头指向已经拿过的地方"，四个界面会各错各的。ID 在关卡里找不到对应点时返回 false 并在日志点名；静默失败的话表现只是"箭头不显示"，根因几乎查不到。
 - **丢件恢复**：`NotifyItemLost` 把进行中的任务退回待取件，但接电话时开始的计时、催促状态和特殊事件继续保留；`UDeliveryItemComponent::EndPlay` 在 Actor 被销毁时自动上报（掉出世界会走到）。**"正常交付"和"意外丢失"靠执行顺序区分**——`TryDeliver` 先标已完成再销毁快递，所以 `EndPlay` 时状态已不是进行中，`NotifyItemLost` 自己返回 false；**调换这两步会让每次成功交付都被误判成丢件**。退回待取件之后**回取货点再领一件**即可，不再需要关卡里还躺着那件原物——这是取货点流程修掉的那个死锁。
 - **指引换算**：[DeliveryGuidanceLibrary](Source/Delivery/Task/DeliveryGuidanceLibrary.h) 返回距离、相对镜头的水平夹角、在不在前方、高度差，UI 画屏幕边缘箭头直接用。**角度基于镜头不是角色**——骑车时镜头和车头可能不一致（摩托车有自由/固定两套视角），用角色朝向算的话自由视角下箭头会指错。
-- 顶部水平罗盘条用 `DeliveryGuidanceLibrary::GetTrackedTaskCompass`：目标与 N/E/S/W 都返回同一条水平轴上的 `-1~1` 偏移，乘罗盘条半宽即可。默认 `+X` 为北，可用 `NorthWorldYaw` 对齐关卡；背后的任务目标会夹在左右边缘持续提示。
+- 顶部水平罗盘条用 `DeliveryGuidanceLibrary::GetTrackedTaskCompass`：目标与 N/E/S/W 都返回同一条水平轴上的 `-1~1` 偏移，乘罗盘条半宽即可。北方取项目设置 `MapNorthWorldYaw`（和小地图同一个值，不再是函数参数）；背后的任务目标会夹在左右边缘持续提示。
 - **罗盘条只在接到任务后出现**（`WBP_Compass`，蓝图侧；C++ 只出数据）。
   判据用 `GetTrackedTaskCompass().bHasTarget`，它正好等于想要的条件：
   `Locked`/`Completed` 为 false，`AwaitingPickup`（指取件点）/`InProgress`（指收件点）为 true。
@@ -180,7 +180,32 @@
   手上已经有包裹却还挂着取件图钉，玩家会折返回取件点，所以 `None` 时连图钉带距离一起藏。
   **UI 不要自己读任务状态判一遍**——判断只在 `GetTrackedTaskMarker` 这一处，和
   `GetTaskDestination` 取同一个状态；两边各判一次迟早不一致，表现是"箭头指送达点、图钉还是箱子"。
-- 罗盘图钉的美术：`Content/Python/generate_compass_icons.py` 离线画 PNG 到
+- **送达图钉是从取件图钉"改画"出来的**，不是从零再画一枚：
+  `Content/Python/generate_delivery_icon.py` 拿 `T_CompassTaskTarget.png` 当底，
+  只重绘圆盘正中那个图标（按掩码擦掉箱子、画房子），外圈描边、蓝环、奶油环、
+  尖端、橙色箭头、投影全是**字面意义上的同一份像素**，天然 1:1。
+  从零画整枚的那条路试过并失败：蓝环被奶油圈挤掉只剩顶上一道、尖端拉成一根针、
+  箭头掉到尖上、而且全平涂没有立体阴影——外壳那堆渐变和内外阴影靠参数复刻
+  代价极高且永远差一口气，而**真正要换的只有圆盘中间那个图形**。
+  - **几何必须打分类图读，不能用射线扫**。第一版用"从中心发射线找奶油边界"，
+    射线被正中间的箱子截断，量出来的圆心比真值低 14 像素、半径也偏大；
+    后果是顶部一圈箱子描边擦不掉（留两道淡弧）、房子偏右下、左上空一块。
+    实测真值：圆盘心 (280, 163.5)、半径 94、箱子连描边最远 88、描边色 `#020c1e`
+    （**深海军蓝不是黑**，和图钉外圈同色；用纯黑画出来并排一看就不是一套）。
+  - **擦箱子要按掩码、不要整片重绘**。整片重绘时补出来的奶油和外面真奶油之间
+    必然留一道接缝（拟合再准也差几个色阶）。掩码判据是"和该位置的奶油模型
+    差超过 12 级"——不能用"不是奶油色"，箱子高光 `#fccc90` 会被当成奶油漏掉。
+  - **图形尺寸按最远顶点的半径定，不按外接框**。箱子是六边形、四角没有料，
+    同样外接框下矩形的房子对角线会戳出奶油圈；而顶点半径还要减去半个描边宽
+    （8/2=4），所以顶点留到 84、连描边正好贴住 88，和箱子一致。
+  - 房子刻意做得**扁而宽**：角半径 = √((w/2)²+(h/2)²)，高度压下来同样半径才能
+    放宽，h=100 时 w 能到 150（接近箱子的 155），h=130 时只剩 134。
+  - 脚本带自检：**奶油圈以外被改动的像素必须是 0**，并且报色差幅度而不只报个数
+    （裁剪掩码自带 2px 羽化，边界上必然有几十个像素差 1~2 级，只报个数的话
+    每次都像出了问题）。
+- 导入走 `Content/Python/import_compass_icons.py`（**已提交**——它和生成器都
+  因为是未跟踪文件在 `git pull` 的 autostash 恢复失败里丢过两次）。
+- 罗盘图钉的美术（早期从零画整枚的版本）：`Content/Python/generate_compass_icons.py` 离线画 PNG 到
   `Content/UI/Minimap/Source/`，`import_compass_icons.py` 在编辑器里导入并配 UI 贴图参数
   （`UserInterface2D` + 无 mip + sRGB，漏任一项分别表现为描边脏边 / 缩小糊成一团 / 整张发暗）。
   调色板和几何都是从原图逐像素实采的（最宽 272px、圆头半径 136、奶油圈半径 100、尖端 y≈390），
@@ -830,7 +855,7 @@ Source/Delivery/
 
 ### 脚边箭头与圆形小地图
 - `Task/DeliveryGroundArrowComponent` 默认挂 PlayerController，本机在人物周围（95 cm）/摩托车周围（180 cm）显示黄色描边箭头。目的地统一取 `GetTrackedTaskDestination`，随取件/交付阶段切换，无目标隐藏。只用 XY 方向，地面探测后抬高 45 cm，大小和半径可调；上下车使用当前受控 Pawn。
-- `/Game/UI/Minimap/WBP_Minimap` 继承 `UI/DeliveryMinimapWidget`，仍由 `WBP_Main` 引用。圆形裁切、深浅双边框、中心红色方向尖头由原生绘制完成。默认直径 320、右上角边距 24；拍摄宽度从 24000 cm 拉近到 18000 cm。地图固定 +X 朝上，标记按身体朝向旋转（步行取 `GetBodyForward()`，骑车取 Pawn 朝向），不跟随自由镜头。每名本机玩家有独立 512×512 RT 和摄像头，以 30Hz 跟随当前 Pawn；暂停旧蓝图写共享 `RT_Minimap` 的摄像头，控件销毁时恢复。绘制忽略 RT 的 Alpha，避免场景颜色被透明通道遮掉。尺寸、拍摄范围、刷新率、边框可在蓝图默认值调整。
+- `/Game/UI/Minimap/WBP_Minimap` 继承 `UI/DeliveryMinimapWidget`，仍由 `WBP_Main` 引用。圆形裁切、深浅双边框、中心红色方向尖头由原生绘制完成。默认直径 320、右上角边距 24；拍摄宽度从 24000 cm 拉近到 18000 cm。地图朝向由**项目设置**里的 `UDeliveryMapSettings::MapNorthWorldYaw` 决定（项目设置 → 游戏 → Delivery 地图，0 = 世界 +X 朝北），标记按身体朝向旋转（步行取 `GetBodyForward()`，骑车取 Pawn 朝向），不跟随自由镜头。**小地图的朝上方向和罗盘的 N/E/S/W 读的是同一个值**——"这张地图的北在哪"是一个事实，原来抄在两处（小地图的 `MapUpWorldYaw` + 罗盘节点的 `NorthWorldYaw` 引脚），改一处忘另一处的表现是"小地图正的、罗盘偏 90°"，而两个数单看都像是对的。现在那两个字段都删了，`GetTrackedTaskCompass` 也**不再有 `NorthWorldYaw` 参数**（删参数会让 `WBP_Compass` 的节点少一个引脚，重编译一次即可）。放 `UDeveloperSettings` 的理由：不用每张图记得摆 Actor（漏摆会静默退回 0）；存 `Config/DefaultGame.ini` 是**文本**，而本项目被 `git pull` 的 autostash 冲掉过两次，二进制 `.uasset` 冲突只能整份取舍、文本能合并。代价是整个项目一份、不是每关一份。相机是 `UDeliveryMinimapWidget` 运行时 `NewObject` 出来的 `USceneCaptureComponent2D`、挂在 PlayerController 上，**关卡 Outliner 里找不到它**；旋转每帧重设，所以改设置立刻生效。**任务目的地也标在小地图上**：在拍摄范围内画橙色圆点（真实位置），超出就夹到圆边并换成**朝外的三角**——圆点停在边上看不出"目标还在更远处"，三角的尖端天然表达"继续往这边走"。描边用 `#020c1e`，和罗盘图钉、人物标记同一套。**比例尺是 `2*MapRadius / MapWorldWidth`**：`Disc()` 把整张 RT 的 UV 0~1 铺在**直径**上，而 RT 宽度就是 `OrthoWidth = MapWorldWidth`；用半径去除会小一半，表现是"目标点总比真实位置离中心近"，而且近得很均匀，看着像比例没调好、不像算错。目的地在 **Tick 里就换算成地图空间**（X=图上右、Y=图上上）存成 `TargetMapOffsetCm`，Paint 里只剩乘比例尺和夹圆——Paint 是 const 且每帧可能被调多次，不在那里查任务系统；用的 up/right 和相机 `FRotator(-90, N, 0)` 推出来的是同一组，地图转了标记跟着转。没有目标时（`GetTrackedTaskDestination` 返回 false）整个标记不画，和罗盘图钉、脚边箭头同一个判据。每名本机玩家有独立 512×512 RT 和摄像头，以 30Hz 跟随当前 Pawn；暂停旧蓝图写共享 `RT_Minimap` 的摄像头，控件销毁时恢复。绘制忽略 RT 的 Alpha，避免场景颜色被透明通道遮掉。尺寸、拍摄范围、刷新率、边框可在蓝图默认值调整。
 - 新父类须先完整编译，再用 `Content/Python/upgrade_minimap.py` 切换小地图父类、编译保存，并验证主 HUD。无需更改关卡。
 
 箭头可见性修正：逻辑组件留在 PlayerController，世界空间 Widget 的 Owner 必须是当前受控 Pawn。`OnlyOwnerSee` 按镜头 ViewActor 与 Owner 链判断，视觉挂 Controller 会被普通 Pawn 镜头过滤；上下摩托车时销毁旧视觉并以新 Pawn 为 Owner 重建。箭头原生 Widget 显式提供 128×128 绘制区域并启用动态重绘。
