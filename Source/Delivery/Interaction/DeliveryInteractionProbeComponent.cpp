@@ -12,6 +12,8 @@
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Task/DeliveryItemComponent.h"
+#include "Task/DeliveryPickupPointComponent.h"
+#include "Vehicle/DeliveryMotorbike.h"
 
 UDeliveryInteractionProbeComponent::UDeliveryInteractionProbeComponent()
 {
@@ -27,8 +29,20 @@ void UDeliveryInteractionProbeComponent::TickComponent(
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	const APawn* Owner = Cast<APawn>(GetOwner());
-	// 不是本机操控的 Pawn 就别探测：包括别人的角色，也包括自己上了车之后被丢下的那具身体。
-	if (!Owner || !Owner->IsLocallyControlled())
+	const ADeliveryCharacter* OwnerCharacter = Cast<ADeliveryCharacter>(Owner);
+
+	/**
+	 * 本机操控，**或者**我是某辆本机操控的车的驾驶员。
+	 *
+	 * 骑车时控制器 Possess 的是车，这具身体的 `IsLocallyControlled()` 变成 false
+	 * ——只判那一句的话上车之后 E 整个失灵，取货点和收件点都按不动。
+	 * 判的是"车是不是本机的"而不是"我身上有没有车"：别人骑的车上也挂着一具身体，
+	 * 那具不该在我这边探测。
+	 */
+	const ADeliveryMotorbike* RiddenBike = OwnerCharacter ? OwnerCharacter->GetCurrentVehicle() : nullptr;
+	const bool bLocallyDriving = RiddenBike && RiddenBike->IsLocallyControlled();
+
+	if (!Owner || (!Owner->IsLocallyControlled() && !bLocallyDriving))
 	{
 		FocusedGeneral = nullptr;
 		FocusedPickup = nullptr;
@@ -37,7 +51,7 @@ void UDeliveryInteractionProbeComponent::TickComponent(
 	}
 
 	// An incapacitated pawn cannot interact. Clear both input targets and the old highlight.
-	const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(Owner);
+	const ADeliveryCharacter* Character = OwnerCharacter;
 	if (Character && Character->IsIncapacitated())
 	{
 		FocusedGeneral = nullptr;
@@ -69,7 +83,15 @@ void UDeliveryInteractionProbeComponent::TickComponent(
 			FText Text = PromptTarget->PromptText;
 			if (Pickup)
 			{
-				if (const UDeliveryItemComponent* Item = Pickup->GetOwner()->FindComponentByClass<UDeliveryItemComponent>())
+				// 取货点和快递箱子各有一套拦截原因。"按了没反应"在游戏里完全无法自查，
+				// 两边都必须把原因顶到提示浮窗上
+				AActor* PickupOwner = Pickup->GetOwner();
+				if (const UDeliveryPickupPointComponent* Point = UDeliveryPickupPointComponent::FindOn(PickupOwner))
+				{
+					const FText Reason = Point->GetBlockedReason();
+					if (!Reason.IsEmpty()) Text = Reason;
+				}
+				else if (const UDeliveryItemComponent* Item = PickupOwner->FindComponentByClass<UDeliveryItemComponent>())
 				{
 					const FText Reason = Item->GetPickupBlockedReason();
 					if (!Reason.IsEmpty()) Text = Reason;

@@ -12,6 +12,8 @@
 #include "CollisionQueryParams.h"
 #include "Delivery.h"
 #include "DeliveryCharacter.h"
+#include "Inventory/DeliveryInventoryComponent.h"
+#include "Inventory/DeliveryPackageItem.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
@@ -60,6 +62,9 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 
 	MeshAlign = CreateDefaultSubobject<USceneComponent>(TEXT("MeshAlign"));
 	MeshAlign->SetupAttachment(MeshRoot);
+
+	CargoPivot = CreateDefaultSubobject<USceneComponent>(TEXT("CargoPivot"));
+	CargoPivot->SetupAttachment(MeshAlign);
 
 	SteerPivot = CreateDefaultSubobject<USceneComponent>(TEXT("SteerPivot"));
 	SteerPivot->SetupAttachment(MeshAlign);
@@ -159,6 +164,7 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 		MouseLookAction = MouseLookActionFinder.Object;
 	}
 	InteractAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
+	PickupAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Pickup.IA_Pickup")));
 	CameraToggleKey = EKeys::P;
 	RiderMeshAsset = TSoftObjectPtr<USkeletalMesh>(
 		FSoftObjectPath(TEXT("/Game/Vehicle/Motorbike/SK_MotorbikeRider.SK_MotorbikeRider")));
@@ -168,6 +174,7 @@ void ADeliveryMotorbike::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ADeliveryMotorbike, Driver);
+	DOREPLIFETIME(ADeliveryMotorbike, Cargo);
 	DOREPLIFETIME(ADeliveryMotorbike, ReplicatedRiderMotion);
 }
 
@@ -219,7 +226,8 @@ void ADeliveryMotorbike::AutoConfigureFromMeshes()
 	// 下面全是"只填空的"：脚本量过的、或者在 BP 上手调过的，一律不碰。
 	const bool bNeedWheels = WheelPartIndices.Num() == 0;
 	const bool bNeedSteer = SteeringPartIndices.Num() == 0 && HandlebarPartIndices.Num() == 0;
-	if (!bNeedWheels && !bNeedSteer)
+	const bool bNeedCargo = CargoOffset.IsNearlyZero();
+	if (!bNeedWheels && !bNeedSteer && !bNeedCargo)
 	{
 		return;
 	}
@@ -334,6 +342,40 @@ void ADeliveryMotorbike::AutoConfigureFromMeshes()
 				*GetName(), BarIndex, BestWidth, SteeringPartIndices.Num());
 		}
 	}
+
+	if (bNeedCargo)
+	{
+		// 货架 = 车尾那批部件的顶面中点。
+		//
+		// **只取车尾 35%**，不是整车：整车包围盒的 Max.Z 是车把/风挡的高度，
+		// 用它会把快递架到半空中。而"后备架在车尾、坐垫后面"这件事在任何摩托车上都成立，
+		// 所以按位置筛一批部件再取它们的顶面，换模型也不会错。
+		// 导入空间里车头朝 +Y，所以"尾部"是 Y 小的那一端。
+		const float RearLine = Whole.Min.Y + Whole.GetSize().Y * 0.35f;
+		FBox Rear(ForceInit);
+		for (const FBox& Box : Boxes)
+		{
+			if (Box.IsValid && Box.GetCenter().Y <= RearLine)
+			{
+				Rear += Box;
+			}
+		}
+
+		// 车尾一个部件都没筛到（模型被合并成一整块？）就退回整车，
+		// 位置会偏高但至少在车上，而不是留在原点、让快递挂在前轮里
+		const FBox& Source = Rear.IsValid ? Rear : Whole;
+
+		// 再往上垫一点，免得箱子一半陷进车尾的壳里。
+		// 12cm 大致是测试快递（32×26×20）的一半高再多一点；
+		// 换了明显更大的箱子就在 BP 上手填 CargoOffset，自动标定会让开
+		constexpr float CargoLift = 12.0f;
+		CargoOffset = FVector(Whole.GetCenter().X, Source.GetCenter().Y, Source.Max.Z + CargoLift);
+
+		UE_LOG(LogDelivery, Log,
+			TEXT("%s：自动量出货架位置 (%.0f, %.0f, %.0f)%s。"),
+			*GetName(), CargoOffset.X, CargoOffset.Y, CargoOffset.Z,
+			Rear.IsValid ? TEXT("") : TEXT("（没筛到车尾部件，退回整车包围盒，可能偏高）"));
+	}
 }
 
 void ADeliveryMotorbike::ApplyBodyMeshes()
@@ -353,6 +395,12 @@ void ADeliveryMotorbike::ApplyBodyMeshes()
 	if (RiderPivot)
 	{
 		RiderPivot->SetRelativeLocation(RiderPivotLocation);
+	}
+	// 货架不是转轴，是个纯挂点：孩子（快递）不需要把偏移减回去，
+	// 所以这里直接把位置和朝向都写上
+	if (CargoPivot)
+	{
+		CargoPivot->SetRelativeLocationAndRotation(CargoOffset, CargoRotation);
 	}
 	if (RiderMesh)
 	{
@@ -506,6 +554,59 @@ void ADeliveryMotorbike::OnRep_Driver()
 	ApplyDriverPresentation();
 }
 
+void ADeliveryMotorbike::OnRep_Cargo()
+{
+	ApplyCargoPresentation();
+}
+
+void ADeliveryMotorbike::ApplyCargoPresentation()
+{
+	if (Cargo && CargoPivot)
+	{
+		Cargo->SetVehicleCargoPresentation(CargoPivot);
+	}
+}
+
+ADeliveryPackageItem* ADeliveryMotorbike::GetCargo() const
+{
+	// 实现放在 cpp：头文件里只有 ADeliveryPackageItem 的前向声明，
+	// IsValid() 要的那个 UObject* 转换需要完整类型，写成内联会编不过
+	return IsValid(Cargo) ? Cargo.Get() : nullptr;
+}
+
+bool ADeliveryMotorbike::AttachCargo(ADeliveryPackageItem* Package)
+{
+	if (!HasAuthority() || HasCargo() || !IsValid(Package) || !CargoPivot)
+	{
+		return false;
+	}
+
+	Cargo = Package;
+	// 让快递归车所有：下车/销毁时的所有权链条要对得上，
+	// 而且 Owner 为空的 Actor 在"这件东西归谁"的判断里会被当成地上的野物
+	Package->SetOwner(this);
+	ApplyCargoPresentation();
+
+	return true;
+}
+
+ADeliveryPackageItem* ADeliveryMotorbike::ReleaseCargo()
+{
+	ADeliveryPackageItem* Released = GetCargo();
+	// 悬空指针也要清掉：快递在别处被销毁过，这里还留着的话下一件就绑不上
+	Cargo = nullptr;
+	if (!HasAuthority() || !Released)
+	{
+		return nullptr;
+	}
+	Released->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	Released->SetOwner(nullptr);
+
+	// 这里**故意不恢复物理、也不摆位置**：接下来它要进手里还是掉地上，
+	// 只有调用方知道。两处都恢复一遍的话，先恢复的那次会让它在地上弹一下
+	return Released;
+}
+
 void ADeliveryMotorbike::HandleInteractRequested(APawn* Interactor)
 {
 	TryEnter(Cast<ADeliveryCharacter>(Interactor));
@@ -550,6 +651,22 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	NewDriver->SetActorEnableCollision(false);
 	NewDriver->SetActorHiddenInGame(true);
 	NewDriver->AttachToComponent(CollisionBox, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+
+	// 手上拿着快递就搬到车上。**必须排在 attach 之后**：
+	// GetCurrentVehicle() 是从附着父级推出来的，attach 之前这个人还"不在车上"，
+	// ReceiveTaskPackage 会把快递又塞回手里
+	if (UDeliveryInventoryComponent* Inventory = NewDriver->GetInventoryComponent())
+	{
+		if (ADeliveryPackageItem* Package = Cast<ADeliveryPackageItem>(Inventory->GetHeldItem()))
+		{
+			// 先从背包摘出来再绑车上：顺序反了的话这件快递会同时挂在
+			// 背包槽位和车的货架上，交付时摘哪一边都留下另一边的残影
+			if (Inventory->ConsumeHeldItem(Package))
+			{
+				AttachCargo(Package);
+			}
+		}
+	}
 
 	DriverController->Possess(this);
 	if (APlayerController* PC = Cast<APlayerController>(DriverController))
@@ -845,6 +962,13 @@ void ADeliveryMotorbike::ExitVehicle()
 	ResetRiderMotion();
 	AController* BikeController = GetController();
 
+	// 车上的快递跟着人下车，回到手上。
+	// **要在清掉 Driver 之后、detach 之前取下来**：清掉 Driver 之后
+	// GetCurrentVehicle() 已经返回 null，所以下面交回去时走的是"步行"那条路。
+	// 交不回去（背包满、人已经晕倒）就留在车上——总比掉进地里强，
+	// 车还能用 R 召唤回来，而掉出世界的快递要重新跑一趟取货点
+	ADeliveryPackageItem* ReturningCargo = ReleaseCargo();
+
 	Leaving->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	Leaving->SetActorEnableCollision(true);
 	Leaving->SetActorHiddenInGame(false);
@@ -864,6 +988,15 @@ void ADeliveryMotorbike::ExitVehicle()
 	if (UDeliveryActiveRagdollComponent* Ragdoll = Leaving->GetActiveRagdoll())
 	{
 		Ragdoll->StartRagdoll();
+	}
+
+	// 快递交回手上。排在 StartRagdoll 之后：手上那套表现要跟着手骨走，
+	// 刚体还没重建时算出来的手部位置是旧的，快递会先出现在错的地方再弹过去。
+	// 不放取件音效——这是搬运，不是又领了一件
+	if (IsValid(ReturningCargo) && !Leaving->ReceiveTaskPackage(ReturningCargo, /*bPlayFeedback=*/false))
+	{
+		// 收不下就绑回车上，别让它悬在空中（已经 detach 过、物理还是关的）
+		AttachCargo(ReturningCargo);
 	}
 
 	ThrottleInput = 0.0f;
@@ -1018,6 +1151,14 @@ void ADeliveryMotorbike::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	if (UInputAction* Interact = InteractAction.LoadSynchronous())
 	{
 		EnhancedInput->BindAction(Interact, ETriggerEvent::Started, this, &ADeliveryMotorbike::InteractPressed);
+	}
+	if (UInputAction* Pickup = PickupAction.LoadSynchronous())
+	{
+		// 松开和取消都要绑：长按取件要能中途放弃，少绑一个的话松手之后
+		// 服务器那边的长按记录一直留着，下一次按 E 会被当成"还在按着上一个"
+		EnhancedInput->BindAction(Pickup, ETriggerEvent::Started, this, &ADeliveryMotorbike::PickupPressed);
+		EnhancedInput->BindAction(Pickup, ETriggerEvent::Completed, this, &ADeliveryMotorbike::PickupReleased);
+		EnhancedInput->BindAction(Pickup, ETriggerEvent::Canceled, this, &ADeliveryMotorbike::PickupReleased);
 	}
 }
 
@@ -1275,6 +1416,25 @@ void ADeliveryMotorbike::ServerSetDriveInput_Implementation(float InThrottle, fl
 {
 	ThrottleInput = FMath::IsFinite(InThrottle) ? FMath::Clamp(InThrottle, -1.0f, 1.0f) : 0.0f;
 	SteerInput = FMath::IsFinite(InSteer) ? FMath::Clamp(InSteer, -1.0f, 1.0f) : 0.0f;
+}
+
+void ADeliveryMotorbike::PickupPressed(const FInputActionValue& /*Value*/)
+{
+	// 转发给驾驶员那具身体：它身上的探测器、长按计时和服务器复核都还在工作
+	// （探测器已经放宽成"本机操控、或者我是本机操控的车的驾驶员"）。
+	// 车自己不认识取货点和收件点，也不该认识
+	if (IsValid(Driver))
+	{
+		Driver->DoPickup();
+	}
+}
+
+void ADeliveryMotorbike::PickupReleased(const FInputActionValue& /*Value*/)
+{
+	if (IsValid(Driver))
+	{
+		Driver->DoPickupRelease();
+	}
 }
 
 void ADeliveryMotorbike::InteractPressed(const FInputActionValue& /*Value*/)

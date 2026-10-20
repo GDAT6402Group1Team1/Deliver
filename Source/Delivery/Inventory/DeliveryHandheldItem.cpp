@@ -121,6 +121,39 @@ void ADeliveryHandheldItem::SetInventoryPresentation(bool bInHand, bool bInInven
 	}
 }
 
+void ADeliveryHandheldItem::SetVehicleCargoPresentation(USceneComponent* CargoParent)
+{
+	if (!CargoParent)
+	{
+		return;
+	}
+
+	// 位置由附着关系决定，不该再被移动复制覆盖一遍——两边各写一次会打架，
+	// 表现是客户端上的快递在车上微微抖动
+	if (HasAuthority()) SetReplicateMovement(false);
+
+	// 模拟中的根组件附着不可靠，必须先停物理再改附着（和手上那套同一个理由）
+	ItemMesh->SetSimulatePhysics(false);
+	ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SetActorEnableCollision(false);
+
+	// 绑在车上是**看得见**的，和塞进背包不一样
+	SetActorHiddenInGame(false);
+	ItemMesh->SetVisibility(true, true);
+
+	// 车上的货不给按 E："拿走别人车上的快递"不是现在要做的玩法，
+	// 而留着可交互会让提示浮窗在骑车时一直糊在屏幕上
+	InteractableComponent->bInteractEnabled = false;
+
+	// 不要每帧跟随：这两个状态清掉，Tick 里那套就不会再动它
+	bHeldPresentationActive = false;
+	HeldAnchor.Reset();
+	SetActorTickEnabled(false);
+
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	AttachToComponent(CargoParent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+}
+
 void ADeliveryHandheldItem::DropFromInventory(const FVector& WorldLocation, const FVector& InitialVelocity)
 {
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);

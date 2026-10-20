@@ -30,6 +30,15 @@ public:
 	void SetInventoryPresentation(bool bInHand, bool bInInventory, USceneComponent* HandParent);
 	void DropFromInventory(const FVector& WorldLocation, const FVector& InitialVelocity);
 
+	/**
+	 * 焊到载具的货架上。
+	 *
+	 * 和手上那套的区别是**不走每帧跟随**：`HeldAnchor` 那条路是为了过滤 Chaos 的
+	 * 手部抖动，而载具是运动学的、位置由代码直接写，一点抖都没有。硬附着不但更省，
+	 * 还天然没有"快递落后车半个身位"的拖影——指数跟随在高速时必然欠一截。
+	 */
+	void SetVehicleCargoPresentation(USceneComponent* CargoParent);
+
 	UFUNCTION(BlueprintPure, Category="Item")
 	UDeliveryInventoryItemComponent* GetItemComponent() const { return ItemComponent; }
 

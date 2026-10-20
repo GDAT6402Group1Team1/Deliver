@@ -8,6 +8,7 @@
 #include "DeliveryMotorbike.generated.h"
 
 class ADeliveryCharacter;
+class ADeliveryPackageItem;
 class UBoxComponent;
 class UCameraComponent;
 class UAudioComponent;
@@ -70,6 +71,38 @@ public:
 	/** 服务器：下车，把驾驶员放回车边的地面。 */
 	UFUNCTION(BlueprintCallable, Category="Motorbike")
 	void ExitVehicle();
+
+	/**
+	 * 服务器：把一件快递绑到车上。已经绑着别的就拒绝。
+	 *
+	 * 绑上之后快递**关掉物理、焊在 CargoPivot 上**，不是用物理约束拴着：
+	 * 车是运动学的（`bSimulatePhysics=false`，靠 SetActorLocation 沿样条/输入走），
+	 * 约束的另一端是个"无穷重且不讲道理"的刚体，Chaos 会把误差全算到快递头上
+	 * ——表现是快递在车后面疯狂抽动，拖人那套就踩过这个坑（见 CLAUDE.md 抓取一节）。
+	 * 焊死没有这个失败模式，而且"绑在车上"本来就该是硬连接。
+	 */
+	UFUNCTION(BlueprintCallable, Category="Motorbike|货物")
+	bool AttachCargo(ADeliveryPackageItem* Package);
+
+	/**
+	 * 服务器：解下车上的快递并返回它；车上没货返回 null。
+	 *
+	 * 只解绑、不恢复物理也不放到地上——调用方才知道接下来它要进手里还是掉地上。
+	 * 恢复物理这件事交给 `ADeliveryHandheldItem` 自己那套表现逻辑，两处都做会打架。
+	 */
+	UFUNCTION(BlueprintCallable, Category="Motorbike|货物")
+	ADeliveryPackageItem* ReleaseCargo();
+
+	/**
+	 * 车上的货。过 IsValid 而不是直接判空：快递被别处销毁（交付、掉出世界、
+	 * 关卡清理）时这个指针会悬着，裸判空会让"已经没货了却说有货"，
+	 * 表现是下一件快递永远领不到。
+	 */
+	UFUNCTION(BlueprintPure, Category="Motorbike|货物")
+	ADeliveryPackageItem* GetCargo() const;
+
+	UFUNCTION(BlueprintPure, Category="Motorbike|货物")
+	bool HasCargo() const { return GetCargo() != nullptr; }
 
 	/**
 	 * 服务器：被交通车撞了一下。撞够 ImpactsToDismount 次就把人掀下车。
@@ -145,6 +178,34 @@ protected:
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<USceneComponent> MeshAlign;
+
+	/**
+	 * 货架：绑在车上的快递焊在这一层。
+	 *
+	 * 挂在 MeshAlign 下面，所以它继承了车头朝向修正和压弯侧倾——货物会跟着车一起倒，
+	 * 而不是在压弯时保持水平"飘"在车边上。挂 MeshRoot 的话就只有侧倾没有朝向修正，
+	 * 默认偏移里那个"往后"会变成"往右"。
+	 *
+	 * 默认位置在座位后方偏上（后座 / 尾架），由 `CargoOffset` 调。
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<USceneComponent> CargoPivot;
+
+	/**
+	 * 货架相对 MeshAlign 的位置。MeshAlign 局部空间里 **+Y 是车头**
+	 * （模型车头朝 +Y，靠 MeshAlign 的 −90° Yaw 纠正到 Pawn 的 +X），
+	 * 所以"往后"是 −Y，不是 −X —— 填错的表现是快递挂在车的侧面。
+	 *
+	 * **留零 = 自动按车身包围盒量**（`AutoConfigureFromMeshes` 里和轮子、车把
+	 * 同一套做法）：取车尾那批部件的顶面中点。换车模型不用重新手调，
+	 * 也不用重跑脚本。不满意就在 BP 上填个非零值，自动标定会让开。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Motorbike|货物")
+	FVector CargoOffset = FVector::ZeroVector;
+
+	/** 货架朝向，相对 MeshAlign。让箱子正面朝外、不至于歪着。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Motorbike|货物")
+	FRotator CargoRotation = FRotator::ZeroRotator;
 
 	/**
 	 * 龙头：前轮 / 前叉 / 车把挂在这一层，按转向输入绕竖直轴转。
@@ -682,6 +743,16 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	TSoftObjectPtr<UInputAction> InteractAction;
 
+	/**
+	 * 取件键（E）。骑车时按它**转发给驾驶员那具身体**去走它自己那套
+	 * 本机探测 + 长按 + 服务器复核，而不是在车上另写一套。
+	 *
+	 * 那一套已经调通了（范围判定、准星排序、长按进度、服务器复核），复制一份
+	 * 只会多一个要同步维护的地方；而且交付判定本来就认"玩家"不认"车"。
+	 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	TSoftObjectPtr<UInputAction> PickupAction;
+
 private:
 
 	void MoveInput(const FInputActionValue& Value);
@@ -693,6 +764,8 @@ private:
 	/** 按 bFreeLookCamera 把弹簧臂配成自由视角或固定车尾视角。上车时和 BeginPlay 各调一次。 */
 	void ApplyCameraMode();
 	void InteractPressed(const FInputActionValue& Value);
+	void PickupPressed(const FInputActionValue& Value);
+	void PickupReleased(const FInputActionValue& Value);
 
 	UFUNCTION(Server, Unreliable)
 	void ServerSetDriveInput(float InThrottle, float InSteer);
@@ -709,6 +782,12 @@ private:
 
 	UFUNCTION()
 	void OnRep_Driver();
+
+	UFUNCTION()
+	void OnRep_Cargo();
+
+	/** 把 Cargo 焊到货架上（或在它变空时什么都不做）。两端都要跑。 */
+	void ApplyCargoPresentation();
 
 	/** 把 BodyMeshes 里的网格铺到固定槽位上，多余的槽位清空。 */
 	void ApplyBodyMeshes();
@@ -783,6 +862,16 @@ private:
 
 	UPROPERTY(ReplicatedUsing=OnRep_Driver)
 	TObjectPtr<ADeliveryCharacter> Driver;
+
+	/**
+	 * 车上绑着的快递。复制给所有人——路过的别的玩家也该看见这车上有货。
+	 *
+	 * 用 OnRep 而不是在客户端自己判：附着这件事要在**客户端**也做一遍，
+	 * 否则远端看到的快递还留在取货点原地（服务端的附着不会自动复制成
+	 * 客户端的附着层级，`AttachToComponent` 的结果只对调用那一端生效）。
+	 */
+	UPROPERTY(ReplicatedUsing=OnRep_Cargo)
+	TObjectPtr<ADeliveryPackageItem> Cargo;
 
 	float ThrottleInput = 0.0f;
 	float SteerInput = 0.0f;

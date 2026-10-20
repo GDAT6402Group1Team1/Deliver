@@ -98,6 +98,33 @@ static FAutoConsoleCommandWithWorldAndArgs GDeliveryLocationsDump(
 				Registry->ResolveLocation(Id, Location);
 				UE_LOG(LogDelivery, Log, TEXT("    %s  (%.0f, %.0f, %.0f)"),
 					*Id.ToString(), Location.X, Location.Y, Location.Z);
+
+				/**
+				 * 同一个 ID 底下的所有 Actor 都要点名。
+				 *
+				 * 一个 ID 挂了两个 Actor 时 `ResolveLocation` 返回哪一个是不确定的，
+				 * 而症状极具迷惑性：罗盘指 A、取货点在 B，玩家"走到地方了却取不了件"，
+				 * 两个点可能隔几百米。只按 ID 打一行的话这件事完全看不出来——
+				 * 实测就是这么浪费过一轮（取货点组件加在 StaticMeshActor_7 上，
+				 * 而旧标记还在餐馆那边，430 米）。
+				 */
+				const TArray<AActor*> Owners = Registry->ResolveAllActors(Id);
+				if (Owners.Num() > 1)
+				{
+					UE_LOG(LogDelivery, Warning,
+						TEXT("      !! 这个 ID 挂了 %d 个 Actor，ResolveLocation 返回哪个不确定："),
+						Owners.Num());
+				}
+				for (const AActor* Owner : Owners)
+				{
+					if (!Owner)
+					{
+						continue;
+					}
+					const FVector Pos = Owner->GetActorLocation();
+					UE_LOG(LogDelivery, Log, TEXT("      - %-28s (%.0f, %.0f, %.0f)"),
+						*Owner->GetName(), Pos.X, Pos.Y, Pos.Z);
+				}
 			}
 
 			if (Ids.Num() == 0)

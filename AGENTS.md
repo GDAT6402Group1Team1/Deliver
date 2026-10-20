@@ -59,6 +59,81 @@
 - Character 上的 `HealthRegenEffect` / `DamageEffect`（Instant + SetByCaller `Effect.Type.Damage`）及左右拳 GA 类，均在蓝图 `BP_DeliveryMan` 中指定，C++ 侧只留 `TSubclassOf` 插槽。
 
 ### 4. 任务系统（电话接任务）
+**快递从取货点领，不再手摆在地上**（2026-10-20 改）。按住 E 和取货点交互，
+服务器当场生成一件快递交给玩家：**步行拿在手上，骑车绑在车上**。
+
+- [DeliveryPickupPointComponent](Source/Delivery/Task/DeliveryPickupPointComponent.h) ——
+  挂在取货点上。**不填任务**，而是按地点 ID 反查：登记在册、状态是待取件、
+  且 `PickupLocationId` 等于本点 ID 的那个任务。所以同一个取货点能在一局里
+  先后发好几个任务的快递，和 `Tasks.csv` 里"每个任务各自写取货点"的数据形状对得上。
+  `PackageClass` 留空时退回内置测试快递——摆了点却一件都领不到又没有报错，
+  是最难查的那种空配置。
+- [ADeliveryPickupPoint](Source/Delivery/Task/DeliveryPickupPoint.h) ——
+  拖进关卡填个 `LocationId` 就能用的现成 Actor（继承 `ADeliveryLocationMarker`，
+  连 Billboard 和"Python 加的组件存不住"那条都一起继承了）。取货点本来就是关卡里
+  某个模型时不用摆它，直接在那个 Actor 上加
+  `DeliveryLocationComponent` + `DeliveryInteractableComponent` + `DeliveryPickupPointComponent` 三件套。
+- [ADeliveryDropOffPoint](Source/Delivery/Task/DeliveryDropOffPoint.h) ——
+  成对的收件点，填 `LocationId` + `ExpectedTask` 就能交付。
+  一个能用的收件点需要**三个**组件（地点 + 可交互 + 收件），手加三次还要把
+  `InteractionKey` 调成 `PickupE`、`HoldDuration` 调成 0.5，漏任何一个的表现
+  都是"走过去按 E 没反应"、且三种漏法长得一模一样，所以做成现成 Actor。
+  `DeliveryRadius` 构造时就对齐 `InteractRadius`：两个数不一样会出现
+  "提示出来了但按不动"（提示走前者、交付走后者），而玩家只看得到后半截。
+  **和取货点刻意不对称**：收件点手填 `ExpectedTask`，取货点不填任务——
+  取货点是"这个柜台现在该发哪一单"（状态），收件点是"这一户只收这一单"（身份）。
+- 两个点的 `HighlightActors` 都要在关卡实例里填上真正的建筑：这两个 Actor 自己
+  没有网格，不填的话透视高亮会去照一个空 Actor，表现是"追踪了任务但什么都没亮"。
+- `ReceiverNpcId` 目前**没有任何代码在读**，只是存在资产里，摆点时不用管它。
+- **这同时修掉了旧流程的死锁**：以前快递掉出世界 → `EndPlay` 上报丢件 → 任务退回待取件，
+  但地上那件已经没了，这一局再也推不动。现在退回待取件之后回取货点再领一件就行。
+- **"放哪"只有一处判断**：`ADeliveryCharacter::ReceiveTaskPackage()`。取货点发货、
+  地上捡回、上车、下车四条路全走它。散在四处各判一遍的话迟早出现"车上和手上各有一件"，
+  而交付时取到哪一件是不确定的。
+- **车上的货**：`ADeliveryMotorbike::AttachCargo/ReleaseCargo`，焊在 `CargoPivot`
+  （挂 `MeshAlign` 下面，所以继承车头朝向修正和压弯侧倾）。**用焊接不用物理约束**——
+  车是运动学的，约束另一端相当于无穷重刚体，Chaos 会把误差全算到快递头上，
+  表现是快递在车后面疯狂抽动（拖人那套踩过同一个坑）。`CargoOffset` **留零时由
+  `AutoConfigureFromMeshes()` 自动量**（取车尾 35% 那批部件的顶面中点——整车包围盒的
+  `Max.Z` 是车把高度，用它会把快递架到半空）。要手填的话注意"往后"是 **−Y 不是 −X**：
+  MeshAlign 局部空间里 +Y 才是车头，填错的表现是快递挂在车侧面。
+- **上下车自动换手**：`TryEnter` 把手上的快递搬到车上（**必须排在 attach 之后**，
+  因为 `GetCurrentVehicle()` 是从附着父级推出来的，attach 之前这个人还"不在车上"），
+  `ExitVehicle` 搬回手上（排在 `StartRagdoll` 之后，刚体没重建时算出来的手部位置是旧的）。
+  交回去失败（背包满、人晕了）就留在车上——车还能用 R 召唤回来，掉出世界的快递要重跑一趟。
+- **骑车时按 E**：摩托车绑 `IA_Pickup` 后**转发给驾驶员那具身体**
+  （`Driver->DoPickup()` / `DoPickupRelease()`），不在车上另写一套。
+  配套地，交互探测器的门槛从"本机操控"放宽成"本机操控**或者**我是本机操控的车的驾驶员"
+  ——骑车时控制器 Possess 的是车，那具身体的 `IsLocallyControlled()` 是 false，
+  只判那一句的话上车之后 E 整个失灵。`CanUsePickupTarget` 里的布娃娃状态门槛同理跳过
+  （骑车时 `StopRagdoll` 过了，控制模式不是 `Active`）。非任务道具（斧头）骑车时仍不给捡：
+  它要进背包，而背包表现挂在那具被隐藏的身体上，捡了也看不见。
+- **交付判定必须走 `GetCarriedTaskPackage()`**，不能用 `Inventory->GetHeldItem()`：
+  骑车时快递在车上、手上是空的，用背包那句会让"骑到收件点交不了货"。
+  `GetCargo()` 走 `IsValid` 而不是裸判空——快递被别处销毁时指针会悬着，
+  裸判空会让"已经没货了却说有货"，下一件永远领不到；`TryDeliver` 也会先从车上摘再销毁。
+- **骑车时 `GetPlayerState()` 是空的**，任务/结算一律走
+  `ADeliveryCharacter::GetTaskPlayerState()`。引擎在 `APawn::UnPossessed()` 里
+  `SetPlayerState(nullptr)`（UE 5.8 `Pawn.cpp:719`），而骑车时控制器 Possess 的是车，
+  所以那具身体的 PlayerState 就是空的。直接用它去交付的结果是
+  `TryCompleteDelivery(Task, nullptr)`——任务完成了、钱包一分没进，**且没有任何报错**。
+- **收件点的交付判距离和提示/按键必须取同一个点**：`UDeliveryTargetComponent::GetDeliveryPoint()`
+  转调可交互组件的 `GetInteractionPoint()`（锚点 > 根碰撞表面 > Actor 原点），
+  不自己再实现一遍。早先这里用的是 `GetOwner()->GetActorLocation()`，挂在整栋楼上时
+  提示浮窗在门口出现、`CanInteract` 也过，但走到 `CanAcceptDelivery` 会按楼心算距离并失败
+  ——玩家看到的是**"提示出来了、按住 E 了、什么都没发生"，日志里一句话都没有**。
+  和 `DeliveryRadius`/`InteractRadius` 不一致是同一类错，只是走另一条代码路径。
+- **交互半径只有一个填写位置**：取货点填 `UDeliveryPickupPointComponent::InteractRadius`、
+  收件点填 `UDeliveryTargetComponent::InteractRadius`（现成 Actor 上转发到 Actor 详情）。
+  组件每次 `BeginPlay` 都把它写进可交互组件，**自动建的和手加的都盖掉**，
+  所以"调了不生效"不可能发生；收件点还会顺带把 `DeliveryRadius` 对齐过去。
+  早先按"自动建的用 A、手加的用 B、现成 Actor 用 C"分流，结果同一个概念三个位置，
+  问一次"怎么调半径"要分三种情况回答——**一个旋钮永远生效 > 三个旋钮各管一段**。
+- 调试：`Delivery.Pickup.Dump`（列全部取货点 + 此刻该发哪个任务 + 发不出的原因）、
+  `Delivery.Pickup.Take`（从最近的点领一件，跳距离不跳任务状态）、
+  `Delivery.DropOff.Dump`（收件点收哪个任务、交互配得对不对、你和快递各自离测量点多远）、`Delivery.Carry.Dump`（快递到底在手上还是车上）。`Delivery.Task.Validate`
+  也认取货点了：地点 ID 能解析只说明那儿有个标记，标记上没挂取货点组件玩家按不动 E。
+
 快递 E 拾取与交付改为纯范围判定，不要求准星、朝向或视线；本机以 20Hz 优先选可用目标；同等可用性下准星附近目标优先，未瞄准任何目标时回退到最近目标（准星只排序，不作为交互门槛），长按期间目标仍有效则保持选中，不可取快递仅作为原因提示的后备。服务端复核范围、任务状态和长按时间。保留快递 0.5 秒长按及现有交付半径，F 交互和双键物理抓取不变。
 **结构、接口清单、配置方式、完整调用链、待确认假设都写在 [Document/TaskSystem.md](Document/TaskSystem.md)——改任务系统前先读这份。** 要点：
 
@@ -75,7 +150,7 @@
 - **地点 ID 解析**：[DeliveryLocationRegistry](Source/Delivery/Task/DeliveryLocationRegistry.h)（WorldSubsystem）+ [DeliveryLocationComponent](Source/Delivery/Task/DeliveryLocationComponent.h)。关卡里的取件点/收件点/收件人 NPC 挂后者、填 `LocationId`（和 `Tasks.csv` 一致），任务定义里那几个裸 `FName` 才能变成世界坐标。三种点共用一个组件，因为在数据上它们是同一种东西；继承 SceneComponent 是为了能带相对偏移（收件点挂在整栋楼上时楼的原点可能在地下，箭头该指门口）。查找走注册表而不是遍历关卡，和交互系统同一个理由：碰撞查询在本项目静默失效过一次。
 - **任务地点透视高亮**：本机 `TaskTracker` 按任务状态自动高亮当前目的地（待取件→`PickupLocationId`，进行中→`DeliveryLocationId`），沿用 `CustomDepth/Stencil=1` + `/Game/Blueprint/Interaction/M_GrabHighlight`。`DeliveryPlayerController` 自动给本机启用该后处理，不需要在地图的 PostProcessVolume 里手加。`DeliveryLocationComponent.HighlightActors` 为空时高亮 Owner；地点是门口独立 Marker 时，必须在关卡实例里把实际建筑 Actor 填进数组，可填多个组成同一建筑的模型。任务完成、改追踪或切换阶段会恢复模型原来的 CustomDepth/Stencil 状态。
 - **"该去哪"**：`Tracker::GetTrackedTaskDestination()`。**目的地按任务状态自动切换**（待取件→取件点，进行中→收件点），调用方不要自己判——判错的表现是"箭头指向已经拿过的地方"，四个界面会各错各的。ID 在关卡里找不到对应点时返回 false 并在日志点名；静默失败的话表现只是"箭头不显示"，根因几乎查不到。
-- **丢件恢复**：`NotifyItemLost` 把进行中的任务退回待取件，但接电话时开始的计时、催促状态和特殊事件继续保留；`UDeliveryItemComponent::EndPlay` 在 Actor 被销毁时自动上报（掉出世界会走到）。**"正常交付"和"意外丢失"靠执行顺序区分**——`TryDeliver` 先标已完成再销毁快递，所以 `EndPlay` 时状态已不是进行中，`NotifyItemLost` 自己返回 false；**调换这两步会让每次成功交付都被误判成丢件**。
+- **丢件恢复**：`NotifyItemLost` 把进行中的任务退回待取件，但接电话时开始的计时、催促状态和特殊事件继续保留；`UDeliveryItemComponent::EndPlay` 在 Actor 被销毁时自动上报（掉出世界会走到）。**"正常交付"和"意外丢失"靠执行顺序区分**——`TryDeliver` 先标已完成再销毁快递，所以 `EndPlay` 时状态已不是进行中，`NotifyItemLost` 自己返回 false；**调换这两步会让每次成功交付都被误判成丢件**。退回待取件之后**回取货点再领一件**即可，不再需要关卡里还躺着那件原物——这是取货点流程修掉的那个死锁。
 - **指引换算**：[DeliveryGuidanceLibrary](Source/Delivery/Task/DeliveryGuidanceLibrary.h) 返回距离、相对镜头的水平夹角、在不在前方、高度差，UI 画屏幕边缘箭头直接用。**角度基于镜头不是角色**——骑车时镜头和车头可能不一致（摩托车有自由/固定两套视角），用角色朝向算的话自由视角下箭头会指错。
 - 顶部水平罗盘条用 `DeliveryGuidanceLibrary::GetTrackedTaskCompass`：目标与 N/E/S/W 都返回同一条水平轴上的 `-1~1` 偏移，乘罗盘条半宽即可。默认 `+X` 为北，可用 `NorthWorldYaw` 对齐关卡；背后的任务目标会夹在左右边缘持续提示。
 - **罗盘条只在接到任务后出现**（`WBP_Compass`，蓝图侧；C++ 只出数据）。判据用 `GetTrackedTaskCompass().bHasTarget`（`Locked`/`Completed` 为 false；`AwaitingPickup` 指取件点、`InProgress` 指收件点为 true），在 `UpdateCompass` 末尾用以它为 Index 的「选择」节点（Option 0 = `Collapsed`）去 `SetVisibility` **根面板 `CanvasPanel_19`**，只有一处判断。原来的 bug 是那个 Select **两个选项都填了 `Visible`**，等于没判断。**控件树必须先查清**：五个 `Compass_*` 是变量，但树里还有个 `Image_138`（那条横线）不是变量、没有可见性逻辑，只接那五个会「还剩一条线」。**收根面板是安全的**——Slate 不 tick `Collapsed` 的控件只对 UserWidget 自己成立，`CanvasPanel_19` 是它内部的顶层面板，「事件Tick」挂在 UserWidget 上；真收 UserWidget 自己才会自锁、永远恢复不了。拿引用走 `Get Compass_N` → `GetParent` ×3（`bIsVariable` 是 protected 写不了、`GetWidgetFromName` 五种路径都解析不上），代价是把三层嵌套写死了、层级一改就指错。脚本顺序：`dump_compass_widget.py` → `gate_compass_on_task.py` → `dump_compass_tree.py` → `gate_compass_root.py` → `clean_compass_orphans.py` → `compile_compass.py`。

@@ -34,23 +34,60 @@ bool UDeliveryInteractableComponent::CanInteract(const APawn* Interactor) const
 	{
 		return false;
 	}
-	FVector InteractionPoint = GetOwner()->GetActorLocation();
-	FVector InteractorPoint = Interactor->GetActorLocation();
+	const float Distance = GetInteractionDistance(Interactor);
+
+	return Distance >= 0.0f && Distance <= InteractRadius;
+}
+
+FVector UDeliveryInteractableComponent::GetInteractionPoint(const FVector& FromLocation) const
+{
+	const AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return FromLocation;
+	}
+
+	// 锚点优先。挂在整栋楼上时 Actor 原点可能在楼心/地下，而大型网格用
+	// "Use Complex Collision As Simple" 时连简单碰撞体都没有、下面那个查询也会失败，
+	// 于是"箭头指门口、判定从楼心算"。锚点是唯一能让两者统一的办法
+	if (const USceneComponent* Anchor = InteractAnchor.Get())
+	{
+		return Anchor->GetComponentLocation();
+	}
+
 	// E items on the floor are reached at their collision surface, not their pivot.
-	// Measure the actual gap between the item and the player's collision surface.
 	// Measuring from the pawn origin (the pelvis) makes a floor item appear farther
 	// than one metre away even when it is directly beside the player's feet.
 	if (InteractionKey == EDeliveryInteractionKey::PickupE)
 	{
-		if (const UPrimitiveComponent* Primitive = Cast<UPrimitiveComponent>(GetOwner()->GetRootComponent()))
+		if (const UPrimitiveComponent* Primitive = Cast<UPrimitiveComponent>(Owner->GetRootComponent()))
 		{
 			FVector Closest;
-			if (Primitive->GetClosestPointOnCollision(Interactor->GetActorLocation(), Closest) > 0.0f)
+			if (Primitive->GetClosestPointOnCollision(FromLocation, Closest) > 0.0f)
 			{
-				InteractionPoint = Closest;
+				return Closest;
 			}
 		}
-		if (const UPrimitiveComponent* InteractorPrimitive = Cast<UPrimitiveComponent>(Interactor->GetRootComponent()))
+	}
+
+	return Owner->GetActorLocation();
+}
+
+float UDeliveryInteractableComponent::GetInteractionDistance(const APawn* Interactor) const
+{
+	if (!Interactor || !GetOwner())
+	{
+		return -1.0f;
+	}
+
+	const FVector InteractionPoint = GetInteractionPoint(Interactor->GetActorLocation());
+	FVector InteractorPoint = Interactor->GetActorLocation();
+
+	// 玩家这一侧也取碰撞表面：从胶囊原点（骨盆）算的话，脚边的东西也会显得一米开外
+	if (InteractionKey == EDeliveryInteractionKey::PickupE)
+	{
+		if (const UPrimitiveComponent* InteractorPrimitive =
+			Cast<UPrimitiveComponent>(Interactor->GetRootComponent()))
 		{
 			FVector Closest;
 			if (InteractorPrimitive->GetClosestPointOnCollision(InteractionPoint, Closest) > 0.0f)
@@ -59,8 +96,8 @@ bool UDeliveryInteractableComponent::CanInteract(const APawn* Interactor) const
 			}
 		}
 	}
-	const float DistSq = FVector::DistSquared(InteractorPoint, InteractionPoint);
-	return DistSq <= FMath::Square(InteractRadius);
+
+	return FVector::Dist(InteractorPoint, InteractionPoint);
 }
 
 void UDeliveryInteractableComponent::Execute(APawn* Interactor)
@@ -71,7 +108,18 @@ void UDeliveryInteractableComponent::Execute(APawn* Interactor)
 FVector UDeliveryInteractableComponent::GetPromptLocation() const
 {
 	const AActor* Owner = GetOwner();
-	return Owner ? Owner->GetActorLocation() + PromptOffset : PromptOffset;
+	if (!Owner)
+	{
+		return PromptOffset;
+	}
+
+	// 浮窗也吊在锚点上方，不是 Actor 原点上方。
+	// 否则会出现"提示飘在楼中间、能按的地方在门口"——玩家会走向提示那边
+	const FVector Base = InteractAnchor.Get()
+		? InteractAnchor->GetComponentLocation()
+		: Owner->GetActorLocation();
+
+	return Base + PromptOffset;
 }
 
 UDeliveryInteractableComponent* UDeliveryInteractableComponent::FindBest(
