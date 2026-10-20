@@ -64,6 +64,34 @@ public:
 	UPROPERTY(EditAnywhere, Category="Input|Input Mappings")
 	FKey TogglePhoneKey;
 
+	/**
+	 * 报告某个 UI 面板开了还是关了。**鼠标光标和输入模式由这里统一算出来**：
+	 * 只要还有任何面板开着就显示光标（`GameAndUI`），全关了就回到纯游戏（`GameOnly`）。
+	 *
+	 * **调用方一律不要自己写 `bShowMouseCursor`。** 那正是"骑车时鼠标转不了视角、
+	 * 必须按住左键或右键"的根源：原来 `BP_DeliveryManPC` 在手机键上
+	 * `Set bShowMouseCursor = NOT(Get bShowMouseCursor)`，和面板开关是**两个互不相干的
+	 * 取反开关**——只要有一次只翻了其中一个（面板里点关闭、来电自动弹出、
+	 * 按键被吃掉……），两者就永久失同步。光标留在开着的状态时鼠标移动归光标，
+	 * 视口只在按住鼠标键时才捕获鼠标，于是鼠标看起来"失灵"了。
+	 * 改成"光标是面板状态的函数"之后，这种失同步在结构上就不可能发生。
+	 *
+	 * 面板用 `PanelId` 区分（手机、任务面板、以后的商店等各用一个名字），
+	 * 所以同时开两个面板、关掉其中一个时光标不会被错误地收走。
+	 * **面板若有"自己关掉自己"的路径（关闭按钮、Destruct），那里也要调一次 false**，
+	 * 否则光标会留着——这是本设计唯一需要调用方配合的地方。
+	 */
+	UFUNCTION(BlueprintCallable, Category="UI")
+	void SetUIPanelOpen(FName PanelId, bool bOpen);
+
+	/** 当前是否还有 UI 面板开着（= 该不该显示光标）。 */
+	UFUNCTION(BlueprintPure, Category="UI")
+	bool IsAnyUIPanelOpen() const;
+
+	/** 手机界面当前是开着的吗。状态由 C++ 持有，蓝图不要另存一份。 */
+	UFUNCTION(BlueprintPure, Category="Phone")
+	bool IsPhoneUIOpen() const { return bPhoneUIOpen; }
+
 protected:
 
 	virtual void BeginPlay() override;
@@ -128,7 +156,20 @@ protected:
 	/** TogglePhoneKey 按下时的转发。BindKey 需要一个无参成员函数，不能直接绑 BlueprintImplementableEvent。 */
 	void HandleTogglePhonePressed();
 
+	/** 按当前开着的面板集合算出光标和输入模式。只在本机控制器上生效。 */
+	void ApplyUIInputMode();
+
 private:
+
+	/**
+	 * 当前开着的 UI 面板。只在本机维护、不复制。
+	 *
+	 * 用集合而不是一个 bool：同时开手机和任务面板时，关掉一个不该把光标收走。
+	 */
+	TSet<FName> OpenUIPanels;
+
+	/** 手机界面开没开。C++ 持有，这样光标状态不可能和它脱钩。 */
+	bool bPhoneUIOpen = false;
 
 	/** GameState 可能比本机 PlayerController 晚就绪，绑定不到时短暂重试。 */
 	void BindPhoneVoice();

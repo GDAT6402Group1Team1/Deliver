@@ -336,6 +336,10 @@ void ADeliveryPlayerController::SetupInputComponent()
 	}
 }
 
+// 手机面板在 OpenUIPanels 里的名字。名字起得长是刻意的：Unity Build 会把多个 cpp
+// 合并成一个翻译单元，短名常量（PanelId、RetrySeconds 之类）在本项目已经撞过一次。
+static const FName DeliveryPhoneUIPanelId(TEXT("DeliveryPhoneUI"));
+
 void ADeliveryPlayerController::HandleTogglePhonePressed()
 {
 	// 纯本机 UI 开关，不用过服务器
@@ -343,7 +347,72 @@ void ADeliveryPlayerController::HandleTogglePhonePressed()
 	{
 		UGameplayStatics::PlaySound2D(this, PhoneToggleSound);
 	}
+
+	// **状态由 C++ 翻，光标跟着状态走。** 蓝图那边的 TogglePhoneUI 只负责把面板
+	// 加进/移出视口，不许碰 bShowMouseCursor——两边各自取反就是失同步的来源。
+	bPhoneUIOpen = !bPhoneUIOpen;
+	SetUIPanelOpen(DeliveryPhoneUIPanelId, bPhoneUIOpen);
+
 	TogglePhoneUI();
+}
+
+void ADeliveryPlayerController::SetUIPanelOpen(FName PanelId, bool bOpen)
+{
+	if (PanelId.IsNone())
+	{
+		return;
+	}
+
+	const int32 Before = OpenUIPanels.Num();
+	if (bOpen)
+	{
+		OpenUIPanels.Add(PanelId);
+	}
+	else
+	{
+		OpenUIPanels.Remove(PanelId);
+	}
+
+	// 值没变就别重复设输入模式：SetInputMode 会动焦点，每帧调一次会把 UI 里的
+	// 输入框焦点抢掉。只在"有没有面板"这件事真的翻转时才应用。
+	const bool bHadAny = Before > 0;
+	const bool bHasAny = OpenUIPanels.Num() > 0;
+	if (bHadAny != bHasAny)
+	{
+		ApplyUIInputMode();
+	}
+}
+
+bool ADeliveryPlayerController::IsAnyUIPanelOpen() const
+{
+	return OpenUIPanels.Num() > 0;
+}
+
+void ADeliveryPlayerController::ApplyUIInputMode()
+{
+	// 只有本机控制器有光标和输入模式这回事；服务器上那几个代理控制器碰了没意义。
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	const bool bWantCursor = IsAnyUIPanelOpen();
+	bShowMouseCursor = bWantCursor;
+
+	if (bWantCursor)
+	{
+		FInputModeGameAndUI Mode;
+		// 不锁鼠标到视口：面板开着时玩家要能把指针移到任何地方点。
+		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		// 捕获期间也别藏光标，否则按住左键拖动时指针消失、看着像卡住。
+		Mode.SetHideCursorDuringCapture(false);
+		SetInputMode(Mode);
+	}
+	else
+	{
+		// 回到纯游戏：鼠标移动全部交给视角，不再被光标吃掉。
+		SetInputMode(FInputModeGameOnly());
+	}
 }
 
 void ADeliveryPlayerController::RequestAnswerCall()

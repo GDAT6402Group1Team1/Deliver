@@ -111,6 +111,27 @@
   调色板和几何都是从原图逐像素实采的（最宽 272px、圆头半径 136、奶油圈半径 100、尖端 y≈390），
   别手改色号。**画图钉时切点必须在圆心下方 ±36°、圆弧走大的那段 252°**——算到圆上方的话
   只画出顶上 72°，头缩掉四分之一、蓝环被奶油圈挤没，渲出来是一根针。生成器里留了自检。
+- **鼠标光标归 C++ 统一管，蓝图一律不要写 `bShowMouseCursor`。**
+  规则就一句：**光标 = 有没有 UI 面板开着**。`ADeliveryPlayerController::SetUIPanelOpen(PanelId, bOpen)`
+  维护一个面板集合，在「有/没有」翻转时设 `bShowMouseCursor` 和输入模式
+  （有 → `GameAndUI`、不锁视口、捕获时不藏光标；全关 → `GameOnly`）。
+  配套 `IsAnyUIPanelOpen()` / `IsPhoneUIOpen()`。用集合而不是一个 bool：
+  同时开手机和任务面板时，关掉一个不该把光标收走。
+  **症状是「骑车时鼠标转不了视角，必须按住左键或右键」**——光标开着时鼠标移动归光标，
+  视口只在按住鼠标键时才捕获鼠标。根因是 `BP_DeliveryManPC` 原来在手机键上
+  `Set bShowMouseCursor = NOT(Get bShowMouseCursor)`，和面板开关是**两个互不相干的
+  取反开关**，只要有一次只翻了其中一个就永久失同步。改成「光标是面板状态的函数」之后，
+  这种失同步在结构上不可能发生。
+  **唯一需要调用方配合的地方**：面板若有「自己关掉自己」的路径（关闭按钮、`Destruct`），
+  那里也要调一次 `SetUIPanelOpen(..., false)`，C++ 探测不到 widget 被移出视口。
+  按 J 的流程现在是：C++ 翻 `bPhoneUIOpen` → 更新集合（光标跟着变）→ 调蓝图事件
+  `TogglePhoneUI` → 蓝图只负责面板显示/隐藏。**IMC 那条路已经拆掉**（`IA_TogglePhone`
+  节点已从蓝图删除），CLAUDE.md 里要求的那步迁移这次才真正做完。
+  脚本：`diag_input_mode.py`（只读定位）→ `fix_phone_cursor.py` → `fix_phone_event.py`。
+  **`WBP_TaskHUD` 有两份真资产**：`/Game/UI/Task/WBP_TaskHUD` 被 `WBP_Main` 引用（在用），
+  `/Game/Task/UI/WBP_TaskHUD` 零引用、可删。它那边有 `IsPhoneOpen` 变量和
+  `SetPhoneOpen(bool)` setter，所以以后可以把蓝图事件从 `TogglePhone()` 换成
+  `SetPhoneOpen(C++ 状态)`，面板就成了 C++ 状态的纯函数，连 toggle 漂移都没有。
 - **手机开关键 J 已从 `IMC_Default` 搬到 `BindKey`**（`ADeliveryPlayerController::TogglePhoneKey` → `BlueprintImplementableEvent TogglePhoneUI()`，蓝图实现加/移视口）。理由和物品栏 1~5、切视角 P、召唤 R 一样：`IMC_Default.uasset` 从来没被提交过，每次 `git pull` 都会冲掉，而症状极具迷惑性——手机面板的显示逻辑不依赖按键绑定，表现是"UI 突然坏了"而不是"按键没绑"。F 键已经因此丢过两次。**蓝图那边要把原来绑 `IA_TogglePhone` 的逻辑改挂到 `TogglePhoneUI` 事件上。**
 - 调试命令（非 Shipping）：`Delivery.Wallet.Dump` / `Delivery.Wallet.Add <金额>` / `Delivery.Locations.Dump` / `Delivery.Task.LoseItem` / **`Delivery.Task.Validate`**。最后一条是摆取件点/收件点时的主力工具——一次列全所有配置问题（地点 ID 解析不出来、任务没有收件点指向它、收件点忘了填 `ExpectedTask`），不是遇到第一个就停。
 - 奖励结算有单元测试（`Task/DeliveryRewardTests.cpp`，筛 `Delivery.Task` 跑）。`EvaluateReward` 是纯函数，档位顺序、超时边界、特殊事件重复计数这些在 PIE 里只表现为"钱好像不太对"，靠肉眼对不出来。
