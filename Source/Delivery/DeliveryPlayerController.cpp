@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "DeliveryPlayerController.h"
+#include "Blueprint/UserWidget.h"
 #include "Audio/DeliveryDialogueVoiceComponent.h"
 #include "Audio/DeliveryMusicComponent.h"
 #include "Components/AudioComponent.h"
@@ -16,12 +17,14 @@
 #include "Sound/SoundBase.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
 #include "Task/DeliveryPhoneCallQueueComponent.h"
+#include "Task/DeliveryGroundArrowComponent.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 ADeliveryPlayerController::ADeliveryPlayerController()
 {
 	DialogueVoice = CreateDefaultSubobject<UDeliveryDialogueVoiceComponent>(TEXT("DialogueVoice"));
+	GroundArrow = CreateDefaultSubobject<UDeliveryGroundArrowComponent>(TEXT("GroundArrow"));
 
 	Music = CreateDefaultSubobject<UDeliveryMusicComponent>(TEXT("Music"));
 
@@ -362,6 +365,10 @@ void ADeliveryPlayerController::SetUIPanelOpen(FName PanelId, bool bOpen)
 	{
 		return;
 	}
+	if (PanelId == DeliveryPhoneUIPanelId)
+	{
+		bPhoneUIOpen = bOpen;
+	}
 
 	const int32 Before = OpenUIPanels.Num();
 	if (bOpen)
@@ -380,6 +387,16 @@ void ADeliveryPlayerController::SetUIPanelOpen(FName PanelId, bool bOpen)
 	if (bHadAny != bHasAny)
 	{
 		ApplyUIInputMode();
+	}
+}
+
+void ADeliveryPlayerController::ReportPhoneUIOpen(UUserWidget* PhoneWidget, bool bOpen)
+{
+	ADeliveryPlayerController* Controller = PhoneWidget
+		? Cast<ADeliveryPlayerController>(PhoneWidget->GetOwningPlayer()) : nullptr;
+	if (Controller)
+	{
+		Controller->SetUIPanelOpen(DeliveryPhoneUIPanelId, bOpen);
 	}
 }
 

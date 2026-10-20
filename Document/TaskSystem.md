@@ -491,3 +491,13 @@ UMG 将偏移乘以罗盘条半宽后写入 `Render Translation X`。目标和�
 5. ~~超时交付用单独的 `OvertimeMultiplier`~~ —— **已确认**：策划表里超时是分档的（负数档位），已改成剩余时间语义，`OvertimeMultiplier` 删除。
 6. **未解锁任务在数据层完全不暴露给 UI**（手机里不显示灰条）。
 7. **没有放弃任务的接口**，和"不设失败状态"保持一致。
+
+
+### 脚边任务方向箭头
+PlayerController 默认创建 `UDeliveryGroundArrowComponent`，本机按 `GetTrackedTaskDestination` 在人物或当前受控摩托车周围指示目标 XY 方向。步行/骑车半径默认 95/180 cm，地面探测后抬高 45 cm；没有目标或附近没有可用地面时隐藏。取件与交付阶段自动切换，纯视觉、不复制，不修改任务状态。
+
+箭头可见性修正：逻辑组件留在 PlayerController，世界空间 Widget 的 Owner 必须是当前受控 Pawn。`OnlyOwnerSee` 按镜头 ViewActor 与 Owner 链判断，视觉挂 Controller 会被普通 Pawn 镜头过滤；上下摩托车时销毁旧视觉并以新 Pawn 为 Owner 重建。箭头原生 Widget 显式提供 128×128 绘制区域并启用动态重绘。
+
+
+### 通话结束后自动收起
+在用的 `/Game/UI/Task/WBP_TaskHUD.RefreshPhone` 在电话状态回到 `Idle` 后调用 `SetPhoneOpen(false)`，接通进入 `InCall` 时保持展开，整段通话结束（或手动挂断）才收起；不影响任务计时。`SetPhoneOpen` 统一调用 `DeliveryPlayerController.ReportPhoneUIOpen`，同步 `bPhoneUIOpen` 和 `OpenUIPanels`；已移除该函数内直接修改光标/输入模式的四个旧节点，统一由 C++ 按所有面板状态管理。因此来电自动展开、通话结束收起与 J 手动开关都同步，自动收起后下一次 J 直接打开。`Content/Python/phone_autoclose.py` 可幂等修补并编译保存该蓝图；原资产备份在 Saved，不提交。

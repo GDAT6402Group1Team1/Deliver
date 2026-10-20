@@ -14,6 +14,8 @@ class UDeliveryDialogueVoiceComponent;
 class UDeliveryMusicComponent;
 class UAudioComponent;
 class USoundBase;
+class UDeliveryGroundArrowComponent;
+class UUserWidget;
 
 /**
  * PlayerController that only installs Enhanced Input mapping contexts.
@@ -26,6 +28,10 @@ class ADeliveryPlayerController : public APlayerController
 public:
 
 	ADeliveryPlayerController();
+
+	/** 当前任务的脚边方向箭头；上下摩托车时持续存在。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|Guidance")
+	TObjectPtr<UDeliveryGroundArrowComponent> GroundArrow;
 
 	/** 本机人物电子语音生成器。电话/NPC UI 都复用这一份。 */
 	UFUNCTION(BlueprintPure, Category="Delivery|Voice")
@@ -83,6 +89,10 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="UI")
 	void SetUIPanelOpen(FName PanelId, bool bOpen);
+
+	/** 手机所有开关入口在实际改变面板后报告状态，包含来电自动展开和接听收起。 */
+	UFUNCTION(BlueprintCallable, Category="Phone", meta=(DefaultToSelf="PhoneWidget"))
+	static void ReportPhoneUIOpen(UUserWidget* PhoneWidget, bool bOpen);
 
 	/** 当前是否还有 UI 面板开着（= 该不该显示光标）。 */
 	UFUNCTION(BlueprintPure, Category="UI")
