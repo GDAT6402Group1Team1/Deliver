@@ -99,6 +99,18 @@
     （改 Select 的 Option 0）→ `dump_compass_tree.py`（导控件树，找出那条线）→
     `gate_compass_root.py`（接根面板 + 删旧节点）→ `clean_compass_orphans.py`（清孤立 Get）
     → `compile_compass.py`（编译 + 核对接线）。
+- **罗盘图钉按任务阶段切换**：`FDeliveryCompassGuidance.Marker`（`EDeliveryCompassMarker`）——
+  待取件 → `Pickup`（箱子图钉 `T_CompassTaskTarget`），进行中 → `Delivery`（房子图钉
+  `T_CompassTaskDelivery`），未解锁/已完成/没接任务/地点 ID 解析不出来 → `None`，**整个图钉隐藏**。
+  手上已经有包裹却还挂着取件图钉，玩家会折返回取件点，所以 `None` 时连图钉带距离一起藏。
+  **UI 不要自己读任务状态判一遍**——判断只在 `GetTrackedTaskMarker` 这一处，和
+  `GetTaskDestination` 取同一个状态；两边各判一次迟早不一致，表现是"箭头指送达点、图钉还是箱子"。
+- 罗盘图钉的美术：`Content/Python/generate_compass_icons.py` 离线画 PNG 到
+  `Content/UI/Minimap/Source/`，`import_compass_icons.py` 在编辑器里导入并配 UI 贴图参数
+  （`UserInterface2D` + 无 mip + sRGB，漏任一项分别表现为描边脏边 / 缩小糊成一团 / 整张发暗）。
+  调色板和几何都是从原图逐像素实采的（最宽 272px、圆头半径 136、奶油圈半径 100、尖端 y≈390），
+  别手改色号。**画图钉时切点必须在圆心下方 ±36°、圆弧走大的那段 252°**——算到圆上方的话
+  只画出顶上 72°，头缩掉四分之一、蓝环被奶油圈挤没，渲出来是一根针。生成器里留了自检。
 - **手机开关键 J 已从 `IMC_Default` 搬到 `BindKey`**（`ADeliveryPlayerController::TogglePhoneKey` → `BlueprintImplementableEvent TogglePhoneUI()`，蓝图实现加/移视口）。理由和物品栏 1~5、切视角 P、召唤 R 一样：`IMC_Default.uasset` 从来没被提交过，每次 `git pull` 都会冲掉，而症状极具迷惑性——手机面板的显示逻辑不依赖按键绑定，表现是"UI 突然坏了"而不是"按键没绑"。F 键已经因此丢过两次。**蓝图那边要把原来绑 `IA_TogglePhone` 的逻辑改挂到 `TogglePhoneUI` 事件上。**
 - 调试命令（非 Shipping）：`Delivery.Wallet.Dump` / `Delivery.Wallet.Add <金额>` / `Delivery.Locations.Dump` / `Delivery.Task.LoseItem` / **`Delivery.Task.Validate`**。最后一条是摆取件点/收件点时的主力工具——一次列全所有配置问题（地点 ID 解析不出来、任务没有收件点指向它、收件点忘了填 `ExpectedTask`），不是遇到第一个就停。
 - 奖励结算有单元测试（`Task/DeliveryRewardTests.cpp`，筛 `Delivery.Task` 跑）。`EvaluateReward` 是纯函数，档位顺序、超时边界、特殊事件重复计数这些在 PIE 里只表现为"钱好像不太对"，靠肉眼对不出来。
@@ -635,6 +647,18 @@ PlayerController 自动累积到 `DeliveryPromptSubsystem` 的屏幕下方字幕
 `BP_DeliveryManPC` / `BP_DeliveryMan`；原始 WAV 在 `Design/Audio/GeneratedSFX`，可用
 `Content/Python/generate_gameplay_sfx.py` 重生成和重导入，不含第三方采样。当前第二版为 48kHz
 立体声：电话音使用动态 FM，任务提示使用非整数泛音钟体，并带短反射、低通和轻微软削波。
+
+**背景音乐**：[DeliveryMusicComponent](Source/Delivery/Audio/DeliveryMusicComponent.h) 挂
+`ADeliveryPlayerController`（和语音组件同位置——骑车时控制器 Possess 了车，挂角色会在上车瞬间断）。
+纯本机、不复制。三条轨道插槽填在 `BP_DeliveryManPC` 上：`ExploreTrack` / `TaskActiveTrack` /
+`OverdueTrack`，**逐级回退，只填探索轨就能用**；回退后若和当前同一资产则不重起，
+否则会"任务一进行中音乐就跳回开头"。电话响铃/通话期间自动压到 `CallDuckVolumeScale`（默认 0.25）——
+**这是必须的**，电子人声是窄频段细碎方波，不压就盖住台词，而台词是任务信息的载体。
+手动闪避 `DuckFor()` 与电话闪避**取更低值而非相乘**，相乘会压得过头。
+**没有引入 SoundClass/Submix**：闪避直接乘在音频组件音量上；那套东西是给"音乐/音效分开调"
+的设置项用的，等有设置菜单再加。占位音乐用 `Content/Python/generate_music.py` 纯合成，
+**无缝循环靠把频率吸附成"一个循环整数个周期"而不是首尾淡化**，导入时必须设 `looping=True`
+（否则表现为"开局有音乐、过一会儿安静了"）。验收：`Delivery.Music.Dump` / `.Volume` / `.Duck` / `.Toggle`。
 
 ## 开发环境与编译
 

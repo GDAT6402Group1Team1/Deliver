@@ -11,6 +11,7 @@ class UInputAction;
 class UInputMappingContext;
 class UPostProcessComponent;
 class UDeliveryDialogueVoiceComponent;
+class UDeliveryMusicComponent;
 class UAudioComponent;
 class USoundBase;
 
@@ -29,6 +30,9 @@ public:
 	/** 本机人物电子语音生成器。电话/NPC UI 都复用这一份。 */
 	UFUNCTION(BlueprintPure, Category="Delivery|Voice")
 	UDeliveryDialogueVoiceComponent* GetDialogueVoice() const { return DialogueVoice; }
+
+	/** 背景音乐。和语音组件同一个位置：跨 Possess（上下摩托车）不断。 */
+	UDeliveryMusicComponent* GetMusic() const { return Music; }
 
 	/**
 	 * 接听当前来电。客户端调用会自动转成 Server RPC。
@@ -100,6 +104,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|Voice", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UDeliveryDialogueVoiceComponent> DialogueVoice;
+
+	/** 背景音乐。轨道插槽填在 BP_DeliveryManPC 上，电话期间自动闪避。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Audio")
+	TObjectPtr<UDeliveryMusicComponent> Music;
 
 	/** 手机界面每次开/关时的按键反馈。需要区分开和关时可在 TogglePhoneUI 蓝图事件里另外播放。 */
 	UPROPERTY(EditDefaultsOnly, Category="Delivery|Audio|Phone")

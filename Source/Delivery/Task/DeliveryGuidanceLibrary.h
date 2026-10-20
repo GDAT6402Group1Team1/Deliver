@@ -47,6 +47,25 @@ struct FDeliveryGuidance
 };
 
 /**
+ * 罗盘上该画哪个目标图钉。
+ *
+ * UI 按这个值选贴图，**不要自己去读任务状态判断**——判错的表现是
+ * "已经拿到包裹了还在指取件点"，而罗盘、顶部任务条、透视高亮三处会各错各的。
+ */
+UENUM(BlueprintType)
+enum class EDeliveryCompassMarker : uint8
+{
+	/** 没有可指引的目标：没接任务、任务已完成、或者地点 ID 在关卡里解析不出来。 */
+	None UMETA(DisplayName="不显示"),
+
+	/** 待取件：去拿包裹。对应 T_CompassTaskTarget（箱子图钉）。 */
+	Pickup UMETA(DisplayName="取件点"),
+
+	/** 进行中：包裹在手上，去送。对应 T_CompassTaskDelivery（房子图钉）。 */
+	Delivery UMETA(DisplayName="送达点")
+};
+
+/**
  * 顶部水平罗盘条需要的全部数据。
  *
  * Offset 字段都是 -1~1：-1 是罗盘条最左边，0 是镜头正前方，+1 是最右边。
@@ -68,6 +87,14 @@ struct FDeliveryCompassGuidance
 	/** 当前任务是否有可解析的目的地。false 时只显示 NSEW，不显示目标标记。 */
 	UPROPERTY(BlueprintReadOnly, Category="Delivery|Guidance|Compass")
 	bool bHasTarget = false;
+
+	/**
+	 * 该画哪个图钉。`None` 时**连图钉带距离一起隐藏**——
+	 * 手上没包裹的时候罗盘上还挂着取件图钉，玩家会以为任务没推进。
+	 * bHasTarget 为 false 时这里必然是 None，UI 判一个就够。
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Delivery|Guidance|Compass")
+	EDeliveryCompassMarker Marker = EDeliveryCompassMarker::None;
 
 	/** 目标相对镜头的水平夹角，负数在左，正数在右。 */
 	UPROPERTY(BlueprintReadOnly, Category="Delivery|Guidance|Compass")
@@ -152,6 +179,13 @@ public:
 	UFUNCTION(BlueprintPure, Category="Delivery|Guidance", meta=(WorldContext="WorldContextObject"))
 	static FDeliveryCompassGuidance GetTrackedTaskCompass(const UObject* WorldContextObject,
 		float VisibleAngle = 180.f, float NorthWorldYaw = 0.f);
+
+	/**
+	 * 当前该画哪个目标图钉。罗盘以外的 UI（小地图、屏幕边缘箭头）也用这个，
+	 * 保证全场只有一处在判断任务阶段。
+	 */
+	UFUNCTION(BlueprintPure, Category="Delivery|Guidance", meta=(WorldContext="WorldContextObject"))
+	static EDeliveryCompassMarker GetTrackedTaskMarker(const UObject* WorldContextObject);
 
 	/** 把距离格式化成中文显示文本：1200 → "12 米"，150000 → "1.5 公里"。 */
 	UFUNCTION(BlueprintPure, Category="Delivery|Guidance")

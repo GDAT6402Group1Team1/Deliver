@@ -2,6 +2,7 @@
 
 #include "DeliveryPlayerController.h"
 #include "Audio/DeliveryDialogueVoiceComponent.h"
+#include "Audio/DeliveryMusicComponent.h"
 #include "Components/AudioComponent.h"
 #include "Delivery.h"
 #include "Components/PostProcessComponent.h"
@@ -21,6 +22,8 @@
 ADeliveryPlayerController::ADeliveryPlayerController()
 {
 	DialogueVoice = CreateDefaultSubobject<UDeliveryDialogueVoiceComponent>(TEXT("DialogueVoice"));
+
+	Music = CreateDefaultSubobject<UDeliveryMusicComponent>(TEXT("Music"));
 
 	HighlightPostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("HighlightPostProcess"));
 	HighlightPostProcess->bUnbound = true;
