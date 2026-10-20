@@ -564,6 +564,8 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	ThrottleInput = 0.0f;
 	SteerInput = 0.0f;
 	MoveInputRaw = FVector2D::ZeroVector;
+	TurnAroundSign = 0.0f;
+	bBrakingForTurn = false;
 	TrafficImpactCount = 0;
 	LastImpactTime = -1000.0f;
 	ApplyDriverPresentation();
@@ -604,6 +606,8 @@ bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredY
 	ThrottleInput = 0.0f;
 	SteerInput = 0.0f;
 	MoveInputRaw = FVector2D::ZeroVector;
+	TurnAroundSign = 0.0f;
+	bBrakingForTurn = false;
 	KnockVelocity = FVector::ZeroVector;
 	KnockYawRate = 0.0f;
 	KnockTilt = 0.0f;
@@ -865,6 +869,8 @@ void ADeliveryMotorbike::ExitVehicle()
 	ThrottleInput = 0.0f;
 	SteerInput = 0.0f;
 	MoveInputRaw = FVector2D::ZeroVector;
+	TurnAroundSign = 0.0f;
+	bBrakingForTurn = false;
 	TrafficImpactCount = 0;
 	LastImpactTime = -1000.0f;
 	ApplyDriverPresentation();
@@ -1055,6 +1061,23 @@ void ADeliveryMotorbike::ApplyCameraRelativeInput()
 	{
 		ThrottleInput = 0.0f;
 		SteerInput = 0.0f;
+		TurnAroundSign = 0.0f;
+		bBrakingForTurn = false;
+	}
+	// **S 是后退，不参与"按镜头方向走"的换算。**
+	// 纯按方向解释的话 S = 往屏幕下方开 = 掉头，但按 S 想后退（以及先刹停）
+	// 是所有驾驶游戏的肌肉记忆，掉头应该是"把镜头转过去再按 W"。
+	// 这里直接把负的 Y 当油门交给 UpdateSpeed：还在前进时它按 BrakeDeceleration
+	// 刹车（油门与车速反向 = 刹车），停下后继续推就往 MaxReverseSpeed 倒。
+	// 转向用 X 原值（车头相对），和倒车时扭头看后方的直觉一致；
+	// UpdateSteering 里 Direction 已按车速取负，倒车时左右不会反。
+	else if (MoveInputRaw.Y < -UE_KINDA_SMALL_NUMBER)
+	{
+		ThrottleInput = FMath::Clamp(MoveInputRaw.Y, -1.0f, 1.0f);
+		SteerInput = FMath::Clamp(MoveInputRaw.X, -1.0f, 1.0f);
+		// 后退不是掉头动作，两个锁定都不该留着（否则松开 S 按 W 会沿用上次的侧）。
+		TurnAroundSign = 0.0f;
+		bBrakingForTurn = false;
 	}
 	else
 	{
@@ -1082,23 +1105,66 @@ void ADeliveryMotorbike::ApplyCameraRelativeInput()
 		// 输入强度（摇杆可以推一半）。WASD 是 0/1，这里对两者都成立。
 		const float Magnitude = FMath::Min(MoveInputRaw.Size(), 1.0f);
 
-		const bool bMovingForward = CurrentSpeed > TurnSpeedReference * 0.25f;
-		if (AbsError > CameraRelativeBrakeAngle && bMovingForward)
+		// **分段转向**：方向差超过 CameraRelativeStageSideAngle（90°）时不直接奔最终方向，
+		// 而是先锁定一侧、只朝那一侧的"侧面"打舵，转过侧面之后才由真实误差收尾。
+		// 这一段同时解决两个独立的颤抖来源，缺一个都还会抖：
+		//   (1) Error 用 NormalizeAxis 归到 (-180, 180]，**180 是奇点**——鼠标或车身一丝抖动
+		//       就让它在 +180 和 −180 之间翻号，满舵方向每帧左右互换。
+		//       **实测踩中的场景：车头朝前、把镜头转 180° 再按 W**——目标方向正好落在
+		//       车身后方，Error 恰好 180。（S 不会踩中：它是后退，不走这条换算。）
+		//   (2) 大角度时刹车分支和掉头分支在**同一个速度阈值**上来回弹：车一加速越过
+		//       TurnSpeedReference*0.25 就进刹车（油门 −1、舵角归零），刹到阈值以下又回掉头
+		//       （油门 +0.4、满舵），没有滞环就是个极限循环。这一条和角度是不是 180 无关，
+		//       所以镜头转到任何大角度再按 W/A/D 都会抖，不止正后方。
+		// 对策都是**锁定**：侧别和"刹车还是直接掉头"都只在动作开始那一帧定一次，
+		// 整个动作里不再重新判断。
+		float StagedError = Error;
+		if (AbsError > CameraRelativeStageSideAngle)
 		{
-			// 方向差很大 + 还在往前跑 = 想停下来。给反向油门，UpdateSpeed 会按
-			// BrakeDeceleration（比加速大得多）处理，按一下就明显慢下来。
-			// 刹到很慢之后 bMovingForward 变 false，自动转为下面的掉头分支。
+			if (FMath::IsNearlyZero(TurnAroundSign))
+			{
+				// 侧别只在这一帧读一次。顺着当前误差的符号转（玩家镜头已经偏了一点
+				// 就顺着偏的那边），正好 180 时 NormalizeAxis 给的是 +180、符号恒为正，
+				// 结果是确定的，不会两帧之间换边。
+				const float ErrorSign = FMath::Sign(Error);
+				TurnAroundSign = FMath::IsNearlyZero(ErrorSign) ? 1.0f : ErrorSign;
+
+				// 刹车还是直接掉头，也在这一帧定下来。**不能每帧重判**——那正是 (2)。
+				// 判据和原来一样：方向差大到该当"想停下来"，而且车确实还在往前跑。
+				bBrakingForTurn = AbsError > CameraRelativeBrakeAngle
+					&& CurrentSpeed > TurnSpeedReference * 0.25f;
+			}
+			StagedError = TurnAroundSign * CameraRelativeStageSideAngle;
+		}
+		else
+		{
+			// 已经转到侧面以内，动作结束，解锁交给常规换算。
+			TurnAroundSign = 0.0f;
+			bBrakingForTurn = false;
+		}
+
+		// 刹车一旦开始就刹到**很慢**才松（CameraRelativeBrakeExitSpeed），
+		// 不是刹到进入阈值就松：进出用同一个阈值就是 (2) 那个极限循环。
+		if (bBrakingForTurn && CurrentSpeed > CameraRelativeBrakeExitSpeed)
+		{
+			// 反向油门，UpdateSpeed 会按 BrakeDeceleration（比加速大得多）处理，
+			// 按一下就明显慢下来。
 			ThrottleInput = -Magnitude;
 			// 刹车时不强行扭车头：这时候横向摆车看着像甩尾，不是刹车。
 			SteerInput = 0.0f;
 		}
 		else
 		{
+			// 刹够了就接着掉头，同一个键走完整个动作。
+			bBrakingForTurn = false;
+
 			SteerInput = FMath::Clamp(
-				Error / FMath::Max(CameraRelativeFullSteerAngle, 1.0f), -1.0f, 1.0f);
+				StagedError / FMath::Max(CameraRelativeFullSteerAngle, 1.0f), -1.0f, 1.0f);
 			// 方向差越大油门越收，但**不能收到 0**：转向量正比于车速，
 			// 停下来就再也转不动，想掉头会卡成死局（见头文件里 CameraRelativeMinThrottle）。
-			const float Align = FMath::Cos(FMath::DegreesToRadians(AbsError));
+			// 这里用分段后的误差：第一段的目标是侧面，按最终方向算会把油门压到下限、
+			// 掉头全程只剩最低速。
+			const float Align = FMath::Cos(FMath::DegreesToRadians(FMath::Abs(StagedError)));
 			const float Scale = FMath::Max(Align, CameraRelativeMinThrottle);
 			ThrottleInput = Magnitude * Scale;
 		}
@@ -1139,6 +1205,9 @@ void ADeliveryMotorbike::ToggleCameraMode()
 	// 这边是"转向量"）。不接这一下，按着 W 切过去会有一帧按旧语义开。
 	if (!UsesCameraRelativeMove())
 	{
+		// 掉头锁定是镜头相对模式独有的状态，切走就清掉，免得切回来沿用旧侧。
+		TurnAroundSign = 0.0f;
+		bBrakingForTurn = false;
 		SteerInput = MoveInputRaw.X;
 		ThrottleInput = MoveInputRaw.Y;
 		if (!HasAuthority())

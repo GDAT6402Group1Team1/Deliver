@@ -70,6 +70,35 @@
 - **丢件恢复**：`NotifyItemLost` 把进行中的任务退回待取件，但接电话时开始的计时、催促状态和特殊事件继续保留；`UDeliveryItemComponent::EndPlay` 在 Actor 被销毁时自动上报（掉出世界会走到）。**"正常交付"和"意外丢失"靠执行顺序区分**——`TryDeliver` 先标已完成再销毁快递，所以 `EndPlay` 时状态已不是进行中，`NotifyItemLost` 自己返回 false；**调换这两步会让每次成功交付都被误判成丢件**。
 - **指引换算**：[DeliveryGuidanceLibrary](Source/Delivery/Task/DeliveryGuidanceLibrary.h) 返回距离、相对镜头的水平夹角、在不在前方、高度差，UI 画屏幕边缘箭头直接用。**角度基于镜头不是角色**——骑车时镜头和车头可能不一致（摩托车有自由/固定两套视角），用角色朝向算的话自由视角下箭头会指错。
 - 顶部水平罗盘条用 `DeliveryGuidanceLibrary::GetTrackedTaskCompass`：目标与 N/E/S/W 都返回同一条水平轴上的 `-1~1` 偏移，乘罗盘条半宽即可。默认 `+X` 为北，可用 `NorthWorldYaw` 对齐关卡；背后的任务目标会夹在左右边缘持续提示。
+- **罗盘条只在接到任务后出现**（`WBP_Compass`，蓝图侧；C++ 只出数据）。
+  判据用 `GetTrackedTaskCompass().bHasTarget`，它正好等于想要的条件：
+  `Locked`/`Completed` 为 false，`AwaitingPickup`（指取件点）/`InProgress`（指收件点）为 true。
+  做法是在 `UpdateCompass`（事件Tick 每帧调）末尾，用那个以 `bHasTarget` 为 Index 的
+  「选择」节点（Option 0 = `Collapsed`、Option 1 = `Visible`）去 `SetVisibility`
+  **根面板 `CanvasPanel_19`**——只有一处判断。
+  - **原来的 bug 是那个 Select 的两个选项都填了 `Visible`**，等于没判断，
+    所以目标标记一开局就在。
+  - **控件树必须先查清，不能只盯着蓝图变量。** 五个 `Compass_N/S/E/W/Target` 是变量，
+    但树里还有个 `Image_138`（那条横线）**不是变量**、压根没有可见性逻辑——
+    第一版只把那五个接上，结果"屏幕上还剩一条线"。真实形状是
+    `CanvasPanel_19 →（SizeBox_20 → CanvasPanel_97 → 五个 Image）+ Image_138`。
+  - **收根面板是安全的，之前"绝对不能收根"那条结论画得太宽。** Slate 不 tick
+    `Collapsed` 的控件——但那只适用于 **UserWidget 自己**；`CanvasPanel_19` 是
+    UserWidget **内部**的顶层面板，「事件Tick」挂在 UserWidget 上，收它不受影响。
+    真要收 UserWidget 自己才会自锁：`UpdateCompass` 再也不跑、`bHasTarget` 变 true
+    也永远恢复不了，表现是"罗盘再也不出现"且极难查。
+  - **怎么拿到根面板的引用**（三条路试了两条死路，结论值得记）：
+    `CanvasPanel_19` 没勾 Is Variable，所以没有 Get 节点；
+    `bIsVariable` 是 protected、Python 写不了；`GetWidgetFromName` 五种路径全返回 None。
+    最后走的是 **`Get Compass_N` → `GetParent` ×3**（`UWidget::GetParent()` 是
+    BlueprintCallable，三次正好到根）。
+    **代价**：这条链把"三层嵌套"写死了，以后在 Designer 里加一层容器或改层级，
+    链子会指到错的控件或拿到 null（运行时 Accessed None，表现是罗盘一直显示）。
+    层级一旦要改，就回去在 Designer 勾上根面板的 Is Variable、换成直接 Get。
+  - 脚本（按使用顺序）：`dump_compass_widget.py`（导图表）→ `gate_compass_on_task.py`
+    （改 Select 的 Option 0）→ `dump_compass_tree.py`（导控件树，找出那条线）→
+    `gate_compass_root.py`（接根面板 + 删旧节点）→ `clean_compass_orphans.py`（清孤立 Get）
+    → `compile_compass.py`（编译 + 核对接线）。
 - **手机开关键 J 已从 `IMC_Default` 搬到 `BindKey`**（`ADeliveryPlayerController::TogglePhoneKey` → `BlueprintImplementableEvent TogglePhoneUI()`，蓝图实现加/移视口）。理由和物品栏 1~5、切视角 P、召唤 R 一样：`IMC_Default.uasset` 从来没被提交过，每次 `git pull` 都会冲掉，而症状极具迷惑性——手机面板的显示逻辑不依赖按键绑定，表现是"UI 突然坏了"而不是"按键没绑"。F 键已经因此丢过两次。**蓝图那边要把原来绑 `IA_TogglePhone` 的逻辑改挂到 `TogglePhoneUI` 事件上。**
 - 调试命令（非 Shipping）：`Delivery.Wallet.Dump` / `Delivery.Wallet.Add <金额>` / `Delivery.Locations.Dump` / `Delivery.Task.LoseItem` / **`Delivery.Task.Validate`**。最后一条是摆取件点/收件点时的主力工具——一次列全所有配置问题（地点 ID 解析不出来、任务没有收件点指向它、收件点忘了填 `ExpectedTask`），不是遇到第一个就停。
 - 奖励结算有单元测试（`Task/DeliveryRewardTests.cpp`，筛 `Delivery.Task` 跑）。`EvaluateReward` 是纯函数，档位顺序、超时边界、特殊事件重复计数这些在 PIE 里只表现为"钱好像不太对"，靠肉眼对不出来。
@@ -350,6 +379,57 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 `get_editor_property` 读不到，必须走上面这套；`get_pin_name()` 返回的是 `unreal.Name` 不是 `str`，
 直接切片会抛 `'Name' object is not subscriptable`，整个导出断在第一个节点。
 
+**加节点也能用，签名已实测**（2026-10-20，罗盘条那次）。都是 `BlueprintGraphEditor`
+实例上的绑定方法，**只收自己那几个参数、不要再传 editor**，形状猜错会报
+`takes at most 1 argument (3 given)`：
+- `editor.add_call_function_node(function_path)` —— 传裸名 `"SetVisibility"` 实测也能解析上
+  （正式写法是完整路径）。**怎么确认函数真解析到了**：看新节点上有没有按签名生成的参数引脚
+  （`InVisibility`/`self`）——有引脚就说明解析成功，没有就是个编译才报错的空节点。
+- `editor.add_get_member_variable_node(member_name, class_path="")` ——
+  第二个参数是**类路径字符串**，不是坐标；传 `Vector2D` 会报
+  `Cannot nativize 'Vector2D' as 'ClassPath' (StrProperty)`。
+- `editor.create_node_from_name(node_with_category, location, context_pins, declaring_class=None)`
+  —— 这个才收坐标，按 `'Development|PrintString'` 这种「分类|名字」找。
+- 这两个 add 函数**都不接受坐标**，所以新节点全叠在原点附近，图上会挤成一团、连线却是对的。
+- 清理用 `remove_nodes`（`remove_*` 系列里只有这个能删普通节点）。
+- `try_create_connection` 可能静默失败，**接完要回读 `list_connected_pins` 验证**；
+  写完还要 `modify(True)` + 存盘，并且**编译一次**（`BlueprintEditorLibrary.compile_blueprint`，
+  Python 能直接编、不必手点；状态读 `bp.get_editor_property("status")`，
+  `BS_UP_TO_DATE` 才算干净，`BS_ERROR` 就是接错了线）。
+
+**UMG 控件树 / 蓝图变量那几道墙**（2026-10-20 罗盘条那次全撞过一遍）：
+- **`UWidgetBlueprint.WidgetTree` 和 `UWidgetTree.RootWidget` 都是 protected**，
+  `get_editor_property` 一律读不到。前者能用 `unreal.find_object(bp, "WidgetTree")`
+  绕过去（按子对象名找，不走属性权限检查），**后者绕不过去**——
+  所以「从根往下遍历」这条路是死的。
+  可行的是**从叶子往上爬**：`unreal.find_object(tree, "<变量名>")` 拿到一个已暴露成
+  变量的控件，再用 `UWidget::GetParent()`（BlueprintCallable）一层层到顶，
+  然后用 `UPanelWidget::get_children_count/get_child_at` 往下铺开整棵树。
+- **`bIsVariable` 是 protected，写不了**（`set_editor_property` 直接报
+  `Property 'bIsVariable' ... is protected and cannot be set`）。
+  所以「把某个没暴露的控件变成变量再 Get」只能人在 Designer 里勾那个复选框，
+  勾完还必须**编译**，变量才真正进入类。
+- **`add_call_function_node` 对 `GetWidgetFromName` 解析不上**，
+  `/Script/UMG.UserWidget:GetWidgetFromName`、`.` 分隔、裸名等五种写法全返回 None
+  （而 `SetVisibility` 用裸名却能解析——**裸名能成是运气，不能推广**）。
+  没解析上时建出来的是个**一个引脚都没有的节点**，留在图里会让编译报
+  `Could not find a function named`，所以每建完一个节点都要检查引脚、
+  没有就立刻 `remove_nodes` 掉。
+- **拿不到变量时的替代路子**：从已是变量的兄弟控件 `GetParent()` 往上爬到目标。
+  代价是把层级结构写死了，层级一改就指错或拿到 null（运行时 Accessed None）。
+- **判断「某个 API 失败是因为数据还是因为 API」要带对照组。** 实测
+  `add_get_member_variable_node("CanvasPanel_19")` 返回 None，光看这一条
+  分不清是「它不是变量」还是「这个 API 对面板类型不管用」；
+  同一次调用拿已知是变量的 `Compass_N` 跑一遍（成功），答案立刻就清楚了。
+- **返回 None 也必须打日志。** 有一版在返回值为 None 时一条日志都不打，
+  报告里整段消失，看着像「这段代码根本没跑」——静默失败伪装成没执行，最难查。
+- **删节点的判据要按连线、不能按标题。** `Compass_N` 这类变量在同一张图里可能有
+  **两个 Get 节点**（一个喂 `SetRenderTranslation` 管位置、一个喂 `SetVisibility` 管显隐），
+  按「标题是 Get Compass_N」删会把管位置的那个一起删掉、罗盘位置逻辑整个断。
+  按「输出引脚没有任何连线」删才是自我保护的：还在被用的节点天然有连线、选不中。
+- **exec 输出引脚只能连一处**，所以把上游接到新节点时旧链会自动断开——
+  「先接新的、验证通过再删旧的」这个顺序因此是安全的，删除只是清理、不是功能的一部分。
+
 ### 人物美术
 - 已导入测试角色模型，最近有一版人物相关提交（"人物"）。布娃娃对建模的要求见 Ragdoll.html 第五节：约 15–18 根骨骼、四肢截面需容纳胶囊碰撞体、不用人体解剖骨骼/标准 Mannequin。
 
@@ -427,9 +507,39 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
     - **油门下限 `CameraRelativeMinThrottle`（0.4）不能给 0。** 转向量乘的是
       `|车速| / TurnSpeedReference`，车停下来完全不能转（刻意的，停着打把原地转圈很出戏）。
       想掉头时若把油门收到 0 就是 停住 → 不能转 → 永远掉不了头 的死局。
-    - **按 S 仍然是刹车**：纯按方向解释的话 S = 往屏幕下方开 = 原地绕大圈，刹车整个没了，
-      而按 S 想停下来是肌肉记忆。方向差超过 `CameraRelativeBrakeAngle`（120°）且还在前进时
-      先给反向油门走 `BrakeDeceleration`，减速到很慢后自动转成掉头，同一个键。
+    - **S 是后退，不参与方向换算**（在 `ApplyCameraRelativeInput` 里单独一条分支拦掉）。
+      纯按方向解释的话 S = 往屏幕下方开 = 掉头，但按 S 想后退（以及先刹停）
+      是所有驾驶游戏的肌肉记忆；**掉头应该是"把镜头转过去再按 W"**。
+      实现是把负的 Y 直接当油门交给 `UpdateSpeed`：还在前进时它按
+      `BrakeDeceleration`（2200，比加速的 950 猛得多）刹车，停下后继续按就往
+      `MaxReverseSpeed`（400）倒。不需要额外状态机，也没有新参数。
+      转向用 `MoveInputRaw.X` 原值（车头相对），`UpdateSteering` 里 `Direction`
+      已按车速取负，所以**倒车时左右不会反**。
+      **A/D 保持"往屏幕左右开"不动**——按驾驶惯例改成纯转向没有意义，
+      这套车的转向量本来就乘 `|车速|/TurnSpeedReference`，停着打把转不动是刻意的。
+    - **刹车（`CameraRelativeBrakeAngle` 120°）针对的是"高速行驶中把镜头转过头再按 W"**：
+      不先把速度卸掉就会以当前车速画一个巨大的弧，看着像失控漂出去。和 S 没有关系。
+    - **大角度转向分两段，而且"刹车还是掉头"必须锁住**
+      （`CameraRelativeStageSideAngle` 90°、`CameraRelativeBrakeExitSpeed` 25 cm/s）。
+      症状：**大角度下车原地颤抖**，要抖到某个角度才突然顺畅，而 A/D 正常；
+      停住按 S 最明显，但**不止 S，角度一大就会**。两个独立来源叠在一起，缺一个都还抖：
+      1. `Error` 用 `NormalizeAxis` 归到 `(-180, 180]`，**180 是奇点**——鼠标或车身一丝抖动
+         就让它在 +180 和 −180 之间翻号，`SteerInput` 被 clamp 成 ±1、满舵方向每帧左右互换。
+         **停住按 S 必然踩中**：自由视角的镜头通常就在车尾正后方，`CameraYaw ≈ ActorYaw`，
+         `Error` 恰好 180。A/D 没事正是因为那边 `Error ≈ ±90`，离断点最远。
+      2. **刹车分支和掉头分支在同一个速度阈值上来回弹**（这条才是主因）：
+         `bMovingForward` 的判据是 `CurrentSpeed > TurnSpeedReference * 0.25`（112.5），
+         车一加速越过就进刹车（油门 −1、**舵角归零**），刹到阈值以下又回掉头
+         （油门 +0.4、**满舵**）——**进出同一个阈值、没有滞环**，就是个极限循环，
+         油门和舵角每几帧翻一次。**这条和角度是不是 180 无关**，所以任何大角度都中，
+         而且要一直抖到误差小于 `CameraRelativeBrakeAngle` 才跳出来。
+      对策都是**锁定，只在动作开始那一帧判一次**：转向侧 `TurnAroundSign`（只读一次
+      `Error` 的符号）、刹车与否 `bBrakingForTurn`（只读一次速度和角度）。
+      超过 90° 时第一段只朝锁定那侧的**侧面**打舵，转过侧面解锁、第二段由真实误差收尾。
+      刹车一旦开始就刹到 `CameraRelativeBrakeExitSpeed`（远小于进入阈值 112.5）才松，
+      于是是"一次干净的刹停 + 一道连续的 U 形弧"，不再往复。
+      油门的 `cos` 衰减也要用分段后的误差，否则第一段按最终方向算会把油门压到下限、
+      掉头全程只剩最低速。两个锁定值在松手、上下车、召唤、切视角时都要和 `MoveInputRaw` 一起清掉。
     - 切视角那一帧要按原始输入重算一次：两套模式下 `SteerInput` 语义不同
       （镜头相对是"到目标方向的误差"，车头相对是"转向量"），不接这一下按着 W 切过去会有一帧按旧语义开。
   - 代价写在这里免得以后重新纠结：**关掉**镜头相对开关时，自由视角下

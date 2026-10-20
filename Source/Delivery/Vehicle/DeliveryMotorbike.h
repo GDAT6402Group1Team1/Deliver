@@ -484,14 +484,47 @@ protected:
 	float CameraRelativeMinThrottle = 0.4f;
 
 	/**
-	 * 方向差超过这个角度（度）且车还在往前跑时，先当**刹车**而不是掉头。
+	 * 方向差超过这个角度（度）且车还在往前跑时，先当**刹车**再掉头。
 	 *
-	 * 否则按住 S 就只会原地绕大圈，刹车这个操作整个没了——而按 S 想停下来
-	 * 是绝大多数人的肌肉记忆。减速到很慢之后它自己会转成掉头，
-	 * 所以"刹车"和"往回开"仍然是同一个键，不用额外按键。
+	 * 针对的是"高速行驶中把镜头转过头再按 W"：不先刹就会以当前车速画一个巨大的弧，
+	 * 看着像失控漂出去。先把速度卸掉、再原地附近掉头，和真人骑车一致。
+	 * **这条和 S 没有关系**——S 是后退（见 ApplyCameraRelativeInput 里的分支），
+	 * 压根不走方向换算。
 	 */
 	UPROPERTY(EditAnywhere, Category = "Motorbike|镜头", meta = (ClampMin = "90.0", ClampMax = "180.0"))
 	float CameraRelativeBrakeAngle = 120.0f;
+
+	/**
+	 * 方向差超过这个角度（度）就进入**分段转向**：先只转到这个角度（"侧面"），
+	 * 转过去之后才由真实误差收尾。同时它也是解除锁定的阈值。
+	 *
+	 * **为什么必须分段 + 锁定**，两个独立的颤抖来源缺一个都还会抖：
+	 * 1. `Error` 用 `NormalizeAxis` 归到 `(-180, 180]`，**180 是奇点**——鼠标或车身一丝抖动
+	 *    就让它在 +180 和 −180 之间翻号，`SteerInput` 被 clamp 成 ±1、满舵方向每帧左右互换。
+	 *    **实测踩中的场景：车头朝前、把镜头转 180° 再按 W**——目标方向正好落在车身后方，
+	 *    `Error` 恰好 180。（`S` 不会踩中：它是后退，不走这条换算。）
+	 * 2. 大角度时刹车分支和掉头分支在**同一个速度阈值**（`TurnSpeedReference * 0.25`）上
+	 *    来回弹：越过就刹车（油门 −1、舵角归零），刹到阈值以下又回掉头（油门 +0.4、满舵），
+	 *    进出同一个阈值、没有滞环，就是个极限循环。**这一条和角度是不是 180 无关**，
+	 *    所以镜头转到任何大角度再按 W/A/D 都会抖、不止正后方，而且要一直抖到误差小于
+	 *    `CameraRelativeBrakeAngle` 才跳出来。
+	 *
+	 * 对策都是**锁定**：转向侧（`TurnAroundSign`）和"刹车还是直接掉头"（`bBrakingForTurn`）
+	 * 都只在动作开始那一帧定一次，整个动作里不再重新判断。
+	 * 在这个角上分段算法和常规算法给出的舵角本来就相等，所以交接处没有跳变。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|镜头", meta = (ClampMin = "30.0", ClampMax = "135.0"))
+	float CameraRelativeStageSideAngle = 90.0f;
+
+	/**
+	 * 为掉头而刹车时，刹到多慢（cm/s）才转入掉头段。
+	 *
+	 * **必须远小于进入刹车的速度阈值**（`TurnSpeedReference * 0.25`，默认 112.5）。
+	 * 两者取同一个值就是上面第 2 条那个极限循环：刹到阈值 → 转掉头 → 加速越过阈值
+	 * → 又刹车，油门和舵角每几帧翻一次。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|镜头", meta = (ClampMin = "0.0"))
+	float CameraRelativeBrakeExitSpeed = 25.0f;
 
 	/**
 	 * 两次撞击之间的最小间隔（秒）。比这更密的撞击直接不计数、不给击退。
@@ -762,6 +795,24 @@ private:
 	 * 所以这里存原始值，真正的换算放在 Tick 里（ApplyCameraRelativeInput）。
 	 */
 	FVector2D MoveInputRaw = FVector2D::ZeroVector;
+
+	/**
+	 * 两段式掉头锁定的转向侧（+1 右 / −1 左，0 = 没在掉头）。
+	 *
+	 * 锁定值只在进入掉头段的那一帧写一次，之后一路保持到转过侧面为止——
+	 * 每帧重读 `Error` 的符号正是颤抖的来源（见 CameraRelativeStageSideAngle）。
+	 * 松手、上下车、召唤时要和 MoveInputRaw 一起清掉，否则下一次掉头会沿用上一次的侧。
+	 */
+	float TurnAroundSign = 0.0f;
+
+	/**
+	 * 当前这次大角度动作是不是还在"先刹车"的阶段。
+	 *
+	 * 和 TurnAroundSign 一样**只在动作开始那一帧定一次**，之后一路刹到
+	 * CameraRelativeBrakeExitSpeed 才转 false。每帧重判会让刹车和掉头在速度阈值上
+	 * 来回弹（见 CameraRelativeStageSideAngle 的第 2 条）。
+	 */
+	bool bBrakingForTurn = false;
 
 	/** 上次发给服务器的油门/转向，用来避免每帧重复发同样的值。 */
 	float LastSentThrottle = 0.0f;
