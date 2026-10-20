@@ -120,6 +120,49 @@
   - **红灯超时改为沿车队传递、并放宽到 10 秒（2026-09-24）**：原来的判据只看**本车自己**的 `StopatInter`，而 `TraceForIntersection` 的前瞻距离和车速成正比——队伍里第二辆之后的车已经被前车逼停、前瞻缩到接近 0，根本探不到路口盒，自己的 `bStoppedAtIntersection` 恒为 false，于是只有队首享受宽松超时，后面几辆照样 3 秒就放弃避让怼上前车。现在组件公开 `IsStoppedAtIntersection()`，`GetDistanceToCarAhead()` 扫描时顺手记下最近那辆车的红灯状态（`bLeaderStoppedAtIntersection`，扫不到车时清 false，否则前车开走后还会一直以为"前面在等红灯"），超时判据变成 `bStoppedAtIntersection || bLeaderStoppedAtIntersection`，红灯状态就能一辆辆往后传。阈值同时从 8 秒提到 **10 秒**：要盖住的不只是一个 3 秒红灯，还有前面几辆依次起步、拉开距离的时间，排队越长最后一辆等得越久。`GetDistanceToCarAhead()` 因此去掉了 `const`（它本来就会写前车的 `MaxSpeed`，并非纯查询）。
   - 车辆碰撞盒保持 `Overlap` **没改成 `Block`**：车是运动学的（`bSimulatePhysics=false`，靠 `SetActorLocation` 沿样条走），Block 在不开 sweep 的情况下根本不起作用；而开了 sweep 会和样条跟随打架（样条要它往前、sweep 把它顶回来）导致抖动。"后车停在后方不超车"靠的是修好之后真正生效的前车探测 + 减速，不是物理阻挡。
 
+- **红绿灯模型（`Content/trafficlight/trafficlight`）自带完整变色循环，不要从外部驱动它。**
+  用 `dump_light_bp.py` 导出过真实图表确认：`BeginPlay → set traffic light color(start color)`，
+  那个自定义事件 `Switch` 颜色枚举后 `toggle green/yellow/red light` 改三个 SpotLight 的可见性，
+  再 `Delay(对应时长)` 递归调用自己换下一色。所以**亮灯只发生在这个事件内部**——
+  从 C++ 写它的颜色变量一点效果都没有（这条路试过，组件已撤掉）。要同步只能让它自己的节拍和路口一致。
+  - 变量真名**带空格**：`trafficlight colors`（当前色）、`start color`、
+    `green/yellow/red light duration`。**没有 `LightColor` 这个蓝图变量**——
+    `strings` 扫 uasset 能扫到 `LightColor`，那是 SpotLightComponent 自带的原生属性，不是它。
+  - `trafficlight_color_enum` 顺序是 **0=green / 1=yellow / 2=red**。
+    用 `strings` 查会得出"只有 green 和 yellow"的错结论——**默认只输出 ≥4 字符的串，
+    3 个字母的 `red` 被过滤了**，要加 `-n 3`。
+  - **一圈时长必须 = 路口 `LightDuration` × 2**（路口是两相位轮流放行，
+    单盏灯的视角就是绿一个周期、红一个周期），黄灯从绿的那段里切出来、不额外占时间。
+    原始值绿 10/黄 3/红 20 = 33 秒，和路口 6 秒毫无关系，这就是"灯和车对不上"的根源。
+  - **两组灯靠相反的 `start color` 错开相位，而这个值只能存在「类」上、存不进实例。**
+    `start color` 带 `CPF_DisableEditOnInstance`（蓝图里没勾 Instance Editable），
+    `PropertyAccessUtil.cpp:739` 对非 CDO 对象直接 PermissionDenied；
+    而那个开关只能在蓝图界面点——`UBlueprint::NewVariables` 是裸 `UPROPERTY()`，
+    Python 读不到也写不了。**写 CDO 是允许的**（挡模板要的是另一个标记
+    `CPF_DisableEditOnTemplate`，这个变量没有）。所以做法是：
+    `make_light_variant.py` 建一个**只改默认值的空子类** `trafficlight_green_start`
+    （一个节点都没有、逻辑全继承，不存在两份逻辑要同步），父类起始红、子类起始绿，
+    三个时长写在两个 CDO 上；`gen_traffic_lights.py` 按组号选类。
+    `GREEN_FIRST_GROUP` 在两个脚本里都有，**必须一致**，否则两边各按各的分组走。
+    灯已经摆好、只改默认值时**不用重摆**：灯没有实例覆盖，改 CDO 即生效。
+  - **写这个枚举要传枚举值对象，不能传裸整数**（`ByteProperty` 由 UserDefinedEnum 撑着，
+    裸 `int` 报 `Failed to convert type 'int'`）。而 `unreal.trafficlight_color_enum`
+    **取不到**——蓝图里定义的 UserDefinedEnum 不作为模块属性暴露。可行的办法是
+    **先读回现值、用 `type(现值)` 反推枚举类型**再取成员（实测 `type(现值).GREEN` 成功）。
+    兜底时别静默退回整数：那会让报错和改之前一字不差，看着像"改了没生效"。
+  - `tune_traffic_lights.py` 现在只当验证工具：起始色由类提供，它在实例上写入被挡是
+    **预期行为**，只要现值等于期望值就算过。
+  - **已知会漂**：灯和路口是两个独立定时器，蓝图 `Delay` 每次多走不到一帧，
+    灯相对路口缓慢往后漂（60fps 下一圈约 25ms）。几分钟试玩看不出；
+    要彻底不漂就得让灯读路口相位，那就不是"纯时间"了——选纯时间时接受的代价。
+- **编辑器 Python 脚本只能在编辑器里跑，一个 `NameError` 要绕一整圈才知道**，
+  所以写完除了 `ast.parse` 还要查"用了但没定义的名字"——`ast.parse` 只查语法，
+  查不出这个。实际栽过：用"从 A 到 B 整段替换"的方式打补丁，把夹在中间的常量定义
+  一起删掉，脚本启动即崩、一个值都没写，而报告里只有一行 traceback。
+- `gen_traffic_lights.py` 沿路口四个方向各摆一盏灯，打标签 `ClaudeGenTrafficLight:<组号>`，
+  组号取自该方向 `Inter_` 段的 `LightNumber`。灯位按 `BP_Intersection` 的 actor 位置算——
+  `testfortraffic` 里这个 actor 恰好在路口附近所以没出错，**换图前要改成按 `Inter_` 段算几何中心**，
+  因为路口 actor 的原点不保证在路口中央。
 - 测试地图：`Content/Level/TestForCharacter.umap`（角色/互殴测试）、`Content/Level/testfortraffic.umap`（交通路口测试）。
 
 
@@ -341,7 +384,21 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 - 上车顺序：先 `GrabComponent->ForceRelease()`（手里还抓着东西的话，约束会把货物/别的玩家一路拖在车上）→ `StopRagdoll()`（关刚体模拟并把网格挂回胶囊，不停的话被挂到车上的身体会一路抽搐）→ 隐藏 + 关碰撞 + 挂到车上 → `Controller->Possess(bike)`。下车反过来，先摆好位置再 `StartRagdoll()`（它内部带 `PlaceOnGround`，顺序反了人会掉在原地）。
 - **车把与骑手独立求解**：SteerPivot 前叉、BarPivot 车把继续沿用原转角；RiderPivot 不再整人旋转。双手目标挂 BarPivot，双脚目标挂 MeshAlign，由骑手动画代理解四肢 IK。转向角仍不乘速度系数，停车打把也有反馈。
 - **被交通车撞**：`UDeliveryTrafficCarComponent` 在原有的逐帧扫掠撞击之外**单开一次 `ECC_Pawn` 查询**（摩托车碰撞盒是 Pawn 配置，而撞人查的是布娃娃刚体 `ECC_PhysicsBody`；并进同一次查询会把角色胶囊也扫进来、扰动那条已经调通的撞人逻辑），命中后调 `ADeliveryMotorbike::NotifyTrafficImpact()`。
-  **共用同一张冷却表 `LastImpactTimeByActor`（0.75 秒）**——一次碰撞会连着好几帧重叠，不设冷却的话"撞两下才下车"会在同一次碰撞里就被扣完。
+  **来车那边有一张冷却表 `LastImpactTimeByActor`（0.75 秒）**，一次碰撞会连着好几帧重叠，不设冷却的话"撞两下才下车"会在同一次碰撞里就被扣完。
+  **但那张表只够挡"同一辆车连着撞"**——它是 `UDeliveryTrafficCarComponent` 的成员、**每辆车各一份**，
+  多辆车可以在同一帧各打一下，`ImpactsToDismount`（2）于是在一次碰撞里被扣满，
+  玩家体验是"被撞一下就直接下车加晕倒"。日志实证（2026-10-15）：
+  同一帧两条记录、来车速度完全相同（很可能是第二/三波克隆车和本体重叠在同一位置、速度向量一致）：
+  `[12.33.55:490][678] 被交通车撞击 1/2 次（来车速度 3053 cm/s）` 紧跟一条 `2/2 次`。
+  所以摩托车自己再挡一道 **`MinImpactInterval`（默认 1 秒）**，在 `NotifyTrafficImpact` 开头、
+  **计数/音效/击退之前**判断并返回 false（放后面等于白挡；返回 false 让来车不记录这次命中，
+  它下一帧还会来问、继续被挡，代价只是一次比较）。次数是摩托车自己的状态，
+  谁来撞、撞几辆都该由它说了算——这才是对的层。上下车和召唤时和 `TrafficImpactCount` 一起清零。
+  **还没修的相邻问题**：`CarVelocity = Travel / DeltaTime`（每帧位移 ÷ 帧时间），
+  所以 `OnRouteLost` 把车瞬移回出生点那一帧会算出**假的巨大速度**（实测 3053 cm/s，
+  而车的 `MaxSpeed` 随机范围只有 600~1500），抛射力度被顶成 100%。
+  想修就得在位移明显超过 `MaxSpeed × DeltaTime` 时跳过那一帧的撞击扫掠；
+  **注意这条路同时供撞角色的伤害计算使用**（按相对速度算伤害），改之前先读那一段的注释。
   每撞一下：按来车方向给击退速度、按左右分量给撞歪的角速度和车身倾斜（`KnockTilt` 直接叠在转弯侧倾上，**不再插值**，插了会把撞击那一下的尖峰抹平）、镜头两轴不同频率抖动。四个量统一按 `KnockDecay` 指数衰减。
   撞满 `ImpactsToDismount`（默认 2）次 → `ExitVehicle()`（和按 F 同一条路）→ 再 `KnockDownDriver()`：走既有伤害 GE 把血清零（回血 GE 可能抵消，所以跟着补一次 `SetNumericAttributeBase`，和撞人那边一样），ASC 自己会切 Stunned/Limp，复用现成的倒地表现，不另写一套。**顺序不能反**：`ExitVehicle` 内部的 `StartRagdoll` 会重建刚体，先加的冲量会被冲掉。
   被掀下车时那记抛射的力度**按来车速度缩放**（`KnockDownSpeedReference` 1200 cm/s 到满、`KnockDownLaunchMinScale` 0.35 保底）：交通车的 `MaxSpeed` 本来就是 600~1500 随机的，一律同一个飞法就看不出"被快车撞"和"被慢车蹭"的区别；保底不能给 0，否则慢车蹭一下人是原地瘫软，看着像自己躺下的。
@@ -355,7 +412,28 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
   - 切换那一帧要接控制旋转，否则视角会跳：切到固定视角调 `SyncControlRotation()`，切到自由视角保留当前朝向当起点。
   - **自由视角**（开）：弹簧臂 `bUsePawnControlRotation=true`，`bInheritPitch/Yaw` 都必须设成 true——`USpringArmComponent::GetTargetRotation()` 会拿组件的相对角度把没继承的那一轴顶掉，只开一个就只剩一个轴能转。鼠标/右摇杆复用角色身上同两个 IA（`IA_Look` / `IA_MouseLook`），俯仰上下限走 `PlayerCameraManager` 的 `ViewPitchMin/Max`。**Tick 里必须停掉 `SyncControlRotation()`**：自由视角下控制旋转就是镜头，每帧同步成车头朝向等于把鼠标抹掉。
   - **固定车尾视角**（关）：`bUsePawnControlRotation=false`、只继承 Yaw、俯仰吃 `CameraPitch` 的相对角度，鼠标完全不参与，"W 永远是往屏幕里开"。
-  - 代价写在这里免得以后重新纠结：自由视角下 **W 按的是车头方向、不是屏幕里的方向**，镜头转到侧面时按 W 车还是往自己车头那边开。载具游戏普遍如此，但和固定视角手感确实不同，这就是留开关的原因。
+  - **自由视角下 WASD 改成按镜头的前后左右**（`bCameraRelativeMoveInFreeLook`，默认开）。
+    固定视角下这个开关自动不生效——那套镜头的 yaw 本来就跟着车头，两种解释等价，
+    多绕一层换算只会引入误差。关掉开关就回到原来的"W 永远是车头方向"。
+    实现是把二维输入在镜头 yaw 下解释成"想去的世界方向"，再换算成这套车**原有的**
+    油门 + 转向量，不是另写一套移动，所以爬坡、撞墙掉速、压弯、轮子自转全部照旧。
+    - **换算必须每帧在 Tick 里做**（`ApplyCameraRelativeInput`，排在 `UpdateSpeed`/
+      `UpdateSteering` 之前），不能放在按键事件里：镜头每帧都在动，按一次算一次的话
+      松手之前方向就不再更新。原始输入存在 `MoveInputRaw`，三处清输入的地方要一起清。
+    - 取**控制旋转**的 yaw 当镜头朝向，不取 `FollowCamera` 的世界朝向——后者带弹簧臂的
+      迟滞（`CameraLagSpeed`），用它会让行进方向跟着镜头晃、手感发糊。
+    - `atan2(X, Y)` 不是 `atan2(Y, X)`：UE 的 yaw 以 +X 为 0 度，而这里的"前"对应
+      输入的 Y 分量，两者正好差一次参数对调。
+    - **油门下限 `CameraRelativeMinThrottle`（0.4）不能给 0。** 转向量乘的是
+      `|车速| / TurnSpeedReference`，车停下来完全不能转（刻意的，停着打把原地转圈很出戏）。
+      想掉头时若把油门收到 0 就是 停住 → 不能转 → 永远掉不了头 的死局。
+    - **按 S 仍然是刹车**：纯按方向解释的话 S = 往屏幕下方开 = 原地绕大圈，刹车整个没了，
+      而按 S 想停下来是肌肉记忆。方向差超过 `CameraRelativeBrakeAngle`（120°）且还在前进时
+      先给反向油门走 `BrakeDeceleration`，减速到很慢后自动转成掉头，同一个键。
+    - 切视角那一帧要按原始输入重算一次：两套模式下 `SteerInput` 语义不同
+      （镜头相对是"到目标方向的误差"，车头相对是"转向量"），不接这一下按着 W 切过去会有一帧按旧语义开。
+  - 代价写在这里免得以后重新纠结：**关掉**镜头相对开关时，自由视角下
+    W 按的是车头方向、不是屏幕里的方向，镜头转到侧面时按 W 车还是往自己车头那边开。
   - **被撞抖镜头在自由视角下只剩 Roll 一轴**：Pitch/Yaw 归控制旋转管，写进相对角度会被顶掉，硬抖就得每帧改控制旋转、和玩家鼠标打架。`bInheritRoll` 保持 false，弹簧臂那一轴取的正是相对 Roll，左右晃一样读得出"被撞了"。
 - **骑手已改为 SkeletalMesh + ABP_MotorbikeRider**：原生父类 DeliveryRiderAnimInstance 用动画代理从坐姿参考骨架生成姿态，不使用旧 PoseableMesh 直接拧脖子的实现。详细流程、调参和验证见 [Document/MotorbikeRider.md](Document/MotorbikeRider.md)。
   迎风后仰：HeadWindSway 默认 18°乘 WindExaggeration（默认 1.7），用 .72 基准 + .28 波动得到约 13～31°的后仰回摆目标，避免顶住 35°限幅。直行无周期性左右摇头/扭腰；身体前后阵风系数 .3，转弯侧倾乘 1.35，侧向阵风系数 .65，头部增加滞后的转弯侧向回摆。侧摆由转向强度淡入，直行归零；头部在 IK 后叠加，手脚仍固定。停车回正，倒车不套用前进迎风后仰。测试检查后仰方向、前后变化、横向稳定、接触点和停车回正。
@@ -459,6 +537,9 @@ PlayerController 自动累积到 `DeliveryPromptSubsystem` 的屏幕下方字幕
 
   引擎目录**每台机器不一样**，Epic 默认装在 `C:\Program Files\Epic Games\UE_5.8`。
 
+- **Mac 上的运行时日志在 `~/Library/Logs/Unreal Engine/DeliveryEditor/Delivery.log`**，
+  **不在**工程的 `Saved/Logs`（那个目录在 Mac 上根本不存在，别去那里找然后得出"没存日志"的结论）。
+  排查运行时问题先读它：`UE_LOG` 自带时间戳和帧号，比在 PIE 里轮询属性靠谱得多。
 - **编辑器开着就编不了**：会直接报 `Unable to build while Live Coding is active`。
   可靠做法是**先关编辑器再编**；在编辑器里按 Ctrl+Alt+F11 走 Live Coding 也行，但它对
   新增 UPROPERTY / 改类布局这类改动不可靠，结构一变就该用完整编译。

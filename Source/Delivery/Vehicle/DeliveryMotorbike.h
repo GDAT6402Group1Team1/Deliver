@@ -337,7 +337,7 @@ protected:
 	float GroundAlignSpeed = 7.0f;
 
 	UPROPERTY(EditAnywhere, Category="Motorbike|贴地", meta=(ClampMin="0.0", ClampMax="80.0"))
-	float MaxGroundAlignAngle = 40.0f;
+	float MaxGroundAlignAngle = 45.0f;
 
 	// ---- 爬坡越障 ----
 
@@ -350,14 +350,14 @@ protected:
 	 * 别调太大：它同时也是"能凭空抬多高"的上限，过大时车会爬上本该挡住它的矮墙。
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", Units="cm"))
-	float MaxStepHeight = 45.0f;
+	float MaxStepHeight = 60.0f;
 
 	/**
 	 * 最陡能爬的坡度。比这更陡的面当墙，跨上去也不算站住。
 	 * 和 MaxGroundAlignAngle 保持一致：能爬上去的坡，车身姿态就该跟着贴上去。
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", ClampMax="80.0"))
-	float MaxClimbAngle = 40.0f;
+	float MaxClimbAngle = 45.0f;
 
 	/**
 	 * 贴地高度往上追的速度下限（cm/s）。
@@ -374,11 +374,24 @@ protected:
 	 * 实际前瞻距离取"这一帧位移的两倍"和这个值里的小者，所以停着不会凭空浮起来。
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", Units="cm"))
-	float GroundLookAhead = 90.0f;
+	float GroundLookAhead = 120.0f;
 
 	/** 真撞墙（跨不上去）时车速剩下多少。原来写死 0.3。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float WallHitSpeedScale = 0.3f;
+	float WallHitSpeedScale = 0.5f;
+
+	/**
+	 * 跨越台阶时，抬起来之后至少要走完这一帧剩余位移的多少比例，才算"跨上去了"。
+	 *
+	 * 原来是 `TryStepUp` 里写死的 0.1：抬高之后前进不足剩余位移的 10% 就整体撤回、
+	 * 当成撞墙处理。这一条是"车莫名被地形卡住"的主要来源——**一堵真墙和"台阶上方
+	 * 还有点别的东西蹭一下"在这个判据下长得一模一样**，而后者只要让它慢慢往前挤就过去了。
+	 * 调小 = 更宽容（接受很小的进展，不轻易判定撞墙）；
+	 * 调大 = 更严格（容易被判成墙，但也更不容易贴着墙面往上爬）。
+	 * 给 0 等于"只要不是完全走不动就算跨过去了"。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float StepUpMinProgress = 0.03f;
 
 	/** 离地多高还算"贴着地"，超过就交给重力。要大于 MaxStepHeight，否则刚跨上台阶就被判成起飞。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|贴地", meta=(ClampMin="0.0", Units="cm"))
@@ -438,6 +451,66 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现")
 	bool bFreeLookCamera = true;
+
+	/**
+	 * 自由视角下 WASD 按**镜头**的前后左右走，而不是按车头。
+	 *
+	 * 关掉就是原来的开法：W 永远是车头方向、A/D 是转向量。固定视角下这个开关
+	 * 不起作用——那套镜头的 yaw 本来就跟着车头，两种解释是同一回事。
+	 *
+	 * 做法：把摇杆/WASD 的二维输入在镜头 yaw 下解释成一个"想去的世界方向"，
+	 * 再把它换算成这套车本来就有的 油门 + 转向量。不是另写一套移动，
+	 * 所以爬坡、撞墙掉速、压弯那些全都照旧生效。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|镜头")
+	bool bCameraRelativeMoveInFreeLook = true;
+
+	/**
+	 * 车头和"想去的方向"差多少度算满舵（度）。
+	 * 小了会在小角度就打满、走蛇形；大了转向迟钝、过弯要压很久。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|镜头", meta = (ClampMin = "5.0", ClampMax = "180.0"))
+	float CameraRelativeFullSteerAngle = 50.0f;
+
+	/**
+	 * 方向差很大时油门的下限（0~1）。
+	 *
+	 * **不能给 0。** 转向量乘的是 `|车速| / TurnSpeedReference`，车停下来就完全不能转
+	 * （摩托车停着打把原地转圈很出戏，这是刻意的）。所以"想掉头"的时候如果把油门收到 0，
+	 * 车会停住 → 不能转 → 永远掉不了头，卡成死局。留一个下限让它保持滚动、
+	 * 边走边转，自然画出一个 U 形。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|镜头", meta = (ClampMin = "0.05", ClampMax = "1.0"))
+	float CameraRelativeMinThrottle = 0.4f;
+
+	/**
+	 * 方向差超过这个角度（度）且车还在往前跑时，先当**刹车**而不是掉头。
+	 *
+	 * 否则按住 S 就只会原地绕大圈，刹车这个操作整个没了——而按 S 想停下来
+	 * 是绝大多数人的肌肉记忆。减速到很慢之后它自己会转成掉头，
+	 * 所以"刹车"和"往回开"仍然是同一个键，不用额外按键。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|镜头", meta = (ClampMin = "90.0", ClampMax = "180.0"))
+	float CameraRelativeBrakeAngle = 120.0f;
+
+	/**
+	 * 两次撞击之间的最小间隔（秒）。比这更密的撞击直接不计数、不给击退。
+	 *
+	 * **为什么要在被撞者这边再挡一道**：交通车那边已经有一张 0.75 秒的冷却表
+	 * （`UDeliveryTrafficCarComponent::LastImpactTimeByActor`），但那张表是
+	 * **每辆车各一份**的组件成员，只能保证"同一辆车不连着撞"。多辆车可以在
+	 * 同一帧各打一下，`ImpactsToDismount`（2）于是在一次碰撞里就被扣满——
+	 * 实测日志里出现过同一帧两条撞击记录、来车速度完全相同（很可能是第二/三波
+	 * 克隆车和本体重叠在同一位置、速度向量一致）：
+	 *     [12.33.55:490][678] 被交通车撞击 1/2 次（来车速度 3053 cm/s）
+	 *     [12.33.55:490][678] 被交通车撞击 2/2 次（来车速度 3053 cm/s）
+	 * 玩家的体验就是"被撞一下就直接下车加晕倒"。
+	 *
+	 * 挡在这里才是对的层：次数是**摩托车自己**的状态，谁来撞、撞几辆都该由它说了算。
+	 * 给 0 就退回原来的行为（只靠来车那边各自的冷却表）。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|撞击", meta = (ClampMin = "0.0"))
+	float MinImpactInterval = 1.0f;
 
 	/**
 	 * 轮子要不要自转。暂时关掉——整套逻辑（认轮子、轮轴分层、按车速算转速）都留着，
@@ -624,6 +697,12 @@ private:
 
 	void UpdateSpeed(float DeltaSeconds);
 	void UpdateSteering(float DeltaSeconds);
+
+	/** 把 MoveInputRaw 按镜头朝向换算成 ThrottleInput / SteerInput。每帧调一次。 */
+	void ApplyCameraRelativeInput();
+
+	/** 现在是不是按镜头方向开（开关打开 **且** 处于自由视角）。 */
+	bool UsesCameraRelativeMove() const;
 	void UpdateGroundAndMove(float DeltaSeconds);
 
 	/**
@@ -674,6 +753,22 @@ private:
 
 	float ThrottleInput = 0.0f;
 	float SteerInput = 0.0f;
+
+	/**
+	 * 摇杆/WASD 的原始二维输入。
+	 *
+	 * 镜头相对模式必须**每帧**重算油门和转向量：镜头和车头的夹角一直在变，
+	 * 只在按键事件里算一次的话，松手之前方向就不会再更新。
+	 * 所以这里存原始值，真正的换算放在 Tick 里（ApplyCameraRelativeInput）。
+	 */
+	FVector2D MoveInputRaw = FVector2D::ZeroVector;
+
+	/** 上次发给服务器的油门/转向，用来避免每帧重复发同样的值。 */
+	float LastSentThrottle = 0.0f;
+	float LastSentSteer = 0.0f;
+
+	/** 上一次真正记数的撞击发生在什么时候（服务器时间）。只在服务器维护。 */
+	float LastImpactTime = -1000.0f;
 	float CurrentSpeed = 0.0f;
 	float VerticalVelocity = 0.0f;
 	float CurrentLean = 0.0f;

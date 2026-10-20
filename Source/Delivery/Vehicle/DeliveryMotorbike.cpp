@@ -563,7 +563,9 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 
 	ThrottleInput = 0.0f;
 	SteerInput = 0.0f;
+	MoveInputRaw = FVector2D::ZeroVector;
 	TrafficImpactCount = 0;
+	LastImpactTime = -1000.0f;
 	ApplyDriverPresentation();
 	MulticastPlayAudioEvent(0);
 	return true;
@@ -601,11 +603,13 @@ bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredY
 	VerticalVelocity = 0.0f;
 	ThrottleInput = 0.0f;
 	SteerInput = 0.0f;
+	MoveInputRaw = FVector2D::ZeroVector;
 	KnockVelocity = FVector::ZeroVector;
 	KnockYawRate = 0.0f;
 	KnockTilt = 0.0f;
 	ShakeAmount = 0.0f;
 	TrafficImpactCount = 0;
+	LastImpactTime = -1000.0f;
 	bWheelLocationValid = false;
 
 	UE_LOG(LogDelivery, Log, TEXT("%s：被召唤到 (%.0f, %.0f, %.0f)"),
@@ -620,6 +624,22 @@ bool ADeliveryMotorbike::NotifyTrafficImpact(const FVector& CarVelocity)
 	if (!HasAuthority() || !Driver)
 	{
 		return false;
+	}
+
+	// 最小间隔：挡住"多辆车同一帧各打一下"把次数一次扣满。
+	// 必须排在计数、音效、击退**之前**——放在后面等于白挡。
+	// 返回 false 让来车那边不记录这次命中，它下一帧还会来问，继续被挡掉，代价只是一次比较。
+	if (const UWorld* World = GetWorld())
+	{
+		const float Now = World->GetTimeSeconds();
+		if (MinImpactInterval > 0.0f && Now - LastImpactTime < MinImpactInterval)
+		{
+			UE_LOG(LogDelivery, Verbose,
+				TEXT("%s：撞击被最小间隔挡掉（距上次 %.2f 秒 < %.2f 秒）"),
+				*GetName(), Now - LastImpactTime, MinImpactInterval);
+			return false;
+		}
+		LastImpactTime = Now;
 	}
 
 	const float ImpactSpeed = CarVelocity.Size2D();
@@ -844,7 +864,9 @@ void ADeliveryMotorbike::ExitVehicle()
 
 	ThrottleInput = 0.0f;
 	SteerInput = 0.0f;
+	MoveInputRaw = FVector2D::ZeroVector;
 	TrafficImpactCount = 0;
+	LastImpactTime = -1000.0f;
 	ApplyDriverPresentation();
 	MulticastPlayAudioEvent(1);
 }
@@ -996,12 +1018,102 @@ void ADeliveryMotorbike::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 void ADeliveryMotorbike::MoveInput(const FInputActionValue& Value)
 {
 	const FVector2D Axis = Value.Get<FVector2D>();
-	SteerInput = FMath::Clamp(Axis.X, -1.0f, 1.0f);
-	ThrottleInput = FMath::Clamp(Axis.Y, -1.0f, 1.0f);
+	MoveInputRaw.X = FMath::Clamp(Axis.X, -1.0f, 1.0f);
+	MoveInputRaw.Y = FMath::Clamp(Axis.Y, -1.0f, 1.0f);
 
+	// 车头相对模式下这里就是最终值，直接发；镜头相对模式要等 Tick 里按
+	// 当前镜头朝向换算，发送也移到那边（镜头每帧都在动，这里算了也会马上过期）。
+	if (!UsesCameraRelativeMove())
+	{
+		SteerInput = MoveInputRaw.X;
+		ThrottleInput = MoveInputRaw.Y;
+		if (!HasAuthority())
+		{
+			ServerSetDriveInput(ThrottleInput, SteerInput);
+			LastSentThrottle = ThrottleInput;
+			LastSentSteer = SteerInput;
+		}
+	}
+}
+
+bool ADeliveryMotorbike::UsesCameraRelativeMove() const
+{
+	// 固定视角不走这条路：那套镜头的 yaw 本来就跟着车头，两种解释等价，
+	// 多绕一层换算只会引入误差。
+	return bCameraRelativeMoveInFreeLook && bFreeLookCamera;
+}
+
+void ADeliveryMotorbike::ApplyCameraRelativeInput()
+{
+	if (!UsesCameraRelativeMove())
+	{
+		return;
+	}
+
+	// 松手就彻底归零，别留残值——否则松手后车还会按最后一次的方向继续修正。
+	if (MoveInputRaw.IsNearlyZero())
+	{
+		ThrottleInput = 0.0f;
+		SteerInput = 0.0f;
+	}
+	else
+	{
+		// 镜头的 yaw，而不是车头的。取控制旋转：自由视角下它**就是**镜头朝向
+		// （ApplyCameraMode 里弹簧臂 bUsePawnControlRotation=true 且继承 pitch/yaw）。
+		// 读 FollowCamera 的世界朝向也行，但那一份带弹簧臂的迟滞（CameraLagSpeed），
+		// 用它会让方向跟着镜头晃、手感发糊。
+		float CameraYaw = GetActorRotation().Yaw;
+		if (const APlayerController* PC = Cast<APlayerController>(GetController()))
+		{
+			CameraYaw = PC->GetControlRotation().Yaw;
+		}
+
+		// 摇杆方向在镜头空间里的朝向：Y 是"往屏幕里"，X 是"往右"。
+		// atan2(X, Y) 而不是 atan2(Y, X)——UE 的 yaw 以 +X 为 0 度、向右手正方向增长，
+		// 而这里的"前"对应 Y 分量，两者正好差一次参数对调。
+		const float InputYaw = FMath::RadiansToDegrees(
+			FMath::Atan2(MoveInputRaw.X, MoveInputRaw.Y));
+		const float DesiredYaw = CameraYaw + InputYaw;
+
+		// 车头到目标方向的带符号夹角（-180~180）。正值表示目标在车头右侧。
+		const float Error = FRotator::NormalizeAxis(DesiredYaw - GetActorRotation().Yaw);
+		const float AbsError = FMath::Abs(Error);
+
+		// 输入强度（摇杆可以推一半）。WASD 是 0/1，这里对两者都成立。
+		const float Magnitude = FMath::Min(MoveInputRaw.Size(), 1.0f);
+
+		const bool bMovingForward = CurrentSpeed > TurnSpeedReference * 0.25f;
+		if (AbsError > CameraRelativeBrakeAngle && bMovingForward)
+		{
+			// 方向差很大 + 还在往前跑 = 想停下来。给反向油门，UpdateSpeed 会按
+			// BrakeDeceleration（比加速大得多）处理，按一下就明显慢下来。
+			// 刹到很慢之后 bMovingForward 变 false，自动转为下面的掉头分支。
+			ThrottleInput = -Magnitude;
+			// 刹车时不强行扭车头：这时候横向摆车看着像甩尾，不是刹车。
+			SteerInput = 0.0f;
+		}
+		else
+		{
+			SteerInput = FMath::Clamp(
+				Error / FMath::Max(CameraRelativeFullSteerAngle, 1.0f), -1.0f, 1.0f);
+			// 方向差越大油门越收，但**不能收到 0**：转向量正比于车速，
+			// 停下来就再也转不动，想掉头会卡成死局（见头文件里 CameraRelativeMinThrottle）。
+			const float Align = FMath::Cos(FMath::DegreesToRadians(AbsError));
+			const float Scale = FMath::Max(Align, CameraRelativeMinThrottle);
+			ThrottleInput = Magnitude * Scale;
+		}
+	}
+
+	// 换算出来的值每帧都可能变，但只在变化够大时才发，省掉同值重复 RPC。
 	if (!HasAuthority())
 	{
-		ServerSetDriveInput(ThrottleInput, SteerInput);
+		if (FMath::Abs(ThrottleInput - LastSentThrottle) > 0.02f
+			|| FMath::Abs(SteerInput - LastSentSteer) > 0.02f)
+		{
+			ServerSetDriveInput(ThrottleInput, SteerInput);
+			LastSentThrottle = ThrottleInput;
+			LastSentSteer = SteerInput;
+		}
 	}
 }
 
@@ -1021,6 +1133,21 @@ void ADeliveryMotorbike::ToggleCameraMode()
 {
 	bFreeLookCamera = !bFreeLookCamera;
 	ApplyCameraMode();
+
+	// 切到车头相对模式时立刻按原始输入重算一次：ThrottleInput/SteerInput 里现在存的是
+	// 镜头相对模式算出来的值，语义完全不同（那边的 SteerInput 是"到目标方向的误差"，
+	// 这边是"转向量"）。不接这一下，按着 W 切过去会有一帧按旧语义开。
+	if (!UsesCameraRelativeMove())
+	{
+		SteerInput = MoveInputRaw.X;
+		ThrottleInput = MoveInputRaw.Y;
+		if (!HasAuthority())
+		{
+			ServerSetDriveInput(ThrottleInput, SteerInput);
+			LastSentThrottle = ThrottleInput;
+			LastSentSteer = SteerInput;
+		}
+	}
 	if (CameraToggleSound)
 	{
 		UGameplayStatics::PlaySound2D(this, CameraToggleSound);
@@ -1115,6 +1242,13 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 	{
 		if (Driver)
 		{
+			// 必须排在 UpdateSpeed/UpdateSteering 之前：它改的就是这两个函数要读的
+			// ThrottleInput/SteerInput。只有本机驾驶者算得出来（镜头是本机的东西），
+			// 服务器用的是 ServerSetDriveInput 发过去的结果。
+			if (IsLocallyControlled())
+			{
+				ApplyCameraRelativeInput();
+			}
 			UpdateSpeed(DeltaSeconds);
 			UpdateSteering(DeltaSeconds);
 		}
@@ -1334,9 +1468,11 @@ bool ADeliveryMotorbike::TryStepUp(const FVector& RemainingDelta, const FHitResu
 	}
 
 	// ② 往前走完这一帧剩下的位移。抬起来之后还是几乎走不动，说明挡着的是一堵真墙。
+	// 阈值做成参数（StepUpMinProgress）而不是写死：真墙和"台阶上方还蹭到点东西"
+	// 在这个判据下长得一样，写死 0.1 的话后者会被误判成墙、车就卡在那儿。
 	FHitResult ForwardHit;
 	AddActorWorldOffset(RemainingDelta, true, &ForwardHit);
-	if (ForwardHit.bBlockingHit && ForwardHit.Time < 0.1f)
+	if (ForwardHit.bBlockingHit && ForwardHit.Time < StepUpMinProgress)
 	{
 		SetActorLocation(StartLocation, false, nullptr, ETeleportType::TeleportPhysics);
 		return false;

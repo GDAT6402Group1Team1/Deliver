@@ -279,15 +279,20 @@ protected:
 	 * 后续帧对方自然也能通过。
 	 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|避让", meta = (ClampMin = "0.0"))
-	float MaxBlockedTime = 3.0f;
+	float MaxBlockedTime = 6.0f;
 
 	/**
 	 * 本车**或前车**被红灯拦住时改用的死锁超时，比 MaxBlockedTime 宽松。
 	 *
-	 * 红灯期间前车是"合法地长时间不动"，不是死锁；如果还按 MaxBlockedTime（3 秒）
-	 * 就放弃避让，后车会在红灯没结束时直接压上去。红绿灯周期 LightDuration 是 3 秒，
-	 * 这里给到 10 秒：一整个红灯 + 前面几辆依次起步、拉开距离的时间都要盖住，
-	 * 排队越长最后一辆等得越久，所以留的余量比单个灯周期大得多。
+	 * 红灯期间前车是"合法地长时间不动"，不是死锁；如果还按 MaxBlockedTime
+	 * 就放弃避让，后车会在红灯没结束时直接压上去。
+	 *
+	 * **这个值必须跟着路口的 LightDuration 走。** 2026-10-15 实测
+	 * testfortraffic 的 BP_Intersection 是 **6 秒**（不是旧注释里写的 3 秒），
+	 * 红绿灯模型那边也按它配成了红灯 6 秒，所以这里从 10 提到 16：
+	 * 要盖住的是"一整个红灯 6 秒 + 前面几辆依次起步拉开距离"的总时长，
+	 * 排队越长最后一辆等得越久，余量必须比单个灯周期大得多。
+	 * 换关卡后如果 LightDuration 改了，这个值要重新算，不然队尾又会顶上去。
 	 *
 	 * "或前车"这一条是后补的：TraceForIntersection 的前瞻距离和车速成正比，
 	 * 队伍里第二辆之后的车已经被逼停、前瞻缩到接近 0，探不到路口盒，
@@ -296,7 +301,7 @@ protected:
 	 * 沿车队一辆辆往后传。
 	 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|避让", meta = (ClampMin = "0.0"))
-	float MaxBlockedTimeAtIntersection = 10.0f;
+	float MaxBlockedTimeAtIntersection = 16.0f;
 
 	/** 打开后在场景里画出前方探测用的胶囊范围，方便在编辑器里调探测距离和半径。 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|避让")
