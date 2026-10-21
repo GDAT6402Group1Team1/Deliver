@@ -30,11 +30,28 @@ Pawn 朝 +X，差 90 度，表现是车横着走）。所以这里留了 MODEL_Y
 
 import math
 import traceback
+import importlib
 
 import unreal
+import traffic_light_placement
+importlib.reload(traffic_light_placement)
+from traffic_light_placement import shared_between_lanes
+from traffic_light_directions import normalized_directions
 
 DRY_RUN = False
-REQUIRE_LEVEL = "testfortraffic"        # 只动这张图
+ALLOWED_LEVELS = ["testfortraffic", "TestForCharacter"]
+# 只在这几张图里摆。留这道闸是因为**摆灯是写操作**：跑错图会在别的关卡里
+# 撒一堆带 tag 的灯，只能手工清（或者再跑一次靠 tag 清，但得先意识到跑错了）。
+# 加 TestForCharacter 是因为交通线现在铺到大图上了。
+
+CENTER_FROM_CHILDREN = True
+# 灯位取**该路口管辖的 Inter_ 段的几何中心**，而不是 BP_Intersection 的 actor 位置。
+# 为什么要这条：路口 actor 的原点**不保证**在路口中央。
+# gen_intersections.py 是把路口 spawn 在聚类中心的，所以脚本生成的那些本来就对；
+# 但**手摆的**路口原点可能偏得很远（testfortraffic 里那个恰好在附近所以没出错，
+# 这是运气不是设计）。按子段算中心对两种都成立。
+CENTER_WARN = 300.0   # actor 位置和子段中心差超过这个就在报告里点名——
+                      # 那基本就是手摆的路口，值得人去看一眼。
 LIGHT_BP = "/Game/trafficlight/trafficlight"
 # 「先放行」那组用的子类：和 LIGHT_BP 唯一的差别是 CDO 里 start color = 绿。
 # 由 make_light_variant.py 生成，**先跑那个再跑本脚本**。
@@ -43,7 +60,7 @@ LIGHT_BP = "/Game/trafficlight/trafficlight"
 GREEN_START_BP = "/Game/trafficlight/trafficlight_green_start"
 # 哪一组先放行（从绿开始）。必须和 tune_traffic_lights.py 里的同名常量一致，
 # 否则两个脚本会各按各的分组走，表现是"某个方向灯绿但车不走"。
-GREEN_FIRST_GROUP = 1
+GREEN_FIRST_GROUP = 0  # 用户定义：组0上下先绿，组1左右先红
 INTERSECTION_PREFIX = "BP_Intersection"  # 按类名前缀认路口
 LANE_TAG_PREFIX = "ClaudeGenLane"          # 脚本生成的车道才有
 CHILD_CLASS_PREFIX = "BP_TrafficLine1_IntersectionChild"   # 手摆的按类名认
@@ -51,7 +68,7 @@ TAG = "ClaudeGenTrafficLight"
 
 CENTER_RADIUS = 0.0      # 灯离路口中心多远。0 = 正中央四面背靠背
 LIGHT_Z = 0.0            # 相对路口 actor 的高度微调
-MODEL_YAW_OFFSET = 0.0   # 模型正面不是 +X 时在这里补；先跑一次看视口再定
+MODEL_YAW_OFFSET = 90.0  # 实测灯头/SpotLight 面向局部-Y，需补90度
 CHILD_SEARCH_RADIUS = 3000.0   # 多远以内的 Inter_ 段算这个路口的
 
 WS = unreal.SplineCoordinateSpace.WORLD
@@ -127,7 +144,7 @@ def child_directions(inter, lanes):
         h = math.sqrt(dx * dx + dy * dy)
         if h < 1e-3:
             continue
-        out.append((label, dx / h, dy / h, read_prop(a, "LightNumber")))
+        out.append((label, dx / h, dy / h, read_prop(a, "LightNumber"), p))
     return out
 
 
@@ -137,8 +154,9 @@ def run():
     name = world.get_name() if world else u"?"
     w(u"=== 路口红绿灯摆放 ===")
     w(u"关卡：%s     模式：%s" % (name, u"只看不摆（DRY_RUN）" if DRY_RUN else u"**写入**"))
-    if name != REQUIRE_LEVEL:
-        w(u"！这个脚本只在 %s 里摆灯，当前是 %s，退出。" % (REQUIRE_LEVEL, name))
+    if name not in ALLOWED_LEVELS:
+        w(u"！这个脚本只在 %s 里摆灯，当前是 %s，退出。"
+          % (u"/".join(ALLOWED_LEVELS), name))
         return
 
     light_class = unreal.EditorAssetLibrary.load_blueprint_class(LIGHT_BP)
@@ -147,6 +165,7 @@ def run():
         return
 
     actors = eas.get_all_level_actors()
+    actors_by_label = {a.get_actor_label():a for a in actors}
     inters = [a for a in actors
               if a.get_class().get_name().startswith(INTERSECTION_PREFIX)]
     # 按**类名**找路口段，不按标签。标签 ClaudeGenLane 只有脚本生成的车道才有，
@@ -191,9 +210,25 @@ def run():
 
         dirs = child_directions(inter, lanes)
         w(u"  管辖的 Inter_ 段 %d 个：" % len(dirs))
+
+        # 灯位取子段的几何中心（见 CENTER_FROM_CHILDREN）。
+        # 一个段都没找到时只能退回 actor 位置，并且点名——那种情况下
+        # 这个路口压根没有管辖的子段，灯摆了也没有灯态可言。
+        if CENTER_FROM_CHILDREN and dirs:
+            cx = sum(x[4].x for x in dirs) / float(len(dirs))
+            cy = sum(x[4].y for x in dirs) / float(len(dirs))
+            cz = sum(x[4].z for x in dirs) / float(len(dirs))
+            off = math.sqrt((cx - loc.x) ** 2 + (cy - loc.y) ** 2)
+            if off > CENTER_WARN:
+                w(u"  !! actor 位置和子段中心差 %.0f cm —— 这个路口大概是手摆的，"
+                  u"灯按子段中心 (%.0f, %.0f) 摆" % (off, cx, cy))
+            loc = unreal.Vector(cx, cy, cz)
+        elif CENTER_FROM_CHILDREN:
+            w(u"  !! 一个 Inter_ 段都没找到（%.0f cm 内），灯只能按 actor 位置摆；"
+              u"这个路口也不会有灯态" % CHILD_SEARCH_RADIUS)
         # 按走向归到四个方位，同方位只留一个代表
         buckets = {}
-        for label, dx, dy, ln in dirs:
+        for label, dx, dy, ln, _p in dirs:
             yaw = math.degrees(math.atan2(dy, dx))
             key = int(round(yaw / 90.0)) % 4          # 0=+X 1=+Y 2=-X 3=-Y
             buckets.setdefault(key, []).append((label, yaw, ln))
@@ -213,21 +248,32 @@ def run():
             w(u"  ！找不到绿起始子类 %s —— 四盏灯会全用父类、全部红起始，" % GREEN_START_BP)
             w(u"    也就分不出两组。先跑 py make_light_variant.py 再跑本脚本。")
 
+        shared_placement = shared_between_lanes(loc, dirs, actors_by_label)
+        corrected, direction_warnings = normalized_directions(dirs)
+        for warning in direction_warnings:
+            w('    ！'+warning)
         for key in sorted(buckets):
             items = buckets[key]
-            travel_yaw = items[0][1]
+            travel_yaw = corrected[key]['travel_yaw']
             # 车沿 travel_yaw 开过来，灯要面朝来车 → 转 180 度
             light_yaw = travel_yaw + 180.0 + MODEL_YAW_OFFSET
             rad = math.radians(travel_yaw)
             # 往来车方向退 CENTER_RADIUS，站在该方向那一侧
             px = loc.x - math.cos(rad) * CENTER_RADIUS
             py = loc.y - math.sin(rad) * CENTER_RADIUS
+            placement = shared_placement
+            if placement is None:
+                w('    ！方位%d 找不到两条线之间的安全灯位，跳过，避免压线' % key)
+                continue
+            point, lane_a, lane_b, clearance = placement
+            px, py = point.x, point.y
+            w('    灯位在 %s 与 %s 中间，距最近交通线 %.0f cm' % (lane_a,lane_b,clearance))
             # Rotator 的构造参数是 (roll, pitch, yaw)，和 C++ 的 FRotator 顺序不同。
             # 填错位置会把 yaw 当成 pitch，灯直接躺下——CLAUDE.md 记过这个坑。
             rot = unreal.Rotator(0.0, 0.0, light_yaw)
             # 起始色由类决定：先放行那组用绿起始子类，另一组用父类（红起始）。
             try:
-                group = int(items[0][2])
+                group = corrected[key]['group']
             except Exception:
                 group = 0
             use_green = (group % 2) == (GREEN_FIRST_GROUP % 2)
@@ -238,7 +284,7 @@ def run():
                 w(u"    ！方位%d 生成失败" % key)
                 continue
             a.set_actor_label(u"TrafficLight_%s_%d" % (inter.get_actor_label()[-6:], key))
-            a.tags = [TAG, u"%s:%s" % (TAG, items[0][2])]
+            a.tags = [TAG, u"%s:%s" % (TAG, group)]
             placed += 1
             w(u"    方位%d 摆好：组%s 起始%s  yaw %.0f（行进 %.0f + 180 + 偏移 %.0f）"
               % (key, items[0][2], u"绿" if (use_green and green_class is not None)
@@ -256,14 +302,13 @@ def run():
     w(u"     重点看 light_number：如果它随时间在 0/1 之间跳，那它就是「当前哪个相位绿灯」。")
 
 
-try:
-    run()
-except Exception:
-    err = traceback.format_exc()
-    unreal.log_error("[lights] fail:" + chr(10) + err)
-    lines.append(u"")
-    lines.append(u"！中途异常：")
-    lines.append(err)
-finally:
-    flush()
-    unreal.log("[lights] 写入 %s" % OUT)
+if __name__ == '__main__':
+    try:
+        run()
+    except Exception:
+        err = traceback.format_exc()
+        unreal.log_error("[lights] fail:" + chr(10) + err)
+        lines.append(u"！中途异常：" + err)
+    finally:
+        flush()
+        unreal.log("[lights] 写入 %s" % OUT)
