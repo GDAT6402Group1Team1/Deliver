@@ -55,6 +55,7 @@ namespace DeliveryTaskDebug
 		switch (Status)
 		{
 		case EDeliveryTaskStatus::Locked:         return TEXT("未解锁");
+		case EDeliveryTaskStatus::Offered: return TEXT("已来电未接");
 		case EDeliveryTaskStatus::AwaitingPickup: return TEXT("待取件");
 		case EDeliveryTaskStatus::InProgress:     return TEXT("进行中");
 		case EDeliveryTaskStatus::Completed:      return TEXT("已完成");
@@ -102,6 +103,7 @@ namespace DeliveryTaskDebug
 
 		for (EDeliveryTaskStatus Status : {
 			EDeliveryTaskStatus::Locked,
+			EDeliveryTaskStatus::Offered,
 			EDeliveryTaskStatus::AwaitingPickup,
 			EDeliveryTaskStatus::InProgress,
 			EDeliveryTaskStatus::Completed })
@@ -215,7 +217,10 @@ namespace DeliveryTaskDebug
 
 			if (Awaiting.Num() == 0)
 			{
-				Print(TEXT("[Task] 没有待取件的任务。先看 Delivery.Task.Dump，可能全都还没解锁。"));
+				// 最常见的原因不是"没解锁"而是"电话还没接"——任务停在 Offered，
+				// 这条命令按 AwaitingPickup 找，自然找不到
+				Print(TEXT("[Task] 没有待取件的任务。状态是「已来电未接」的话先 Delivery.Phone.Answer；"
+					"都还没解锁就看 Delivery.Task.Dump。"));
 				return;
 			}
 

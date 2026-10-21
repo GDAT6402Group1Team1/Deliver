@@ -64,9 +64,10 @@ void RunDeliverySmokeStep()
 			Retry, FTimerDelegate::CreateStatic(&RunDeliverySmokeStep), 1.0f, false);
 		return;
 	}
-	if (Manager->GetTaskStatus(TaskItem->OwningTask) != EDeliveryTaskStatus::AwaitingPickup)
+	// 解锁后停在 Offered（已来电未接），接听才进 AwaitingPickup
+	if (Manager->GetTaskStatus(TaskItem->OwningTask) != EDeliveryTaskStatus::Offered)
 	{
-		UE_LOG(LogDelivery, Error, TEXT("Delivery smoke: FAIL task must begin AwaitingPickup (status=%d)"),
+		UE_LOG(LogDelivery, Error, TEXT("Delivery smoke: FAIL task must begin Offered (status=%d)"),
 			static_cast<int32>(Manager->GetTaskStatus(TaskItem->OwningTask)));
 		return;
 	}

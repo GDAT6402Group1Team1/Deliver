@@ -94,6 +94,19 @@ public:
 
 protected:
 
+	/**
+	 * 拒接/漏接的任务解锁电话，隔多久重拨（秒）。
+	 *
+	 * **这个不能去掉。** 取件现在要求"接过电话"（`CanAcquireItem` 查 `bTimerStarted`），
+	 * 而挂断会把电话移出队列——没有重拨的话，挂一次电话那个任务就永久推不动了，
+	 * 和"四个状态无失败态"的设计直接冲突。
+	 *
+	 * 只重拨 `TaskUnlocked`：催促电话是提醒、错过就错过，重拨反而烦人。
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Delivery|Phone",
+		meta=(ClampMin="1.0", Units="s"))
+	float RedialDelaySeconds = 20.f;
+
 	UPROPERTY(ReplicatedUsing=OnRep_Queue)
 	TArray<FDeliveryPhoneCall> Queue;
 
@@ -125,6 +138,14 @@ protected:
 
 	/** 服务器改状态的唯一入口，负责记时间戳和广播。 */
 	void SetCallState(EDeliveryPhoneCallState NewState, float Duration);
+
+	/** 拒接/漏接之后，若任务还没被接单就排一次重拨。 */
+	void ScheduleRedial(UDeliveryTaskDefinition* Task);
+
+	UFUNCTION()
+	void HandleRedial(UDeliveryTaskDefinition* Task);
+
+	FTimerHandle RedialTimerHandle;
 
 	/** 双端：状态或队首变了就广播一次。 */
 	void BroadcastStateIfChanged();

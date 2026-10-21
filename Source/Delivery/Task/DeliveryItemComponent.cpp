@@ -29,6 +29,11 @@ FText UDeliveryItemComponent::GetPickupBlockedReason() const
 		return NSLOCTEXT("DeliveryPickup", "Completed", "这份快递的任务已完成");
 	if (Manager->GetTaskStatus(OwningTask) == EDeliveryTaskStatus::Locked)
 		return NSLOCTEXT("DeliveryPickup", "Locked", "任务尚未解锁，请等待任务来电");
+	if (!Manager->IsTaskAccepted(OwningTask))
+	{
+		return NSLOCTEXT("DeliveryPickup", "NotAnswered", "先接电话才能接这一单");
+	}
+
 	return NSLOCTEXT("DeliveryPickup", "OtherTask", "请先完成正在进行的快递任务");
 }
 

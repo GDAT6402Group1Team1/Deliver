@@ -175,6 +175,13 @@ FText UDeliveryPickupPointComponent::GetBlockedReason() const
 			return FText::GetEmpty();
 		}
 
+		// 先分"没接电话"再分"有别的单"：这两种都会让 CanAcquireItem 返回 false，
+		// 但玩家该做的事完全不同（去接电话 vs 先送完手上这单）
+		if (!Manager->IsTaskAccepted(Task))
+		{
+			return NSLOCTEXT("DeliveryPickup", "NotAnswered", "先接电话才能接这一单");
+		}
+
 		return NSLOCTEXT("DeliveryPickup", "OtherTask", "请先完成正在进行的快递任务");
 	}
 

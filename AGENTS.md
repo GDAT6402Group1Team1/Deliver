@@ -139,6 +139,9 @@
 
 - 任务状态全局共享（多人下解锁/来电/接取/计时/完成对所有玩家是同一份数据），权威在 GameState 上的 [DeliveryTaskManagerComponent](Source/Delivery/Task/DeliveryTaskManagerComponent.h)；只有"当前追踪哪个任务"是每玩家各自的，在 PlayerState 上的 [DeliveryTaskTrackerComponent](Source/Delivery/Task/DeliveryTaskTrackerComponent.h)。
 - 计时在**接通任务解锁电话**时开始，用服务器时间戳相减，不是 Tick 累加；通话、前往取餐、掉落、换手、进车后备箱、持有者晕倒都影响不到计时。漏接后直接取餐会以取餐时刻兜底，避免任务锁死。
+- **取件要求"按过接听"**，不是"电话响过"：`CanAcquireItem` 查 `bTimerStarted`（只由 `AnswerCurrentCall` 置上），`IsTaskAccepted()` 是它的公开查询。早先允许漏接直接取件、由 `TryAcquireItem` 以取件时刻兜底开始计时，结果是电话沦为纯播片——不接也照样做任务，接听这个动作没有任何后果。那条兜底已删。
+- **挂断必须配重拨，这两件不能拆开做。** 拒接/漏接会把电话**移出队列且永不重拨**，所以只加"必须接听"这道门槛、不补重拨的话，挂一次电话那个任务就永久推不动，和"四个状态无失败态"直接冲突。现在 `DeliveryPhoneCallQueueComponent::ScheduleRedial`在 `RedialDelaySeconds`（默认 20 秒）后重拨，重拨前复核"状态仍是待取件且仍未接单"，否则不打；**只重拨 `TaskUnlocked`**，催促电话错过就错过、重拨只会烦人。
+- 取件被拦时要分得出原因：「先接电话才能接这一单」和「请先完成正在进行的快递任务」都会让 `CanAcquireItem` 返回 false，但玩家该做的事完全不同（去接电话 vs 先送完手上这单）。
 - 全世界同时只有一个已接单并计时的任务：后续任务解锁来电会在 PhoneQueue 里暂停，当前任务的超时催促电话可插队；`CanAcquireItem()` 同时阻止拿起其他任务的快递。
 - 四个状态、无失败态：`Locked / AwaitingPickup / InProgress / Completed`。超时只打一次催促电话 + 降低奖励倍率，任务不会结束，倒计时转正计时。
 - 电话队列 [DeliveryPhoneCallQueueComponent](Source/Delivery/Task/DeliveryPhoneCallQueueComponent.h) 由服务器按每通电话配置的时长推进，不等客户端播完回报（队列是全局共享的）。

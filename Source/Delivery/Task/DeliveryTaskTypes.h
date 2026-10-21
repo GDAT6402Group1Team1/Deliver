@@ -12,14 +12,27 @@ class USoundBase;
 
 /**
  * 任务状态。没有失败态：超时只影响奖励倍率，不会结束任务。
- * 流转：Locked →(解锁条件满足) AwaitingPickup →(有人拿到快递) InProgress →(交付) Completed
+ * 流转：Locked →(解锁条件满足，来电入队) Offered →(**玩家按接听**) AwaitingPickup
+ *       →(有人拿到快递) InProgress →(交付) Completed
+ *
+ * 拒接/漏接**不改状态**，留在 Offered；电话队列会在 RedialDelaySeconds 后重拨。
  */
 UENUM(BlueprintType)
 enum class EDeliveryTaskStatus : uint8
 {
 	/** 解锁条件未满足，手机里看不到。 */
 	Locked UMETA(DisplayName="未解锁"),
-	/** 已解锁、来电已入队但还没人取件；接听后会在此状态开始计时。 */
+	/**
+	 * 解锁条件满足、电话已入队，**但玩家还没按接听**。
+	 *
+	 * 这一档必须是独立状态，不能靠「AwaitingPickup + 一个 bool」表示：
+	 * 全项目有十几处按状态分支（任务条、脚边箭头、罗盘图钉、建筑高亮、取货点、
+	 * 调试命令），只要有一处忘了额外判那个 bool，表现就是"电话还没接，
+	 * 取货引导就全亮了"——而这正是之前那一版的毛病。状态自己说清楚，
+	 * 这类漏判在结构上就不可能发生。
+	 */
+	Offered UMETA(DisplayName="已来电未接"),
+	/** 已接听、计时已开始，等着去取件。 */
 	AwaitingPickup UMETA(DisplayName="待取件"),
 	/** 有人取过件，全局计时中。同一时间全世界只允许一个。 */
 	InProgress UMETA(DisplayName="进行中"),

@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
+#include "Delivery.h"
 #include "Task/DeliveryTaskDefinition.h"
 #include "Task/DeliveryTaskManagerComponent.h"
 #include "TimerManager.h"
@@ -223,6 +224,13 @@ void UDeliveryPhoneCallQueueComponent::FinishCurrentCall(bool bMissed)
 	if (bMissed)
 	{
 		OnCallMissed.Broadcast(Finished);
+
+		// 拒接/漏接的解锁电话要重拨。取件现在要求接过电话，不重拨的话
+		// 挂一次就把这个任务永久锁死
+		if (Finished.CallType == EDeliveryPhoneCallType::TaskUnlocked)
+		{
+			ScheduleRedial(Finished.Task);
+		}
 	}
 
 	SetCallState(EDeliveryPhoneCallState::Idle, 0.f);
@@ -265,4 +273,49 @@ void UDeliveryPhoneCallQueueComponent::OnRep_Queue()
 void UDeliveryPhoneCallQueueComponent::OnRep_CallState()
 {
 	BroadcastStateIfChanged();
+}
+
+void UDeliveryPhoneCallQueueComponent::ScheduleRedial(UDeliveryTaskDefinition* Task)
+{
+	UWorld* World = GetWorld();
+	if (!Task || !World || RedialDelaySeconds <= 0.f)
+	{
+		return;
+	}
+
+	// 只用一个 handle：同一时刻最多排一通重拨就够，后面的解锁电话本来就在队列里等。
+	// 每次重排都先 Clear——三处共用一个变量却只 Set 不 Clear 的话，旧 handle
+	// 会被新值冲掉、旧计时器还在跑（交通车那边踩过一模一样的坑）
+	World->GetTimerManager().ClearTimer(RedialTimerHandle);
+	World->GetTimerManager().SetTimer(RedialTimerHandle,
+		FTimerDelegate::CreateUObject(this, &UDeliveryPhoneCallQueueComponent::HandleRedial, Task),
+		RedialDelaySeconds, false);
+
+	UE_LOG(LogDelivery, Log, TEXT("[电话] %s 被拒接/漏接，%.0f 秒后重拨"),
+		*Task->TaskId.ToString(), RedialDelaySeconds);
+}
+
+void UDeliveryPhoneCallQueueComponent::HandleRedial(UDeliveryTaskDefinition* Task)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !Task)
+	{
+		return;
+	}
+
+	const UDeliveryTaskManagerComponent* Manager =
+		GetOwner()->FindComponentByClass<UDeliveryTaskManagerComponent>();
+	if (!Manager)
+	{
+		return;
+	}
+
+	// 这段时间里玩家可能已经从别的途径接了单、或者任务已经完成。
+	// 判据用 CanAcquireItem 的那一半——状态还是待取件、且还没接单
+	// 还没接听的任务停在 Offered。接了（AwaitingPickup）或者已经做掉了就别再打
+	if (Manager->GetTaskStatus(Task) != EDeliveryTaskStatus::Offered)
+	{
+		return;
+	}
+
+	EnqueueCall(Task, EDeliveryPhoneCallType::TaskUnlocked);
 }
