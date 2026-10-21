@@ -29,20 +29,28 @@ int32 UDeliveryGroundArrowWidget::NativePaint(const FPaintArgs& Args, const FGeo
 		OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
 	const FVector2D Size = AllottedGeometry.GetLocalSize();
 	const auto Point = [&Size](float X, float Y) { return FVector2D(X * Size.X, Y * Size.Y); };
-	const TArray<FVector2D> Head = {Point(.2f, .45f), Point(.5f, .15f), Point(.8f, .45f)};
-	const TArray<FVector2D> Shaft = {Point(.5f, .18f), Point(.5f, .85f)};
-	// Dark border keeps the yellow arrow legible on both bright roads and grass.
-	for (int32 Pass = 0; Pass < 2; ++Pass)
+	// Two upward chevrons echo the reference's >> shape once the widget faces the target.
+	const TArray<TArray<FVector2D>> Chevrons = {
+		{Point(.23f, .38f), Point(.5f, .13f), Point(.77f, .38f)},
+		{Point(.23f, .85f), Point(.5f, .60f), Point(.77f, .85f)}
+	};
+	// A dark edge and warm inner rim keep the yellow readable on roads and grass.
+	const FLinearColor Colors[] = {
+		FLinearColor(.16f, .075f, .005f, 1.f),
+		FLinearColor(.83f, .43f, .015f, 1.f),
+		FLinearColor(1.f, .86f, .19f, 1.f)
+	};
+	const float Widths[] = {.245f, .19f, .145f};
+	for (int32 Pass = 0; Pass < 3; ++Pass)
 	{
-		const FLinearColor Color = Pass == 0 ? FLinearColor(.025f, .025f, .015f, 1.f)
-			: FLinearColor(1.f, .78f, .035f, 1.f);
-		const float Thickness = Size.X * (Pass == 0 ? .16f : .10f);
-		FSlateDrawElement::MakeLines(OutDrawElements, BaseLayer + 1 + Pass,
-			AllottedGeometry.ToPaintGeometry(), Shaft, ESlateDrawEffect::None, Color, true, Thickness);
-		FSlateDrawElement::MakeLines(OutDrawElements, BaseLayer + 1 + Pass,
-			AllottedGeometry.ToPaintGeometry(), Head, ESlateDrawEffect::None, Color, true, Thickness);
+		for (const TArray<FVector2D>& Chevron : Chevrons)
+		{
+			FSlateDrawElement::MakeLines(OutDrawElements, BaseLayer + 1 + Pass,
+				AllottedGeometry.ToPaintGeometry(), Chevron, ESlateDrawEffect::None,
+				Colors[Pass], true, Size.X * Widths[Pass]);
+		}
 	}
-	return BaseLayer + 2;
+	return BaseLayer + 3;
 }
 
 UDeliveryGroundArrowComponent::UDeliveryGroundArrowComponent()

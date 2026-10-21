@@ -18,6 +18,7 @@
 里那几条路的旧 actor，不会误删其它路已经生成好的车道。
 """
 
+import re
 import traceback
 
 import unreal
@@ -49,9 +50,27 @@ LANE_BP = "/Game/PS2DEM/BP_TrafficLine1"
 CHILD_BP = "/Game/PS2DEM/BP_TrafficLine1_IntersectionChild"
 TAG_PREFIX = "ClaudeGenLane"   # 实际 tag = "ClaudeGenLane:<路名>"，按路独立，互不误删
 
+# **道路样条按大纲文件夹找，不按类名找**（2026-10-21 改）。
+# 原来写的是 `get_class().get_name() == "BP_PS2DEMSplineActor_v3_C"`，
+# 而队友把 landscape spline 逆向同步成蓝图 spline actor 之后
+# （348e00b），道路变成了 45 个**裸 AActor**（类名就是 "Actor"）
+# 各带一个 USplineComponent，那条类名判断只剩两条河能匹配。
+# 实测后果：报告写「关卡道路样条共 2 条、合计 0 个 actor」——
+# **一条车道都没生成，而且不报错**，只有去读报告才看得出来。
+# 按类名找在这里本来就不可靠（裸 Actor 关卡里一大堆），
+# 文件夹才是队友维护的那个事实。
+ROAD_FOLDERS = ["PS2DEM/Splines/MainRoad", "PS2DEM/Splines/BranchRoad"]
+SKIP_PART_SEGMENTS = True   # 跳过 _PartNN 分段，只认 merge_part_roads.py 合出来的
+                            # 「<基路名>_Merged」。两边都收会把同一条路铺两遍。
+_skipped_parts = []         # 被跳过的分段，报告里点名
+# 顺带一个好处：河不在这两个文件夹里，于是**压根不进 all_splines**，
+# 既不会被铺车道、也不会参与路口判定，所以下面 EXCLUDE_ROADS /
+# NO_JUNCTION_WITH 里那两条河现在是空操作（留着无害，换图可能还用得上）。
+
 # 主次路按**大纲文件夹**判定，不靠实测宽度猜——
 # 实测会被路口、裙边、压平的地形干扰（形状13/39 都被测成上限 1000），
 # 而文件夹是人工整理的，确定且可控。
+# 新路径 PS2DEM/Splines/MainRoad 天然命中这个子串，这一条不用改。
 MAIN_ROAD_FOLDER = "MainRoad"
 MAIN_ROAD_WIDTH, MAIN_ROAD_LANES = 1800.0, 4     # 偏移 +-225 / +-675
 SIDE_ROAD_WIDTH, SIDE_ROAD_LANES = 1080.0, 2
@@ -111,7 +130,20 @@ INTER_HALF_EXTRA = 300.0 # 路口段在算出来的半长上再往两头各加�
                          # 有可能压到车道 Box（gen_intersections 的报告里会写明）。
 BREAK_HALF_FALLBACK = 900.0   # 认不出交叉路时的兜底
 DETECT_STEP = 250.0
-XY_CROSS = 200.0         # 最近 XY 小于此值才算真的相交（实测真路口都 <120）
+XY_CROSS = 400.0         # 最近 XY 小于此值才算真的相交。
+                         # **200 → 400（2026-10-21）**，依据是实测、不是手感：
+                         # 队友把道路从 形状xx 换成 landscape spline 同步出来的
+                         # MainRoad_*/BranchRoad_* 之后，新样条**在路口处彼此差
+                         # 244~360cm 没碰上**（旧样条真路口都 <120，所以旧值 200 够用）。
+                         # 拿改路前的 31 个路口当标答对标，200 时判出 27/31，
+                         # 漏掉的 4 个缺口实测 244 / 272 / 351 / 360。
+                         # 选 400 两头都有余量：往下盖住最大的 360（余 40），
+                         # 往上低于**最小的兄弟段缺口 629**（余 229）——
+                         # 兄弟段是同一条路被切开的两段（_PartNN），
+                         # 阈值一旦超过它们，每个切点都会多出一个假路口。
+                         # 距离分布是连续的（…185、199、200、210、244…342、351…），
+                         # 没有干净的数值空隙可卡，所以**不能再往上随手调**；
+                         # 真要调先跑 diag_junction_miss.py 重新量这两头。
 # 强制路口：某个**具体位置**上，就算两条路没真正相交也当成路口（T 形接头）。
 # 队友在路口处切断长样条、再手工补路之后，两条路可能只是"凑得很近"，
 # XY_CROSS=200 够不着。
@@ -122,6 +154,37 @@ XY_CROSS = 200.0         # 最近 XY 小于此值才算真的相交（实测真�
 FORCE_JUNCTIONS = [
     ("形状 13", "形状 1", 3094.0, -17726.0, 3000.0, 1500.0),
 ]
+# 运行时自动追加的强制路口（见 build_part_junctions）。手写那条保持不变。
+AUTO_FORCE_JUNCTIONS = []
+
+# ---- 被切成 _PartNN 的路，在切点处自动补强制路口 ----
+# 队友把 5 条支路在路口处切成了多段（R024/R035/R036/R038/R039）。
+# **名字带 _PartNN 就意味着这条路在那儿被切开了，而被切开就意味着那儿有路口**——
+# 这是队友的命名约定给出的结构事实，比靠距离阈值猜可靠得多。
+#
+# 为什么不直接把 XY_CROSS 调大：实测横穿路到被切两段端点的距离最大 1107cm
+# （R024_Part01 × BranchRoad_R023），要盖住就得把全局阈值放到 1200；
+# 而不同逻辑路之间的最近接近距离分布是**连续的**
+# （…185、199、200、210、244…342、351…），没有空隙可卡，
+# 一刀放到 1200 必然把并行的两条路判成路口，表现是
+# 「车在直路中间莫名停下等红灯」，而且极难往这个方向查。
+# 所以只在**切点这个具体位置**放宽，别的地方仍按 XY_CROSS。
+PART_JUNCTION_NEAR = 1200.0    # 横穿路离切点中心多近才认为「这条路穿过这个切点」
+                               # 实测 7 个真切点里横穿路离中点 4~630cm，
+                               # 1200 足够宽；再大会把路口旁边平行经过的路也算进来。
+PART_JUNCTION_RADIUS = 2500.0  # 规则生效半径（采样点离切点中心多近才放宽）
+PART_JUNCTION_LIMIT = 1300.0   # 放宽后的阈值。实测最大需要 1107，留 ~200 余量。
+PART_INTER_HALF = 200.0        # **路口落在被切段的端点上时，路口段用这个短半长。**
+                               # 默认半长按横穿路的半宽算（inter_half_for），
+                               # 那个算式假设「路从路口中间穿过去」。
+                               # 而被切开的段是**停在路口外面**的，端点到路口中心
+                               # 实测还有 599~1107cm——这段距离本身已经在路口里了，
+                               # 再按整条横穿路的半宽给一次等于重复计一遍：
+                               # 每段 1150 + 中间物理缺口 1283~1677 + 另一段 1150
+                               # ≈ 3600cm 的路口，而横穿的主路只有 1800 宽。
+                               # 短半长让路口段贴着段的端点收尾，车道也能跑到端点附近。
+PART_END_EPS = 400.0           # 路口中心离段的首/尾多近算「落在端点上」。
+                               # 实测被切段的路口都正好判在端点处（最近点就是端点）。
 # 生效半径 = 以那个世界坐标为圆心多大范围内放宽；半径外一律回到 XY_CROSS。
 # 坐标取自改路之前 Intersection_28 的中心，队友改完路可能挪了位——
 # 所以下面无论成不成都会把该范围内的实测最近距离打进报告，一轮就能校准。
@@ -143,6 +206,20 @@ INTER_END_EXTEND = 0.0   # 路口段只延**行驶方向的末端**，起点不�
 
 BRIDGE_INTERSECTIONS = True
 BRIDGE_DEV_WARN = 80.0   # 桥接高度偏离路口内实测路面超过这么多就在报告里点名
+BRIDGE_SURFACE_BLEND = 0.5
+# **路口段高度：桥接线往实测路面靠多少**（0 = 纯桥接，1 = 完全贴地）。
+# 原来是探到路面也直接丢掉、无条件用桥接高度，代价写在 BRIDGE_INTERSECTIONS
+# 那条注释里：「路口里车可能浮起/陷入」。实测确实浮了——合并路的路口段
+# 平均高差 +40 / −62、最大 76cm（diag_lane_fit 报的），而且全都在
+# BRIDGE_DEV_WARN=80 的报警线以下，所以之前一声不响。
+# 0.5 把浮/陷砍掉一半，同时保留一半的桥接平滑度。
+# **为什么不设 1.0**：路口处两条路的路面是叠着的（实测差约 200cm），
+# 完全贴地会让车道在层与层之间跳，那正是桥接要解决的问题——
+# 文档记过「只取最上面那层会在接缝出现 250cm 台阶」。
+BRIDGE_SURFACE_MAX_DIFF = 120.0
+# 只有桥接线和实测路面差在这以内才往回靠。差得更多说明**那个路口两条路的
+# 路面本来就对不上**（关卡几何问题，文档明说桥接治不了），
+# 这时硬贴会把车道拽到另一层路面上去，比浮着更糟。
 # 路口段的高度不去路口里实测，直接由两侧车道段的端点桥接出来。
 #
 # 理由：路口内部的路面本来就是一团乱——两条路的面叠着（实测差约 200cm）、
@@ -279,13 +356,25 @@ def horiz_right(sp, d):
     return r.x / h, r.y / h
 
 
-def inter_half_for(cross_name, actor_by_label):
+def inter_half_for(cross_name, actor_by_label, road_label=None,
+                   at_dist=None, total=None):
     """按交叉道路的宽度决定这个路口的样条半长（同时也是 Box 的落点）。
 
     Box 在 actor 原点 = 样条第一个点，必须落在两路重叠区内，
     而重叠区沿本路方向的半宽 = 交叉路的半宽。
     合并路口（名字里有 '+'）取其中最窄的那条。
+
+    **例外：被切成 _PartNN 的段，路口落在它端点上时用 PART_INTER_HALF。**
+    那个「按横穿路半宽」的算式假设路从路口中间穿过去，而被切开的段停在
+    路口外面，端点到路口中心那段距离本身已经在路口里了（见 PART_INTER_HALF）。
+    判据是「路口中心落在本段首或尾 PART_END_EPS 以内」——
+    被切段的路口实测都正好判在端点处，而正常穿过的路口落在样条中段。
     """
+    if (road_label is not None and at_dist is not None and total is not None
+            and part_index(road_label) is not None):
+        if at_dist <= PART_END_EPS or (total - at_dist) <= PART_END_EPS:
+            return PART_INTER_HALF
+
     best = None
     for nm in str(cross_name).split("+"):
         a = actor_by_label.get(nm.strip())
@@ -297,6 +386,56 @@ def inter_half_for(cross_name, actor_by_label):
     if best is None:
         return BREAK_HALF_FALLBACK - SEG_EXTEND - TARGET_GAP + INTER_HALF_EXTRA
     return max(150.0, best) + INTER_HALF_EXTRA
+
+
+def base_road_name(label):
+    """剥掉 _PartNN 后缀，得到逻辑路名。
+
+    队友把几条路在路口处切成了多段（实测 5 条：R024/R035/R036/R038/R039，
+    形如 BranchRoad_R035_Part01 / _Part02）。这些段**是同一条路**，
+    彼此之间不该算路口——否则每个切点都会多出一个假路口，
+    车开到那儿会以为要选路。
+
+    现在这条排除其实是**安全网而不是必需品**：实测兄弟段之间的缺口
+    最小 629cm，而 XY_CROSS 是 400，本来就判不成路口。
+    但它让「以后谁想再调大 XY_CROSS」这件事变安全——
+    一旦超过 629 就会在每个切点造出假路口，而那种错误的表现是
+    「车在直路中间莫名停下等红灯」，极难往这个方向想。
+    """
+    return re.sub(r"_[Pp]art\d+$", "", str(label))
+
+
+def road_spline_of(actor):
+    """是道路样条就返回它的 SplineComponent，不是就返回 None。
+
+    判据是**大纲文件夹**（ROAD_FOLDERS）+ 身上有 USplineComponent，
+    不看类名——理由见文件顶部 ROAD_FOLDERS 的注释。
+    """
+    try:
+        folder = str(actor.get_folder_path()).replace("\\", "/").lower()
+    except Exception:
+        return None
+    if not any(f.lower() in folder for f in ROAD_FOLDERS):
+        return None
+
+    # **跳过带 _PartNN 的分段**：它们已经由 merge_part_roads.py 合并成
+    # 「<基路名>_Merged」了，两边都收就会把同一条路铺两遍车道
+    # （两套车道几乎重叠，车会随机选到其中一套，而且路口会被重复判定）。
+    # 判据是名字——队友把一条路切开时就是用这个后缀标记的。
+    # 没跑过合并脚本的话这里会把那 5 条路整条跳掉、报告里车道数明显少，
+    # 所以下面会专门点名提醒。
+    try:
+        label = actor.get_actor_label()
+    except Exception:
+        label = ""
+    if SKIP_PART_SEGMENTS and part_index(label) is not None:
+        _skipped_parts.append(label)
+        return None
+
+    try:
+        return actor.get_component_by_class(unreal.SplineComponent)
+    except Exception:
+        return None
 
 
 def classify(actor):
@@ -320,12 +459,94 @@ def forced_entry(a_name, b_name, p):
     路名和位置都要对上——只对路名的话，长路上任何一处靠近都会被放行。
     """
     key = frozenset((str(a_name).strip(), str(b_name).strip()))
-    for ra, rb, fx, fy, radius, lim in FORCE_JUNCTIONS:
+    # 手写的 + 切点处自动算出来的，查同一套逻辑
+    for ra, rb, fx, fy, radius, lim in list(FORCE_JUNCTIONS) + list(AUTO_FORCE_JUNCTIONS):
         if frozenset((ra.strip(), rb.strip())) != key:
             continue
         if ((p.x - fx) ** 2 + (p.y - fy) ** 2) ** 0.5 <= radius:
             return (ra, rb, fx, fy, radius, lim)
     return None
+
+
+def part_index(label):
+    """取 _PartNN 里的那个编号；不是分段的返回 None。"""
+    m = re.search(r"_[Pp]art(\d+)$", str(label))
+    return int(m.group(1)) if m else None
+
+
+def build_part_junctions(all_splines):
+    """为被切成 _PartNN 的路，在切点处自动生成强制路口规则。
+
+    只配**相邻编号**的两段（Part01-Part02、Part02-Part03）。
+    不按距离判相邻：编号就在名字里，是确定的。
+    按距离判会出错——实测 R036_Part01 和 _Part03 的两端相距 24915cm，
+    它们的「中点」附近恰好有别的路经过，当成切点就会在空地上造一个假路口。
+
+    切点位置取两段**最近的那一对端点**的中点。横穿路取离这个中点
+    PART_JUNCTION_NEAR 以内的别的逻辑路——实测 7 个真切点里
+    横穿路离中点只有 4~630cm，所以这个判据很稳。
+    """
+    del AUTO_FORCE_JUNCTIONS[:]
+    by_base = {}
+    for label, sp in all_splines:
+        by_base.setdefault(base_road_name(label), []).append((label, sp))
+
+    made = 0
+    for base in sorted(by_base):
+        parts = [(part_index(l), l, sp) for l, sp in by_base[base]]
+        parts = [x for x in parts if x[0] is not None]
+        if len(parts) < 2:
+            continue
+        parts.sort()
+        for k in range(len(parts) - 1):
+            ia, la, spa = parts[k]
+            ib, lb, spb = parts[k + 1]
+            # 最近的那一对端点 = 切点
+            la_len = spa.get_spline_length()
+            lb_len = spb.get_spline_length()
+            ea = [spa.get_location_at_distance_along_spline(0.0, WS),
+                  spa.get_location_at_distance_along_spline(la_len, WS)]
+            eb = [spb.get_location_at_distance_along_spline(0.0, WS),
+                  spb.get_location_at_distance_along_spline(lb_len, WS)]
+            best = None
+            for pa in ea:
+                for pb in eb:
+                    d = ((pa.x - pb.x) ** 2 + (pa.y - pb.y) ** 2) ** 0.5
+                    if best is None or d < best[0]:
+                        best = (d, pa, pb)
+            gap, pa, pb = best
+            mx, my = (pa.x + pb.x) / 2.0, (pa.y + pb.y) / 2.0
+
+            # 谁穿过这个切点
+            crossing = []
+            for name, osp in all_splines:
+                if base_road_name(name) == base:
+                    continue
+                q = osp.find_location_closest_to_world_location(
+                    unreal.Vector(mx, my, (pa.z + pb.z) / 2.0), WS)
+                dmid = ((q.x - mx) ** 2 + (q.y - my) ** 2) ** 0.5
+                if dmid <= PART_JUNCTION_NEAR:
+                    crossing.append((dmid, name))
+            crossing.sort()
+
+            if not crossing:
+                # 切点附近没有别的路 = 这不是路口，是一条路被切成两段。
+                # 加路口是错的（车会在直路中间停下等一个不存在的灯），
+                # 但车道也会在这儿断开（缺口远大于 TARGET_GAP），所以要报出来。
+                w("   !! %s ←→ %s 切点 (%.0f, %.0f) 缺口 %.0f 附近没有横穿路——"
+                  "不是路口，车道会在这儿断开"
+                  % (la, lb, mx, my, gap))
+                continue
+
+            for dmid, other in crossing:
+                for me in (la, lb):
+                    AUTO_FORCE_JUNCTIONS.append(
+                        (me, other, mx, my, PART_JUNCTION_RADIUS, PART_JUNCTION_LIMIT))
+                    made += 1
+                w("   切点强制路口：%s ←→ %s 处的 %s（离切点 %.0f cm，缺口 %.0f）"
+                  % (la, lb, other, dmid, gap))
+    w("按 _PartNN 切点自动生成强制路口规则 %d 条" % made)
+    return made
 
 
 def find_intersections(tsp, roads, total, self_name=""):
@@ -340,6 +561,9 @@ def find_intersections(tsp, roads, total, self_name=""):
     while d <= total:
         p = tsp.get_location_at_distance_along_spline(d, WS)
         for name, osp in roads:
+            # 同一条路被切开的两段之间不算路口（见 base_road_name）
+            if self_name and base_road_name(name) == base_road_name(self_name):
+                continue
             q = osp.find_location_closest_to_world_location(p, WS)
             dxy = ((q.x - p.x) ** 2 + (q.y - p.y) ** 2) ** 0.5
             ent = forced_entry(self_name, name, p)
@@ -593,10 +817,21 @@ def build_points(world, tsp, offset, d_from, d_to, prof=None, z_fn=None):
         p, ok, who = lane_point(world, tsp, offset, dd, prof)
         if z_fn is not None:
             zb = z_fn(dd)
-            if ok:      # 实测到了路面，记下桥接线偏离它多远
+            if ok:      # 实测到了路面：按 BRIDGE_SURFACE_BLEND 往它靠一部分
+                diff = p.z - zb
+                if (BRIDGE_SURFACE_BLEND > 0.0
+                        and abs(diff) <= BRIDGE_SURFACE_MAX_DIFF):
+                    zb = zb + diff * BRIDGE_SURFACE_BLEND
+                    who_tag = "bridge+surf"
+                else:
+                    who_tag = "bridge"
+                # 记**混合之后**还差多少——那才是车实际会浮起/陷入的量，
+                # 记原始偏差会让报告比实际严重一倍。
                 dev = max(dev, abs(p.z - zb))
+            else:
+                who_tag = "bridge"
             p = unreal.Vector(p.x, p.y, zb)
-            ok, who = True, "bridge"
+            ok, who = True, who_tag
         pts.append(p)
         oks.append(ok)
         whos.append(who)
@@ -765,14 +1000,17 @@ def process_road(eas, world, all_splines, road_label, tag, road_actor,
     inters = find_intersections(tsp, roads, total, road_label)
     w("检测到路口 %d 处（XY<%.0f 且 Z差<%.0f，相距<%.0f 的已合并）"
       % (len(inters), XY_CROSS, Z_CROSS, MERGE_DIST))
-    ihalf_preview = [inter_half_for(nm, actor_by_label) for _c, nm in inters]
+    ihalf_preview = [inter_half_for(nm, actor_by_label, road_label, c, total)
+                     for c, nm in inters]
     for k, (c, name) in enumerate(inters):
         w("   沿线 %8.0f   %-18s 路口段半长 %.0f  截断半径 %.0f"
           % (c, name, ihalf_preview[k],
              ihalf_preview[k] + SEG_EXTEND + TARGET_GAP))
 
     # 每个路口各自的 INTER_HALF / BREAK_HALF
-    ihalf = [inter_half_for(nm, actor_by_label) for _c, nm in inters]
+    # 路名和位置都要传：被切段在端点处的路口要用短半长（见 inter_half_for）
+    ihalf = [inter_half_for(nm, actor_by_label, road_label, c, total)
+             for c, nm in inters]
     bhalf = [h + SEG_EXTEND + TARGET_GAP for h in ihalf]
 
     segs = []
@@ -962,12 +1200,32 @@ def run():
     all_splines = []
     actor_by_label = {}
     for a in actors:
-        if a.get_class().get_name() == "BP_PS2DEMSplineActor_v3_C":
-            sp = a.get_component_by_class(unreal.SplineComponent)
-            if sp:
-                all_splines.append((a.get_actor_label(), sp))
-                actor_by_label[a.get_actor_label()] = a
-    w("关卡道路样条共 %d 条" % len(all_splines))
+        sp = road_spline_of(a)
+        if sp:
+            all_splines.append((a.get_actor_label(), sp))
+            actor_by_label[a.get_actor_label()] = a
+    w("关卡道路样条共 %d 条（按文件夹 %s 找）"
+      % (len(all_splines), "、".join(ROAD_FOLDERS)))
+    if _skipped_parts:
+        bases = sorted(set(base_road_name(x) for x in _skipped_parts))
+        merged = sorted(lbl for lbl, _sp in all_splines if lbl.endswith("_Merged"))
+        w("跳过 _PartNN 分段 %d 个（属于 %d 条逻辑路）：%s"
+          % (len(_skipped_parts), len(bases), "、".join(bases)))
+        w("已收到的合并产物 %d 个：%s" % (len(merged), "、".join(merged) or "无"))
+        if len(merged) < len(bases):
+            w("  !! 合并产物比被切的逻辑路少 —— **先跑 merge_part_roads.py**，")
+            w("     否则这几条路整条不会有车道（而且不会报错，只是报告里少几条）。")
+    # 一条都没找到时直接说清楚，别让它静默生成 0 个 actor——
+    # 上一次就是这么白跑一轮的（报告里只有一行「合计 0 个」）。
+    if not all_splines:
+        w("")
+        w("**一条道路样条都没找到，后面什么都不会生成。**")
+        w("去 Outliner 确认道路样条在哪个文件夹下，改 ROAD_FOLDERS；")
+        w("或者跑 find_road_splines.py 看所有带样条的 actor 都在什么类/什么名下。")
+
+    # 被切成 _PartNN 的路，在切点处补强制路口（必须在 find_intersections 之前）
+    build_part_junctions(all_splines)
+    w("")
 
     roads = drop_excluded(resolve_roads(all_splines))
 
@@ -980,6 +1238,31 @@ def run():
             eas.destroy_actor(a)
             removed += 1
     w("清除旧 actor %d 个（仅限 %s）" % (removed, "、".join(roads)))
+
+    # **再扫一遍改名前的遗留**。上面那轮是按路名清的（tag = ClaudeGenLane:<路名>），
+    # 而路名刚从 形状xx 变成 MainRoad_R0xx / BranchRoad_R0xx，对不上——
+    # 旧车道会原地留在关卡里贴着**旧**路几何，和新车道混在一起，
+    # 而且数量相当（实测残留 262 段 + 218 路口段），车会乱跑且极难看出原因。
+    # 判据：带本脚本的 tag 前缀、但路名不在本次名单里 = 遗留。
+    # **只在 ALL_ROADS 下做**：非全铺模式时，"不在本次名单里"完全可能是
+    # 本次故意不处理的路，那样扫就是误删别人的成果。
+    if ALL_ROADS and roads:
+        prefix = TAG_PREFIX + ":"
+        keep = set("%s%s" % (prefix, r) for r in roads)
+        orphan = 0
+        for a in actors:
+            try:
+                tags = set(str(t) for t in a.tags)
+            except Exception:
+                continue          # 上一轮已经销毁的，拿 tags 会抛
+            mine = set(t for t in tags if t.startswith(prefix))
+            if mine and not (mine & keep):
+                try:
+                    eas.destroy_actor(a)
+                    orphan += 1
+                except Exception:
+                    pass
+        w("清除改名前遗留的车道 %d 个（tag 以 %s 开头、路名已不存在）" % (orphan, prefix))
     w("")
 
     stats = []

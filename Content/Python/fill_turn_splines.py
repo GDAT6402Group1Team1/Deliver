@@ -25,6 +25,7 @@ UE 里 Cross(Forward, Right) = +Z，所以 cross(进入方向, 驶出方向).z >
 """
 
 import math
+import re
 import traceback
 
 import unreal
@@ -56,6 +57,38 @@ TURN_RADIUS = 400.0      # 圆弧段的半径（cm）。
                          # 比调贝塞尔手柄的比例直观得多。
                          # 太小的话（相对路口尺寸）会被自动夹住，报告里会写明。
 USE_ARC = True           # False 则退回下面的贝塞尔手柄模型
+USE_BIARC = False          # **按用户决定关掉：全部回到单圆弧。**
+                           # 关掉 = 只用单圆弧，半径被夹到多小都照画。
+                           # 留这个开关是为了能直接对比：单圆弧出口前有一整段直线、
+                           # 车提前对正，手感确实最好，所以它仍然是主路径
+                           # （实测 328 条里 260 条走它）。
+                           # 但它**没法同时精确满足两头的方向**——圆弧只有 3 个自由度
+                           # （圆心 + 半径），而约束有 4 个（两端各一个位置 + 一个方向）。
+                           # 关掉之后那 23 条半径被夹到 2~18cm 的会保持尖角 V，
+                           # 车的探测球跟不住，表现是过路口冲出车道或接不上下一条线。
+MIN_USABLE_RADIUS = 150.0  # 单圆弧半径被夹到比这还小就改走双圆弧（biarc）。
+                           # 为什么要这条：单圆弧**两侧共用同一个切线长**
+                           # tl = R*tan(|δ|/2)，而 tl 受
+                           # lim = min(|角点-p0|, |p3-角点|) 限制——
+                           # 角点一旦贴近某个端点，lim 就塌到接近 0，
+                           # 半径被夹到 2~18cm，等于没有圆弧、就是个尖角 V，车跟不住。
+                           # 实测全图 328 条转弯里 68 条被夹小（21%），
+                           # 其中 23 条半径 <150，**而且最惨的几条是 88~97° 的
+                           # 普通直角转弯**（跨度还有 935~1444cm，空间明明够），
+                           # 所以这不是「大角度才有的问题」，是单圆弧构造本身
+                           # 对某些端点/切线组合没有解。
+MAX_TURN_DEG = 135.0       # |偏转角| 超过这个就不当转弯，写成直行副本。
+                           # 原来只在距 180° 不到 2.9°（0.05 rad）时才拒绝，
+                           # 于是 165° 这种也会被当转弯画出来。
+                           # 为什么是 135 而不是 160：**不是算法不行，是这种转弯
+                           # 现实里不存在**。离线实测 134° 的 biarc 最小半径只有
+                           # 68cm、153° 只有 33cm（虽然比单圆弧那个 8 / 4 好得多），
+                           # 对车来说仍然过紧；而 134° 本身已经是急回头弯了。
+                           # 按实测分布，这条门槛会把 120~150° 的 18 条、
+                           # 150~170° 的 7 条、170~181° 的 9 条共约 30 条
+                           # 改成直行副本——车只能直行通过那个方向，
+                           # 而不是硬画一条跟不住的急弯。
+                           # 代价是路口可选路径变少，这是取舍、不是 bug。
 
 ENTRY_HANDLE = 0.12      # 仅 USE_ARC=False 时用。进口控制点落在 p0->角点 连线上的比例
 EXIT_HANDLE = 1.00       # 出口控制点落在 p3->角点 连线上的比例（上限就是 1.0：
@@ -197,12 +230,20 @@ def mirror_straight(a, sp, main):
                       for i in range(n)])
 
 
+# 从**右往左**锚定：末尾是 I<编号>、倒数第二段是 ±四位偏移，中间全是路名。
+# 原来是 lbl.split("_") 按位置取 parts[1]/parts[2]，而那只在「路名里没有下划线」
+# 时成立——旧路名是 形状13，新路名是 BranchRoad_R011，字段整个错位，
+# int("R011") 抛 ValueError，于是 192 个路口段全被判成「名字对不上格式」
+# 跳过，报告写「路口段 0 个 / 没有可处理的路口段」，一条转弯都没生成。
+INTER_LABEL_RE = re.compile(r"^Inter_(.+)_([+-]\d+)_(I\d+)$")
+
+
 def parse_label(lbl):
-    parts = lbl.split("_")
-    if len(parts) < 4 or parts[0] != "Inter":
+    m = INTER_LABEL_RE.match(str(lbl))
+    if not m:
         return None
     try:
-        return parts[1], int(parts[2]), parts[3]
+        return m.group(1), int(m.group(2)), m.group(3)
     except ValueError:
         return None
 
@@ -263,8 +304,11 @@ def arc_path(p0, d0, p3, d3, c):
     a_in = math.atan2(d0.y, d0.x)
     a_out = math.atan2(d3.y, d3.x)
     delta = (a_out - a_in + math.pi) % (2 * math.pi) - math.pi   # 偏转角，带符号
-    if abs(delta) < 0.05 or abs(abs(delta) - math.pi) < 0.05:
+    if abs(delta) < 0.05:
         return None, "偏转角 %.0f 度，不适合圆弧" % math.degrees(delta)
+    if abs(math.degrees(delta)) > MAX_TURN_DEG:
+        # 近掉头，不是转弯（见 MAX_TURN_DEG）
+        return None, "偏转角 %.0f 度接近掉头，不生成转弯" % math.degrees(delta)
 
     # 切点不能越过两端的端点
     lim = min(((c.x - p0.x) ** 2 + (c.y - p0.y) ** 2) ** 0.5,
@@ -277,6 +321,10 @@ def arc_path(p0, d0, p3, d3, c):
         tl = lim
         r = tl / t_half
         note = "半径被夹到 %.0f" % r
+        if r < MIN_USABLE_RADIUS:
+            # 夹到这么小已经不是圆弧了，是个尖角 V，车的探测球跟不住。
+            # 怎么处理由调用方按 USE_BIARC 决定（走 biarc 还是写成直行副本）。
+            return None, "半径只能夹到 %.0f，太尖" % r
 
     ax, ay = c.x - d0.x * tl, c.y - d0.y * tl
     bx, by = c.x + d3.x * tl, c.y + d3.y * tl
@@ -307,6 +355,118 @@ def arc_path(p0, d0, p3, d3, c):
     return out, note
 
 
+def _arc_2d(ax, ay, tx, ty, bx, by, n):
+    """从 A（切线 T）到 B 的单段圆弧，返回 n 段的 (x, y) 列表（不含起点）。
+
+    圆心必在过 A 且垂直于 T 的那条直线上：O = A + N * (|chord|² / (2 * chord·N))，
+    其中 N 是 T 的左法向。chord·N 接近 0 表示 B 就在切线方向上，
+    此时半径趋于无穷，直接退化成直线——这是合法情形，不是错误。
+    """
+    cx, cy = bx - ax, by - ay
+    nx, ny = -ty, tx                       # T 的左法向
+    h = cx * nx + cy * ny
+    chord2 = cx * cx + cy * cy
+    if abs(h) < 1e-6 or chord2 < 1e-12:
+        return [(ax + cx * (float(i) / n), ay + cy * (float(i) / n))
+                for i in range(1, n + 1)]
+    rr = chord2 / (2.0 * h)                # 带符号半径：符号决定往哪边弯
+    ox, oy = ax + nx * rr, ay + ny * rr
+    r = abs(rr)
+    a0 = math.atan2(ay - oy, ax - ox)
+    a1 = math.atan2(by - oy, bx - ox)
+    # 扫过的角要和切线方向一致：rr > 0 时逆时针，< 0 时顺时针
+    sweep = a1 - a0
+    if rr > 0:
+        while sweep < 0:
+            sweep += 2 * math.pi
+    else:
+        while sweep > 0:
+            sweep -= 2 * math.pi
+    return [(ox + r * math.cos(a0 + sweep * (float(i) / n)),
+             oy + r * math.sin(a0 + sweep * (float(i) / n)))
+            for i in range(1, n + 1)]
+
+
+def biarc_path(p0, d0, p3, d3):
+    """双圆弧（biarc）：两段圆弧在中间 G1 相接。返回 (点列, 说明)。
+
+    **为什么需要它**：单圆弧（arc_path）两侧共用同一个切线长，是个过约束的
+    构造——角点贴近端点时半径只能夹到几厘米，就是个尖角 V。biarc 对
+    **任意** (起点+进入方向) → (终点+驶出方向) 都有解，不存在这种退化。
+
+    而且它同时避开了文档里记录的那两次失败：
+      * 三次贝塞尔（切线各伸 k 倍）—— k 要猜，猜大了曲线在反面鼓包、整条变 S 形
+      * 以角点为控制点的二次贝塞尔 —— 不会 S 形，但整段都在转，
+        车到终点还没转到目标朝向、扫不到下一条线
+    biarc 两头的切线**精确等于** d0 / d3，所以出口天然对正下一条线；
+    而曲率只在中间接点处跳变一次，不会鼓包。
+
+    等切线长解法：令两段的切线长都是 d，接点
+        J = ((p0 + d*d0) + (p3 - d*d3)) / 2
+    G1 条件化成一元二次方程 a·d² + b·d + c = 0：
+        a = 2(d0·d3 - 1)    （≤ 0，两切线平行时为 0）
+        b = 2 V·(d0 + d3)
+        c = -|V|²           （V = p3 - p0）
+    a 接近 0（两切线几乎同向）时退化成线性解 d = |V|² / (2 V·(d0+d3))。
+    """
+    vx, vy = p3.x - p0.x, p3.y - p0.y
+    v2 = vx * vx + vy * vy
+    if v2 < 1e-9:
+        return None, "首尾重合"
+
+    tx, ty = d0.x + d3.x, d0.y + d3.y
+    vt = vx * tx + vy * ty
+    # 方程是 (|T|²-4)d² - 2(V·T)d + |V|² = 0。
+    # **这两个符号写反过一次**（b 取 +2V·T、c 取 -|V|²），那等于解了另一个方程，
+    # 判别式会变成 b²-4ac 里 4ac>0 → 可能为负，而且**恰好在要修的那几条上为负**
+    # （离线实测 97°/134°/153° 全部「判别式<0」）。
+    # 正确形式下 disc = 4(V·T)² + 8(1-d0·d3)|V|² ≥ 0 **恒成立**，biarc 永远有解。
+    a = (tx * tx + ty * ty) - 4.0        # = 2(d0·d3 - 1)，≤ 0
+    b = -2.0 * vt
+    c = v2
+
+    if abs(a) < 1e-6:
+        if abs(b) < 1e-9:
+            return None, "两切线同向且首尾不共线，biarc 无解"
+        d = -c / b                       # 退化成线性
+    else:
+        disc = b * b - 4.0 * a * c
+        if disc < 0.0:
+            return None, "biarc 判别式 <0"
+        sq = math.sqrt(disc)
+        cands = [(-b + sq) / (2.0 * a), (-b - sq) / (2.0 * a)]
+        cands = [x for x in cands if x > 1e-6]
+        if not cands:
+            return None, "biarc 切线长无正解"
+        d = min(cands)      # 取小的那个：弯更紧凑、不会绕到路口外面去
+
+    jx = ((p0.x + d0.x * d) + (p3.x - d3.x * d)) / 2.0
+    jy = ((p0.y + d0.y * d) + (p3.y - d3.y * d)) / 2.0
+
+    half = max(4, (SAMPLES - 1) // 2)
+    pts2 = [(p0.x, p0.y)]
+    pts2 += _arc_2d(p0.x, p0.y, d0.x, d0.y, jx, jy, half)
+    # 第二段从 p3 往回画（切线 -d3），再反过来接上，这样两头的切线都精确等于给定值
+    back = _arc_2d(p3.x, p3.y, -d3.x, -d3.y, jx, jy, half)
+    back.reverse()
+    pts2 += back[1:]            # back[0] 是接点 J，上一段末尾已经有了
+    pts2.append((p3.x, p3.y))
+
+    # 高度按累计弧长在首尾之间过渡（和 arc_path 同一套）
+    total = 0.0
+    segl = [0.0]
+    for i in range(1, len(pts2)):
+        total += ((pts2[i][0] - pts2[i - 1][0]) ** 2
+                  + (pts2[i][1] - pts2[i - 1][1]) ** 2) ** 0.5
+        segl.append(total)
+    out = []
+    for (x, y), dd in zip(pts2, segl):
+        f = (dd / total) if total > 1e-6 else 0.0
+        out.append(unreal.Vector(x, y, p0.z + (p3.z - p0.z) * f))
+    out[0], out[-1] = p0, p3
+    return out, "biarc 切线长 %.0f" % d
+
+
 def bezier(src, dst):
     """返回 (点列, 首尾直线距离, 说明)。画不出来时点列为 None。"""
     p0, p3 = src["p_in"], dst["p_out"]
@@ -314,11 +474,47 @@ def bezier(src, dst):
     if span < MIN_TURN_LEN:
         return None, span, "首尾过近"
 
+    # **转角门槛放在这里、不放在 arc_path 里。**
+    # 放在 arc_path 里拦不住一类情形：两条路在路口反向平行时，
+    # 两切线近乎平行 -> corner_point 求不出交点（实测 t = -1.4 亿），
+    # arc_path 压根不会被调用，于是直接落到三次贝塞尔画出一个 180° 发卡弯。
+    # 实测跑出来过：Inter_MainRoad_R003_+0540_I00 左转 -> BranchRoad_R016_+0180，
+    # 转 -180°，而转弯终点 150cm 处就是 Lane_MainRoad_R003_-0180——
+    # **开过去等于掉头回到同一条路的反向车道**，真实路口没有这种走法。
+    # 注意「目标是另一条路」这个判据拦不住它（目标确实是 BranchRoad_R016），
+    # 能拦住的只有转角。
+    a_in = math.atan2(src["d_in"].y, src["d_in"].x)
+    a_out = math.atan2(dst["d_out"].y, dst["d_out"].x)
+    turn = math.degrees((a_out - a_in + math.pi) % (2 * math.pi) - math.pi)
+    if abs(turn) > MAX_TURN_DEG:
+        return None, span, "转 %.0f° 超过 %.0f°，接近掉头，不生成" % (turn, MAX_TURN_DEG)
+
     c, why = corner_point(p0, src["d_in"], p3, dst["d_out"])
+    arc_note = ""
     if c is not None and USE_ARC:
         pts, note = arc_path(p0, src["d_in"], p3, dst["d_out"], c)
         if pts is not None:
             return pts, span, note
+        arc_note = note
+        # 近掉头不是「画不出来」而是「不该画」，直接放弃，别退到后面的兜底
+        # 又把它画出来（见 MAX_TURN_DEG）。
+        if "接近掉头" in note:
+            return None, span, note
+        # 半径太尖、而且 biarc 关着：**写成直行副本**，不要落到后面的贝塞尔兜底。
+        # 贝塞尔会照样画出一条曲线，那就既不是单圆弧、又还是过紧，
+        # 两头的好处都占不到。直行副本是现成机制：这个方向没有转弯，
+        # 车只能直行通过，干净且不会冲出车道。
+        if "太尖" in note and not USE_BIARC:
+            return None, span, note + "，写成直行副本"
+
+    # 单圆弧不成立（最常见的是半径只能夹到几厘米）时走双圆弧。
+    # biarc 对任意端点/切线都有解，而且两头切线精确等于 d0/d3，出口天然对正。
+    pts, note = (None, "USE_BIARC=False")
+    if USE_BIARC:
+        pts, note = biarc_path(p0, src["d_in"], p3, dst["d_out"])
+    if pts is not None:
+        return pts, span, (arc_note + " -> " + note) if arc_note else note
+
     if c is not None:
         # 三次贝塞尔，两个控制点都落在 p0->角点 和 p3->角点 的连线上。
         # 都取 2/3 时等价于以角点为控制点的二次贝塞尔（转弯均匀分布在全程）。

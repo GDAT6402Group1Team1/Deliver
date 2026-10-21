@@ -7,7 +7,7 @@
 
 class UWidgetComponent;
 
-/** Code-drawn arrow; no editor-only mesh or external image asset required. */
+/** Code-drawn yellow double-chevron; no external image asset required. */
 UCLASS(NotBlueprintable)
 class DELIVERY_API UDeliveryGroundArrowWidget : public UUserWidget
 {

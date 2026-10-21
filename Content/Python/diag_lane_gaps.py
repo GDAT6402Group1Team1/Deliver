@@ -13,6 +13,7 @@
 用法：py diag_lane_gaps.py
 """
 
+import re
 import traceback
 
 import unreal
@@ -38,11 +39,16 @@ def flush():
         pass
 
 
+# 从右往左锚定，路名里有下划线也不会错位
+# （旧路名 形状13 没有下划线，新路名 BranchRoad_R011 有）。
+SEG_LABEL_RE = re.compile(r"^(?:Lane|Inter)_(.+)_([+-]\d+)_[SI]\d+$")
+
+
 def parse(label):
-    """Lane_形状13_-0675_S00 -> ('形状13', '-0675')"""
-    parts = str(label).split("_")
-    if len(parts) >= 3:
-        return parts[1], parts[2]
+    """Lane_BranchRoad_R011_-0180_S00 -> ('BranchRoad_R011', '-0180')"""
+    m = SEG_LABEL_RE.match(str(label))
+    if m:
+        return m.group(1), m.group(2)
     return str(label), ""
 
 
