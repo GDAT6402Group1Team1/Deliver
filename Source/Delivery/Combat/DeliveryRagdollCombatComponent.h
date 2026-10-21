@@ -24,6 +24,15 @@ class DELIVERY_API UDeliveryRagdollCombatComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
+	/**
+	 * 播命中音。**服务器调，所有人听。**
+	 *
+	 * 命中判定本来就只在服务器做（`UGA_DeliverPunch::OnHitWindow` 开头那句
+	 * `IsNetAuthority()`），所以这个不能走本机预测——客户端自己不知道打中没打中，
+	 * 预测的结果是挥空也响。挥拳音能预测是因为"我按了键"这件事本机就知道。
+	 */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayPunchHit(FVector_NetQuantize10 Location);
 
 	UDeliveryRagdollCombatComponent();
 
@@ -96,6 +105,15 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Punch|Audio")
 	TObjectPtr<USoundBase> RightPunchSound;
+
+	/**
+	 * 拳头**真的打到人**时的闷响。和上面两个挥拳音是两件事：
+	 * 挥拳音每次出拳都响（本机预测，按下就有反馈），这个只在命中时响。
+	 * 两个都不填也能打，只是没声；只填挥拳音时挥空和打中听起来一样，手感会很糊。
+	 */
+	UPROPERTY(EditAnywhere, Category="Punch|Audio")
+	TObjectPtr<USoundBase> PunchHitSound;
+
 
 	UPROPERTY(Transient)
 	TObjectPtr<USkeletalMeshComponent> Mesh;

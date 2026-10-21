@@ -521,6 +521,48 @@ PlayerController 自动累积到 `DeliveryPromptSubsystem` 的屏幕下方字幕
 `Delivery.Voice.Test [normal|low|high|robot|angry]`、`Delivery.Voice.Say <文字>`、
 `Delivery.Voice.Stop`。完整接口和扩展边界见 [Document/AudioSystem.md](Document/AudioSystem.md)。
 
+**脚步与出拳音效**（2026-10-22）。`UDeliveryActiveRagdollComponent::OnFootPlanted`
+（`bLeft` + 落点）是落脚的公开委托，脚印、扬尘以后都接这里。
+
+- **广播点是 `SetControlEnabled(Foot.Control, false, ...)` 那一行，不是 `Alpha >= 1`。**
+  `UpdateFootTarget` 里 `Alpha` 到 1 之后还有一段
+  `if (Gap > 18 && ...) { Alpha = 0.999f; return; }` 在**等物理脚追上目标**——
+  那时候脚还悬在半空，按 Alpha 判会让声音比画面早小半步。
+  只响一次由函数开头的 `if (Alpha >= 1.0f) return;` 保证，不需要额外的 bool。
+- **门槛按"这一脚走了多远"（`FootstepMinStride` 18cm），不按身体速度。**
+  站着不动时平衡恢复会不停踏小碎步，按速度判的话人站着也在响、一秒好几下。
+  音量再按迈步距离从 0.35 缩放到 1.0（`FootstepFullStride` 70cm），碎步轻、大步重。
+- 左右脚**故意给不同音高**（0.94 / 1.06）：吸盘那种卡通音一高一低交替才听得出
+  "左右左右"的节奏，同音会糊成一串。
+- `FootstepSounds` 是**数组不是 Sound Cue**：C++ 里挑变体时顺手避开上一次刚放过的那个，
+  而 Cue 的 Random 节点要手勾 "no repeats" 才有这个行为，漏勾的表现是
+  "偶尔连着两下一样"、极难复现。
+- 用 `PlaySoundAtLocation` 而不是 `PlaySound2D`：取件/交付那两个是"给你本人的反馈"所以 2D，
+  脚步是世界里真实发生的事，别人的脚步要能从方位上听出来。**不复制**——
+  布娃娃在每台客户端各自模拟，每台机器自己为看到的每个角色触发，远端脚步天然就有。
+- **出拳分挥空和命中两个音。** 挥空音（`LeftPunchSound`/`RightPunchSound`）早就有、
+  时机本来就对：在 `FirePunchDrive()` 放拳那一刻、本机预测、音源在手骨上。
+  缺的是命中音 `PunchHitSound`，走 `MulticastPlayPunchHit`——命中判定只在服务器做
+  （`OnHitWindow` 开头那句 `IsNetAuthority()`），客户端不知道打中没打中，
+  预测的结果是挥空也响。为此 `UDeliveryRagdollCombatComponent` 构造时
+  `SetIsReplicated(true)`（它没有要复制的属性，开这个只为了组件 RPC 能发出去）。
+  一拳扫到两个人**只响一次**，`bAnyHit` 标记放在循环末尾、所有 `continue` 之后。
+- 音效由 `Content/Python/generate_physical_sfx.py` 纯合成（8 个脚步变体 + 左右挥拳 + 命中），
+  WAV 在 `Design/Audio/GeneratedSFX`，跑一次会导入 `/Game/Sound/SFX` 并写进
+  `BP_DeliveryMan` 两个组件的 CDO。**吸盘质感的关键是音高自己在动**
+  （一个短促的下滑再上滑），不是音色复杂——真实录音的"踩地"都是宽频噪声、没有这个滑音，
+  所以找素材反而更难对上。滑音**必须累加相位**，用 `sin(2*pi*f(t)*t)` 会在频率变化处
+  相位跳变、夹出噼啪声，而且只在变化快的地方出现，听着像"素材本身有爆音"。
+- **变体"听着一样"在报告里完全看不出来，所以脚本带两两相关度自检**（阈值 0.85）。
+  第一版基频用 `rng.uniform` 取，8 个里撞出两对相关度 0.95+，而脚本照样打印
+  "已写 8 个文件"、峰值和 RMS 全正常。改成**按变体序号均匀铺开**才有保证；
+  音色参数用**另一个顺序**（乘 5 取模，5 与 8 互质）铺，音高接近的两个在音色上一定隔得远。
+  **真正的主因一度被猜错**：以为是音高不够散，把跨度从 ±1.2 提到 ±1.6 个半音，
+  相似度反而从 0.854 升到 0.872——这一下否掉了那个猜测，才找到真凶：
+  低频"咚"那一层在所有变体里是同一组参数（92→62Hz、同音量同衰减），
+  而它是低频段最响的东西，于是任意两个变体都因为这一层强相关。让它也跟着变体变之后，
+  28 对的最高相似度降到 0.76。
+
 游戏事件音效不经过一套全局管理器，统一以 `USoundBase` 插槽放在真正拥有事件的类上：
 `BP_DeliveryMan` 填成功取件/交付，`RagdollCombat` 填左右拳，`GrabComponent` 填抓取/松手，
 `BP_DeliveryManPC` 填手机切换/来电/接听/挂断，`BP_Motorbike` 填发动机循环、上下车、交通撞击、

@@ -8,6 +8,7 @@
 #include "Combat/DeliveryBoxingPose.h"
 #include "DeliveryActiveRagdollComponent.generated.h"
 
+class USoundBase;
 class UCapsuleComponent;
 class UPhysicsControlComponent;
 class USkeletalMeshComponent;
@@ -99,6 +100,18 @@ struct FDeliveryRagdollBones
  * 走路不是动画位移，也不是 IK。髋先走、脚后追。问地的方向沿坡面法线，只处理较缓的斜面。
  * 陡坡改由服务器触发短暂的全物理翻滚；台阶和用手攀爬不在步态范围内。
  */
+/**
+ * 脚**真正落到地上**的那一帧。bLeft 区分左右，Location 是落点。
+ *
+ * Location 现在只用来定位音源，留着是为了以后按地面材质换音效——
+ * 到时候在这个点打一条短射线取物理材质即可，不用改委托签名。
+ *
+ * **纯本机表现，不复制。** 布娃娃在每个客户端各自模拟，所以每台机器
+ * 都会为自己看到的每个角色触发这个事件，远端玩家的脚步声天然就有了。
+ * 走复制反而会和本地模拟的落脚时刻对不上。
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeliveryFootPlanted, bool, bLeft, FVector, Location);
+
 UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 {
@@ -147,6 +160,50 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Ragdoll")
 	EDeliveryRagdollControlMode GetControlMode() const { return ReplicatedControlMode; }
+
+	/** 脚落地时广播。音效、脚印、扬尘都可以接这里。 */
+	UPROPERTY(BlueprintAssignable, Category="Delivery|Ragdoll")
+	FOnDeliveryFootPlanted OnFootPlanted;
+
+	/**
+	 * 落脚音的变体。**必须多个**——走路是每秒响一两次的声音，
+	 * 同一个采样重复两三下就能听出来是机械的。
+	 *
+	 * 这里是数组而不是一个 Sound Cue：Cue 的 Random 节点要手勾
+	 * "no repeats" 才会避开刚放过的那个（漏勾的表现是"偶尔连着两下一样"，
+	 * 极难复现），而这个判断写在 C++ 里只有一处、不会漏。
+	 * 少一个 Cue 资产也少一处要维护。
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Audio|Footstep")
+	TArray<TObjectPtr<USoundBase>> FootstepSounds;
+
+	/**
+	 * 迈步水平距离小于这个值就不出声（cm）。
+	 *
+	 * **这个门槛是必须的，而且不能换成"按车速/身体速度判"。** 站着不动时
+	 * 平衡恢复（`UpdateFeet` 里那段 `bRecoverLeft`）会不停地踏小碎步，
+	 * 按速度判的话人站着不动也在响、一秒好几下，听着像原地跺脚。
+	 * 按**这一脚实际走了多远**判才对得上"迈了一步"这件事本身。
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Audio|Footstep", meta=(ClampMin="0.0"))
+	float FootstepMinStride = 18.0f;
+
+	/** 到这个迈步距离时音量给满（cm）。碎步轻、大步重，不是一刀切同一个音量。 */
+	UPROPERTY(EditDefaultsOnly, Category="Audio|Footstep", meta=(ClampMin="1.0"))
+	float FootstepFullStride = 70.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Audio|Footstep", meta=(ClampMin="0.0"))
+	float FootstepVolume = 1.0f;
+
+	/**
+	 * 左右脚的变调。两只脚**故意给不同的音高**：吸盘那种卡通音效一高一低
+	 * 交替才听得出"左右左右"的节奏，两边同音会糊成一串。
+	 */
+	UPROPERTY(EditDefaultsOnly, Category="Audio|Footstep", meta=(ClampMin="0.1"))
+	float FootstepLeftPitch = 0.94f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Audio|Footstep", meta=(ClampMin="0.1"))
+	float FootstepRightPitch = 1.06f;
 
 	/** 盆骨是否贴在站立高度附近。跳跃过程中恒为 false，二段跳就是被这里挡住的。 */
 	UFUNCTION(BlueprintPure, Category="Ragdoll|跳跃")
@@ -658,6 +715,11 @@ protected:
 	void UpdateFeet(float DeltaTime, const FVector& Wish);
 	void KeepFeetOnOwnSide();
 	bool BeginStep(FFoot& Foot, const FVector& Wish);
+	/** 落脚音的实际播放。Stride 是这一脚的水平位移，用来判要不要响、响多大。 */
+	void PlayFootstep(bool bLeft, const FVector& Location, float Stride);
+
+	/** 上一次用过的变体下标，用来避免连着放同一个。-1 = 还没放过。 */
+	int32 LastFootstepIndex = -1;
 	void UpdateFootTarget(FFoot& Foot, float DeltaTime);
 	bool PlanFootLanding(FFoot& Foot, const FVector& Wish);
 	FVector GetSlopeForward(const FVector& Wish) const;
