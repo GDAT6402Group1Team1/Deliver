@@ -49,6 +49,7 @@
 - `Import / Reimport Splines`：自动替换 MainRoad、BranchRoad、River 普通路线 Spline。
 - `Convert / Rebuild Landscape Splines`：把选中的 PS2DEM 普通路线转换成可编辑、可保存、可挂 Mesh 的原生 Landscape Spline。
 - `Convert / Rebuild Selected Rivers`：只重建选中的 River，保留已生成的主干道、支路和手工 Landscape Spline。
+- `Export Road Actor Splines from Landscape`：把工具生成的 MainRoad 和 BranchRoad Landscape Spline 反向重建成普通 Actor Spline；River 和手工样条不变。
 - `Remove Generated Landscape Splines...`：只删除工具生成的 Landscape Spline，不碰手工样条。
 - `Assign Selected Mesh to Main Roads / Branch Roads / Rivers`：把内容浏览器中唯一选中的 Static Mesh 批量绑定给对应类型。
 - `Diagnose Splines / Landscape...`：只读比较选中路线、当前 UE 地表和 R16 高度，并输出逐点 JSON 日志。
@@ -92,6 +93,19 @@ PSD 中建立 `MainRoad`、`BranchRoad`、`River` 三个组。组内每个 Shape
 - 路线约每 10m 创建一个控制点，以跟随现有地表，原始普通 Spline 不会因此增加控制点。
 
 再次执行转换时，只会替换所有名称以 `PS2DEM_` 开头的工具生成点和线段；手工 Landscape Spline 保留不变。也可以用 `Remove Generated Landscape Splines...` 单独清除生成内容。
+
+## 从 Landscape 反向导出道路 Actor
+
+在 Landscape 模式中调整完工具生成的道路后，选择目标 Landscape（关卡中只有一个 Landscape 时可不选），执行 `PS2DEM → Export Road Actor Splines from Landscape`：
+
+- 只读取名称为 `PS2DEM_MainRoad_*` 和 `PS2DEM_BranchRoad_*` 的 Landscape Spline。
+- 替换带 `PS2DEM_SPLINE` 标签的旧 MainRoad、BranchRoad Actor，并自动选中新 Actor。
+- 保留道路高度、曲线切线、闭合状态和每个控制点的宽度。
+- 如果同一个路线编号在 Landscape 中已经断成多个不相连部分，会分别导出为带 `_Part01`、`_Part02` 后缀的 Actor，避免遗漏。
+- 不导出、不删除也不修改 River；手工 Landscape Spline 同样不受影响。
+- 这是一次性反向重建，并非双向同步。以后再次执行正向转换，会根据当时的道路 Actor 重建工具生成的 Landscape Spline。
+
+反向导出的控制点来自 Landscape Spline 当前的密集采样点，因此形状会贴合当前 Landscape 道路，但无法恢复最初 Photoshop 路径中更少的原始贝塞尔控制点。命令不会自动保存关卡。
 
 ## 给 Landscape Spline 绑定 Mesh
 

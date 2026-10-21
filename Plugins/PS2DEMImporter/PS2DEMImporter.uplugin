@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
-	"Version": 9,
-	"VersionName": "1.3.2",
+	"Version": 11,
+	"VersionName": "1.3.4",
 	"FriendlyName": "PS2DEM Importer",
 	"Description": "PS2DEM terrain, building, route spline and Landscape deformation editor tools.",
 	"Category": "Editor",

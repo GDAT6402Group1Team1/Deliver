@@ -18,6 +18,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "PS2DEM|Landscape")
     static bool ConvertSelectedRiverRoutesToLandscapeSplines(bool bShowConfirmation = true);
 
+    /** Rebuild ordinary MainRoad and BranchRoad actors from generated Landscape Splines. */
+    UFUNCTION(BlueprintCallable, Category = "PS2DEM|Landscape")
+    static bool ExportRoadActorSplinesFromLandscape(bool bShowConfirmation = true);
+
     /** Return a compact summary used by diagnostics and unattended verification. */
     UFUNCTION(BlueprintPure, Category = "PS2DEM|Landscape")
     static FString GetGeneratedLandscapeSplineSummary();
