@@ -223,7 +223,7 @@ bool UDeliveryInventoryComponent::ConsumeHeldItem(ADeliveryHandheldItem* Expecte
 
 void UDeliveryInventoryComponent::UseHeldItem()
 {
-	if (ADeliveryHandheldItem* Item = GetHeldItem()) Item->Use(GetCharacter());
+	if (ADeliveryHandheldItem* Item = GetHeldItem()) Item->UseFromInventory(GetCharacter());
 }
 
 void UDeliveryInventoryComponent::ClientInventoryFull_Implementation()

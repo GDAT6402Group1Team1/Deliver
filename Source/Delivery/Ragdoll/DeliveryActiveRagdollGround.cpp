@@ -5,7 +5,10 @@
 #include "DeliveryCharacter.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
+#include "PhysicsControlComponent.h"
+#include "PhysicsEngine/BodyInstance.h"
 using DeliveryRagdollPhysicsHelpers::HasPhysicsBody;
 
 bool UDeliveryActiveRagdollComponent::SampleGround(
@@ -74,6 +77,10 @@ bool UDeliveryActiveRagdollComponent::TraceGround(
 
 		OutHit.Point = Hit.ImpactPoint;
 		OutHit.Normal = HitNormal;
+		const UPrimitiveComponent* Surface = Hit.GetComponent();
+		OutHit.SurfaceVelocity = Surface ? (Surface->IsSimulatingPhysics(Hit.BoneName)
+			? Surface->GetPhysicsLinearVelocityAtPoint(Hit.ImpactPoint, Hit.BoneName)
+			: Surface->GetComponentVelocity()) : FVector::ZeroVector;
 		return true;
 	}
 	return false;
@@ -180,12 +187,46 @@ void UDeliveryActiveRagdollComponent::UpdateLimpRecovery(float DeltaTime)
 	{
 		return;
 	}
+	// Recovering must check the torso too: an upright hip can sit below a folded spine.
+	const FBodyInstance* HipBody = Mesh->GetBodyInstance(Bones.Hips);
+	const FBodyInstance* ChestBody = Mesh->GetBodyInstance(Bones.Spine);
+	FPhysicsControlTarget ChestTarget;
+	const bool bTorsoAligned = HipBody && ChestBody && PhysicsControl
+		&& PhysicsControl->GetControlTarget(ChestControl, ChestTarget)
+		&& (HipBody->GetUnrealWorldTransform().GetRotation().Inverse()
+			* ChestBody->GetUnrealWorldTransform().GetRotation()).AngularDistance(
+			ChestTarget.TargetOrientation.Quaternion()) < FMath::DegreesToRadians(25.f);
+	if (ReplicatedControlMode == EDeliveryRagdollControlMode::Active && !bIsLimp)
+	{
+		FGroundHit Surface;
+		const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
+		const bool bGrabbing = Character && Character->GetGrabComponent()
+			&& Character->GetGrabComponent()->IsGrabbing();
+		const bool bCollapsed = !bJumping && !bPelvisAirborne && !bExternalLimpRequested
+			&& !bBodyDrivenPunchActive && !bGrabbing && GetUprightDot() < 0.35f
+			&& TraceTumbleSurface(Surface)
+			&& Surface.Normal.Z >= FMath::Cos(FMath::DegreesToRadians(TumbleRecoverySlopeDegrees))
+			&& Mesh->GetPhysicsLinearVelocity(Bones.Hips).Size() <= LimpRecoveryMaxSpeed;
+		LimpRecoveryStandingTime = bCollapsed ? LimpRecoveryStandingTime + DeltaTime : 0.f;
+		if (LimpRecoveryStandingTime >= 0.6f)
+		{
+			// Already conscious: retain motors/HP, release stale foot support and
+			// settle in place. Do not toggle simulation or teleport the body chain.
+			SetPunchFeetPlanted(false);
+			SetHitFeetPlanted(false);
+			ReseedFromCurrentPose();
+			LimpRecoveryStandingTime = 0.f;
+			ReplicatedControlMode = EDeliveryRagdollControlMode::Recovering;
+			GetOwner()->ForceNetUpdate();
+		}
+		return;
+	}
 	if (ReplicatedControlMode == EDeliveryRagdollControlMode::Recovering && !bIsLimp)
 	{
 		// 起身是否结束由服务器按真实物理姿态决定；客户端在此之前只播放快照。
 		FGroundHit StandingSurface;
 		const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
-		const bool bStanding = !bRisingFromLimp && TraceTumbleSurface(StandingSurface)
+		const bool bStanding = !bRisingFromLimp && bTorsoAligned && TraceTumbleSurface(StandingSurface)
 			&& GetUprightDot() >= 0.55f
 			&& FVector::DotProduct(Hips - StandingSurface.Point, StandingSurface.Normal)
 				>= StandHeight * 0.65f

@@ -31,7 +31,10 @@ bool UGA_DeliverPunch::CanActivateAbility(
 	const ADeliveryCharacter* StunCheckCharacter = Cast<ADeliveryCharacter>(ActorInfo->AvatarActor.Get());
 	const UDeliveryActiveRagdollComponent* StunCheckRagdoll = StunCheckCharacter
 		? StunCheckCharacter->GetActiveRagdoll() : nullptr;
-	if (StunCheckRagdoll && StunCheckRagdoll->GetControlMode() != EDeliveryRagdollControlMode::Active)
+	// Reject during recovery before CommitAbility/LastMeleeAttackTime, otherwise
+	// a too-early click consumes cooldown despite never starting a punch.
+	if (StunCheckRagdoll && (StunCheckRagdoll->GetControlMode() != EDeliveryRagdollControlMode::Active
+		|| StunCheckRagdoll->IsPunchRecovering()))
 	{
 		return false;
 	}

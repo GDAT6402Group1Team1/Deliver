@@ -10,6 +10,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "TimerManager.h"
+#include "Delivery.h"
 
 UDeliveryRagdollCombatComponent::UDeliveryRagdollCombatComponent()
 {
@@ -27,7 +28,8 @@ bool UDeliveryRagdollCombatComponent::StartPunch(EMeleeHand Hand, FVector AimDir
 {
 	// 先确认身体当前能出拳，再把平面瞄准方向存下来；本次出拳全程用同一方向。
 	UWorld* World = GetWorld();
-	if (bIsPunching || !World || !Mesh || !ActiveRagdoll || !ActiveRagdoll->IsRagdollActive())
+	if (bIsPunching || !World || !Mesh || !ActiveRagdoll || !ActiveRagdoll->IsRagdollActive()
+		|| ActiveRagdoll->IsPunchRecovering())
 	{
 		return false;
 	}
@@ -42,6 +44,10 @@ bool UDeliveryRagdollCombatComponent::StartPunch(EMeleeHand Hand, FVector AimDir
 	bIsPunching = true;
 	const float HandSide = Hand == EMeleeHand::Left ? 1.0f : -1.0f;
 	ActiveRagdoll->BeginBodyDrivenPunch(CachedAimDir, HandSide);
+#if !UE_BUILD_SHIPPING
+	UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=Begin hand=%d aim=%s"),
+		*GetNameSafe(GetOwner()), World->GetTimeSeconds(), int32(Hand), *CachedAimDir.ToCompactString());
+#endif
 
 	FTimerManager& TimerManager = World->GetTimerManager();
 	// 三个计时点相互独立：蓄力结束时发拳；稍后才允许检测命中；最后收拳结束。
@@ -63,6 +69,10 @@ void UDeliveryRagdollCombatComponent::CancelPunch()
 	// 晕倒或其他动作打断时清掉未触发的事件，避免角色倒地后仍突然出拳。
 	if (!bIsPunching) return;
 	GetWorld()->GetTimerManager().ClearTimer(HitWindowTimer);
+#if !UE_BUILD_SHIPPING
+	UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=Cancel hand=%d"),
+		*GetNameSafe(GetOwner()), GetWorld()->GetTimeSeconds(), int32(ActiveHand));
+#endif
 	GetWorld()->GetTimerManager().ClearTimer(PunchDriveTimer);
 	GetWorld()->GetTimerManager().ClearTimer(EndTimer);
 	ActiveRagdoll->EndBodyDrivenPunch();
@@ -73,6 +83,10 @@ void UDeliveryRagdollCombatComponent::FirePunchDrive()
 {
 	if (!bIsPunching) return;
 	ActiveRagdoll->ReleaseBodyDrivenPunch();
+#if !UE_BUILD_SHIPPING
+	UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=Release hand=%d impulse=%.1f"),
+		*GetNameSafe(GetOwner()), GetWorld()->GetTimeSeconds(), int32(ActiveHand), PunchImpulse);
+#endif
 
 	// 姿势电机负责轨迹，冲量负责让拳头一开始就带着速度出去。
 	// 大头给拳头，前臂跟上，上臂只给一点，免得整条手臂把身体推走。
@@ -108,6 +122,10 @@ void UDeliveryRagdollCombatComponent::FireHitWindow()
 void UDeliveryRagdollCombatComponent::FirePunchEnded()
 {
 	if (!bIsPunching) return;
+#if !UE_BUILD_SHIPPING
+	UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=End hand=%d"),
+		*GetNameSafe(GetOwner()), GetWorld()->GetTimeSeconds(), int32(ActiveHand));
+#endif
 	ActiveRagdoll->EndBodyDrivenPunch();
 	bIsPunching = false;
 	OnPunchEnded.Broadcast(ActiveHand);

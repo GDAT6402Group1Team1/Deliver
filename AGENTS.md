@@ -17,6 +17,8 @@
 ## 目前已实现的内容（从 git 历史与代码整理）
 
 ### 1. 角色移动 —— 主动布娃娃（Active Ragdoll），非常规 Character Movement
+- 坡上松键的髋部切向站立目标保持在停步位置，不再每帧跟随下滑的身体重建；恢复移动、跳跃、攻击/受击、失衡或离支撑点超过 80 cm 时解除。只固定电机参考，不修改刚体变换；移动地面按命中点速度推进参考。
+- 坡面防滑：落脚最后 15% 不再被跟随髋部的横向纠偏移动目标。已贴地且未启用位置驱动的支撑脚，在 5° 至翻滚阈值之间施加有上限的切向摩擦辅助（`SlopeSupportTraction` / `SlopeSupportMaxAcceleration`），补偿顺坡重力并阻尼相对地面速度；不锁位置、不施加法线吸附，摆动/释放恢复/离地及明显失衡时不介入。动态地面按表面速度计算。
 代码阅读顺序：`DeliveryActiveRagdollComponent.cpp` 保留状态和每帧入口；同目录的 `DeliveryActiveRagdollSetup.cpp`、`DeliveryActiveRagdollStance.cpp`、`DeliveryActiveRagdollGait.cpp`、`DeliveryActiveRagdollGround.cpp`、`DeliveryActiveRagdollCombat.cpp`、`DeliveryActiveRagdollNetwork.cpp` 分别处理物理控制初始化、身体目标、脚步、地面/翻滚、物理受击和复制。它们仍实现同一个组件，蓝图参数与复制字段都在原头文件。无场景依赖的落点和摆动公式在 `DeliveryFootPlacement.h`，拳路公式在 `Combat/DeliveryPunchTrajectory.h`；拳击资产补全单独在 `Combat/DeliveryBoxingPhysicsAsset.cpp`。改物理时先看每帧入口及调用顺序。
 下坡双脚防交叉：落点左右轴跟随 `CurrentFacingYaw`（身体朝向），不随 WASD 方向瞬时翻转；仅在着地可控状态对内滑的脚/小腿刚体施加有上限的水平纠偏加速度。迈步最后 15% 固定落点，最多额外等待 0.18 秒到位；停步后也允许纠正已交叉的脚。回归检查：`Delivery.Ragdoll.FootSeparation`。
 角色采用"持续物理驱动"：从 BeginPlay 起 Simulate Physics 常驻打开，走路/站立/
@@ -32,7 +34,19 @@
 - [Source/Delivery/DeliveryCharacter.h](Source/Delivery/DeliveryCharacter.h) —— 第三人称 Pawn，组装胶囊/网格/相机/布娃娃/战斗组件，实现 `IAbilitySystemInterface` 与 `IDeliveryCombatInterface`。移动与跳跃走网络复制（`ServerSetMoveInput` 为 Unreliable，`ServerJump` 为 Reliable，带最小跳跃间隔）。
 - 电瓶车受击：地面探测只查 `WorldStatic/WorldDynamic`，排除 `Vehicle`；离地时暂停髋部世界空间电机，重新探到地面后恢复。撞击镜头只在受击玩家本机平滑拉远约 120 cm 并回归，不改全局相机遮挡。
 
+- 撞后缩身恢复：脊柱、肩根、腿和脚踝的父空间电机使用 `CreateReferencePoseControls` 从资产参考骨架计算固定相对旋转，不依赖可变动画/物理骨骼缓存；迈步仍由脚位置目标驱动。起身完成额外要求胸相对髋目标误差 <25°；清醒、非抓取/出拳/跳跃、在安全地面低速且直立点积 <0.35 持续 0.6 秒时重新进入原地恢复，不切物理、不瞬移、不改 HP。测试显式使用玩家覆盖的 `renwu_Physics1`，验证畸变缓存不改变目标；自动化不等于真实撞飞验收。
+
+- 急转身与卡腿（2026-10-15）：`GetSlopeRight`/横向纠偏改用 live 髋刚体相对参考姿势的真实朝向，不能把 `CurrentFacingYaw`（电机目标）当作身体已转到的方向；摆动中的防交叉也使用当前真实侧轴。迈步到期且距离目标仍 >18 cm 时取消两脚位置驱动，保持 0.45 秒释放期并暂停移动目标，避免同一帧立即重新选中失败脚、让超时释放形同虚设。`LegRecoveryDiag` 记录真实腿部目标误差、脚电机/距离/步伐计时。`Delivery.Ragdoll.LegIsolation` 用生产蓝图在独立平地世界逐帧对比正常、关闭脚拉力、关闭内部碰撞（后两种仅测试），并断言超时不会同帧重启、物理确实移动；仍需真实地图复测。
+
 ### 2. 互殴系统（近战）
+- 出拳接走路：起步前倾计时跟踪原始移动意图，不能使用被脚步超时/恢复临时归零的 `EffectiveWish`，否则持续按键也会重复前倾。胸腰支撑覆盖 `HasPendingPunchRecovery()` 收拳阶段，不在攻击窗口结束时提前放松。`Delivery.Ragdoll.LegIsolation` 包含不出拳、左拳、右拳后立即前走对照及持续按键跨脚步释放的回归断言；平地自动测试不代替实际关卡复现。
+- 撞飞后髋部质量异常修正：`DeliveryRagdollMass.cpp` 在 ConfigurePhysics 创建真实刚体后检查髋部与直接连接躯干/大腿的质量比。仅当相邻最大质量 > 髋部 20 倍时，把髋部设为该最大质量的一半，并将各轴惯量至少补到相邻最小主惯量的 1/4；解决 renwu 髋部 0.0115 kg 连接 24–32 kg 刚体的病态配置。只改 live BodyInstance，不扩大碰撞、不保存原资产、不提高电机/伤害。每次创建物理状态后需要重新应用；测试覆盖两次重建、幂等性及正常腿部不变。此修正仍需真实撞击复测，不把质量断言当作完整动力学验收。
+- 撞飞恢复诊断：非 Shipping 的 `CrashDiagJoint` 记录全部 live 关节（包括胸腰、髋腿、膝踝）的参考框架间距/角差、实际角度/限位/质量；`CrashDiagDrive` 记录全部电机启用状态、力度倍率及目标偏移。晕倒期间也采样，便于定位起身后半身扭曲；frameAngleDeg 是关节参考框架角差，不等于动画驱动误差，不能直接作为统一恢复阈值。
+- 出拳胸腰摆动：保留左右拳的转体，蓄力沿拳路反方向后摆默认 2°、释放朝拳路前摆默认 7°，通过原拧身速度平滑过渡，收拳回零。仅叠加胸腰目标，不改变骨盆/脚支撑、手臂旋转算法、冲量或伤害；组件 `Ragdoll|出拳` 的 `PunchTorsoWindupLeanAngle/PunchTorsoFollowLeanAngle` 可调。
+- 运行时物理资产补全修改约束后必须同步 `UPhysicsConstraintTemplate::SetDefaultProfile`（WITH_EDITOR）：PIE 创建/重建关节时会在复制 DefaultInstance 后再次应用 DefaultProfile；只改 DefaultInstance 会让肩/肘限位回到 45°，新增右腕还会回到 Free 轴。同步仅修改运行时副本，原资产不保存。回归测试在实际 renwu 网格上重建两次物理状态，直接检查 live constraint 的肩/肘限位、右腕角限位/平移锁定/相邻碰撞禁用，不能只检查模板。
+- 非 Shipping 的拳击诊断自动写入 `Saved/Logs/Delivery.log`：`PunchDiagEvent` 标记开始/释放/结束/取消，`PunchDiag*` 与 `UpperBodyTrace` 记录本机及服务器的状态、实际/目标旋转、目标角速度、质量、关节角度与限位。出拳/收拳时每 0.2 秒采样，待机每 0.5 秒采样，正常姿势也保留以便对照卡住前后；仅观察，不改物理参数。
+- 收拳旋转连续性：实际主角 renwu 的旧参考姿态最短弧解算在收拳时出现单帧约 150°–163° 目标翻转。收拳从释放目标旋转平滑回到 A 姿势，不再混合拳路和肘部 Pole 重新求解；每只手保留自己的拳路方向，收拳目标未归零时拒绝下一拳。禁止在蓄力/出拳期间独立积分上臂和前臂的旋转（parallel transport）：它们会积累不同轴向扭转，曾造成实机剧烈乱动回归，现恢复参考姿态锚定的解算。测试 `Delivery.Boxing.PlayerRecoveryTargets` 覆盖实际主角左右手及 ±50° 瞄准方向、出拳旋转不依赖历史、收拳目标连续性；这不等价于场景中的完整物理验收。
+- **持斧下劈动画**：`UseFromInventory` 按物品的 `bUsesAxeSwing` 显式开关接左键（手柄沿用左攻击键），正式 `/Game/Blueprint/Item/BP_Axe` 与测试斧头都已启用，普通物品仍调用原来的蓝图 Use，由布娃娃组件的 Server RPC 核验当前手持斧头、可控状态和冷却，再多播服务器起始时间。源动画 `/Game/Characters/Animations/Axe/A_AxeDownward` 长 2.533 秒，默认播放速率 1.8（实际约 1.407 秒）；`DeliveryAnimationArmPose` 按源骨架参考姿势建立前/右/上坐标，只将双臂方向重映射进现有 `BoxingPose` 电机，不复制源手臂长度、不覆盖腿部步态、不应用 Root Motion、不关闭物理。`Ragdoll|Axe` 可调动画、播放速率和 0.12/0.2 秒（动画时间）的淡入淡出。切换物品、抓取、晕倒或停止布娃娃会中止动作；斧头挥动时按实际前臂在前后平面的角度摆动，仍过滤轴向滚转。当前仅接动作，没有新增斧头伤害或耐久消耗。导入脚本 `Content/Python/import_axe_swing.py` 只创建独立源资产，不改主角骨架或地图。正式斧头配置脚本 `Content/Python/setup_axe_attack.py` 只设置动作开关，不重设父类、模型、材质或地图。回归测试 `Delivery.Axe.HeldItemFlow` 覆盖正式/测试斧头、普通道具拒绝及取消；`Delivery.Axe.AnimationTargets` 核对完整剪辑、朝向变换、两级电机目标和物理模拟保持开启。
 - 出拳手感追加调校：释放冲量当前为 1200（上一版 900），后收比例 0.24，蓄力姿态速度 4、伸拳速度 10；前送沿用快速释放曲线，收拳单独使用 SmoothStep 两端缓速。保留下半身支撑与 4 cm 髋部前压，不提高伤害数值。
 - [Source/Delivery/Combat/DeliveryRagdollCombatComponent.h](Source/Delivery/Combat/DeliveryRagdollCombatComponent.h) —— 在布娃娃刚体链上执行出拳动作。
 - [Source/Delivery/Combat/DeliveryCombatInterface.h](Source/Delivery/Combat/DeliveryCombatInterface.h) —— `StartMeleeAttack` / `GatherMeleeHits` / `EndMeleeAttack` / `IsMeleeAttacking`，Character 实现，GA 调用。

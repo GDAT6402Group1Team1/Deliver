@@ -22,7 +22,13 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
-	/** Item-specific LMB behavior. Intentionally empty until tools gain their actual attacks. */
+	/** Native input dispatch; configured axe swings do not depend on a Blueprint Use override. */
+	void UseFromInventory(APawn* User);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Item|Attack")
+	bool bUsesAxeSwing = false;
+
+	/** Item-specific LMB behavior for items without the native axe action. */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Item")
 	void Use(APawn* User);
 	virtual void Use_Implementation(APawn* User);

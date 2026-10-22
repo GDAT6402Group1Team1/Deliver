@@ -3,6 +3,7 @@
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "DeliveryCharacter.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Inventory/DeliveryInventoryComponent.h"
@@ -61,7 +62,21 @@ void ADeliveryHandheldItem::UpdateHeldTransform(float DeltaSeconds, bool bSnap)
 			: Holder->GetActorForwardVector().GetSafeNormal2D();
 	}
 	if (StableForward.IsNearlyZero()) StableForward = FVector::ForwardVector;
-	const FQuat StableRotation = FRotationMatrix::MakeFromXZ(StableForward, FVector::UpVector).ToQuat();
+	FQuat StableRotation = FRotationMatrix::MakeFromXZ(StableForward, FVector::UpVector).ToQuat();
+	if (const ADeliveryCharacter* Holder = Cast<ADeliveryCharacter>(HeldAnchor->GetOwner()))
+	{
+		const float SwingWeight = Holder->GetActiveRagdoll() ? Holder->GetActiveRagdoll()->GetAxeSwingWeight() : 0.f;
+		if (SwingWeight > 0 && Holder->GetMesh())
+		{
+			// Follow the physical forearm's swing in the forward/up plane, not its noisy axial roll.
+			const FVector Forearm = (Holder->GetMesh()->GetBoneLocation(TEXT("RightHand"))
+				- Holder->GetMesh()->GetBoneLocation(TEXT("RightForeArm"))).GetSafeNormal();
+			const float Angle = FMath::Atan2(Forearm.Dot(StableForward), -Forearm.Z);
+			const FVector Right = FVector::CrossProduct(FVector::UpVector, StableForward);
+			const FQuat SwingRotation(Right, -Angle);
+			StableRotation = FQuat::Slerp(StableRotation, SwingRotation * StableRotation, SwingWeight).GetNormalized();
+		}
+	}
 	const FTransform StableGripFrame(StableRotation, HeldAnchor->GetComponentLocation(), FVector::OneVector);
 	const FTransform Target = HeldRelativeTransform * StableGripFrame;
 	if (bSnap)
@@ -79,6 +94,19 @@ void ADeliveryHandheldItem::UpdateHeldTransform(float DeltaSeconds, bool bSnap)
 
 void ADeliveryHandheldItem::Use_Implementation(APawn* User)
 {
+}
+
+void ADeliveryHandheldItem::UseFromInventory(APawn* User)
+{
+	if (bUsesAxeSwing)
+	{
+		if (ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(User))
+		{
+			if (Character->GetActiveRagdoll()) Character->GetActiveRagdoll()->RequestAxeSwing();
+		}
+		return;
+	}
+	Use(User);
 }
 
 void ADeliveryHandheldItem::HandleInteract(APawn* Interactor)

@@ -7,6 +7,27 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryFootPlacementTest,
 
 bool FDeliveryFootPlacementTest::RunTest(const FString& Parameters)
 {
+	for (float Angle : {-30.f, -15.f, 15.f, 30.f})
+	{
+		const FVector Normal = FRotator(Angle,0,0).RotateVector(FVector::UpVector);
+		const FVector Slip = FVector::VectorPlaneProject(FVector(100,20,0),Normal);
+		const FVector Accel = DeliveryFootPlacement::SupportTraction(Slip,Normal,-980,.03f,12,900);
+		TestTrue(TEXT("slope traction never attracts foot into ground"),FMath::Abs(FVector::DotProduct(Accel,Normal))<.001f);
+		TestTrue(TEXT("slope traction remains bounded"),Accel.Size()<=900.001f);
+		TestTrue(TEXT("support opposes slipping"),FVector::DotProduct(Accel,Slip)<0.f);
+		const FVector StaticAccel=DeliveryFootPlacement::SupportTraction(FVector::ZeroVector,Normal,-980,.03f,12,900);
+		TestTrue(TEXT("stationary support compensates downhill gravity"),
+			(StaticAccel+FVector::VectorPlaneProject(FVector(0,0,-980),Normal)).IsNearlyZero(.001f));
+	}
+	TestTrue(TEXT("disabled traction is zero"),DeliveryFootPlacement::SupportTraction(FVector(100,0,0),FVector::UpVector,-980,.03f,0,900).IsZero());
+	const FQuat Reference = FRotator(0.f,-90.f,90.f).Quaternion();
+	for (float ActualYaw : {0.f,45.f,120.f,180.f})
+	{
+		const FQuat Actual = FRotator(0.f,ActualYaw,0.f).Quaternion() * Reference;
+		const FVector Side = DeliveryFootPlacement::PhysicalSideAxis(FVector::UpVector,Actual,Reference,0.f);
+		TestTrue(TEXT("feet follow physical pelvis, not ahead-of-body turn target"),
+			Side.Equals(DeliveryFootPlacement::SideAxis(FVector::UpVector,ActualYaw),.001f));
+	}
 	for (float Yaw : { -170.0f, -90.0f, 0.0f, 45.0f, 170.0f })
 	{
 		const FVector BodyRight = FRotationMatrix(FRotator(0.0f, Yaw, 0.0f)).GetUnitAxis(EAxis::Y);

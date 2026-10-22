@@ -2,6 +2,7 @@
 // 目标只是电机想去的位置；角色刚体的位置仍由物理模拟决定。
 #include "DeliveryActiveRagdollComponent.h"
 #include "DeliveryCharacter.h"
+#include "Combat/DeliveryPunchTrajectory.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Controller.h"
@@ -27,6 +28,20 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	}
 
 	const FVector Wish = GetWishDir();
+	// 起步事件取玩家意图，不能取下面被恢复/脚步超时临时归零的 EffectiveWish。
+	// 否则一直按住移动也会在每次松脚后重新触发前倾。
+	const bool bHasMoveWish = !Wish.IsNearlyZero();
+	if (bHasMoveWish && !bHadMoveWishLastTick)
+	{
+		AccelerationLeanRemaining = AccelerationLeanDuration;
+	}
+	else if (!bHasMoveWish)
+	{
+		AccelerationLeanRemaining = 0.0f;
+	}
+	bHadMoveWishLastTick = bHasMoveWish;
+	AccelerationLeanRemaining = FMath::Max(0.0f, AccelerationLeanRemaining - DeltaTime);
+	BlockedStepRecoveryRemaining = FMath::Max(0.f, BlockedStepRecoveryRemaining - DeltaTime);
 	if (bPunchFeetPlanted && FVector::Dist2D(
 		Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace), PunchSupportLocation) > PunchSupportBreakDistance)
 	{
@@ -41,6 +56,7 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 		&& FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentFacingYaw, PunchAimDirection.Rotation().Yaw)) < 35.0f);
 	const FVector EffectiveWish = ReplicatedControlMode == EDeliveryRagdollControlMode::Recovering
 		|| bRisingFromLimp || StartupPlantRemaining > 0.0f || bHitFeetPlanted
+		|| BlockedStepRecoveryRemaining > 0.0f
 		? FVector::ZeroVector : Wish;
 	// 先确定本帧髋部打算移动到哪里；脚的目标和身体朝向都以这个结果为基准。
 	UpdatePelvisTarget(DeltaTime, EffectiveWish);
@@ -57,7 +73,10 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 		&& GrabCharacter->GetGrabComponent()->IsDraggingCharacter();
 	DragReachAlpha = FMath::FInterpTo(DragReachAlpha,
 		bDraggingCharacter && !bJumping ? 1.0f : 0.0f, DeltaTime, 7.0f);
-	BraceTorsoForAction(DeltaTime, bBodyDrivenPunchActive, bCarryingProp);
+	FDeliveryAnimationArmPose AnimationPose;
+	const bool bAxeSwing = SampleAxeSwing(AnimationPose);
+	// EndPunch 结束的是攻击窗口，手臂电机此时还在收拳；支撑必须覆盖收拳阶段。
+	BraceTorsoForAction(DeltaTime, bBodyDrivenPunchActive || BoxingPose.HasPendingPunchRecovery() || bAxeSwing, bCarryingProp);
 	FVector GrabGoals[2] = { FVector::ZeroVector, FVector::ZeroVector };
 	uint8 GrabMask = 0;
 	if (const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner()))
@@ -70,7 +89,8 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	}
 	BoxingPose.Update(Mesh, PhysicsControl, CurrentFacingYaw, DeltaTime,
 		bBodyDrivenPunchActive ? (PunchHandSide > 0 ? 0 : 1) : -1, bBodyDrivenPunchReleased,
-		bBodyDrivenPunchActive ? PunchAimDirection : FVector::ZeroVector, GrabGoals, GrabMask);
+		bBodyDrivenPunchActive ? PunchAimDirection : FVector::ZeroVector, GrabGoals, GrabMask,
+		bAxeSwing ? &AnimationPose : nullptr);
 }
 
 void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const FVector& Wish)
@@ -139,6 +159,27 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	SmoothedBalanceOffset = FMath::VInterpTo(
 		SmoothedBalanceOffset, DesiredBalanceOffset, DeltaTime, BalanceResponseSpeed);
 	Target += SmoothedBalanceOffset;
+
+	// 坡面松键后不能把每帧已经下滑的髋位置当成新的站立点。
+	// 只固定电机的切平面参考；身体仍持续模拟，受击/起跳/大幅偏离时立即释放。
+	const bool bSlopeStand = GetWishDir().IsNearlyZero() && !bRisingFromLimp
+		&& !bJumping && !bPelvisAirborne && !bBodyDrivenPunchActive && !bHitFeetPlanted
+		&& ReplicatedControlMode == EDeliveryRagdollControlMode::Active
+		&& GetUprightDot() > 0.65f && CurrentGroundNormal.Z < 0.9962f
+		&& CurrentGroundNormal.Z > FMath::Cos(FMath::DegreesToRadians(TumbleSlopeDegrees));
+	if (!bSlopeStand) bSlopeStandAnchored = false;
+	else
+	{
+		if (bSlopeStandAnchored && bHasHipGround)
+			SlopeStandAnchor += GroundUnderHips.SurfaceVelocity * DeltaTime;
+		if (!bSlopeStandAnchored || FVector::Dist2D(Hips, SlopeStandAnchor) > 80.f)
+		{
+			SlopeStandAnchor = Hips;
+			bSlopeStandAnchored = true;
+		}
+		Target = SlopeStandAnchor + CurrentGroundNormal
+			* FVector::DotProduct(Target - SlopeStandAnchor, CurrentGroundNormal);
+	}
 
 	FVector DesiredNormal = CurrentGroundNormal;
 	FVector DesiredGroundPoint = SmoothedGroundPoint;
@@ -309,22 +350,10 @@ void UDeliveryActiveRagdollComponent::WriteBodyRotationTargets(float DeltaTime, 
 	FQuat Lean = FQuat::Identity;
 	const FVector SlopeForward = GetSlopeForward(Wish);
 	const FVector SlopeRight = GetSlopeRight(Wish);
-	const bool bHasMoveWish = !Wish.IsNearlyZero();
-	if (bHasMoveWish && !bHadMoveWishLastTick)
-	{
-		// 只在起步时给一次前倾，匀速下坡时不再不断追加前倾。
-		AccelerationLeanRemaining = AccelerationLeanDuration;
-	}
-	else if (!bHasMoveWish)
-	{
-		AccelerationLeanRemaining = 0.0f;
-	}
-	bHadMoveWishLastTick = bHasMoveWish;
 	const float StartupLeanAlpha = AccelerationLeanDuration > KINDA_SMALL_NUMBER
 		? AccelerationLeanRemaining / AccelerationLeanDuration : 0.0f;
 	SmoothedAccelerationAlpha = FMath::FInterpTo(
 		SmoothedAccelerationAlpha, StartupLeanAlpha, DeltaTime, DriveTargetSmoothingSpeed);
-	AccelerationLeanRemaining = FMath::Max(0.0f, AccelerationLeanRemaining - DeltaTime);
 	if (!Wish.IsNearlyZero())
 	{
 		const float LeanRadians = FMath::DegreesToRadians(
@@ -348,16 +377,18 @@ void UDeliveryActiveRagdollComponent::WriteBodyRotationTargets(float DeltaTime, 
 		}
 	}
 
-	// 纯水平拧身，不弯腰也不侧倾：蓄力时出拳侧的肩膀往后拧，释放后拧回来再带出去一点。
+	// 胸腰转体配合沿拳路的小幅前后摆，骨盆保持原本的平衡目标。
 	// 正的 Yaw 会把左肩转向前方，所以左拳（PunchHandSide 为正）蓄力要给负角度。
 	const float DesiredPunchTwist = !bBodyDrivenPunchActive ? 0.0f
 		: PunchHandSide * (bBodyDrivenPunchReleased ? PunchFollowThroughAngle : -PunchSideStanceAngle);
 	// 这个目标角度是阶跃的：出拳、释放、收拳各跳一次。胸腰电机很硬，把阶跃直接喂进去
 	// 会把整个上半身连着伸出去的手臂横甩过去，看着就是在扇耳光。必须平滑。
 	PunchTwist = FMath::FInterpTo(PunchTwist, DesiredPunchTwist, DeltaTime, PunchTwistSpeed);
-	const FQuat PunchSideRotation = FMath::IsNearlyZero(PunchTwist)
-		? FQuat::Identity
-		: FQuat(CurrentGroundNormal, FMath::DegreesToRadians(PunchTwist));
+	const float DesiredPunchLean = !bBodyDrivenPunchActive || bCarryingProp ? 0.f
+		: (bBodyDrivenPunchReleased ? PunchTorsoFollowLeanAngle : -PunchTorsoWindupLeanAngle);
+	PunchTorsoLean = FMath::FInterpTo(PunchTorsoLean, DesiredPunchLean, DeltaTime, PunchTwistSpeed);
+	const FQuat PunchSideRotation = DeliveryPunchTrajectory::TorsoSway(
+		CurrentGroundNormal, PunchAimDirection, PunchTwist, PunchTorsoLean);
 	const FQuat PelvisRotation = Lean * YawDelta * SlopeAlign * ReferencePelvisRotation;
 	// 蓄力和释放的拧身由腰胸完成，骨盆不跟着左右扭动两条腿。
 	FQuat SpineRelativeRotation = (PelvisRotation.Inverse() * PunchSideRotation

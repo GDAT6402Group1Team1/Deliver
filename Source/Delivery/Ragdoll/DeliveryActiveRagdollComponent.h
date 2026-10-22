@@ -11,6 +11,8 @@
 class UCapsuleComponent;
 class UPhysicsControlComponent;
 class USkeletalMeshComponent;
+class UAnimSequence;
+class ADeliveryHandheldItem;
 
 UENUM(BlueprintType)
 enum class EDeliveryRagdollControlMode : uint8
@@ -105,6 +107,7 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
+	friend class FDeliveryLegIsolationTest;
 
 	UDeliveryActiveRagdollComponent();
 
@@ -134,7 +137,36 @@ public:
 	/** 开始直拳：记录攻击方向和手侧。 */
 	void BeginBodyDrivenPunch(FVector AimDirection, float HandSide);
 	bool CanDrivePunch(float HandSide) const { return bIsActive && ReplicatedControlMode == EDeliveryRagdollControlMode::Active && BoxingPose.IsReady(HandSide > 0 ? 0 : 1); }
+	bool IsPunchRecovering() const { return BoxingPose.HasPendingPunchRecovery(); }
 	FVector GetBodyForward() const { return FRotator(0, CurrentFacingYaw, 0).Vector(); }
+
+	/** Held-axe LMB path; the server validates the equipped item before starting. */
+	void RequestAxeSwing();
+	float GetAxeSwingWeight() const;
+
+	UPROPERTY(EditDefaultsOnly, Category="Ragdoll|Axe")
+	TObjectPtr<UAnimSequence> AxeSwingAnimation;
+
+	UPROPERTY(EditDefaultsOnly, Category="Ragdoll|Axe", meta=(ClampMin="0.1", ClampMax="3"))
+	float AxeSwingPlayRate = 1.8f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Ragdoll|Axe", meta=(ClampMin="0.01"))
+	float AxeSwingBlendIn = 0.12f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Ragdoll|Axe", meta=(ClampMin="0.01"))
+	float AxeSwingBlendOut = 0.2f;
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestAxeSwing();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStartAxeSwing(ADeliveryHandheldItem* Axe, float ServerStartTime);
+
+	bool CanStartAxeSwing() const;
+	bool SampleAxeSwing(FDeliveryAnimationArmPose& Out);
+	float GetAxeSwingTime() const;
+	TWeakObjectPtr<ADeliveryHandheldItem> SwingAxe;
+	float AxeSwingStartTime = -1.f;
 
 	/** 释放直拳：标记前送阶段。 */
 	void ReleaseBodyDrivenPunch();
@@ -233,6 +265,13 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float MinimumStepUprightDot = 0.35f;
+
+	/** 可行走斜坡上已落地支撑脚的切向摩擦辅助；0 关闭，不锁脚、不吸附地面。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0"))
+	float SlopeSupportTraction = 12.0f;
+
+	UPROPERTY(EditAnywhere, Category="Ragdoll|步态", meta=(ClampMin="0.0"))
+	float SlopeSupportMaxAcceleration = 900.0f;
 
 	/**
 	 * 允许沿坡面行走的最大坡角（度）。坡角是地面法线与世界向上的夹角：
@@ -355,6 +394,14 @@ protected:
 	/** 释放时上身向出拳侧带出多少度。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0", ClampMax="45.0"))
 	float PunchFollowThroughAngle = 9.0f;
+
+	/** 蓄力时胸腰向拳路反方向轻微后摆，骨盆不参与。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0", ClampMax="8.0"))
+	float PunchTorsoWindupLeanAngle = 2.0f;
+
+	/** 释放时胸腰朝拳路前摆；保持小幅度，避免压倒身体。 */
+	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="0.0", ClampMax="15.0"))
+	float PunchTorsoFollowLeanAngle = 7.0f;
 
 	/** 拧身角度的过渡速度。目标角度是阶跃的，这里决定身体多快跟上去。 */
 	UPROPERTY(EditAnywhere, Category="Ragdoll|出拳", meta=(ClampMin="1.0"))
@@ -495,6 +542,7 @@ protected:
 	{
 		FVector Point = FVector::ZeroVector;
 		FVector Normal = FVector::UpVector;
+		FVector SurfaceVelocity = FVector::ZeroVector;
 	};
 
 	/** 一只脚的迈步状态。Alpha 小于 1 表示正在摆动，等于 1 表示落在地上做支撑。 */
@@ -542,6 +590,8 @@ protected:
 	float SmoothedAccelerationAlpha = 0.0f;
 	float DragReachAlpha = 0.0f;
 	float AccelerationLeanRemaining = 0.0f;
+	FVector SlopeStandAnchor = FVector::ZeroVector;
+	bool bSlopeStandAnchored = false;
 	bool bHadMoveWishLastTick = false;
 	FFoot LeftFoot;
 	FFoot RightFoot;
@@ -555,6 +605,7 @@ protected:
 	float AppliedBraceTargetStrength = -1.0f;
 	/** 平滑后的拧身角度。发给电机的必须是这个，不是阶跃的目标角度。 */
 	float PunchTwist = 0.0f;
+	float PunchTorsoLean = 0.0f;
 	float PunchLunge = 0.0f;
 	/** 受击后退平滑值，0 到 1，驱动髋部目标沿 HitPushDirection 的偏移量。 */
 	float HitPushAlpha = 0.0f;
@@ -608,6 +659,7 @@ protected:
 	bool bHasOwnerCorrectionSequence = false;
 	bool bWasMoving = false;
 	bool bPendingStopRecovery = false;
+	float BlockedStepRecoveryRemaining = 0.0f;
 	bool bStepLeftNext = true;
 	bool bIsActive = false;
 	bool bIsLimp = false;
@@ -657,6 +709,7 @@ protected:
 		float Wobble, bool bCarryingProp, const FVector& Target);
 	void UpdateFeet(float DeltaTime, const FVector& Wish);
 	void KeepFeetOnOwnSide();
+	void ApplySlopeSupportTraction(float DeltaTime);
 	bool BeginStep(FFoot& Foot, const FVector& Wish);
 	void UpdateFootTarget(FFoot& Foot, float DeltaTime);
 	bool PlanFootLanding(FFoot& Foot, const FVector& Wish);

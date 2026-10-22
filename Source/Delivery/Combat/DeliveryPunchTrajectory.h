@@ -6,6 +6,18 @@
 // 读这个文件时可以把肩看成原点：Direction * Distance 就是拳头相对肩的位置。
 namespace DeliveryPunchTrajectory
 {
+// World-space chest offset only; the pelvis/feet must not inherit this sway.
+inline FQuat TorsoSway(const FVector& Up, const FVector& Aim, float TwistDegrees, float LeanDegrees)
+{
+	const FVector Normal = Up.GetSafeNormal();
+	if (Normal.IsNearlyZero()) return FQuat::Identity;
+	const FVector Forward = FVector::VectorPlaneProject(Aim, Normal).GetSafeNormal();
+	const FQuat Twist(Normal, FMath::DegreesToRadians(TwistDegrees));
+	if (Forward.IsNearlyZero()) return Twist;
+	const FVector TiltedUp = (Normal + Forward * FMath::Tan(FMath::DegreesToRadians(LeanDegrees))).GetSafeNormal();
+	return (FQuat::FindBetweenNormals(Normal, TiltedUp) * Twist).GetNormalized();
+}
+
 struct FArmReach
 {
 	// Direction × Distance = 手相对肩的位置；Pole 是肘关节优先弯曲的一侧。

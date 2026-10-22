@@ -10,6 +10,16 @@
 
 namespace
 {
+	void SyncDefaultProfile(UPhysicsConstraintTemplate* Template)
+	{
+#if WITH_EDITOR
+		// PIE recreates live joints from DefaultProfile after copying DefaultInstance.
+		// Updating only the instance silently restores authored 45-degree limits
+		// (and default Free axes on newly created wrists) in the actual simulation.
+		Template->SetDefaultProfile(Template->DefaultInstance);
+#endif
+	}
+
 	/** 关节限位是否已经放到出拳需要的范围。够宽就不用再复制一份物理资产。 */
 	bool JointIsOpenedUp(const FConstraintInstance& Joint, float SwingLimit, float TwistLimit)
 	{
@@ -68,6 +78,7 @@ namespace
 		Joint.SetLinearLimits(LCM_Locked, LCM_Locked, LCM_Locked, 0);
 		OpenUpJoint(Joint, SwingLimit, TwistLimit);
 		Joint.SetDisableCollision(true);
+		SyncDefaultProfile(Constraint);
 		Asset->ConstraintSetup.Add(Constraint);
 	}
 
@@ -164,11 +175,13 @@ void FDeliveryBoxingPose::CompletePhysicsAsset(USkeletalMeshComponent* Mesh, con
 			if (Joint.ConstraintBone1 == Upper)
 			{
 				OpenUpJoint(Joint, Settings.ShoulderSwingLimit, Settings.ShoulderTwistLimit);
+				SyncDefaultProfile(Template);
 				bShoulderFound = true;
 			}
 			else if (Joint.ConstraintBone1 == Lower)
 			{
 				OpenUpJoint(Joint, Settings.ElbowSwingLimit, Settings.ElbowTwistLimit);
+				SyncDefaultProfile(Template);
 			}
 		}
 		if (!bShoulderFound)
@@ -208,6 +221,7 @@ void FDeliveryBoxingPose::CompletePhysicsAsset(USkeletalMeshComponent* Mesh, con
 				Joint.SetAngularSwing2Limit(ACM_Limited, 15);
 				Joint.SetAngularTwistLimit(ACM_Limited, 15);
 				Joint.SetDisableCollision(true);
+				SyncDefaultProfile(Template);
 				bWristFound = true;
 			}
 			if (!bWristFound)

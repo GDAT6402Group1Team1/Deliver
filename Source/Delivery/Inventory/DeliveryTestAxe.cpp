@@ -8,6 +8,7 @@
 
 ADeliveryTestAxe::ADeliveryTestAxe()
 {
+	bUsesAxeSwing = true;
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeFinder(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeFinder.Succeeded())
 	{

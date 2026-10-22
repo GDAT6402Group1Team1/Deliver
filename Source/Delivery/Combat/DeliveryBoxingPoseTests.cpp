@@ -25,6 +25,17 @@ bool FDeliveryPunchTrajectoryTest::RunTest(const FString&)
 	TestTrue(TEXT("直拳终点在肩前"), Forward.X > 0.0f);
 	TestTrue(TEXT("前送中段已越过半程"), DeliveryPunchTrajectory::StrikeProgress(0.5f) > 0.5f);
 	TestTrue(TEXT("回收两端比中间慢"), DeliveryPunchTrajectory::RetractProgress(0.1f) < 0.1f);
+	for (float Yaw : {0.f, 90.f, -120.f})
+	for (float Side : {-1.f, 1.f})
+	{
+		const FVector Aim = FRotator(0,Yaw,0).Vector();
+		const FVector ReleasedUp = DeliveryPunchTrajectory::TorsoSway(FVector::UpVector,Aim,Side*9.f,7.f).RotateVector(FVector::UpVector);
+		const FVector WindupUp = DeliveryPunchTrajectory::TorsoSway(FVector::UpVector,Aim,-Side*8.f,-2.f).RotateVector(FVector::UpVector);
+		TestTrue(TEXT("chest follows punch direction for either hand"), FVector::DotProduct(ReleasedUp,Aim)>0.1f);
+		TestTrue(TEXT("windup leans slightly away from punch"), FVector::DotProduct(WindupUp,Aim)<0.f);
+		TestTrue(TEXT("chest sway remains small"), FVector::DotProduct(ReleasedUp,FVector::UpVector)>0.99f);
+		TestTrue(TEXT("recovered chest has no residual offset"), DeliveryPunchTrajectory::TorsoSway(FVector::UpVector,Aim,0,0).Equals(FQuat::Identity));
+	}
 	return true;
 }
 
@@ -113,6 +124,9 @@ bool FDeliveryBoxingAssetTest::RunTest(const FString&)
 		const bool bFound = Controls->GetControlTarget(Arm.UpperControl, Upper)
 			&& Controls->GetControlTarget(Arm.LowerControl, Lower);
 		TestTrue(TEXT("arm control targets exist"), bFound);
+		// Lower targets are parent-relative, not world rotations.
+		Lower.TargetOrientation = (Upper.TargetOrientation.Quaternion()
+			* Lower.TargetOrientation.Quaternion()).Rotator();
 		const auto Direction = [](const FPhysicsControlTarget& Target, const FQuat& Reference, const FVector& Bone)
 		{
 			return Target.TargetOrientation.Quaternion().RotateVector(Reference.UnrotateVector(Bone.GetSafeNormal()));

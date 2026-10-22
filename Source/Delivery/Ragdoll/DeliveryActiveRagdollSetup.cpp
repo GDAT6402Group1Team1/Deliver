@@ -311,6 +311,7 @@ void UDeliveryActiveRagdollComponent::ConfigurePhysics()
 	Mesh->SetAllBodiesSimulatePhysics(true);
 	Mesh->SetAllBodiesPhysicsBlendWeight(1.0f, false);
 	Mesh->SetSimulatePhysics(true);
+	DeliveryRagdollPhysicsHelpers::StabilizePelvisMass(Mesh, Bones.Hips);
 	Mesh->WakeAllRigidBodies();
 }
 
@@ -411,10 +412,10 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 	}
 	ChestControl = ChestControls[0];
 
-	// 躯干其余节：父空间旋转，目标是当前骨骼动画姿势，不是启动时记下的站立姿势。
+	// 躯干其余节：使用资产参考姿势，不能把物理混合后的骨骼缓存当成恢复目标。
 	// 上臂就挂在这几节上，出拳时要按名字把它们绷紧，所以留着控制名。
-	TorsoControls = PhysicsControl->CreateControlsFromSkeletalMesh(
-		Mesh, Torso, EPhysicsControlType::ParentSpace, MakeAngularControl(LooseComedyBodyStrength, StableMuscleDampingRatio), TorsoSet);
+	TorsoControls = DeliveryRagdollPhysicsHelpers::CreateReferencePoseControls(
+		Mesh, PhysicsControl, Torso, MakeAngularControl(LooseComedyBodyStrength, StableMuscleDampingRatio), TorsoSet);
 	// 头：世界空间旋转，目标由启动时记下的头部姿势随身体转向得到。
 	FPhysicsControlData HeadData = MakeAngularControl(UprightHeadStrength, StableHeadDampingRatio);
 	HeadData.bUseSkeletalAnimation = false;
@@ -426,17 +427,17 @@ bool UDeliveryActiveRagdollComponent::CreateControls()
 		return false;
 	}
 	HeadControl = HeadControls[0];
-	PhysicsControl->CreateControlsFromSkeletalMesh(
-		Mesh, HeadChildren, EPhysicsControlType::ParentSpace,
+	DeliveryRagdollPhysicsHelpers::CreateReferencePoseControls(
+		Mesh, PhysicsControl, HeadChildren,
 		MakeAngularControl(UprightHeadStrength, StableHeadDampingRatio), HeadSet);
-	// 大腿和小腿：父空间旋转，目标是当前骨骼动画姿势。腿会跟着弯，但迈步位移由脚的世界空间目标决定。
-	PhysicsControl->CreateControlsFromSkeletalMesh(
-		Mesh, UpperLegs, EPhysicsControlType::ParentSpace, MakeAngularControl(StableHipStrength, 1.3f), LegsSet);
-	PhysicsControl->CreateControlsFromSkeletalMesh(
-		Mesh, LowerLegs, EPhysicsControlType::ParentSpace, MakeAngularControl(ArticulatedKneeStrength, 1.15f), LegsSet);
+	// 腿的恢复角度固定在参考姿势，迈步位移仍由脚的世界空间目标决定。
+	DeliveryRagdollPhysicsHelpers::CreateReferencePoseControls(
+		Mesh, PhysicsControl, UpperLegs, MakeAngularControl(StableHipStrength, 1.3f), LegsSet);
+	DeliveryRagdollPhysicsHelpers::CreateReferencePoseControls(
+		Mesh, PhysicsControl, LowerLegs, MakeAngularControl(ArticulatedKneeStrength, 1.15f), LegsSet);
 	// 脚踝：父空间旋转负责脚尖朝向。世界空间脚控制只拉位置，不写角度，避免两套旋转目标互相拉扯。
-	PhysicsControl->CreateControlsFromSkeletalMesh(
-		Mesh, { LeftFoot.Bone, RightFoot.Bone }, EPhysicsControlType::ParentSpace,
+	DeliveryRagdollPhysicsHelpers::CreateReferencePoseControls(
+		Mesh, PhysicsControl, { LeftFoot.Bone, RightFoot.Bone },
 		MakeAngularControl(FootFacingStrength, StableMuscleDampingRatio), FootPostureSet);
 	// 手臂正常由 BoxingPose 驱动。只有它建不起来时才退回这套跟随骨架动画的软控制，
 	// 避免猜测局部轴导致关节持续扭动。
@@ -503,6 +504,7 @@ void UDeliveryActiveRagdollComponent::DestroyControls()
 	AppliedBraceAlpha = -1.0f;
 	AppliedBraceTargetStrength = -1.0f;
 	PunchTwist = 0.0f;
+	PunchTorsoLean = 0.0f;
 	PunchLunge = 0.0f;
 	HitPushAlpha = 0.0f;
 	HitReactionEndTime = 0.0f;
@@ -598,6 +600,7 @@ void UDeliveryActiveRagdollComponent::CacheStandingState()
 	WishOnSlope = FVector::ZeroVector;
 	SmoothedAccelerationAlpha = 0.0f;
 	AccelerationLeanRemaining = 0.0f;
+	bSlopeStandAnchored = false;
 	bHadMoveWishLastTick = false;
 	StartupPlantRemaining = StartupFootPlantDuration;
 	bWasMoving = false;

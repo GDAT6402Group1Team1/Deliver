@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DeliveryAnimationArmPose.h"
+
 #include "CoreMinimal.h"
 #include "Combat/DeliveryCombatTypes.h"
 
@@ -19,6 +21,12 @@ struct FDeliveryBoxingPose
 		/** 0 是站立走路的 A 姿势，1 是拳头拉到身后的收拳。只有出拳那只手才往 1 走。 */
 		float Windup = 0;
 		float Extension = 0;
+		FVector PunchForward = FVector::ZeroVector;
+		// Last facing-relative targets, captured only as the start of recovery.
+		// Do not integrate these during windup/strike: that accumulates axial roll.
+		FQuat UpperTransport = FQuat::Identity, LowerTransport = FQuat::Identity;
+		FQuat UpperRecovery = FQuat::Identity, LowerRecovery = FQuat::Identity;
+		bool bWasPunching = false;
 		float AppliedStrength = -1;
 		bool bReady = false;
 	};
@@ -35,8 +43,15 @@ struct FDeliveryBoxingPose
 	void Update(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* Controls,
 		float FacingYaw, float DeltaTime, int32 PunchArm, bool bReleased,
 		FVector PunchDirection = FVector::ZeroVector,
-		const FVector* GrabGoals = nullptr, uint8 GrabMask = 0);
+		const FVector* GrabGoals = nullptr, uint8 GrabMask = 0,
+		const FDeliveryAnimationArmPose* AnimationPose = nullptr);
 	bool IsReady(int32 Side) const { return Side >= 0 && Side < 2 && Arms[Side].bReady; }
+	bool HasPendingPunchRecovery() const
+	{
+		for (const FArm& Arm : Arms)
+			if (Arm.bReady && (Arm.Windup > 0.f || Arm.Extension > 0.f)) return true;
+		return false;
+	}
 	static FVector SolveElbow(const FVector& Shoulder, const FVector& Hand,
 		const FVector& Pole, float UpperLength, float LowerLength);
 };

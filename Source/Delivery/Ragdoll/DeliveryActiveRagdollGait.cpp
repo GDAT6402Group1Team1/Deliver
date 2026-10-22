@@ -3,8 +3,10 @@
 #include "DeliveryActiveRagdollComponent.h"
 #include "DeliveryFootPlacement.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
 #include "Math/RotationMatrix.h"
 #include "PhysicsControlComponent.h"
+#include "PhysicsEngine/BodyInstance.h"
 
 void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector& Wish)
 {
@@ -12,6 +14,11 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 	if (GetUprightDot() >= MinimumStepUprightDot) KeepFeetOnOwnSide();
 	UpdateFootTarget(LeftFoot, DeltaTime);
 	UpdateFootTarget(RightFoot, DeltaTime);
+	ApplySlopeSupportTraction(DeltaTime);
+	// A timed-out step must stay released for a real recovery interval. Otherwise
+	// the selection below chooses the same trailing foot in this very frame and
+	// re-enables its unreachable target before Chaos ever sees it disabled.
+	if (BlockedStepRecoveryRemaining > 0.0f) return;
 
 	const bool bMoving = !Wish.IsNearlyZero();
 	// 记住“刚从移动变成停下”：普通行走停住后，如果脚离稳定位置太远，要补一步。
@@ -147,8 +154,12 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FFoot& Foot, float DeltaT
 	float SmoothAlpha = 0.0f;
 	FVector Position = DeliveryFootPlacement::SwingPosition(Foot.Start, Foot.Target,
 		CurrentGroundNormal, Foot.Alpha, ControlledStepHeight, SmoothAlpha);
-	Position = DeliveryFootPlacement::KeepOnSide(Position, PlannedPelvisTarget,
-		Foot.SideAxis, Foot.SideSign, StableMinimumFootSide * SmoothAlpha);
+	// 最后 15% 已固定落点，不能再用移动中的髋部把落脚目标推走。
+	if (Foot.Alpha < 0.85f)
+	{
+		Position = DeliveryFootPlacement::KeepOnSide(Position, PlannedPelvisTarget,
+			GetSlopeRight(FVector::ZeroVector), Foot.SideSign, StableMinimumFootSide * SmoothAlpha);
+	}
 
 	PhysicsControl->SetControlTargetPositionAndOrientation(
 		Foot.Control, Position, Foot.TargetRotation.Rotator(), DeltaTime, true, true, true, false);
@@ -164,6 +175,12 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FFoot& Foot, float DeltaT
 		// 只额外等待有限时间：让物理脚有机会落到目标，又不让被障碍挡住的腿永远锁住。
 		// 关闭位置电机后，下方 KeepFeetOnOwnSide 仍会保护支撑脚不跨过中线。
 		PhysicsControl->SetControlEnabled(Foot.Control, false, true, false);
+		if (Gap > 18.0f)
+		{
+			CancelFootSteps();
+			BlockedStepRecoveryRemaining = 0.45f;
+			bPendingStopRecovery = true;
+		}
 	}
 }
 
@@ -229,6 +246,15 @@ FVector UDeliveryActiveRagdollComponent::GetSlopeRight(const FVector& /*Wish*/) 
 {
 	// 左右以身体平滑后的朝向为准，不跟随瞬间改变的移动输入。
 	// 比如玩家突然反向按键时，髋还没转过来，不能立刻把左右脚的归属对调。
+	// CurrentFacingYaw is the motor's requested heading, NOT the physical body's
+	// heading. During a U-turn it can lead the pelvis by almost 180 degrees. Using
+	// it here swaps the feet and pushes a still-supported leg through the other.
+	if (const FBodyInstance* Pelvis = Mesh->GetBodyInstance(Bones.Hips))
+	{
+		const FVector Side = DeliveryFootPlacement::PhysicalSideAxis(CurrentGroundNormal,
+			Pelvis->GetUnrealWorldTransform().GetRotation(), ReferencePelvisRotation, ReferenceFacingYaw);
+		if (!Side.IsNearlyZero()) return Side;
+	}
 	return DeliveryFootPlacement::SideAxis(CurrentGroundNormal, CurrentFacingYaw);
 }
 
@@ -236,7 +262,7 @@ void UDeliveryActiveRagdollComponent::KeepFeetOnOwnSide()
 {
 	// 这里修正的是脚的真实物理刚体，不只是迈步目标。支撑脚没有位置电机，
 	// 在下坡滑动时也可能跨过身体中线，所以需要一个有限的向外分离力。
-	const FVector Right = FRotationMatrix(FRotator(0.0f, CurrentFacingYaw, 0.0f)).GetUnitAxis(EAxis::Y);
+	const FVector Right = GetSlopeRight(FVector::ZeroVector);
 	const FVector Hips = Mesh->GetCenterOfMass(Bones.Hips);
 	const FVector HipVelocity = Mesh->GetPhysicsLinearVelocity(Bones.Hips);
 	for (FFoot* Foot : { &LeftFoot, &RightFoot })
@@ -247,6 +273,27 @@ void UDeliveryActiveRagdollComponent::KeepFeetOnOwnSide()
 		const float OutwardSpeed = FVector::DotProduct(Mesh->GetPhysicsLinearVelocity(Foot->Bone) - HipVelocity, Outward);
 		const float Acceleration = DeliveryFootPlacement::SeparationAcceleration(Side, OutwardSpeed, StableMinimumFootSide);
 		Mesh->AddForce(Outward * Acceleration, Foot->Bone, true);
+	}
+}
+
+void UDeliveryActiveRagdollComponent::ApplySlopeSupportTraction(float DeltaTime)
+{
+	if (GetUprightDot() < 0.65f || BlockedStepRecoveryRemaining > 0.f
+		|| SlopeSupportTraction <= 0.f || !GetWorld()) return;
+	for (const FFoot* Foot : { &LeftFoot, &RightFoot })
+	{
+		// 摆动、脚步释放恢复和空中都不能刹脚；否则又会把髋与腿互相拉扯。
+		if (Foot->Alpha < 1.f || PhysicsControl->GetControlEnabled(Foot->Control)) continue;
+		const FVector Sole = Mesh->GetBoneLocation(Foot->SoleBone, EBoneSpaces::WorldSpace);
+		FGroundHit Ground;
+		if (!TraceGround(Sole, CurrentGroundNormal, Ground)) continue;
+		const float Height = FVector::DotProduct(Sole - Ground.Point, Ground.Normal);
+		if (Height < -5.f || Height > 5.f || Ground.Normal.Z > 0.9962f
+			|| Ground.Normal.Z < FMath::Cos(FMath::DegreesToRadians(TumbleSlopeDegrees))) continue;
+		const FVector Velocity = Mesh->GetPhysicsLinearVelocity(Foot->Bone) - Ground.SurfaceVelocity;
+		if (FMath::Abs(FVector::DotProduct(Velocity, Ground.Normal)) > 50.f) continue;
+		Mesh->AddForce(DeliveryFootPlacement::SupportTraction(Velocity, Ground.Normal,
+			GetWorld()->GetGravityZ(), DeltaTime, SlopeSupportTraction, SlopeSupportMaxAcceleration), Foot->Bone, true);
 	}
 }
 

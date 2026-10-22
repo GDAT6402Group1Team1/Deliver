@@ -32,8 +32,14 @@
 #include "PhysicsControlComponent.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/ConstraintInstance.h"
+#include "PhysicsEngine/PhysicsConstraintTemplate.h"
 #include "Math/RotationMatrix.h"
 #include "../Delivery.h"
+#include "Animation/AnimSequence.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Inventory/DeliveryInventoryComponent.h"
+#include "Inventory/DeliveryHandheldItem.h"
 
 
 UDeliveryActiveRagdollComponent::UDeliveryActiveRagdollComponent()
@@ -49,6 +55,9 @@ UDeliveryActiveRagdollComponent::UDeliveryActiveRagdollComponent()
 	PostPhysicsTickFunction.TickGroup = TG_PostPhysics;
 
 	PhysicsControl = CreateDefaultSubobject<UPhysicsControlComponent>(TEXT("PhysicsControl"));
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> AxeAnimation(
+		TEXT("/Game/Characters/Animations/Axe/A_AxeDownward.A_AxeDownward"));
+	AxeSwingAnimation = AxeAnimation.Object;
 }
 
 void UDeliveryActiveRagdollComponent::GetLifetimeReplicatedProps(
@@ -96,6 +105,16 @@ void UDeliveryActiveRagdollComponent::TickComponent(
 	float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	if (SwingAxe.IsValid())
+	{
+		const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
+		if (!bIsActive || bIsLimp || !Character || Character->IsIncapacitated()
+			|| !Character->GetInventoryComponent() || Character->GetInventoryComponent()->GetHeldItem() != SwingAxe.Get()
+			|| (Character->GetGrabComponent() && Character->GetGrabComponent()->IsGrabbing()))
+		{
+			SwingAxe.Reset(); // A cancelled clip must not resume if the axe is equipped again.
+		}
+	}
 
 	if (!bIsActive)
 	{
@@ -166,19 +185,67 @@ void UDeliveryActiveRagdollComponent::TickComponent(
 #if !UE_BUILD_SHIPPING
 void UDeliveryActiveRagdollComponent::TraceRecoveryPhysics(bool bAfterPhysics, float DeltaTime)
 {
-	if (!GetOwner()->HasAuthority() || !Mesh || !PhysicsControl || !GetWorld()) return;
+	if (!GetOwner() || !Mesh || !PhysicsControl || !GetWorld()) return;
+	if (!GetOwner()->HasAuthority() && GetOwner()->GetLocalRole() != ROLE_AutonomousProxy) return;
 	const FBodyInstance* Body = Mesh->GetBodyInstance(Bones.Hips);
 	if (!Body) return;
 	const float Now = GetWorld()->GetTimeSeconds();
 	const int32 Mode = static_cast<int32>(ReplicatedControlMode);
 	// Also sample after the pelvis recovery window: an upright hip does not prove
 	// that the shoulders/elbows/wrists have returned to their targets.
-	if (bAfterPhysics && !bIsLimp && Now >= DiagnosticUpperBodyNextLog)
+	if (bAfterPhysics && Now >= DiagnosticUpperBodyNextLog)
 	{
-		DiagnosticUpperBodyNextLog = Now + 1.0f;
+		DiagnosticUpperBodyNextLog = Now + (bBodyDrivenPunchActive || IsPunchRecovering() ? 0.2f : 0.5f);
+		UE_LOG(LogDelivery, Log, TEXT("PunchDiag actor=%s world=%s time=%.3f role=%d dt=%.4f mode=%d active=%d released=%d hand=%.0f aim=%s facing=%.1f twist=%.1f upright=%.3f planted=%d interrupted=%d axe=%d mesh=%s physics=%s"),
+			*GetNameSafe(GetOwner()), *GetNameSafe(GetWorld()), Now, int32(GetOwner()->GetLocalRole()), DeltaTime,
+			Mode, bBodyDrivenPunchActive, bBodyDrivenPunchReleased, PunchHandSide,
+			*PunchAimDirection.ToCompactString(), CurrentFacingYaw, PunchTwist, GetUprightDot(),
+			bPunchFeetPlanted, bPunchSupportInterrupted, SwingAxe.IsValid(),
+			*GetNameSafe(Mesh->GetSkeletalMeshAsset()), *GetNameSafe(Mesh->GetPhysicsAsset()));
+		// Crash recovery needs the entire joint chain, including the limp interval.
+		// These are live constraints; asset templates alone hid the PIE profile bug.
+		if (const UPhysicsAsset* Asset = Mesh->GetPhysicsAsset())
+		{
+			for (const UPhysicsConstraintTemplate* Template : Asset->ConstraintSetup)
+			{
+				if (!Template) continue;
+				const FConstraintInstance* Joint = Mesh->FindConstraintInstance(Template->DefaultInstance.JointName);
+				if (!Joint) continue;
+				const FBodyInstance* Child = Mesh->GetBodyInstance(Joint->ConstraintBone1);
+				const FBodyInstance* Parent = Mesh->GetBodyInstance(Joint->ConstraintBone2);
+				if (!Child || !Parent) continue;
+				const FTransform ChildFrame = Joint->GetRefFrame(EConstraintFrame::Frame1) * Child->GetUnrealWorldTransform();
+				const FTransform ParentFrame = Joint->GetRefFrame(EConstraintFrame::Frame2) * Parent->GetUnrealWorldTransform();
+				UE_LOG(LogDelivery, Log, TEXT("CrashDiagJoint actor=%s time=%.3f role=%d mode=%d limp=%d rise=%.2f child=%s parent=%s frameGapCm=%.2f frameAngleDeg=%.1f anglesRad=%.3f,%.3f,%.3f limitsDeg=%.1f,%.1f,%.1f motions=%d,%d,%d mass=%.4f,%.4f collisionDisabled=%d angularV=%s"),
+					*GetNameSafe(GetOwner()), Now, int32(GetOwner()->GetLocalRole()), Mode, bIsLimp, LimpRecoveryRiseAlpha,
+					*Joint->ConstraintBone1.ToString(), *Joint->ConstraintBone2.ToString(),
+					FVector::Distance(ChildFrame.GetLocation(), ParentFrame.GetLocation()),
+					FMath::RadiansToDegrees(ChildFrame.GetRotation().AngularDistance(ParentFrame.GetRotation())),
+					Joint->GetCurrentSwing1(), Joint->GetCurrentSwing2(), Joint->GetCurrentTwist(),
+					Joint->GetAngularSwing1Limit(), Joint->GetAngularSwing2Limit(), Joint->GetAngularTwistLimit(),
+					int32(Joint->GetAngularSwing1Motion()), int32(Joint->GetAngularSwing2Motion()), int32(Joint->GetAngularTwistMotion()),
+					Child->GetBodyMass(), Parent->GetBodyMass(), Joint->IsCollisionDisabled(),
+					*Child->GetUnrealWorldAngularVelocityInRadians().ToCompactString());
+			}
+		}
+		for (const FName Control : PhysicsControl->GetControlNamesInSet(TEXT("All")))
+		{
+			FPhysicsControlData Data;
+			FPhysicsControlMultiplier Multiplier;
+			FPhysicsControlTarget Target;
+			if (!PhysicsControl->GetControlData(Control, Data) || !PhysicsControl->GetControlMultiplier(Control, Multiplier)
+				|| !PhysicsControl->GetControlTarget(Control, Target)) continue;
+			UE_LOG(LogDelivery, Log, TEXT("CrashDiagDrive actor=%s time=%.3f role=%d control=%s enabled=%d useAnim=%d angularStrength=%.2f angularMultiplier=%.2f linearMultiplier=%s targetOffset=%s targetAngularV=%s"),
+				*GetNameSafe(GetOwner()), Now, int32(GetOwner()->GetLocalRole()), *Control.ToString(),
+				PhysicsControl->GetControlEnabled(Control), Data.bUseSkeletalAnimation,
+				Data.AngularStrength, Multiplier.AngularStrengthMultiplier, *Multiplier.LinearStrengthMultiplier.ToCompactString(),
+				*Target.TargetOrientation.ToCompactString(), *Target.TargetAngularVelocity.ToCompactString());
+		}
 		for (const FDeliveryBoxingPose::FArm& Arm : BoxingPose.Arms)
 		{
 			if (!Arm.bReady) continue;
+			UE_LOG(LogDelivery, Log, TEXT("PunchDiagArm actor=%s time=%.3f bone=%s windup=%.3f extension=%.3f aim=%s"),
+				*GetNameSafe(GetOwner()), Now, *Arm.Upper.ToString(), Arm.Windup, Arm.Extension, *Arm.PunchForward.ToCompactString());
 			const TPair<FName, FName> Links[] = {
 				{ Arm.Upper, Arm.UpperControl }, { Arm.Lower, Arm.LowerControl }, { Arm.Hand, Arm.HandControl } };
 			for (const TPair<FName, FName>& Link : Links)
@@ -201,12 +268,49 @@ void UDeliveryActiveRagdollComponent::TraceRecoveryPhysics(bool bAfterPhysics, f
 					}
 				}
 				const float Error = FMath::RadiansToDegrees(Actual.AngularDistance(Target.TargetOrientation.Quaternion()));
-				if (Error < 30.0f && PhysicsControl->GetControlEnabled(Link.Value)) continue;
+				// Keep normal samples too: we need the lead-up, not only the final stuck pose.
 				UE_LOG(LogDelivery, Log, TEXT("UpperBodyTrace actor=%s world=%s time=%.3f mode=%d bone=%s enabled=%d errorDeg=%.1f strength=%.2f multiplier=%.2f actual=%s target=%s angularV=%s"),
 					*GetNameSafe(GetOwner()), *GetNameSafe(GetWorld()), Now, Mode, *Link.Key.ToString(),
 					PhysicsControl->GetControlEnabled(Link.Value), Error, Data.AngularStrength,
 					Multiplier.AngularStrengthMultiplier, *Actual.Rotator().ToCompactString(),
 					*Target.TargetOrientation.ToCompactString(), *LinkBody->GetUnrealWorldAngularVelocityInRadians().ToCompactString());
+				UE_LOG(LogDelivery, Log, TEXT("PunchDiagBody actor=%s time=%.3f bone=%s mass=%.4f sim=%d awake=%d parent=%s pos=%s targetAngularV=%s"),
+					*GetNameSafe(GetOwner()), Now, *Link.Key.ToString(), LinkBody->GetBodyMass(),
+					Mesh->IsSimulatingPhysics(Link.Key), LinkBody->IsInstanceAwake(), *ParentBone.ToString(),
+					*LinkBody->GetUnrealWorldTransform().GetLocation().ToCompactString(), *Target.TargetAngularVelocity.ToCompactString());
+				if (const FConstraintInstance* Joint = Mesh->FindConstraintInstance(Link.Key))
+				{
+					UE_LOG(LogDelivery, Log, TEXT("PunchDiagJoint actor=%s time=%.3f bone=%s child=%s parent=%s anglesRadians=%.3f,%.3f,%.3f limitsDegrees=%.1f,%.1f,%.1f motions=%d,%d,%d collisionDisabled=%d"),
+						*GetNameSafe(GetOwner()), Now, *Link.Key.ToString(), *Joint->ConstraintBone1.ToString(), *Joint->ConstraintBone2.ToString(),
+						Joint->GetCurrentSwing1(), Joint->GetCurrentSwing2(), Joint->GetCurrentTwist(),
+						Joint->GetAngularSwing1Limit(), Joint->GetAngularSwing2Limit(), Joint->GetAngularTwistLimit(),
+						int32(Joint->GetAngularSwing1Motion()), int32(Joint->GetAngularSwing2Motion()), int32(Joint->GetAngularTwistMotion()),
+						Joint->IsCollisionDisabled());
+				}
+			}
+		}
+		for (const FFoot* Foot : { &LeftFoot, &RightFoot })
+		{
+			const FName Thigh = Foot == &LeftFoot ? Bones.LeftUpLeg : Bones.RightUpLeg;
+			for (FName ChildName : { Thigh, Foot->Bone })
+			{
+				FName ParentName = Mesh->GetParentBone(ChildName);
+				while (!ParentName.IsNone() && !Mesh->GetBodyInstance(ParentName))
+					ParentName = Mesh->GetParentBone(ParentName);
+				const FBodyInstance* Child = Mesh->GetBodyInstance(ChildName);
+				const FBodyInstance* Parent = Mesh->GetBodyInstance(ParentName);
+				const FName Control(*(ParentName.ToString() + TEXT("_") + ChildName.ToString()));
+				FPhysicsControlTarget Target;
+				if (!Child || !Parent || !PhysicsControl->GetControlTarget(Control, Target)) continue;
+				const FQuat Actual = Parent->GetUnrealWorldTransform().GetRotation().Inverse()
+					* Child->GetUnrealWorldTransform().GetRotation();
+				FPhysicsControlTarget FootTarget;
+				PhysicsControl->GetControlTarget(Foot->Control, FootTarget);
+				UE_LOG(LogDelivery, Log, TEXT("LegRecoveryDiag time=%.3f bone=%s targetErrorDeg=%.2f actual=%s target=%s footDrive=%d footGap=%.2f stepAlpha=%.3f stepElapsed=%.3f wish=%s hipSpeed=%.1f"),
+					Now, *ChildName.ToString(), FMath::RadiansToDegrees(Actual.AngularDistance(Target.TargetOrientation.Quaternion())),
+					*Actual.Rotator().ToCompactString(), *Target.TargetOrientation.ToCompactString(),
+					PhysicsControl->GetControlEnabled(Foot->Control), FVector::Dist(Mesh->GetCenterOfMass(Foot->Bone), FootTarget.TargetPosition),
+					Foot->Alpha, Foot->Elapsed, *GetWishDir().ToCompactString(), Mesh->GetPhysicsLinearVelocity(Bones.Hips).Size());
 			}
 		}
 		const FBodyInstance* Chest = Mesh->GetBodyInstance(Bones.Spine);
@@ -224,6 +328,7 @@ void UDeliveryActiveRagdollComponent::TraceRecoveryPhysics(bool bAfterPhysics, f
 			}
 		}
 	}
+	if (!GetOwner()->HasAuthority()) return;
 	if (!bAfterPhysics)
 	{
 		if (Mode != DiagnosticRecoveryMode)
@@ -345,6 +450,7 @@ void UDeliveryActiveRagdollComponent::StartRagdoll()
 
 void UDeliveryActiveRagdollComponent::StopRagdoll()
 {
+	SwingAxe.Reset();
 	// 撤销这套物理控制并把角色恢复到非布娃娃状态；不沿用旧的脚步/输入缓存。
 	AActor* Owner = GetOwner();
 	if (Owner)
@@ -410,6 +516,7 @@ void UDeliveryActiveRagdollComponent::SetLimp(bool bLimp)
 
 void UDeliveryActiveRagdollComponent::ApplyLimpState(bool bLimp)
 {
+	if (bLimp) SwingAxe.Reset();
 	// 晕倒不是关闭物理模拟，而是放开站立电机，让整条刚体链继续受重力/碰撞驱动。
 	// 恢复时重新播种当前身体位置，避免追向晕倒前缓存的世界位置。
 	if (bIsActive && bIsLimp == bLimp)
@@ -587,6 +694,7 @@ void UDeliveryActiveRagdollComponent::ReseedFromCurrentPose()
 	WishOnSlope = FVector::ZeroVector;
 	SmoothedAccelerationAlpha = 0.0f;
 	AccelerationLeanRemaining = 0.0f;
+	bSlopeStandAnchored = false;
 	bHadMoveWishLastTick = false;
 	MoveInput = FVector2D::ZeroVector;
 	LastWishDirection = FRotator(0.0f, CurrentFacingYaw, 0.0f).Vector();
@@ -601,6 +709,7 @@ void UDeliveryActiveRagdollComponent::ReseedFromCurrentPose()
 	bHasHitFacing = false;
 
 	// 脚回到"站着、不迈步"的状态，并给一小段站定时间再开始走。
+	BlockedStepRecoveryRemaining = 0.0f;
 	CancelFootSteps();
 	LeftFoot.Start = Mesh->GetCenterOfMass(LeftFoot.Bone);
 	RightFoot.Start = Mesh->GetCenterOfMass(RightFoot.Bone);

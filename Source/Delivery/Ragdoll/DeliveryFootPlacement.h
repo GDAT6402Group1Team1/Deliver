@@ -6,10 +6,29 @@
 // 地面射线、真实刚体位置、电机设置都留在 DeliveryActiveRagdollGait.cpp。
 namespace DeliveryFootPlacement
 {
+// 支撑脚的切向摩擦辅助，不锁定位置，不施加法线吸附力。
+inline FVector SupportTraction(const FVector& RelativeVelocity, const FVector& Normal,
+ float GravityZ, float DeltaTime, float Strength, float MaxAcceleration)
+{
+ if (DeltaTime <= SMALL_NUMBER || Strength <= 0.f || MaxAcceleration <= 0.f) return FVector::ZeroVector;
+ const FVector Slip = FVector::VectorPlaneProject(RelativeVelocity, Normal);
+ const float Gain = FMath::Min(Strength, 1.f / DeltaTime);
+ return (-Slip * Gain - FVector::VectorPlaneProject(FVector(0,0,GravityZ), Normal))
+  .GetClampedToMaxSize(MaxAcceleration);
+}
+
 inline FVector SideAxis(const FVector& GroundNormal, float BodyYaw)
 {
 	// 坡面法线 × 身体前方 = 坡面上的身体右侧；左右脚都以这条轴判断所属侧。
 	return FVector::CrossProduct(GroundNormal, FRotator(0.0f, BodyYaw, 0.0f).Vector()).GetSafeNormal();
+}
+
+inline FVector PhysicalSideAxis(const FVector& GroundNormal, const FQuat& PelvisRotation,
+ const FQuat& ReferenceRotation, float ReferenceYaw)
+{
+ const FVector Forward = (PelvisRotation * ReferenceRotation.Inverse()).RotateVector(
+  FRotator(0.f, ReferenceYaw, 0.f).Vector());
+ return FVector::CrossProduct(GroundNormal, Forward).GetSafeNormal();
 }
 
 inline float SeparationAcceleration(float Side, float OutwardSpeed, float MinimumSide)
