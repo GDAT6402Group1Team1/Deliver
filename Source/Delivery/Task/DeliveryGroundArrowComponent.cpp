@@ -34,11 +34,11 @@ int32 UDeliveryGroundArrowWidget::NativePaint(const FPaintArgs& Args, const FGeo
 		{Point(.23f, .38f), Point(.5f, .13f), Point(.77f, .38f)},
 		{Point(.23f, .85f), Point(.5f, .60f), Point(.77f, .85f)}
 	};
-	// A dark edge and warm inner rim keep the yellow readable on roads and grass.
+	// Dark outline, saturated orange rim and bright yellow core stay legible on roads and grass.
 	const FLinearColor Colors[] = {
-		FLinearColor(.16f, .075f, .005f, 1.f),
-		FLinearColor(.83f, .43f, .015f, 1.f),
-		FLinearColor(1.f, .86f, .19f, 1.f)
+		FLinearColor(.14f, .035f, .0f, 1.f),
+		FLinearColor(1.f, .42f, .0f, 1.f),
+		FLinearColor(1.f, .96f, .02f, 1.f)
 	};
 	const float Widths[] = {.245f, .19f, .145f};
 	for (int32 Pass = 0; Pass < 3; ++Pass)
@@ -94,7 +94,14 @@ void UDeliveryGroundArrowComponent::TickComponent(float DeltaTime, ELevelTick Ti
 
 	// Use the currently possessed pawn, so riding follows the bike rather than the hidden character.
 	const float Radius = Pawn->IsA<ADeliveryMotorbike>() ? RidingRadius : WalkingRadius;
-	FVector Position = Origin + Direction * FMath::Min(Radius, FVector::Dist2D(Origin, Destination));
+	FVector ViewLocation;
+	FRotator ViewRotation;
+	Controller->GetPlayerViewPoint(ViewLocation, ViewRotation);
+	const FVector ViewForward = ViewRotation.Vector().GetSafeNormal2D();
+	const float ForwardFactor = FMath::Max(0.f, FVector::DotProduct(Direction, ViewForward));
+	const float ArrowDistance = FMath::Min(Radius + ForwardOffset * ForwardFactor,
+		FVector::Dist2D(Origin, Destination));
+	FVector Position = Origin + Direction * ArrowDistance;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(DeliveryGroundArrow), false, Pawn);
 	TArray<AActor*> Attached;
 	Pawn->GetAttachedActors(Attached, true, true);

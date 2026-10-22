@@ -225,8 +225,7 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
   填 `LocationId`，`BeginPlay` 时自己注册。三种点共用一个组件，因为在数据上它们是同一种
   东西：一个需要被解析成世界坐标的外部编号。继承 SceneComponent 是为了能带相对偏移——
   收件点挂在整栋楼上时，楼的原点可能在中心甚至地下，指引箭头该指门口。`HighlightActors`
-  指定任务指向这里时要透视高亮的建筑模型；留空默认高亮组件 Owner。地点是门口单独摆的
-  Marker 时要在关卡实例中显式填实际建筑，可填多个 Actor。
+  是旧版建筑高亮配置，目前任务追踪不再读取；保留字段以兼容已有的关卡实例。
 - **`UDeliveryLocationRegistry`**（WorldSubsystem）：`ResolveActor` / `ResolveLocation` /
   `ResolveAllActors` / `ResolveAllComponents` / `GetRegisteredIds`。
 
@@ -245,11 +244,9 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 进行中 → `DeliveryLocationId`，其他状态返回 false。判错了的表现是"箭头指向已经拿过的
 地方"，而且四个界面会各错各的。
 
-同一套状态切换也驱动本机建筑透视高亮：`TaskTracker` 给目标建筑的 Mesh 开启
-`CustomDepth/Stencil=1`，`DeliveryPlayerController` 自动启用现有的
-`/Game/Blueprint/Interaction/M_GrabHighlight` 后处理材质。完成任务、改追踪目标或从取件切到
-送货时先恢复上一栋建筑原有的 CustomDepth/Stencil，再高亮新目标。只有本机拥有的 Tracker
-执行渲染改动，多人玩家各看各的追踪目标。
+任务追踪不再给目的地建筑开启 `CustomDepth/Stencil`，也不再定时刷新建筑高亮。
+`DeliveryPlayerController` 的 `/Game/Blueprint/Interaction/M_GrabHighlight` 后处理仍供
+交互物和抓取候选使用；罗盘、小地图与脚边箭头继续按追踪状态指引目的地。
 
 策划表里填了 ID、关卡里却没有对应的点时返回 false **并在日志里点名**。静默失败的话
 表现只是"箭头不显示"，根因几乎查不到。
@@ -494,11 +491,11 @@ UMG 将偏移乘以罗盘条半宽后写入 `Render Translation X`。目标和�
 
 
 ### 脚边任务方向箭头
-PlayerController 默认创建 `UDeliveryGroundArrowComponent`，本机按 `GetTrackedTaskDestination` 在人物或当前受控摩托车周围指示目标 XY 方向。步行/骑车半径默认 95/180 cm，地面探测后抬高 45 cm；没有目标或附近没有可用地面时隐藏。取件与交付阶段自动切换，纯视觉、不复制，不修改任务状态。
+PlayerController 默认创建 `UDeliveryGroundArrowComponent`，本机按 `GetTrackedTaskDestination` 在人物或当前受控摩托车周围指示目标 XY 方向。步行/骑车半径默认 95/180 cm；目标在镜头正前方时沿目标方向额外前移最多 50 cm，侧面和后方逐渐归零，且不越过目的地。地面探测后抬高 60 cm；没有目标或附近没有可用地面时隐藏。取件与交付阶段自动切换，纯视觉、不复制，不修改任务状态。
 
 箭头可见性修正：逻辑组件留在 PlayerController，世界空间 Widget 的 Owner 必须是当前受控 Pawn。`OnlyOwnerSee` 按镜头 ViewActor 与 Owner 链判断，视觉挂 Controller 会被普通 Pawn 镜头过滤；上下摩托车时销毁旧视觉并以新 Pawn 为 Owner 重建。箭头原生 Widget 显式提供 128×128 绘制区域并启用动态重绘。
 
-箭头外观为朝向目的地的黄色双 V 形箭头，采用深棕描边、橙色内缘和亮黄色主体；继续由原生 Widget 绘制，无需额外贴图资产。
+箭头外观为朝向目的地的黄色双 V 形箭头，采用深棕描边、高饱和橙色内缘和明黄色主体；继续由原生 Widget 绘制，无需额外贴图资产。
 
 
 ### 通话结束后自动收起

@@ -98,8 +98,8 @@
   "提示出来了但按不动"（提示走前者、交付走后者），而玩家只看得到后半截。
   **和取货点刻意不对称**：收件点手填 `ExpectedTask`，取货点不填任务——
   取货点是"这个柜台现在该发哪一单"（状态），收件点是"这一户只收这一单"（身份）。
-- 两个点的 `HighlightActors` 都要在关卡实例里填上真正的建筑：这两个 Actor 自己
-  没有网格，不填的话透视高亮会去照一个空 Actor，表现是"追踪了任务但什么都没亮"。
+- 取件点和收件点的 `HighlightActors` 是旧版建筑透视高亮配置，当前任务追踪不再读取，
+  无需在关卡实例里填写；字段保留是为了兼容已有场景。
 - `ReceiverNpcId` 目前**没有任何代码在读**，只是存在资产里，摆点时不用管它。
 - **这同时修掉了旧流程的死锁**：以前快递掉出世界 → `EndPlay` 上报丢件 → 任务退回待取件，
   但地上那件已经没了，这一局再也推不动。现在退回待取件之后回取货点再领一件就行。
@@ -167,7 +167,7 @@
 - 调试用控制台命令（`Delivery.Task.Dump` / `Acquire` / `Deliver` / `Event`）见 [DeliveryTaskDebugCommands.cpp](Source/Delivery/Task/DeliveryTaskDebugCommands.cpp)，在 PIE 里不用 UI 就能跑完整个任务流程；`DeliveryTaskDefinition` 有 `IsDataValid` 校验，阈值配反、档位顺序错会在编辑器里标红。
 - **钱包**：[DeliveryWalletComponent](Source/Delivery/Economy/DeliveryWalletComponent.h) 挂在 `ADeliverPlayerState` 上（和 ASC 同理——钱要在角色死亡/重生/上下载具之后还在）。**入账全自动**：组件自己订阅 GameState 上的 `OnTaskCompleted`，那个委托自带 `APlayerState* Deliverer`，多人抢单时钱记给谁天然就对，任务系统那边一行都不用改。余额 `COND_OwnerOnly` 复制，不做客户端预测。PlayerState 可能比 GameState 先 `BeginPlay`，订阅不到时每 0.5 秒重试——不重试的话这个玩家整局收不到钱且毫无报错。UI 接 `OnTaskPaid(Task, Reward)` 拿完整奖励明细做结算飘字。
 - **地点 ID 解析**：[DeliveryLocationRegistry](Source/Delivery/Task/DeliveryLocationRegistry.h)（WorldSubsystem）+ [DeliveryLocationComponent](Source/Delivery/Task/DeliveryLocationComponent.h)。关卡里的取件点/收件点/收件人 NPC 挂后者、填 `LocationId`（和 `Tasks.csv` 一致），任务定义里那几个裸 `FName` 才能变成世界坐标。三种点共用一个组件，因为在数据上它们是同一种东西；继承 SceneComponent 是为了能带相对偏移（收件点挂在整栋楼上时楼的原点可能在地下，箭头该指门口）。查找走注册表而不是遍历关卡，和交互系统同一个理由：碰撞查询在本项目静默失效过一次。
-- **任务地点透视高亮**：本机 `TaskTracker` 按任务状态自动高亮当前目的地（待取件→`PickupLocationId`，进行中→`DeliveryLocationId`），沿用 `CustomDepth/Stencil=1` + `/Game/Blueprint/Interaction/M_GrabHighlight`。`DeliveryPlayerController` 自动给本机启用该后处理，不需要在地图的 PostProcessVolume 里手加。`DeliveryLocationComponent.HighlightActors` 为空时高亮 Owner；地点是门口独立 Marker 时，必须在关卡实例里把实际建筑 Actor 填进数组，可填多个组成同一建筑的模型。任务完成、改追踪或切换阶段会恢复模型原来的 CustomDepth/Stencil 状态。
+- **任务地点建筑高亮已停用**：`TaskTracker` 不再给目的地建筑开启 `CustomDepth/Stencil`，也不再定时扫描建筑；罗盘、小地图和脚边箭头继续提供指引。`DeliveryPlayerController` 的后处理仍用于交互物和抓取候选，不能为了关建筑高亮而移除。
 - **"该去哪"**：`Tracker::GetTrackedTaskDestination()`。**目的地按任务状态自动切换**（待取件→取件点，进行中→收件点），调用方不要自己判——判错的表现是"箭头指向已经拿过的地方"，四个界面会各错各的。ID 在关卡里找不到对应点时返回 false 并在日志点名；静默失败的话表现只是"箭头不显示"，根因几乎查不到。
 - **丢件恢复**：`NotifyItemLost` 把进行中的任务退回待取件，但接电话时开始的计时、催促状态和特殊事件继续保留；`UDeliveryItemComponent::EndPlay` 在 Actor 被销毁时自动上报（掉出世界会走到）。**"正常交付"和"意外丢失"靠执行顺序区分**——`TryDeliver` 先标已完成再销毁快递，所以 `EndPlay` 时状态已不是进行中，`NotifyItemLost` 自己返回 false；**调换这两步会让每次成功交付都被误判成丢件**。退回待取件之后**回取货点再领一件**即可，不再需要关卡里还躺着那件原物——这是取货点流程修掉的那个死锁。
 - **指引换算**：[DeliveryGuidanceLibrary](Source/Delivery/Task/DeliveryGuidanceLibrary.h) 返回距离、相对镜头的水平夹角、在不在前方、高度差，UI 画屏幕边缘箭头直接用。**角度基于镜头不是角色**——骑车时镜头和车头可能不一致（摩托车有自由/固定两套视角），用角色朝向算的话自由视角下箭头会指错。
@@ -677,7 +677,7 @@ Document/AudioSystem.md               人物电子语音（合成器+文本节�
 
 
 ### 脚边箭头与圆形小地图
-- `Task/DeliveryGroundArrowComponent` 默认挂 PlayerController，本机在人物周围（95 cm）/摩托车周围（180 cm）显示黄色描边箭头。目的地统一取 `GetTrackedTaskDestination`，随取件/交付阶段切换，无目标隐藏。只用 XY 方向，地面探测后抬高 45 cm，大小和半径可调；上下车使用当前受控 Pawn。
+- `Task/DeliveryGroundArrowComponent` 默认挂 PlayerController，本机在人物周围（95 cm）/摩托车周围（180 cm）显示高饱和橙黄双 V 箭头。目的地统一取 `GetTrackedTaskDestination`，随取件/交付阶段切换，无目标隐藏。只用 XY 方向；目标位于镜头前方时沿目标方向额外前移最多 50 cm（不越过目的地），避免角色挡住；地面探测后抬高 60 cm。大小、半径、前移量和高度可调；上下车使用当前受控 Pawn。
 - `/Game/UI/Minimap/WBP_Minimap` 继承 `UI/DeliveryMinimapWidget`，仍由 `WBP_Main` 引用。圆形裁切、深浅双边框、中心红色方向尖头由原生绘制完成。默认直径 320、右上角边距 24；拍摄宽度从 24000 cm 拉近到 18000 cm。地图朝向由**项目设置**里的 `UDeliveryMapSettings::MapNorthWorldYaw` 决定（项目设置 → 游戏 → Delivery 地图，0 = 世界 +X 朝北），标记按身体朝向旋转（步行取 `GetBodyForward()`，骑车取 Pawn 朝向），不跟随自由镜头。**小地图的朝上方向和罗盘的 N/E/S/W 读的是同一个值**——"这张地图的北在哪"是一个事实，原来抄在两处（小地图的 `MapUpWorldYaw` + 罗盘节点的 `NorthWorldYaw` 引脚），改一处忘另一处的表现是"小地图正的、罗盘偏 90°"，而两个数单看都像是对的。现在那两个字段都删了，`GetTrackedTaskCompass` 也**不再有 `NorthWorldYaw` 参数**（删参数会让 `WBP_Compass` 的节点少一个引脚，重编译一次即可）。放 `UDeveloperSettings` 的理由：不用每张图记得摆 Actor（漏摆会静默退回 0）；存 `Config/DefaultGame.ini` 是**文本**，而本项目被 `git pull` 的 autostash 冲掉过两次，二进制 `.uasset` 冲突只能整份取舍、文本能合并。代价是整个项目一份、不是每关一份。相机是 `UDeliveryMinimapWidget` 运行时 `NewObject` 出来的 `USceneCaptureComponent2D`、挂在 PlayerController 上，**关卡 Outliner 里找不到它**；旋转每帧重设，所以改设置立刻生效。**任务目的地也标在小地图上**：在拍摄范围内画橙色圆点（真实位置），超出就夹到圆边并换成**朝外的三角**——圆点停在边上看不出"目标还在更远处"，三角的尖端天然表达"继续往这边走"。描边用 `#020c1e`，和罗盘图钉、人物标记同一套。**比例尺是 `2*MapRadius / MapWorldWidth`**：`Disc()` 把整张 RT 的 UV 0~1 铺在**直径**上，而 RT 宽度就是 `OrthoWidth = MapWorldWidth`；用半径去除会小一半，表现是"目标点总比真实位置离中心近"，而且近得很均匀，看着像比例没调好、不像算错。目的地在 **Tick 里就换算成地图空间**（X=图上右、Y=图上上）存成 `TargetMapOffsetCm`，Paint 里只剩乘比例尺和夹圆——Paint 是 const 且每帧可能被调多次，不在那里查任务系统；用的 up/right 和相机 `FRotator(-90, N, 0)` 推出来的是同一组，地图转了标记跟着转。没有目标时（`GetTrackedTaskDestination` 返回 false）整个标记不画，和罗盘图钉、脚边箭头同一个判据。每名本机玩家有独立 512×512 RT 和摄像头，以 30Hz 跟随当前 Pawn；暂停旧蓝图写共享 `RT_Minimap` 的摄像头，控件销毁时恢复。绘制忽略 RT 的 Alpha，避免场景颜色被透明通道遮掉。尺寸、拍摄范围、刷新率、边框可在蓝图默认值调整。
 - 新父类须先完整编译，再用 `Content/Python/upgrade_minimap.py` 切换小地图父类、编译保存，并验证主 HUD。无需更改关卡。
 

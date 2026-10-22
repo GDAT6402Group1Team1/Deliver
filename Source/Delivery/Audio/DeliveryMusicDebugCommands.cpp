@@ -59,9 +59,9 @@ static FAutoConsoleCommandWithWorld GDeliveryMusicDump(
 			return;
 		}
 
-		auto SlotName = [](USoundBase* Sound)
+		auto SlotName = [](USoundBase* Sound) -> FString
 		{
-			return Sound ? *Sound->GetName() : TEXT("<空>");
+			return Sound ? Sound->GetName() : TEXT("<空>");
 		};
 
 		UE_LOG(LogDelivery, Log, TEXT("================ 音乐状态 ================"));
@@ -71,9 +71,9 @@ static FAutoConsoleCommandWithWorld GDeliveryMusicDump(
 		UE_LOG(LogDelivery, Log, TEXT("  正在闪避    : %s"), Music->IsDucking() ? TEXT("是") : TEXT("否"));
 		UE_LOG(LogDelivery, Log, TEXT("  音量/闪避比 : %.2f / %.2f"),
 			Music->MusicVolume, Music->CallDuckVolumeScale);
-		UE_LOG(LogDelivery, Log, TEXT("  探索轨      : %s"), SlotName(Music->ExploreTrack));
-		UE_LOG(LogDelivery, Log, TEXT("  任务轨      : %s"), SlotName(Music->TaskActiveTrack));
-		UE_LOG(LogDelivery, Log, TEXT("  超时轨      : %s"), SlotName(Music->OverdueTrack));
+		UE_LOG(LogDelivery, Log, TEXT("  探索轨      : %s"), *SlotName(Music->ExploreTrack));
+		UE_LOG(LogDelivery, Log, TEXT("  任务轨      : %s"), *SlotName(Music->TaskActiveTrack));
+		UE_LOG(LogDelivery, Log, TEXT("  超时轨      : %s"), *SlotName(Music->OverdueTrack));
 
 		if (!Music->ExploreTrack)
 		{

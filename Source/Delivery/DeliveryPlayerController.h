@@ -136,7 +136,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input|Input Mappings")
 	FKey InteractKey;
 
-	/** 本机任务地点和抓取候选共用的透视高亮后处理。 */
+	/** 本机交互物和抓取候选使用的透视高亮后处理；任务地点不再高亮。 */
 	UPROPERTY(VisibleAnywhere, Category="Delivery|Highlight")
 	TObjectPtr<UPostProcessComponent> HighlightPostProcess;
 
