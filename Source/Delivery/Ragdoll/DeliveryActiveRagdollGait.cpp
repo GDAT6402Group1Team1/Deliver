@@ -7,6 +7,7 @@
 #include "Math/RotationMatrix.h"
 #include "PhysicsControlComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "Kismet/GameplayStatics.h"
 
 void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector& Wish)
 {
@@ -181,6 +182,15 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FFoot& Foot, float DeltaT
 			BlockedStepRecoveryRemaining = 0.45f;
 			bPendingStopRecovery = true;
 		}
+
+		// **落脚事件挂在这里，不是挂 Alpha>=1。**
+		// 上面那条 `Foot.Alpha = 0.999f; return;` 是在等物理脚追上目标——
+		// 那时候脚还悬在半空，按 Alpha 判会让声音比画面早小半步。
+		// 走到这一行才说明脚真的到位了（或者等超时放弃，那时也确实该落地了）。
+		const bool bLeftFoot = (&Foot == &LeftFoot);
+		const FVector Landed = Mesh->GetCenterOfMass(Foot.Bone);
+		OnFootPlanted.Broadcast(bLeftFoot, Landed);
+		PlayFootstep(bLeftFoot, Landed, FVector::Dist2D(Foot.Start, Landed));
 	}
 }
 
@@ -317,4 +327,40 @@ FQuat UDeliveryActiveRagdollComponent::MakeSlopeAlignedFootRotation(
 	const FVector ReferenceForward = FRotator(0.0f, ReferenceFacingYaw, 0.0f).Vector();
 	const FQuat ReferenceBasis(FRotationMatrix::MakeFromZX(FVector::UpVector, ReferenceForward));
 	return SlopeBasis * ReferenceBasis.Inverse() * Foot.ReferenceRotation;
+}
+
+void UDeliveryActiveRagdollComponent::PlayFootstep(bool bLeft, const FVector& Location, float Stride)
+{
+	// 碎步（平衡恢复那种）不出声，见 FootstepMinStride 的注释。
+	if (FootstepSounds.IsEmpty() || Stride < FootstepMinStride)
+	{
+		return;
+	}
+
+	// 随机挑一个，但**避开上一次刚放过的那个**。纯随机时 8 个变体里
+	// 连续撞上同一个的概率是 1/8，走十来步就会出现一次"连着两下一样"，
+	// 而那正是"音效很假"最容易被察觉的瞬间。
+	int32 Index = FMath::RandHelper(FootstepSounds.Num());
+	if (FootstepSounds.Num() > 1 && Index == LastFootstepIndex)
+	{
+		Index = (Index + 1) % FootstepSounds.Num();
+	}
+	LastFootstepIndex = Index;
+
+	USoundBase* Sound = FootstepSounds[Index];
+	if (!Sound)
+	{
+		return;
+	}
+
+	// 大步重、小步轻。下限给 0.35 而不是 0：刚过门槛的那一脚也该听得见，
+	// 否则门槛附近会出现"有时响有时不响"，听着像漏音。
+	const float Loudness = FMath::GetMappedRangeValueClamped(
+		FVector2D(FootstepMinStride, FMath::Max(FootstepFullStride, FootstepMinStride + 1.0f)),
+		FVector2D(0.35f, 1.0f), Stride);
+
+	// **空间音，不是 PlaySound2D。** 取件/交付那两个提示音是"给你本人的反馈"所以用 2D；
+	// 脚步是世界里真实发生的事，别人的脚步要能从方位上听出来。
+	UGameplayStatics::PlaySoundAtLocation(this, Sound, Location,
+		FootstepVolume * Loudness, bLeft ? FootstepLeftPitch : FootstepRightPitch);
 }

@@ -113,6 +113,9 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 	const FVector PunchDirection = RagdollCombat->GetPunchAimDirection();
 	const FVector ImpactPoint = RagdollCombat->GetPunchTraceTransform().GetLocation();
 
+	// 命中音只响一次，不是每个受击者一次：一拳扫到两个人时听起来还是"一拳"。
+	bool bAnyHit = false;
+
 	for (AActor* HitActor : Hits)
 	{
 		ADeliveryCharacter* TargetCharacter = Cast<ADeliveryCharacter>(HitActor);
@@ -148,6 +151,15 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 				+ FVector::UpVector * HitReactionUpwardFraction).GetSafeNormal();
 			TargetRagdoll->ApplyMeleeImpact(ReactionDirection * HitReactionImpulse, ImpactPoint);
 		}
+
+		// 放在循环末尾、所有 continue 之后：只有真正被打到的目标才算命中。
+		// 放循环开头的话打到已销毁/非布娃娃目标也会响。
+		bAnyHit = true;
+	}
+
+	if (bAnyHit)
+	{
+		RagdollCombat->MulticastPlayPunchHit(ImpactPoint);
 	}
 }
 

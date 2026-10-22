@@ -6,6 +6,8 @@
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "DeliveryGuidanceLibrary.generated.h"
 
+class UTexture2D;
+
 class UDeliveryTaskDefinition;
 
 /** 一次指引查询的结果。UI 画屏幕边缘箭头、距离提示需要的量都在这里。 */
@@ -47,6 +49,25 @@ struct FDeliveryGuidance
 };
 
 /**
+ * 罗盘上该画哪个目标图钉。
+ *
+ * UI 按这个值选贴图，**不要自己去读任务状态判断**——判错的表现是
+ * "已经拿到包裹了还在指取件点"，而罗盘、顶部任务条、透视高亮三处会各错各的。
+ */
+UENUM(BlueprintType)
+enum class EDeliveryCompassMarker : uint8
+{
+	/** 没有可指引的目标：没接任务、任务已完成、或者地点 ID 在关卡里解析不出来。 */
+	None UMETA(DisplayName="不显示"),
+
+	/** 待取件：去拿包裹。对应 T_CompassTaskTarget（箱子图钉）。 */
+	Pickup UMETA(DisplayName="取件点"),
+
+	/** 进行中：包裹在手上，去送。对应 T_CompassTaskDelivery（房子图钉）。 */
+	Delivery UMETA(DisplayName="送达点")
+};
+
+/**
  * 顶部水平罗盘条需要的全部数据。
  *
  * Offset 字段都是 -1~1：-1 是罗盘条最左边，0 是镜头正前方，+1 是最右边。
@@ -68,6 +89,14 @@ struct FDeliveryCompassGuidance
 	/** 当前任务是否有可解析的目的地。false 时只显示 NSEW，不显示目标标记。 */
 	UPROPERTY(BlueprintReadOnly, Category="Delivery|Guidance|Compass")
 	bool bHasTarget = false;
+
+	/**
+	 * 该画哪个图钉。`None` 时**连图钉带距离一起隐藏**——
+	 * 手上没包裹的时候罗盘上还挂着取件图钉，玩家会以为任务没推进。
+	 * bHasTarget 为 false 时这里必然是 None，UI 判一个就够。
+	 */
+	UPROPERTY(BlueprintReadOnly, Category="Delivery|Guidance|Compass")
+	EDeliveryCompassMarker Marker = EDeliveryCompassMarker::None;
 
 	/** 目标相对镜头的水平夹角，负数在左，正数在右。 */
 	UPROPERTY(BlueprintReadOnly, Category="Delivery|Guidance|Compass")
@@ -147,11 +176,37 @@ public:
 
 	/**
 	 * 顶部水平罗盘条数据。VisibleAngle 是整条 UI 覆盖的角度，默认显示镜头前方 180°。
-	 * NorthWorldYaw 用来校准地图的北方；默认世界 +X（Yaw 0）为北。
+	 *
+	 * **北方不再是参数**，统一读 `UDeliveryMapSettings::MapNorthWorldYaw`。
+	 * 原来它是个蓝图引脚，于是"这张地图的北在哪"同时抄在罗盘节点和小地图控件上，
+	 * 改了一处忘了另一处的表现是"小地图正的、罗盘偏 90°"，而两个数单看都像对的。
+	 * 真要给某个控件单独换北方，再加回一个可选覆盖，别把共享事实做成参数。
 	 */
 	UFUNCTION(BlueprintPure, Category="Delivery|Guidance", meta=(WorldContext="WorldContextObject"))
 	static FDeliveryCompassGuidance GetTrackedTaskCompass(const UObject* WorldContextObject,
-		float VisibleAngle = 180.f, float NorthWorldYaw = 0.f);
+		float VisibleAngle = 180.f);
+
+	/**
+	 * 当前该画哪个目标图钉。罗盘以外的 UI（小地图、屏幕边缘箭头）也用这个，
+	 * 保证全场只有一处在判断任务阶段。
+	 */
+	UFUNCTION(BlueprintPure, Category="Delivery|Guidance", meta=(WorldContext="WorldContextObject"))
+	static EDeliveryCompassMarker GetTrackedTaskMarker(const UObject* WorldContextObject);
+
+	/**
+	 * 当前该画哪张图钉贴图。没有目标时返回 nullptr，UI 据此连图钉带距离一起藏。
+	 *
+	 * **把"枚举→贴图"这一步也放进 C++**，而不是让蓝图接个 Select 自己选：
+	 * CLAUDE.md 里已经立过「判断只在 `GetTrackedTaskMarker` 这一处」，
+	 * 映射落在蓝图里就等于有了第二处——以后加第三种图钉（比如取消/失败）
+	 * 要记得同时改 C++ 和控件，漏一个的表现是"状态变了图标没变"。
+	 * 这样蓝图侧只剩两个节点：调这个 → `SetBrushFromTexture`。
+	 *
+	 * 贴图用软引用晚绑：这是 UI 资产，没必要在模块加载时就钉在内存里，
+	 * 而且 `ConstructorHelpers` 那条路对"这次会话里才导入的资产"永远解析不到。
+	 */
+	UFUNCTION(BlueprintPure, Category="Delivery|Guidance", meta=(WorldContext="WorldContextObject"))
+	static UTexture2D* GetTrackedTaskMarkerTexture(const UObject* WorldContextObject);
 
 	/** 把距离格式化成中文显示文本：1200 → "12 米"，150000 → "1.5 公里"。 */
 	UFUNCTION(BlueprintPure, Category="Delivery|Guidance")

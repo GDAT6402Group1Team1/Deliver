@@ -4,6 +4,7 @@
 #include "DeliveryItemComponent.h"
 #include "DeliveryLocationComponent.h"
 #include "DeliveryLocationRegistry.h"
+#include "DeliveryPickupPointComponent.h"
 #include "DeliveryTargetComponent.h"
 #include "DeliveryTaskDefinition.h"
 #include "DeliveryTaskManagerComponent.h"
@@ -24,7 +25,8 @@
  *   1. 任务定义本身填全了没（TaskId / 地点 ID）
  *   2. 地点 ID 在关卡里能不能解析出位置
  *   3. 收件点的 ExpectedTask 配没配、和任务对不对得上
- *   4. 快递物品上有没有 DeliveryItemComponent、OwningTask 指向谁
+ *   4. 取货点在不在、`LocationId` 和任务的 `PickupLocationId` 对不对得上
+ *   5. 手摆的快递物品（旧流程）上有没有 DeliveryItemComponent、OwningTask 指向谁
  */
 
 namespace
@@ -59,6 +61,29 @@ namespace
 			for (const UDeliveryTargetComponent* Target : Components)
 			{
 				Result.Add(Target->ExpectedTask, *It);
+			}
+		}
+
+		return Result;
+	}
+
+	/**
+	 * 关卡里所有取货点，按它所在地点的 ID 归类。
+	 *
+	 * 取货点不填任务、只认地点 ID（一个点能在一局里先后发好几个任务的快递），
+	 * 所以这里的键是 `LocationId` 而不是任务——和收件点那张表形状不一样是故意的。
+	 */
+	TMultiMap<FName, AActor*> CollectPickupPoints(UWorld* World)
+	{
+		TMultiMap<FName, AActor*> Result;
+
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			TArray<UDeliveryPickupPointComponent*> Components;
+			It->GetComponents(Components);
+			for (const UDeliveryPickupPointComponent* Point : Components)
+			{
+				Result.Add(Point->GetLocationId(), *It);
 			}
 		}
 
@@ -146,6 +171,7 @@ static FAutoConsoleCommandWithWorldAndArgs GDeliveryTaskValidate(
 
 			const TMultiMap<const UDeliveryTaskDefinition*, AActor*> Targets = CollectTargets(World);
 			const TMultiMap<const UDeliveryTaskDefinition*, AActor*> Items = CollectItems(World);
+			const TMultiMap<FName, AActor*> PickupPoints = CollectPickupPoints(World);
 
 			// 没绑任何任务的收件点/快递：摆了却忘了填 ExpectedTask / OwningTask，
 			// 这种在游戏里表现为"这个点按了没反应"，很难想到是配置漏了
@@ -155,6 +181,15 @@ static FAutoConsoleCommandWithWorldAndArgs GDeliveryTaskValidate(
 			{
 				ReportWarning(Counters, FString::Printf(
 					TEXT("收件点 %s 的 ExpectedTask 没填，永远不会接受任何交付"), *Actor->GetName()));
+			}
+
+			Orphans.Reset();
+			PickupPoints.MultiFind(NAME_None, Orphans);
+			for (const AActor* Actor : Orphans)
+			{
+				ReportWarning(Counters, FString::Printf(
+					TEXT("取货点 %s 没填 LocationId（要填在同一个 Actor 的 DeliveryLocationComponent 上），"
+						 "永远发不出任何快递"), *Actor->GetName()));
 			}
 
 			Orphans.Reset();
@@ -204,13 +239,41 @@ static FAutoConsoleCommandWithWorldAndArgs GDeliveryTaskValidate(
 						*TaskName, TaskTargets.Num()));
 				}
 
+				// 取货点：快递现在是从取货点领的，所以"取货点在不在"才是能不能开工的判据。
+				// 地点 ID 能解析只说明那儿有个标记，标记上没挂取货点组件的话玩家走过去按不动 E
+				TArray<AActor*> TaskPoints;
+				PickupPoints.MultiFind(Task->PickupLocationId, TaskPoints);
+
 				TArray<AActor*> TaskItems;
 				Items.MultiFind(Task, TaskItems);
-				if (TaskItems.Num() == 0)
+
+				if (TaskPoints.Num() == 0 && !Task->PickupLocationId.IsNone())
 				{
+					if (TaskItems.Num() > 0)
+					{
+						// 旧流程：快递手摆在地上。还能用，但掉出世界就死锁
+						ReportWarning(Counters, FString::Printf(
+							TEXT("%s：取货点 \"%s\" 上没有 DeliveryPickupPointComponent，"
+								 "走的是把快递手摆在地上的旧流程。快递掉出世界这一局就推不动了，"
+								 "建议改成在那个点上挂取货点组件（或者换成 ADeliveryPickupPoint）"),
+							*TaskName, *Task->PickupLocationId.ToString()));
+					}
+					else
+					{
+						ReportError(Counters, FString::Printf(
+							TEXT("%s：取货点 \"%s\" 上没有 DeliveryPickupPointComponent，"
+								 "关卡里也没有手摆的快递——这个任务取不到货。"
+								 "在那个位置摆一个 ADeliveryPickupPoint 并把 LocationId 填成它"),
+							*TaskName, *Task->PickupLocationId.ToString()));
+					}
+				}
+				else if (TaskPoints.Num() > 0 && TaskItems.Num() > 0)
+				{
+					// 两套流程都在：玩家能从取货点领一件，地上还躺着一件。
+					// 两件快递的 OwningTask 都指向同一个任务，交付时取到哪件是不确定的
 					ReportWarning(Counters, FString::Printf(
-						TEXT("%s：关卡里没有挂着它的快递物品。如果快递是运行时生成的就正常，"
-							 "手摆的话是漏了"), *TaskName));
+						TEXT("%s：既有取货点又有手摆的快递。手摆那件现在是多余的，"
+							 "留着会出现「身上一件、地上一件」，建议从关卡里删掉"), *TaskName));
 				}
 
 				if (Task->TimeGrades.Num() == 0)

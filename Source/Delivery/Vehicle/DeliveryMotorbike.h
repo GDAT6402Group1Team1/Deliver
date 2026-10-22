@@ -8,6 +8,7 @@
 #include "DeliveryMotorbike.generated.h"
 
 class ADeliveryCharacter;
+class ADeliveryPackageItem;
 class UBoxComponent;
 class UCameraComponent;
 class UAudioComponent;
@@ -70,6 +71,38 @@ public:
 	/** 服务器：下车，把驾驶员放回车边的地面。 */
 	UFUNCTION(BlueprintCallable, Category="Motorbike")
 	void ExitVehicle();
+
+	/**
+	 * 服务器：把一件快递绑到车上。已经绑着别的就拒绝。
+	 *
+	 * 绑上之后快递**关掉物理、焊在 CargoPivot 上**，不是用物理约束拴着：
+	 * 车是运动学的（`bSimulatePhysics=false`，靠 SetActorLocation 沿样条/输入走），
+	 * 约束的另一端是个"无穷重且不讲道理"的刚体，Chaos 会把误差全算到快递头上
+	 * ——表现是快递在车后面疯狂抽动，拖人那套就踩过这个坑（见 CLAUDE.md 抓取一节）。
+	 * 焊死没有这个失败模式，而且"绑在车上"本来就该是硬连接。
+	 */
+	UFUNCTION(BlueprintCallable, Category="Motorbike|货物")
+	bool AttachCargo(ADeliveryPackageItem* Package);
+
+	/**
+	 * 服务器：解下车上的快递并返回它；车上没货返回 null。
+	 *
+	 * 只解绑、不恢复物理也不放到地上——调用方才知道接下来它要进手里还是掉地上。
+	 * 恢复物理这件事交给 `ADeliveryHandheldItem` 自己那套表现逻辑，两处都做会打架。
+	 */
+	UFUNCTION(BlueprintCallable, Category="Motorbike|货物")
+	ADeliveryPackageItem* ReleaseCargo();
+
+	/**
+	 * 车上的货。过 IsValid 而不是直接判空：快递被别处销毁（交付、掉出世界、
+	 * 关卡清理）时这个指针会悬着，裸判空会让"已经没货了却说有货"，
+	 * 表现是下一件快递永远领不到。
+	 */
+	UFUNCTION(BlueprintPure, Category="Motorbike|货物")
+	ADeliveryPackageItem* GetCargo() const;
+
+	UFUNCTION(BlueprintPure, Category="Motorbike|货物")
+	bool HasCargo() const { return GetCargo() != nullptr; }
 
 	/**
 	 * 服务器：被交通车撞了一下。撞够 ImpactsToDismount 次就把人掀下车。
@@ -145,6 +178,34 @@ protected:
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<USceneComponent> MeshAlign;
+
+	/**
+	 * 货架：绑在车上的快递焊在这一层。
+	 *
+	 * 挂在 MeshAlign 下面，所以它继承了车头朝向修正和压弯侧倾——货物会跟着车一起倒，
+	 * 而不是在压弯时保持水平"飘"在车边上。挂 MeshRoot 的话就只有侧倾没有朝向修正，
+	 * 默认偏移里那个"往后"会变成"往右"。
+	 *
+	 * 默认位置在座位后方偏上（后座 / 尾架），由 `CargoOffset` 调。
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<USceneComponent> CargoPivot;
+
+	/**
+	 * 货架相对 MeshAlign 的位置。MeshAlign 局部空间里 **+Y 是车头**
+	 * （模型车头朝 +Y，靠 MeshAlign 的 −90° Yaw 纠正到 Pawn 的 +X），
+	 * 所以"往后"是 −Y，不是 −X —— 填错的表现是快递挂在车的侧面。
+	 *
+	 * **留零 = 自动按车身包围盒量**（`AutoConfigureFromMeshes` 里和轮子、车把
+	 * 同一套做法）：取车尾那批部件的顶面中点。换车模型不用重新手调，
+	 * 也不用重跑脚本。不满意就在 BP 上填个非零值，自动标定会让开。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Motorbike|货物")
+	FVector CargoOffset = FVector::ZeroVector;
+
+	/** 货架朝向，相对 MeshAlign。让箱子正面朝外、不至于歪着。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Motorbike|货物")
+	FRotator CargoRotation = FRotator::ZeroRotator;
 
 	/**
 	 * 龙头：前轮 / 前叉 / 车把挂在这一层，按转向输入绕竖直轴转。
@@ -337,7 +398,7 @@ protected:
 	float GroundAlignSpeed = 7.0f;
 
 	UPROPERTY(EditAnywhere, Category="Motorbike|贴地", meta=(ClampMin="0.0", ClampMax="80.0"))
-	float MaxGroundAlignAngle = 40.0f;
+	float MaxGroundAlignAngle = 45.0f;
 
 	// ---- 爬坡越障 ----
 
@@ -350,14 +411,14 @@ protected:
 	 * 别调太大：它同时也是"能凭空抬多高"的上限，过大时车会爬上本该挡住它的矮墙。
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", Units="cm"))
-	float MaxStepHeight = 45.0f;
+	float MaxStepHeight = 60.0f;
 
 	/**
 	 * 最陡能爬的坡度。比这更陡的面当墙，跨上去也不算站住。
 	 * 和 MaxGroundAlignAngle 保持一致：能爬上去的坡，车身姿态就该跟着贴上去。
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", ClampMax="80.0"))
-	float MaxClimbAngle = 40.0f;
+	float MaxClimbAngle = 45.0f;
 
 	/**
 	 * 贴地高度往上追的速度下限（cm/s）。
@@ -374,11 +435,24 @@ protected:
 	 * 实际前瞻距离取"这一帧位移的两倍"和这个值里的小者，所以停着不会凭空浮起来。
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", Units="cm"))
-	float GroundLookAhead = 90.0f;
+	float GroundLookAhead = 120.0f;
 
 	/** 真撞墙（跨不上去）时车速剩下多少。原来写死 0.3。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float WallHitSpeedScale = 0.3f;
+	float WallHitSpeedScale = 0.5f;
+
+	/**
+	 * 跨越台阶时，抬起来之后至少要走完这一帧剩余位移的多少比例，才算"跨上去了"。
+	 *
+	 * 原来是 `TryStepUp` 里写死的 0.1：抬高之后前进不足剩余位移的 10% 就整体撤回、
+	 * 当成撞墙处理。这一条是"车莫名被地形卡住"的主要来源——**一堵真墙和"台阶上方
+	 * 还有点别的东西蹭一下"在这个判据下长得一模一样**，而后者只要让它慢慢往前挤就过去了。
+	 * 调小 = 更宽容（接受很小的进展，不轻易判定撞墙）；
+	 * 调大 = 更严格（容易被判成墙，但也更不容易贴着墙面往上爬）。
+	 * 给 0 等于"只要不是完全走不动就算跨过去了"。
+	 */
+	UPROPERTY(EditAnywhere, Category="Motorbike|爬坡越障", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float StepUpMinProgress = 0.03f;
 
 	/** 离地多高还算"贴着地"，超过就交给重力。要大于 MaxStepHeight，否则刚跨上台阶就被判成起飞。 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|贴地", meta=(ClampMin="0.0", Units="cm"))
@@ -438,6 +512,99 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, Category="Motorbike|表现")
 	bool bFreeLookCamera = true;
+
+	/**
+	 * 自由视角下 WASD 按**镜头**的前后左右走，而不是按车头。
+	 *
+	 * 关掉就是原来的开法：W 永远是车头方向、A/D 是转向量。固定视角下这个开关
+	 * 不起作用——那套镜头的 yaw 本来就跟着车头，两种解释是同一回事。
+	 *
+	 * 做法：把摇杆/WASD 的二维输入在镜头 yaw 下解释成一个"想去的世界方向"，
+	 * 再把它换算成这套车本来就有的 油门 + 转向量。不是另写一套移动，
+	 * 所以爬坡、撞墙掉速、压弯那些全都照旧生效。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|镜头")
+	bool bCameraRelativeMoveInFreeLook = true;
+
+	/**
+	 * 车头和"想去的方向"差多少度算满舵（度）。
+	 * 小了会在小角度就打满、走蛇形；大了转向迟钝、过弯要压很久。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|镜头", meta = (ClampMin = "5.0", ClampMax = "180.0"))
+	float CameraRelativeFullSteerAngle = 50.0f;
+
+	/**
+	 * 方向差很大时油门的下限（0~1）。
+	 *
+	 * **不能给 0。** 转向量乘的是 `|车速| / TurnSpeedReference`，车停下来就完全不能转
+	 * （摩托车停着打把原地转圈很出戏，这是刻意的）。所以"想掉头"的时候如果把油门收到 0，
+	 * 车会停住 → 不能转 → 永远掉不了头，卡成死局。留一个下限让它保持滚动、
+	 * 边走边转，自然画出一个 U 形。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|镜头", meta = (ClampMin = "0.05", ClampMax = "1.0"))
+	float CameraRelativeMinThrottle = 0.4f;
+
+	/**
+	 * 方向差超过这个角度（度）且车还在往前跑时，先当**刹车**再掉头。
+	 *
+	 * 针对的是"高速行驶中把镜头转过头再按 W"：不先刹就会以当前车速画一个巨大的弧，
+	 * 看着像失控漂出去。先把速度卸掉、再原地附近掉头，和真人骑车一致。
+	 * **这条和 S 没有关系**——S 是后退（见 ApplyCameraRelativeInput 里的分支），
+	 * 压根不走方向换算。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|镜头", meta = (ClampMin = "90.0", ClampMax = "180.0"))
+	float CameraRelativeBrakeAngle = 120.0f;
+
+	/**
+	 * 方向差超过这个角度（度）就进入**分段转向**：先只转到这个角度（"侧面"），
+	 * 转过去之后才由真实误差收尾。同时它也是解除锁定的阈值。
+	 *
+	 * **为什么必须分段 + 锁定**，两个独立的颤抖来源缺一个都还会抖：
+	 * 1. `Error` 用 `NormalizeAxis` 归到 `(-180, 180]`，**180 是奇点**——鼠标或车身一丝抖动
+	 *    就让它在 +180 和 −180 之间翻号，`SteerInput` 被 clamp 成 ±1、满舵方向每帧左右互换。
+	 *    **实测踩中的场景：车头朝前、把镜头转 180° 再按 W**——目标方向正好落在车身后方，
+	 *    `Error` 恰好 180。（`S` 不会踩中：它是后退，不走这条换算。）
+	 * 2. 大角度时刹车分支和掉头分支在**同一个速度阈值**（`TurnSpeedReference * 0.25`）上
+	 *    来回弹：越过就刹车（油门 −1、舵角归零），刹到阈值以下又回掉头（油门 +0.4、满舵），
+	 *    进出同一个阈值、没有滞环，就是个极限循环。**这一条和角度是不是 180 无关**，
+	 *    所以镜头转到任何大角度再按 W/A/D 都会抖、不止正后方，而且要一直抖到误差小于
+	 *    `CameraRelativeBrakeAngle` 才跳出来。
+	 *
+	 * 对策都是**锁定**：转向侧（`TurnAroundSign`）和"刹车还是直接掉头"（`bBrakingForTurn`）
+	 * 都只在动作开始那一帧定一次，整个动作里不再重新判断。
+	 * 在这个角上分段算法和常规算法给出的舵角本来就相等，所以交接处没有跳变。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|镜头", meta = (ClampMin = "30.0", ClampMax = "135.0"))
+	float CameraRelativeStageSideAngle = 90.0f;
+
+	/**
+	 * 为掉头而刹车时，刹到多慢（cm/s）才转入掉头段。
+	 *
+	 * **必须远小于进入刹车的速度阈值**（`TurnSpeedReference * 0.25`，默认 112.5）。
+	 * 两者取同一个值就是上面第 2 条那个极限循环：刹到阈值 → 转掉头 → 加速越过阈值
+	 * → 又刹车，油门和舵角每几帧翻一次。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|镜头", meta = (ClampMin = "0.0"))
+	float CameraRelativeBrakeExitSpeed = 25.0f;
+
+	/**
+	 * 两次撞击之间的最小间隔（秒）。比这更密的撞击直接不计数、不给击退。
+	 *
+	 * **为什么要在被撞者这边再挡一道**：交通车那边已经有一张 0.75 秒的冷却表
+	 * （`UDeliveryTrafficCarComponent::LastImpactTimeByActor`），但那张表是
+	 * **每辆车各一份**的组件成员，只能保证"同一辆车不连着撞"。多辆车可以在
+	 * 同一帧各打一下，`ImpactsToDismount`（2）于是在一次碰撞里就被扣满——
+	 * 实测日志里出现过同一帧两条撞击记录、来车速度完全相同（很可能是第二/三波
+	 * 克隆车和本体重叠在同一位置、速度向量一致）：
+	 *     [12.33.55:490][678] 被交通车撞击 1/2 次（来车速度 3053 cm/s）
+	 *     [12.33.55:490][678] 被交通车撞击 2/2 次（来车速度 3053 cm/s）
+	 * 玩家的体验就是"被撞一下就直接下车加晕倒"。
+	 *
+	 * 挡在这里才是对的层：次数是**摩托车自己**的状态，谁来撞、撞几辆都该由它说了算。
+	 * 给 0 就退回原来的行为（只靠来车那边各自的冷却表）。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|撞击", meta = (ClampMin = "0.0"))
+	float MinImpactInterval = 1.0f;
 
 	/**
 	 * 轮子要不要自转。暂时关掉——整套逻辑（认轮子、轮轴分层、按车速算转速）都留着，
@@ -576,6 +743,16 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	TSoftObjectPtr<UInputAction> InteractAction;
 
+	/**
+	 * 取件键（E）。骑车时按它**转发给驾驶员那具身体**去走它自己那套
+	 * 本机探测 + 长按 + 服务器复核，而不是在车上另写一套。
+	 *
+	 * 那一套已经调通了（范围判定、准星排序、长按进度、服务器复核），复制一份
+	 * 只会多一个要同步维护的地方；而且交付判定本来就认"玩家"不认"车"。
+	 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	TSoftObjectPtr<UInputAction> PickupAction;
+
 private:
 
 	void MoveInput(const FInputActionValue& Value);
@@ -587,6 +764,8 @@ private:
 	/** 按 bFreeLookCamera 把弹簧臂配成自由视角或固定车尾视角。上车时和 BeginPlay 各调一次。 */
 	void ApplyCameraMode();
 	void InteractPressed(const FInputActionValue& Value);
+	void PickupPressed(const FInputActionValue& Value);
+	void PickupReleased(const FInputActionValue& Value);
 
 	UFUNCTION(Server, Unreliable)
 	void ServerSetDriveInput(float InThrottle, float InSteer);
@@ -603,6 +782,12 @@ private:
 
 	UFUNCTION()
 	void OnRep_Driver();
+
+	UFUNCTION()
+	void OnRep_Cargo();
+
+	/** 把 Cargo 焊到货架上（或在它变空时什么都不做）。两端都要跑。 */
+	void ApplyCargoPresentation();
 
 	/** 把 BodyMeshes 里的网格铺到固定槽位上，多余的槽位清空。 */
 	void ApplyBodyMeshes();
@@ -624,6 +809,12 @@ private:
 
 	void UpdateSpeed(float DeltaSeconds);
 	void UpdateSteering(float DeltaSeconds);
+
+	/** 把 MoveInputRaw 按镜头朝向换算成 ThrottleInput / SteerInput。每帧调一次。 */
+	void ApplyCameraRelativeInput();
+
+	/** 现在是不是按镜头方向开（开关打开 **且** 处于自由视角）。 */
+	bool UsesCameraRelativeMove() const;
 	void UpdateGroundAndMove(float DeltaSeconds);
 
 	/**
@@ -672,8 +863,52 @@ private:
 	UPROPERTY(ReplicatedUsing=OnRep_Driver)
 	TObjectPtr<ADeliveryCharacter> Driver;
 
+	/**
+	 * 车上绑着的快递。复制给所有人——路过的别的玩家也该看见这车上有货。
+	 *
+	 * 用 OnRep 而不是在客户端自己判：附着这件事要在**客户端**也做一遍，
+	 * 否则远端看到的快递还留在取货点原地（服务端的附着不会自动复制成
+	 * 客户端的附着层级，`AttachToComponent` 的结果只对调用那一端生效）。
+	 */
+	UPROPERTY(ReplicatedUsing=OnRep_Cargo)
+	TObjectPtr<ADeliveryPackageItem> Cargo;
+
 	float ThrottleInput = 0.0f;
 	float SteerInput = 0.0f;
+
+	/**
+	 * 摇杆/WASD 的原始二维输入。
+	 *
+	 * 镜头相对模式必须**每帧**重算油门和转向量：镜头和车头的夹角一直在变，
+	 * 只在按键事件里算一次的话，松手之前方向就不会再更新。
+	 * 所以这里存原始值，真正的换算放在 Tick 里（ApplyCameraRelativeInput）。
+	 */
+	FVector2D MoveInputRaw = FVector2D::ZeroVector;
+
+	/**
+	 * 两段式掉头锁定的转向侧（+1 右 / −1 左，0 = 没在掉头）。
+	 *
+	 * 锁定值只在进入掉头段的那一帧写一次，之后一路保持到转过侧面为止——
+	 * 每帧重读 `Error` 的符号正是颤抖的来源（见 CameraRelativeStageSideAngle）。
+	 * 松手、上下车、召唤时要和 MoveInputRaw 一起清掉，否则下一次掉头会沿用上一次的侧。
+	 */
+	float TurnAroundSign = 0.0f;
+
+	/**
+	 * 当前这次大角度动作是不是还在"先刹车"的阶段。
+	 *
+	 * 和 TurnAroundSign 一样**只在动作开始那一帧定一次**，之后一路刹到
+	 * CameraRelativeBrakeExitSpeed 才转 false。每帧重判会让刹车和掉头在速度阈值上
+	 * 来回弹（见 CameraRelativeStageSideAngle 的第 2 条）。
+	 */
+	bool bBrakingForTurn = false;
+
+	/** 上次发给服务器的油门/转向，用来避免每帧重复发同样的值。 */
+	float LastSentThrottle = 0.0f;
+	float LastSentSteer = 0.0f;
+
+	/** 上一次真正记数的撞击发生在什么时候（服务器时间）。只在服务器维护。 */
+	float LastImpactTime = -1000.0f;
 	float CurrentSpeed = 0.0f;
 	float VerticalVelocity = 0.0f;
 	float CurrentLean = 0.0f;

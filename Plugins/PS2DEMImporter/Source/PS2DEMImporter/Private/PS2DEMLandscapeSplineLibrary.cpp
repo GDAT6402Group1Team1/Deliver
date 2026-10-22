@@ -3,6 +3,7 @@
 #include "Components/SplineComponent.h"
 #include "ContentBrowserModule.h"
 #include "Editor.h"
+#include "Engine/World.h"
 #include "Engine/Selection.h"
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
@@ -16,6 +17,7 @@
 #include "LandscapeSplinesComponent.h"
 #include "Misc/MessageDialog.h"
 #include "ScopedTransaction.h"
+#include "GameFramework/Actor.h"
 #include "Widgets/Notifications/SNotificationList.h"
 
 #define LOCTEXT_NAMESPACE "PS2DEMLandscapeSplineLibrary"
@@ -448,6 +450,546 @@ bool SegmentMatchesType(const ULandscapeSplineSegment* Segment, const FString& R
         && Segment->GetName().StartsWith(FString::Printf(TEXT("PS2DEM_%s_"), *RouteType));
 }
 
+struct FIndexedRoadSegment
+{
+    int32 Index = INDEX_NONE;
+    ULandscapeSplineSegment* Segment = nullptr;
+};
+
+struct FGeneratedRoadGroup
+{
+    FString BaseName;
+    FString Type;
+    TArray<FIndexedRoadSegment> Segments;
+};
+
+struct FOrientedRoadSegment
+{
+    ULandscapeSplineSegment* Segment = nullptr;
+    bool bForward = true;
+
+    const FLandscapeSplineSegmentConnection& Start() const
+    {
+        return Segment->Connections[bForward ? 0 : 1];
+    }
+
+    const FLandscapeSplineSegmentConnection& End() const
+    {
+        return Segment->Connections[bForward ? 1 : 0];
+    }
+};
+
+struct FActorRoadPoint
+{
+    FVector WorldLocation = FVector::ZeroVector;
+    FVector ArriveTangent = FVector::ZeroVector;
+    FVector LeaveTangent = FVector::ZeroVector;
+    float WidthM = 0.0f;
+};
+
+struct FActorRoadRoute
+{
+    FString BaseName;
+    FString Type;
+    bool bClosed = false;
+    float WidthM = 0.0f;
+    TArray<FActorRoadPoint> Points;
+};
+
+bool ParseGeneratedRoadSegment(
+    ULandscapeSplineSegment* Segment,
+    FString& OutBaseName,
+    FString& OutType,
+    int32& OutSegmentIndex)
+{
+    if (!Segment)
+    {
+        return false;
+    }
+
+    const FString Name = Segment->GetName();
+    static const TArray<FString> RoadTypes = {TEXT("MainRoad"), TEXT("BranchRoad")};
+    for (const FString& Type : RoadTypes)
+    {
+        const FString Prefix = FString::Printf(TEXT("PS2DEM_%s_"), *Type);
+        if (!Name.StartsWith(Prefix))
+        {
+            continue;
+        }
+
+        const int32 Marker = Name.Find(TEXT("_SEG"), ESearchCase::CaseSensitive);
+        if (Marker == INDEX_NONE || Marker <= Prefix.Len())
+        {
+            return false;
+        }
+        const FString RouteId = Name.Mid(Prefix.Len(), Marker - Prefix.Len());
+        if (!RouteId.StartsWith(TEXT("R")))
+        {
+            return false;
+        }
+
+        OutBaseName = Name.Left(Marker);
+        OutType = Type;
+        OutSegmentIndex = FCString::Atoi(*Name.Mid(Marker + 4));
+        return true;
+    }
+    return false;
+}
+
+void GetConnectionWorldData(
+    const FLandscapeSplineSegmentConnection& Connection,
+    bool bStart,
+    const FTransform& ComponentTransform,
+    FVector& OutLocation,
+    FVector& OutTangent)
+{
+    FVector LocalLocation = FVector::ZeroVector;
+    FRotator LocalRotation = FRotator::ZeroRotator;
+    Connection.ControlPoint->GetConnectionLocationAndRotation(
+        Connection.SocketName, LocalLocation, LocalRotation);
+    const float SignedTangentLength = bStart
+        ? Connection.TangentLen
+        : -Connection.TangentLen;
+    OutLocation = ComponentTransform.TransformPosition(LocalLocation);
+    OutTangent = ComponentTransform.TransformVector(
+        LocalRotation.Vector() * SignedTangentLength);
+}
+
+bool BuildActorRoadRoute(
+    FGeneratedRoadGroup Group,
+    const FTransform& ComponentTransform,
+    FActorRoadRoute& OutRoute,
+    FString& OutError)
+{
+    Group.Segments.Sort([](const FIndexedRoadSegment& A, const FIndexedRoadSegment& B)
+    {
+        return A.Index < B.Index;
+    });
+    if (Group.Segments.IsEmpty())
+    {
+        return false;
+    }
+
+    TMap<ULandscapeSplineControlPoint*, TArray<ULandscapeSplineSegment*>> Adjacency;
+    for (const FIndexedRoadSegment& Indexed : Group.Segments)
+    {
+        ULandscapeSplineSegment* Segment = Indexed.Segment;
+        if (!Segment || !Segment->Connections[0].ControlPoint || !Segment->Connections[1].ControlPoint)
+        {
+            OutError = FString::Printf(TEXT("%s contains an incomplete Landscape Spline segment."), *Group.BaseName);
+            return false;
+        }
+        Adjacency.FindOrAdd(Segment->Connections[0].ControlPoint).Add(Segment);
+        Adjacency.FindOrAdd(Segment->Connections[1].ControlPoint).Add(Segment);
+    }
+
+    TArray<ULandscapeSplineControlPoint*> Endpoints;
+    for (const TPair<ULandscapeSplineControlPoint*, TArray<ULandscapeSplineSegment*>>& Pair : Adjacency)
+    {
+        if (Pair.Value.Num() == 1)
+        {
+            Endpoints.Add(Pair.Key);
+        }
+        else if (Pair.Value.Num() != 2)
+        {
+            OutError = FString::Printf(
+                TEXT("%s contains a branch or disconnected Landscape Spline control point."),
+                *Group.BaseName);
+            return false;
+        }
+    }
+    if (Endpoints.Num() != 0 && Endpoints.Num() != 2)
+    {
+        OutError = FString::Printf(
+            TEXT("%s is not one continuous open or closed Landscape Spline route."),
+            *Group.BaseName);
+        return false;
+    }
+
+    ULandscapeSplineControlPoint* PreferredStart = Group.Segments[0].Segment->Connections[0].ControlPoint;
+    ULandscapeSplineControlPoint* Current = PreferredStart;
+    if (Endpoints.Num() == 2 && Adjacency.FindChecked(PreferredStart).Num() != 1)
+    {
+        Current = Endpoints[0];
+    }
+
+    TSet<ULandscapeSplineSegment*> Used;
+    TArray<FOrientedRoadSegment> Ordered;
+    Ordered.Reserve(Group.Segments.Num());
+    while (Ordered.Num() < Group.Segments.Num())
+    {
+        ULandscapeSplineSegment* Next = nullptr;
+        for (ULandscapeSplineSegment* Candidate : Adjacency.FindChecked(Current))
+        {
+            if (!Used.Contains(Candidate))
+            {
+                Next = Candidate;
+                break;
+            }
+        }
+        if (!Next)
+        {
+            OutError = FString::Printf(
+                TEXT("%s contains disconnected Landscape Spline segments."),
+                *Group.BaseName);
+            return false;
+        }
+
+        const bool bForward = Next->Connections[0].ControlPoint == Current;
+        Ordered.Add({Next, bForward});
+        Used.Add(Next);
+        Current = Next->Connections[bForward ? 1 : 0].ControlPoint;
+    }
+
+    OutRoute.BaseName = Group.BaseName;
+    OutRoute.Type = Group.Type;
+    OutRoute.bClosed = Endpoints.IsEmpty();
+    if ((OutRoute.bClosed && Current != Ordered[0].Start().ControlPoint)
+        || (!OutRoute.bClosed && !Endpoints.Contains(Current)))
+    {
+        OutError = FString::Printf(
+            TEXT("%s could not be traversed as one complete Landscape Spline route."),
+            *Group.BaseName);
+        return false;
+    }
+
+    const int32 PointCount = OutRoute.bClosed
+        ? Ordered.Num()
+        : Ordered.Num() + 1;
+    OutRoute.Points.Reserve(PointCount);
+    double WidthSum = 0.0;
+
+    for (int32 PointIndex = 0; PointIndex < PointCount; ++PointIndex)
+    {
+        FActorRoadPoint Point;
+        if (OutRoute.bClosed || PointIndex < Ordered.Num())
+        {
+            const int32 SegmentIndex = PointIndex % Ordered.Num();
+            const int32 PreviousSegmentIndex = (SegmentIndex - 1 + Ordered.Num()) % Ordered.Num();
+            const FOrientedRoadSegment& Segment = Ordered[SegmentIndex];
+            FVector IgnoredLocation;
+            GetConnectionWorldData(
+                Segment.Start(), true, ComponentTransform,
+                Point.WorldLocation, Point.LeaveTangent);
+            if (OutRoute.bClosed || PointIndex > 0)
+            {
+                GetConnectionWorldData(
+                    Ordered[PreviousSegmentIndex].End(), false,
+                    ComponentTransform, IgnoredLocation, Point.ArriveTangent);
+            }
+            else
+            {
+                Point.ArriveTangent = Point.LeaveTangent;
+            }
+            Point.WidthM = Segment.Start().ControlPoint->Width * 0.02f;
+        }
+        else
+        {
+            const FOrientedRoadSegment& Segment = Ordered.Last();
+            GetConnectionWorldData(
+                Segment.End(), false, ComponentTransform,
+                Point.WorldLocation, Point.ArriveTangent);
+            Point.LeaveTangent = Point.ArriveTangent;
+            Point.WidthM = Segment.End().ControlPoint->Width * 0.02f;
+        }
+        WidthSum += Point.WidthM;
+        OutRoute.Points.Add(Point);
+    }
+
+    OutRoute.WidthM = static_cast<float>(WidthSum / FMath::Max(1, OutRoute.Points.Num()));
+    return OutRoute.Points.Num() >= 2;
+}
+
+TArray<FActorRoadRoute> CollectGeneratedRoadRoutes(
+    ULandscapeSplinesComponent* Splines,
+    TArray<FString>& OutWarnings)
+{
+    TMap<FString, FGeneratedRoadGroup> Groups;
+    for (ULandscapeSplineSegment* Segment : Splines->GetSegments())
+    {
+        FString BaseName;
+        FString Type;
+        int32 SegmentIndex = INDEX_NONE;
+        if (!ParseGeneratedRoadSegment(Segment, BaseName, Type, SegmentIndex))
+        {
+            continue;
+        }
+        FGeneratedRoadGroup& Group = Groups.FindOrAdd(BaseName);
+        Group.BaseName = BaseName;
+        Group.Type = Type;
+        Group.Segments.Add({SegmentIndex, Segment});
+    }
+
+    TArray<FString> Keys;
+    Groups.GetKeys(Keys);
+    Keys.Sort();
+    TArray<FActorRoadRoute> Routes;
+    Routes.Reserve(Keys.Num());
+    const FTransform ComponentTransform = Splines->GetComponentTransform();
+    for (const FString& Key : Keys)
+    {
+        const FGeneratedRoadGroup& SourceGroup = Groups[Key];
+        TMap<ULandscapeSplineControlPoint*, TArray<FIndexedRoadSegment>> Adjacency;
+        for (const FIndexedRoadSegment& Indexed : SourceGroup.Segments)
+        {
+            if (!Indexed.Segment
+                || !Indexed.Segment->Connections[0].ControlPoint
+                || !Indexed.Segment->Connections[1].ControlPoint)
+            {
+                continue;
+            }
+            Adjacency.FindOrAdd(Indexed.Segment->Connections[0].ControlPoint).Add(Indexed);
+            Adjacency.FindOrAdd(Indexed.Segment->Connections[1].ControlPoint).Add(Indexed);
+        }
+
+        TSet<ULandscapeSplineSegment*> Visited;
+        TArray<FGeneratedRoadGroup> Components;
+        for (const FIndexedRoadSegment& Seed : SourceGroup.Segments)
+        {
+            if (!Seed.Segment || Visited.Contains(Seed.Segment))
+            {
+                continue;
+            }
+
+            FGeneratedRoadGroup Component;
+            Component.BaseName = SourceGroup.BaseName;
+            Component.Type = SourceGroup.Type;
+            TArray<FIndexedRoadSegment> Queue = {Seed};
+            Visited.Add(Seed.Segment);
+            for (int32 QueueIndex = 0; QueueIndex < Queue.Num(); ++QueueIndex)
+            {
+                const FIndexedRoadSegment Current = Queue[QueueIndex];
+                Component.Segments.Add(Current);
+                for (int32 EndIndex = 0; EndIndex < 2; ++EndIndex)
+                {
+                    ULandscapeSplineControlPoint* Point = Current.Segment->Connections[EndIndex].ControlPoint;
+                    if (!Point)
+                    {
+                        continue;
+                    }
+                    for (const FIndexedRoadSegment& Neighbour : Adjacency.FindChecked(Point))
+                    {
+                        if (Neighbour.Segment && !Visited.Contains(Neighbour.Segment))
+                        {
+                            Visited.Add(Neighbour.Segment);
+                            Queue.Add(Neighbour);
+                        }
+                    }
+                }
+            }
+            Components.Add(MoveTemp(Component));
+        }
+
+        for (int32 ComponentIndex = 0; ComponentIndex < Components.Num(); ++ComponentIndex)
+        {
+            if (Components.Num() > 1)
+            {
+                Components[ComponentIndex].BaseName += FString::Printf(
+                    TEXT("_Part%02d"), ComponentIndex + 1);
+            }
+            FActorRoadRoute Route;
+            FString Error;
+            if (BuildActorRoadRoute(
+                Components[ComponentIndex], ComponentTransform, Route, Error))
+            {
+                Routes.Add(MoveTemp(Route));
+            }
+            else if (!Error.IsEmpty())
+            {
+                OutWarnings.Add(Error);
+            }
+        }
+    }
+    return Routes;
+}
+
+bool IsGeneratedRoadActor(const AActor* Actor)
+{
+    return Actor
+        && Actor->Tags.Contains(FName(TEXT("PS2DEM_SPLINE")))
+        && (Actor->Tags.Contains(FName(TEXT("MainRoad")))
+            || Actor->Tags.Contains(FName(TEXT("BranchRoad"))));
+}
+
+int32 RemoveGeneratedRoadActors(UWorld* World)
+{
+    TArray<AActor*> ActorsToRemove;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        if (IsGeneratedRoadActor(*It))
+        {
+            ActorsToRemove.Add(*It);
+        }
+    }
+    for (AActor* Actor : ActorsToRemove)
+    {
+        World->EditorDestroyActor(Actor, true);
+    }
+    return ActorsToRemove.Num();
+}
+
+AActor* CreateRoadActor(UWorld* World, ULevel* Level, const FActorRoadRoute& Route)
+{
+    if (!World || Route.Points.Num() < 2)
+    {
+        return nullptr;
+    }
+
+    const FVector Origin = Route.Points[0].WorldLocation;
+
+    FActorSpawnParameters SpawnParameters;
+    SpawnParameters.Name = MakeUniqueObjectName(
+        Level, AActor::StaticClass(),
+        FName(*FString::Printf(TEXT("PS2DEM_Actor_%s"), *Route.BaseName)));
+    SpawnParameters.OverrideLevel = Level;
+    SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    SpawnParameters.ObjectFlags |= RF_Transactional;
+    AActor* Actor = World->SpawnActor<AActor>(
+        AActor::StaticClass(), Route.Points[0].WorldLocation,
+        FRotator::ZeroRotator, SpawnParameters);
+    if (!Actor)
+    {
+        return nullptr;
+    }
+
+    Actor->Modify();
+    Actor->SetActorLabel(Route.BaseName.Replace(TEXT("PS2DEM_"), TEXT("")), true);
+    Actor->SetFolderPath(FName(*FString::Printf(TEXT("PS2DEM/Splines/%s"), *Route.Type)));
+    Actor->Tags = {
+        FName(TEXT("PS2DEM_SPLINE")),
+        FName(TEXT("PS2DEM_LANDSCAPE_EXPORT")),
+        FName(*Route.Type),
+        FName(*FString::Printf(TEXT("WIDTH_M_%s"), *FString::SanitizeFloat(Route.WidthM)))
+    };
+
+    USplineComponent* Spline = NewObject<USplineComponent>(
+        Actor, FName(TEXT("Spline")), RF_Transactional);
+    Actor->AddInstanceComponent(Spline);
+    Actor->SetRootComponent(Spline);
+    Spline->OnComponentCreated();
+    Spline->RegisterComponent();
+    Spline->SetRelativeTransform(FTransform::Identity);
+    Spline->Modify();
+    Spline->bInputSplinePointsToConstructionScript = false;
+    Spline->bSplineHasBeenEdited = true;
+    Spline->bAllowDiscontinuousSpline = true;
+#if WITH_EDITORONLY_DATA
+    const FLinearColor Color = Route.Type == TEXT("MainRoad")
+        ? FLinearColor(1.0f, 0.32f, 0.02f, 1.0f)
+        : FLinearColor(1.0f, 0.9f, 0.25f, 1.0f);
+    Spline->EditorUnselectedSplineSegmentColor = Color;
+    Spline->EditorSelectedSplineSegmentColor = Color;
+#endif
+
+    // AActor has no root component when it is spawned. Registering a new root and
+    // assigning an identity relative transform therefore resets its world transform
+    // to the world origin. Restore the intended actor origin before adding local
+    // spline points, otherwise every route gets an unwanted segment from (0,0,0).
+    Actor->SetActorLocation(Origin, false, nullptr, ETeleportType::TeleportPhysics);
+    Spline->ClearSplinePoints(false);
+    for (int32 Index = 0; Index < Route.Points.Num(); ++Index)
+    {
+        const FActorRoadPoint& Point = Route.Points[Index];
+        Spline->AddSplinePoint(
+            Point.WorldLocation - Origin, ESplineCoordinateSpace::Local, false);
+        Spline->SetSplinePointType(Index, ESplinePointType::CurveCustomTangent, false);
+        Spline->SetTangentsAtSplinePoint(
+            Index, Point.ArriveTangent, Point.LeaveTangent,
+            ESplineCoordinateSpace::Local, false);
+        Spline->SetScaleAtSplinePoint(
+            Index, FVector(1.0f, Point.WidthM, 1.0f), false);
+    }
+    Spline->SetClosedLoop(Route.bClosed, false);
+    Spline->UpdateSpline();
+    Actor->MarkPackageDirty();
+    return Actor;
+}
+
+bool ExportRoadActorSplinesFromLandscapeImpl(bool bShowConfirmation)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    FString Error;
+    ALandscape* Landscape = World ? FindTargetLandscape(World, Error) : nullptr;
+    if (!Landscape || !Landscape->GetSplinesComponent())
+    {
+        ShowMessage(
+            LOCTEXT("RoadExportFailedTitle", "PS2DEM Road Actor Export Failed"),
+            FText::FromString(Error.IsEmpty()
+                ? TEXT("No generated Landscape road splines were found.")
+                : Error));
+        return false;
+    }
+
+    TArray<FString> Warnings;
+    const TArray<FActorRoadRoute> Routes = CollectGeneratedRoadRoutes(
+        Landscape->GetSplinesComponent(), Warnings);
+    if (Routes.IsEmpty())
+    {
+        FString Message = TEXT("No generated PS2DEM MainRoad or BranchRoad Landscape Splines were found.");
+        if (!Warnings.IsEmpty())
+        {
+            Message += TEXT("\n\n") + FString::Join(Warnings, TEXT("\n"));
+        }
+        ShowMessage(
+            LOCTEXT("RoadExportFailedTitle", "PS2DEM Road Actor Export Failed"),
+            FText::FromString(Message));
+        return false;
+    }
+
+    if (bShowConfirmation && FMessageDialog::Open(
+        EAppMsgType::YesNo,
+        FText::Format(
+            LOCTEXT("RoadExportConfirm", "Rebuild {0} ordinary road Actor spline(s) from Landscape '{1}'?\n\nExisting PS2DEM MainRoad and BranchRoad actors will be replaced. River actors, River Landscape Splines and hand-made Landscape Splines will not be changed."),
+            FText::AsNumber(Routes.Num()),
+            FText::FromString(Landscape->GetActorLabel())),
+        LOCTEXT("RoadExportTitle", "Export Road Actor Splines from Landscape")) != EAppReturnType::Yes)
+    {
+        return false;
+    }
+
+    const FScopedTransaction Transaction(
+        LOCTEXT("RoadExportTransaction", "Export PS2DEM Road Actor Splines from Landscape"));
+    const int32 Removed = RemoveGeneratedRoadActors(World);
+    TArray<AActor*> CreatedActors;
+    for (const FActorRoadRoute& Route : Routes)
+    {
+        if (AActor* Actor = CreateRoadActor(World, Landscape->GetLevel(), Route))
+        {
+            CreatedActors.Add(Actor);
+        }
+        else
+        {
+            Warnings.Add(FString::Printf(TEXT("Could not create Actor for %s."), *Route.BaseName));
+        }
+    }
+
+    if (GEditor && !CreatedActors.IsEmpty())
+    {
+        GEditor->SelectNone(false, true, false);
+        for (AActor* Actor : CreatedActors)
+        {
+            GEditor->SelectActor(Actor, true, false);
+        }
+        GEditor->NoteSelectionChange();
+    }
+
+    FString Message = FString::Printf(
+        TEXT("Created %d road Actor spline(s); replaced %d previous road Actor(s).\n\nRivers were not exported or changed. The level was not saved automatically."),
+        CreatedActors.Num(), Removed);
+    if (!Warnings.IsEmpty())
+    {
+        Message += TEXT("\n\nWarnings:\n") + FString::Join(Warnings, TEXT("\n"));
+    }
+    UE_LOG(LogTemp, Display, TEXT("PS2DEM: %s"), *Message);
+    if (bShowConfirmation)
+    {
+        ShowMessage(
+            LOCTEXT("RoadExportDoneTitle", "PS2DEM Road Actor Export"),
+            FText::FromString(Message));
+    }
+    return CreatedActors.Num() == Routes.Num();
+}
+
 bool ConvertSelectedRoutesToLandscapeSplinesImpl(
     bool bShowConfirmation,
     const FString& RequiredRouteType)
@@ -559,6 +1101,12 @@ bool UPS2DEMLandscapeSplineLibrary::ConvertSelectedRiverRoutesToLandscapeSplines
     bool bShowConfirmation)
 {
     return ConvertSelectedRoutesToLandscapeSplinesImpl(bShowConfirmation, TEXT("River"));
+}
+
+bool UPS2DEMLandscapeSplineLibrary::ExportRoadActorSplinesFromLandscape(
+    bool bShowConfirmation)
+{
+    return ExportRoadActorSplinesFromLandscapeImpl(bShowConfirmation);
 }
 
 void UPS2DEMLandscapeSplineLibrary::AssignSelectedMeshToGeneratedLandscapeSplines(

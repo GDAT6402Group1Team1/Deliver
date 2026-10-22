@@ -37,8 +37,11 @@
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Vehicle/DeliveryVehicleSummonComponent.h"
 #include "Inventory/DeliveryInventoryItemComponent.h"
+#include "Inventory/DeliveryPackageItem.h"
 #include "Task/DeliveryItemComponent.h"
 #include "Task/DeliveryTargetComponent.h"
+#include "Task/DeliveryPickupPointComponent.h"
+#include "Vehicle/DeliveryMotorbike.h"
 #include "UI/DeliveryHotbarWidget.h"
 #include "TimerManager.h"
 
@@ -48,8 +51,8 @@ ADeliveryCharacter::ADeliveryCharacter()
 	PrimaryActorTick.bStartWithTickEnabled = false;
 	bReplicates = true;
 	SetReplicateMovement(true);
-	NetUpdateFrequency = 20.0f;
-	MinNetUpdateFrequency = 10.0f;
+	SetNetUpdateFrequency(20.0f);
+	SetMinNetUpdateFrequency(10.0f);
 
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
@@ -546,6 +549,11 @@ void ADeliveryCharacter::DoPickup()
 	BeginPickupInteraction();
 }
 
+void ADeliveryCharacter::DoPickupRelease()
+{
+	CancelPickupHold();
+}
+
 void ADeliveryCharacter::BeginPickupInteraction()
 {
 	if (bPickupHeld) return;
@@ -616,8 +624,17 @@ bool ADeliveryCharacter::CanUsePickupTarget(const AActor* Target, bool bCheckTas
 	if (GrabComponent && GrabComponent->IsGrabbing()) return false;
 	if (const UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
 		ASC && ASC->HasMatchingGameplayTag(TAG_State_Stunned)) return false;
-	if (ActiveRagdoll && ActiveRagdoll->GetControlMode() != EDeliveryRagdollControlMode::Active) return false;
+	// 骑车时那具身体的布娃娃是停掉的（StopRagdoll），控制模式不是 Active。
+	// 所以这道门槛只对步行有效，不然上车之后 E 就彻底失灵了
+	const bool bRiding = IsRidingVehicle();
+	if (!bRiding && ActiveRagdoll
+		&& ActiveRagdoll->GetControlMode() != EDeliveryRagdollControlMode::Active) return false;
 
+	// 取货点：从这里领快递，领到的放哪由 ReceiveTaskPackage 决定
+	if (const UDeliveryPickupPointComponent* PickupPoint = UDeliveryPickupPointComponent::FindOn(Target))
+	{
+		return !bCheckTaskAvailability || PickupPoint->CanDispense();
+	}
 	if (const ADeliveryHandheldItem* Item = Cast<ADeliveryHandheldItem>(Target))
 	{
 		if (Item->GetOwner()) return false;
@@ -625,13 +642,99 @@ bool ADeliveryCharacter::CanUsePickupTarget(const AActor* Target, bool bCheckTas
 		{
 			return !bCheckTaskAvailability || DeliveryItem->CanBeAcquired();
 		}
-		return true;
+		// 非任务道具（斧头之类）骑车时不给捡：它要进背包，而背包表现挂在
+		// 那具被隐藏的身体上，骑车时捡起来玩家什么都看不到
+		return !bRiding;
 	}
 	if (const UDeliveryTargetComponent* DeliveryTarget = Target->FindComponentByClass<UDeliveryTargetComponent>())
 	{
-		return InventoryComponent && DeliveryTarget->CanAcceptDelivery(
-			InventoryComponent->GetHeldItem(), GetPlayerState());
+		// 这里**不能**用 Inventory->GetHeldItem()：骑车时快递在车上、手上是空的，
+		// 用背包那句会让"骑到收件点交不了货"
+		return DeliveryTarget->CanAcceptDelivery(GetCarriedTaskPackage(), GetTaskPlayerState());
 	}
+	return false;
+}
+
+ADeliveryMotorbike* ADeliveryCharacter::GetCurrentVehicle() const
+{
+	// 附着父级就是权威：上车时角色被 attach 到车的碰撞盒上，下车时 detach。
+	// 还要复核 Driver 指的是我——被别人撞飞落到车上这种情况不算"在骑车"
+	ADeliveryMotorbike* Bike = Cast<ADeliveryMotorbike>(GetAttachParentActor());
+
+	return (Bike && Bike->GetDriver() == this) ? Bike : nullptr;
+}
+
+ADeliveryPackageItem* ADeliveryCharacter::GetCarriedTaskPackage() const
+{
+	// 车上优先：骑车时快递在车上、手上是空的
+	if (const ADeliveryMotorbike* Bike = GetCurrentVehicle())
+	{
+		if (ADeliveryPackageItem* Cargo = Bike->GetCargo())
+		{
+			return Cargo;
+		}
+	}
+
+	return InventoryComponent ? Cast<ADeliveryPackageItem>(InventoryComponent->GetHeldItem()) : nullptr;
+}
+
+APlayerState* ADeliveryCharacter::GetTaskPlayerState() const
+{
+	if (APlayerState* Mine = GetPlayerState())
+	{
+		return Mine;
+	}
+
+	// 被 UnPossess 之后自己这边是空的，去车那边取——骑车时控制器 Possess 的是车
+	const ADeliveryMotorbike* Bike = GetCurrentVehicle();
+
+	return Bike ? Bike->GetPlayerState() : nullptr;
+}
+
+bool ADeliveryCharacter::ReceiveTaskPackage(ADeliveryPackageItem* Package, bool bPlayFeedback)
+{
+	if (!HasAuthority() || !IsValid(Package))
+	{
+		return false;
+	}
+
+	// 已经带着一件了就不再收。两件同时存在的话，交付时取到哪一件是不确定的
+	if (GetCarriedTaskPackage())
+	{
+		return false;
+	}
+
+	UDeliveryItemComponent* Item = Package->GetDeliveryItemComponent();
+
+	if (ADeliveryMotorbike* Bike = GetCurrentVehicle())
+	{
+		if (!Bike->AttachCargo(Package))
+		{
+			return false;
+		}
+
+		// 绑上车之后才让任务进入进行中：NotifyAcquired 失败的话上面那一步要能回滚，
+		// 而回滚一个已经改过的任务状态比回滚一次附着麻烦得多
+		if (Item && !Item->NotifyAcquired(GetTaskPlayerState()))
+		{
+			Bike->ReleaseCargo();
+
+			return false;
+		}
+
+		if (bPlayFeedback) ClientPickupSucceeded();
+
+		return true;
+	}
+
+	// 步行：走现有背包那条路。TryPickup 内部会调 NotifyAcquired，不要在这里重复调
+	if (InventoryComponent && InventoryComponent->TryPickup(Package))
+	{
+		if (bPlayFeedback) ClientPickupSucceeded();
+
+		return true;
+	}
+
 	return false;
 }
 
@@ -692,6 +795,19 @@ void ADeliveryCharacter::ServerCompletePickupHold_Implementation(AActor* Target)
 	}
 	ServerPickupHoldTarget.Reset();
 
+	// 取货点发货。成功音效由 ReceiveTaskPackage 自己放——它才知道到底收下了没有
+	if (UDeliveryPickupPointComponent* PickupPoint = UDeliveryPickupPointComponent::FindOn(Target))
+	{
+		PickupPoint->TryDispense(this);
+		return;
+	}
+	if (ADeliveryPackageItem* Package = Cast<ADeliveryPackageItem>(Target))
+	{
+		// 掉在地上的任务快递也走同一个出口：步行捡回手上、骑车捡上车，
+		// "放哪"这个判断全程只有 ReceiveTaskPackage 一处
+		ReceiveTaskPackage(Package);
+		return;
+	}
 	if (ADeliveryHandheldItem* Item = Cast<ADeliveryHandheldItem>(Target))
 	{
 		if (InventoryComponent && InventoryComponent->TryPickup(Item))
@@ -702,8 +818,7 @@ void ADeliveryCharacter::ServerCompletePickupHold_Implementation(AActor* Target)
 	}
 	if (UDeliveryTargetComponent* DeliveryTarget = Target->FindComponentByClass<UDeliveryTargetComponent>())
 	{
-		ADeliveryHandheldItem* Held = InventoryComponent ? InventoryComponent->GetHeldItem() : nullptr;
-		if (DeliveryTarget->TryDeliver(Held, GetPlayerState()))
+		if (DeliveryTarget->TryDeliver(GetCarriedTaskPackage(), GetTaskPlayerState()))
 		{
 			ClientDeliverySucceeded();
 		}

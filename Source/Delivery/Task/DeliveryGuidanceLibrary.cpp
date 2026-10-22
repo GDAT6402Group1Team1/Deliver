@@ -2,8 +2,12 @@
 
 #include "DeliveryGuidanceLibrary.h"
 
+#include "DeliveryMapSettings.h"
+#include "DeliveryTaskDefinition.h"
+#include "DeliveryTaskManagerComponent.h"
 #include "DeliveryTaskTrackerComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
@@ -131,8 +135,50 @@ FDeliveryGuidance UDeliveryGuidanceLibrary::GetTrackedTaskGuidance(const UObject
 	return Tracker ? GetTaskGuidance(WorldContextObject, Tracker->GetTrackedTask()) : FDeliveryGuidance();
 }
 
+EDeliveryCompassMarker UDeliveryGuidanceLibrary::GetTrackedTaskMarker(const UObject* WorldContextObject)
+{
+	const UDeliveryTaskTrackerComponent* Tracker = FindLocalTracker(WorldContextObject);
+	const UDeliveryTaskManagerComponent* Manager =
+		UDeliveryTaskManagerComponent::Get(WorldContextObject);
+	if (!Tracker || !Manager)
+	{
+		return EDeliveryCompassMarker::None;
+	}
+
+	const UDeliveryTaskDefinition* Task = Tracker->GetTrackedTask();
+	if (!Task)
+	{
+		return EDeliveryCompassMarker::None;
+	}
+
+	// 目的地解析不出来就别画图钉：有 ID 没地点时画出来的位置是 (0,0,0)，
+	// 玩家会被指到世界原点去
+	FVector Unused = FVector::ZeroVector;
+	FName UnusedId = NAME_None;
+	if (!Tracker->GetTaskDestination(Task, Unused, UnusedId))
+	{
+		return EDeliveryCompassMarker::None;
+	}
+
+	switch (Manager->GetTaskStatus(Task))
+	{
+	case EDeliveryTaskStatus::AwaitingPickup:
+		// 还没拿到包裹 → 指取件点
+		return EDeliveryCompassMarker::Pickup;
+
+	case EDeliveryTaskStatus::InProgress:
+		// 包裹在手上 → 指送达点。**这一步之后绝不能再显示取件图钉**，
+		// 否则玩家会以为任务没推进、折返回取件点
+		return EDeliveryCompassMarker::Delivery;
+
+	default:
+		// 未解锁和已完成都没有可去的地方
+		return EDeliveryCompassMarker::None;
+	}
+}
+
 FDeliveryCompassGuidance UDeliveryGuidanceLibrary::GetTrackedTaskCompass(
-	const UObject* WorldContextObject, float VisibleAngle, float NorthWorldYaw)
+	const UObject* WorldContextObject, float VisibleAngle)
 {
 	FDeliveryCompassGuidance Result;
 
@@ -145,7 +191,8 @@ FDeliveryCompassGuidance UDeliveryGuidanceLibrary::GetTrackedTaskCompass(
 
 	const float HalfVisibleAngle = FMath::Max(FMath::Abs(VisibleAngle) * 0.5f, 1.f);
 	const float ViewYaw = FRotator::NormalizeAxis(ViewRotation.Yaw);
-	const float NorthYaw = FRotator::NormalizeAxis(NorthWorldYaw);
+	// 北方取项目设置，不再由调用方传——和小地图读的是同一个值
+	const float NorthYaw = UDeliveryMapSettings::GetMapNorthWorldYaw();
 
 	Result.bValid = true;
 	// 世界里的 yaw 是从 +X 顺时针朝 +Y 增长。减掉地图北方后，正好就是
@@ -169,6 +216,10 @@ FDeliveryCompassGuidance UDeliveryGuidanceLibrary::GetTrackedTaskCompass(
 		const float UnclampedOffset = Guidance.RelativeYaw / HalfVisibleAngle;
 		Result.bTargetInStrip = FMath::Abs(UnclampedOffset) <= 1.f;
 		Result.TargetOffset = FMath::Clamp(UnclampedOffset, -1.f, 1.f);
+
+		// 图钉按阶段选，和 GetTaskDestination 取的是同一个状态——
+		// 两边各判一次迟早会不一致，表现就是"箭头指送达点、图钉还是箱子"
+		Result.Marker = GetTrackedTaskMarker(WorldContextObject);
 	}
 
 	return Result;
@@ -195,3 +246,28 @@ FText UDeliveryGuidanceLibrary::FormatDistance(float Centimeters)
 }
 
 #undef LOCTEXT_NAMESPACE
+
+UTexture2D* UDeliveryGuidanceLibrary::GetTrackedTaskMarkerTexture(const UObject* WorldContextObject)
+{
+	// 路径和 Content/Python/import_compass_icons.py 里的 DEST 一致。
+	// 改了那边记得改这里——两处对不上的表现是图钉直接不显示，没有任何报错
+	static const TSoftObjectPtr<UTexture2D> PickupIcon(
+		FSoftObjectPath(TEXT("/Game/UI/Minimap/Source/T_CompassTaskTarget.T_CompassTaskTarget")));
+	static const TSoftObjectPtr<UTexture2D> DeliveryIcon(
+		FSoftObjectPath(TEXT("/Game/UI/Minimap/Source/T_CompassTaskDelivery.T_CompassTaskDelivery")));
+
+	switch (GetTrackedTaskMarker(WorldContextObject))
+	{
+	case EDeliveryCompassMarker::Pickup:
+		return PickupIcon.LoadSynchronous();
+
+	case EDeliveryCompassMarker::Delivery:
+		return DeliveryIcon.LoadSynchronous();
+
+	default:
+		// None：没接任务、已完成、或者地点 ID 解析不出来。
+		// 返回 nullptr 而不是退回取件图钉——手上已经有包裹却还挂着取件图钉，
+		// 玩家会折返回取件点
+		return nullptr;
+	}
+}

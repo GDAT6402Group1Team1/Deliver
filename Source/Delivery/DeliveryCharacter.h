@@ -18,6 +18,9 @@ class UDeliveryGrabbableComponent;
 class UDeliveryInteractionProbeComponent;
 class UDeliveryInventoryComponent;
 class UDeliveryVehicleSummonComponent;
+class ADeliveryMotorbike;
+class ADeliveryPackageItem;
+class APlayerState;
 class UDeliveryHotbarWidget;
 class USkeletalMeshComponent;
 class USpringArmComponent;
@@ -238,9 +241,66 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoPickup();
 
+	/**
+	 * 松开取件键。和 `DoPickup()` 配对，骑车时由摩托车转发进来。
+	 *
+	 * 必须有这一半：长按取件要能中途放弃，只转发按下的话松手之后服务器那边
+	 * 的长按记录一直留着，下一次按 E 会被当成"还在按着上一个目标"。
+	 */
+	UFUNCTION(BlueprintCallable, Category="Input")
+	virtual void DoPickupRelease();
+
 	/** Local probe/UI query. Negative progress means this target is not currently being held. */
 	float GetPickupHoldProgress(const AActor* Target) const;
 	bool CanUsePickupTarget(const AActor* Target, bool bCheckTaskAvailability = true) const;
+
+	/** —— 任务快递的搬运 —— */
+
+	/**
+	 * 服务器：收下一件任务快递。**步行放手上、骑车绑车上。**
+	 *
+	 * 这是取货点发货的唯一出口，也是"放哪"这个判断的唯一一处——
+	 * 散在取货点、上车、下车三处各判一遍，迟早出现"车上和手上各有一件"。
+	 */
+	UFUNCTION(BlueprintCallable, Category="Delivery|Carry")
+	bool ReceiveTaskPackage(ADeliveryPackageItem* Package, bool bPlayFeedback = true);
+
+	/**
+	 * 身上这件任务快递，手上和车上都算；没有返回 null。
+	 *
+	 * 交付判定必须走这一句而不是 `Inventory->GetHeldItem()`：骑车时快递在车上、
+	 * 手上是空的，用背包那句会让"骑到收件点交不了货"。
+	 */
+	UFUNCTION(BlueprintPure, Category="Delivery|Carry")
+	ADeliveryPackageItem* GetCarriedTaskPackage() const;
+
+	/**
+	 * 任务/结算该记在哪个 PlayerState 上。
+	 *
+	 * **不能直接用 `GetPlayerState()`**：骑车时控制器 Possess 的是车，
+	 * 引擎在 `APawn::UnPossessed()` 里会 `SetPlayerState(nullptr)`
+	 * （UE 5.8 `Pawn.cpp:719`），这具身体的 PlayerState 就是空的。
+	 * 用它去交付的话 `TryCompleteDelivery(Task, nullptr)` 会把钱记到 null 上
+	 * ——任务完成了、钱包一分没进，而且没有任何报错。
+	 * 骑车时要从车那边取。
+	 */
+	UFUNCTION(BlueprintPure, Category="Delivery|Carry")
+	APlayerState* GetTaskPlayerState() const;
+
+	/**
+	 * 正在骑的车；没骑车返回 null。
+	 *
+	 * **不存字段，现场从附着父级推出来。** 上车时角色被 attach 到车上、车的
+	 * `Driver` 又是复制的，这两样在服务器和客户端都是权威值；再存一份
+	 * `CurrentVehicle` 就有两个真相，而它们不同步的表现是"下了车还以为在车上"
+	 * ——货物会被塞到一辆已经骑走的车上，查起来毫无线索。
+	 */
+	UFUNCTION(BlueprintPure, Category="Delivery|Carry")
+	ADeliveryMotorbike* GetCurrentVehicle() const;
+
+	/** 在不在车上。探测器和拾取门槛都要放宽骑车时的判断。 */
+	UFUNCTION(BlueprintPure, Category="Delivery|Carry")
+	bool IsRidingVehicle() const { return GetCurrentVehicle() != nullptr; }
 
 	// IDeliveryCombatInterface
 	virtual bool StartMeleeAttack(EMeleeHand Hand) override;

@@ -165,13 +165,17 @@ void UDeliveryTaskTrackerComponent::RefreshAutoSelection()
 		return;
 	}
 
-	// 原来追踪的任务已经完成（或者刚被别人做掉了）
+	// 原来追踪的任务已经完成（或者刚被别人做掉了）。
+	// 没接电话的任务是 Offered 不是 AwaitingPickup，这一句天然也把它排除掉
 	if (TrackedTask && Manager->GetTaskStatus(TrackedTask) != EDeliveryTaskStatus::AwaitingPickup)
 	{
 		SetTrackedTask(nullptr);
 	}
 
-	// 只剩一个待取件任务时默认选中它
+	// 只剩一个待取件任务时默认选中它。
+	// `AwaitingPickup` 现在就等于"已接听"，没接的那档是 Offered，不会被选中——
+	// 任务条、脚边箭头、罗盘图钉、建筑高亮都跟着被追踪的任务走，
+	// 所以这一句就是"接听之后整套取货引导才出现"的那个开关
 	if (!TrackedTask)
 	{
 		TArray<UDeliveryTaskDefinition*> Awaiting;

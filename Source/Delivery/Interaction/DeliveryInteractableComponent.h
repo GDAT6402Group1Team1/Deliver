@@ -7,6 +7,7 @@
 #include "DeliveryInteractableComponent.generated.h"
 
 class APawn;
+class USceneComponent;
 
 UENUM(BlueprintType)
 enum class EDeliveryInteractionKey : uint8
@@ -40,9 +41,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Interaction")
 	FText PromptText;
 
-	/** 玩家离得多近才开始提示。从宿主 Actor 原点算起。 */
+	/**
+	 * 玩家离得多近才能交互。从下面那个"测量点"算起，不一定是 Actor 原点。
+	 *
+	 * 测量点的优先级见 `GetInteractionPoint()`：锚点 > 根碰撞表面 > Actor 原点。
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Interaction", meta=(ClampMin="0.0", Units="cm"))
 	float InteractRadius = 300.0f;
+
+	/**
+	 * 距离从这个组件的位置算，而不是 Actor 原点 / 碰撞表面。
+	 *
+	 * **为什么需要它**：可交互物挂在整栋楼上时，Actor 原点可能在楼中心甚至地下，
+	 * 而大型网格如果用"Use Complex Collision As Simple"就没有简单碰撞体、
+	 * `GetClosestPointOnCollision` 查不到，于是退回原点——结果是**箭头指门口、
+	 * 交互判定从楼心算**，玩家站在门口按不动，而把半径调到够用时站在楼背面也能按。
+	 *
+	 * 取货点/收件点会自动把它指向同一个 Actor 上的 `DeliveryLocationComponent`
+	 * （那个组件本来就是为了能摆到门口才做成 SceneComponent 的），
+	 * 于是"箭头指哪"和"在哪能按"天然是同一个点。手填也可以，指任何场景组件都行。
+	 */
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category="Interaction")
+	TObjectPtr<USceneComponent> InteractAnchor;
 
 	/** 浮窗吊在宿主 Actor 原点往上多高。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Interaction")
@@ -68,6 +88,19 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Interaction")
 	bool CanInteract(const APawn* Interactor) const;
+
+	/**
+	 * 距离从哪个点算。锚点 > 根组件碰撞表面（只对 E 目标）> Actor 原点。
+	 *
+	 * 公开出来是为了让诊断命令能打这个点——"按不动"最常见的原因就是
+	 * 它和玩家以为的位置不是一回事，而这件事在游戏里完全看不见。
+	 */
+	UFUNCTION(BlueprintPure, Category="Interaction")
+	FVector GetInteractionPoint(const FVector& FromLocation) const;
+
+	/** 玩家到测量点的实际距离。负数表示拿不到（没有 Owner）。诊断用。 */
+	UFUNCTION(BlueprintPure, Category="Interaction")
+	float GetInteractionDistance(const APawn* Interactor) const;
 
 	/** 服务器复核通过之后真正执行一次交互。 */
 	void Execute(APawn* Interactor);

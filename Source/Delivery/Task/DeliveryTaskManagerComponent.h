@@ -54,6 +54,16 @@ public:
 	UFUNCTION(BlueprintPure, Category="Task")
 	bool CanAcquireItem(const UDeliveryTaskDefinition* Task) const;
 
+	/**
+	 * 这个任务**接过电话了吗**（玩家按过接听）。
+	 *
+	 * 和"状态是不是 AwaitingPickup"是两件事：解锁时状态就变成待取件了，
+	 * 但在接听之前不能取件。UI 要区分「电话响了」和「已接单」时查这个；
+	 * 重拨前也用它判断这通电话还该不该打。
+	 */
+	UFUNCTION(BlueprintPure, Category="Task")
+	bool IsTaskAccepted(const UDeliveryTaskDefinition* Task) const;
+
 	bool IsTaskRegistered(const UDeliveryTaskDefinition* Task) const;
 
 	/**

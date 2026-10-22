@@ -15,6 +15,18 @@
 UDeliveryRagdollCombatComponent::UDeliveryRagdollCombatComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	// 组件自己没有要复制的属性，开这个只为了能发 NetMulticast（命中音）。
+	// 组件上的 RPC 要求组件被标记为复制，否则调用会被静默丢掉。
+	SetIsReplicated(true);
+}
+
+void UDeliveryRagdollCombatComponent::MulticastPlayPunchHit_Implementation(
+	FVector_NetQuantize10 Location)
+{
+	if (PunchHitSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, PunchHitSound, Location);
+	}
 }
 
 void UDeliveryRagdollCombatComponent::BeginPlay()

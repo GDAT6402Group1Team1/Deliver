@@ -146,7 +146,9 @@ void UDeliveryTaskManagerComponent::ReevaluateUnlocks()
 			continue;
 		}
 
-		SetTaskStatus(State, EDeliveryTaskStatus::AwaitingPickup);
+		// 解锁只到 Offered。**接听才进 AwaitingPickup**——
+		// 在这里就设成待取件的话，铃一响整套取货引导就亮了
+		SetTaskStatus(State, EDeliveryTaskStatus::Offered);
 
 		if (UDeliveryPhoneCallQueueComponent* Phone = GetPhoneQueue())
 		{
@@ -204,9 +206,18 @@ bool UDeliveryTaskManagerComponent::CanAcquireItem(const UDeliveryTaskDefinition
 		return false;
 	}
 
-	// 已接听的任务优先。漏接电话时仍允许直接取件，TryAcquireItem 会以取件时刻兜底启动计时。
+	// 状态是 AwaitingPickup 就已经意味着"接过电话"了（Offered 才是没接的那档），
+	// 所以这里不用再额外判一个 bool
 	const UDeliveryTaskDefinition* TimedTask = GetTimedTask();
 	return TimedTask == nullptr || TimedTask == Task;
+}
+
+bool UDeliveryTaskManagerComponent::IsTaskAccepted(const UDeliveryTaskDefinition* Task) const
+{
+	const FDeliveryTaskState* State = FindState(Task);
+
+	// bTimerStarted 只由 AnswerCurrentCall 置上，所以它就等于"按过接听"
+	return State && State->bTimerStarted;
 }
 
 bool UDeliveryTaskManagerComponent::StartTaskTimerFromAcceptedCall(UDeliveryTaskDefinition* Task)
@@ -217,7 +228,7 @@ bool UDeliveryTaskManagerComponent::StartTaskTimerFromAcceptedCall(UDeliveryTask
 	}
 
 	FDeliveryTaskState* State = FindState(Task);
-	if (!State || State->Status != EDeliveryTaskStatus::AwaitingPickup)
+	if (!State || State->Status != EDeliveryTaskStatus::Offered)
 	{
 		return false;
 	}
@@ -240,8 +251,9 @@ bool UDeliveryTaskManagerComponent::StartTaskTimerFromAcceptedCall(UDeliveryTask
 	State->Deliverer = nullptr;
 	KnownStates.Add(State->Definition, *State);
 
-	// 状态仍是 AwaitingPickup，但 UI/Tracker 需要立刻知道这项任务已经正式接单。
-	OnTaskStatusChanged.Broadcast(Task, State->Status);
+	// 接听 = 正式接单，状态在这里才推进到待取件。
+	// SetTaskStatus 自己会广播，所以不用再单独广播一次
+	SetTaskStatus(*State, EDeliveryTaskStatus::AwaitingPickup);
 	GetOwner()->ForceNetUpdate();
 
 	if (Task->TimeLimitSeconds > 0.f && GetWorld())
@@ -281,8 +293,9 @@ bool UDeliveryTaskManagerComponent::TryAcquireItem(UDeliveryTaskDefinition* Task
 		return false;
 	}
 
-	// 正常流程在接电话时已经开始。漏接电话但直接找到餐品时从这里兜底，避免无计时订单。
-	if (!State->bTimerStarted && !StartTaskTimerFromAcceptedCall(Task))
+	// 不再有"取件时兜底开始计时"那条路：计时只能由接听电话开启。
+	// CanAcquireItem 已经夹过一次，这里是服务器侧的第二道
+	if (!State->bTimerStarted)
 	{
 		return false;
 	}

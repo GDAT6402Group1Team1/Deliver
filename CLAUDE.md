@@ -66,11 +66,89 @@
 - Character 上配置了 `HealthRegenEffect` / `DamageEffect`（Instant + SetByCaller Effect.Type.Damage）以及左右拳 GA 类，均在蓝图 `BP_DeliveryMan` 里指定。
 
 ### 任务系统（电话接任务）
+**快递从取货点领，不再手摆在地上**（2026-10-20 改）。按住 E 和取货点交互，
+服务器当场生成一件快递交给玩家：**步行拿在手上，骑车绑在车上**。
+
+- [DeliveryPickupPointComponent](Source/Delivery/Task/DeliveryPickupPointComponent.h) ——
+  挂在取货点上。**不填任务**，而是按地点 ID 反查：登记在册、状态是待取件、
+  且 `PickupLocationId` 等于本点 ID 的那个任务。所以同一个取货点能在一局里
+  先后发好几个任务的快递，和 `Tasks.csv` 里"每个任务各自写取货点"的数据形状对得上。
+  `PackageClass` 留空时退回内置测试快递——摆了点却一件都领不到又没有报错，
+  是最难查的那种空配置。
+- [ADeliveryPickupPoint](Source/Delivery/Task/DeliveryPickupPoint.h) ——
+  拖进关卡填个 `LocationId` 就能用的现成 Actor（继承 `ADeliveryLocationMarker`，
+  连 Billboard 和"Python 加的组件存不住"那条都一起继承了）。取货点本来就是关卡里
+  某个模型时不用摆它，直接在那个 Actor 上加
+  `DeliveryLocationComponent` + `DeliveryInteractableComponent` + `DeliveryPickupPointComponent` 三件套。
+- [ADeliveryDropOffPoint](Source/Delivery/Task/DeliveryDropOffPoint.h) ——
+  成对的收件点，填 `LocationId` + `ExpectedTask` 就能交付。
+  一个能用的收件点需要**三个**组件（地点 + 可交互 + 收件），手加三次还要把
+  `InteractionKey` 调成 `PickupE`、`HoldDuration` 调成 0.5，漏任何一个的表现
+  都是"走过去按 E 没反应"、且三种漏法长得一模一样，所以做成现成 Actor。
+  `DeliveryRadius` 构造时就对齐 `InteractRadius`：两个数不一样会出现
+  "提示出来了但按不动"（提示走前者、交付走后者），而玩家只看得到后半截。
+  **和取货点刻意不对称**：收件点手填 `ExpectedTask`，取货点不填任务——
+  取货点是"这个柜台现在该发哪一单"（状态），收件点是"这一户只收这一单"（身份）。
+- 两个点的 `HighlightActors` 都要在关卡实例里填上真正的建筑：这两个 Actor 自己
+  没有网格，不填的话透视高亮会去照一个空 Actor，表现是"追踪了任务但什么都没亮"。
+- `ReceiverNpcId` 目前**没有任何代码在读**，只是存在资产里，摆点时不用管它。
+- **这同时修掉了旧流程的死锁**：以前快递掉出世界 → `EndPlay` 上报丢件 → 任务退回待取件，
+  但地上那件已经没了，这一局再也推不动。现在退回待取件之后回取货点再领一件就行。
+- **"放哪"只有一处判断**：`ADeliveryCharacter::ReceiveTaskPackage()`。取货点发货、
+  地上捡回、上车、下车四条路全走它。散在四处各判一遍的话迟早出现"车上和手上各有一件"，
+  而交付时取到哪一件是不确定的。
+- **车上的货**：`ADeliveryMotorbike::AttachCargo/ReleaseCargo`，焊在 `CargoPivot`
+  （挂 `MeshAlign` 下面，所以继承车头朝向修正和压弯侧倾）。**用焊接不用物理约束**——
+  车是运动学的，约束另一端相当于无穷重刚体，Chaos 会把误差全算到快递头上，
+  表现是快递在车后面疯狂抽动（拖人那套踩过同一个坑）。`CargoOffset` **留零时由
+  `AutoConfigureFromMeshes()` 自动量**（取车尾 35% 那批部件的顶面中点——整车包围盒的
+  `Max.Z` 是车把高度，用它会把快递架到半空）。要手填的话注意"往后"是 **−Y 不是 −X**：
+  MeshAlign 局部空间里 +Y 才是车头，填错的表现是快递挂在车侧面。
+- **上下车自动换手**：`TryEnter` 把手上的快递搬到车上（**必须排在 attach 之后**，
+  因为 `GetCurrentVehicle()` 是从附着父级推出来的，attach 之前这个人还"不在车上"），
+  `ExitVehicle` 搬回手上（排在 `StartRagdoll` 之后，刚体没重建时算出来的手部位置是旧的）。
+  交回去失败（背包满、人晕了）就留在车上——车还能用 R 召唤回来，掉出世界的快递要重跑一趟。
+- **骑车时按 E**：摩托车绑 `IA_Pickup` 后**转发给驾驶员那具身体**
+  （`Driver->DoPickup()` / `DoPickupRelease()`），不在车上另写一套。
+  配套地，交互探测器的门槛从"本机操控"放宽成"本机操控**或者**我是本机操控的车的驾驶员"
+  ——骑车时控制器 Possess 的是车，那具身体的 `IsLocallyControlled()` 是 false，
+  只判那一句的话上车之后 E 整个失灵。`CanUsePickupTarget` 里的布娃娃状态门槛同理跳过
+  （骑车时 `StopRagdoll` 过了，控制模式不是 `Active`）。非任务道具（斧头）骑车时仍不给捡：
+  它要进背包，而背包表现挂在那具被隐藏的身体上，捡了也看不见。
+- **交付判定必须走 `GetCarriedTaskPackage()`**，不能用 `Inventory->GetHeldItem()`：
+  骑车时快递在车上、手上是空的，用背包那句会让"骑到收件点交不了货"。
+  `GetCargo()` 走 `IsValid` 而不是裸判空——快递被别处销毁时指针会悬着，
+  裸判空会让"已经没货了却说有货"，下一件永远领不到；`TryDeliver` 也会先从车上摘再销毁。
+- **骑车时 `GetPlayerState()` 是空的**，任务/结算一律走
+  `ADeliveryCharacter::GetTaskPlayerState()`。引擎在 `APawn::UnPossessed()` 里
+  `SetPlayerState(nullptr)`（UE 5.8 `Pawn.cpp:719`），而骑车时控制器 Possess 的是车，
+  所以那具身体的 PlayerState 就是空的。直接用它去交付的结果是
+  `TryCompleteDelivery(Task, nullptr)`——任务完成了、钱包一分没进，**且没有任何报错**。
+- **收件点的交付判距离和提示/按键必须取同一个点**：`UDeliveryTargetComponent::GetDeliveryPoint()`
+  转调可交互组件的 `GetInteractionPoint()`（锚点 > 根碰撞表面 > Actor 原点），
+  不自己再实现一遍。早先这里用的是 `GetOwner()->GetActorLocation()`，挂在整栋楼上时
+  提示浮窗在门口出现、`CanInteract` 也过，但走到 `CanAcceptDelivery` 会按楼心算距离并失败
+  ——玩家看到的是**"提示出来了、按住 E 了、什么都没发生"，日志里一句话都没有**。
+  和 `DeliveryRadius`/`InteractRadius` 不一致是同一类错，只是走另一条代码路径。
+- **交互半径只有一个填写位置**：取货点填 `UDeliveryPickupPointComponent::InteractRadius`、
+  收件点填 `UDeliveryTargetComponent::InteractRadius`（现成 Actor 上转发到 Actor 详情）。
+  组件每次 `BeginPlay` 都把它写进可交互组件，**自动建的和手加的都盖掉**，
+  所以"调了不生效"不可能发生；收件点还会顺带把 `DeliveryRadius` 对齐过去。
+  早先按"自动建的用 A、手加的用 B、现成 Actor 用 C"分流，结果同一个概念三个位置，
+  问一次"怎么调半径"要分三种情况回答——**一个旋钮永远生效 > 三个旋钮各管一段**。
+- 调试：`Delivery.Pickup.Dump`（列全部取货点 + 此刻该发哪个任务 + 发不出的原因）、
+  `Delivery.Pickup.Take`（从最近的点领一件，跳距离不跳任务状态）、
+  `Delivery.DropOff.Dump`（收件点收哪个任务、交互配得对不对、你和快递各自离测量点多远）、`Delivery.Carry.Dump`（快递到底在手上还是车上）。`Delivery.Task.Validate`
+  也认取货点了：地点 ID 能解析只说明那儿有个标记，标记上没挂取货点组件玩家按不动 E。
+
 快递 E 拾取与交付改为纯范围判定，不要求准星、朝向或视线；本机以 20Hz 优先选可用目标；同等可用性下准星附近目标优先，未瞄准任何目标时回退到最近目标（准星只排序，不作为交互门槛），长按期间目标仍有效则保持选中，不可取快递仅作为原因提示的后备。服务端复核范围、任务状态和长按时间。保留快递 0.5 秒长按及现有交付半径，F 交互和双键物理抓取不变。
 完整的结构、接口清单、配置方式、调用链和待确认假设见 **[Document/TaskSystem.md](Document/TaskSystem.md)**，改动前先看这份。要点：
 
 - 任务状态全局共享（多人下解锁/来电/计时/完成对所有人是同一份），挂在 GameState 上的 [DeliveryTaskManagerComponent](Source/Delivery/Task/DeliveryTaskManagerComponent.h)；"当前追踪哪个任务"是每玩家各自的，挂在 PlayerState 上的 [DeliveryTaskTrackerComponent](Source/Delivery/Task/DeliveryTaskTrackerComponent.h)。
 - 计时在**接通任务解锁电话**时开始，用服务器时间戳而不是 Tick 累加；通话、前往取餐、掉落/换手/进后备箱/晕倒都碰不到计时。漏接后直接取餐会以取餐时刻兜底。
+- **取件要求"按过接听"**，不是"电话响过"：`CanAcquireItem` 查 `bTimerStarted`（只由 `AnswerCurrentCall` 置上），`IsTaskAccepted()` 是它的公开查询。早先允许漏接直接取件、由 `TryAcquireItem` 以取件时刻兜底开始计时，结果是电话沦为纯播片——不接也照样做任务，接听这个动作没有任何后果。那条兜底已删。
+- **挂断必须配重拨，这两件不能拆开做。** 拒接/漏接会把电话**移出队列且永不重拨**，所以只加"必须接听"这道门槛、不补重拨的话，挂一次电话那个任务就永久推不动，和"四个状态无失败态"直接冲突。现在 `DeliveryPhoneCallQueueComponent::ScheduleRedial`在 `RedialDelaySeconds`（默认 20 秒）后重拨，重拨前复核"状态仍是待取件且仍未接单"，否则不打；**只重拨 `TaskUnlocked`**，催促电话错过就错过、重拨只会烦人。
+- 取件被拦时要分得出原因：「先接电话才能接这一单」和「请先完成正在进行的快递任务」都会让 `CanAcquireItem` 返回 false，但玩家该做的事完全不同（去接电话 vs 先送完手上这单）。
 - 全世界同时只有一个已接单并计时的任务：后续任务解锁来电在 PhoneQueue 暂停，当前任务催促电话可插队；`CanAcquireItem()` 同时阻止拿起其他任务快递。
 - 四个状态无失败态（Locked / AwaitingPickup / InProgress / Completed），超时只打一次催促电话并降低奖励倍率，任务继续。
 - 电话队列 [DeliveryPhoneCallQueueComponent](Source/Delivery/Task/DeliveryPhoneCallQueueComponent.h) 也在 GameState 上，由服务器按配置时长推进，不等客户端播完回报。
@@ -81,9 +159,96 @@
 - **地点 ID 解析**：[DeliveryLocationRegistry](Source/Delivery/Task/DeliveryLocationRegistry.h)（WorldSubsystem）+ [DeliveryLocationComponent](Source/Delivery/Task/DeliveryLocationComponent.h)。关卡里的取件点/收件点/收件人 NPC 挂后者、填 `LocationId`（和 `Tasks.csv` 一致），任务定义里那几个裸 `FName` 才能变成世界坐标。三种点共用一个组件，因为在数据上它们是同一种东西；继承 SceneComponent 是为了能带相对偏移（收件点挂在整栋楼上时楼的原点可能在地下，箭头该指门口）。查找走注册表而不是遍历关卡，和交互系统同一个理由：碰撞查询在本项目静默失效过一次。
 - **任务地点透视高亮**：本机 `TaskTracker` 按任务状态自动高亮当前目的地（待取件→`PickupLocationId`，进行中→`DeliveryLocationId`），沿用 `CustomDepth/Stencil=1` + `/Game/Blueprint/Interaction/M_GrabHighlight`。`DeliveryPlayerController` 自动给本机启用该后处理，不需要在地图的 PostProcessVolume 里手加。`DeliveryLocationComponent.HighlightActors` 为空时高亮 Owner；地点是门口独立 Marker 时，必须在关卡实例里把实际建筑 Actor 填进数组，可填多个组成同一建筑的模型。任务完成、改追踪或切换阶段会恢复模型原来的 CustomDepth/Stencil 状态。
 - **"该去哪"**：`Tracker::GetTrackedTaskDestination()`。**目的地按任务状态自动切换**（待取件→取件点，进行中→收件点），调用方不要自己判——判错的表现是"箭头指向已经拿过的地方"，四个界面会各错各的。ID 在关卡里找不到对应点时返回 false 并在日志点名；静默失败的话表现只是"箭头不显示"，根因几乎查不到。
-- **丢件恢复**：`NotifyItemLost` 把进行中的任务退回待取件，但接电话时开始的计时、催促状态和特殊事件继续保留；`UDeliveryItemComponent::EndPlay` 在 Actor 被销毁时自动上报（掉出世界会走到）。**"正常交付"和"意外丢失"靠执行顺序区分**——`TryDeliver` 先标已完成再销毁快递，所以 `EndPlay` 时状态已不是进行中，`NotifyItemLost` 自己返回 false；**调换这两步会让每次成功交付都被误判成丢件**。
+- **丢件恢复**：`NotifyItemLost` 把进行中的任务退回待取件，但接电话时开始的计时、催促状态和特殊事件继续保留；`UDeliveryItemComponent::EndPlay` 在 Actor 被销毁时自动上报（掉出世界会走到）。**"正常交付"和"意外丢失"靠执行顺序区分**——`TryDeliver` 先标已完成再销毁快递，所以 `EndPlay` 时状态已不是进行中，`NotifyItemLost` 自己返回 false；**调换这两步会让每次成功交付都被误判成丢件**。退回待取件之后**回取货点再领一件**即可，不再需要关卡里还躺着那件原物——这是取货点流程修掉的那个死锁。
 - **指引换算**：[DeliveryGuidanceLibrary](Source/Delivery/Task/DeliveryGuidanceLibrary.h) 返回距离、相对镜头的水平夹角、在不在前方、高度差，UI 画屏幕边缘箭头直接用。**角度基于镜头不是角色**——骑车时镜头和车头可能不一致（摩托车有自由/固定两套视角），用角色朝向算的话自由视角下箭头会指错。
-- 顶部水平罗盘条用 `DeliveryGuidanceLibrary::GetTrackedTaskCompass`：目标与 N/E/S/W 都返回同一条水平轴上的 `-1~1` 偏移，乘罗盘条半宽即可。默认 `+X` 为北，可用 `NorthWorldYaw` 对齐关卡；背后的任务目标会夹在左右边缘持续提示。
+- 顶部水平罗盘条用 `DeliveryGuidanceLibrary::GetTrackedTaskCompass`：目标与 N/E/S/W 都返回同一条水平轴上的 `-1~1` 偏移，乘罗盘条半宽即可。北方取项目设置 `MapNorthWorldYaw`（和小地图同一个值，不再是函数参数）；背后的任务目标会夹在左右边缘持续提示。
+- **罗盘条只在接到任务后出现**（`WBP_Compass`，蓝图侧；C++ 只出数据）。
+  判据用 `GetTrackedTaskCompass().bHasTarget`，它正好等于想要的条件：
+  `Locked`/`Completed` 为 false，`AwaitingPickup`（指取件点）/`InProgress`（指收件点）为 true。
+  做法是在 `UpdateCompass`（事件Tick 每帧调）末尾，用那个以 `bHasTarget` 为 Index 的
+  「选择」节点（Option 0 = `Collapsed`、Option 1 = `Visible`）去 `SetVisibility`
+  **根面板 `CanvasPanel_19`**——只有一处判断。
+  - **原来的 bug 是那个 Select 的两个选项都填了 `Visible`**，等于没判断，
+    所以目标标记一开局就在。
+  - **控件树必须先查清，不能只盯着蓝图变量。** 五个 `Compass_N/S/E/W/Target` 是变量，
+    但树里还有个 `Image_138`（那条横线）**不是变量**、压根没有可见性逻辑——
+    第一版只把那五个接上，结果"屏幕上还剩一条线"。真实形状是
+    `CanvasPanel_19 →（SizeBox_20 → CanvasPanel_97 → 五个 Image）+ Image_138`。
+  - **收根面板是安全的，之前"绝对不能收根"那条结论画得太宽。** Slate 不 tick
+    `Collapsed` 的控件——但那只适用于 **UserWidget 自己**；`CanvasPanel_19` 是
+    UserWidget **内部**的顶层面板，「事件Tick」挂在 UserWidget 上，收它不受影响。
+    真要收 UserWidget 自己才会自锁：`UpdateCompass` 再也不跑、`bHasTarget` 变 true
+    也永远恢复不了，表现是"罗盘再也不出现"且极难查。
+  - **怎么拿到根面板的引用**（三条路试了两条死路，结论值得记）：
+    `CanvasPanel_19` 没勾 Is Variable，所以没有 Get 节点；
+    `bIsVariable` 是 protected、Python 写不了；`GetWidgetFromName` 五种路径全返回 None。
+    最后走的是 **`Get Compass_N` → `GetParent` ×3**（`UWidget::GetParent()` 是
+    BlueprintCallable，三次正好到根）。
+    **代价**：这条链把"三层嵌套"写死了，以后在 Designer 里加一层容器或改层级，
+    链子会指到错的控件或拿到 null（运行时 Accessed None，表现是罗盘一直显示）。
+    层级一旦要改，就回去在 Designer 勾上根面板的 Is Variable、换成直接 Get。
+  - 脚本（按使用顺序）：`dump_compass_widget.py`（导图表）→ `gate_compass_on_task.py`
+    （改 Select 的 Option 0）→ `dump_compass_tree.py`（导控件树，找出那条线）→
+    `gate_compass_root.py`（接根面板 + 删旧节点）→ `clean_compass_orphans.py`（清孤立 Get）
+    → `compile_compass.py`（编译 + 核对接线）。
+- **罗盘图钉按任务阶段切换**：`FDeliveryCompassGuidance.Marker`（`EDeliveryCompassMarker`）——
+  待取件 → `Pickup`（箱子图钉 `T_CompassTaskTarget`），进行中 → `Delivery`（房子图钉
+  `T_CompassTaskDelivery`），未解锁/已完成/没接任务/地点 ID 解析不出来 → `None`，**整个图钉隐藏**。
+  手上已经有包裹却还挂着取件图钉，玩家会折返回取件点，所以 `None` 时连图钉带距离一起藏。
+  **UI 不要自己读任务状态判一遍**——判断只在 `GetTrackedTaskMarker` 这一处，和
+  `GetTaskDestination` 取同一个状态；两边各判一次迟早不一致，表现是"箭头指送达点、图钉还是箱子"。
+- **送达图钉是从取件图钉"改画"出来的**，不是从零再画一枚：
+  `Content/Python/generate_delivery_icon.py` 拿 `T_CompassTaskTarget.png` 当底，
+  只重绘圆盘正中那个图标（按掩码擦掉箱子、画房子），外圈描边、蓝环、奶油环、
+  尖端、橙色箭头、投影全是**字面意义上的同一份像素**，天然 1:1。
+  从零画整枚的那条路试过并失败：蓝环被奶油圈挤掉只剩顶上一道、尖端拉成一根针、
+  箭头掉到尖上、而且全平涂没有立体阴影——外壳那堆渐变和内外阴影靠参数复刻
+  代价极高且永远差一口气，而**真正要换的只有圆盘中间那个图形**。
+  - **几何必须打分类图读，不能用射线扫**。第一版用"从中心发射线找奶油边界"，
+    射线被正中间的箱子截断，量出来的圆心比真值低 14 像素、半径也偏大；
+    后果是顶部一圈箱子描边擦不掉（留两道淡弧）、房子偏右下、左上空一块。
+    实测真值：圆盘心 (280, 163.5)、半径 94、箱子连描边最远 88、描边色 `#020c1e`
+    （**深海军蓝不是黑**，和图钉外圈同色；用纯黑画出来并排一看就不是一套）。
+  - **擦箱子要按掩码、不要整片重绘**。整片重绘时补出来的奶油和外面真奶油之间
+    必然留一道接缝（拟合再准也差几个色阶）。掩码判据是"和该位置的奶油模型
+    差超过 12 级"——不能用"不是奶油色"，箱子高光 `#fccc90` 会被当成奶油漏掉。
+  - **图形尺寸按最远顶点的半径定，不按外接框**。箱子是六边形、四角没有料，
+    同样外接框下矩形的房子对角线会戳出奶油圈；而顶点半径还要减去半个描边宽
+    （8/2=4），所以顶点留到 84、连描边正好贴住 88，和箱子一致。
+  - 房子刻意做得**扁而宽**：角半径 = √((w/2)²+(h/2)²)，高度压下来同样半径才能
+    放宽，h=100 时 w 能到 150（接近箱子的 155），h=130 时只剩 134。
+  - 脚本带自检：**奶油圈以外被改动的像素必须是 0**，并且报色差幅度而不只报个数
+    （裁剪掩码自带 2px 羽化，边界上必然有几十个像素差 1~2 级，只报个数的话
+    每次都像出了问题）。
+- 导入走 `Content/Python/import_compass_icons.py`（**已提交**——它和生成器都
+  因为是未跟踪文件在 `git pull` 的 autostash 恢复失败里丢过两次）。
+- 罗盘图钉的美术（早期从零画整枚的版本）：`Content/Python/generate_compass_icons.py` 离线画 PNG 到
+  `Content/UI/Minimap/Source/`，`import_compass_icons.py` 在编辑器里导入并配 UI 贴图参数
+  （`UserInterface2D` + 无 mip + sRGB，漏任一项分别表现为描边脏边 / 缩小糊成一团 / 整张发暗）。
+  调色板和几何都是从原图逐像素实采的（最宽 272px、圆头半径 136、奶油圈半径 100、尖端 y≈390），
+  别手改色号。**画图钉时切点必须在圆心下方 ±36°、圆弧走大的那段 252°**——算到圆上方的话
+  只画出顶上 72°，头缩掉四分之一、蓝环被奶油圈挤没，渲出来是一根针。生成器里留了自检。
+- **鼠标光标归 C++ 统一管，蓝图一律不要写 `bShowMouseCursor`。**
+  规则就一句：**光标 = 有没有 UI 面板开着**。`ADeliveryPlayerController::SetUIPanelOpen(PanelId, bOpen)`
+  维护一个面板集合，在「有/没有」翻转时设 `bShowMouseCursor` 和输入模式
+  （有 → `GameAndUI`、不锁视口、捕获时不藏光标；全关 → `GameOnly`）。
+  配套 `IsAnyUIPanelOpen()` / `IsPhoneUIOpen()`。用集合而不是一个 bool：
+  同时开手机和任务面板时，关掉一个不该把光标收走。
+  **症状是「骑车时鼠标转不了视角，必须按住左键或右键」**——光标开着时鼠标移动归光标，
+  视口只在按住鼠标键时才捕获鼠标。根因是 `BP_DeliveryManPC` 原来在手机键上
+  `Set bShowMouseCursor = NOT(Get bShowMouseCursor)`，和面板开关是**两个互不相干的
+  取反开关**，只要有一次只翻了其中一个就永久失同步。改成「光标是面板状态的函数」之后，
+  这种失同步在结构上不可能发生。
+  **唯一需要调用方配合的地方**：面板若有「自己关掉自己」的路径（关闭按钮、`Destruct`），
+  那里也要调一次 `SetUIPanelOpen(..., false)`，C++ 探测不到 widget 被移出视口。
+  按 J 的流程现在是：C++ 翻 `bPhoneUIOpen` → 更新集合（光标跟着变）→ 调蓝图事件
+  `TogglePhoneUI` → 蓝图只负责面板显示/隐藏。**IMC 那条路已经拆掉**（`IA_TogglePhone`
+  节点已从蓝图删除），CLAUDE.md 里要求的那步迁移这次才真正做完。
+  脚本：`diag_input_mode.py`（只读定位）→ `fix_phone_cursor.py` → `fix_phone_event.py`。
+  **`WBP_TaskHUD` 有两份真资产**：`/Game/UI/Task/WBP_TaskHUD` 被 `WBP_Main` 引用（在用），
+  `/Game/Task/UI/WBP_TaskHUD` 零引用、可删。它那边有 `IsPhoneOpen` 变量和
+  `SetPhoneOpen(bool)` setter，所以以后可以把蓝图事件从 `TogglePhone()` 换成
+  `SetPhoneOpen(C++ 状态)`，面板就成了 C++ 状态的纯函数，连 toggle 漂移都没有。
 - **手机开关键 J 已从 `IMC_Default` 搬到 `BindKey`**（`ADeliveryPlayerController::TogglePhoneKey` → `BlueprintImplementableEvent TogglePhoneUI()`，蓝图实现加/移视口）。理由和物品栏 1~5、切视角 P、召唤 R 一样：`IMC_Default.uasset` 从来没被提交过，每次 `git pull` 都会冲掉，而症状极具迷惑性——手机面板的显示逻辑不依赖按键绑定，表现是"UI 突然坏了"而不是"按键没绑"。F 键已经因此丢过两次。**蓝图那边要把原来绑 `IA_TogglePhone` 的逻辑改挂到 `TogglePhoneUI` 事件上。**
 - 调试命令（非 Shipping）：`Delivery.Wallet.Dump` / `Delivery.Wallet.Add <金额>` / `Delivery.Locations.Dump` / `Delivery.Task.LoseItem` / **`Delivery.Task.Validate`**。最后一条是摆取件点/收件点时的主力工具——一次列全所有配置问题（地点 ID 解析不出来、任务没有收件点指向它、收件点忘了填 `ExpectedTask`），不是遇到第一个就停。
 - 奖励结算有单元测试（`Task/DeliveryRewardTests.cpp`，筛 `Delivery.Task` 跑）。`EvaluateReward` 是纯函数，档位顺序、超时边界、特殊事件重复计数这些在 PIE 里只表现为"钱好像不太对"，靠肉眼对不出来。
@@ -134,6 +299,49 @@
   - **红灯超时改为沿车队传递、并放宽到 10 秒（2026-09-24）**：原来的判据只看**本车自己**的 `StopatInter`，而 `TraceForIntersection` 的前瞻距离和车速成正比——队伍里第二辆之后的车已经被前车逼停、前瞻缩到接近 0，根本探不到路口盒，自己的 `bStoppedAtIntersection` 恒为 false，于是只有队首享受宽松超时，后面几辆照样 3 秒就放弃避让怼上前车。现在组件公开 `IsStoppedAtIntersection()`，`GetDistanceToCarAhead()` 扫描时顺手记下最近那辆车的红灯状态（`bLeaderStoppedAtIntersection`，扫不到车时清 false，否则前车开走后还会一直以为"前面在等红灯"），超时判据变成 `bStoppedAtIntersection || bLeaderStoppedAtIntersection`，红灯状态就能一辆辆往后传。阈值同时从 8 秒提到 **10 秒**：要盖住的不只是一个 3 秒红灯，还有前面几辆依次起步、拉开距离的时间，排队越长最后一辆等得越久。`GetDistanceToCarAhead()` 因此去掉了 `const`（它本来就会写前车的 `MaxSpeed`，并非纯查询）。
   - 车辆碰撞盒保持 `Overlap` **没改成 `Block`**：车是运动学的（`bSimulatePhysics=false`，靠 `SetActorLocation` 沿样条走），Block 在不开 sweep 的情况下根本不起作用；而开了 sweep 会和样条跟随打架（样条要它往前、sweep 把它顶回来）导致抖动。"后车停在后方不超车"靠的是修好之后真正生效的前车探测 + 减速，不是物理阻挡。
 
+- **红绿灯模型（`Content/trafficlight/trafficlight`）自带完整变色循环，不要从外部驱动它。**
+  用 `dump_light_bp.py` 导出过真实图表确认：`BeginPlay → set traffic light color(start color)`，
+  那个自定义事件 `Switch` 颜色枚举后 `toggle green/yellow/red light` 改三个 SpotLight 的可见性，
+  再 `Delay(对应时长)` 递归调用自己换下一色。所以**亮灯只发生在这个事件内部**——
+  从 C++ 写它的颜色变量一点效果都没有（这条路试过，组件已撤掉）。要同步只能让它自己的节拍和路口一致。
+  - 变量真名**带空格**：`trafficlight colors`（当前色）、`start color`、
+    `green/yellow/red light duration`。**没有 `LightColor` 这个蓝图变量**——
+    `strings` 扫 uasset 能扫到 `LightColor`，那是 SpotLightComponent 自带的原生属性，不是它。
+  - `trafficlight_color_enum` 顺序是 **0=green / 1=yellow / 2=red**。
+    用 `strings` 查会得出"只有 green 和 yellow"的错结论——**默认只输出 ≥4 字符的串，
+    3 个字母的 `red` 被过滤了**，要加 `-n 3`。
+  - **一圈时长必须 = 路口 `LightDuration` × 2**（路口是两相位轮流放行，
+    单盏灯的视角就是绿一个周期、红一个周期），黄灯从绿的那段里切出来、不额外占时间。
+    原始值绿 10/黄 3/红 20 = 33 秒，和路口 6 秒毫无关系，这就是"灯和车对不上"的根源。
+  - **两组灯靠相反的 `start color` 错开相位，而这个值只能存在「类」上、存不进实例。**
+    `start color` 带 `CPF_DisableEditOnInstance`（蓝图里没勾 Instance Editable），
+    `PropertyAccessUtil.cpp:739` 对非 CDO 对象直接 PermissionDenied；
+    而那个开关只能在蓝图界面点——`UBlueprint::NewVariables` 是裸 `UPROPERTY()`，
+    Python 读不到也写不了。**写 CDO 是允许的**（挡模板要的是另一个标记
+    `CPF_DisableEditOnTemplate`，这个变量没有）。所以做法是：
+    `make_light_variant.py` 建一个**只改默认值的空子类** `trafficlight_green_start`
+    （一个节点都没有、逻辑全继承，不存在两份逻辑要同步），父类起始红、子类起始绿，
+    三个时长写在两个 CDO 上；`gen_traffic_lights.py` 按组号选类。
+    `GREEN_FIRST_GROUP` 在两个脚本里都有，**必须一致**，否则两边各按各的分组走。
+    灯已经摆好、只改默认值时**不用重摆**：灯没有实例覆盖，改 CDO 即生效。
+  - **写这个枚举要传枚举值对象，不能传裸整数**（`ByteProperty` 由 UserDefinedEnum 撑着，
+    裸 `int` 报 `Failed to convert type 'int'`）。而 `unreal.trafficlight_color_enum`
+    **取不到**——蓝图里定义的 UserDefinedEnum 不作为模块属性暴露。可行的办法是
+    **先读回现值、用 `type(现值)` 反推枚举类型**再取成员（实测 `type(现值).GREEN` 成功）。
+    兜底时别静默退回整数：那会让报错和改之前一字不差，看着像"改了没生效"。
+  - `tune_traffic_lights.py` 现在只当验证工具：起始色由类提供，它在实例上写入被挡是
+    **预期行为**，只要现值等于期望值就算过。
+  - **已知会漂**：灯和路口是两个独立定时器，蓝图 `Delay` 每次多走不到一帧，
+    灯相对路口缓慢往后漂（60fps 下一圈约 25ms）。几分钟试玩看不出；
+    要彻底不漂就得让灯读路口相位，那就不是"纯时间"了——选纯时间时接受的代价。
+- **编辑器 Python 脚本只能在编辑器里跑，一个 `NameError` 要绕一整圈才知道**，
+  所以写完除了 `ast.parse` 还要查"用了但没定义的名字"——`ast.parse` 只查语法，
+  查不出这个。实际栽过：用"从 A 到 B 整段替换"的方式打补丁，把夹在中间的常量定义
+  一起删掉，脚本启动即崩、一个值都没写，而报告里只有一行 traceback。
+- `gen_traffic_lights.py` 沿路口四个方向各摆一盏灯，打标签 `ClaudeGenTrafficLight:<组号>`，
+  组号取自该方向 `Inter_` 段的 `LightNumber`。灯位按 `BP_Intersection` 的 actor 位置算——
+  `testfortraffic` 里这个 actor 恰好在路口附近所以没出错，**换图前要改成按 `Inter_` 段算几何中心**，
+  因为路口 actor 的原点不保证在路口中央。
 - 测试地图：`Content/Level/TestForCharacter.umap`（角色/互殴测试）、`Content/Level/testfortraffic.umap`（交通路口测试）。
 
 
@@ -321,6 +529,57 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 `get_editor_property` 读不到，必须走上面这套；`get_pin_name()` 返回的是 `unreal.Name` 不是 `str`，
 直接切片会抛 `'Name' object is not subscriptable`，整个导出断在第一个节点。
 
+**加节点也能用，签名已实测**（2026-10-20，罗盘条那次）。都是 `BlueprintGraphEditor`
+实例上的绑定方法，**只收自己那几个参数、不要再传 editor**，形状猜错会报
+`takes at most 1 argument (3 given)`：
+- `editor.add_call_function_node(function_path)` —— 传裸名 `"SetVisibility"` 实测也能解析上
+  （正式写法是完整路径）。**怎么确认函数真解析到了**：看新节点上有没有按签名生成的参数引脚
+  （`InVisibility`/`self`）——有引脚就说明解析成功，没有就是个编译才报错的空节点。
+- `editor.add_get_member_variable_node(member_name, class_path="")` ——
+  第二个参数是**类路径字符串**，不是坐标；传 `Vector2D` 会报
+  `Cannot nativize 'Vector2D' as 'ClassPath' (StrProperty)`。
+- `editor.create_node_from_name(node_with_category, location, context_pins, declaring_class=None)`
+  —— 这个才收坐标，按 `'Development|PrintString'` 这种「分类|名字」找。
+- 这两个 add 函数**都不接受坐标**，所以新节点全叠在原点附近，图上会挤成一团、连线却是对的。
+- 清理用 `remove_nodes`（`remove_*` 系列里只有这个能删普通节点）。
+- `try_create_connection` 可能静默失败，**接完要回读 `list_connected_pins` 验证**；
+  写完还要 `modify(True)` + 存盘，并且**编译一次**（`BlueprintEditorLibrary.compile_blueprint`，
+  Python 能直接编、不必手点；状态读 `bp.get_editor_property("status")`，
+  `BS_UP_TO_DATE` 才算干净，`BS_ERROR` 就是接错了线）。
+
+**UMG 控件树 / 蓝图变量那几道墙**（2026-10-20 罗盘条那次全撞过一遍）：
+- **`UWidgetBlueprint.WidgetTree` 和 `UWidgetTree.RootWidget` 都是 protected**，
+  `get_editor_property` 一律读不到。前者能用 `unreal.find_object(bp, "WidgetTree")`
+  绕过去（按子对象名找，不走属性权限检查），**后者绕不过去**——
+  所以「从根往下遍历」这条路是死的。
+  可行的是**从叶子往上爬**：`unreal.find_object(tree, "<变量名>")` 拿到一个已暴露成
+  变量的控件，再用 `UWidget::GetParent()`（BlueprintCallable）一层层到顶，
+  然后用 `UPanelWidget::get_children_count/get_child_at` 往下铺开整棵树。
+- **`bIsVariable` 是 protected，写不了**（`set_editor_property` 直接报
+  `Property 'bIsVariable' ... is protected and cannot be set`）。
+  所以「把某个没暴露的控件变成变量再 Get」只能人在 Designer 里勾那个复选框，
+  勾完还必须**编译**，变量才真正进入类。
+- **`add_call_function_node` 对 `GetWidgetFromName` 解析不上**，
+  `/Script/UMG.UserWidget:GetWidgetFromName`、`.` 分隔、裸名等五种写法全返回 None
+  （而 `SetVisibility` 用裸名却能解析——**裸名能成是运气，不能推广**）。
+  没解析上时建出来的是个**一个引脚都没有的节点**，留在图里会让编译报
+  `Could not find a function named`，所以每建完一个节点都要检查引脚、
+  没有就立刻 `remove_nodes` 掉。
+- **拿不到变量时的替代路子**：从已是变量的兄弟控件 `GetParent()` 往上爬到目标。
+  代价是把层级结构写死了，层级一改就指错或拿到 null（运行时 Accessed None）。
+- **判断「某个 API 失败是因为数据还是因为 API」要带对照组。** 实测
+  `add_get_member_variable_node("CanvasPanel_19")` 返回 None，光看这一条
+  分不清是「它不是变量」还是「这个 API 对面板类型不管用」；
+  同一次调用拿已知是变量的 `Compass_N` 跑一遍（成功），答案立刻就清楚了。
+- **返回 None 也必须打日志。** 有一版在返回值为 None 时一条日志都不打，
+  报告里整段消失，看着像「这段代码根本没跑」——静默失败伪装成没执行，最难查。
+- **删节点的判据要按连线、不能按标题。** `Compass_N` 这类变量在同一张图里可能有
+  **两个 Get 节点**（一个喂 `SetRenderTranslation` 管位置、一个喂 `SetVisibility` 管显隐），
+  按「标题是 Get Compass_N」删会把管位置的那个一起删掉、罗盘位置逻辑整个断。
+  按「输出引脚没有任何连线」删才是自我保护的：还在被用的节点天然有连线、选不中。
+- **exec 输出引脚只能连一处**，所以把上游接到新节点时旧链会自动断开——
+  「先接新的、验证通过再删旧的」这个顺序因此是安全的，删除只是清理、不是功能的一部分。
+
 ### 人物美术
 - 已导入测试角色模型，最近有一版人物相关提交（"人物"）。布娃娃对建模的要求见 Ragdoll.html 第五节：约 15–18 根骨骼、四肢截面需容纳胶囊碰撞体、不用人体解剖骨骼/标准 Mannequin。
 
@@ -355,7 +614,21 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 - 上车顺序：先 `GrabComponent->ForceRelease()`（手里还抓着东西的话，约束会把货物/别的玩家一路拖在车上）→ `StopRagdoll()`（关刚体模拟并把网格挂回胶囊，不停的话被挂到车上的身体会一路抽搐）→ 隐藏 + 关碰撞 + 挂到车上 → `Controller->Possess(bike)`。下车反过来，先摆好位置再 `StartRagdoll()`（它内部带 `PlaceOnGround`，顺序反了人会掉在原地）。
 - **车把与骑手独立求解**：SteerPivot 前叉、BarPivot 车把继续沿用原转角；RiderPivot 不再整人旋转。双手目标挂 BarPivot，双脚目标挂 MeshAlign，由骑手动画代理解四肢 IK。转向角仍不乘速度系数，停车打把也有反馈。
 - **被交通车撞**：`UDeliveryTrafficCarComponent` 在原有的逐帧扫掠撞击之外**单开一次 `ECC_Pawn` 查询**（摩托车碰撞盒是 Pawn 配置，而撞人查的是布娃娃刚体 `ECC_PhysicsBody`；并进同一次查询会把角色胶囊也扫进来、扰动那条已经调通的撞人逻辑），命中后调 `ADeliveryMotorbike::NotifyTrafficImpact()`。
-  **共用同一张冷却表 `LastImpactTimeByActor`（0.75 秒）**——一次碰撞会连着好几帧重叠，不设冷却的话"撞两下才下车"会在同一次碰撞里就被扣完。
+  **来车那边有一张冷却表 `LastImpactTimeByActor`（0.75 秒）**，一次碰撞会连着好几帧重叠，不设冷却的话"撞两下才下车"会在同一次碰撞里就被扣完。
+  **但那张表只够挡"同一辆车连着撞"**——它是 `UDeliveryTrafficCarComponent` 的成员、**每辆车各一份**，
+  多辆车可以在同一帧各打一下，`ImpactsToDismount`（2）于是在一次碰撞里被扣满，
+  玩家体验是"被撞一下就直接下车加晕倒"。日志实证（2026-10-15）：
+  同一帧两条记录、来车速度完全相同（很可能是第二/三波克隆车和本体重叠在同一位置、速度向量一致）：
+  `[12.33.55:490][678] 被交通车撞击 1/2 次（来车速度 3053 cm/s）` 紧跟一条 `2/2 次`。
+  所以摩托车自己再挡一道 **`MinImpactInterval`（默认 1 秒）**，在 `NotifyTrafficImpact` 开头、
+  **计数/音效/击退之前**判断并返回 false（放后面等于白挡；返回 false 让来车不记录这次命中，
+  它下一帧还会来问、继续被挡，代价只是一次比较）。次数是摩托车自己的状态，
+  谁来撞、撞几辆都该由它说了算——这才是对的层。上下车和召唤时和 `TrafficImpactCount` 一起清零。
+  **还没修的相邻问题**：`CarVelocity = Travel / DeltaTime`（每帧位移 ÷ 帧时间），
+  所以 `OnRouteLost` 把车瞬移回出生点那一帧会算出**假的巨大速度**（实测 3053 cm/s，
+  而车的 `MaxSpeed` 随机范围只有 600~1500），抛射力度被顶成 100%。
+  想修就得在位移明显超过 `MaxSpeed × DeltaTime` 时跳过那一帧的撞击扫掠；
+  **注意这条路同时供撞角色的伤害计算使用**（按相对速度算伤害），改之前先读那一段的注释。
   每撞一下：按来车方向给击退速度、按左右分量给撞歪的角速度和车身倾斜（`KnockTilt` 直接叠在转弯侧倾上，**不再插值**，插了会把撞击那一下的尖峰抹平）、镜头两轴不同频率抖动。四个量统一按 `KnockDecay` 指数衰减。
   撞满 `ImpactsToDismount`（默认 2）次 → `ExitVehicle()`（和按 F 同一条路）→ 再 `KnockDownDriver()`：走既有伤害 GE 把血清零（回血 GE 可能抵消，所以跟着补一次 `SetNumericAttributeBase`，和撞人那边一样），ASC 自己会切 Stunned/Limp，复用现成的倒地表现，不另写一套。**顺序不能反**：`ExitVehicle` 内部的 `StartRagdoll` 会重建刚体，先加的冲量会被冲掉。
   被掀下车时那记抛射的力度**按来车速度缩放**（`KnockDownSpeedReference` 1200 cm/s 到满、`KnockDownLaunchMinScale` 0.35 保底）：交通车的 `MaxSpeed` 本来就是 600~1500 随机的，一律同一个飞法就看不出"被快车撞"和"被慢车蹭"的区别；保底不能给 0，否则慢车蹭一下人是原地瘫软，看着像自己躺下的。
@@ -369,7 +642,58 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
   - 切换那一帧要接控制旋转，否则视角会跳：切到固定视角调 `SyncControlRotation()`，切到自由视角保留当前朝向当起点。
   - **自由视角**（开）：弹簧臂 `bUsePawnControlRotation=true`，`bInheritPitch/Yaw` 都必须设成 true——`USpringArmComponent::GetTargetRotation()` 会拿组件的相对角度把没继承的那一轴顶掉，只开一个就只剩一个轴能转。鼠标/右摇杆复用角色身上同两个 IA（`IA_Look` / `IA_MouseLook`），俯仰上下限走 `PlayerCameraManager` 的 `ViewPitchMin/Max`。**Tick 里必须停掉 `SyncControlRotation()`**：自由视角下控制旋转就是镜头，每帧同步成车头朝向等于把鼠标抹掉。
   - **固定车尾视角**（关）：`bUsePawnControlRotation=false`、只继承 Yaw、俯仰吃 `CameraPitch` 的相对角度，鼠标完全不参与，"W 永远是往屏幕里开"。
-  - 代价写在这里免得以后重新纠结：自由视角下 **W 按的是车头方向、不是屏幕里的方向**，镜头转到侧面时按 W 车还是往自己车头那边开。载具游戏普遍如此，但和固定视角手感确实不同，这就是留开关的原因。
+  - **自由视角下 WASD 改成按镜头的前后左右**（`bCameraRelativeMoveInFreeLook`，默认开）。
+    固定视角下这个开关自动不生效——那套镜头的 yaw 本来就跟着车头，两种解释等价，
+    多绕一层换算只会引入误差。关掉开关就回到原来的"W 永远是车头方向"。
+    实现是把二维输入在镜头 yaw 下解释成"想去的世界方向"，再换算成这套车**原有的**
+    油门 + 转向量，不是另写一套移动，所以爬坡、撞墙掉速、压弯、轮子自转全部照旧。
+    - **换算必须每帧在 Tick 里做**（`ApplyCameraRelativeInput`，排在 `UpdateSpeed`/
+      `UpdateSteering` 之前），不能放在按键事件里：镜头每帧都在动，按一次算一次的话
+      松手之前方向就不再更新。原始输入存在 `MoveInputRaw`，三处清输入的地方要一起清。
+    - 取**控制旋转**的 yaw 当镜头朝向，不取 `FollowCamera` 的世界朝向——后者带弹簧臂的
+      迟滞（`CameraLagSpeed`），用它会让行进方向跟着镜头晃、手感发糊。
+    - `atan2(X, Y)` 不是 `atan2(Y, X)`：UE 的 yaw 以 +X 为 0 度，而这里的"前"对应
+      输入的 Y 分量，两者正好差一次参数对调。
+    - **油门下限 `CameraRelativeMinThrottle`（0.4）不能给 0。** 转向量乘的是
+      `|车速| / TurnSpeedReference`，车停下来完全不能转（刻意的，停着打把原地转圈很出戏）。
+      想掉头时若把油门收到 0 就是 停住 → 不能转 → 永远掉不了头 的死局。
+    - **S 是后退，不参与方向换算**（在 `ApplyCameraRelativeInput` 里单独一条分支拦掉）。
+      纯按方向解释的话 S = 往屏幕下方开 = 掉头，但按 S 想后退（以及先刹停）
+      是所有驾驶游戏的肌肉记忆；**掉头应该是"把镜头转过去再按 W"**。
+      实现是把负的 Y 直接当油门交给 `UpdateSpeed`：还在前进时它按
+      `BrakeDeceleration`（2200，比加速的 950 猛得多）刹车，停下后继续按就往
+      `MaxReverseSpeed`（400）倒。不需要额外状态机，也没有新参数。
+      转向用 `MoveInputRaw.X` 原值（车头相对），`UpdateSteering` 里 `Direction`
+      已按车速取负，所以**倒车时左右不会反**。
+      **A/D 保持"往屏幕左右开"不动**——按驾驶惯例改成纯转向没有意义，
+      这套车的转向量本来就乘 `|车速|/TurnSpeedReference`，停着打把转不动是刻意的。
+    - **刹车（`CameraRelativeBrakeAngle` 120°）针对的是"高速行驶中把镜头转过头再按 W"**：
+      不先把速度卸掉就会以当前车速画一个巨大的弧，看着像失控漂出去。和 S 没有关系。
+    - **大角度转向分两段，而且"刹车还是掉头"必须锁住**
+      （`CameraRelativeStageSideAngle` 90°、`CameraRelativeBrakeExitSpeed` 25 cm/s）。
+      症状：**大角度下车原地颤抖**，要抖到某个角度才突然顺畅，而 A/D 正常；
+      停住按 S 最明显，但**不止 S，角度一大就会**。两个独立来源叠在一起，缺一个都还抖：
+      1. `Error` 用 `NormalizeAxis` 归到 `(-180, 180]`，**180 是奇点**——鼠标或车身一丝抖动
+         就让它在 +180 和 −180 之间翻号，`SteerInput` 被 clamp 成 ±1、满舵方向每帧左右互换。
+         **停住按 S 必然踩中**：自由视角的镜头通常就在车尾正后方，`CameraYaw ≈ ActorYaw`，
+         `Error` 恰好 180。A/D 没事正是因为那边 `Error ≈ ±90`，离断点最远。
+      2. **刹车分支和掉头分支在同一个速度阈值上来回弹**（这条才是主因）：
+         `bMovingForward` 的判据是 `CurrentSpeed > TurnSpeedReference * 0.25`（112.5），
+         车一加速越过就进刹车（油门 −1、**舵角归零**），刹到阈值以下又回掉头
+         （油门 +0.4、**满舵**）——**进出同一个阈值、没有滞环**，就是个极限循环，
+         油门和舵角每几帧翻一次。**这条和角度是不是 180 无关**，所以任何大角度都中，
+         而且要一直抖到误差小于 `CameraRelativeBrakeAngle` 才跳出来。
+      对策都是**锁定，只在动作开始那一帧判一次**：转向侧 `TurnAroundSign`（只读一次
+      `Error` 的符号）、刹车与否 `bBrakingForTurn`（只读一次速度和角度）。
+      超过 90° 时第一段只朝锁定那侧的**侧面**打舵，转过侧面解锁、第二段由真实误差收尾。
+      刹车一旦开始就刹到 `CameraRelativeBrakeExitSpeed`（远小于进入阈值 112.5）才松，
+      于是是"一次干净的刹停 + 一道连续的 U 形弧"，不再往复。
+      油门的 `cos` 衰减也要用分段后的误差，否则第一段按最终方向算会把油门压到下限、
+      掉头全程只剩最低速。两个锁定值在松手、上下车、召唤、切视角时都要和 `MoveInputRaw` 一起清掉。
+    - 切视角那一帧要按原始输入重算一次：两套模式下 `SteerInput` 语义不同
+      （镜头相对是"到目标方向的误差"，车头相对是"转向量"），不接这一下按着 W 切过去会有一帧按旧语义开。
+  - 代价写在这里免得以后重新纠结：**关掉**镜头相对开关时，自由视角下
+    W 按的是车头方向、不是屏幕里的方向，镜头转到侧面时按 W 车还是往自己车头那边开。
   - **被撞抖镜头在自由视角下只剩 Roll 一轴**：Pitch/Yaw 归控制旋转管，写进相对角度会被顶掉，硬抖就得每帧改控制旋转、和玩家鼠标打架。`bInheritRoll` 保持 false，弹簧臂那一轴取的正是相对 Roll，左右晃一样读得出"被撞了"。
 - **骑手已改为 SkeletalMesh + ABP_MotorbikeRider**：原生父类 DeliveryRiderAnimInstance 用动画代理从坐姿参考骨架生成姿态，不使用旧 PoseableMesh 直接拧脖子的实现。详细流程、调参和验证见 [Document/MotorbikeRider.md](Document/MotorbikeRider.md)。
   迎风后仰：HeadWindSway 默认 18°乘 WindExaggeration（默认 1.7），用 .72 基准 + .28 波动得到约 13～31°的后仰回摆目标，避免顶住 35°限幅。直行无周期性左右摇头/扭腰；身体前后阵风系数 .3，转弯侧倾乘 1.35，侧向阵风系数 .65，头部增加滞后的转弯侧向回摆。侧摆由转向强度淡入，直行归零；头部在 IK 后叠加，手脚仍固定。停车回正，倒车不套用前进迎风后仰。测试检查后仰方向、前后变化、横向稳定、接触点和停车回正。
@@ -462,6 +786,60 @@ PlayerController 自动累积到 `DeliveryPromptSubsystem` 的屏幕下方字幕
 `Content/Python/generate_gameplay_sfx.py` 重生成和重导入，不含第三方采样。当前第二版为 48kHz
 立体声：电话音使用动态 FM，任务提示使用非整数泛音钟体，并带短反射、低通和轻微软削波。
 
+**脚步与出拳音效**（2026-10-22）。`UDeliveryActiveRagdollComponent::OnFootPlanted`
+（`bLeft` + 落点）是落脚的公开委托，脚印、扬尘以后都接这里。
+
+- **广播点是 `SetControlEnabled(Foot.Control, false, ...)` 那一行，不是 `Alpha >= 1`。**
+  `UpdateFootTarget` 里 `Alpha` 到 1 之后还有一段
+  `if (Gap > 18 && ...) { Alpha = 0.999f; return; }` 在**等物理脚追上目标**——
+  那时候脚还悬在半空，按 Alpha 判会让声音比画面早小半步。
+  只响一次由函数开头的 `if (Alpha >= 1.0f) return;` 保证，不需要额外的 bool。
+- **门槛按"这一脚走了多远"（`FootstepMinStride` 18cm），不按身体速度。**
+  站着不动时平衡恢复会不停踏小碎步，按速度判的话人站着也在响、一秒好几下。
+  音量再按迈步距离从 0.35 缩放到 1.0（`FootstepFullStride` 70cm），碎步轻、大步重。
+- 左右脚**故意给不同音高**（0.94 / 1.06）：吸盘那种卡通音一高一低交替才听得出
+  "左右左右"的节奏，同音会糊成一串。
+- `FootstepSounds` 是**数组不是 Sound Cue**：C++ 里挑变体时顺手避开上一次刚放过的那个，
+  而 Cue 的 Random 节点要手勾 "no repeats" 才有这个行为，漏勾的表现是
+  "偶尔连着两下一样"、极难复现。
+- 用 `PlaySoundAtLocation` 而不是 `PlaySound2D`：取件/交付那两个是"给你本人的反馈"所以 2D，
+  脚步是世界里真实发生的事，别人的脚步要能从方位上听出来。**不复制**——
+  布娃娃在每台客户端各自模拟，每台机器自己为看到的每个角色触发，远端脚步天然就有。
+- **出拳分挥空和命中两个音。** 挥空音（`LeftPunchSound`/`RightPunchSound`）早就有、
+  时机本来就对：在 `FirePunchDrive()` 放拳那一刻、本机预测、音源在手骨上。
+  缺的是命中音 `PunchHitSound`，走 `MulticastPlayPunchHit`——命中判定只在服务器做
+  （`OnHitWindow` 开头那句 `IsNetAuthority()`），客户端不知道打中没打中，
+  预测的结果是挥空也响。为此 `UDeliveryRagdollCombatComponent` 构造时
+  `SetIsReplicated(true)`（它没有要复制的属性，开这个只为了组件 RPC 能发出去）。
+  一拳扫到两个人**只响一次**，`bAnyHit` 标记放在循环末尾、所有 `continue` 之后。
+- 音效由 `Content/Python/generate_physical_sfx.py` 纯合成（8 个脚步变体 + 左右挥拳 + 命中），
+  WAV 在 `Design/Audio/GeneratedSFX`，跑一次会导入 `/Game/Sound/SFX` 并写进
+  `BP_DeliveryMan` 两个组件的 CDO。**吸盘质感的关键是音高自己在动**
+  （一个短促的下滑再上滑），不是音色复杂——真实录音的"踩地"都是宽频噪声、没有这个滑音，
+  所以找素材反而更难对上。滑音**必须累加相位**，用 `sin(2*pi*f(t)*t)` 会在频率变化处
+  相位跳变、夹出噼啪声，而且只在变化快的地方出现，听着像"素材本身有爆音"。
+- **变体"听着一样"在报告里完全看不出来，所以脚本带两两相关度自检**（阈值 0.85）。
+  第一版基频用 `rng.uniform` 取，8 个里撞出两对相关度 0.95+，而脚本照样打印
+  "已写 8 个文件"、峰值和 RMS 全正常。改成**按变体序号均匀铺开**才有保证；
+  音色参数用**另一个顺序**（乘 5 取模，5 与 8 互质）铺，音高接近的两个在音色上一定隔得远。
+  **真正的主因一度被猜错**：以为是音高不够散，把跨度从 ±1.2 提到 ±1.6 个半音，
+  相似度反而从 0.854 升到 0.872——这一下否掉了那个猜测，才找到真凶：
+  低频"咚"那一层在所有变体里是同一组参数（92→62Hz、同音量同衰减），
+  而它是低频段最响的东西，于是任意两个变体都因为这一层强相关。让它也跟着变体变之后，
+  28 对的最高相似度降到 0.76。
+
+**背景音乐**：[DeliveryMusicComponent](Source/Delivery/Audio/DeliveryMusicComponent.h) 挂
+`ADeliveryPlayerController`（和语音组件同位置——骑车时控制器 Possess 了车，挂角色会在上车瞬间断）。
+纯本机、不复制。三条轨道插槽填在 `BP_DeliveryManPC` 上：`ExploreTrack` / `TaskActiveTrack` /
+`OverdueTrack`，**逐级回退，只填探索轨就能用**；回退后若和当前同一资产则不重起，
+否则会"任务一进行中音乐就跳回开头"。电话响铃/通话期间自动压到 `CallDuckVolumeScale`（默认 0.25）——
+**这是必须的**，电子人声是窄频段细碎方波，不压就盖住台词，而台词是任务信息的载体。
+手动闪避 `DuckFor()` 与电话闪避**取更低值而非相乘**，相乘会压得过头。
+**没有引入 SoundClass/Submix**：闪避直接乘在音频组件音量上；那套东西是给"音乐/音效分开调"
+的设置项用的，等有设置菜单再加。占位音乐用 `Content/Python/generate_music.py` 纯合成，
+**无缝循环靠把频率吸附成"一个循环整数个周期"而不是首尾淡化**，导入时必须设 `looping=True`
+（否则表现为"开局有音乐、过一会儿安静了"）。验收：`Delivery.Music.Dump` / `.Volume` / `.Duck` / `.Toggle`。
+
 ## 开发环境与编译
 
 - **引擎：UE 5.8。** 编译走 `Build.bat`，目标是 **`DeliveryEditor`**（不是 `Delivery`——只编后者的话
@@ -473,6 +851,9 @@ PlayerController 自动累积到 `DeliveryPromptSubsystem` 的屏幕下方字幕
 
   引擎目录**每台机器不一样**，Epic 默认装在 `C:\Program Files\Epic Games\UE_5.8`。
 
+- **Mac 上的运行时日志在 `~/Library/Logs/Unreal Engine/DeliveryEditor/Delivery.log`**，
+  **不在**工程的 `Saved/Logs`（那个目录在 Mac 上根本不存在，别去那里找然后得出"没存日志"的结论）。
+  排查运行时问题先读它：`UE_LOG` 自带时间戳和帧号，比在 PIE 里轮询属性靠谱得多。
 - **编辑器开着就编不了**：会直接报 `Unable to build while Live Coding is active`。
   可靠做法是**先关编辑器再编**；在编辑器里按 Ctrl+Alt+F11 走 Live Coding 也行，但它对
   新增 UPROPERTY / 改类布局这类改动不可靠，结构一变就该用完整编译。
@@ -512,7 +893,7 @@ Source/Delivery/
 ├── Inventory/                       五格物品栏、手持道具
 ├── Ragdoll/                         主动布娃娃、布娃娃战斗组件
 ├── Traffic/                         交通车辆辅助组件（卡住重置循环、前车避让减速）
-└── Vehicle/                         可骑载具（摩托车，运动学街机式）+ 按 R 召唤载具组件
+└── Vehicle/                         可骑载具（摩托车，运动学街机式 + 车尾货架）+ 按 R 召唤载具组件
 ```
 
 `Content/Python/` 是编辑器 Python 工具链（车道/路口/转弯生成、地形压平、裙边、以及一整套只读诊断脚本），
@@ -529,3 +910,15 @@ Source/Delivery/
 - GAS 的 AbilitySystemComponent 挂在 PlayerState 而不是 Character 上，涉及网络复制/GetAbilitySystemComponent 相关改动时注意这一点（`OnRep_PlayerState` 里做了处理）。
 
 任务 HUD 编译依赖：`DeliveryTaskHudComponent` 调用 `DeliveryPromptSubsystem::PushObjective`，提示子系统的声明、实现和顶部任务栏必须一并保留。HUD 的重试常量使用 `TaskHudBindRetrySeconds`，避免 Unity Build 将多个 cpp 合并后与钱包的匿名命名空间常量重名。
+
+
+### 脚边箭头与圆形小地图
+- `Task/DeliveryGroundArrowComponent` 默认挂 PlayerController，本机在人物周围（95 cm）/摩托车周围（180 cm）显示黄色描边箭头。目的地统一取 `GetTrackedTaskDestination`，随取件/交付阶段切换，无目标隐藏。只用 XY 方向，地面探测后抬高 45 cm，大小和半径可调；上下车使用当前受控 Pawn。
+- `/Game/UI/Minimap/WBP_Minimap` 继承 `UI/DeliveryMinimapWidget`，仍由 `WBP_Main` 引用。圆形裁切、深浅双边框、中心红色方向尖头由原生绘制完成。默认直径 320、右上角边距 24；拍摄宽度从 24000 cm 拉近到 18000 cm。地图朝向由**项目设置**里的 `UDeliveryMapSettings::MapNorthWorldYaw` 决定（项目设置 → 游戏 → Delivery 地图，0 = 世界 +X 朝北），标记按身体朝向旋转（步行取 `GetBodyForward()`，骑车取 Pawn 朝向），不跟随自由镜头。**小地图的朝上方向和罗盘的 N/E/S/W 读的是同一个值**——"这张地图的北在哪"是一个事实，原来抄在两处（小地图的 `MapUpWorldYaw` + 罗盘节点的 `NorthWorldYaw` 引脚），改一处忘另一处的表现是"小地图正的、罗盘偏 90°"，而两个数单看都像是对的。现在那两个字段都删了，`GetTrackedTaskCompass` 也**不再有 `NorthWorldYaw` 参数**（删参数会让 `WBP_Compass` 的节点少一个引脚，重编译一次即可）。放 `UDeveloperSettings` 的理由：不用每张图记得摆 Actor（漏摆会静默退回 0）；存 `Config/DefaultGame.ini` 是**文本**，而本项目被 `git pull` 的 autostash 冲掉过两次，二进制 `.uasset` 冲突只能整份取舍、文本能合并。代价是整个项目一份、不是每关一份。相机是 `UDeliveryMinimapWidget` 运行时 `NewObject` 出来的 `USceneCaptureComponent2D`、挂在 PlayerController 上，**关卡 Outliner 里找不到它**；旋转每帧重设，所以改设置立刻生效。**任务目的地也标在小地图上**：在拍摄范围内画橙色圆点（真实位置），超出就夹到圆边并换成**朝外的三角**——圆点停在边上看不出"目标还在更远处"，三角的尖端天然表达"继续往这边走"。描边用 `#020c1e`，和罗盘图钉、人物标记同一套。**比例尺是 `2*MapRadius / MapWorldWidth`**：`Disc()` 把整张 RT 的 UV 0~1 铺在**直径**上，而 RT 宽度就是 `OrthoWidth = MapWorldWidth`；用半径去除会小一半，表现是"目标点总比真实位置离中心近"，而且近得很均匀，看着像比例没调好、不像算错。目的地在 **Tick 里就换算成地图空间**（X=图上右、Y=图上上）存成 `TargetMapOffsetCm`，Paint 里只剩乘比例尺和夹圆——Paint 是 const 且每帧可能被调多次，不在那里查任务系统；用的 up/right 和相机 `FRotator(-90, N, 0)` 推出来的是同一组，地图转了标记跟着转。没有目标时（`GetTrackedTaskDestination` 返回 false）整个标记不画，和罗盘图钉、脚边箭头同一个判据。每名本机玩家有独立 512×512 RT 和摄像头，以 30Hz 跟随当前 Pawn；暂停旧蓝图写共享 `RT_Minimap` 的摄像头，控件销毁时恢复。绘制忽略 RT 的 Alpha，避免场景颜色被透明通道遮掉。尺寸、拍摄范围、刷新率、边框可在蓝图默认值调整。
+- 新父类须先完整编译，再用 `Content/Python/upgrade_minimap.py` 切换小地图父类、编译保存，并验证主 HUD。无需更改关卡。
+
+箭头可见性修正：逻辑组件留在 PlayerController，世界空间 Widget 的 Owner 必须是当前受控 Pawn。`OnlyOwnerSee` 按镜头 ViewActor 与 Owner 链判断，视觉挂 Controller 会被普通 Pawn 镜头过滤；上下摩托车时销毁旧视觉并以新 Pawn 为 Owner 重建。箭头原生 Widget 显式提供 128×128 绘制区域并启用动态重绘。
+
+
+### 通话结束后自动收起
+在用的 `/Game/UI/Task/WBP_TaskHUD.RefreshPhone` 在电话状态回到 `Idle` 后调用 `SetPhoneOpen(false)`，接通进入 `InCall` 时保持展开，整段通话结束（或手动挂断）才收起；不影响任务计时。`SetPhoneOpen` 统一调用 `DeliveryPlayerController.ReportPhoneUIOpen`，同步 `bPhoneUIOpen` 和 `OpenUIPanels`；已移除该函数内直接修改光标/输入模式的四个旧节点，统一由 C++ 按所有面板状态管理。因此来电自动展开、通话结束收起与 J 手动开关都同步，自动收起后下一次 J 直接打开。`Content/Python/phone_autoclose.py` 可幂等修补并编译保存该蓝图；原资产备份在 Saved，不提交。

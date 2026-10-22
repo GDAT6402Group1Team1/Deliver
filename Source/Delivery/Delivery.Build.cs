@@ -24,7 +24,9 @@ public class Delivery : ModuleRules
             // UMG 只用来做世界坐标 → 屏幕坐标的换算（那一步自带 DPI 缩放处理）。
             "Slate",
             "SlateCore",
-            "UMG"
+            "UMG",
+            // 地图朝向那一个设置走 UDeveloperSettings（见 DeliveryMapSettings.h）
+            "DeveloperSettings"
         });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
