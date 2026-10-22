@@ -17,6 +17,7 @@ public class Delivery : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"PhysicsControl",
+			"GeometryCollectionEngine",
             "GameplayAbilities",
             "GameplayTags",
             "GameplayTasks",

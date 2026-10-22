@@ -3,6 +3,8 @@
 #include "DeliveryBoxingPose.h"
 #include "Animation/AnimSequence.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "GeometryCollection/GeometryCollectionComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
@@ -12,6 +14,7 @@
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Inventory/DeliveryTestAxe.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
+#include "Task/DeliveryBreakableDoor.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryAxeAnimationTest, "Delivery.Axe.AnimationTargets",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -129,7 +132,27 @@ bool FDeliveryAxeInputTest::RunTest(const FString&)
 			TestTrue(TEXT("animation clock advances at 1.8x"), FMath::IsNearlyEqual(Ragdoll->GetAxeSwingTime(), .45f, .001f));
 			FDeliveryAnimationArmPose Sample;
 			TestTrue(TEXT("held source animation feeds motor pose"), Ragdoll->SampleAxeSwing(Sample));
+			const FVector Hand = Character->GetMesh()->GetBoneLocation(TEXT("RightHand"));
+			ADeliveryBreakableDoor* Door = World->SpawnActor<ADeliveryBreakableDoor>(
+				Hand + Ragdoll->GetBodyForward() * 115.f, FRotator::ZeroRotator);
+			if (TestNotNull(TEXT("breakable door spawns"), Door))
+			{
+				TestFalse(TEXT("door starts intact"), Door->IsBroken());
+				Ragdoll->TryAxeDoorHit();
+				TestTrue(TEXT("equipped swing breaks a door in reach"), Door->IsBroken());
+				TestEqual(TEXT("broken door no longer blocks the player"),
+					Door->GetIntactMesh()->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
+				TestTrue(TEXT("broken pieces become visible"), Door->GetFragments()->IsVisible());
+				TestNotNull(TEXT("fractured door asset"), Door->GetFragments()->GetRestCollection());
+			}
 			Inventory->DropHeldItem();
+			ADeliveryBreakableDoor* UnarmedDoor = World->SpawnActor<ADeliveryBreakableDoor>(
+				Hand + Ragdoll->GetBodyForward() * 115.f, FRotator::ZeroRotator);
+			Ragdoll->TryAxeDoorHit();
+			if (TestNotNull(TEXT("unarmed door spawns"), UnarmedDoor))
+			{
+				TestFalse(TEXT("dropping axe prevents another break"), UnarmedDoor->IsBroken());
+			}
 			TestEqual(TEXT("dropping cancels visual swing immediately"), Ragdoll->GetAxeSwingWeight(), 0.f);
 			Ragdoll->TickComponent(.01f, LEVELTICK_All, &Ragdoll->PrimaryComponentTick);
 			TestFalse(TEXT("cancelled swing token cleared"), Ragdoll->SwingAxe.IsValid());

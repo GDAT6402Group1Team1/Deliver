@@ -15,6 +15,7 @@
 #include "DeliveryCharacter.h"
 #include "Components/BoxComponent.h"
 #include "GameFramework/WorldSettings.h"
+#include "GameFramework/PlayerController.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryPunchRecoveryTest, "Delivery.Boxing.PlayerRecoveryTargets",
  EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -192,7 +193,7 @@ bool FDeliveryLegIsolationTest::RunTest(const FString&)
 {
  UClass* Class = LoadClass<ADeliveryCharacter>(nullptr,TEXT("/Game/Blueprint/Character/DeliverMan/BP_DeliveryMan.BP_DeliveryMan_C"));
  if (!TestNotNull(TEXT("production character"),Class)) return false;
- for (int32 Variant=0; Variant<8; ++Variant)
+ for (int32 Variant=0; Variant<10; ++Variant)
  {
   const auto Init = UWorld::InitializationValues().AllowAudioPlayback(false).CreatePhysicsScene(true)
    .ShouldSimulatePhysics(true).CreateNavigation(false).CreateAISystem(false);
@@ -203,9 +204,10 @@ bool FDeliveryLegIsolationTest::RunTest(const FString&)
   Floor->SetRootComponent(Box);
   Box->SetBoxExtent(FVector(20000,20000,50));
   Box->SetWorldLocation(FVector(0,0,-50));
-  if (Variant>=6)
+  if (Variant>=6 && Variant<=9)
   {
-   const FRotator Slope(Variant==6 ? 20.f : -20.f,0,0);
+   const float Angle=Variant>=8 ? 30.f : 20.f;
+   const FRotator Slope(Variant%2==0 ? Angle : -Angle,0,0);
    Box->SetWorldRotation(Slope);
    Box->SetWorldLocation(Slope.RotateVector(FVector(0,0,-50)));
   }
@@ -216,6 +218,13 @@ bool FDeliveryLegIsolationTest::RunTest(const FString&)
   auto* Mesh=Character->GetMesh();
   World->InitializeActorsForPlay(FURL());
   World->GetWorldSettings()->NotifyBeginPlay();
+  APlayerController* DownwardCamera = nullptr;
+  if (Variant>=6 && Variant<=9)
+  {
+   DownwardCamera=World->SpawnActor<APlayerController>();
+   DownwardCamera->Possess(Character);
+   DownwardCamera->SetControlRotation(FRotator(-75.f,0.f,0.f));
+  }
   Rag->StartRagdoll();
   if (Variant==2)
   {
@@ -265,7 +274,7 @@ bool FDeliveryLegIsolationTest::RunTest(const FString&)
   const FVector LocalUp=InitialHip.UnrotateVector(FVector::UpVector);
   const FVector InitialPosition=Mesh->GetBodyInstance(TEXT("Hips"))->GetUnrealWorldTransform().GetLocation();
   auto* Combat=Character->FindComponentByClass<UDeliveryRagdollCombatComponent>();
-  ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, World, Rag, Mesh, Controls, Combat, LocalUp, InitialPosition, Variant, Frame=0, MaxTravel=0.0, WalkFrame=-1, LeanRestarts=0, PreviousLean=0.f, LowTime=0.f, MaxLowTime=0.f, StopPosition=FVector::ZeroVector]() mutable
+  ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, World, Rag, Mesh, Controls, Combat, DownwardCamera, LocalUp, InitialPosition, Variant, Frame=0, MaxTravel=0.0, WalkFrame=-1, LeanRestarts=0, PreviousLean=0.f, LowTime=0.f, MaxLowTime=0.f, StopPosition=FVector::ZeroVector]() mutable
   {
    const float Sign=((Frame/90)%2) ? -1.f : 1.f;
    if (Variant>=3)
@@ -273,11 +282,22 @@ bool FDeliveryLegIsolationTest::RunTest(const FString&)
     if (Frame==90 && Variant>=4 && Variant<=5)
      TestTrue(TEXT("real punch starts"),Combat && Combat->StartPunch(Variant==4 ? EMeleeHand::Left : EMeleeHand::Right,FVector::ForwardVector));
     if (WalkFrame<0 && Frame>=91 && (Variant==3 || Variant>=6 ? Frame>=116 : Combat && !Combat->IsPunching())) WalkFrame=Frame;
-    Rag->SetMoveInput(WalkFrame>=0 && !(Variant>=6 && Frame>=270) ? FVector2D(0,1) : FVector2D::ZeroVector);
+    const bool bSlope=Variant>=6 && Variant<=9;
+    Rag->SetMoveInput(WalkFrame>=0 && !(bSlope && Frame>=270)
+     ? FVector2D(0,1) : FVector2D::ZeroVector);
+    if (bSlope && Frame==120)
+    {
+     const FVector DownWish=Rag->GetWishDir();
+     DownwardCamera->SetControlRotation(FRotator(0.f,0.f,0.f));
+     const FVector LevelWish=Rag->GetWishDir();
+     DownwardCamera->SetControlRotation(FRotator(-75.f,0.f,0.f));
+     TestTrue(TEXT("looking down does not tilt movement input into ground"),
+      DownWish.Equals(LevelWish,.001f) && FMath::IsNearlyZero(DownWish.Z,.001f));
+    }
    }
    else Rag->SetMoveInput(Frame<90 || Frame>=270 ? FVector2D::ZeroVector : FVector2D(0,Sign));
    World->Tick(LEVELTICK_All,.03f);
-   if (Variant>=6 && Frame==300) StopPosition=Mesh->GetCenterOfMass(TEXT("Hips"));
+   if (Variant>=6 && Variant<=9 && Frame==300) StopPosition=Mesh->GetCenterOfMass(TEXT("Hips"));
    if (Variant>=4 && WalkFrame>=0 && Rag->BoxingPose.HasPendingPunchRecovery())
     TestTrue(TEXT("torso remains braced while punch arms retract"),Rag->BraceAlpha>.9f);
    if (Variant>=3 && WalkFrame>=0)
@@ -302,7 +322,7 @@ bool FDeliveryLegIsolationTest::RunTest(const FString&)
      *Hip->GetUnrealWorldTransform().GetLocation().ToCompactString()));
    }
    if (++Frame<360) return false;
-   if (Variant>=6)
+   if (Variant>=6 && Variant<=9)
    {
     const double Drift=FVector::Dist(StopPosition,Mesh->GetCenterOfMass(TEXT("Hips")));
     AddInfo(FString::Printf(TEXT("SlopeWalk variant=%d stoppedDrift=%.2f travel=%.2f"),Variant,Drift,MaxTravel));

@@ -6,6 +6,7 @@
 #include "Inventory/DeliveryHandheldItem.h"
 #include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"
+#include "Task/DeliveryBreakableDoor.h"
 
 float UDeliveryActiveRagdollComponent::GetAxeSwingTime() const
 {
@@ -51,6 +52,31 @@ void UDeliveryActiveRagdollComponent::ServerRequestAxeSwing_Implementation()
 	const AGameStateBase* State = GetWorld()->GetGameState();
 	MulticastStartAxeSwing(Character->GetInventoryComponent()->GetHeldItem(),
 		State ? State->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds());
+	// The source clip reaches the downward strike around 1.1 animation seconds.
+	GetWorld()->GetTimerManager().SetTimer(AxeDoorHitTimer, this,
+		&UDeliveryActiveRagdollComponent::TryAxeDoorHit, 1.1f / FMath::Max(AxeSwingPlayRate, .1f), false);
+}
+
+void UDeliveryActiveRagdollComponent::TryAxeDoorHit()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || GetAxeSwingWeight() <= 0.f) return;
+	const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
+	if (!Character || !Character->GetMesh()) return;
+
+	const FVector Forward = GetBodyForward().GetSafeNormal2D();
+	const FVector Start = Character->GetMesh()->GetBoneLocation(TEXT("RightHand"));
+	if (Forward.IsNearlyZero() || Start.IsNearlyZero()) return;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(AxeDoorHit), false, Character);
+	if (SwingAxe.IsValid()) Params.AddIgnoredActor(SwingAxe.Get());
+	FHitResult Hit;
+	if (GetWorld()->SweepSingleByChannel(Hit, Start, Start + Forward * 175.f,
+		FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(65.f), Params))
+	{
+		if (ADeliveryBreakableDoor* Door = Cast<ADeliveryBreakableDoor>(Hit.GetActor()))
+		{
+			Door->BreakFromAxe();
+		}
+	}
 }
 
 void UDeliveryActiveRagdollComponent::MulticastStartAxeSwing_Implementation(ADeliveryHandheldItem* Axe, float ServerStartTime)

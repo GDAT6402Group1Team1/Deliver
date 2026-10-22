@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Engine/NetSerialization.h"
+#include "TimerManager.h"
 #include "Combat/DeliveryBoxingPose.h"
 #include "DeliveryActiveRagdollComponent.generated.h"
 
@@ -178,8 +179,10 @@ public:
 	bool CanStartAxeSwing() const;
 	bool SampleAxeSwing(FDeliveryAnimationArmPose& Out);
 	float GetAxeSwingTime() const;
+	void TryAxeDoorHit();
 	TWeakObjectPtr<ADeliveryHandheldItem> SwingAxe;
 	float AxeSwingStartTime = -1.f;
+	FTimerHandle AxeDoorHitTimer;
 
 	/** 释放直拳：标记前送阶段。 */
 	void ReleaseBodyDrivenPunch();
