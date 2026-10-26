@@ -24,10 +24,24 @@ import unreal
 
 CAR_NAME_PREFIX = "BP_car_base"
 LANE_TAG_PREFIX = "ClaudeGenLane"
-BEHIND_BOX = 300.0       # 修正后车落在 Box 后方多远
+BEHIND_BOX = 250.0       # 车摆在 Box 后方多远。
+                         # **能接上路的最远距离是 150(TraceForNewPath
+                         # 的球半径) + 83(LANE_BOX_HALF 沿行驶方向) = 233**，
+                         # 而出生时 CurrentSpeed=0、探测是零长度扇描（不命中），
+                         # 所以车得先动起来。300 正好落在 233 外侧——
+                         # 车只能裸奔瞎撞，撞不到就被 RouteLostTimeout(3s)
+                         # 缩小消失、瞑移回出生点，表现是「走不上交通线」。
+                         # 250 刻意略大于 233：出生姿势下球还没压着 Box
+                         # （250-83=167 > 150），第一次有速度那一跳是真正的
+                         # sweep 命中；要走的路只有 17cm。详见 spawn_test_cars.py。
 SEARCH_RADIUS = 6000.0   # 找最近车道段起点的范围
 LATERAL_WARN = 400.0     # 横向偏离超过这个值就点名
-FIX = True               # False = 只报告不动
+FIX = False              # **默认只报告。** 它按「离本车最近的那条车道」重新摆，
+                         # 而 spawn_test_cars / add_more_cars 已经按各自挑中的车道摆好了——
+                         # 两者未必是同一条（相邻车道起点可能更近），开 FIX 会把摆对的车
+                         # 挪到别的车道上，还可能和那条车道自己的车叠在一起。
+                         # 所以放在流程最后当**验收**用：看「纵向」是不是全为负。
+                         # 只有手摆的车、或者重铺车道之后要批量对齐时才开 True。
 
 WS = unreal.SplineCoordinateSpace.WORLD
 OUT = unreal.Paths.project_saved_dir() + "reposition_cars.txt"

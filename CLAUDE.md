@@ -572,12 +572,55 @@
 逐点测高差 + 沿法线探到路缘的余量）、`diag_road_width.py`（源道路样条两侧路面的实际半宽，
 用中位数避开路口处扫到交叉路造成的虚高）、`diag_spline_tangent.py`（端点/中间点的切线与
 旋转前向是否退化）、`check_turn_targets.py`（每条转弯的终点有没有同向下家）、
-`spawn_test_cars.py`（清掉所有 `BP_car_base` 并在车道上零散放一批测试车，
-随机颜色 + 600~1500 的随机 `MaxSpeed`）、`diag_lane_gaps.py`（接缝间距 + 高度差）、
+`spawn_test_cars.py`（清掉所有 `BP_car_base` 并在车道段起点重新摆一批测试车，
+六种车型轮换 + 600~1500 的随机 `MaxSpeed`。**不是只读**，见下面「车怎么接上车道」）、
+`diag_lane_gaps.py`（接缝间距 + 高度差）、
 `diag_seams.py`（逐点查落差来源）、`whats_here.py`（某个 actor 附近都有哪些样条）、
 `inventory_level.py`、`audit_traffic_channels.py`（碰撞通道）、`dump_bp_graph.py`（导出蓝图图表）、
 `monitor_car.py` / `chase_car.py`（Simulate 期间采样车状态 / 跟拍相机——用每帧回调而不是 sleep 轮询，
 Python 跑在游戏线程上，轮询会把模拟本身卡死）。
+
+**车怎么接上车道：摆位是算出来的，不是手感（2026-10-29 从图表 dump 反推）。**
+`Saved/bp_graph.txt` 里两段图表给出了全部约束：
+```
+TraceForNewPath:  球半径 150
+                  Start = GetActorLocation()
+                  End   = Start + Forward × FrameRate × CurrentSpeed × 5
+GetFuturePostionandRotationAlongSpline:
+                  每帧 GetDistanceAlongSplineAtLocation(GetActorLocation())
+```
+- **出生那一刻 `CurrentSpeed = 0`，于是 `End == Start`，这是条零长度扫描——
+  UE 的零长度 sweep 不返回命中。** 所以不存在「一出生就接上路」，
+  车必须先被加速计时器（0.1 秒一跳）推动起来，探测才有长度。
+- **能接上路的最远出生距离 = 150（球半径）+ 83（`LANE_BOX_HALF` 沿行驶方向的
+  半尺寸）= 233 cm**，Box 挂在车道段的**第一个控制点**上。超出这个距离，
+  车只能沿着出生朝向裸奔瞎撞；撞不到就被 `RouteLostTimeout`（3 秒）缩小消失、
+  瞬移回出生点，再撞一次——**表现正是「这辆车永远走不上交通线」**。
+  `BEHIND_BOX` 原来是 **300**，正好落在 233 外侧，所以那批车全靠运气。
+  现在是 **250**：刻意略大于 233（250−83=167 > 150），出生姿势下球还没压着 Box，
+  于是第一次有速度的那一跳是一次**真正的 sweep 命中**，不赌「初始重叠算不算命中」
+  这个没实测过的语义；而要走的距离只有 17 cm，裸奔几乎不发生。
+- **车不必落在样条起点，也不怕「开过了起点」**：位置是每帧用自己的世界坐标
+  现算的。脚本里原来那句「放在起点之后等于一出生就开过了自己的盒子，
+  永远接不上路」是错的——门槛是距离，不是先后。
+- 配套的四道筛子（都是为了「摆下去的车都能走」，不是为了摆得多）：
+  ①出生点底下必须有路面（逐点射线只认 `SplineMesh`，跳过地形/裙边/建筑，
+  取离车道点 Z **最近**的那层而不是最上面的——路口处两条路的面是叠着的）；
+  ②出生点 300 cm 内不能有**别的段**的第一个控制点，否则焊到谁身上取决于
+  sweep 先碰到哪个，车会当场横向瞬移到横向车流或对向车道上；
+  ③前方 1050 cm（`ForwardTraceDistance` 900 + `TraceStartForwardOffset` 150）的
+  锥体里不能已经有车，否则一出生就互相判成前车集体停住。**判据必须是有向的**
+  （沿前方距离 + 横向偏移 ≤ 250），用「车与车的直线距离」会把同一横断面上的
+  4 条平行车道误杀掉——它们横向只差 360，但互相不在对方的探测锥里。
+  这也是旧版「每隔 `STRIDE` 条取一条」做不到的事：排序按离锚点的距离，
+  相邻两条既可能是平行车道也可能首尾相接，`STRIDE` 既误杀又漏放；
+  ④车道末端 700 cm 内要有同向下家，否则车开到头就裸奔——那是「路到头了」
+  不是「接不上路」，混在一起会把真问题盖住。
+- 报告里每辆车都打「到箱心」和「地面差」两列，淘汰的逐条给原因，
+  所以「为什么只摆了 N 辆」是可查的，不用猜。
+- **「车浮着」和 `CAR_Z` 无关**：焊上样条之后车的高度完全由
+  `GetLocationAtDistanceAlongSpline` 决定，也就是车道点自己的 Z。
+  调 `CAR_Z` 只会掩盖问题，要跑 `diag_lane_fit.py` 查车道的高度剖面。
 
 **还没解决的**：
 - **`Lane_*` 和 `Inter_*` 的 Box 在同一个碰撞通道**（都是 `ECC_TRAFFIC_ROAD`），`TraceForIntersection` 分不出两者。

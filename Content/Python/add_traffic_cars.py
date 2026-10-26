@@ -9,7 +9,7 @@ import unreal
 ADD_COUNT = 30  # 本批累计数量；重复运行只补缺失的，不每次再加30辆
 TAG = 'DeliveryExtraTrafficCarsBatch1'
 MIN_SPACING = 1200.0
-BEHIND_BOX = 300.0
+BEHIND_BOX = 250.0   # 最远 150(球半径)+83(Box 半尺寸)=233，300 在外侧接不上路
 WS = unreal.SplineCoordinateSpace.WORLD
 SCALES = {'BP_car_base2':0.5,'BP_car_base3':0.8}
 
