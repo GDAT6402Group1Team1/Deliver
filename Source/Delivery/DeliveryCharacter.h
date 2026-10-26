@@ -90,6 +90,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> MouseLookAction;
 
+	/** 鼠标视角灵敏度；手柄右摇杆不受影响。 */
+	UPROPERTY(EditAnywhere, Category="Input", meta=(ClampMin="0.1", ClampMax="2.0"))
+	float MouseLookSensitivity = 0.75f;
+
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> AttackLeftAction;
 
@@ -196,6 +200,7 @@ protected:
 
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
+	void MouseLook(const FInputActionValue& Value);
 	void JumpStarted(const FInputActionValue& Value);
 	void AttackLeftStarted(const FInputActionValue& Value);
 	void AttackRightStarted(const FInputActionValue& Value);

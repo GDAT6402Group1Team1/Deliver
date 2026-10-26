@@ -1139,7 +1139,7 @@ void ADeliveryMotorbike::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	}
 	if (MouseLookAction)
 	{
-		EnhancedInput->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &ADeliveryMotorbike::LookInput);
+		EnhancedInput->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &ADeliveryMotorbike::MouseLookInput);
 	}
 
 	// 直接绑键，不走 InputAction + IMC 映射：IMC_Default 从来没被提交过，
@@ -1332,6 +1332,17 @@ void ADeliveryMotorbike::LookInput(const FInputActionValue& Value)
 	}
 	const FVector2D Axis = Value.Get<FVector2D>();
 	// 俯仰的上下限走 PlayerCameraManager 的 ViewPitchMin/Max，和角色那边同一套限制。
+	AddControllerYawInput(Axis.X);
+	AddControllerPitchInput(Axis.Y);
+}
+
+void ADeliveryMotorbike::MouseLookInput(const FInputActionValue& Value)
+{
+	if (!bFreeLookCamera)
+	{
+		return;
+	}
+	const FVector2D Axis = Value.Get<FVector2D>() * MouseLookSensitivity;
 	AddControllerYawInput(Axis.X);
 	AddControllerPitchInput(Axis.Y);
 }

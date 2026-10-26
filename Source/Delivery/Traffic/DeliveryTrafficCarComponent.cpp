@@ -318,21 +318,7 @@ void UDeliveryTrafficCarComponent::TickComponent(float DeltaTime, ELevelTick Tic
 		if (RouteLostElapsedTime >= RouteLostTimeout && !bRouteLostPending)
 		{
 			RouteLostElapsedTime = 0.0f;
-			// 先缩小再消失。缩完由 UpdateScaleAnim 广播 OnRouteLost，
-			// 蓝图那边照旧瞬移回出生点 + 调 NotifyResetToStart，那里再放大回来。
-			// bRouteLostPending 是必须的：缩小这零点几秒里车还在裸奔，
-			// 计时会继续累加、再次触发超时，没有这道闸会广播好几次。
-			if (bScaleOutOnRouteLost && ScaleOutDuration > 0.0f && GetOwner())
-			{
-				bRouteLostPending = true;
-				bScaleOutRunning = true;
-				bScaleInRunning = false;
-				ScaleOutElapsed = 0.0f;
-			}
-			else
-			{
-				OnRouteLost.Broadcast();
-			}
+			BeginRouteReset();
 		}
 	}
 	else if (!bHasReachedMaxSpeed)
@@ -340,6 +326,29 @@ void UDeliveryTrafficCarComponent::TickComponent(float DeltaTime, ELevelTick Tic
 		// 掉速了（红灯刹车、避让减速、或者刚被重置）就把计时清零，
 		// 保证下次是从"速度重新回到 MaxSpeed 的那一刻"重新开始算满 RouteLostTimeout。
 		RouteLostElapsedTime = 0.0f;
+	}
+
+	// 停滞兜底：裸奔计时只在满速时走，所以"卡住不动"那一类它永远不管。
+	// 红灯等待是合法的长时间静止，所以用更宽松的阈值——只用一个阈值的话，
+	// 红灯 6 秒 + 整队依次起步可能超过它，正常排队的车会被一辆辆瞬移走。
+	if (FMath::Abs(LastKnownSpeed) <= StallSpeedThreshold)
+	{
+		const bool bWaitingForLight = bStoppedAtIntersection || bLeaderStoppedAtIntersection;
+		const float Limit = bWaitingForLight ? StalledTimeoutAtIntersection : StalledTimeout;
+		StalledElapsedTime += DeltaTime;
+		if (Limit > 0.0f && StalledElapsedTime >= Limit && !bRouteLostPending)
+		{
+			UE_LOG(LogDelivery, Log,
+				TEXT("%s：车速为 0 已 %.1f 秒（阈值 %.1f%s），回溯到出生点"),
+				*GetNameSafe(GetOwner()), StalledElapsedTime, Limit,
+				bWaitingForLight ? TEXT("，在等红灯") : TEXT(""));
+			StalledElapsedTime = 0.0f;
+			BeginRouteReset();
+		}
+	}
+	else
+	{
+		StalledElapsedTime = 0.0f;
 	}
 
 	// 红灯期间前车是合法地长时间静止，不是死锁，用更宽松的超时，避免后车提前放弃避让压上去。
@@ -395,10 +404,31 @@ void UDeliveryTrafficCarComponent::UpdateRouteFollowState(bool bIsFollowingRoute
 	}
 }
 
+void UDeliveryTrafficCarComponent::BeginRouteReset()
+{
+	// 先缩小再消失。缩完由 UpdateScaleAnim 广播 OnRouteLost，
+	// 蓝图那边照旧瞬移回出生点 + 调 NotifyResetToStart，那里再放大回来。
+	// bRouteLostPending 是必须的：缩小这零点几秒里车还在裸奔/还在卡着，
+	// 计时会继续累加、再次触发超时，没有这道闸会广播好几次。
+	if (bScaleOutOnRouteLost && ScaleOutDuration > 0.0f && GetOwner())
+	{
+		bRouteLostPending = true;
+		bScaleOutRunning = true;
+		bScaleInRunning = false;
+		ScaleOutElapsed = 0.0f;
+	}
+	else
+	{
+		OnRouteLost.Broadcast();
+	}
+}
+
 void UDeliveryTrafficCarComponent::UpdateSpeedState(float InCurrentSpeed, float InMaxSpeed)
 {
 	// MaxSpeed 是蓝图里的纯配置量，正常恒为正；防一手除零/负值配置。
 	bHasReachedMaxSpeed = (InMaxSpeed > 0.0f) && (InCurrentSpeed >= InMaxSpeed - KINDA_SMALL_NUMBER);
+	// 停滞检测要用绝对车速。组件自己不接管移动，只能靠蓝图每帧报上来。
+	LastKnownSpeed = InCurrentSpeed;
 }
 
 void UDeliveryTrafficCarComponent::UpdateStoppedAtIntersection(bool bInStoppedAtIntersection)
@@ -416,6 +446,11 @@ void UDeliveryTrafficCarComponent::NotifyResetToStart()
 	}
 	bIsCurrentlyOnRoute = true;
 	RouteLostElapsedTime = 0.0f;
+	// 停滞计时也要清。重置瞬间车速还是 0，不清的话它会带着重置前攒下的秒数继续累，
+	// 重生后很快又被判停滞、再次回溯，形成自我重置循环。
+	// （同一个坑踩过：当初漏清 SpeedMultiplier / BlockedElapsedTime。）
+	StalledElapsedTime = 0.0f;
+	LastKnownSpeed = 0.0f;
 
 	// 还原被"顶慢车"改过的 MaxSpeed。要求是重生后所有参数都和刚 BeginPlay 一致，
 	// 车速也在其中——不还原的话它会一直带着路上被顶上去/压下来的值。

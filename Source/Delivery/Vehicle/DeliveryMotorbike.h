@@ -735,6 +735,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> MouseLookAction;
 
+	/** 鼠标自由视角灵敏度；固定视角和手柄右摇杆不受影响。 */
+	UPROPERTY(EditAnywhere, Category="Input", meta=(ClampMin="0.1", ClampMax="2.0"))
+	float MouseLookSensitivity = 0.75f;
+
 	/**
 	 * 交互键（F）。用软引用晚绑：IA_Interact 是由 setup_motorbike.py 生成的，
 	 * 构造函数里的 ConstructorHelpers 只在模块加载时跑一次，资产是这次会话里新建的话
@@ -757,6 +761,7 @@ private:
 
 	void MoveInput(const FInputActionValue& Value);
 	void LookInput(const FInputActionValue& Value);
+	void MouseLookInput(const FInputActionValue& Value);
 
 	/** 局内切一次视角模式，并在屏幕上提示现在是哪种。 */
 	void ToggleCameraMode();

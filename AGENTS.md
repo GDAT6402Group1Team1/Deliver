@@ -425,6 +425,7 @@ Python 跑在游戏线程上，轮询会把模拟本身卡死）。
 - 交互键走服务器复核：客户端 `ADeliveryCharacter::DoInteract()` 把本地探到的目标发 `ServerInteract(Target)`，服务器重新查组件 + 距离才执行。
 
 **摩托车（[DeliveryMotorbike](Source/Delivery/Vehicle/DeliveryMotorbike.h)）** —— 运动学街机式载具，不是 Chaos Vehicle：
+- 人物和摩托车自由视角的鼠标灵敏度 `MouseLookSensitivity` 默认 0.75（原输入的 75%）；手柄右摇杆不变，摩托车固定车尾视角仍不响应鼠标。
 - 美术资产是一整套静态网格 + 一个坐姿骑手，**没有轮子骨骼、没有物理资产**，Chaos 需要的东西一样都没有；且关卡里的交通车本来就是运动学沿样条走的，玩家车用同一套假设不会出现"玩家车被物理弹飞、AI 车纹丝不动"。
 - 每帧自己算速度/转向，水平位移带 sweep 挡墙，竖直方向打射线贴地（竖直**不能**用 sweep，会和"贴到地面上"互相打架）。转向量乘 `Speed/TurnSpeedReference`，停着不能原地转圈。
 - **爬坡越障**（`Motorbike|爬坡越障`）。原来"一点爬坡能力都没有"是三个独立原因叠在一起，缺一条都修不好：

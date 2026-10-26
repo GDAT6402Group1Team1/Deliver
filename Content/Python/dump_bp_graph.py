@@ -23,6 +23,13 @@ import unreal
 
 # (蓝图路径, 要导的图名列表)；图名列表为空 = 该蓝图的全部图
 TARGETS = [
+    # 2026-10-26：查「只有一个灯组时会不会永远不放行」。
+    # 名字表里有 ChildNodes / Traffic_Array / Get Lane Traffic Lights /
+    # CurrentTrafficLight / IncrementInt / Array_Length / EqualEqual_IntInt，
+    # 像是「把子节点按 LightNumber 分组成数组 + 一个游标轮换」，但光看名字
+    # 推不出只有一组时的行为（两种读法分别预测「恒绿」和「半数时间绿」，
+    # 都不是恒红），所以要看真实连线。
+    ("/Game/PS2DEM/BP_Intersection", []),
     # 目标：TraceForIntersection 现在查的是 Traffic_Road 通道，
     # Lane_ 和 Inter_ 的 Box 都在这个通道上，分不出普通车道和路口段。
     # 要改成只认 IntersectionChild，先得看清它现在的节点和连线。

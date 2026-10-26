@@ -144,6 +144,41 @@ XY_CROSS = 400.0         # 最近 XY 小于此值才算真的相交。
                          # 距离分布是连续的（…185、199、200、210、244…342、351…），
                          # 没有干净的数值空隙可卡，所以**不能再往上随手调**；
                          # 真要调先跑 diag_junction_miss.py 重新量这两头。
+# ---- 端点规则（2026-10-26）----
+# 现象：很多 T 形路口判不出来。原因是上面那条判据问的是「两条路的中线靠多近」，
+# 而 T 形接头的几何是**支路停在主路外面**——队友把长样条在路口处切断、手工补路
+# 之后，支路端点到主路中线常常差 600~1200cm，远超 XY_CROSS(400)。
+#
+# 为什么不直接调大 XY_CROSS：那是全局阈值，一调大，所有**并行经过**的路
+# 都会被判成路口，凭空多出一堆假路口（表现是"车在直路中间莫名停下等红灯"，
+# 极难往这个方向想）。端点规则是**定向放宽**：只有当"近点落在某条路的端点上"
+# 时才用这个更大的阈值。并行经过的两条路在那个位置上没有端点，不受影响。
+ENDPOINT_CROSS = 900.0   # 端点到对方中线的最大缺口。比 XY_CROSS 宽得多，
+                         # 但只在端点处生效，所以不会把并行的路判成路口。
+                         # **900 是从实测分布里挑的，不是手感**
+                         # （preview_endpoint_junctions.py，2026-10-26）：
+                         #   400~500: 38 处   500~600: 26   600~700: 20
+                         #   700~800:  9      800~900:  6
+                         #   900~1000: **0 处**  ← 空隙在这儿
+                         #   1000~1100: 2     1100~1200: 1   最大 1188
+                         # 900 以下 99 处、1000 以上只有 3 处，中间整档为空，
+                         # 所以卡 900 两边都有余量。被切掉的那 3 处缺口 10~12 米，
+                         # 基本可以断定是"路从旁边经过"而不是接头。
+                         # 要再调先重跑那个预览看分布，别直接改数字。
+ENDPOINT_TOL = 300.0     # 离样条首/末控制点多近才算"在端点上"
+#
+# 四种几何下的行为（第三条是必须排除的那个）：
+#   1. 十字交叉（两条中线真的穿过）—— 老规则 XY_CROSS 就命中，端点规则不参与
+#   2. T 形（支路端点 ↔ 主路中段）—— **要的就是这个**。
+#      走主路时："对方的端点离我很近" → 命中；
+#      走支路时："我正站在自己的端点上，而对方从旁边过" → 命中。
+#      两边都命中才能两条路各自切出 Inter_ 段、各自有灯。
+#   3. 首尾相接的续接（A 的端点 ↔ B 的端点）—— **不是路口**，是同一条路线的延续。
+#      所以两条子规则都要求"另一头不是端点"：走主路时我自己不能站在端点上，
+#      走支路时对方的近点不能也是端点。不排除的话，每一处接驳都会多出一个
+#      假路口，而那恰恰是路最连贯的地方。
+#   4. 并行经过 —— 两个位置上都没有端点，两条子规则都不触发，行为完全不变。
+
 # 强制路口：某个**具体位置**上，就算两条路没真正相交也当成路口（T 形接头）。
 # 队友在路口处切断长样条、再手工补路之后，两条路可能只是"凑得很近"，
 # XY_CROSS=200 够不着。
@@ -549,6 +584,25 @@ def build_part_junctions(all_splines):
     return made
 
 
+def endpoint_near(sp, point, tol=None):
+    """point 是不是落在样条 sp 的首/末控制点附近。
+
+    **取控制点、不按弧长采样**：`get_location_at_distance_along_spline(L)` 用的是
+    近似弧长，曲线样条上采到 L 处未必正好是最后一个控制点（这条在生成转弯曲线时
+    已经栽过一次）。
+    """
+    if tol is None:
+        tol = ENDPOINT_TOL
+    n = sp.get_number_of_spline_points()
+    if n < 2:
+        return False
+    for i in (0, n - 1):
+        e = sp.get_location_at_spline_point(i, WS)
+        if ((e.x - point.x) ** 2 + (e.y - point.y) ** 2) ** 0.5 < tol:
+            return True
+    return False
+
+
 def find_intersections(tsp, roads, total, self_name=""):
     """返回 [(路口中心沿线距离, 对向道路名)]，已排除立交、已合并相近的。
 
@@ -556,6 +610,8 @@ def find_intersections(tsp, roads, total, self_name=""):
     """
     forced_hits = []
     forced_seen = {}     # 强制规则覆盖范围内实测到的最近距离，成不成都要报
+    endpoint_hits = []   # 靠端点规则捡回来的，必须单独报——它放宽了阈值，
+                         # 一旦误判就是假路口，得能一眼看出是哪条规则加的
     raw = []
     d = 0.0
     while d <= total:
@@ -576,6 +632,20 @@ def find_intersections(tsp, roads, total, self_name=""):
                 raw.append((d, name, dxy))
                 if ent is not None and dxy >= XY_CROSS:
                     forced_hits.append((d, name, dxy))
+            elif dxy < ENDPOINT_CROSS and abs(q.z - p.z) < Z_CROSS:
+                # 中段阈值没够，但可能是 T 形接头。看端点（见上面 ENDPOINT_CROSS
+                # 那段的四种几何）。`near_own_end` 是"我正站在自己的端点上"。
+                near_own_end = (d < ENDPOINT_TOL) or (total - d < ENDPOINT_TOL)
+                other_end = endpoint_near(osp, q)
+                hit_kind = None
+                if other_end and not near_own_end:
+                    hit_kind = u"对方端点"        # 我是主路，支路端点顶上来
+                elif near_own_end and not other_end:
+                    hit_kind = u"我方端点"        # 我是支路，端点顶在对方中段
+                # 两头都是端点 = 首尾续接，不是路口，故意不处理
+                if hit_kind:
+                    raw.append((d, name, dxy))
+                    endpoint_hits.append((d, name, dxy, hit_kind))
         d += DETECT_STEP
     # 强制规则的执行情况：成了要说，没成更要说（否则只是报告里少一行，很难发现）
     for (ra, rb, fx, fy), (best, at_d, dz, lim) in forced_seen.items():
@@ -588,6 +658,11 @@ def find_intersections(tsp, roads, total, self_name=""):
             why = ("阈值 %.0f 不够" % lim) if best >= lim else ("Z 差 %.0f 太大" % dz)
             w("   !! 强制路口没生效：与 %s 在 (%.0f, %.0f) 半径内实测最近 %.0f cm，%s"
               % (other, fx, fy, best, why))
+
+    for d_at, nm, dxy, kind in endpoint_hits:
+        w("   端点规则命中：与 %s 在沿线 %.0f 处缺口 %.0f cm（%s，"
+          "中段阈值 %.0f 不够，端点阈值 %.0f 放行）"
+          % (nm, d_at, dxy, kind, XY_CROSS, ENDPOINT_CROSS))
 
     groups = []
     for dist, name, dxy in raw:

@@ -269,7 +269,7 @@ void ADeliveryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	}
 	if (MouseLookAction)
 	{
-		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &ADeliveryCharacter::Look);
+		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &ADeliveryCharacter::MouseLook);
 	}
 	if (MoveAction)
 	{
@@ -348,6 +348,12 @@ void ADeliveryCharacter::Move(const FInputActionValue& Value)
 void ADeliveryCharacter::Look(const FInputActionValue& Value)
 {
 	const FVector2D Axis = Value.Get<FVector2D>();
+	DoLook(Axis.X, Axis.Y);
+}
+
+void ADeliveryCharacter::MouseLook(const FInputActionValue& Value)
+{
+	const FVector2D Axis = Value.Get<FVector2D>() * MouseLookSensitivity;
 	DoLook(Axis.X, Axis.Y);
 }
 

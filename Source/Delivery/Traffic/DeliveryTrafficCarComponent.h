@@ -68,6 +68,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Traffic|循环")
 	void UpdateSpeedState(float InCurrentSpeed, float InMaxSpeed);
 
+private:
+	/** 走重置流程（缩小消失 → 广播 OnRouteLost）。裸奔超时和停滞超时共用这一处。 */
+	void BeginRouteReset();
+
+public:
+
 	/**
 	 * 蓝图每次写 StopatInter 之后调用一次，把"这辆车当前是不是被红灯拦住"同步给组件。
 	 *
@@ -206,9 +212,48 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Traffic|出现动画", meta = (ClampMin = "0.01"))
 	float ScaleOutDuration = 0.4f;
 
-	/** 连续脱离预设路线（裸奔）超过这么久（秒）就触发 OnRouteLost，让路口车流循环起来。 */
+	/** 连续脱离预设路线（裸奔）超过这么久（秒）就触发 OnRouteLost，让路口车流循环起来。
+	 *
+	 * 5 -> 3（2026-10-26）。注意这个计时**只在满速时累加**（见 TickComponent），
+	 * 所以缩短它不会影响"刚重置完/刚起步还没接上样条"那段。
+	 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|循环", meta = (ClampMin = "0.1"))
-	float RouteLostTimeout = 5.0f;
+	float RouteLostTimeout = 3.0f;
+
+	/**
+	 * 车速几乎为 0 连续超过这么久（秒）也回溯到出生点，和裸奔走同一条重置路径。
+	 *
+	 * 补这一条是因为裸奔计时**只在满速时累加**，所以"卡住不动"这种情况它永远不管：
+	 * 车速 0 → `bHasReachedMaxSpeed` 为 false → 计时一直被清零。
+	 * 真卡死的车（挤在墙角、两车顶住、灯态异常）会永久停在那儿。
+	 *
+	 * **但"停着"大多数时候是合法的**，所以分成两个阈值，和下面
+	 * MaxBlockedTime / MaxBlockedTimeAtIntersection 是同一套思路：
+	 * 红灯期间（本车或前车在等灯）用 StalledTimeoutAtIntersection，宽松得多。
+	 * 只用一个阈值的话，红灯 6 秒 + 整队依次起步可能超过它，结果是
+	 * **正常排队的车被一辆辆瞬移走**——那比卡住更难查，因为看起来像是随机消失。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|循环", meta = (ClampMin = "0.5"))
+	float StalledTimeout = 12.0f;
+
+	/**
+	 * 本车或前车正在等红灯时改用的停滞超时（秒），比 StalledTimeout 宽松。
+	 *
+	 * 要大于"一次红灯 + 整条队列依次起步拉开距离"的总时长，否则队尾会被瞬移。
+	 * 参照：LightDuration 实测 6 秒。按实际车流密度定的 15 秒。
+	 *
+	 * **注意它和 MaxBlockedTimeAtIntersection(16) 的先后。** 现在 15 < 16，
+	 * 也就是说红灯下被前车堵住的车会**先**被这里瞬移走，而不是等到 16 秒
+	 * 放弃避让、强行通过。想让"强行通过"先发生，把本值调到 16 以上（比如 18）。
+	 * 两者都是兜底，哪个先触发是取舍：瞬移干净但车会消失重生，
+	 * 强行通过保留车流连续性但可能叠在前车上。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|循环", meta = (ClampMin = "0.5"))
+	float StalledTimeoutAtIntersection = 15.0f;
+
+	/** 车速低于这个值（cm/s）算"停着"。给点余量，别用严格的 0。 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|循环", meta = (ClampMin = "0.0"))
+	float StallSpeedThreshold = 5.0f;
 
 	/**
 	 * 前方探测的最大距离：车头基准点到探测终点的长度。放大能提前发现前车、
@@ -218,6 +263,18 @@ protected:
 	 * 发现前车时基本就到跟前了；900 给到 0.6 秒。
 	 * 它**不决定停多近**——停车间距由 MinFollowDistance 单独控制，
 	 * 这两个分开正是为了"看得远、停得近"。
+	 *
+	 * **别再往上调（2026-10-26 评估后放弃）。** 这条探测是沿车头方向的**直线**扫掠
+	 * （GetDistanceToCarAhead 里 `Start + Forward * ForwardTraceDistance`），
+	 * **不跟着样条弯**。弯道上直线会偏出本车道，偏移量约 L²/(2R)，
+	 * 以曲率半径 4000 估：
+	 *   L=900（当前）偏 101cm，还在半车道（相邻车道间距 360、半宽 180）以内；
+	 *   L=1400 偏 245cm，**已经会探到隔壁车道**；
+	 *   L=2000 偏 500cm，连对向车道都扫得到。
+	 * 误判的表现是**车在弯道上莫名减速、前面根本没有车**，很难往这儿想。
+	 * 曾经把它提到 1400（为了更早减速），评估出上面这个代价后**撤回到 900**，
+	 * 只保留了 MinFollowDistance 的调整。
+	 * 真要看得更远，得把探测改成**沿样条采样**而不是直线扫掠——那是另一件事。
 	 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|避让", meta = (ClampMin = "0.0"))
 	float ForwardTraceDistance = 900.0f;
@@ -243,11 +300,25 @@ protected:
 	 * （提前、平缓地减速）同时停得很近（不会隔着老远就杵住）。
 	 *
 	 * 单位是从探测起点算起的距离，不是车头到车尾的净间距——探测起点已经在车头前
-	 * TraceStartForwardOffset(150)，扫描球本身还有 ForwardTraceRadius(60) 的半径，
-	 * 所以实际保险杠间距大约是 本值 - 90。默认 200 对应约 110 的车距。
+	 * TraceStartForwardOffset(150)，扫描球本身还有 ForwardTraceRadius 的半径，
+	 * 所以实际保险杠间距大约是 本值 +150 -半径。
+	 *
+	 * **200 -> 350（2026-10-26）**：原来 200 对应的车距太贴（视觉上像追尾）。
+	 * 先试过 420，实测偏远，回调到 350。排队时每辆车多占这么多，红灯前的车队会更长——
+	 * 这是想要的效果（看着像真的在排队），但如果某个路口的车道段本身很短，
+	 * 队尾可能溢出到上一段，表现是车卡在接缝处。真遇到就按那条路的段长回调。
+	 *
+	 * **必须小于 ForwardTraceDistance**，两者之间做线性插值
+	 * （cpp 里 `Span = max(ForwardTraceDistance - MinFollowDistance, 1)`）。
+	 * 当前 350 / 900，插值区间 **550**，比原来的 700 窄——也就是"开始减速"到
+	 * "必须停住"之间的距离短了，车更可能冲过 350 这条线一点再停下。
+	 * 但速度系数本身由 SpeedMultiplierChangeRate(0.6/秒) 限速、不可能瞬变，
+	 * 本来就会有过冲；350 的缓冲比原来的 200 宽得多，正好吸收它。
+	 * 如果实测觉得刹得太急，优先回调本值，**不要去调大 ForwardTraceDistance**
+	 * ——那会带来弯道误判，见上面那条。
 	 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|避让", meta = (ClampMin = "0.0"))
-	float MinFollowDistance = 200.0f;
+	float MinFollowDistance = 350.0f;
 
 	/**
 	 * 探测用的碰撞通道，必须和车辆碰撞盒实际"有响应"的通道匹配。
@@ -401,6 +472,12 @@ private:
 
 	bool bIsCurrentlyOnRoute = true;
 	float RouteLostElapsedTime = 0.0f;
+
+	/** 车速几乎为 0 持续了多久。由 TickComponent 累加，起步/重置时清零。 */
+	float StalledElapsedTime = 0.0f;
+
+	/** 蓝图上一次通过 UpdateSpeedState 报上来的车速。组件自己不算移动，只能这样拿。 */
+	float LastKnownSpeed = 0.0f;
 
 	float SpeedMultiplier = 1.0f;
 
