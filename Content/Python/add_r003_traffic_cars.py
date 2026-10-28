@@ -12,7 +12,7 @@ ROAD_PREFIX = 'Lane_MainRoad_R003_'
 COUNT = 5
 TAG = 'DeliveryR003ExtraCarsBatch1'
 MIN_SPACING = 1200.0
-BEHIND_BOX = 300.0
+BEHIND_BOX = 250.0   # 最远 150(球半径)+83(Box 半尺寸)=233，300 在外侧接不上路
 WS = unreal.SplineCoordinateSpace.WORLD
 REPORT = unreal.Paths.project_saved_dir()+'add_r003_traffic_cars.json'
 
