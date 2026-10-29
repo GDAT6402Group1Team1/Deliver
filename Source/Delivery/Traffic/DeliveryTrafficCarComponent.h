@@ -121,14 +121,27 @@ protected:
 
 	/** 关卡开始多久（秒）出第二波。 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0"))
-	float SecondWaveDelay = 10.0f;
+	float SecondWaveDelay = 15.0f;
 
 	/**
 	 * 第二波之后**再**多久（秒）出第三波。是相对上一波的间隔，不是绝对时刻。
-	 * 当前 10 + 15：第二波落在 10 秒、第三波落在 25 秒。
+	 * 当前 15 + 30：出生点畅通时第二波落在 15 秒、第三波落在 45 秒。
+	 * 如果出生点被占用，第三波随第二波的实际生成时间顺延。
 	 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0"))
-	float ThirdWaveDelay = 15.0f;
+	float ThirdWaveDelay = 30.0f;
+
+	/** 出生点附近有交通车时不生成，按此间隔重试（秒）。 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.1"))
+	float WaveSpawnRetryDelay = 2.0f;
+
+	/** 出生点水平净空半径；只检查附近交通车，不影响其他物体。 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0"))
+	float WaveSpawnClearance = 400.0f;
+
+	/** 高架上下层不互相阻挡分波生成。 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0"))
+	float WaveSpawnHeightTolerance = 200.0f;
 
 	/**
 	 * 前车比自己慢时，把前车的 MaxSpeed 提到自己的水平，自己再降
@@ -342,6 +355,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Traffic|避让", meta = (ClampMin = "0.01"))
 	float SpeedMultiplierChangeRate = 1.5f;
 
+	/** 最后一次因前车减速后，至少保持当前跟车速度系数这么久才允许回升；再次减速立即生效并重新计时。 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|避让", meta = (ClampMin = "0.0"))
+	float FollowAccelerationPause = 1.0f;
+
 	/**
 	 * 被前车挡住连续超过这么久（秒）就强制放行，忽略这一次的"前方有车"判定。
 	 * 两条车道汇入同一点时，双方都在对方的前方扫描范围内、都减速到 0 之后彼此的
@@ -453,6 +470,7 @@ private:
 	bool bHasOriginalMaxSpeed = false;
 
 	FTimerHandle NextWaveTimer;
+	bool bWaveSpawnWasBlocked = false;
 	/** BeginPlay 当场记下来的出生变换（含缩放）。之后车会开走，不能到时候再取。 */
 	FTransform SecondWaveTransform = FTransform::Identity;
 
@@ -480,6 +498,8 @@ private:
 	float LastKnownSpeed = 0.0f;
 
 	float SpeedMultiplier = 1.0f;
+	/** 减速结束后到允许重新加速的剩余时间。 */
+	float FollowAccelerationPauseRemaining = 0.0f;
 
 	/** 被前车挡住已经持续了多久，用于死锁超时判定。 */
 	float BlockedElapsedTime = 0.0f;
@@ -517,4 +537,8 @@ public:
 	/** 调试用：被前车挡住已经持续了多久（秒）。 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Traffic|调试")
 	float DebugBlockedElapsed = 0.0f;
+
+	/** 跟车加速还需等待多久（秒）；等待时减速仍可立即生效。 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Traffic|调试")
+	float DebugAccelerationPauseRemaining = 0.0f;
 };

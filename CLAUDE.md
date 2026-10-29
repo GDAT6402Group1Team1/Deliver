@@ -300,6 +300,8 @@
   - **红灯期间的避让死锁超时放宽到 8 秒（2026-09-17）**：新增 `MaxBlockedTimeAtIntersection = 8.0f` 和 `UpdateStoppedAtIntersection(bool)`。蓝图在 `TraceForIntersection` 的 `SetStopatInter` 之后、以及 `OnRouteLost` 的 `SetStopatInter(false)` 之后各调一次。红灯时前车是"合法地长时间不动"、不是死锁，还按 `MaxBlockedTime`（3 秒）就放弃避让的话，后车会在红灯没结束时压上去；`LightDuration` 是 3 秒，8 秒足够覆盖一整个红灯。
   - **红灯超时改为沿车队传递、并放宽到 10 秒（2026-09-24）**：原来的判据只看**本车自己**的 `StopatInter`，而 `TraceForIntersection` 的前瞻距离和车速成正比——队伍里第二辆之后的车已经被前车逼停、前瞻缩到接近 0，根本探不到路口盒，自己的 `bStoppedAtIntersection` 恒为 false，于是只有队首享受宽松超时，后面几辆照样 3 秒就放弃避让怼上前车。现在组件公开 `IsStoppedAtIntersection()`，`GetDistanceToCarAhead()` 扫描时顺手记下最近那辆车的红灯状态（`bLeaderStoppedAtIntersection`，扫不到车时清 false，否则前车开走后还会一直以为"前面在等红灯"），超时判据变成 `bStoppedAtIntersection || bLeaderStoppedAtIntersection`，红灯状态就能一辆辆往后传。阈值同时从 8 秒提到 **10 秒**：要盖住的不只是一个 3 秒红灯，还有前面几辆依次起步、拉开距离的时间，排队越长最后一辆等得越久。`GetDistanceToCarAhead()` 因此去掉了 `const`（它本来就会写前车的 `MaxSpeed`，并非纯查询）。
   - 车辆碰撞盒保持 `Overlap` **没改成 `Block`**：车是运动学的（`bSimulatePhysics=false`，靠 `SetActorLocation` 沿样条走），Block 在不开 sweep 的情况下根本不起作用；而开了 sweep 会和样条跟随打架（样条要它往前、sweep 把它顶回来）导致抖动。"后车停在后方不超车"靠的是修好之后真正生效的前车探测 + 减速，不是物理阻挡。
+  - **分波时间与出生净空（2026-10-29）**：默认开局 15 秒出第二波，再过 30 秒出第三波（畅通时为 45 秒）。生成前服务器检查出生点水平 400 cm、上下 200 cm 内的交通车，包含绕回来的原车；占用则每 2 秒重试，空出来才生成。第三波从第二波实际生成时起算，堵车时顺延。只检查交通车，不把物理 Block 加到运动学车辆上。
+  - **跟车加速延迟（2026-10-29）**：每次需要减速都立即降低跟车系数并重置 `FollowAccelerationPause`（默认 1 秒）；最后一次减速后至少保持当前系数 1 秒，才允许回升。前车在探测边缘反复出现/消失时不会立刻加速，等待期间再次减速不受阻。只冻结跟车系数，不控制蓝图的红灯/加速；PIE 中可看 `DebugAccelerationPauseRemaining`。
 
 - **红绿灯模型（`Content/trafficlight/trafficlight`）自带完整变色循环，不要从外部驱动它。**
   用 `dump_light_bp.py` 导出过真实图表确认：`BeginPlay → set traffic light color(start color)`，
@@ -641,8 +643,10 @@
 逐点测高差 + 沿法线探到路缘的余量）、`diag_road_width.py`（源道路样条两侧路面的实际半宽，
 用中位数避开路口处扫到交叉路造成的虚高）、`diag_spline_tangent.py`（端点/中间点的切线与
 旋转前向是否退化）、`check_turn_targets.py`（每条转弯的终点有没有同向下家）、
-`spawn_test_cars.py`（清掉所有 `BP_car_base` 并在车道段起点重新摆一批测试车，
-六种车型轮换 + 600~1500 的随机 `MaxSpeed`。**不是只读**，见下面「车怎么接上车道」）、
+`spawn_test_cars.py`（清掉所有 `BP_car_base` 并在车道段起点重新摆一批测试车；
+在 `MainRoad_R003` 周围优先 300m 半径内做最远点分散选位，不足再扩到全图，
+原有接线/路面/避让筛子不变；车型带权随机、车速偏向 500~1300 的低速档。
+**不是只读**，见下面「车怎么接上车道」）、
 `diag_lane_gaps.py`（接缝间距 + 高度差）、
 `diag_seams.py`（逐点查落差来源）、`whats_here.py`（某个 actor 附近都有哪些样条）、
 `inventory_level.py`、`audit_traffic_channels.py`（碰撞通道）、`dump_bp_graph.py`（导出蓝图图表）、
@@ -665,10 +669,10 @@ GetFuturePostionandRotationAlongSpline:
   半尺寸）= 233 cm**，Box 挂在车道段的**第一个控制点**上。超出这个距离，
   车只能沿着出生朝向裸奔瞎撞；撞不到就被 `RouteLostTimeout`（3 秒）缩小消失、
   瞬移回出生点，再撞一次——**表现正是「这辆车永远走不上交通线」**。
-  `BEHIND_BOX` 原来是 **300**，正好落在 233 外侧，所以那批车全靠运气。
-  现在是 **250**：刻意略大于 233（250−83=167 > 150），出生姿势下球还没压着 Box，
-  于是第一次有速度的那一跳是一次**真正的 sweep 命中**，不赌「初始重叠算不算命中」
-  这个没实测过的语义；而要走的距离只有 17 cm，裸奔几乎不发生。
+  现在 `BEHIND_BOX` 是 **300**（300−83=217 > 150），出生姿势下球还没压着 Box。
+  车要先直行约 67 cm 才进入探测范围；弯道上可能错过 Box，必须在实际关卡验证。
+  出生 Z 取对应车道 Box 的世界坐标 Z（`CAR_Z` 默认 0），不再取出生点路面 Z；
+  路面射线仍用于拒绝不在路上的出生点。
 - **车不必落在样条起点，也不怕「开过了起点」**：位置是每帧用自己的世界坐标
   现算的。脚本里原来那句「放在起点之后等于一出生就开过了自己的盒子，
   永远接不上路」是错的——门槛是距离，不是先后。

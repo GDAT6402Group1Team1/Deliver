@@ -220,6 +220,8 @@
 - 已导入地图并接入 **PS2DEMImporter**（`Plugins/PS2DEMImporter`，PS2 地形/道路生成插件）用于把地形转换为 landscape spline 道路。
 - 交通路口、红绿灯、道路与门的破碎效果正在搭建：`Content/PS2DEM`（`BP_Intersection`、`BP_TrafficLine*`）、`Content/trafficlight`。车辆沿样条行驶、进路口的 Overlap 检测都写在 `BP_car_base` 事件图里，C++ 侧原本没有对应基类。
 - [Source/Delivery/Traffic/DeliveryTrafficCarComponent.h](Source/Delivery/Traffic/DeliveryTrafficCarComponent.h) —— 挂在 `BP_car_base` 上的辅助组件，不接管移动本身：车辆走完所有预设样条、没接上下一段车道时会脱离路线按最后方向裸奔冲出画面；蓝图每帧用 `UpdateRouteFollowState(bool)` 告诉组件这一帧还在不在跟随预设样条，连续脱离满 5 秒（`RouteLostTimeout`）广播 `OnRouteLost` 让蓝图把车放回起始样条起点、形成循环车流；同时自己在 `TickComponent` 里做前方球形扫描，探测到前方另一辆挂了同组件的车就把 `GetSpeedMultiplier()` 平滑降到 0，蓝图乘到目标速度上即可实现遇前车减速到停、让开后恢复。
+- 分波默认在开局 15 秒生成第二波，再过 30 秒生成第三波（出生点畅通时即 45 秒）。服务器生成前检查出生点周围 400 cm、上下 200 cm 内是否有交通车（包括原车）；被占用时每 2 秒重试，空出来才生成。第三波从第二波实际生成时刻起算，因此堵车时会顺延，不会叠车强行出生。参数在交通组件中可调。
+- 跟车系数在前车探测边缘抖动时不立即回升：每次需要减速都立即响应，并重置 `FollowAccelerationPause`（默认 1 秒）；此后至少保持当前跟车系数 1 秒才允许加速。等待期间再次需要减速仍立即生效；只冻结跟车系数，不覆盖蓝图的红灯/加速逻辑。`DebugAccelerationPauseRemaining` 可在 PIE 中观察等待时间。
 - `BP_car_base` 现为服务器驱动并复制 Actor 移动；`BeginPlay`/`Drive` 仅 Authority 执行。关卡里旧车实例覆盖过 `bReplicates=false`，因此交通组件在服务器 `BeginPlay` 再调用 `SetReplicates(true)`/`SetReplicateMovement(true)`，无需改地图。组件仅在服务器按车轨迹扫 `PhysicsBody`，同车同角色 0.75 秒去重，按相对速度和有效质量算伤害/水平冲量；强撞 HP 归零沿用现有晕倒与 50% 回血起身（`StunRecoverHealthPercent`，原 40%，已放宽）。车组件运行时忽略 `Camera` 通道，墙和地形仍会挡镜头。撞击参数在组件蓝图详情中可调。
 - 测试地图：`Content/Level/TestForCharacter.umap`（角色/互殴）、`Content/Level/testfortraffic.umap`（交通路口）。
 - 旧关卡实例的 `bReplicateMovement=false` 也会覆盖蓝图默认值；组件在服务端和客户端均调用 `SetReplicateMovement(true)`，否则客户端会丢弃服务器位置更新。
@@ -342,8 +344,10 @@
 逐点测高差 + 沿法线探到路缘的余量）、`diag_road_width.py`（源道路样条两侧路面的实际半宽，
 用中位数避开路口处扫到交叉路造成的虚高）、`diag_spline_tangent.py`（端点/中间点的切线与
 旋转前向是否退化）、`check_turn_targets.py`（每条转弯的终点有没有同向下家）、
-`spawn_test_cars.py`（清掉所有 `BP_car_base` 并在车道段起点重新摆一批测试车，
-六种车型轮换 + 600~1500 的随机 `MaxSpeed`。**不是只读**，见下面「车怎么接上车道」）、
+`spawn_test_cars.py`（清掉所有 `BP_car_base` 并在车道段起点重新摆一批测试车；
+在 `MainRoad_R003` 周围优先 300m 半径内做最远点分散选位，不足再扩到全图，
+原有接线/路面/避让筛子不变；车型带权随机、车速偏向 500~1300 的低速档。
+**不是只读**，见下面「车怎么接上车道」）、
 `diag_lane_gaps.py`（接缝间距 + 高度差）、
 `diag_seams.py`（逐点查落差来源）、`whats_here.py`（某个 actor 附近都有哪些样条）、
 `inventory_level.py`、`audit_traffic_channels.py`（碰撞通道）、`dump_bp_graph.py`（导出蓝图图表）、
@@ -366,10 +370,10 @@ GetFuturePostionandRotationAlongSpline:
   半尺寸）= 233 cm**，Box 挂在车道段的**第一个控制点**上。超出这个距离，
   车只能沿着出生朝向裸奔瞎撞；撞不到就被 `RouteLostTimeout`（3 秒）缩小消失、
   瞬移回出生点，再撞一次——**表现正是「这辆车永远走不上交通线」**。
-  `BEHIND_BOX` 原来是 **300**，正好落在 233 外侧，所以那批车全靠运气。
-  现在是 **250**：刻意略大于 233（250−83=167 > 150），出生姿势下球还没压着 Box，
-  于是第一次有速度的那一跳是一次**真正的 sweep 命中**，不赌「初始重叠算不算命中」
-  这个没实测过的语义；而要走的距离只有 17 cm，裸奔几乎不发生。
+  现在 `BEHIND_BOX` 是 **300**（300−83=217 > 150），出生姿势下球还没压着 Box。
+  车要先直行约 67 cm 才进入探测范围；弯道上可能错过 Box，必须在实际关卡验证。
+  出生 Z 取对应车道 Box 的世界坐标 Z（`CAR_Z` 默认 0），不再取出生点路面 Z；
+  路面射线仍用于拒绝不在路上的出生点。
 - **车不必落在样条起点，也不怕「开过了起点」**：位置是每帧用自己的世界坐标
   现算的。脚本里原来那句「放在起点之后等于一出生就开过了自己的盒子，
   永远接不上路」是错的——门槛是距离，不是先后。

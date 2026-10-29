@@ -4,6 +4,7 @@
 #include "Delivery.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "DeliveryCharacter.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
@@ -137,8 +138,15 @@ void UDeliveryTrafficCarComponent::BeginPlay()
 		const int32 Wave = GetWaveIndex();
 		// 第 0 波（关卡里摆好的）生第 1 波，第 1 波生第 2 波，第 2 波到此为止。
 		// 总共三波。少了这道闸就是指数增长。
-		const float Delay = (Wave == 0) ? SecondWaveDelay
-						  : (Wave == 1) ? ThirdWaveDelay
+		// 旧蓝图组件/关卡实例可能把先前默认的 10 秒序列化成覆盖值；
+		// 将这个旧值迁到 15 秒，其他用户自定义延迟仍保持原样。
+		const float EffectiveSecondWaveDelay =
+			FMath::IsNearlyEqual(SecondWaveDelay, 10.0f) ? 15.0f : SecondWaveDelay;
+		// 同理兼容旧蓝图里序列化的第三波 15 秒间隔。
+		const float EffectiveThirdWaveDelay =
+			FMath::IsNearlyEqual(ThirdWaveDelay, 15.0f) ? 30.0f : ThirdWaveDelay;
+		const float Delay = (Wave == 0) ? EffectiveSecondWaveDelay
+					  : (Wave == 1) ? EffectiveThirdWaveDelay
 										: -1.0f;
 		if (Delay >= 0.0f)
 		{
@@ -245,15 +253,53 @@ void UDeliveryTrafficCarComponent::SpawnNextWave()
 {
 	AActor* Owner = GetOwner();
 	UWorld* World = GetWorld();
-	if (!Owner || !World)
+	if (!Owner || !World || !Owner->HasAuthority())
 	{
 		return;
 	}
 
-	// 出生点此刻多半已经有别的车压着（原车刚起步没走远，或者后面排着的车），
-	// 按默认规则会因为碰撞而放弃生成，而"第二波少了几辆"很难发现。
-	// 交通车是运动学的（bSimulatePhysics=false，靠 SetActorLocation 沿样条走），
-	// 短暂重叠不会把谁弹飞，所以明确要求照放不误。
+	// 第一波原车也可能重新绕回出生点，因此包括 Owner 在内检查全部交通车。
+	// 只看水平距离和有限高度差，避免高架上下层互相等待。
+	const FVector SpawnLocation = SecondWaveTransform.GetLocation();
+	AActor* BlockingCar = nullptr;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Other = *It;
+		if (!IsValid(Other) || Other->IsActorBeingDestroyed()
+			|| !Other->FindComponentByClass<UDeliveryTrafficCarComponent>())
+		{
+			continue;
+		}
+		const FVector OtherLocation = Other->GetActorLocation();
+		if (FMath::Abs(OtherLocation.Z - SpawnLocation.Z) <= WaveSpawnHeightTolerance
+			&& FVector::DistSquared2D(OtherLocation, SpawnLocation)
+				< FMath::Square(WaveSpawnClearance))
+		{
+			BlockingCar = Other;
+			break;
+		}
+	}
+	if (BlockingCar)
+	{
+		if (!bWaveSpawnWasBlocked)
+		{
+			UE_LOG(LogDelivery, Log, TEXT("%s: wave=%d 出生点被 %s 占用，每 %.1f 秒重试"),
+				*GetNameSafe(Owner), GetWaveIndex() + 1,
+				*GetNameSafe(BlockingCar), WaveSpawnRetryDelay);
+			bWaveSpawnWasBlocked = true;
+		}
+		World->GetTimerManager().SetTimer(NextWaveTimer, this,
+			&UDeliveryTrafficCarComponent::SpawnNextWave,
+			FMath::Max(0.1f, WaveSpawnRetryDelay), false);
+		return;
+	}
+	if (bWaveSpawnWasBlocked)
+	{
+		UE_LOG(LogDelivery, Log, TEXT("%s: wave=%d 出生点已空，继续生成"),
+			*GetNameSafe(Owner), GetWaveIndex() + 1);
+		bWaveSpawnWasBlocked = false;
+	}
+
 	FActorSpawnParameters Params;
 	Params.Owner = Owner->GetOwner();
 	Params.Instigator = Owner->GetInstigator();
@@ -388,11 +434,31 @@ void UDeliveryTrafficCarComponent::TickComponent(float DeltaTime, ELevelTick Tic
 		BlockedElapsedTime = 0.0f;
 	}
 
-	SpeedMultiplier = FMath::FInterpConstantTo(SpeedMultiplier, Target, DeltaTime, SpeedMultiplierChangeRate);
+	// 刹车不等待；最后一次刹车后保持当前跟车系数至少 1 秒，再允许加速。
+	// 前车在探测边缘反复出现/消失时，不会每次丢失就立刻提速；
+	// 若等待期间再次需要刹车，立即刹车并重新开始计时。
+	if (Target < SpeedMultiplier - KINDA_SMALL_NUMBER)
+	{
+		SpeedMultiplier = FMath::FInterpConstantTo(
+			SpeedMultiplier, Target, DeltaTime, SpeedMultiplierChangeRate);
+		FollowAccelerationPauseRemaining = FollowAccelerationPause;
+	}
+	else
+	{
+		const float PreviousPause = FollowAccelerationPauseRemaining;
+		FollowAccelerationPauseRemaining = FMath::Max(
+			0.0f, FollowAccelerationPauseRemaining - DeltaTime);
+		if (PreviousPause <= 0.0f && Target > SpeedMultiplier + KINDA_SMALL_NUMBER)
+		{
+			SpeedMultiplier = FMath::FInterpConstantTo(
+				SpeedMultiplier, Target, DeltaTime, SpeedMultiplierChangeRate);
+		}
+	}
 
 	DebugSpeedMultiplier = SpeedMultiplier;
 	DebugDistanceAhead = DistanceAhead;
 	DebugBlockedElapsed = BlockedElapsedTime;
+	DebugAccelerationPauseRemaining = FollowAccelerationPauseRemaining;
 }
 
 void UDeliveryTrafficCarComponent::UpdateRouteFollowState(bool bIsFollowingRoute)
@@ -482,6 +548,7 @@ void UDeliveryTrafficCarComponent::NotifyResetToStart()
 	// 不然车瞬移回出生点后可能还带着重置前"正在让路"的残留状态（比如速度系数
 	// 还没插值回 1、卡住计时还没清），跟真正刚出生的车表现不一致。
 	SpeedMultiplier = 1.0f;
+	FollowAccelerationPauseRemaining = 0.0f;
 	BlockedElapsedTime = 0.0f;
 
 	// 车刚被瞬移回出生点，速度也被蓝图归零了，这里跟着回到"还没跑起来"的状态：
@@ -493,6 +560,7 @@ void UDeliveryTrafficCarComponent::NotifyResetToStart()
 	DebugSpeedMultiplier = 1.0f;
 	DebugDistanceAhead = -1.0f;
 	DebugBlockedElapsed = 0.0f;
+	DebugAccelerationPauseRemaining = 0.0f;
 }
 
 void UDeliveryTrafficCarComponent::ProcessVehicleImpacts(float DeltaTime)

@@ -21,11 +21,9 @@
    所以出生点到第一个控制点的距离必须 < 150 + 83 = 233，否则车只能
    靠裸奔瞎撞；撞不到就 RouteLostTimeout(3 秒) 缩小消失、瞬移回出生点，
    再撞一次——表现就是「这辆车永远走不上交通线」。
-   BEHIND_BOX = 250 是**刻意略大于 233** 的：这样出生姿势下球还没碰到
-   Box（250 - 83 = 167 > 150），第一次有速度的那一跳是一次**真正的
-   sweep 命中**，不依赖「初始重叠算不算命中」这个没实测过的语义；
-   而要走的距离只有 17cm，裸奔几乎不发生。
-   **原来写的是 300**，正好落在 233 外侧——那批车全靠裸奔撞运气。
+   BEHIND_BOX = 300：出生姿势下球还没碰到 Box（300 - 83 = 217 > 150），
+   车需要先直行约 67 cm 才进入可探测范围。弯道上这段直行可能错过 Box，
+   需要在实际关卡中验证接线率。
 3. 位置是每帧现算的，所以车不必落在样条起点，也不怕「开过了起点」——
    原来注释里「放在起点之后就永远接不上路」那条是错的，
    真正的门槛是距离，不是先后。
@@ -45,7 +43,8 @@
   * **车道末端必须有下家**（NEXT_MAX + 同向），不然车开到头就裸奔，
     那不是「接不上路」而是「路到头了」，混在一起会把真问题盖住。
 
-挑哪些车道：以 ANCHOR_ROAD 为中心按距离排序，依次过上面几道筛子，
+挑哪些车道：先在 ANCHOR_ROAD 附近落一辆，之后优先挑与已摆车辆最远的
+候选出生点；优先区域内凑不够时才扩展到全图。原有安全筛子仍逐辆执行，
 凑够 MAX_CARS 就停。只影响 BP_car_base 实例，不碰交通线。
 用法：py spawn_test_cars.py
 """
@@ -65,23 +64,28 @@ SCALE_BY_VARIANT = {               # 个别车型模型大小不同，单独给
 }
 LANE_TAG_PREFIX = "ClaudeGenLane"
 
-ANCHOR_ROAD = "MainRoad_R003"   # 以这条路为中心往外挑；"" = 全图均匀挑。
+ANCHOR_ROAD = "MainRoad_R003"   # 优先分布区域的中心；"" = 全图均匀挑。
                            # 两个极端都不要：挨着放会互相判成前车集体停住，
                            # 撒太开（实测 952m x 918m）视口里只看得见一两辆，
                            # 看着像「车都不见了」。锚在 MainRoad_R003 上是因为
                            # R024/R035/R036/R038 几条合并路都横穿它，
                            # 正好顺带验证 _Part 切点处车过不过得去。
+SPREAD_RADIUS = 30000.0     # 优先在锚点周围 300m 内均匀铺开；不够 30 辆才扩到全图。
+                           # 原来按距离由近到远凑数，前 30 辆集中在锚点附近；
+                           # 现在每次选距已摆车最远的出生点，范围大约扩为 600m 直径。
+                           # 只改变候选顺序，不放宽任何路面/接线/避让判据。
 MAX_CARS = 30              # **这是「摆放数」，不是最终车数。**
                            # 组件默认 bSpawnExtraWaves=true，每辆车会在
-                           # **自己的出生点**再克隆两波（10 秒、再 15 秒），
-                           # 所以 25 秒后实际车数 = 摆放数 × 3 = 90 辆。
+                           # **自己的出生点**再克隆两波（15 秒、再 30 秒），
+                           # 出生点畅通时 45 秒后实际车数 = 摆放数 × 3 = 90 辆；
+                           # 被别的交通车占用则每 2 秒重试，实际时间会顺延。
                            # 别直接设 90：那是 270 辆，而且三波是在同一个
                            # 出生点叠出来的，加上避让真生效，容易连锁堵死。
-                           # 想一眼看到全部车、不等 25 秒，去 BP_car_base 的
+                           # 想一眼看到全部车、不等 45 秒，去 BP_car_base 的
                            # Delivery Traffic Car 组件上关掉 bSpawnExtraWaves。
 
-BEHIND_BOX = 250.0         # 沿行进方向退到车道段第一个控制点**之前**这么远。
-                           # 为什么正好是这个数：见文件头第 2 条。
+BEHIND_BOX = 300.0         # 沿行进方向退到车道段第一个控制点**之前**这么远。
+                           # 接线风险见文件头第 2 条。
                            # 调小到 233 以内 → 出生姿势下球已经压着 Box，
                            # 变成「初始重叠算不算命中」的赌注；
                            # 调大到 233 以上越多 → 裸奔距离越长，
@@ -91,7 +95,7 @@ MAX_SPAWN_DIST = 233.0     # 150(球半径) + 83(Box 沿行驶方向的半尺寸
 
 SURFACE_TOL = 150.0        # 出生点实测路面和车道点 Z 差超过这个就跳过这条车道。
                            # 车道点自己带 Z_OFFSET=2，正常只差几厘米；
-                           # 差上百厘米说明退到的那 250cm 已经不在这条路面上
+                           # 差上百厘米说明退到的那 300cm 已经不在这条路面上
                            # （路口桥接段、或者路到头了）。
 COMPETE_R = 300.0          # 出生点这么近有别的段的第一个控制点就跳过：擦着边的
                            # 那种，焊到谁身上取决于 sweep 先碰到哪一个，不确定。
@@ -109,16 +113,16 @@ NEXT_MAX = 700.0           # 车道末端这么远内要有下家段的第一个
                            # 路口段加长和 _Part 切点处的缺口。
 NEXT_DOT = 0.5             # 下家必须大致同向，否则会把对向车道认成下家。
 
-CAR_Z = 0.0                # 车高度微调（加到**实测路面**的 Z 上，不再加到车道点上）。
+CAR_Z = 0.0                # 车高度微调（加到**车道 Box 世界坐标**的 Z 上）。
                            # 注意：**车开起来的高度和这个值无关**——
                            # 焊上样条之后高度完全由 GetLocationAtDistanceAlongSpline
                            # 决定，也就是车道点自己的 Z。所以「车浮着」调这里没用，
                            # 要去调车道的高度剖面（跑 diag_lane_fit.py 逐点测）。
-                           # 这里只管「出生那一两帧站在地上」。
+                           # 这里只管出生那一两帧；默认 0 与 Box 中心同高。
 MIN_LANE_LEN = 1500.0      # 太短的段不放（车还没加速就到头了）
 TAG = "ClaudeTestCar"
 
-# 车速随机：600~1500 的 100 倍数。MaxSpeed 在整张蓝图里没有 Set 节点、
+# 车速随机：500~1300 的 100 倍数。MaxSpeed 在整张蓝图里没有 Set 节点、
 # 是纯配置变量，所以实例上改了就一直有效。
 SPEED_MIN, SPEED_MAX, SPEED_STEP = 500, 1300, 100
 
@@ -141,8 +145,8 @@ VARIANT_WEIGHTS = {
     "BP_car_base3": 0.25,
 }
 
-# 车型**轮换**着用（不随机）：六种车自带不同材质（plastic_red / plastic_yellow /
-# plastic_white / plastic_dark …），本来就互相区分得开，轮换还能保证每种都出场。
+# 车型现在按 VARIANT_WEIGHTS 带权随机；六种车自带不同材质
+# （plastic_red / plastic_yellow / plastic_white / plastic_dark …）。
 # 原来那套 paint() 往蓝图变量/材质参数上写颜色**三十辆全部失败**
 # （上一次报告里是「没上成 × 30」），而且它建的是 MID、编辑器里存不住，已删掉。
 
@@ -246,6 +250,20 @@ def seg_dir(sp, at_start=True):
     return dx / h, dy / h
 
 
+def choose_spread_index(positions, placed, center, radius):
+    """在优先区域内选离已摆车最远的出生点；没有候选才扩到全图。"""
+    cx, cy = center
+    preferred = [i for i, (x, y) in enumerate(positions)
+                 if radius > 0.0 and (x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2]
+    pool = preferred if preferred else range(len(positions))
+    if not placed:
+        return min(pool, key=lambda i: (
+            (positions[i][0] - cx) ** 2 + (positions[i][1] - cy) ** 2, i))
+    return max(pool, key=lambda i: (
+        min((positions[i][0] - x) ** 2 + (positions[i][1] - y) ** 2
+            for x, y, _dx, _dy in placed), -i))
+
+
 def run():
     eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
     world = unreal.get_editor_subsystem(
@@ -321,22 +339,27 @@ def run():
     w("")
     flush()
 
-    # --- 3. 按离锚定道路的距离排序 ---
+    # --- 3. 确定优先分布区域；具体候选每摆成功一辆就重新挑 ---
+    lanes.sort(key=lambda t: t[0])  # 等分时按标签稳定选，重跑结果可复现
+    use_anchor_region = False
     if ANCHOR_ROAD:
         anchor_pts = [sp.get_location_at_distance_along_spline(
                           sp.get_spline_length() * 0.5, WS)
                       for lbl, sp, _p, _d in lanes if ANCHOR_ROAD in lbl]
         if anchor_pts:
+            use_anchor_region = True
             cx = sum(p.x for p in anchor_pts) / len(anchor_pts)
             cy = sum(p.y for p in anchor_pts) / len(anchor_pts)
-            w("锚点 %s 的中心 (%.0f, %.0f)，按离它的距离排序"
-              % (ANCHOR_ROAD, cx, cy))
-            lanes.sort(key=lambda t: (t[2].x - cx) ** 2 + (t[2].y - cy) ** 2)
+            w("锚点 %s 的中心 (%.0f, %.0f)，优先在 %.0f cm 半径内分散摆放"
+              % (ANCHOR_ROAD, cx, cy, SPREAD_RADIUS))
         else:
-            w("!! 没有名字含 %s 的车道段，改为全图顺序" % ANCHOR_ROAD)
-            lanes.sort(key=lambda t: t[0])
+            w("!! 没有名字含 %s 的车道段，改为全图分散摆放" % ANCHOR_ROAD)
+            cx = (min(t[2].x for t in lanes) + max(t[2].x for t in lanes)) * 0.5
+            cy = (min(t[2].y for t in lanes) + max(t[2].y for t in lanes)) * 0.5
     else:
-        lanes.sort(key=lambda t: t[0])
+        cx = (min(t[2].x for t in lanes) + max(t[2].x for t in lanes)) * 0.5
+        cy = (min(t[2].y for t in lanes) + max(t[2].y for t in lanes)) * 0.5
+        w("全图分散摆放，候选车道包围盒中心 (%.0f, %.0f)" % (cx, cy))
     w("")
 
     # --- 4. 逐条过筛子，够数就停 ---
@@ -373,9 +396,21 @@ def run():
         reject[why] = reject.get(why, 0) + 1
         detail.append("   %-32s %s %s" % (lbl[:32], why, extra))
 
-    for lbl, sp, p0, d0 in lanes:
-        if made >= MAX_CARS:
-            break
+    # 用真正的出生点而非车道起点比较间距；下家的判据、路面、
+    # 竞争箱和前车锥体筛子保持原样。
+    def spawn_xy(item):
+        _lbl, _sp, start, direction = item
+        return (start.x - direction[0] * BEHIND_BOX,
+                start.y - direction[1] * BEHIND_BOX)
+
+    remaining = list(lanes)
+    while remaining and made < MAX_CARS:
+        positions = [spawn_xy(item) for item in remaining]
+        # 最远点采样：每成功摆下一辆，就优先补尚未覆盖的区域。
+        # 被安全筛子淘汰的候选不计入 placed，下一轮可换同一区域的别处。
+        chosen = choose_spread_index(positions, placed, (cx, cy),
+                                     SPREAD_RADIUS if use_anchor_region else 0.0)
+        lbl, sp, p0, d0 = remaining.pop(chosen)
         dx, dy = d0
 
         # 4a. 末端要有下家（同向），否则车开到头就裸奔
@@ -400,7 +435,12 @@ def run():
         sx = p0.x - dx * BEHIND_BOX
         sy = p0.y - dy * BEHIND_BOX
 
-        # 4c. 底下要有路面
+        # 4c. 底下要有路面；出生高度取此车道碰撞盒的世界坐标
+        box = sp.get_owner().get_component_by_class(unreal.BoxComponent)
+        if box is None:
+            drop(lbl, "车道没有碰撞盒")
+            continue
+        box_z = box.get_world_location().z
         gz = road_surface_z(world, sx, sy, p0.z)
         if gz is None:
             drop(lbl, "出生点底下没有路面",
@@ -443,7 +483,7 @@ def run():
             continue
 
         # 4f. 放
-        loc = unreal.Vector(sx, sy, gz + CAR_Z)
+        loc = unreal.Vector(sx, sy, box_z + CAR_Z)
         yaw = math.degrees(math.atan2(dy, dx))
         # unreal.Rotator 的构造参数是 (roll, pitch, yaw)，和 C++ 的
         # FRotator(Pitch, Yaw, Roll) 顺序不一样。把 yaw 填进第二个位置
@@ -492,11 +532,19 @@ def run():
     w("=" * 78)
     w("删掉 %d 辆旧车，放置 %d 辆新车（标签 TestCar_xx，tag %s）"
       % (killed, made, TAG))
+    if len(placed) > 1:
+        nearest = sorted(min(math.hypot(x - ox, y - oy)
+                             for j, (ox, oy, _odx, _ody) in enumerate(placed)
+                             if j != i)
+                         for i, (x, y, _dx, _dy) in enumerate(placed))
+        w("出生点最近邻距离：最小 %.0f cm，中位 %.0f cm；最远距分布中心 %.0f cm"
+          % (nearest[0], nearest[len(nearest) // 2],
+             max(math.hypot(x - cx, y - cy) for x, y, _dx, _dy in placed)))
     if made < MAX_CARS:
         w("!! 只凑到 %d 辆（想要 %d）。候选车道 %d 条已全部过完。"
           % (made, MAX_CARS, len(lanes)))
-        w("   下面的淘汰统计就是差额的来源。想要更多车：把 ANCHOR_ROAD 设成")
-        w("   空串（全图挑）、或者调小 FOLLOW_CLEAR。")
+        w("   下面的淘汰统计就是差额的来源。想要更多车可调小 FOLLOW_CLEAR；")
+        w("   想铺得更开可增大 SPREAD_RADIUS，设 ANCHOR_ROAD 为空则全图分散。")
     w("")
     w("淘汰统计（共 %d 条）：" % sum(reject.values()))
     for why, n in sorted(reject.items(), key=lambda kv: -kv[1]):
@@ -516,15 +564,15 @@ def run():
     w("  所以车一定要先动起来才可能接上路。")
     w("  Box 半尺寸 (83,83,390) 挂在车道段第一个控制点上，于是能接上路的")
     w("  最远出生距离是 150+83 = %.0f。" % MAX_SPAWN_DIST)
-    w("  BEHIND_BOX=%.0f 刻意略大于它：出生姿势下球还没压着 Box"
+    w("  BEHIND_BOX=%.0f 大于它：出生姿势下球还没压着 Box"
       % BEHIND_BOX)
     w("  （%.0f-83=%.0f > 150），所以第一次有速度的那一跳是一次真正的 sweep"
       % (BEHIND_BOX, BEHIND_BOX - 83.0))
-    w("  命中，不赌「初始重叠算不算命中」；而要走的距离只有 %.0f cm，"
+    w("  扫描，但需先直行约 %.0f cm 才进入可探测范围；弯道可能错过 Box，"
       % (BEHIND_BOX - MAX_SPAWN_DIST))
-    w("  裸奔几乎不发生。原来是 300，正好在 %.0f 外侧。" % MAX_SPAWN_DIST)
+    w("  应在 Simulate 中逐辆验证接线。出生 Z = 本车道 Box 世界 Z + CAR_Z。")
     w("")
-    w("验证方法：跑 Simulate，正常的车应该**几乎立刻**沿车道走。不该出现")
+    w("验证方法：跑 Simulate，正常的车驶入 Box 附近后应接上车道。不该出现")
     w("  「直线开出去 → 缩小消失 → 回到出生点」的循环——那是")
     w("  RouteLostTimeout(3 秒) 在兜底，说明那辆车没接上路。")
     w("  逐辆跟踪用 monitor_car.py / chase_car.py（每帧回调，不要 sleep 轮询）。")
