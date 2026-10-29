@@ -23,22 +23,75 @@ import traceback
 
 import unreal
 
-ALL_ROADS = True          # True = 关卡里所有道路样条全铺，忽略 CROSSING_WITH。
+# 中间点用 CURVE 还是 CURVE_CLAMPED（首尾一律 CURVE，见下面那段注释）。
+# **True（默认）**：CURVE 的自动切线指向邻点、非零，曲线连续。
+# 为什么要改：CURVE_CLAMPED 的定义行为是**把端点和局部极值处的切线归零**，
+# 而车道的 Z 是逐点打射线测的，路面每个小起伏都制造一个局部极大/极小，
+# 于是那些点的切线被钳成 0，曲线在那里出现"平台 + 折角"——
+# 肉眼看就是**一条折线而不是曲线**（用户 2026-10-29 报的就是这个）。
+# 代价：CURVE 不像 Clamped 那样保证不过冲，点间距不均处可能向外鼓一点。
+# 控制点一个都不动，所以**首尾位置和接缝连接完全不受影响**。
+# 置 False 回到原来的防过冲行为。
+MIDDLE_POINTS_CURVE = True
+
+# ！！**不要改成 True。关卡里有大量手改的交通线（用户 2026-10-29 明确说明）。**
+# `ALL_ROADS = True` 会把全图 38 条路的车道/路口段全部删掉重建，
+# **所有手动调整都会消失**，而且没有任何脚本能复现它们。
+#
+# 曾经一度改成 True，理由是"重建会丢的东西都能被脚本复现"——那张核对表
+# 只核对了脚本产物（LightNumber、转弯样条、Z 偏移、点型），
+# **漏掉了人手改过的部分**，是错的。
+#
+# 现在是**单路模式**：只重建 ROAD_LABELS 里列的路。
+# 即使这样，**那几条路上的手改也会丢**——跑之前先确认那几条没有手改内容。
+# 不想重建又要修某些问题时，用就地修的脚本：
+#   · 折线样     → smooth_lane_tangents.py（只改点型，控制点一个不动）
+#   · 废路口     → drop_intersection.py（解除红灯 + 删盒子，但保留 150cm 接缝）
+#   · 端点切线零 → fix_endpoint_tangents.py（就地改点型，不重建 actor）
+ALL_ROADS = False         # True = 关卡里所有道路样条全铺，忽略 CROSSING_WITH。
                           # 只按 EXCLUDE_ROADS 剔除。河（River/BranchRiver）不是路，
                           # 必须排除，否则会沿着河铺出一条车道来。
-CROSSING_WITH = "形状 13"  # 非空时自动算出要处理的路：这条路 + 所有与它相交的路。
+CROSSING_WITH = ""        # 非空时自动算出要处理的路：这条路 + 所有与它相交的路。
                           # 用的是和切路口同一套 find_intersections，
                           # 以后改样条也不会过期，不用手动维护名单。
                           # 置成 "" 就退回下面的手写名单。
-ROAD_LABELS = ["形状 13", "形状 39"]   # CROSSING_WITH 为空时才用这个
-EXTRA_ROADS = ["形状 40"]              # 无论自动模式算没算到，都追加处理这几条。
+                          # **这次刻意置空**：自动模式会把"所有与 R003 相交的路"
+                          # 一起重建，那些路的 LightNumber 会全部回到默认值，
+                          # 改动面比需要的大得多。
+ROAD_LABELS = ["MainRoad_R003",         # CROSSING_WITH 为空时才用这个
+               "MainRoad_R010",
+               "MainRoad_R008"]        # R003: 不再和 R020 交叉；
+                                       # R010: 不再和 R004/R005 交叉
+                                       #       （两条都要重建才能在那些位置连成直行线）；
+                                       # R008: 修 Inter_MainRoad_R008_+0540_I00
+                                       #       首尾控制点重合（轴角读不到、
+                                       #       自动切线为零）。相邻重合点去重
+                                       #       （阈值 2cm）的代码早就在了，
+                                       #       但只在生成时生效，必须重建这条路。
+EXTRA_ROADS = []                       # 无论自动模式算没算到，都追加处理这几条。
                                       # 自动模式只取"与 形状13 相交的路"，
                                       # 离得远的新路（形状40）永远进不来。
                                       # 加在这里比把 CROSSING_WITH 置空、
                                       # 退回全手写名单好：自动那部分仍然自动。
 EXCLUDE_ROADS = ["形状 43",            # 源样条是坏的：2 个点、首尾同坐标、长度却有 1597
-                 "River", "BranchRiver"]   # 河，不是路
-NO_JUNCTION_WITH = ["River", "BranchRiver"]
+                 "River", "BranchRiver",   # 河，不是路
+                 "BranchRoad_R020",       # 2026-10-29：用户手删了它的交通线，
+                 "MainRoad_R004",          # 这里也排掉，否则重新生成会再铺一遍
+                 "MainRoad_R005",          # R004/R005 对应已废弃的 Intersection_39
+                 "BranchRoad_R031"]        # 2026-10-29 export_manual_edits.py 查出来的
+                                           # 第四条装饰路（一条交通线都没有）
+NO_JUNCTION_WITH = ["River", "BranchRiver",
+                    "BranchRoad_R020",     # 它和 MainRoad_R003 的交叉点
+                    "MainRoad_R004",       # R004/R005 和 MainRoad_R010 的交叉点
+                    "MainRoad_R005",       # （Intersection_39）也不再当路口，
+                    "BranchRoad_R031"]     # R031 同理
+                                           # （约 3826, 18806）不再当路口，
+                                           # 对应已删掉的 Intersection_15。
+                                           # **光加进 EXCLUDE_ROADS 不够**：
+                                           # 被排除的样条仍然参与相交检测，
+                                           # R003 照样会在那里被切断、长出
+                                           # Inter_ 段，gen_intersections 再给它
+                                           # 配一个盒子，等于白删。
 # **不参与路口判定**的样条。和 EXCLUDE_ROADS 是两件事：
 # EXCLUDE_ROADS 只管"不给谁铺车道"，被排除的样条**仍然参与相交检测**，
 # 于是路过河的地方被当成路口切断了（实测 形状16、形状12 都中招），
@@ -970,7 +1023,11 @@ def spawn_lane(eas, cls, pts, label, forward, tag, box_half=None):
     for p in dedup_pts(pts):
         sp.add_spline_point(p, WS, False)
     for i in range(sp.get_number_of_spline_points()):
-        sp.set_spline_point_type(i, unreal.SplinePointType.CURVE_CLAMPED, False)
+        sp.set_spline_point_type(
+            i,
+            unreal.SplinePointType.CURVE if MIDDLE_POINTS_CURVE
+            else unreal.SplinePointType.CURVE_CLAMPED,
+            False)
     # 首尾两点必须用 CURVE 而不是 CURVE_CLAMPED。
     # "Clamped" 的定义行为就是把端点和局部极值处的切线归零，而
     # GetRotationAtDistanceAlongSpline 内部是 MakeFromXZ(切线, Up)——

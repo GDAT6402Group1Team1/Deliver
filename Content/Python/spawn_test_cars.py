@@ -120,7 +120,26 @@ TAG = "ClaudeTestCar"
 
 # 车速随机：600~1500 的 100 倍数。MaxSpeed 在整张蓝图里没有 Set 节点、
 # 是纯配置变量，所以实例上改了就一直有效。
-SPEED_MIN, SPEED_MAX, SPEED_STEP = 600, 1500, 100
+SPEED_MIN, SPEED_MAX, SPEED_STEP = 500, 1300, 100
+
+# 车速**偏向低速**：权重 = (档位数 - 下标) ** SPEED_LOW_BIAS，所以最低档权重最大。
+# 为什么不用均匀分布：均匀取时快车占一半，而快车在这张图上问题最多——
+# 前车探测只有 900cm（弯道上不能再调大），1300 下只有 0.69 秒前瞻；
+# 而且 MinFollowDistance 350 的停车距离是按中低速调的。
+# bias 越大越偏慢：0 = 均匀，1 = 线性递减，2 = 平方递减。
+# 选 1.0：各档 500→1300 分别是 20/18/16/13/11/9/7/4/2%，期望均值 767
+#（均匀分布会是 900）。**没选 2.0**，那样 1300 只剩 0.4%、1200 只剩 1%，
+# 等于把上限砍掉了、"500~1300"这个区间名不副实。
+# 想更慢就调到 1.5~2.0，但要接受高速档基本不出现。
+SPEED_LOW_BIAS = 1.0
+
+# 车型权重。`find_variants()` 把 VEHICLE_DIR 下所有 BP_car_base* 列出来，
+# 原来是 `variants[made % len(variants)]` **轮流**用，每种一样多。
+# 这里改成带权随机，没列出来的车型按 1.0 算。
+# base3 调到 0.25：用户要求它少一些。
+VARIANT_WEIGHTS = {
+    "BP_car_base3": 0.25,
+}
 
 # 车型**轮换**着用（不随机）：六种车自带不同材质（plastic_red / plastic_yellow /
 # plastic_white / plastic_dark …），本来就互相区分得开，轮换还能保证每种都出场。
@@ -324,7 +343,21 @@ def run():
     speeds = list(range(SPEED_MIN, SPEED_MAX + 1, SPEED_STEP))
     rng = random.Random(20261029)      # 固定种子：重跑一次车速分布一样，
                                        # 便于「改了别的东西前后对比」
-    w("车速从 %s 里随机取（固定种子）" % speeds)
+    spd_hist, var_hist = {}, {}
+    n_sp = len(speeds)
+    speed_weights = [float(n_sp - i) ** SPEED_LOW_BIAS for i in range(n_sp)]
+    variant_weights = [VARIANT_WEIGHTS.get(nm, 1.0) for nm, _bp in variants]
+    _tw = sum(speed_weights)
+    w("车速从 %s 里带权随机（固定种子），权重偏低速 bias=%.1f" % (speeds, SPEED_LOW_BIAS))
+    w("   各档概率：%s"
+      % "  ".join("%d:%.0f%%" % (sp, 100.0 * wt / _tw)
+                  for sp, wt in zip(speeds, speed_weights)))
+    w("   期望均值 %.0f（均匀分布会是 %.0f）"
+      % (sum(sp * wt for sp, wt in zip(speeds, speed_weights)) / _tw,
+         sum(speeds) / float(n_sp)))
+    w("车型权重：%s"
+      % "  ".join("%s=%.2f" % (nm, wt) for (nm, _b), wt
+                  in zip(variants, variant_weights)))
     w("")
     w("%-4s %-30s %-14s %-26s %7s %6s %5s %7s %7s"
       % ("#", "车道段", "车型", "出生位置", "朝向", "车速", "缩放",
@@ -417,7 +450,7 @@ def run():
         # 就变成 pitch，车会被竖起来，而且「歪的角度」跟着那个值变，
         # 看着像随机其实是确定的。
         rot = unreal.Rotator(0.0, 0.0, yaw)
-        vname, bp = variants[made % len(variants)]
+        vname, bp = rng.choices(variants, weights=variant_weights, k=1)[0]
         try:
             car = eas.spawn_actor_from_object(bp, loc, rot)
         except Exception as exc:
@@ -438,7 +471,7 @@ def run():
         except Exception:
             pass
 
-        spd = rng.choice(speeds)
+        spd = rng.choices(speeds, weights=speed_weights, k=1)[0]
         try:
             car.modify(True)
             car.set_editor_property("MaxSpeed", float(spd))
@@ -446,6 +479,8 @@ def run():
             w("   !! MaxSpeed 写不进去：%s" % str(exc)[:50])
             spd = -1
 
+        spd_hist[spd] = spd_hist.get(spd, 0) + 1
+        var_hist[vname] = var_hist.get(vname, 0) + 1
         placed.append((sx, sy, dx, dy))
         w("%-4d %-30s %-14s (%7.0f,%8.0f,%7.0f) %7.1f %6s %5.2f %7.0f %7.0f"
           % (made, lbl[:30], vname[:14], loc.x, loc.y, loc.z, yaw,

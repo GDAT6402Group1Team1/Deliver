@@ -30,6 +30,17 @@ import traceback
 
 import unreal
 
+# 中间点用 CURVE 还是 CURVE_CLAMPED（首尾一律 CURVE，见下面那段注释）。
+# **True（默认）**：CURVE 的自动切线指向邻点、非零，曲线连续。
+# 为什么要改：CURVE_CLAMPED 的定义行为是**把端点和局部极值处的切线归零**，
+# 而车道的 Z 是逐点打射线测的，路面每个小起伏都制造一个局部极大/极小，
+# 于是那些点的切线被钳成 0，曲线在那里出现"平台 + 折角"——
+# 肉眼看就是**一条折线而不是曲线**（用户 2026-10-29 报的就是这个）。
+# 代价：CURVE 不像 Clamped 那样保证不过冲，点间距不均处可能向外鼓一点。
+# 控制点一个都不动，所以**首尾位置和接缝连接完全不受影响**。
+# 置 False 回到原来的防过冲行为。
+MIDDLE_POINTS_CURVE = True
+
 LANE_TAG_PREFIX = "ClaudeGenLane"
 ONLY_INTERSECTION = ""   # 只处理这个路口（填 actor 名，如 "Intersection_04"）；"" = 全部
 COLLAPSE_ALL_FIRST = True
@@ -195,7 +206,11 @@ def write_spline(sp, pts):
     for p in dedup_pts(pts):
         sp.add_spline_point(p, WS, False)
     for i in range(sp.get_number_of_spline_points()):
-        sp.set_spline_point_type(i, unreal.SplinePointType.CURVE_CLAMPED, False)
+        sp.set_spline_point_type(
+            i,
+            unreal.SplinePointType.CURVE if MIDDLE_POINTS_CURVE
+            else unreal.SplinePointType.CURVE_CLAMPED,
+            False)
     # 首尾两点必须用 CURVE 而不是 CURVE_CLAMPED。
     # "Clamped" 的定义行为就是把端点和局部极值处的切线归零，而
     # GetRotationAtDistanceAlongSpline 内部是 MakeFromXZ(切线, Up)——

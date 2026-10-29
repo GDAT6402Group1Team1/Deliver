@@ -36,7 +36,13 @@ TARGETS = [
     # 探测球体在路口总是朝车的正右方：终点 = 未来点 + GetForwardVector(Rotation)*200，
     # 方向完全由 GetFuturePostionandRotationAlongSpline 返回的 Rotation 决定，
     # 那是个自定义函数，先把它导出来看。
-    ("/Game/Blueprint/BP_car_base", ["GetFuturePostionandRotationAlongSpline",
+    # 路径 2026-10-29 改过：真资产在 /Game/Vehicle/（500KB），
+    # /Game/Blueprint/BP_car_base 只剩一个 2.2KB 的 ObjectRedirector。
+    # 而 load_asset 会把重定向器当成对象返回（不是 None），所以"加载不到"
+    # 那道检查不会触发，直接走到 list_graph_names 返回 None、报
+    # "全部失败"——看着像 API 坏了，其实是加载到了错的东西。
+    # 看文件大小就能分辨真假（真蓝图几百 KB、重定向器 1~2 KB）。
+    ("/Game/Vehicle/BP_car_base", ["GetFuturePostionandRotationAlongSpline",
                                      "TraceForIntersection",
                                      "TraceForNewPath"]),
 ]
@@ -134,6 +140,18 @@ def dump_one(BP_PATH, WANT, show_api):
     w("#" * 78)
     if bp is None:
         w("!! 加载不到")
+        flush()
+        return
+    # 重定向器也会被 load_asset 成功返回，必须显式认一下类型，
+    # 否则后面所有 API 都对着错的对象调、报一堆"全部失败"。
+    cls_name = bp.get_class().get_name()
+    if cls_name == "ObjectRedirector":
+        w("!! 这个路径只剩一个 ObjectRedirector（资产已搬走），不是蓝图。")
+        w("   在 Content 里按文件大小找真资产：重定向器 1~2KB、真蓝图几百 KB。")
+        flush()
+        return
+    if not isinstance(bp, unreal.Blueprint):
+        w("!! 加载到的是 %s，不是 Blueprint。" % cls_name)
         flush()
         return
 

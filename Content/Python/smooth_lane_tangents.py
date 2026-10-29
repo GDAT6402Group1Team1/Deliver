@@ -38,8 +38,13 @@ import traceback
 
 import unreal
 
-DRY_RUN = False                      # True 只量不改；现在是写入模式
-TARGET_SUBSTR = u"形状39_-0180_S00"   # 标签里包含这段的才处理；留空字符串 = 全部车道
+DRY_RUN = False                       # True 只量不改
+TARGET_SUBSTR = u""                  # 标签里包含这段的才处理；**留空 = 全部**
+                                     # 2026-10-29 放开到全图：用户报"很多交通线和
+                                     # 路口线都是明显的折线样"。根因见下面那段。
+ALL_SPLINES_PER_ACTOR = True         # True = 连 SplineLeft/SplineRight 一起平滑。
+                                     # 路口段身上有三条样条，只平滑主样条的话
+                                     # 转弯那两条在视口里还是折的。
 TAG_PREFIX = "ClaudeGenLane"
 
 # 认为"这个点的切线被钳零了"的阈值。CURVE_CLAMPED 归零是真的置 0，
@@ -131,9 +136,14 @@ def run():
         label = a.get_actor_label()
         if TARGET_SUBSTR and TARGET_SUBSTR not in label:
             continue
-        sp = a.get_component_by_class(unreal.SplineComponent)
-        if sp:
-            targets.append((label, a, sp))
+        comps = a.get_components_by_class(unreal.SplineComponent)
+        if not comps:
+            continue
+        if ALL_SPLINES_PER_ACTOR:
+            for c in comps:
+                targets.append((u"%s · %s" % (label, c.get_name()), a, c))
+        else:
+            targets.append((label, a, comps[0]))
 
     w(u"=== 车道切线平滑 ===")
     w(u"模式：%s" % (u"只量不改（DRY_RUN）" if DRY_RUN else u"**写入**"))

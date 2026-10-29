@@ -31,6 +31,7 @@ DRY_RUN=True 只报不改。只改 LightNumber，不碰别的属性。
 """
 
 import math
+import re
 import traceback
 
 import unreal
@@ -38,19 +39,37 @@ import unreal
 DRY_RUN = False
 SAME_AXIS_TOL = 30.0          # 轴角差小于此值算同轴（和审计脚本一致）
 
+# 两条**不同的路**轴角接近时，要不要并成同一个灯组。
+# **默认 False（不并）**，依据是用户 2026-10-29 在 Intersection_35 的手改：
+# 那里 R008(147°) 和 R010(163°) 只差 16°、会被并进同一组，但它们是两条
+# 交汇的路、车流互相冲突，同时放行不对。用户手动改成「一条路一组」=3 组。
+#
+# 取舍：并错了 → 两股冲突车流同时绿灯（车是运动学+Overlap，不物理撞车而是
+# 互相穿过，另外前车探测会让它们互相停住、MaxBlockedTime 6 秒后强行通过）；
+# 不并 → 真正切向汇入的路口多一个相位，车白等一个 LightDuration。
+# 后者只是慢，前者是错，所以默认不并。
+#
+# 代价要知道：原来靠这个合并变成**单组**的那几个切向汇入路口
+# （实测 7 个单组里有 4 个是这种）现在会变成 2 组、开始交替，
+# 车在那儿会等一个红灯——那里其实没有横向车流。
+# 真遇到觉得多余，把这个开关打开、或者单独把那个路口手调回去。
+MERGE_ROADS_BY_AXIS = False
+
 # 手动调过灯组的路口，填路口 actor 名（如 "Intersection_40"）。
 # **手改过就必须填进来**：否则下次跑本脚本会按轴向重新染色、把手改冲掉。
 # 尤其是"把两个不同轴向并进同一组"这种做法——在本脚本眼里就是
 # 「相交却同组」的错误，它会好心地拆回去。
 # 方向多于两个的那 5 个路口见 Document/TrafficLightGroups.md。
-SKIP_INTERSECTIONS = [
-    # 方向多于两个、等人工定策略的 5 个，详见 Document/TrafficLightGroups.md。
-    # 先跳过的理由：脚本会给它们 3~4 个灯组，等待变成 (N-1)x6 = 12~18 秒，
-    # 而其中 40 / 41 更可能是**路口盒跨了两个路口**（同一条路出现差 48~132° 的
-    # 两个走向），那种情况正解是调盒子、不是开多相位。没定之前不动它们。
-    "Intersection_33", "Intersection_38", "Intersection_39",
-    "Intersection_40", "Intersection_41",
-]
+SKIP_INTERSECTIONS = []
+# **按名字记路口是不可靠的，所以这个名单默认空着。**
+# `gen_intersections.py` 每次按簇顺序重新编号（`Intersection_%02d`），
+# 重建一次 `Intersection_40` 就可能变成别的物理路口。
+# 2026-10-29 实测踩到：名单里留着上一轮的 33/38/39/40/41，重建后
+# 这些名字指向别处——真正要人工处理的那个路口不在名单里、被自动写成了 3 组，
+# 而几个正常路口被白白跳过。
+#
+# 要手动维护某个路口就**按坐标记**（见 Document/TrafficLightGroups.md），
+# 临时填进来跑一次之后清空，别把它当长期配置。
 CHILD_PREFIX = "Inter_"
 INTER_PREFIX = "BP_Intersection"
 
@@ -109,6 +128,13 @@ def overlaps(a_box, b_box):
         if abs(getattr(ac, axis) - getattr(bc, axis)) > getattr(ah, axis) + getattr(bh, axis):
             return False
     return True
+
+
+def road_of(label):
+    """Inter_<路名>_<偏移>_I<序号> -> 路名。认不出来返回整个标签，
+    那样它只会和自己同组，不会误并别的路。"""
+    m = re.match(r'^Inter_(.+)_([+-]\d+)_I(\d+)$', str(label))
+    return m.group(1) if m else str(label)
 
 
 def main_spline(a):
@@ -200,19 +226,29 @@ def run():
         if iname in SKIP_INTERSECTIONS:
             skipped_names.append(iname)
             continue
-        # 轴聚类
-        axes = []
+        # ---- 先按**路**分组，再用轴角决定路与路之间是否合并 ----
+        # 为什么不直接按轴角聚：轴角是按段的**首末连线**量的，而路在路口处
+        # 可能正好弯着。实测 Intersection_38 是标准 T 字（R010 直行 4 段 +
+        # R003 的 2 段），但 R003 那两条车道的弦方向差了 38°，超过 30° 容差
+        # 就被拆成两个"轴"，于是一个 T 字路口被误判成三岔、要开三相位。
+        # **同一条路在一个路口里必然同组**，这个判据比弦角可靠得多。
+        by_road = {}
         for s in sorted(ss, key=lambda x: x["ang"]):
+            by_road.setdefault(s.get("road") or road_of(s["label"]), []).append(s)
+        axes = []
+        for _rd, members in sorted(by_road.items()):
+            ang = sum(x["ang"] for x in members) / len(members)
             hit = None
-            for ax in axes:
-                if axis_diff(ax["ang"], s["ang"]) < SAME_AXIS_TOL:
-                    hit = ax
-                    break
+            if MERGE_ROADS_BY_AXIS:
+                for ax in axes:
+                    if axis_diff(ax["ang"], ang) < SAME_AXIS_TOL:
+                        hit = ax
+                        break
             if hit is None:
-                axes.append({"ang": s["ang"], "segs": [s]})
+                axes.append({"ang": ang, "segs": list(members)})
             else:
-                hit["segs"].append(s)
-                # 用成员均值当代表角，避免链式漂移
+                # 两条路走向接近（切向汇入）→ 合并成一组，它们之间不该互相等灯
+                hit["segs"].extend(members)
                 hit["ang"] = sum(x["ang"] for x in hit["segs"]) / len(hit["segs"])
         axes.sort(key=lambda ax: -len(ax["segs"]))
         if len(axes) > 2:

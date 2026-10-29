@@ -28,7 +28,11 @@ import unreal
 
 # ---- 下面这些必须和 gen_traffic_lanes.py 一致 ----
 ROAD_FOLDERS = ["PS2DEM/Splines/MainRoad", "PS2DEM/Splines/BranchRoad"]
-EXCLUDE_ROADS = [u"形状 43", "River", "BranchRiver"]
+# 和 gen_traffic_lanes.py 保持一致（判据是镜像的，改一边记得改另一边）。
+# R020 在生成器里同时进了 EXCLUDE_ROADS 和 NO_JUNCTION_WITH，这里只需排掉即可。
+EXCLUDE_ROADS = [u"形状 43", "River", "BranchRiver",
+                 "BranchRoad_R020", "MainRoad_R004", "MainRoad_R005",
+                 "BranchRoad_R031"]
 DETECT_STEP = 250.0
 XY_CROSS = 400.0
 Z_CROSS = 600.0
