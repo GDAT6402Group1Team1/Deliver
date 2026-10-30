@@ -18,6 +18,7 @@
 #include "Interaction/DeliveryPromptSubsystem.h"
 #include "Task/DeliveryPhoneCallQueueComponent.h"
 #include "Task/DeliveryGroundArrowComponent.h"
+#include "Task/DeliveryObjectiveRingComponent.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -25,6 +26,7 @@ ADeliveryPlayerController::ADeliveryPlayerController()
 {
 	DialogueVoice = CreateDefaultSubobject<UDeliveryDialogueVoiceComponent>(TEXT("DialogueVoice"));
 	GroundArrow = CreateDefaultSubobject<UDeliveryGroundArrowComponent>(TEXT("GroundArrow"));
+	ObjectiveRing = CreateDefaultSubobject<UDeliveryObjectiveRingComponent>(TEXT("ObjectiveRing"));
 
 	Music = CreateDefaultSubobject<UDeliveryMusicComponent>(TEXT("Music"));
 

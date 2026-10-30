@@ -15,6 +15,7 @@ class UDeliveryMusicComponent;
 class UAudioComponent;
 class USoundBase;
 class UDeliveryGroundArrowComponent;
+class UDeliveryObjectiveRingComponent;
 class UUserWidget;
 
 /**
@@ -32,6 +33,10 @@ public:
 	/** 当前任务的脚边方向箭头；上下摩托车时持续存在。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|Guidance")
 	TObjectPtr<UDeliveryGroundArrowComponent> GroundArrow;
+
+	/** 当前任务目的地的地面圈。和脚边箭头同位置、同一个目的地来源。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery")
+	TObjectPtr<UDeliveryObjectiveRingComponent> ObjectiveRing;
 
 	/** 本机人物电子语音生成器。电话/NPC UI 都复用这一份。 */
 	UFUNCTION(BlueprintPure, Category="Delivery|Voice")
