@@ -167,3 +167,7 @@ DeliveryInteractionRegistry 是世界子系统，每个世界分别保存交互�
 ## 对象事件与游戏音效
 
 `Events/DeliveryEventComponent` 提供对象范围的本地事件，`Audio/DeliveryAudioComponent` 在开始时订阅、结束时解绑，通过 `DeliveryAudioConfig.Sounds` 查找一次性音效。角色取件和交付 RPC 只发布事件；车辆用命名枚举的 `MulticastVehicleEvent` 代替数字音效编号。`DeliveryVehicleAudioComponent` 继承普通音效组件，独立控制原 EngineAudio 的循环播放，车辆只传入驾驶状态和速度比例。配置资源为 `/Game/Sound/Config/DA_PlayerAudio` 与 `DA_VehicleAudio`，原蓝图参数已迁移，地图车辆无单独音效覆盖。背景音乐、电子语音、电话音效保持原流程，未全部纳入新事件。详见 Document/GameplayAudio.md
+
+输入与操作提示的职责、通知来源和按键配置见 [InputHints.md](InputHints.md)
+
+手机处理器、HUD 与 PC 的职责见 [PhoneMVC.md](PhoneMVC.md)

@@ -93,8 +93,8 @@ bool UDeliveryTaskController::PushCallState(UDeliveryPhoneCallQueueComponent *Ph
         // 提示使用实际绑定的手机键名，改键后同步更新
 
         const ADeliveryPlayerController *Owner = Cast<ADeliveryPlayerController>(Player.Get());
-        const FText Key = (Owner && Owner->TogglePhoneKey.IsValid()) ? Owner->TogglePhoneKey.GetDisplayName()
-                                                                     : LOCTEXT("PhoneKeyFallback", "手机键");
+        const FText MappedKey = Owner ? Owner->GetPhoneKeyText() : FText::GetEmpty();
+        const FText Key = MappedKey.IsEmpty() ? LOCTEXT("PhoneKeyFallback", "手机键") : MappedKey;
         SetDisplay(FText::Format(LOCTEXT("Ringing", "来电：{0}"), Content.CallerName),
                    FText::Format(LOCTEXT("RingingHint", "按 {0} 接听　（{1} 秒后转未接）"), Key,
                                  FText::AsNumber(FMath::CeilToInt(Phone->GetStateRemainingSeconds()))),

@@ -54,13 +54,22 @@ void UDeliveryPromptSubsystem::PushPrompt(const FText& Text, const FVector& Worl
 	EnsureWidget();
 }
 
-// 更新角落中的操作说明
-void UDeliveryPromptSubsystem::PushCornerHint(const FText& Text, bool bDimmed)
+// 角落提示由提示组件明确更新，不再依赖持续刷新时间戳
+void UDeliveryPromptSubsystem::SetCornerHint(UObject* Source, const FText& Text, bool bDimmed)
 {
-	CornerText = Text;
-	bCornerDimmed = bDimmed;
-	LastCornerPushTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-	EnsureWidget();
+    if (!IsValid(Source)) return;
+    CornerSource = Source;
+    CornerText = Text;
+    bCornerDimmed = bDimmed;
+    EnsureWidget();
+}
+
+// 旧角色退出时不能清掉新来源已经写入的提示
+void UDeliveryPromptSubsystem::ClearCornerHint(const UObject* Source)
+{
+    if (CornerSource.Get() != Source) return;
+    CornerSource.Reset();
+    CornerText = FText::GetEmpty();
 }
 
 // 目的地与字幕
@@ -92,19 +101,18 @@ void UDeliveryPromptSubsystem::ClearSubtitle()
 	bSubtitleVisible = false;
 }
 
+// 提示有效性检查
+
 bool UDeliveryPromptSubsystem::IsObjectiveFresh() const
 {
 	const UWorld* World = GetWorld();
 	return World && (World->GetTimeSeconds() - LastObjectivePushTime) < PromptTimeout;
 }
 
-bool UDeliveryPromptSubsystem::IsCornerFresh() const
+bool UDeliveryPromptSubsystem::HasCornerHint() const
 {
-	const UWorld* World = GetWorld();
-	return World && (World->GetTimeSeconds() - LastCornerPushTime) < PromptTimeout;
+    return CornerSource.IsValid() && !CornerText.IsEmpty();
 }
-
-// 提示有效性检查
 
 bool UDeliveryPromptSubsystem::IsPromptFresh() const
 {
@@ -214,7 +222,7 @@ void UDeliveryPromptSubsystem::EnsureWidget()
 	    [WeakThis]()
 	    {
 		    const UDeliveryPromptSubsystem* Self = WeakThis.Get();
-		    return (Self && Self->IsCornerFresh()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+		    return (Self && Self->HasCornerHint()) ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
 	    });
 	const auto CornerTextAttr = TAttribute<FText>::CreateLambda(
 	    [WeakThis]()

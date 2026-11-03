@@ -8,10 +8,11 @@
 
 class ADeliveryMotorbike;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDeliveryCooldownChanged);
+
 /**
- * 管理载具召唤、冷却和本机按键提示
- * 服务器记录下次可召唤时间，只同步给所属玩家
- * 组件单独更新提示，不依赖角色按需开启的逐帧更新
+ * 在服务器检查召唤条件，生成或移动车辆并记录冷却结束时间
+ * 将冷却时间同步给操作玩家，时间变化时通知提示组件
  */
 UCLASS(ClassGroup = (Delivery), meta = (BlueprintSpawnableComponent))
 
@@ -22,8 +23,6 @@ class DELIVERY_API UDeliveryVehicleSummonComponent : public UActorComponent
   public:
 	UDeliveryVehicleSummonComponent();
 
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
-	                           FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// 召唤操作
@@ -56,19 +55,11 @@ class DELIVERY_API UDeliveryVehicleSummonComponent : public UActorComponent
 	UPROPERTY(EditDefaultsOnly, Category = "Vehicle|Summon")
 	TSoftClassPtr<ADeliveryMotorbike> DefaultVehicleClass;
 
-	// 本机提示
-	/** 左下角提示文案；%s 会被替换成按键名 */
-	UPROPERTY(EditDefaultsOnly, Category = "Vehicle|Summon")
-	FText ReadyHintFormat;
+    /** 有可召回的车辆，或允许在空地图生成默认车型时显示召唤操作 */
+    bool CanOfferSummon() const;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Vehicle|Summon")
-	FText CooldownHintFormat;
-
-	/** 提示里显示的按键名；由角色在绑定按键时写进来，保证显示和实际绑的键一致 */
-	void SetDisplayKeyName(const FText& InKeyName)
-	{
-		DisplayKeyName = InKeyName;
-	}
+    UPROPERTY(BlueprintAssignable, Category="Vehicle|Summon")
+    FDeliveryCooldownChanged OnCooldownChanged;
 
   private:
 	// 服务器召唤与车辆查询
@@ -78,13 +69,12 @@ class DELIVERY_API UDeliveryVehicleSummonComponent : public UActorComponent
 	/** 服务器：找一辆没人骑的、离玩家最近的车 */
 	ADeliveryMotorbike* FindSummonTarget() const;
 
-	/** 本机：把左下角那条提示推给浮窗子系统 */
-	void PushHint();
+    UFUNCTION()
+    void OnRep_ReadyServerTime();
 
 	// 同步冷却时间
 	/** 服务器世界时间，到了这个时刻才能再召唤 */
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing=OnRep_ReadyServerTime)
 	float ReadyServerTime = 0.0f;
 
-	FText DisplayKeyName;
 };

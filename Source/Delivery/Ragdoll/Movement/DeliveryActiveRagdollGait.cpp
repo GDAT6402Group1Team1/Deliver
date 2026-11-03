@@ -12,13 +12,14 @@
 
 // 左右脚的迈步安排
 
-// 步态入口：先区分支撑、摆动和恢复状态，再决定是否开始新一步
-// 脚部目标用于驱动物理运动，实际脚位置仍受碰撞和关节约束影响
+// 先推进已经抬起的脚，再检查恢复与站姿，最后选择下一只迈步脚
+// BeginStep 记录起点，UpdateFootTarget 推进目标，物理控制器带动实际脚部
 void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector& Wish)
 {
 	// 调用者已经排除了跳跃和晕倒；这里只在角色还能站立时把两只脚维持在各自一侧
 	if (GetUprightDot() >= MinimumStepUprightDot)
 		KeepFeetOnOwnSide();
+	// 先完成已有步伐，避免每帧重新选择起点
 	UpdateFootTarget(Movement.LeftFoot, DeltaTime);
 	UpdateFootTarget(Movement.RightFoot, DeltaTime);
 	ApplySlopeSupportTraction(DeltaTime);
@@ -51,6 +52,7 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 		return;
 	}
 
+	// 身体过度倾斜或仍有脚在摆动时，不开始下一步
 	if (GetUprightDot() < MinimumStepUprightDot || Movement.LeftFoot.Alpha < 1.0f || Movement.RightFoot.Alpha < 1.0f)
 	{
 		return;
@@ -108,6 +110,7 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 		return;
 	}
 
+	// 优先迈落在后面的脚，两脚前后接近时按左右顺序轮换
 	const float LeftForward = FVector::DotProduct(Mesh->GetCenterOfMass(Movement.LeftFoot.Bone) - Hips, Forward);
 	const float RightForward = FVector::DotProduct(Mesh->GetCenterOfMass(Movement.RightFoot.Bone) - Hips, Forward);
 	const bool bStepLeft = FMath::Abs(LeftForward - RightForward) > MovingCrossingRecoveryMargin
@@ -192,10 +195,8 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FDeliveryRagdollFoot& Foo
 			Movement.bPendingStopRecovery = true;
 		}
 
-		// 落脚事件挂在这里，不是挂 Alpha>=1
-		// 上面那条 `Foot.Alpha = 0.999f; return;` 是在等物理脚追上目标——
-		// 那时候脚还悬在半空，按 Alpha 判会让声音比画面早小半步
-		// 走到这一行才说明脚真的到位了（或者等超时放弃，那时也确实该落地了）
+		// 到位或等待超时后结束这一步并发出脚步反馈
+		// 这里包含超时退出，不表示已经确认脚掌接触地面
 		const bool bLeftFoot = (&Foot == &Movement.LeftFoot);
 		const FVector Landed = Mesh->GetCenterOfMass(Foot.Bone);
 		OnFootPlanted.Broadcast(bLeftFoot, Landed);

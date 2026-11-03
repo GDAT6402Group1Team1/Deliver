@@ -15,8 +15,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliverPunchHitWindow, EMeleeHand, 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliverPunchEnded, EMeleeHand, Hand);
 
 /**
- * 布娃娃近战表现：按瞄准方向给手臂冲量，释放后持续检查拳路，结束时关闭检测
- * 伤害与冷却由能力系统管理
+ * 管理一次出拳的准备、释放和结束，释放时给手臂施加冲量
+ * 服务器在物理更新后记录拳头路径，GatherHits 沿该路径查询目标
+ * OnPunchHitWindow 通知 GA_DeliverPunch 结算，结束或取消时关闭检测
+ * 身体姿态交给 ActiveRagdoll，伤害与冷却交给能力系统
  */
 UCLASS(ClassGroup = (Delivery), meta = (BlueprintSpawnableComponent))
 

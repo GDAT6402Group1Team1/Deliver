@@ -5,7 +5,7 @@
 #include "Components/ActorComponent.h"
 #include "DeliveryEventComponent.generated.h"
 
-/** 描述已经发生的操作，不指定声音或界面资源 */
+/** 取件、交付、上下车等操作的事件名称 */
 UENUM(BlueprintType)
 enum class EDeliveryEvent : uint8
 {
@@ -20,7 +20,10 @@ enum class EDeliveryEvent : uint8
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryEventDelegate, EDeliveryEvent, Event);
 
-/** 当前对象的本地事件，网络通知由业务对象负责 */
+/**
+ * 将角色或车辆发布的事件交给已绑定到 OnEvent 的函数
+ * 此组件不发送网络消息，跨端通知由 DeliveryCharacter 和 DeliveryMotorbike 的 RPC 完成
+ */
 UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryEventComponent : public UActorComponent
 {
@@ -28,10 +31,11 @@ class DELIVERY_API UDeliveryEventComponent : public UActorComponent
 public:
     UDeliveryEventComponent();
 
+    /** 音效组件将 HandleEvent 绑定到这里，收到事件后查找并播放声音 */
     UPROPERTY(BlueprintAssignable, Category="事件")
     FDeliveryEventDelegate OnEvent;
 
-    /** 通知当前对象的监听者，不自动向服务器或其他客户端发送 */
+    /** 立即调用绑定到 OnEvent 的函数，并传入事件类型 */
     UFUNCTION(BlueprintCallable, Category="事件")
     void Publish(EDeliveryEvent Event);
 };

@@ -10,7 +10,7 @@ UDeliveryAudioComponent::UDeliveryAudioComponent()
     PrimaryComponentTick.bCanEverTick = false;
 }
 
-// 只监听当前对象，多个角色之间不共用订阅列表
+// 在所属角色或车辆上找到 Events，将 HandleEvent 绑定到 OnEvent
 void UDeliveryAudioComponent::BeginPlay()
 {
     Super::BeginPlay();
@@ -31,7 +31,7 @@ void UDeliveryAudioComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
-// 没有配置的事件不发声，其他监听者仍会收到通知
+// 用事件类型查找声音，配置或声音为空时跳过播放
 void UDeliveryAudioComponent::HandleEvent(EDeliveryEvent Event)
 {
     if (!Config || GetNetMode() == NM_DedicatedServer)

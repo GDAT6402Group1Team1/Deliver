@@ -149,7 +149,8 @@ FTransform UDeliveryRagdollCombatComponent::GetPunchTraceTransform() const
     return FTransform(CachedAimDir.ToOrientationQuat(), Location);
 }
 
-// 物理更新后检查拳头经过的路径，低帧率时也不会跳过两帧之间的目标
+// 物理后记录拳头路径，再通知技能调用 GatherHits 查询并结算
+// 两帧位置之间做扫掠，减少只检查当前拳头位置造成的漏检
 void UDeliveryRagdollCombatComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     FActorComponentTickFunction* ThisTickFunction)
 {
@@ -160,6 +161,7 @@ void UDeliveryRagdollCombatComponent::TickComponent(float DeltaTime, ELevelTick 
     TraceStart = PreviousTraceCenter;
     TraceEnd = GetPunchTraceTransform().GetLocation();
     PreviousTraceCenter = TraceEnd;
+    // 窗口内每帧通知一次，同一拳的重复目标由技能中的 HitActors 排除
     OnPunchHitWindow.Broadcast(ActiveHand);
 }
 
@@ -176,6 +178,7 @@ void UDeliveryRagdollCombatComponent::FirePunchEnded()
     SetComponentTickEnabled(false);
     ActiveRagdoll->EndBodyDrivenPunch();
     bIsPunching = false;
+    // 检测已关闭，技能收到通知后结束并解绑；手臂姿态继续完成收拳
     OnPunchEnded.Broadcast(ActiveHand);
 }
 
@@ -213,7 +216,7 @@ TArray<AActor *> UDeliveryRagdollCombatComponent::GatherHits(EMeleeHand Hand) co
         if (Other && Other != Owner && Other->GetPlayerState<ADeliverPlayerState>() &&
             Other->GetActiveRagdoll() && Other->GetActiveRagdoll()->IsRagdollActive())
         {
-            // 一个角色有多个刚体，同一拳命中多个部位也只结算一次
+            // 本次查询中合并同一角色的多个刚体；跨帧去重由技能负责
             Results.AddUnique(Other);
         }
     }

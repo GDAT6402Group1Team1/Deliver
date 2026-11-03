@@ -4,6 +4,8 @@
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Player/DeliveryPlayerController.h"
+#include "UI/Controllers/DeliveryPhoneController.h"
 
 ADeliveryHUD::ADeliveryHUD()
 {
@@ -75,6 +77,52 @@ void ADeliveryHUD::RemoveHotbar()
 
 void ADeliveryHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    if (PhoneController) PhoneController->Shutdown();
+    PhoneController = nullptr;
+    OpenPanels.Reset();
+    ApplyInputMode();
     RemoveHotbar();
     Super::EndPlay(EndPlayReason);
+}
+
+void ADeliveryHUD::BeginPlay()
+{
+    Super::BeginPlay();
+    GetPhoneController();
+}
+
+UDeliveryPhoneController* ADeliveryHUD::GetPhoneController()
+{
+    auto* Player = Cast<ADeliveryPlayerController>(GetOwningPlayerController());
+    if (!PhoneController && Player && Player->IsLocalController())
+    {
+        PhoneController = NewObject<UDeliveryPhoneController>(this);
+        PhoneController->Initialize(Player, this);
+    }
+    return PhoneController;
+}
+
+void ADeliveryHUD::SetPanelOpen(FName PanelId, bool bOpen)
+{
+    if (PanelId.IsNone()) return;
+    const bool bWasOpen = IsAnyPanelOpen();
+    if (bOpen) OpenPanels.Add(PanelId);
+    else OpenPanels.Remove(PanelId);
+    // 只有首个面板打开或最后一个面板关闭时才改变输入模式，避免反复抢焦点
+    if (bWasOpen != IsAnyPanelOpen()) ApplyInputMode();
+}
+
+void ADeliveryHUD::ApplyInputMode()
+{
+    APlayerController* Player = GetOwningPlayerController();
+    if (!Player || !Player->IsLocalController()) return;
+    Player->bShowMouseCursor = IsAnyPanelOpen();
+    if (IsAnyPanelOpen())
+    {
+        FInputModeGameAndUI Mode;
+        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        Mode.SetHideCursorDuringCapture(false);
+        Player->SetInputMode(Mode);
+    }
+    else Player->SetInputMode(FInputModeGameOnly());
 }

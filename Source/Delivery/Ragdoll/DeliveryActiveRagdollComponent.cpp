@@ -1,8 +1,9 @@
 // 管理布娃娃状态，并按物理阶段调度控制更新与网络采样
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-// 物理计算前更新身体、双脚和手臂目标，计算后采集姿态并同步角色位置
-// 身体目标沿地面调整，双脚轮流寻找支撑；进入陡坡翻滚时暂停主动控制
+// StartRagdoll 建立刚体和控制，之后每帧按物理前、物理后两阶段更新
+// 行走目标在 Movement/DeliveryActiveRagdollStance.cpp 与 Gait.cpp 中计算
+// 出拳姿态在 Combat 目录中更新，实际伤害由 GA_DeliverPunch 结算
 
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Character/DeliveryCharacter.h"
@@ -105,6 +106,7 @@ void UDeliveryActiveRagdollComponent::TickComponent(float DeltaTime, ELevelTick 
     UpdateActionState();
     if (!bIsActive) return;
 
+    // 两次更新共用此入口，不能在物理计算前采集本帧的最终姿态
     if (ThisTickFunction == &PostPhysicsTickFunction)
         UpdateAfterPhysics(DeltaTime);
     else
@@ -113,7 +115,7 @@ void UDeliveryActiveRagdollComponent::TickComponent(float DeltaTime, ELevelTick 
 
 // 动作状态与物理目标
 
-// 保留原有检查时机，前后物理阶段都处理失效动作和到期受击
+// 两个物理阶段都先取消失效动作，并恢复到期的受击控制
 void UDeliveryActiveRagdollComponent::UpdateActionState()
 {
 	if (SwingAxe.IsValid())
@@ -199,6 +201,7 @@ void UDeliveryActiveRagdollComponent::UpdateAfterPhysics(float DeltaTime)
 	{
 		if (Network.ShouldCapture(DeltaTime, NetworkSnapshotRate))
 		{
+			// 采集物理计算后的实际刚体姿态，不发送尚未到达的控制目标
 			CaptureNetworkSnapshot();
 		}
 	}

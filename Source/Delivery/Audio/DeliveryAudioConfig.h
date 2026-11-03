@@ -8,7 +8,7 @@
 
 class USoundBase;
 
-/** 一次事件的播放设置 */
+/** 一种事件使用的声音、音量、音调和播放位置 */
 USTRUCT(BlueprintType)
 struct FDeliverySoundSettings
 {
@@ -28,7 +28,7 @@ struct FDeliverySoundSettings
     bool bSpatial = false;
 };
 
-/** 事件到声音的配置，不保存正在播放的状态 */
+/** 在编辑器中指定每种事件使用的声音和播放参数 */
 UCLASS(BlueprintType)
 class DELIVERY_API UDeliveryAudioConfig : public UDataAsset
 {
@@ -38,7 +38,7 @@ public:
     TMap<EDeliveryEvent, FDeliverySoundSettings> Sounds;
 };
 
-/** 车辆共用事件音效配置，并增加发动机参数 */
+/** 配置上下车等事件的声音，以及发动机的循环声音、音调和音量 */
 UCLASS(BlueprintType)
 class DELIVERY_API UDeliveryVehicleAudioConfig : public UDeliveryAudioConfig
 {

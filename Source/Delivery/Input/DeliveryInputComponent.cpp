@@ -15,11 +15,18 @@
 UDeliveryInputComponent::UDeliveryInputComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
-    SummonVehicleKey = EKeys::R;
+    // 这些动作先保存资源路径，绑定时再取得实际的 IA 对象
+    SummonAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_SummonVehicle.IA_SummonVehicle")));
+    for (int32 Slot = 1; Slot <= 5; ++Slot)
+    {
+        const FString Name = FString::Printf(TEXT("IA_InventorySlot%d"), Slot);
+        InventoryActions.Add(TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/") + Name + TEXT(".") + Name)));
+    }
     InteractAction =
         TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
     PickupAction =
         TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Pickup.IA_Pickup")));
+    // 基础动作随组件加载，蓝图仍可覆盖这些默认配置
     static ConstructorHelpers::FObjectFinder<UInputAction> LookActionFinder(
         TEXT("/Game/Input/Actions/IA_Look"));
     if (LookActionFinder.Succeeded())
@@ -69,10 +76,10 @@ UDeliveryInputComponent::UDeliveryInputComponent()
 // 绑定步行输入，玩法组件仍负责检查操作条件
 void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
 {
+    // 同一个输入组件只绑定一次，避免按一次键触发多次操作
     if (!PlayerInputComponent || BoundInput.Get() == PlayerInputComponent) return;
     Character = Cast<ADeliveryCharacter>(GetOwner());
     if (!Character) return;
-    UDeliveryVehicleSummonComponent* VehicleSummon = Character->FindComponentByClass<UDeliveryVehicleSummonComponent>();
     UEnhancedInputComponent *EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent);
     if (!EnhancedInputComponent)
     {
@@ -82,6 +89,7 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
 
     // 记住本次绑定对象，同一输入组件再次传入时不重复绑定
     BoundInput = PlayerInputComponent;
+    // 视角持续接收输入，鼠标单独应用灵敏度
     if (LookAction)
     {
         EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this,
@@ -92,6 +100,7 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
         EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this,
                                            &UDeliveryInputComponent::MouseLook);
     }
+    // 松开移动键时也调用 Move，将移动方向清零
     if (MoveAction)
     {
         EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this,
@@ -99,12 +108,14 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
         EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this,
                                            &UDeliveryInputComponent::Move);
     }
+    // 跳跃只处理按下，不随持续按住重复发起
     if (JumpAction)
     {
         EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this,
                                            &UDeliveryInputComponent::JumpStarted);
     }
-    // 攻击完成和输入取消都结束蓄力，避免切换输入状态后仍保持出拳准备
+    // 左右键先交给组合键判断，松开和取消统一进入释放处理
+    // 单键用于出拳，短时间内双键按下用于抓取
     if (AttackLeftAction)
     {
         EnhancedInputComponent->BindAction(AttackLeftAction, ETriggerEvent::Started, this,
@@ -123,11 +134,13 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
         EnhancedInputComponent->BindAction(AttackRightAction, ETriggerEvent::Canceled, this,
                                            &UDeliveryInputComponent::AttackRightEnded);
     }
+    // 交互和拾取使用软引用，绑定前确保 IA 已加载；已在内存中则直接使用
     if (UInputAction *Interact = InteractAction.LoadSynchronous())
     {
         EnhancedInputComponent->BindAction(Interact, ETriggerEvent::Started, this,
                                            &UDeliveryInputComponent::InteractStarted);
     }
+    // 按下开始长按拾取，松开或取消时结束本次长按
     if (UInputAction *Pickup = PickupAction.LoadSynchronous())
     {
         EnhancedInputComponent->BindAction(Pickup, ETriggerEvent::Started, this,
@@ -138,33 +151,21 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
                                            &UDeliveryInputComponent::PickupEnded);
     }
 
-    // 数字键 1 丢弃手中物品，2 至 5 将对应槽位与手中物品交换
-    PlayerInputComponent->BindKey(EKeys::One, IE_Pressed, this, &UDeliveryInputComponent::InventorySlot1);
-    PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &UDeliveryInputComponent::InventorySlot2);
-    PlayerInputComponent->BindKey(EKeys::Three, IE_Pressed, this, &UDeliveryInputComponent::InventorySlot3);
-    PlayerInputComponent->BindKey(EKeys::Four, IE_Pressed, this, &UDeliveryInputComponent::InventorySlot4);
-    PlayerInputComponent->BindKey(EKeys::Five, IE_Pressed, this, &UDeliveryInputComponent::InventorySlot5);
-    // 为手柄绑定相同的物品操作，方向键上仍用于打开手机
-    PlayerInputComponent->BindKey(EKeys::Gamepad_DPad_Down, IE_Pressed, this,
-                                  &UDeliveryInputComponent::InventorySlot1);
-    PlayerInputComponent->BindKey(EKeys::Gamepad_DPad_Left, IE_Pressed, this,
-                                  &UDeliveryInputComponent::InventorySlot2);
-    PlayerInputComponent->BindKey(EKeys::Gamepad_DPad_Right, IE_Pressed, this,
-                                  &UDeliveryInputComponent::InventorySlot3);
-    PlayerInputComponent->BindKey(EKeys::Gamepad_LeftShoulder, IE_Pressed, this,
-                                  &UDeliveryInputComponent::InventorySlot4);
-    PlayerInputComponent->BindKey(EKeys::Gamepad_RightShoulder, IE_Pressed, this,
-                                  &UDeliveryInputComponent::InventorySlot5);
-
-    if (SummonVehicleKey.IsValid())
+    // 键盘和手柄映射到同一个动作，只绑定一次物品操作
+    for (int32 Slot = 0; Slot < FMath::Min(InventoryActions.Num(), 5); ++Slot)
     {
-        PlayerInputComponent->BindKey(SummonVehicleKey, IE_Pressed, this,
-                                      &UDeliveryInputComponent::SummonVehiclePressed);
-        if (VehicleSummon)
+        // 回调同时保存槽位索引，触发时直接交给背包
+        if (UInputAction* Action = InventoryActions[Slot].LoadSynchronous())
         {
-            // 使用实际绑定的键名显示提示，避免改键后提示仍显示旧按键
-            VehicleSummon->SetDisplayKeyName(SummonVehicleKey.GetDisplayName(false));
+            EnhancedInputComponent->BindAction(Action, ETriggerEvent::Started, this,
+                                               &UDeliveryInputComponent::InventorySlotSelected, Slot);
         }
+    }
+    // 召唤只发送操作请求，冷却和能否召唤由玩法组件检查
+    if (UInputAction* Action = GetSummonAction())
+    {
+        EnhancedInputComponent->BindAction(Action, ETriggerEvent::Started, this,
+                                           &UDeliveryInputComponent::SummonVehiclePressed);
     }
 
 }
@@ -230,6 +231,7 @@ void UDeliveryInputComponent::MousePressed(bool bLeft)
     if (!IsValid(Character)) return;
     UDeliveryGrabComponent* GrabComponent = Character->GetGrabComponent();
     bool &ThisDown = bLeft ? bLeftMouseDown : bRightMouseDown;
+    // 同一只键已经按住时忽略重复通知
     if (ThisDown)
         return;
     const bool bWasEmpty = !bLeftMouseDown && !bRightMouseDown;
@@ -244,6 +246,7 @@ void UDeliveryInputComponent::MousePressed(bool bLeft)
     }
     else if (!bSingleMouseResolved && !bGrabChordActive)
     {
+        // 第二只键在等待时间内按下，取消单键出拳并开始抓取
         GetWorld()->GetTimerManager().ClearTimer(MouseChordTimer);
         bGrabChordActive = true;
         if (GrabComponent)
@@ -251,6 +254,7 @@ void UDeliveryInputComponent::MousePressed(bool bLeft)
     }
     else if (!bGrabChordActive)
     {
+        // 第一只键已经按单键处理，第二只键继续作为独立出拳
         if (bLeft)
             Character->DoAttackLeft();
         else
@@ -282,6 +286,7 @@ void UDeliveryInputComponent::MouseReleased(bool bLeft)
     ThisDown = false;
     if (bGrabChordActive)
     {
+        // 只松开对应的手，另一只键仍按住时继续保留抓取状态
         if (GrabComponent)
             GrabComponent->RequestReleaseHand(bLeft);
         if (!bLeftMouseDown && !bRightMouseDown)
@@ -299,6 +304,7 @@ void UDeliveryInputComponent::MouseReleased(bool bLeft)
     }
     if (!bLeftMouseDown && !bRightMouseDown)
     {
+        // 两只键都松开后，下一次按下重新判断单键或双键
         GetWorld()->GetTimerManager().ClearTimer(MouseChordTimer);
         bSingleMouseResolved = false;
     }
@@ -324,46 +330,14 @@ void UDeliveryInputComponent::PickupEnded(const FInputActionValue & /* 未使用
     Character->DoPickupRelease();
 }
 
-void UDeliveryInputComponent::InventorySlot1()
+// 把动作对应的槽位交给背包，拾取和丢弃条件仍由背包检查
+void UDeliveryInputComponent::InventorySlotSelected(int32 Slot)
 {
     if (!IsValid(Character)) return;
-    UDeliveryInventoryComponent* InventoryComponent = Character->GetInventoryComponent();
-    if (InventoryComponent)
-        InventoryComponent->RequestSlotAction(0);
-}
-
-void UDeliveryInputComponent::InventorySlot2()
-{
-    if (!IsValid(Character)) return;
-    UDeliveryInventoryComponent* InventoryComponent = Character->GetInventoryComponent();
-    if (InventoryComponent)
-        InventoryComponent->RequestSlotAction(1);
-}
-
-void UDeliveryInputComponent::InventorySlot3()
-{
-    if (!IsValid(Character)) return;
-    UDeliveryInventoryComponent* InventoryComponent = Character->GetInventoryComponent();
-    if (InventoryComponent)
-        InventoryComponent->RequestSlotAction(2);
-}
-
-// 输入状态清理
-
-void UDeliveryInputComponent::InventorySlot4()
-{
-    if (!IsValid(Character)) return;
-    UDeliveryInventoryComponent* InventoryComponent = Character->GetInventoryComponent();
-    if (InventoryComponent)
-        InventoryComponent->RequestSlotAction(3);
-}
-
-void UDeliveryInputComponent::InventorySlot5()
-{
-    if (!IsValid(Character)) return;
-    UDeliveryInventoryComponent* InventoryComponent = Character->GetInventoryComponent();
-    if (InventoryComponent)
-        InventoryComponent->RequestSlotAction(4);
+    if (UDeliveryInventoryComponent* Inventory = Character->GetInventoryComponent())
+    {
+        Inventory->RequestSlotAction(Slot);
+    }
 }
 
 void UDeliveryInputComponent::SummonVehiclePressed()
@@ -377,6 +351,8 @@ void UDeliveryInputComponent::SummonVehiclePressed()
     }
 }
 
+// 输入状态清理
+
 // 清除未完成的输入，避免控制权切换后继续执行旧操作
 void UDeliveryInputComponent::ResetInput()
 {
@@ -388,10 +364,12 @@ void UDeliveryInputComponent::ResetInput()
     if (!IsValid(OwnerCharacter)) return;
     // 远端角色没有本机按键状态，不从模拟代理发送操作请求
     if (!OwnerCharacter->HasAuthority() && !Character) return;
+    // 先停止移动和长按拾取，再释放抓取并取消出拳
     OwnerCharacter->DoMove(0.f, 0.f);
     OwnerCharacter->DoPickupRelease();
     if (UDeliveryGrabComponent* Grab = OwnerCharacter->GetGrabComponent())
     {
+        // 服务器直接释放，操作玩家的客户端分别请求松开两只手
         if (OwnerCharacter->HasAuthority()) Grab->ForceRelease();
         else { Grab->RequestReleaseHand(true); Grab->RequestReleaseHand(false); }
     }
@@ -406,3 +384,8 @@ void UDeliveryInputComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+
+UInputAction* UDeliveryInputComponent::GetSummonAction() const
+{
+    return SummonAction.LoadSynchronous();
+}

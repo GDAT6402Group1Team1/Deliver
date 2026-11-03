@@ -17,7 +17,8 @@
 
 // 本帧身体控制目标
 
-// 身体目标：把当前输入和状态整理为电机目标；目标位置不等于身体已经到达的位置；真实身体还受碰撞与约束影响
+// 一帧的目标计算：移动意图 → 髋部与朝向 → 双脚 → 躯干支撑 → 手臂
+// 这里只写控制目标，刚体由后续物理计算推动
 void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 {
 	// 低帧率时物理模拟会限制步长，脚步也按相同步长推进，避免脚还没落地就超时
@@ -28,7 +29,7 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	if (MaxStep > 0.0f)
 		DeltaTime = FMath::Min(DeltaTime, MaxStep);
 
-	// 这是每帧控制入口；先让髋部选定落点，双脚才能依据同一个目标规划步伐
+	// 先清理超时的远端输入，再计算本帧移动意图
 	if (GetOwner() && GetOwner()->HasAuthority() && GetOwner()->GetLocalRole() == ROLE_Authority)
 	{
 		const APawn* Pawn = Cast<APawn>(GetOwner());
@@ -67,6 +68,7 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	    Wish.IsNearlyZero() && GetUprightDot() > 0.65f &&
 	    (bPunchFeetPlanted || Mesh->GetPhysicsLinearVelocity(Bones.Hips).Size2D() < 80.0f) &&
 	    FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentFacingYaw, Punch.GetDirection().Rotation().Yaw)) < 35.0f);
+	// 保留玩家原始意图，恢复或失衡期间只暂停本帧身体移动
 	const FVector EffectiveWish = ReplicatedControlMode == EDeliveryRagdollControlMode::Recovering ||
 	                                      Recovery.IsRising() || Movement.StartupPlantRemaining > 0.0f ||
 	                                      bHitFeetPlanted || Movement.BlockedStepRecoveryRemaining > 0.0f
@@ -105,6 +107,7 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 				GrabMask |= 2;
 		}
 	}
+	// 最后把出拳、抓取或斧头动作交给手臂姿态计算，不在这里检测伤害
 	BoxingPose.Update(Mesh, PhysicsControl, CurrentFacingYaw, DeltaTime,
 	                  Punch.IsActive() ? (Punch.GetHandSide() > 0 ? 0 : 1) : -1, Punch.IsReleased(),
 	                  Punch.IsActive() ? Punch.GetDirection() : FVector::ZeroVector, GrabGoals, GrabMask,

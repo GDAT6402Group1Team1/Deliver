@@ -18,6 +18,13 @@ GAMEPAD_BINDINGS = (
     ("IA_Pickup", "Gamepad_FaceButton_Left"),
     ("IA_Interact", "Gamepad_FaceButton_Top"),
     ("IA_TogglePhone", "Gamepad_DPad_Up"),
+    ("IA_SummonVehicle", "Gamepad_LeftThumbstick"),
+    ("IA_ToggleCamera", "Gamepad_RightThumbstick"),
+    ("IA_InventorySlot1", "Gamepad_DPad_Down"),
+    ("IA_InventorySlot2", "Gamepad_DPad_Left"),
+    ("IA_InventorySlot3", "Gamepad_DPad_Right"),
+    ("IA_InventorySlot4", "Gamepad_LeftShoulder"),
+    ("IA_InventorySlot5", "Gamepad_RightShoulder"),
 )
 
 

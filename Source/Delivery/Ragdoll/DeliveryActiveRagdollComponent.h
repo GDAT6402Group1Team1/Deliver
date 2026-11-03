@@ -76,6 +76,13 @@ struct FDeliveryRagdollBones
  */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeliveryFootPlanted, bool, bLeft, FVector, Location);
 
+/**
+ * 管理持续模拟的物理身体，行走和出拳都通过控制目标驱动刚体
+ * 物理前：网络修正、倒地恢复、髋部与脚步目标、手臂姿态
+ * 物理后：服务器采集姿态，角色根位置跟随实际髋部
+ * Movement 保存步态，Punch 保存出拳，Recovery 保存起身，Network 保存快照
+ * 本组件负责身体运动，命中检测与伤害分别由战斗组件和拳击技能处理
+ */
 UCLASS(ClassGroup = (Delivery), meta = (BlueprintSpawnableComponent))
 
 class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent

@@ -432,4 +432,7 @@ PlayerController 默认创建 `UDeliveryGroundArrowComponent`，本机按 `GetTr
 
 
 ### 通话结束后自动收起
-在用的 `/Game/UI/Task/WBP_TaskHUD.RefreshPhone` 在电话状态回到 `Idle` 后调用 `SetPhoneOpen(false)`，接通进入 `InCall` 时保持展开，整段通话结束（或手动挂断）才收起；不影响任务计时。`SetPhoneOpen` 统一调用 `DeliveryPlayerController.ReportPhoneUIOpen`，同步 `bPhoneUIOpen` 和 `OpenUIPanels`；已移除该函数内直接修改光标/输入模式的四个旧节点，统一由 C++ 按所有面板状态管理。因此来电自动展开、通话结束收起与 J 手动开关都同步，自动收起后下一次 J 直接打开。`Content/Python/phone_autoclose.py` 可幂等修补并编译保存该蓝图；原资产备份在 Saved，不提交。
+在用的 `/Game/UI/Task/WBP_TaskHUD.RefreshPhone` 在电话状态回到 `Idle` 后调用 `SetPhoneOpen(false)`，接通进入 `InCall` 时保持展开，整段通话结束（或手动挂断）才收起；不影响任务计时。`SetPhoneOpen` 统一调用 `DeliveryPlayerController.ReportPhoneUIOpen`，经 PhoneController 同步 HUD 的 OpenPanels；已移除该函数内直接修改光标/输入模式的四个旧节点，统一由 C++ 按所有面板状态管理。因此来电自动展开、通话结束收起与 J 手动开关都同步，自动收起后下一次 J 直接打开。`Content/Python/phone_autoclose.py` 可幂等修补并编译保存该蓝图；原资产备份在 Saved，不提交。
+
+手机显示与电话音效已从 PC 拆出：PhoneController 处理对白字幕，HUD 管理面板和鼠标，PhoneAudio 播放铃声与操作音效
+原有 PC 接听挂断 RPC 保留，完整流程见 [PhoneMVC.md](PhoneMVC.md)

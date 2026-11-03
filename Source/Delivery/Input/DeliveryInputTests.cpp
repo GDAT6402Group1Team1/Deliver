@@ -7,6 +7,8 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "EnhancedInputComponent.h"
+#include "InputMappingContext.h"
+#include "InputAction.h"
 #include "UObject/UnrealType.h"
 #include "Character/DeliveryCharacter.h"
 #include "Player/DeliveryPlayerController.h"
@@ -38,6 +40,33 @@ bool FDeliveryInputLifecycleTest::RunTest(const FString&)
     Input->Bind(Bindings);
     const int32 BindingCount = Bindings->GetActionEventBindings().Num();
     TestTrue(TEXT("Gameplay actions bound"), BindingCount > 0);
+    TestEqual(TEXT("快捷栏和召唤不再直接绑定按键"), Bindings->KeyBindings.Num(), 0);
+    TestEqual(TEXT("五个快捷栏动作"), Input->InventoryActions.Num(), 5);
+    TestNotNull(TEXT("召唤动作加载成功"), Input->GetSummonAction());
+    TestNotNull(TEXT("车辆视角动作加载成功"), Bike->GetCameraToggleAction());
+    UInputMappingContext* Context = LoadObject<UInputMappingContext>(nullptr, TEXT("/Game/Input/IMC_Default.IMC_Default"));
+    if (TestNotNull(TEXT("默认输入映射"), Context))
+    {
+        const auto HasMapping = [Context](const TCHAR* Name, FKey Key)
+        {
+            return Context->GetMappings().ContainsByPredicate([&](const FEnhancedActionKeyMapping& Mapping)
+            {
+                return Mapping.Action && Mapping.Action->GetFName() == Name && Mapping.Key == Key;
+            });
+        };
+        TestTrue(TEXT("R 召唤"), HasMapping(TEXT("IA_SummonVehicle"), EKeys::R));
+        TestTrue(TEXT("P 切换视角"), HasMapping(TEXT("IA_ToggleCamera"), EKeys::P));
+        TestTrue(TEXT("J 手机"), HasMapping(TEXT("IA_TogglePhone"), EKeys::J));
+        TestTrue(TEXT("手柄手机"), HasMapping(TEXT("IA_TogglePhone"), EKeys::Gamepad_DPad_Up));
+        const FKey Keyboard[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five};
+        const FKey Gamepad[] = {EKeys::Gamepad_DPad_Down, EKeys::Gamepad_DPad_Left, EKeys::Gamepad_DPad_Right,
+                               EKeys::Gamepad_LeftShoulder, EKeys::Gamepad_RightShoulder};
+        for (int32 Index = 0; Index < 5; ++Index)
+        {
+            const FString Name = FString::Printf(TEXT("IA_InventorySlot%d"), Index + 1);
+            TestTrue(*Name, HasMapping(*Name, Keyboard[Index]) && HasMapping(*Name, Gamepad[Index]));
+        }
+    }
     Input->Bind(Bindings);
     TestEqual(TEXT("Repeated setup does not duplicate bindings"), Bindings->GetActionEventBindings().Num(), BindingCount);
 

@@ -26,7 +26,7 @@ void UDeliveryVehicleAudioComponent::BeginPlay()
     }
 }
 
-// 停车时停止循环音，行驶时按速度调整音调和音量
+// 有驾驶员时按车速调整发动机声音，没有驾驶员时停止播放
 void UDeliveryVehicleAudioComponent::UpdateEngine(bool bDriving, float SpeedRatio)
 {
     if (!EngineAudio || GetNetMode() == NM_DedicatedServer)

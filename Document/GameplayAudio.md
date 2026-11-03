@@ -92,3 +92,6 @@ DA_VehicleAudio 还包含发动机设置：循环资源为 Motor_loop，怠速�
 ## 验证
 
 完整编译和 25 项自动化测试通过，其中新增 Delivery.Audio.Events 检查事件隔离、配置读取、解绑及发动机参数。重启后确认角色、车辆蓝图和地图实例的配置保留。双人 PIE 中，取件与交付通知仅到达对应玩家，下车事件在服务器和客户端各收到一次，两端发动机都在上车后播放、下车后停止。此次检查验证事件路由和播放状态，不包含对音质的主观试听，也没有验证延迟或丢包场景
+
+电话音效现在由 DeliveryPhoneAudioComponent 订阅电话状态，资源配置在 BP_DeliveryManPC 的 PhoneAudio 组件
+手机处理器负责对白与字幕，详细流程见 [PhoneMVC.md](PhoneMVC.md)

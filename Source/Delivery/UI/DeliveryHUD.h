@@ -7,8 +7,9 @@
 class ADeliveryCharacter;
 class UDeliveryHotbarWidget;
 class UDeliveryInventoryComponent;
+class UDeliveryPhoneController;
 
-// 管理本机快捷栏的创建、背包绑定和销毁，界面布局仍由控件负责
+// 管理本机界面处理器、面板开关和鼠标模式，控件负责布局和显示
 UCLASS()
 class DELIVERY_API ADeliveryHUD : public AHUD
 {
@@ -18,11 +19,22 @@ public:
     virtual void Tick(float DeltaSeconds) override;
     // 骑车时读取驾驶员的背包，步行时读取当前角色的背包
     static ADeliveryCharacter* ResolveCharacter(APawn* Pawn);
+    UFUNCTION(BlueprintPure, Category="UI")
+    UDeliveryPhoneController* GetPhoneController();
+    void SetPanelOpen(FName PanelId, bool bOpen);
+    bool IsPanelOpen(FName PanelId) const { return OpenPanels.Contains(PanelId); }
+    bool IsAnyPanelOpen() const { return !OpenPanels.IsEmpty(); }
 protected:
+    virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     UPROPERTY(EditDefaultsOnly, Category="UI|Hotbar")
     TSoftClassPtr<UDeliveryHotbarWidget> HotbarWidgetClass;
 private:
+    void ApplyInputMode();
+    // 多个面板同时打开时，关闭其中一个不能收起鼠标
+    TSet<FName> OpenPanels;
+    UPROPERTY(Transient)
+    TObjectPtr<UDeliveryPhoneController> PhoneController;
     void RefreshHotbar();
     void RemoveHotbar();
     UPROPERTY(Transient)

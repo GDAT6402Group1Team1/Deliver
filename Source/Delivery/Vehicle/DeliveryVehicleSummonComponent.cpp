@@ -6,21 +6,17 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
-#include "Interaction/DeliveryPromptSubsystem.h"
+#include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Vehicle/DeliveryMotorbike.h"
 
 UDeliveryVehicleSummonComponent::UDeliveryVehicleSummonComponent()
 {
-	PrimaryComponentTick.bCanEverTick = true;
-	// 只用来刷左下角那条提示，10Hz 足够，读秒的小数位也看不出跳
-	PrimaryComponentTick.TickInterval = 0.1f;
+	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
 	DefaultVehicleClass = TSoftClassPtr<ADeliveryMotorbike>(
 	    FSoftObjectPath(TEXT("/Game/Vehicle/Motorbike/BP_Motorbike.BP_Motorbike_C")));
 
-	ReadyHintFormat = NSLOCTEXT("Delivery", "SummonReady", "按 {0} 召唤摩托车");
-	CooldownHintFormat = NSLOCTEXT("Delivery", "SummonCooling", "召唤冷却 {0}s");
 }
 
 // 同步召唤车辆引用和冷却时间
@@ -34,59 +30,30 @@ void UDeliveryVehicleSummonComponent::GetLifetimeReplicatedProps(
 
 float UDeliveryVehicleSummonComponent::GetCooldownRemaining() const
 {
-	const UWorld* World = GetWorld();
-	return World ? FMath::Max(0.0f, ReadyServerTime - World->GetTimeSeconds()) : 0.0f;
+    const UWorld* World = GetWorld();
+    if (!World) return 0.0f;
+    const AGameStateBase* State = World->GetGameState();
+    const float Now = State ? State->GetServerWorldTimeSeconds() : World->GetTimeSeconds();
+    return FMath::Max(0.0f, ReadyServerTime - Now);
 }
 
-// 更新本机召唤提示，不在这里创建车辆
-void UDeliveryVehicleSummonComponent::TickComponent(float DeltaTime, ELevelTick TickType,
-                                                    FActorComponentTickFunction* ThisTickFunction)
+bool UDeliveryVehicleSummonComponent::CanOfferSummon() const
 {
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	const APawn* Owner = Cast<APawn>(GetOwner());
-	// 上了车之后控制器去 Possess 摩托车了，这具身体不再是本机操控的，
-	// 于是召唤提示自动让位给车上那条"按 P 切换视角"，两条不会打架
-	if (Owner && Owner->IsLocallyControlled())
-	{
-		PushHint();
-	}
+    if (!DefaultVehicleClass.IsNull()) return true;
+    if (UWorld* World = GetWorld())
+    {
+        for (TActorIterator<ADeliveryMotorbike> It(World); It; ++It)
+        {
+            if (IsValid(*It) && !It->IsActorBeingDestroyed()) return true;
+        }
+    }
+    return false;
 }
 
-// 根据冷却和车辆状态显示召唤说明
-void UDeliveryVehicleSummonComponent::PushHint()
+// 客户端收到新的冷却结束时间后，通知提示组件重新读取
+void UDeliveryVehicleSummonComponent::OnRep_ReadyServerTime()
 {
-	UDeliveryPromptSubsystem* Prompt = UDeliveryPromptSubsystem::Get(this);
-	if (!Prompt || DisplayKeyName.IsEmpty())
-	{
-		return;
-	}
-
-	// 空地图也能生成默认车型，因此不能只按场景里有没有车决定提示
-	bool bAnyBike = false;
-	if (const UWorld* World = GetWorld())
-	{
-		for (TActorIterator<ADeliveryMotorbike> It(const_cast<UWorld*>(World)); It; ++It)
-		{
-			bAnyBike = true;
-			break;
-		}
-	}
-	if (!bAnyBike && DefaultVehicleClass.IsNull())
-	{
-		return;
-	}
-
-	const float Remaining = GetCooldownRemaining();
-	if (Remaining > 0.0f)
-	{
-		Prompt->PushCornerHint(
-		    FText::Format(CooldownHintFormat, FText::AsNumber(FMath::CeilToInt(Remaining))), true);
-	}
-	else
-	{
-		Prompt->PushCornerHint(FText::Format(ReadyHintFormat, DisplayKeyName), false);
-	}
+    OnCooldownChanged.Broadcast();
 }
 
 // 将本机召唤意图提交给服务器
@@ -203,4 +170,7 @@ void UDeliveryVehicleSummonComponent::ServerSummon_Implementation()
 	Bike->ForceNetUpdate();
 
 	ReadyServerTime = Now + Cooldown;
+    // 房主不经过属性复制回调，因此服务器修改后也要发送通知
+    OnCooldownChanged.Broadcast();
+    Owner->ForceNetUpdate();
 }

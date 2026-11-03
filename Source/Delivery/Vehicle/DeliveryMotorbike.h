@@ -51,6 +51,9 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+    UInputAction* GetCameraToggleAction() const;
+    bool IsFreeLookCamera() const { return bFreeLookCamera; }
+
 	// 上车与下车接口
 	// 上下车与召唤
 	/** 服务器：让 NewDriver 上车；成功返回 真 */
@@ -561,12 +564,9 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	TObjectPtr<UInputAction> MoveAction;
 
 	// 视角与交互输入
-	/**
-	 * 切换骑车视角的按键，默认 P
-	 * 直接绑定按键，不依赖输入映射资源
-	 */
-	UPROPERTY(EditAnywhere, Category = "Input")
-	FKey CameraToggleKey;
+    /** 切换视角动作，键盘和手柄按键在 IMC_Default 中配置 */
+    UPROPERTY(EditDefaultsOnly, Category="Input")
+    TSoftObjectPtr<UInputAction> CameraToggleAction;
 
 	/** 手柄右摇杆看向；只有 bFreeLookCamera 开着才起作用 */
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -681,7 +681,6 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	void ShowNotice(const FText& Text, float Seconds);
 
 	/** 骑行期间常驻左下角的操作提示（切视角那条） */
-	void PushCameraHint();
 
 	/** 把人打倒：血清零交给既有的晕倒流程，再补一记冲量把他抛离车身 */
 	void KnockDownDriver(ADeliveryCharacter* Rider, const FVector& LaunchDirection, float LaunchScale);

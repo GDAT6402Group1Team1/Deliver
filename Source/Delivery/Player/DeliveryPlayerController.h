@@ -4,7 +4,6 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
-#include "Task/DeliveryTaskTypes.h"
 #include "Interaction/DeliveryInteractionComponent.h"
 #include "DeliveryPlayerController.generated.h"
 
@@ -14,13 +13,17 @@ class UInputMappingContext;
 class UPostProcessComponent;
 class UDeliveryDialogueVoiceComponent;
 class UDeliveryMusicComponent;
-class UAudioComponent;
-class USoundBase;
 class UDeliveryGroundArrowComponent;
 class UDeliveryObjectiveRingComponent;
 class UUserWidget;
+class UDeliveryHintComponent;
+class UDeliveryPhoneController;
+class UDeliveryPhoneAudioComponent;
 
-/** 管理玩家输入、手机界面、任务指引和本机音频 */
+/**
+ * 绑定跨步行和驾驶使用的手机输入，转发交互与电话的服务器请求
+ * 持有跨角色使用的提示和声音组件，界面逻辑由 HUD 和界面处理器负责
+ */
 UCLASS()
 
 class ADeliveryPlayerController : public APlayerController
@@ -29,6 +32,14 @@ class ADeliveryPlayerController : public APlayerController
 
   public:
     ADeliveryPlayerController();
+    virtual bool InputKey(const FInputKeyEventArgs& Params) override;
+    FText GetPhoneKeyText() const;
+    UFUNCTION(BlueprintPure, Category="Phone")
+    UDeliveryPhoneController* GetPhoneController() const;
+
+    /** 监听控制对象、冷却、视角和按键变化，更新操作提示 */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="提示")
+    TObjectPtr<UDeliveryHintComponent> Hints;
 
     // 交互请求转发
     // 步行与骑车共用的交互请求入口
@@ -76,18 +87,18 @@ class ADeliveryPlayerController : public APlayerController
 
     /**
      * 切换手机界面，由蓝图实现界面的显示和关闭
-     * 控制器直接绑定手机按键，不依赖输入映射资源
+     * 手机输入动作由控制器绑定，上下车时继续有效
      */
     UFUNCTION(BlueprintImplementableEvent, Category = "Phone")
     void TogglePhoneUI();
 
-    /** 开关手机的按键；改这里提示里的键名会跟着变，不会说一套做一套 */
-    UPROPERTY(EditAnywhere, Category = "Input|Input Mappings")
-    FKey TogglePhoneKey;
+    /** 手机动作，按键在输入映射资源中配置 */
+    UPROPERTY(EditDefaultsOnly, Category="Input|Input Mappings")
+    TSoftObjectPtr<UInputAction> TogglePhoneAction;
 
     // 界面状态与鼠标模式
     /**
-     * 记录指定面板的开关状态，统一更新鼠标光标和输入模式
+     * 兼容现有蓝图，将面板开关交给 HUD
      * 只要还有面板打开，就保留鼠标操作
      * 面板自行关闭或销毁时，也必须报告关闭状态
      */
@@ -98,21 +109,17 @@ class ADeliveryPlayerController : public APlayerController
     UFUNCTION(BlueprintCallable, Category = "Phone", meta = (DefaultToSelf = "PhoneWidget"))
     static void ReportPhoneUIOpen(UUserWidget *PhoneWidget, bool bOpen);
 
-    /** 当前是否还有 UI 面板开着（= 该不该显示光标） */
+    /** 查询 HUD 是否还有打开的面板 */
     UFUNCTION(BlueprintPure, Category = "UI")
     bool IsAnyUIPanelOpen() const;
 
-    /** 手机界面当前是开着的吗；状态由 C++ 持有，蓝图不要另存一份 */
+    /** 查询 HUD 中的手机面板状态 */
     UFUNCTION(BlueprintPure, Category = "Phone")
 
-    bool IsPhoneUIOpen() const
-    {
-        return bPhoneUIOpen;
-    }
+    bool IsPhoneUIOpen() const;
 
   protected:
     virtual void BeginPlay() override;
-    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     // 服务器电话请求
     UFUNCTION(Server, Reliable)
@@ -153,69 +160,19 @@ class ADeliveryPlayerController : public APlayerController
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Audio")
     TObjectPtr<UDeliveryMusicComponent> Music;
 
-    /** 手机界面每次开/关时的按键反馈；需要区分开和关时可在 TogglePhoneUI 蓝图事件里另外播放 */
-    UPROPERTY(EditDefaultsOnly, Category = "Delivery|Audio|Phone")
-    TObjectPtr<USoundBase> PhoneToggleSound;
-
-    /** 来电铃声；资产本身应设置循环；离开 Ringing 状态时 C++ 会主动停止 */
-    UPROPERTY(EditDefaultsOnly, Category = "Delivery|Audio|Phone")
-    TObjectPtr<USoundBase> IncomingCallSound;
-
-    UPROPERTY(EditDefaultsOnly, Category = "Delivery|Audio|Phone")
-    TObjectPtr<USoundBase> AnswerCallSound;
-
-    UPROPERTY(EditDefaultsOnly, Category = "Delivery|Audio|Phone")
-    TObjectPtr<USoundBase> HangUpCallSound;
+    /** 电话铃声和操作音效，独立于手机界面的开关 */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Audio")
+    TObjectPtr<UDeliveryPhoneAudioComponent> PhoneAudio;
 
     // 控制器输入绑定
     virtual void SetupInputComponent() override;
 
-    /** TogglePhoneKey 按下时的转发；BindKey 需要一个无参成员函数，不能直接绑 BlueprintImplementableEvent */
+    /** 将手机输入交给手机处理器 */
     void HandleTogglePhonePressed();
 
-    /** 按当前开着的面板集合算出光标和输入模式；只在本机控制器上生效 */
-    void ApplyUIInputMode();
-
   private:
-    // 界面运行状态
-    /**
-     * 当前开着的 UI 面板；只在本机维护、不复制
-     *
-     * 用集合而不是一个 bool：同时开手机和任务面板时，关掉一个不该把光标收走
-     */
-    TSet<FName> OpenUIPanels;
-
-    /** 手机界面开没开；C++ 持有，这样光标状态不可能和它脱钩 */
-    bool bPhoneUIOpen = false;
-
-    // 电话事件与字幕
-    /** GameState 可能比本机 PlayerController 晚就绪，绑定不到时短暂重试 */
-    void BindPhoneVoice();
-
-    /** 电话进入 InCall 时在本机播放任务台词；离开通话立即停声 */
-    UFUNCTION()
-    void HandlePhoneVoiceStateChanged(EDeliveryPhoneCallState NewState, const FDeliveryPhoneCall &Call);
-
-    /** 程序化语音每揭示一个字符，就把它追加到屏幕下方字幕 */
-    UFUNCTION()
-    void HandlePhoneVoiceGlyphRevealed(const FString &Glyph, int32 GlyphIndex);
-
-    /** 已有 IMC 里都没映射交互键时，建一份临时的补上 */
-    void EnsureInteractMapping(class UEnhancedInputLocalPlayerSubsystem *Subsystem);
-
-    // 临时输入与声音状态
+    // 旧资源缺少交互映射时补充临时映射
+    void EnsureInteractMapping(class UEnhancedInputLocalPlayerSubsystem* Subsystem);
     UPROPERTY(Transient)
     TObjectPtr<UInputMappingContext> RuntimeInteractContext;
-
-    FTimerHandle PhoneVoiceBindRetryTimer;
-
-    UPROPERTY(Transient)
-    TObjectPtr<UAudioComponent> IncomingCallAudio;
-
-    void StopIncomingCallAudio();
-    bool bPhoneAudioStateInitialized = false;
-    EDeliveryPhoneCallState LastPhoneAudioState = EDeliveryPhoneCallState::Idle;
-    int32 ActiveVoiceCallId = 0;
-    FText ActivePhoneCallerName;
-    FString ActivePhoneSubtitle;
 };

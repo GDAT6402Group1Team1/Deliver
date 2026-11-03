@@ -1,4 +1,6 @@
-// 把一次出拳接到技能生命周期，并在服务器处理命中与伤害
+// 连接出拳动作和伤害结算，本技能不直接计算手臂姿态
+// ActivateAbility 发起动作并订阅战斗组件，OnHitWindow 查询目标并施加效果
+// OnPunchEnded 结束技能，EndAbility 解绑通知；被打断时同时取消出拳
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "AbilitySystem/Abilities/GA_DeliverPunch.h"
@@ -78,6 +80,7 @@ void UGA_DeliverPunch::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		return;
 	}
 
+	// 一次技能实例可以重复出拳，每次成功启动都清空上一拳的命中记录
 	HitActors.Reset();
 	bPlayedHitSound = false;
 	RagdollCombat = Character->GetRagdollCombat();
@@ -118,6 +121,7 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 	{
 		return;
 	}
+	// 战斗组件已记录本帧拳路，这里经角色入口调用 GatherHits 做扫掠查询
 	const TArray<AActor*> Hits = Character->GatherMeleeHits(Hand);
 	const TSubclassOf<UGameplayEffect> DamageClass = Character->GetDamageEffect();
 	const FVector PunchDirection = RagdollCombat->GetPunchAimDirection();
@@ -128,6 +132,7 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 
 	for (AActor* HitActor : Hits)
 	{
+		// 窗口会连续触发，多帧接触同一角色也只处理一拳
 		if (HitActors.Contains(HitActor))
 			continue;
 		ADeliveryCharacter* TargetCharacter = Cast<ADeliveryCharacter>(HitActor);

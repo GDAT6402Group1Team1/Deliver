@@ -9,7 +9,10 @@ class UInputAction;
 class UInputComponent;
 struct FInputActionValue;
 
-// 处理步行按键和双键组合，将操作交给角色及玩法组件
+/**
+ * 将步行输入动作绑定到移动、交互、物品切换和召唤操作
+ * 区分鼠标单键出拳与双键抓取，失去控制时取消未完成的输入
+ */
 UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryInputComponent : public UActorComponent
 {
@@ -20,6 +23,7 @@ public:
     void Bind(UInputComponent* PlayerInputComponent);
     // 失去控制权时取消未完成的操作，不将松开补判为一次攻击
     void ResetInput();
+    UInputAction* GetSummonAction() const;
     bool IsGrabChordHeld() const { return bGrabChordActive && bLeftMouseDown && bRightMouseDown; }
 protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -58,9 +62,13 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Input")
     TSoftObjectPtr<UInputAction> PickupAction;
 
-    /** 召唤载具的按键，默认 R；直接绑定按键，不依赖输入映射资源 */
-    UPROPERTY(EditAnywhere, Category = "Input")
-    FKey SummonVehicleKey;
+    /** 召唤动作，按键在 IMC_Default 中配置 */
+    UPROPERTY(EditDefaultsOnly, Category="Input")
+    TSoftObjectPtr<UInputAction> SummonAction;
+
+    /** 按顺序对应快捷栏 1 至 5，第一格仍为丢弃操作 */
+    UPROPERTY(EditDefaultsOnly, EditFixedSize, Category="Input")
+    TArray<TSoftObjectPtr<UInputAction>> InventoryActions;
 
 private:
     friend class FDeliveryInputLifecycleTest;
@@ -92,11 +100,7 @@ private:
     void InteractStarted(const FInputActionValue &Value);
     void PickupStarted(const FInputActionValue &Value);
     void PickupEnded(const FInputActionValue &Value);
-    void InventorySlot1();
-    void InventorySlot2();
-    void InventorySlot3();
-    void InventorySlot4();
-    void InventorySlot5();
+    void InventorySlotSelected(int32 Slot);
     void SummonVehiclePressed();
 
     // 鼠标组合键状态

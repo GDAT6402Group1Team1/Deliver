@@ -10,13 +10,13 @@
 所以只要有一次只翻了其中一个，两者就永久失同步；光标留在开着的状态时鼠标移动归光标，
 视口只在按住鼠标键时才捕获鼠标，于是鼠标看起来失灵。
 
-C++ 侧已改成「光标 = 有没有 UI 面板开着」：ADeliveryPlayerController::SetUIPanelOpen
-维护一个面板集合，在「有/没有」翻转时设 bShowMouseCursor 和输入模式。
-按 J 时 C++ 自己翻 bPhoneUIOpen、更新集合，然后才调蓝图事件 TogglePhoneUI。
+C++ 侧已改成「光标 = 有没有 UI 面板开着」：PC 的 SetUIPanelOpen 转交 HUD
+HUD 维护面板集合，在「有/没有」翻转时设置光标和输入模式
+按 J 时 PhoneController 更新 HUD 中的手机状态，再调用蓝图事件 TogglePhoneUI
 所以蓝图必须改三处，否则会按一次翻两遍：
 
   1. 删掉 Set/Get bShowMouseCursor 和中间那个 NOT，光标归 C++ 了
-  2. 删掉 IA_TogglePhone 节点。C++ 的 TogglePhoneKey(J) 已经在管这个键，
+  2. 删掉 IA_TogglePhone 节点。C++ 已绑定 IA_TogglePhone 并处理手机开关，
      两条路都在的话一次按键翻两遍，表现是按 J 没反应。
      这也正是 CLAUDE.md 里要求、但一直没做的那步迁移（IMC_Default 老被 git 冲掉）。
   3. 实现 TogglePhoneUI 事件，接到 WBP_Main.TogglePhone（面板显示/隐藏仍归蓝图）

@@ -9,9 +9,8 @@
 class SWidget;
 
 /**
- * 显示跟随世界物体的屏幕提示
- * 调用方持续推送提示内容，停止推送后自动隐藏
- * 提示界面由代码创建，不依赖界面蓝图
+ * 创建并显示交互浮窗、左下角操作提示、顶部任务提示和对白字幕
+ * 交互与任务提示停止更新后自动隐藏，角落提示与字幕由调用者主动清除
  */
 UCLASS()
 
@@ -29,12 +28,9 @@ class DELIVERY_API UDeliveryPromptSubsystem : public UWorldSubsystem
 	/** 每帧调用一次；WorldAnchor 是浮窗要贴住的世界坐标 */
 	void PushPrompt(const FText& Text, const FVector& WorldAnchor, float HoldProgress = -1.0f);
 
-	/**
-	 * 屏幕左下角的常驻提示（"按 R 召唤摩托车"这类）；和世界浮窗是两个独立的槽位，
-	 * 各有各的时间戳，互不覆盖——不然走到车边上时召唤提示就被"按 F 驾驶"顶掉了
-	 * 同样是"每帧推一次"的约定；bDimmed 用来表示这个功能当前不可用（冷却中）
-	 */
-	void PushCornerHint(const FText& Text, bool bDimmed = false);
+    /** 保存左下角提示，直到同一个来源主动清除 */
+    void SetCornerHint(UObject* Source, const FText& Text, bool bDimmed = false);
+    void ClearCornerHint(const UObject* Source);
 
 	/**
 	 * 更新屏幕顶部的任务提示，与左下角按键提示分别保存
@@ -50,19 +46,20 @@ class DELIVERY_API UDeliveryPromptSubsystem : public UWorldSubsystem
 	void ClearSubtitle();
 
   private:
+    friend class FDeliveryPersistentHintTest;
 	// 控件创建与可见性检查
 	void EnsureWidget();
 	bool ComputeScreenPosition(FVector2D& OutPosition) const;
 	bool IsPromptFresh() const;
 
-	bool IsCornerFresh() const;
+	bool HasCornerHint() const;
 	bool IsObjectiveFresh() const;
 
 	TSharedPtr<SWidget> PromptWidget;
 	// 左下角操作提示
 	FText CornerText;
 	bool bCornerDimmed = false;
-	double LastCornerPushTime = -1000.0;
+	TWeakObjectPtr<UObject> CornerSource;
 
 	// 顶部任务提示
 	FText ObjectiveTitle;

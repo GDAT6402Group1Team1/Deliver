@@ -171,7 +171,7 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	    TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
 	PickupAction =
 	    TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Pickup.IA_Pickup")));
-	CameraToggleKey = EKeys::P;
+	CameraToggleAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_ToggleCamera.IA_ToggleCamera")));
 	RiderMeshAsset = TSoftObjectPtr<USkeletalMesh>(
 	    FSoftObjectPath(TEXT("/Game/Vehicle/Motorbike/SK_MotorbikeRider.SK_MotorbikeRider")));
 }
@@ -1114,13 +1114,10 @@ void ADeliveryMotorbike::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		                          &ADeliveryMotorbike::MouseLookInput);
 	}
 
-	// 直接绑定操作键，不依赖额外输入映射资源
-	
-	if (CameraToggleKey.IsValid())
-	{
-		PlayerInputComponent->BindKey(CameraToggleKey, IE_Pressed, this,
-		                              &ADeliveryMotorbike::ToggleCameraMode);
-	}
+    if (UInputAction* Action = GetCameraToggleAction())
+    {
+        EnhancedInput->BindAction(Action, ETriggerEvent::Started, this, &ADeliveryMotorbike::ToggleCameraMode);
+    }
 	if (UInputAction* Interact = InteractAction.LoadSynchronous())
 	{
 		EnhancedInput->BindAction(Interact, ETriggerEvent::Started, this,
@@ -1503,8 +1500,6 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 			NoticeRemaining -= DeltaSeconds;
 			PushNotice();
 		}
-		// 左下角那条是常驻的，和车顶上方那条世界浮窗是两个独立槽位，不会互相顶掉
-		PushCameraHint();
 		bHadDriverLastFrame = true;
 	}
 	else
@@ -1818,23 +1813,6 @@ void ADeliveryMotorbike::SyncControlRotation()
 	}
 }
 
-// 显示当前驾驶视角对应的按键提示
-void ADeliveryMotorbike::PushCameraHint()
-{
-	UDeliveryPromptSubsystem* Prompt = UDeliveryPromptSubsystem::Get(this);
-	if (!Prompt || !CameraToggleKey.IsValid())
-	{
-		return;
-	}
-	// 键名从实际绑的键取，改了 CameraToggleKey 提示会跟着变
-	Prompt->PushCornerHint(
-	    FText::Format(bFreeLookCamera
-	                      ? NSLOCTEXT("Delivery", "MotorbikeHintFree", "按 {0} 切换视角（当前：自由）")
-						  : NSLOCTEXT("Delivery", "MotorbikeHintFixed", "按 {0} 切换视角（当前：固定）"),
-		              CameraToggleKey.GetDisplayName(false)),
-	    false);
-}
-
 // 驾驶提示
 
 void ADeliveryMotorbike::ShowNotice(const FText& Text, float Seconds)
@@ -1852,4 +1830,9 @@ void ADeliveryMotorbike::PushNotice()
 		    GetActorLocation() + (Interactable ? Interactable->PromptOffset : FVector(0.0f, 0.0f, 180.0f));
 		Prompt->PushPrompt(NoticeText, Anchor);
 	}
+}
+
+UInputAction* ADeliveryMotorbike::GetCameraToggleAction() const
+{
+    return CameraToggleAction.LoadSynchronous();
 }

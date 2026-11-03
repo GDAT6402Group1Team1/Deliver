@@ -13,7 +13,7 @@ class DELIVERY_API UDeliveryVehicleAudioComponent : public UDeliveryAudioCompone
 {
     GENERATED_BODY()
 public:
-    /** 车辆完成本帧移动后传入驾驶状态和速度比例 */
+    /** 车辆每帧传入是否有人驾驶，以及当前速度除以最高速度得到的比例 */
     void UpdateEngine(bool bDriving, float SpeedRatio);
 
 protected:

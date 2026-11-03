@@ -6,22 +6,23 @@
 #include "Blueprint/UserWidget.h"
 #include "Audio/DeliveryDialogueVoiceComponent.h"
 #include "Audio/DeliveryMusicComponent.h"
-#include "Components/AudioComponent.h"
 #include "Delivery.h"
 #include "Components/PostProcessComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "EnhancedInputComponent.h"
+#include "InputKeyEventArgs.h"
+#include "UI/DeliveryHintComponent.h"
+#include "UI/DeliveryHUD.h"
+#include "UI/Controllers/DeliveryPhoneController.h"
+#include "Audio/DeliveryPhoneAudioComponent.h"
 #include "Engine/LocalPlayer.h"
 #include "InputAction.h"
 #include "InputCoreTypes.h"
 #include "InputMappingContext.h"
 #include "Materials/MaterialInterface.h"
-#include "Kismet/GameplayStatics.h"
-#include "Sound/SoundBase.h"
-#include "Interaction/DeliveryPromptSubsystem.h"
 #include "Phone/DeliveryPhoneCallQueueComponent.h"
 #include "Task/Tracking/DeliveryGroundArrowComponent.h"
 #include "Task/Tracking/DeliveryObjectiveRingComponent.h"
-#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 ADeliveryPlayerController::ADeliveryPlayerController()
@@ -29,6 +30,10 @@ ADeliveryPlayerController::ADeliveryPlayerController()
     DialogueVoice = CreateDefaultSubobject<UDeliveryDialogueVoiceComponent>(TEXT("DialogueVoice"));
     GroundArrow = CreateDefaultSubobject<UDeliveryGroundArrowComponent>(TEXT("GroundArrow"));
     ObjectiveRing = CreateDefaultSubobject<UDeliveryObjectiveRingComponent>(TEXT("ObjectiveRing"));
+
+    Hints = CreateDefaultSubobject<UDeliveryHintComponent>(TEXT("Hints"));
+
+    PhoneAudio = CreateDefaultSubobject<UDeliveryPhoneAudioComponent>(TEXT("PhoneAudio"));
 
     Music = CreateDefaultSubobject<UDeliveryMusicComponent>(TEXT("Music"));
 
@@ -59,8 +64,7 @@ ADeliveryPlayerController::ADeliveryPlayerController()
         MobileExcludedMappingContexts.Add(MouseLookIMC.Object);
     }
 
-    // J 开关手机；走 BindKey 直接绑，不进 IMC——理由见头文件里 TogglePhoneUI 的注释
-    TogglePhoneKey = EKeys::J;
+    TogglePhoneAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_TogglePhone.IA_TogglePhone")));
 
     // 软引用晚绑：IA_Interact 是脚本生成的资产，构造函数只在模块加载时跑一次，
     // 用 ConstructorHelpers 的话新建出来的资产在同一次会话里永远解析不到
@@ -69,203 +73,11 @@ ADeliveryPlayerController::ADeliveryPlayerController()
     InteractKey = EKeys::F;
 }
 
-// 启动本机表现并绑定电话状态通知
+// 本机启用交互物高亮，界面和电话由各自处理器管理
 void ADeliveryPlayerController::BeginPlay()
 {
     Super::BeginPlay();
-
-    // PlayerController 在服务器上也会为远端玩家存在；只有本机控制器需要渲染后处理
-    if (HighlightPostProcess)
-    {
-        HighlightPostProcess->bEnabled = IsLocalController();
-    }
-
-    BindPhoneVoice();
-    if (IsLocalController() && DialogueVoice)
-    {
-        DialogueVoice->OnGlyphRevealed.AddUniqueDynamic(
-            this, &ADeliveryPlayerController::HandlePhoneVoiceGlyphRevealed);
-    }
-}
-
-// 解除电话订阅并停止本机声音和计时器
-void ADeliveryPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-    StopIncomingCallAudio();
-    if (UWorld *World = GetWorld())
-    {
-        World->GetTimerManager().ClearTimer(PhoneVoiceBindRetryTimer);
-    }
-
-    if (UDeliveryPhoneCallQueueComponent *Phone = UDeliveryPhoneCallQueueComponent::Get(this))
-    {
-        Phone->OnPhoneStateChanged.RemoveDynamic(this,
-                                                 &ADeliveryPlayerController::HandlePhoneVoiceStateChanged);
-    }
-
-    if (DialogueVoice)
-    {
-        DialogueVoice->OnGlyphRevealed.RemoveDynamic(
-            this, &ADeliveryPlayerController::HandlePhoneVoiceGlyphRevealed);
-        DialogueVoice->StopSpeaking();
-    }
-    if (UDeliveryPromptSubsystem *Prompt = UDeliveryPromptSubsystem::Get(this))
-    {
-        Prompt->ClearSubtitle();
-    }
-
-    Super::EndPlay(EndPlayReason);
-}
-
-// 等待电话系统就绪，再绑定来电与对白变化
-void ADeliveryPlayerController::BindPhoneVoice()
-{
-    if (!IsLocalController())
-    {
-        return;
-    }
-
-    UDeliveryPhoneCallQueueComponent *Phone = UDeliveryPhoneCallQueueComponent::Get(this);
-    if (!Phone)
-    {
-        // 客户端的 GameState/组件可能还没复制到；只在本机重试，不让远端 Controller 做表现
-        if (UWorld *World = GetWorld())
-        {
-            World->GetTimerManager().SetTimer(PhoneVoiceBindRetryTimer, this,
-                                              &ADeliveryPlayerController::BindPhoneVoice, 0.5f, false);
-        }
-        return;
-    }
-
-    Phone->OnPhoneStateChanged.AddUniqueDynamic(this,
-                                                &ADeliveryPlayerController::HandlePhoneVoiceStateChanged);
-
-    if (UWorld *World = GetWorld())
-    {
-        World->GetTimerManager().ClearTimer(PhoneVoiceBindRetryTimer);
-    }
-
-    // 绑定发生时电话可能已经响了或已经接通；主动同步一次，避免晚加入/晚复制的客户端没声音
-    FDeliveryPhoneCall CurrentCall;
-    if (Phone->GetCurrentCall(CurrentCall))
-    {
-        HandlePhoneVoiceStateChanged(Phone->GetCallState(), CurrentCall);
-    }
-}
-
-// 手机界面操作转发
-
-// 根据响铃、通话和挂断阶段更新声音、字幕和手机界面
-void ADeliveryPlayerController::HandlePhoneVoiceStateChanged(EDeliveryPhoneCallState NewState,
-                                                             const FDeliveryPhoneCall &Call)
-{
-    if (!IsLocalController())
-    {
-        return;
-    }
-
-    // 状态复制可能让同一状态回调多次，只在真正的状态边沿播放一次操作音
-    if (!bPhoneAudioStateInitialized)
-    {
-        bPhoneAudioStateInitialized = true;
-        LastPhoneAudioState = NewState;
-        if (NewState == EDeliveryPhoneCallState::Ringing && IncomingCallSound)
-        {
-            IncomingCallAudio = UGameplayStatics::SpawnSound2D(this, IncomingCallSound, 1.0f, 1.0f, 0.0f,
-                                                               nullptr, false, false);
-        }
-    }
-    else if (NewState != LastPhoneAudioState)
-    {
-        const EDeliveryPhoneCallState PreviousState = LastPhoneAudioState;
-        LastPhoneAudioState = NewState;
-
-        if (NewState == EDeliveryPhoneCallState::Ringing)
-        {
-            StopIncomingCallAudio();
-            if (IncomingCallSound)
-            {
-                IncomingCallAudio = UGameplayStatics::SpawnSound2D(this, IncomingCallSound, 1.0f, 1.0f, 0.0f,
-                                                                   nullptr, false, false);
-            }
-        }
-        else
-        {
-            StopIncomingCallAudio();
-            if (NewState == EDeliveryPhoneCallState::InCall && AnswerCallSound)
-            {
-                UGameplayStatics::PlaySound2D(this, AnswerCallSound);
-            }
-            else if (NewState == EDeliveryPhoneCallState::Idle &&
-                     PreviousState != EDeliveryPhoneCallState::Idle && HangUpCallSound)
-            {
-                UGameplayStatics::PlaySound2D(this, HangUpCallSound);
-            }
-        }
-    }
-
-    if (NewState != EDeliveryPhoneCallState::InCall)
-    {
-        if (DialogueVoice)
-        {
-            DialogueVoice->StopSpeaking();
-        }
-        ActiveVoiceCallId = 0;
-        ActivePhoneCallerName = FText::GetEmpty();
-        ActivePhoneSubtitle.Reset();
-        if (UDeliveryPromptSubsystem *Prompt = UDeliveryPromptSubsystem::Get(this))
-        {
-            Prompt->ClearSubtitle();
-        }
-        return;
-    }
-
-    // OnRep_Queue / OnRep_CallState 可能在同一帧各触发一次，同一通不能从头播放两遍
-    if (Call.CallId <= 0 || Call.CallId == ActiveVoiceCallId)
-    {
-        return;
-    }
-
-    ActiveVoiceCallId = Call.CallId;
-    const FDeliveryPhoneCallContent Content = UDeliveryPhoneCallQueueComponent::GetCallContent(Call);
-    ActivePhoneCallerName = Content.CallerName;
-    ActivePhoneSubtitle.Reset();
-    if (UDeliveryPromptSubsystem *Prompt = UDeliveryPromptSubsystem::Get(this))
-    {
-        Prompt->ClearSubtitle();
-    }
-    if (DialogueVoice)
-    {
-        DialogueVoice->SpeakText(Content.Dialogue);
-    }
-}
-
-// 停止并清理循环铃声
-void ADeliveryPlayerController::StopIncomingCallAudio()
-{
-    if (IncomingCallAudio)
-    {
-        IncomingCallAudio->Stop();
-        IncomingCallAudio->DestroyComponent();
-        IncomingCallAudio = nullptr;
-    }
-}
-
-// 角色交互的服务器入口
-
-// 逐字语音更新时同步字幕显示
-void ADeliveryPlayerController::HandlePhoneVoiceGlyphRevealed(const FString &Glyph, int32 GlyphIndex)
-{
-    if (!IsLocalController() || ActiveVoiceCallId <= 0)
-    {
-        return;
-    }
-
-    ActivePhoneSubtitle.Append(Glyph);
-    if (UDeliveryPromptSubsystem *Prompt = UDeliveryPromptSubsystem::Get(this))
-    {
-        Prompt->SetSubtitle(ActivePhoneCallerName, FText::FromString(ActivePhoneSubtitle));
-    }
+    if (HighlightPostProcess) HighlightPostProcess->bEnabled = IsLocalController();
 }
 
 namespace
@@ -352,108 +164,54 @@ void ADeliveryPlayerController::SetupInputComponent()
         EnsureInteractMapping(Subsystem);
     }
 
-    if (InputComponent && TogglePhoneKey.IsValid())
+    if (auto* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
     {
-        InputComponent->BindKey(TogglePhoneKey, IE_Pressed, this,
-                                &ADeliveryPlayerController::HandleTogglePhonePressed);
+        if (UInputAction* Action = TogglePhoneAction.LoadSynchronous())
+        {
+            EnhancedInput->BindAction(Action, ETriggerEvent::Started, this,
+                                      &ADeliveryPlayerController::HandleTogglePhonePressed);
+        }
     }
+    Hints->BindInput();
 }
 
-// 手机面板在 OpenUIPanels 里的名字；名字起得长是刻意的：Unity Build 会把多个 cpp
-// 合并成一个翻译单元，短名常量（PanelId、RetrySeconds 之类）在本项目已经撞过一次
-static const FName DeliveryPhoneUIPanelId(TEXT("DeliveryPhoneUI"));
+// 手机界面操作转发
 
-// 处理手机按键，并根据来电状态选择接听或打开界面
+UDeliveryPhoneController* ADeliveryPlayerController::GetPhoneController() const
+{
+    auto* HUD = Cast<ADeliveryHUD>(GetHUD());
+    return HUD ? HUD->GetPhoneController() : nullptr;
+}
+
+// 输入只转交操作，手机开关规则由处理器决定
 void ADeliveryPlayerController::HandleTogglePhonePressed()
 {
-    // 纯本机 UI 开关，不用过服务器
-    if (PhoneToggleSound)
-    {
-        UGameplayStatics::PlaySound2D(this, PhoneToggleSound);
-    }
-
-    // 状态由 C++ 翻，光标跟着状态走； 蓝图那边的 TogglePhoneUI 只负责把面板
-    // 加进/移出视口，不许碰 bShowMouseCursor——两边各自取反就是失同步的来源
-    bPhoneUIOpen = !bPhoneUIOpen;
-    SetUIPanelOpen(DeliveryPhoneUIPanelId, bPhoneUIOpen);
-
-    TogglePhoneUI();
+    if (auto* Phone = GetPhoneController()) Phone->Toggle();
 }
 
-// 记录面板开关状态，并统一更新鼠标和输入模式
+// 保留现有蓝图入口，面板状态统一交给 HUD
 void ADeliveryPlayerController::SetUIPanelOpen(FName PanelId, bool bOpen)
 {
-    if (PanelId.IsNone())
-    {
-        return;
-    }
-    if (PanelId == DeliveryPhoneUIPanelId)
-    {
-        bPhoneUIOpen = bOpen;
-    }
-
-    const int32 Before = OpenUIPanels.Num();
-    if (bOpen)
-    {
-        OpenUIPanels.Add(PanelId);
-    }
-    else
-    {
-        OpenUIPanels.Remove(PanelId);
-    }
-
-    // 值没变就别重复设输入模式：SetInputMode 会动焦点，每帧调一次会把 UI 里的
-    // 输入框焦点抢掉；只在"有没有面板"这件事真的翻转时才应用
-    const bool bHadAny = Before > 0;
-    const bool bHasAny = OpenUIPanels.Num() > 0;
-    if (bHadAny != bHasAny)
-    {
-        ApplyUIInputMode();
-    }
+    if (auto* HUD = Cast<ADeliveryHUD>(GetHUD())) HUD->SetPanelOpen(PanelId, bOpen);
 }
 
-// 把手机蓝图的显示状态交回所属玩家控制器
-void ADeliveryPlayerController::ReportPhoneUIOpen(UUserWidget *PhoneWidget, bool bOpen)
+void ADeliveryPlayerController::ReportPhoneUIOpen(UUserWidget* PhoneWidget, bool bOpen)
 {
-    ADeliveryPlayerController *Controller =
-        PhoneWidget ? Cast<ADeliveryPlayerController>(PhoneWidget->GetOwningPlayer()) : nullptr;
-    if (Controller)
-    {
-        Controller->SetUIPanelOpen(DeliveryPhoneUIPanelId, bOpen);
-    }
+    auto* Player = PhoneWidget ? Cast<ADeliveryPlayerController>(PhoneWidget->GetOwningPlayer()) : nullptr;
+    if (Player)
+        if (auto* Phone = Player->GetPhoneController()) Phone->SetOpen(bOpen);
 }
 
 bool ADeliveryPlayerController::IsAnyUIPanelOpen() const
 {
-    return OpenUIPanels.Num() > 0;
+    const auto* HUD = Cast<ADeliveryHUD>(GetHUD());
+    return HUD && HUD->IsAnyPanelOpen();
 }
 
-// 有面板打开时允许鼠标操作，全部关闭后恢复游戏输入
-void ADeliveryPlayerController::ApplyUIInputMode()
+bool ADeliveryPlayerController::IsPhoneUIOpen() const
 {
-    // 只有本机控制器有光标和输入模式这回事；服务器上那几个代理控制器碰了没意义
-    if (!IsLocalController())
-    {
-        return;
-    }
-
-    const bool bWantCursor = IsAnyUIPanelOpen();
-    bShowMouseCursor = bWantCursor;
-
-    if (bWantCursor)
-    {
-        FInputModeGameAndUI Mode;
-        // 不锁鼠标到视口：面板开着时玩家要能把指针移到任何地方点
-        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-        // 捕获期间也别藏光标，否则按住左键拖动时指针消失、看着像卡住
-        Mode.SetHideCursorDuringCapture(false);
-        SetInputMode(Mode);
-    }
-    else
-    {
-        // 回到纯游戏：鼠标移动全部交给视角，不再被光标吃掉
-        SetInputMode(FInputModeGameOnly());
-    }
+    const auto* HUD = Cast<ADeliveryHUD>(GetHUD());
+    return HUD && HUD->IsPanelOpen(UDeliveryPhoneController::PanelId);
 }
 
 // 接听与挂断请求
@@ -500,6 +258,8 @@ void ADeliveryPlayerController::ServerHangUpCall_Implementation()
     RequestHangUpCall();
 }
 
+// 角色交互的服务器入口
+
 // 确认请求者控制角色或其车辆，再转交角色交互组件
 void ADeliveryPlayerController::ServerRequestInteraction_Implementation(ADeliveryCharacter *ActingCharacter,
                                                                         EDeliveryInteractionRequest Request,
@@ -516,4 +276,20 @@ void ADeliveryPlayerController::ServerRequestInteraction_Implementation(ADeliver
     {
         ActingCharacter->GetInteractionComponent()->HandleRequest(Request, Target);
     }
+}
+
+// 只在实际使用另一种设备时更新键名，忽略摇杆零值和轻微漂移
+bool ADeliveryPlayerController::InputKey(const FInputKeyEventArgs& Params)
+{
+    if (Hints && IsLocalController() &&
+        (Params.Event == IE_Pressed || (Params.Event == IE_Axis && FMath::Abs(Params.AmountDepressed) > 0.2f)))
+    {
+        Hints->SetInputDevice(Params.Key.IsGamepadKey());
+    }
+    return Super::InputKey(Params);
+}
+
+FText ADeliveryPlayerController::GetPhoneKeyText() const
+{
+    return Hints ? Hints->GetKeyText(TogglePhoneAction.LoadSynchronous()) : FText::GetEmpty();
 }

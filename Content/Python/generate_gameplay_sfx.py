@@ -325,8 +325,12 @@ def _import_into_unreal(paths: list[Path]) -> None:
             continue
         try:
             default_object = unreal.get_default_object(blueprint.generated_class())
+            # 电话声音配置在 PhoneAudio 组件中
+            phone_audio = default_object.get_component_by_class(unreal.DeliveryPhoneAudioComponent)
+            if not phone_audio:
+                raise RuntimeError("缺少 PhoneAudio 组件")
             for property_name, sound_path in properties.items():
-                default_object.set_editor_property(property_name, unreal.load_asset(sound_path))
+                phone_audio.set_editor_property(property_name, unreal.load_asset(sound_path))
             unreal.EditorAssetLibrary.save_loaded_asset(blueprint, only_if_is_dirty=False)
             unreal.log(f"[SFX] 已绑定默认音效：{blueprint_path}")
         except Exception as error:

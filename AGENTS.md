@@ -243,8 +243,8 @@
   调色板和几何都是从原图逐像素实采的（最宽 272px、圆头半径 136、奶油圈半径 100、尖端 y≈390），
   别手改色号。**画图钉时切点必须在圆心下方 ±36°、圆弧走大的那段 252°**——算到圆上方的话
   只画出顶上 72°，头缩掉四分之一、蓝环被奶油圈挤没，渲出来是一根针。生成器里留了自检。
-- **鼠标光标归 C++ 统一管，蓝图一律不要写 `bShowMouseCursor`。** 规则是**光标 = 有没有 UI 面板开着**：`ADeliveryPlayerController::SetUIPanelOpen(PanelId, bOpen)` 维护面板集合，在「有/没有」翻转时设 `bShowMouseCursor` 和输入模式（有 → `GameAndUI` 不锁视口；全关 → `GameOnly`），配套 `IsAnyUIPanelOpen()` / `IsPhoneUIOpen()`。症状是**骑车时鼠标转不了视角、必须按住左键或右键**——光标开着时鼠标移动归光标。根因是 `BP_DeliveryManPC` 原来 `Set bShowMouseCursor = NOT(Get bShowMouseCursor)`，和面板开关是两个互不相干的取反开关，错开一次就永久失同步。按 J 现在是 C++ 翻 `bPhoneUIOpen` → 更新集合 → 调蓝图事件 `TogglePhoneUI`（蓝图只管面板显示/隐藏）；`IA_TogglePhone` 节点已删，文档要求的那步迁移这次才真正做完。**面板若有自己关掉自己的路径，那里也要调 `SetUIPanelOpen(..., false)`**。脚本：`diag_input_mode.py` → `fix_phone_cursor.py` → `fix_phone_event.py`。`WBP_TaskHUD` 有两份真资产：`/Game/UI/Task/` 那份在用，`/Game/Task/UI/` 零引用可删。
-- **手机开关键 J 已从 `IMC_Default` 搬到 `BindKey`**（`ADeliveryPlayerController::TogglePhoneKey` → `BlueprintImplementableEvent TogglePhoneUI()`，蓝图实现加/移视口）。理由和物品栏 1~5、切视角 P、召唤 R 一样：`IMC_Default.uasset` 从来没被提交过，每次 `git pull` 都会冲掉，而症状极具迷惑性——手机面板的显示逻辑不依赖按键绑定，表现是"UI 突然坏了"而不是"按键没绑"。F 键已经因此丢过两次。**蓝图那边要把原来绑 `IA_TogglePhone` 的逻辑改挂到 `TogglePhoneUI` 事件上。**
+- **鼠标光标归 C++ 统一管，蓝图一律不要写 `bShowMouseCursor`。** 规则是**光标 = 有没有 UI 面板开着**：`ADeliveryPlayerController::SetUIPanelOpen(PanelId, bOpen)` 转交 HUD，由 HUD 维护面板集合，在「有/没有」翻转时设 `bShowMouseCursor` 和输入模式（有 → `GameAndUI` 不锁视口；全关 → `GameOnly`），配套 `IsAnyUIPanelOpen()` / `IsPhoneUIOpen()`。症状是**骑车时鼠标转不了视角、必须按住左键或右键**——光标开着时鼠标移动归光标。根因是 `BP_DeliveryManPC` 原来 `Set bShowMouseCursor = NOT(Get bShowMouseCursor)`，和面板开关是两个互不相干的取反开关，错开一次就永久失同步。按 J 现在是 PhoneController 切换 HUD 中的手机状态 → 更新集合 → 调蓝图事件 `TogglePhoneUI`（蓝图只管面板显示/隐藏）；`IA_TogglePhone` 节点已删，文档要求的那步迁移这次才真正做完。**面板若有自己关掉自己的路径，那里也要调 `SetUIPanelOpen(..., false)`**。脚本：`diag_input_mode.py` → `fix_phone_cursor.py` → `fix_phone_event.py`。`WBP_TaskHUD` 有两份真资产：`/Game/UI/Task/` 那份在用，`/Game/Task/UI/` 零引用可删。
+- 物品栏、召唤和切换视角统一使用 IA，键盘及手柄映射在 IMC_Default 中配置
 - 调试命令（非 Shipping）：`Delivery.Wallet.Dump` / `Delivery.Wallet.Add <金额>` / `Delivery.Locations.Dump` / `Delivery.Task.LoseItem` / **`Delivery.Task.Validate`**。最后一条是摆取件点/收件点时的主力工具——一次列全所有配置问题（地点 ID 解析不出来、任务没有收件点指向它、收件点忘了填 `ExpectedTask`），不是遇到第一个就停。
 - 奖励结算有单元测试（`Task/DeliveryRewardTests.cpp`，筛 `Delivery.Task` 跑）。`EvaluateReward` 是纯函数，档位顺序、超时边界、特殊事件重复计数这些在 PIE 里只表现为"钱好像不太对"，靠肉眼对不出来。
 - 仍没做：手机 UI、存档、`DeliveryItemId`/`SpecialEventId` 的解析。对接点见文档第七、八节；第九节列了实现时替规则做的假设，需要确认。
@@ -536,8 +536,8 @@ GetFuturePostionandRotationAlongSpline:
 - **骑车时骑手的材质换成驾驶员自己那套**（`bUseDriverMaterials`，默认开）：骑手那 9 个槽共用一个 `tripo_mat_c9b1ab96`，**里面一张贴图都没有**，进游戏是一块灰白。
   **映射按槽位名一一对应。** 玩家网格 `Content/Characters/A/renwu` 和车模型自带的骑手**是同一个基础角色**（都是 Tripo 出的），槽位名完全一致：`tripo_mat_c9b1ab96` / `材质` / `材质_001`…`材质_006` / `Eyes_Black`；区别只在玩家那边给这 9 个槽配了 `character_hat`（绿帽）/`cloth`（黄衣）/`pants`（浅蓝裤）/`shoe1`/`shoe2`（深蓝鞋）/`socks`/`skin`/`eyes`/`prime`。同一个基础角色也意味着 UV 是同一套，贴过去就是玩家本人的样子。`RiderMaterialOverrides` 按下标手填可覆盖；没人骑时 `EmptyOverrideMaterials()` 还原。
   **踩过的坑**：第一版写成"名字里带 eye 的配眼睛，其余所有槽都用第一个非眼睛材质"，结果整个人被涂成衣服那一种黄色。起因是先用 `grep`/ASCII 扫 `.uasset` 判断槽位数，**`材质_00x` 是以 UTF-16 存在名字表里的，ASCII 扫描一条都看不见**，于是误判骑手只有 2 个槽。查 `.uasset` 里的中文名要按 UTF-16 扫，别用 `strings`。
-- **骑车时的镜头有两套，局内按 `P` 随时切**（`CameraToggleKey`，默认 `EKeys::P`；`bFreeLookCamera` 是初始模式，默认开 = 自由视角）。两套设置都完整写在 `ApplyCameraMode()` 里，没有哪一套是被删掉的。
-  - 切视角仍走 `BindKey` **直接绑键**，物品栏 1~5、召唤 R 也是旧的直接绑定；这些功能没有对应 IA，不能只改 IMC。`IMC_Default` 现已提交，角色和摩托车共用其中的移动、视角、攻击与交互 IA。查 `.uasset` 按键时只能按 FName 名字表扫，按 ASCII 正则乱扫单字母会把一堆无关字符串认成按键。
+- **骑车时的镜头有两套，局内按 `P` 随时切**（`IA_ToggleCamera`，默认映射到 P；`bFreeLookCamera` 是初始模式，默认开 = 自由视角）。两套设置都完整写在 `ApplyCameraMode()` 里，没有哪一套是被删掉的。
+- 物品栏、召唤和切换视角统一使用 IA，键盘及手柄映射在 IMC_Default 中配置
   - 切换那一帧要接控制旋转，否则视角会跳：切到固定视角调 `SyncControlRotation()`，切到自由视角保留当前朝向当起点。
   - **自由视角**（开）：弹簧臂 `bUsePawnControlRotation=true`，`bInheritPitch/Yaw` 都必须设成 true——`USpringArmComponent::GetTargetRotation()` 会拿组件的相对角度把没继承的那一轴顶掉，只开一个就只剩一个轴能转。鼠标/右摇杆复用角色身上同两个 IA（`IA_Look` / `IA_MouseLook`），俯仰上下限走 `PlayerCameraManager` 的 `ViewPitchMin/Max`。**Tick 里必须停掉 `SyncControlRotation()`**：自由视角下控制旋转就是镜头，每帧同步成车头朝向等于把鼠标抹掉。
   - **固定车尾视角**（关）：`bUsePawnControlRotation=false`、只继承 Yaw、俯仰吃 `CameraPitch` 的相对角度，鼠标完全不参与，"W 永远是往屏幕里开"。
@@ -588,16 +588,16 @@ GetFuturePostionandRotationAlongSpline:
 
 ### 召唤载具（按 R）
 [DeliveryVehicleSummonComponent](Source/Delivery/Vehicle/DeliveryVehicleSummonComponent.h) —— 挂在玩家 Pawn 上，按 R 把最近一辆没人骑的摩托车挪到身前，冷却 10 秒。地图没有摩托车时，服务器通过 `DefaultVehicleClass`（默认 `/Game/Vehicle/Motorbike/BP_Motorbike`）生成首辆车；已有车被占用或超出搜索范围时不额外生成。生成后仍走 `SummonTo` 探地，失败销毁临时车且不计冷却。回归检查：`Delivery.Vehicle.Summon.EmptyMap`。
-- **单独一个组件**而不是塞进 `ADeliveryCharacter`：它需要**按固定频率 Tick**来刷左下角提示，而角色的 Tick 是 `bStartWithTickEnabled=false`、只在被车撞的镜头拉远期间才临时打开的，借它推 HUD 会把那套按需开关搅乱。
+- 召唤组件只处理召唤和冷却，左下角提示由控制器上的 DeliveryHintComponent 监听状态通知后更新
 - 冷却是**服务器权威**的：`ReadyServerTime` 服务器写、`COND_OwnerOnly` 只复制给拥有者，客户端只拿来显示，不做预测（召唤本来就要等一个来回）。**探不到地面的召唤不计冷却**——玩家什么都没得到，不该被罚等 10 秒。
 - 落位交给 `ADeliveryMotorbike::SummonTo()`，车自己往下打地面射线，并**清空 `CurrentSpeed` / `VerticalVelocity` / 油门转向 / 被撞状态**：残余车速会让车刚出现就从脚边滑走，残余被撞状态会让它一边抖一边歪着出现。车上有人时拒绝，不能把别人正骑的车抽走。
 - `PlaceDistance` 默认 230cm，要大于车长（256cm）的一半再留余量，否则车会压在玩家身上把布娃娃顶翻。
 
 ### 屏幕左下角常驻提示
-`UDeliveryPromptSubsystem::PushCornerHint()` 和世界浮窗 `PushPrompt()` 是**两个独立槽位**，各有各的时间戳，同一个 SConstraintCanvas 上两个锚点。分开是必须的：合在一起的话走到车边时"按 R 召唤"会被"按 F 驾驶"顶掉。同样是"每帧推一次、停推 0.25 秒自动消失"的约定，所以不需要成对写 Show/Hide。
-- 步行时由 `UDeliveryVehicleSummonComponent` 推召唤提示（冷却中压暗成灰色 + 读秒）；骑行时由 `ADeliveryMotorbike::PushCameraHint()` 推"按 P 切换视角（当前：自由/固定）"。
-- **两者天然不会打架**：上车后控制器去 Possess 摩托车，被丢在车上的那具身体 `IsLocallyControlled()` 变成 false，召唤组件自动停推。
-- 提示里的键名一律从**实际绑定的 FKey** 取 `GetDisplayName()`，改了 `SummonVehicleKey` / `CameraToggleKey` 提示会跟着变，不会说一套做一套。
+左下角操作提示由 DeliveryHintComponent 监听事件后调用 SetCornerHint / ClearCornerHint，世界交互浮窗 PushPrompt 保持独立显示位置和原更新规则
+- 步行和骑行提示都由 DeliveryHintComponent 更新，按当前控制对象选择召唤或视角提示
+- 上下车触发 OnPossessedPawnChanged，提示组件取消旧对象的订阅并连接新对象
+- 提示从当前生效的 IA 映射查询键名，映射重建和输入设备切换时重新查询
 - 配置了默认车型时，即使地图没有摩托车也显示召唤提示；仅在场景无车且 `DefaultVehicleClass` 留空时隐藏。
 
 ### 8. 人物电子语音系统
@@ -723,7 +723,7 @@ PlayerController 自动累积到 `DeliveryPromptSubsystem` 的屏幕下方字幕
 - **`Content/Input/IMC_Default.uasset` 已提交。** 手柄布局：左摇杆移动、右摇杆视角、A/× 跳跃、
   LT/L2 左拳、RT/R2 右拳（双扳机沿用双键抓取）、X/□ 拾取、Y/△ 交互、十字键上打开电话；
   键鼠映射并存。用 `Content/Python/setup_gamepad_input.py` 可幂等补回这些手柄映射。
-  物品栏 1~5、切视角 P、召唤 R 仍是 `BindKey` 直接绑定，不属于 IMC/IA，后续适配对应手柄功能时要单独处理。
+- 物品栏、召唤和切换视角统一使用 IA，键盘及手柄映射在 IMC_Default 中配置
 
 ## 代码结构
 
@@ -774,7 +774,7 @@ Document/AudioSystem.md               人物电子语音（合成器+文本节�
 
 
 ### 通话结束后自动收起
-在用的 `/Game/UI/Task/WBP_TaskHUD.RefreshPhone` 在电话状态回到 `Idle` 后调用 `SetPhoneOpen(false)`，接通进入 `InCall` 时保持展开，整段通话结束（或手动挂断）才收起；不影响任务计时。`SetPhoneOpen` 统一调用 `DeliveryPlayerController.ReportPhoneUIOpen`，同步 `bPhoneUIOpen` 和 `OpenUIPanels`；已移除该函数内直接修改光标/输入模式的四个旧节点，统一由 C++ 按所有面板状态管理。因此来电自动展开、通话结束收起与 J 手动开关都同步，自动收起后下一次 J 直接打开。`Content/Python/phone_autoclose.py` 可幂等修补并编译保存该蓝图；原资产备份在 Saved，不提交。
+在用的 `/Game/UI/Task/WBP_TaskHUD.RefreshPhone` 在电话状态回到 `Idle` 后调用 `SetPhoneOpen(false)`，接通进入 `InCall` 时保持展开，整段通话结束（或手动挂断）才收起；不影响任务计时。`SetPhoneOpen` 统一调用 `DeliveryPlayerController.ReportPhoneUIOpen`，经 PhoneController 同步 HUD 的 OpenPanels；已移除该函数内直接修改光标/输入模式的四个旧节点，统一由 C++ 按所有面板状态管理。因此来电自动展开、通话结束收起与 J 手动开关都同步，自动收起后下一次 J 直接打开。`Content/Python/phone_autoclose.py` 可幂等修补并编译保存该蓝图；原资产备份在 Saved，不提交。
 
 ## 代码阅读入口（2026-11-02）
 
@@ -844,3 +844,25 @@ DeliveryInteractionRegistry 是世界子系统，每个世界分别保存交互�
 `Events/DeliveryEventComponent` 提供对象范围的本地事件，`Audio/DeliveryAudioComponent` 在开始时订阅、结束时解绑，通过 `DeliveryAudioConfig.Sounds` 查找一次性音效。角色取件和交付 RPC 只发布事件；车辆用命名枚举的 `MulticastVehicleEvent` 代替数字音效编号。`DeliveryVehicleAudioComponent` 继承普通音效组件，独立控制原 EngineAudio 的循环播放，车辆只传入驾驶状态和速度比例。配置资源为 `/Game/Sound/Config/DA_PlayerAudio` 与 `DA_VehicleAudio`，原蓝图参数已迁移，地图车辆无单独音效覆盖。背景音乐、电子语音、电话音效保持原流程，未全部纳入新事件。详见 Document/GameplayAudio.md
 
 事件音效验证：完整编译、25 项自动化测试通过；配置重启后保持，双人验证对应玩家事件隔离、下车通知和发动机启停，原始参数审计与验证报告在本次工作目录 work/delivery_audio
+## 输入动作与操作提示
+
+召唤、切换视角、物品栏和手机统一使用 IA，键盘和手柄映射放在 IMC_Default
+DeliveryHintComponent 挂在 PlayerController 上，监听控制对象、车辆视角、召唤冷却和输入映射变化
+左下角提示用 SetCornerHint / ClearCornerHint 显式更新，只有召唤冷却期间使用一次性计时器更新秒数
+ReadyServerTime 仍由服务器保存并复制给拥有者，客户端按同步服务器时间计算剩余时间
+详细职责、资源和通知流程见 [输入与操作提示](Document/InputHints.md)
+
+输入提示验证：完整编译通过，26 项自动化检查通过（6 项带警告）
+双人 PIE 检查召唤、上下车、视角、手机和模拟手柄视角输入，左下角提示正常切换且无 Tick
+物品栏五组键盘与手柄映射和绑定由自动化覆盖，未逐格实机验证物品交换
+
+## 手机 MVC 与玩家控制器
+
+PhoneController 使用现有 UI/Controllers 的 UObject 组织方式，由 DeliveryHUD 创建和销毁
+手机操作、对白编号和字幕拼接已从 PC 移到 PhoneController，面板集合和鼠标模式移到 HUD
+PhoneAudio 组件独立监听电话状态，四个电话音效已从 BP_DeliveryManPC 的旧字段迁移到 PhoneAudio
+PC 保留输入绑定、服务器请求及旧蓝图转发入口，不再保存手机开关、字幕和铃声音频实例
+电话队列、任务状态和接听挂断的服务器规则不变，完整结构见 Document/PhoneMVC.md
+
+
+手机 MVC 验证：完整编译通过，27 项自动化检查通过，其中原套件有 6 项带警告。双人 PIE 验证了手动手机开关隔离、共享来电展开、客户端接听后两边播放对白、挂断停声并收起，以及召唤、上下车和视角切换。手机状态、处理器查询与鼠标显示一致。四个电话音效引用已迁移并在重启后核对，HTML 已按手机宽度渲染检查。
