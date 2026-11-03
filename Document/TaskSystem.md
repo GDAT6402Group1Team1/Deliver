@@ -1,7 +1,7 @@
 # 任务系统（电话接任务）结构与接口
 
-对应功能说明里的十条规则。本文档描述**已经写出来的 C++ 结构和对外接口**，
-以及还没做、需要别的系统来接的部分。UI、背包、交互、金钱都不在本次范围内。
+本文说明共享任务状态及其对外接口，交互与携带负责玩家操作，钱包负责奖励，界面控制器负责显示
+完整系统关系见 [系统设计](Architecture.md)
 
 ---
 
@@ -29,85 +29,18 @@
 
 ## 二、状态机
 
+```text
+Locked → Offered → AwaitingPickup → InProgress → Completed
+未解锁     已发出来电     已接单待取件       配送中        已完成
+
+接听来电时开始计时，拾取、换手和重新拾取都不重置计时
+```text
+Locked → Offered → AwaitingPickup → InProgress → Completed
+未解锁     已发出来电     已接单待取件       配送中        已完成
+
+接听来电时开始计时，拾取、换手和重新拾取都不重置计时
 ```
-                解锁条件满足                  有人取到快递              交付完成
-   Locked ──────────────────► AwaitingPickup ──────────► InProgress ──────────► Completed
-（未解锁）      ＋解锁来电入队   （待取件）         状态切换     （进行中）    ＋结算奖励
-                              接听电话即开始计时      计时不重置
-```
 
-- **没有失败态**。超时只影响奖励倍率，任务继续，颜色保持红色，倒计时转正计时。
-- 解锁但尚未接听的任务不计时；接听后即使还没取餐也持续计时。
-- 首次超时打一次催促电话（`bOverdueCallPlayed` 置位），同一任务不会打第二次。
-
----
-
-## 三、文件与职责
-
-所有新文件在 `Source/Delivery/Task/`，另有 GameState 在 `Source/Delivery/`。
-
-| 文件 | 类 | 挂在哪 | 职责 |
-|---|---|---|---|
-| `Task/DeliveryTaskTypes.h` | 枚举与结构体 | — | 状态枚举、计时快照、奖励明细、电话项等纯数据 |
-| `Task/DeliveryTaskDefinition.h/.cpp` | `UDeliveryTaskDefinition` | 资产 | 一个任务的静态配置（一个任务一份资产） |
-| `Task/DeliveryTaskUnlockCondition.h/.cpp` | `UDeliveryTaskUnlockCondition` | 内联在资产里 | 解锁条件基类，可继承 C++/蓝图扩展 |
-| `Task/DeliveryTaskManagerComponent.h/.cpp` | `UDeliveryTaskManagerComponent` | **GameState** | 全局任务状态唯一权威：解锁、接取、计时、完成、奖励结算 |
-| `Task/DeliveryPhoneCallQueueComponent.h/.cpp` | `UDeliveryPhoneCallQueueComponent` | **GameState** | 全局电话队列，解锁来电和催促来电按序播放 |
-| `Task/DeliveryTaskTrackerComponent.h/.cpp` | `UDeliveryTaskTrackerComponent` | **PlayerState** | 每个玩家自己的当前追踪任务 |
-| `Task/DeliveryItemComponent.h/.cpp` | `UDeliveryItemComponent` | 快递 Actor | 声明这件快递属于哪个任务；回答能不能捡、捡了要不要接取 |
-| `Task/DeliveryTargetComponent.h/.cpp` | `UDeliveryTargetComponent` | 收件人 Actor | 声明这里收哪个任务；执行交付判定与完成 |
-| `DeliveryGameState.h/.cpp` | `ADeliveryGameState` | — | 承载上面两个全局组件 |
-
-改动到的既有文件：
-- `DeliveryGameMode.cpp`：`GameStateClass = ADeliveryGameState::StaticClass()`
-- `GAS/DeliverPlayerState.h/.cpp`：创建 `TaskTracker` 子组件
-
----
-
-## 四、接口清单
-
-### 4.1 `UDeliveryTaskManagerComponent`（全局权威，GameState 上）
-
-拿到它：`UDeliveryTaskManagerComponent::Get(WorldContextObject)`（蓝图可调）。
-
-**服务器接口**（客户端调用直接返回 false，不会有副作用）：
-
-| 接口 | 说明 |
-|---|---|
-| `bool StartTaskTimerFromAcceptedCall(Task)` | 接通任务解锁电话时开始计时；幂等，已有其他计时任务时拒绝 |
-| `bool TryAcquireItem(Task, APlayerState* Player)` | 玩家拿到快递。正常情况只切到 InProgress、不重置计时；漏接时以取件时刻兜底开始 |
-| `bool TryCompleteDelivery(Task, APlayerState* Deliverer)` | 完成交付。结算奖励、结束任务、重新评估后续任务解锁 |
-| `void ReportSpecialEvent(Task, FGameplayTag EventTag)` | 上报影响奖励的特殊事件。同一 Tag 只记一次 |
-| `void ReevaluateUnlocks()` | 重新评估所有未解锁任务。完成任务后自动调用；外部条件变化时需手动调 |
-
-**双端查询接口**：
-
-| 接口 | 说明 |
-|---|---|
-| `bool CanAcquireItem(Task) const` | 这件快递现在能不能被拿起来（交互系统在拾取前问这句） |
-| `EDeliveryTaskStatus GetTaskStatus(Task) const` | 任务状态 |
-| `UDeliveryTaskDefinition* GetActiveTask() const` | 当前已取件、进行中的任务 |
-| `UDeliveryTaskDefinition* GetTimedTask() const` | 当前已接单并计时的任务；可能仍在 AwaitingPickup |
-| `void GetTasksByStatus(Status, TArray<...>& Out) const` | 按状态取任务列表（手机列表用 `AwaitingPickup`） |
-| `FDeliveryTaskTimeSnapshot GetTimeSnapshot(Task) const` | 倒计时快照：已用时、剩余（超时为负）、是否超时、绿/黄/红 |
-| `FDeliveryRewardBreakdown EvaluateReward(Task, Elapsed, Events) const` | 纯计算，结算和预览都走它 |
-| `FDeliveryRewardBreakdown PreviewReward(Task) const` | 按当前用时预览"现在送到能拿多少" |
-
-**事件**（服务器直接广播，客户端经复制差分后广播）：
-
-| 委托 | 参数 |
-|---|---|
-| `OnTaskStatusChanged` | `(Task, NewStatus)` |
-| `OnTaskCompleted` | `(Task, const FDeliveryRewardBreakdown&, APlayerState* Deliverer)` |
-| `OnTaskOverdue` | `(Task)` 首次超时 |
-
-三者语义不同，用法见第七节。
-
-### 4.2 `UDeliveryPhoneCallQueueComponent`（全局电话队列，GameState 上）
-
-状态机：
-
-```
 Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCall ──(播完 / 挂断)──┐
                          └──(响铃超时没人接，记未接)──────────────────┤
                                                                      ▼

@@ -1,0 +1,11 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "Delivery 调参助手",
+  "Description": "布娃娃与出拳参数面板及中文调参说明。",
+  "Category": "Editor",
+  "EnabledByDefault": true,
+  "CanContainContent": false,
+  "Modules": [{"Name": "DeliveryTuning", "Type": "Editor", "LoadingPhase": "PostEngineInit"}]
+}

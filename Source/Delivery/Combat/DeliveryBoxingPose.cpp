@@ -1,7 +1,8 @@
-// 阅读顺序：Create 建立手臂电机，Update 用纯拳路计算目标，再把目标旋转交给电机。
-// 物理资产补全单独放在 DeliveryBoxingPhysicsAsset.cpp，游戏中的每帧动作在这里。
-#include "DeliveryBoxingPose.h"
-#include "DeliveryPunchTrajectory.h"
+// 根据拳击阶段计算手臂目标姿势，让出拳与收拳保持连续
+// Create 建立手臂电机；Update 根据拳路计算目标旋转，并更新电机
+// 物理资产补全单独放在 DeliveryBoxingPhysicsAsset.cpp，游戏中的每帧动作在这里
+#include "Combat/DeliveryBoxingPose.h"
+#include "Combat/DeliveryPunchTrajectory.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "PhysicsControlComponent.h"
 #include "Delivery.h"
@@ -10,11 +11,12 @@ using DeliveryPunchTrajectory::FArmReach;
 using DeliveryPunchTrajectory::MakeReach;
 using DeliveryPunchTrajectory::BlendReach;
 
+// 创建手臂姿态控制，并保存后续计算使用的骨骼数据
 void FDeliveryBoxingPose::Create(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* Controls,
-	const FDeliveryArmPoseSettings& InSettings)
+                                 const FDeliveryArmPoseSettings& InSettings)
 {
 	// 每只手臂分别记下“刚进游戏时”的骨骼方向与长度；后续只改变目标姿势，
-	// 不在出拳时改骨骼长度。每段骨骼都需要一个可模拟物理的刚体和一个旋转电机。
+	// 不在出拳时改骨骼长度；每段骨骼都需要一个可模拟物理的刚体和一个旋转电机
 	Settings = InSettings;
 	SettleTime = 0;
 	ReferenceYaw = Mesh->GetOwner()->GetActorRotation().Yaw;
@@ -26,9 +28,10 @@ void FDeliveryBoxingPose::Create(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 		Arm.Upper = FName(*(Prefix + TEXT("Arm")));
 		Arm.Lower = FName(*(Prefix + TEXT("ForeArm")));
 		Arm.Hand = FName(*(Prefix + TEXT("Hand")));
-		if (!Mesh->GetBodyInstance(Arm.Upper) || !Mesh->GetBodyInstance(Arm.Lower) || !Mesh->GetBodyInstance(Arm.Hand))
+		if (!Mesh->GetBodyInstance(Arm.Upper) || !Mesh->GetBodyInstance(Arm.Lower) ||
+		    !Mesh->GetBodyInstance(Arm.Hand))
 		{
-			// 没有刚体就没有肌肉，这条手臂只会跟着身体甩。物理资产缺件时最先看这条。
+			// 没有刚体就没有肌肉，这条手臂只会跟着身体甩；物理资产缺少对应刚体时，无法建立这条手臂的驱动
 			UE_LOG(LogDelivery, Warning, TEXT("Boxing: %s arm has no physics bodies"), *Prefix);
 			continue;
 		}
@@ -41,7 +44,8 @@ void FDeliveryBoxingPose::Create(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 		Arm.LowerDirection = Mesh->GetBoneLocation(Arm.Hand) - Mesh->GetBoneLocation(Arm.Lower);
 		Arm.UpperLength = Arm.UpperDirection.Size();
 		Arm.LowerLength = Arm.LowerDirection.Size();
-		if (FMath::Min(Arm.UpperLength, Arm.LowerLength) < 1) continue;
+		if (FMath::Min(Arm.UpperLength, Arm.LowerLength) < 1)
+			continue;
 		FPhysicsControlData Data;
 		Data.AngularStrength = Settings.RestStrength;
 		Data.AngularDampingRatio = Settings.DampingRatio;
@@ -52,59 +56,66 @@ void FDeliveryBoxingPose::Create(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 		{
 			FPhysicsControlTarget Target;
 			Target.TargetOrientation = Rotation.Rotator();
-			return Controls->CreateControl(Parent.IsNone() ? nullptr : Mesh, Parent,
-				Mesh, Bone, Data, Target, TEXT("Boxing"));
+			return Controls->CreateControl(Parent.IsNone() ? nullptr : Mesh, Parent, Mesh, Bone, Data, Target,
+			                               TEXT("Boxing"));
 		};
 		Arm.UpperControl = CreateControl(NAME_None, Arm.Upper, Arm.UpperReference);
-		Arm.LowerControl = CreateControl(Arm.Upper, Arm.Lower,
-			Arm.UpperReference.Inverse() * Arm.LowerReference);
-		Arm.HandControl = CreateControl(Arm.Lower, Arm.Hand,
-			Arm.LowerReference.Inverse() * Arm.HandReference);
+		Arm.LowerControl =
+		    CreateControl(Arm.Upper, Arm.Lower, Arm.UpperReference.Inverse() * Arm.LowerReference);
+		Arm.HandControl =
+		    CreateControl(Arm.Lower, Arm.Hand, Arm.LowerReference.Inverse() * Arm.HandReference);
 		Arm.bReady = !Arm.UpperControl.IsNone() && !Arm.LowerControl.IsNone() && !Arm.HandControl.IsNone();
 	}
 }
 
-FVector FDeliveryBoxingPose::SolveElbow(const FVector& Shoulder, const FVector& Hand,
-	const FVector& Pole, float UpperLength, float LowerLength)
+// 根据肩、手和手臂长度计算肘部位置
+FVector FDeliveryBoxingPose::SolveElbow(const FVector& Shoulder, const FVector& Hand, const FVector& Pole,
+                                        float UpperLength, float LowerLength)
 {
-	// 已知肩、手、上臂长和前臂长，求肘的位置。Along 是肘沿肩→手方向
-	// 前进的距离；Height 是肘离这条直线的距离；Pole 决定肘向哪一侧弯。
-	// 把手的距离夹在可达范围内，避免完全伸直时出现无解或数值抖动。
+	// 已知肩、手、上臂长和前臂长，求肘的位置；Along 是肘沿肩→手方向
+	// 前进的距离；Height 是肘离这条直线的距离；Pole 决定肘向哪一侧弯
+	// 把手的距离夹在可达范围内，避免完全伸直时出现无解或数值抖动
 	const FVector Direction = (Hand - Shoulder).GetSafeNormal();
-	const float Distance = FMath::Clamp(FVector::Distance(Hand, Shoulder),
-		FMath::Abs(UpperLength - LowerLength) + 0.01f, UpperLength + LowerLength - 0.01f);
-	const float Along = (UpperLength * UpperLength - LowerLength * LowerLength + Distance * Distance) / (2 * Distance);
+	const float Distance =
+	    FMath::Clamp(FVector::Distance(Hand, Shoulder), FMath::Abs(UpperLength - LowerLength) + 0.01f,
+		             UpperLength + LowerLength - 0.01f);
+	const float Along =
+	    (UpperLength * UpperLength - LowerLength * LowerLength + Distance * Distance) / (2 * Distance);
 	const float Height = FMath::Sqrt(FMath::Max(0.f, UpperLength * UpperLength - Along * Along));
 	FVector Bend = FVector::VectorPlaneProject(Pole, Direction).GetSafeNormal();
-	if (Bend.IsNearlyZero()) Bend = FVector::CrossProduct(Direction, FVector::RightVector).GetSafeNormal();
+	if (Bend.IsNearlyZero())
+		Bend = FVector::CrossProduct(Direction, FVector::RightVector).GetSafeNormal();
 	return Shoulder + Direction * Along + Bend * Height;
 }
 
+// 计算蓄力、挥拳和回收阶段的手臂姿态，并更新物理控制目标
 void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* Controls,
-	float FacingYaw, float DeltaTime, int32 PunchArm, bool bReleased, FVector PunchDirection,
-	const FVector* GrabGoals, uint8 GrabMask, const FDeliveryAnimationArmPose* AnimationPose)
+                                 float FacingYaw, float DeltaTime, int32 PunchArm, bool bReleased,
+                                 FVector PunchDirection, const FVector* GrabGoals, uint8 GrabMask,
+                                 const FDeliveryAnimationArmPose* AnimationPose)
 {
-	// 同一条更新路径同时处理自然垂手、向后蓄力、向前出拳、收拳和抓取。
-	// 先算手在肩附近的目标，再求肘与三段骨骼的朝向，最后交给物理电机。
+	// 同一条更新路径同时处理自然垂手、向后蓄力、向前出拳、收拳和抓取
+	// 先算手在肩附近的目标，再求肘与三段骨骼的朝向，最后交给物理电机
 	SettleTime += DeltaTime;
 	const float Settle = FMath::SmoothStep(0.f, 0.5f, SettleTime);
 	const FQuat Yaw(FVector::UpVector, FMath::DegreesToRadians(FacingYaw - ReferenceYaw));
 	const FVector Forward = FRotator(0, FacingYaw, 0).Vector();
 	const FVector Right = FVector::CrossProduct(FVector::UpVector, Forward);
-	// 拳头沿瞄准方向走，但不能离身体正前方太远，不然目标点落在肩膀的活动范围之外。
+	// 拳头沿瞄准方向走，但不能离身体正前方太远，不然目标点落在肩膀的活动范围之外
 	FVector RequestedPunchForward = Forward;
 	const FVector FlatAim = PunchDirection.GetSafeNormal2D();
 	if (!FlatAim.IsNearlyZero())
 	{
 		const float Deviation = FMath::Clamp(FMath::FindDeltaAngleDegrees(FacingYaw, FlatAim.Rotation().Yaw),
-			-Settings.PunchYawLimit, Settings.PunchYawLimit);
+		                                     -Settings.PunchYawLimit, Settings.PunchYawLimit);
 		RequestedPunchForward = FRotator(0, FacingYaw + Deviation, 0).Vector();
 	}
 	for (int32 Side = 0; Side < 2; ++Side)
 	{
 		FArm& Arm = Arms[Side];
-		if (!Arm.bReady) continue;
-		// 只有出拳那只手离开 A 姿势，另一只手继续垂着。
+		if (!Arm.bReady)
+			continue;
+		// 只有出拳那只手离开 A 姿势，另一只手继续垂着
 		const bool bWindup = Side == PunchArm;
 		const bool bStrike = bWindup && bReleased;
 		const bool bReturning = !bWindup && (Arm.bWasPunching || Arm.Windup > 0.f || Arm.Extension > 0.f);
@@ -114,96 +125,107 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 			Arm.LowerRecovery = Arm.LowerTransport;
 		}
 		Arm.bWasPunching = bWindup;
-		if (bWindup || Arm.PunchForward.IsNearlyZero()) Arm.PunchForward = RequestedPunchForward;
+		if (bWindup || Arm.PunchForward.IsNearlyZero())
+			Arm.PunchForward = RequestedPunchForward;
 		const FVector PunchForward = Arm.PunchForward;
 		Arm.Windup = FMath::FInterpConstantTo(Arm.Windup, bWindup ? 1.f : 0.f, DeltaTime,
-			bWindup ? Settings.WindupSpeed : Settings.WindupReleaseSpeed);
-		Arm.Extension = FMath::FInterpConstantTo(Arm.Extension, bStrike ? 1.f : 0.f, DeltaTime,
-			bStrike ? Settings.PunchExtendSpeed : Settings.PunchRetractSpeed);
+		                                      bWindup ? Settings.WindupSpeed : Settings.WindupReleaseSpeed);
+		Arm.Extension =
+		    FMath::FInterpConstantTo(Arm.Extension, bStrike ? 1.f : 0.f, DeltaTime,
+			                         bStrike ? Settings.PunchExtendSpeed : Settings.PunchRetractSpeed);
 		const float WindupAlpha = FMath::SmoothStep(0.f, 1.f, Arm.Windup);
-		// 出拳前段快速向前，末端减速；收拳则两端都放缓。
-		// 若出拳起点也缓入，看起来会像慢慢把对方推开，而不是挥拳。
-		const float StrikeAlpha = bStrike
-			? DeliveryPunchTrajectory::StrikeProgress(Arm.Extension)
-			: DeliveryPunchTrajectory::RetractProgress(Arm.Extension);
+		// 出拳前段快速向前，末端减速；收拳则两端都放缓
+		// 若出拳起点也缓入，看起来会像慢慢把对方推开，而不是挥拳
+		const float StrikeAlpha = bStrike ? DeliveryPunchTrajectory::StrikeProgress(Arm.Extension)
+		                                  : DeliveryPunchTrajectory::RetractProgress(Arm.Extension);
 		const FVector Outward = Right * (Side == 0 ? -1.f : 1.f);
 		const float Length = Arm.UpperLength + Arm.LowerLength;
 		const float MaxReach = Length * 0.99f;
 
-		// 参考姿态：自己算的 A 姿势。手臂自然下垂、略微外张，肘部鼓向身后。
+		// 参考姿态：自己算的 A 姿势；手臂自然下垂、略微外张，肘部鼓向身后
 		const float Spread = FMath::DegreesToRadians(Settings.RestSpreadAngle);
-		FArmReach Reach = MakeReach(
-			(-FVector::UpVector * FMath::Cos(Spread) + Outward * FMath::Sin(Spread)
-				+ Forward * FMath::Tan(FMath::DegreesToRadians(Settings.RestForwardAngle))) * Length * Settings.RestReach,
-			-Forward + Outward * 0.35f, MaxReach);
+		FArmReach Reach =
+		    MakeReach((-FVector::UpVector * FMath::Cos(Spread) + Outward * FMath::Sin(Spread) +
+			           Forward * FMath::Tan(FMath::DegreesToRadians(Settings.RestForwardAngle))) *
+			              Length * Settings.RestReach,
+			          -Forward + Outward * 0.35f, MaxReach);
 		const FArmReach RestReach = Reach;
 
-		// 先沿瞄准方向向侧后方收拳，再从此点向前打出。少量外侧距离
-		// 让手经过肩旁而非穿过肩关节原点，保持屈肘方向连续。
-		const FVector WindupOffset = DeliveryPunchTrajectory::WindupOffset(PunchForward,
-			Outward, Length, Settings.WindupBack, Settings.WindupUp, Settings.WindupOutward);
+		// 先沿瞄准方向向侧后方收拳，再从此点向前打出；少量外侧距离
+		// 让手经过肩旁而非穿过肩关节原点，保持屈肘方向连续
+		const FVector WindupOffset = DeliveryPunchTrajectory::WindupOffset(
+		    PunchForward, Outward, Length, Settings.WindupBack, Settings.WindupUp, Settings.WindupOutward);
 		Reach = BlendReach(Reach, MakeReach(WindupOffset, -FVector::UpVector + Outward * 0.4f, MaxReach),
-			WindupAlpha, WindupAlpha);
+		                   WindupAlpha, WindupAlpha);
 
-		// 前送走肩到手的直线：直接插值偏移。BlendReach 先转方向再伸长，方向差一丁点就是弧。
-		const FVector PunchOffset = DeliveryPunchTrajectory::StrikeOffset(PunchForward,
-			Outward, Length, Settings.PunchReach, Settings.PunchInward, Settings.PunchDrop);
-		Reach = MakeReach(
-			FMath::Lerp(Reach.Direction * Reach.Distance, PunchOffset, StrikeAlpha),
-			FMath::Lerp(Reach.Pole, (-FVector::UpVector * 0.85f + Outward * 0.3f).GetSafeNormal(), StrikeAlpha),
-			MaxReach);
+		// 前送走肩到手的直线：直接插值偏移；BlendReach 先转方向再伸长，方向差一丁点就是弧
+		const FVector PunchOffset = DeliveryPunchTrajectory::StrikeOffset(
+		    PunchForward, Outward, Length, Settings.PunchReach, Settings.PunchInward, Settings.PunchDrop);
+		Reach =
+		    MakeReach(FMath::Lerp(Reach.Direction * Reach.Distance, PunchOffset, StrikeAlpha),
+			          FMath::Lerp(Reach.Pole, (-FVector::UpVector * 0.85f + Outward * 0.3f).GetSafeNormal(),
+			                      StrikeAlpha),
+			          MaxReach);
 
 		const FVector Shoulder = Mesh->GetBoneLocation(Arm.Upper);
 		const bool bGrab = GrabGoals && (GrabMask & (1 << Side));
 		if (bGrab)
 		{
-			// 仍由这套唯一的手臂电机求解；抓取时只改目标，不叠加第二套位置电机。
-			Reach = MakeReach(GrabGoals[Side] - Shoulder,
-				-FVector::UpVector + Outward * 0.4f, MaxReach);
+			// 仍由这套唯一的手臂电机求解；抓取时只改目标，不叠加第二套位置电机
+			Reach = MakeReach(GrabGoals[Side] - Shoulder, -FVector::UpVector + Outward * 0.4f, MaxReach);
 		}
 		const FVector Hand = Shoulder + Reach.Direction * Reach.Distance;
 		// 目标“拳头在哪里”还不能直接驱动整条手臂：先求肘，再把肩→肘、
-		// 肘→手两个方向分别换成上臂、前臂的目标旋转。
+		// 肘→手两个方向分别换成上臂、前臂的目标旋转
 		const FVector Elbow = SolveElbow(Shoulder, Hand, Reach.Pole, Arm.UpperLength, Arm.LowerLength);
 		const FQuat UpperBase = Yaw * Arm.UpperReference;
 		const FQuat LowerBase = Yaw * Arm.LowerReference;
-		// Keep the original absolute twist during windup/strike. Independently
-		// transporting upper/lower rotations accumulates DIFFERENT axial roll,
-		// making the elbow target fight its limited physical twist constraint.
-		// Only recovery needs a continuous transition across the bind-pose antipode.
+		// 蓄力和挥拳使用固定的参考扭转角
+		// 上臂和前臂分别累积旋转会产生不同的轴向偏转
+		// 这会使肘部目标超出物理约束允许的扭转范围
+		// 只有收拳阶段需要连续过渡到参考姿势
 		FQuat Upper = FQuat::FindBetweenNormals(Yaw.RotateVector(Arm.UpperDirection).GetSafeNormal(),
-			(Elbow - Shoulder).GetSafeNormal()) * UpperBase;
+		                                        (Elbow - Shoulder).GetSafeNormal()) *
+		              UpperBase;
 		FQuat Lower = FQuat::FindBetweenNormals(Yaw.RotateVector(Arm.LowerDirection).GetSafeNormal(),
-			(Hand - Elbow).GetSafeNormal()) * LowerBase;
+		                                        (Hand - Elbow).GetSafeNormal()) *
+		              LowerBase;
 		if (bReturning && !bGrab)
 		{
-			// Recovery is an orientation transition, not another IK punch. Blending
-			// the windup pole and reach simultaneously can sweep the elbow around
-			// the shoulder-to-hand axis, even with continuous axial transport.
+			// 收拳直接过渡关节朝向，不再重新求解拳路
+			// 同时改变肘部弯曲方向和手部距离，会让肘部绕肩手连线旋转
+			// 即使旋转插值连续，也无法消除这种肘部绕转
 			const FVector RestHand = RestReach.Direction * RestReach.Distance;
-			const FVector RestElbow = SolveElbow(FVector::ZeroVector, RestHand,
-				RestReach.Pole, Arm.UpperLength, Arm.LowerLength);
-			const float RecoveryAlpha = FMath::SmoothStep(0.f, 1.f,
-				1.f - FMath::Max(Arm.Windup, Arm.Extension));
-			const auto Recover = [&](FQuat& Previous, const FQuat& Start,
-				const FQuat& Reference, const FVector& Axis, const FVector& Direction)
+			const FVector RestElbow =
+			    SolveElbow(FVector::ZeroVector, RestHand, RestReach.Pole, Arm.UpperLength, Arm.LowerLength);
+			const float RecoveryAlpha =
+			    FMath::SmoothStep(0.f, 1.f, 1.f - FMath::Max(Arm.Windup, Arm.Extension));
+			const auto Recover = [&](FQuat& Previous, const FQuat& Start, const FQuat& Reference,
+			                         const FVector& Axis, const FVector& Direction)
 			{
 				const FQuat Rest = FQuat::FindBetweenNormals(Axis.GetSafeNormal(),
-					Yaw.UnrotateVector(Direction.GetSafeNormal())) * Reference;
+				                                             Yaw.UnrotateVector(Direction.GetSafeNormal())) *
+				                   Reference;
 				Previous = FQuat::Slerp(Start, Rest, RecoveryAlpha).GetNormalized();
 				return Yaw * Previous;
 			};
-			Upper = Recover(Arm.UpperTransport, Arm.UpperRecovery, Arm.UpperReference, Arm.UpperDirection, RestElbow);
-			Lower = Recover(Arm.LowerTransport, Arm.LowerRecovery, Arm.LowerReference, Arm.LowerDirection, RestHand - RestElbow);
+			Upper = Recover(Arm.UpperTransport, Arm.UpperRecovery, Arm.UpperReference, Arm.UpperDirection,
+			                RestElbow);
+			Lower = Recover(Arm.LowerTransport, Arm.LowerRecovery, Arm.LowerReference, Arm.LowerDirection,
+			                RestHand - RestElbow);
 		}
 		const float AnimationWeight = AnimationPose && !bGrab ? AnimationPose->Weight : 0.f;
 		if (AnimationWeight > 0)
 		{
 			const FQuat Facing = FRotator(0, FacingYaw, 0).Quaternion();
-			const FQuat AnimatedUpper = FQuat::FindBetweenNormals(
-				Yaw.RotateVector(Arm.UpperDirection).GetSafeNormal(), Facing.RotateVector(AnimationPose->Upper[Side])) * UpperBase;
-			const FQuat AnimatedLower = FQuat::FindBetweenNormals(
-				Yaw.RotateVector(Arm.LowerDirection).GetSafeNormal(), Facing.RotateVector(AnimationPose->Lower[Side])) * LowerBase;
+			const FQuat AnimatedUpper =
+			    FQuat::FindBetweenNormals(Yaw.RotateVector(Arm.UpperDirection).GetSafeNormal(),
+				                          Facing.RotateVector(AnimationPose->Upper[Side])) *
+			    UpperBase;
+			const FQuat AnimatedLower =
+			    FQuat::FindBetweenNormals(Yaw.RotateVector(Arm.LowerDirection).GetSafeNormal(),
+				                          Facing.RotateVector(AnimationPose->Lower[Side])) *
+			    LowerBase;
 			Upper = FQuat::Slerp(Upper, AnimatedUpper, AnimationWeight).GetNormalized();
 			Lower = FQuat::Slerp(Lower, AnimatedLower, AnimationWeight).GetNormalized();
 		}
@@ -211,35 +233,37 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 		Arm.LowerTransport = (Yaw.Inverse() * Lower).GetNormalized();
 		const FQuat Wrist = Lower * Arm.LowerReference.Inverse() * Arm.HandReference;
 
-		// 站着可以松，收拳要绷住，前送必须硬，否则拳头追不上目标点。
-		const float Strength = FMath::Lerp(
-			FMath::Lerp(Settings.RestStrength, Settings.WindupStrength, WindupAlpha),
-			Settings.PunchStrength, StrikeAlpha);
-		const float AppliedStrength = bGrab ? Settings.GrabStrength
-			: FMath::Lerp(Strength, Settings.PunchStrength, AnimationWeight);
+		// 站着可以松，收拳要绷住，前送必须硬，否则拳头追不上目标点
+		const float Strength =
+		    FMath::Lerp(FMath::Lerp(Settings.RestStrength, Settings.WindupStrength, WindupAlpha),
+			            Settings.PunchStrength, StrikeAlpha);
+		const float AppliedStrength =
+		    bGrab ? Settings.GrabStrength : FMath::Lerp(Strength, Settings.PunchStrength, AnimationWeight);
 		if (!FMath::IsNearlyEqual(Arm.AppliedStrength, AppliedStrength, 0.1f))
 		{
 			Arm.AppliedStrength = AppliedStrength;
-			const TPair<FName, float> Links[] = {
-				{ Arm.UpperControl, Settings.UpperArmStrengthScale },
-				{ Arm.LowerControl, 1.f },
-				{ Arm.HandControl, Settings.HandStrengthScale } };
+			const TPair<FName, float> Links[] = {{Arm.UpperControl, Settings.UpperArmStrengthScale},
+			                                     {Arm.LowerControl, 1.f},
+			                                     {Arm.HandControl, Settings.HandStrengthScale}};
 			for (const TPair<FName, float>& Link : Links)
 			{
-				Controls->SetControlAngularData(Link.Key, AppliedStrength * Link.Value, Settings.DampingRatio, 0, 0, true, true, false);
+				Controls->SetControlAngularData(Link.Key, AppliedStrength * Link.Value, Settings.DampingRatio,
+				                                0, 0, true, true, false);
 			}
 		}
 		// 写给实际的三个控制器（不是控制器集合）；DeltaTime 让电机知道目标转动速度，
-		// 快速出拳时能及时跟上。实际手臂依旧由刚体模拟，不会直接传送到目标姿势。
+		// 快速出拳时能及时跟上；实际手臂依旧由刚体模拟，不会直接传送到目标姿势
 		const FQuat UpperTarget = FQuat::Slerp(UpperBase, Upper, Settle).GetNormalized();
 		const FQuat LowerTarget = FQuat::Slerp(LowerBase, Lower, Settle).GetNormalized();
 		const FQuat HandTarget = FQuat::Slerp(Yaw * Arm.HandReference, Wrist, Settle).GetNormalized();
-		// 肘、腕跟随物理父刚体，而不是各自追一个独立世界朝向。
-		// 父肢体受撞偏转时，仍保持同一套可达的相对关节目标。
-		Controls->SetControlTargetOrientation(Arm.UpperControl, UpperTarget.Rotator(), DeltaTime, true, false, true, false);
+		// 肘、腕跟随物理父刚体，而不是各自追一个独立世界朝向
+		// 父肢体受撞偏转时，仍保持同一套可达的相对关节目标
+		Controls->SetControlTargetOrientation(Arm.UpperControl, UpperTarget.Rotator(), DeltaTime, true, false,
+		                                      true, false);
 		Controls->SetControlTargetOrientation(Arm.LowerControl,
-			(UpperTarget.Inverse() * LowerTarget).Rotator(), DeltaTime, true, false, true, false);
-		Controls->SetControlTargetOrientation(Arm.HandControl,
-			(LowerTarget.Inverse() * HandTarget).Rotator(), DeltaTime, true, false, true, false);
+		                                      (UpperTarget.Inverse() * LowerTarget).Rotator(), DeltaTime,
+		                                      true, false, true, false);
+		Controls->SetControlTargetOrientation(Arm.HandControl, (LowerTarget.Inverse() * HandTarget).Rotator(),
+		                                      DeltaTime, true, false, true, false);
 	}
 }

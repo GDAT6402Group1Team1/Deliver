@@ -51,3 +51,10 @@ git push
 ### 许可
 
 见 [LICENSE](LICENSE)（MIT）。
+
+## 代码与文档阅读入口
+
+- [项目阅读路线](Document/READING_GUIDE.md)：按操作追踪实现、关键函数与演示问题。
+- [文档目录](Document/README.md)：按阅读目的查找专题资料。
+
+- [职责、资源与流程总览](Document/Architecture.md)：目录分工、资源对应和调用方向。

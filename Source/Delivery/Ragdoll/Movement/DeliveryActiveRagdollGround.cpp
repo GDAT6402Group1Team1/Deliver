@@ -1,0 +1,271 @@
+// 处理地面探测、坡面状态以及翻滚和恢复条件
+// 地面探测与陡坡翻滚；普通行走只接受可站立坡面；翻滚探测需要读取更陡的原始坡面
+#include "Ragdoll/DeliveryActiveRagdollComponent.h"
+#include "Ragdoll/DeliveryRagdollPhysicsHelpers.h"
+#include "CollisionQueryParams.h"
+#include "Character/DeliveryCharacter.h"
+#include "Grab/DeliveryGrabComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Engine/World.h"
+#include "PhysicsControlComponent.h"
+#include "PhysicsEngine/BodyInstance.h"
+using DeliveryRagdollPhysicsHelpers::HasPhysicsBody;
+
+// 更新脚下地面信息，供站立和步态使用
+bool UDeliveryActiveRagdollComponent::SampleGround(const FVector& Planned, const FVector& Fallback,
+                                                   const FVector& AlongNormal, FGroundHit& OutHit) const
+{
+	// 优先检查预计落点；坡沿上这个点可能悬空，再退回髋下方探一次
+	// 两次都没有可站立表面时，上层会暂停髋部的世界空间支撑电机
+	if (TraceGround(Planned, AlongNormal, OutHit))
+	{
+		return true;
+	}
+	return TraceGround(Fallback, AlongNormal, OutHit);
+}
+
+// 计算身体与竖直方向的接近程度
+float UDeliveryActiveRagdollComponent::GetUprightDot() const
+{
+	if (!Mesh)
+	{
+		return 0.0f;
+	}
+
+	// 把启动时髋里的头顶方向转到现在，再和坡面法线做点积；不要和世界竖直向上比
+	const FQuat PelvisRotation = Mesh->GetBoneQuaternion(Bones.Hips, EBoneSpaces::WorldSpace);
+	const FVector Up = PelvisRotation.RotateVector(UprightInPelvisSpace).GetSafeNormal();
+	return FVector::DotProduct(Up, Movement.CurrentGroundNormal);
+}
+
+// 检测支撑面，排除不适合站立的命中
+bool UDeliveryActiveRagdollComponent::TraceGround(const FVector& Around, const FVector& AlongNormal,
+                                                  FGroundHit& OutHit) const
+{
+	// Around 是探测中心，AlongNormal 指明沿哪条“局部竖直线”寻找坡面
+	// 命中的位置和法线一起返回，供髋部高度、脚步落点和站立判断共用
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	FVector Normal = AlongNormal.GetSafeNormal();
+	if (Normal.IsNearlyZero() || Normal.Z < 0.0f)
+	{
+		Normal = FVector::UpVector;
+	}
+
+	const FVector Start = Around + Normal * 60.0f;
+	const FVector End = Around - Normal * 220.0f;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(RagdollGround), false, GetOwner());
+	FHitResult Hit;
+	FCollisionObjectQueryParams GroundObjects;
+	GroundObjects.AddObjectTypesToQuery(ECC_WorldStatic);
+	GroundObjects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	// 电瓶车是 Vehicle；只认静态/动态地面，不把车顶误当成可站立坡面
+	if (World->LineTraceSingleByObjectType(Hit, Start, End, GroundObjects, Params))
+	{
+		FVector HitNormal = Hit.ImpactNormal.GetSafeNormal();
+		if (HitNormal.Z < 0.0f)
+		{
+			HitNormal = -HitNormal;
+		}
+		const float MinimumWalkableNormalZ = FMath::Cos(FMath::DegreesToRadians(MaxWalkableSlopeDegrees));
+		if (HitNormal.Z < MinimumWalkableNormalZ)
+		{
+			// 比 MaxWalkableSlopeDegrees 更陡的面不按坡面走，例如立面和台阶踢面
+			return false;
+		}
+
+		OutHit.Point = Hit.ImpactPoint;
+		OutHit.Normal = HitNormal;
+		const UPrimitiveComponent* Surface = Hit.GetComponent();
+		OutHit.SurfaceVelocity =
+		    Surface ? (Surface->IsSimulatingPhysics(Hit.BoneName)
+		                   ? Surface->GetPhysicsLinearVelocityAtPoint(Hit.ImpactPoint, Hit.BoneName)
+		                   : Surface->GetComponentVelocity())
+		            : FVector::ZeroVector;
+		return true;
+	}
+	return false;
+}
+
+// 检测身体下方原始坡面，供陡坡翻滚判断使用
+bool UDeliveryActiveRagdollComponent::TraceTumbleSurface(FGroundHit& OutHit) const
+{
+	// 翻滚检测允许读取比普通行走更陡的坡；不能拿“可站立”规则过滤掉触发翻滚的坡面
+	if (!Mesh || !GetWorld())
+	{
+		return false;
+	}
+	const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(RagdollTumbleGround), false, GetOwner());
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	FHitResult Hit;
+	if (!GetWorld()->LineTraceSingleByObjectType(Hit, Hips + FVector(0, 0, 25), Hips - FVector(0, 0, 220),
+	                                             Objects, Params) ||
+	    Hit.ImpactNormal.Z < FMath::Cos(FMath::DegreesToRadians(75.0f)) ||
+	    Hips.Z - Hit.ImpactPoint.Z > StandHeight * 1.5f + 20.0f)
+	{
+		return false;
+	}
+	OutHit.Point = Hit.ImpactPoint;
+	OutHit.Normal = Hit.ImpactNormal.GetSafeNormal();
+	return true;
+}
+
+// 根据坡度、速度和持续时间进入或退出翻滚状态
+void UDeliveryActiveRagdollComponent::UpdateSlopeTumble(float DeltaTime)
+{
+	// 服务器根据坡度和沿坡下滑速度决定是否进入全物理翻滚
+	// 缓坡继续交给站立/脚步控制，陡坡上不强迫两脚维持正常走路姿势
+	if (!bIsActive || !Mesh || !GetOwner())
+	{
+		return;
+	}
+	if (bExternalLimpRequested)
+	{
+		// 受伤晕倒始终优先；坡地计时不能在 HP 恢复之前自行开电机
+		bSlopeTumbling = false;
+		TumbleEntryTime = TumbleElapsed = TumbleRecoveryTime = 0.0f;
+		return;
+	}
+
+	FGroundHit Surface;
+	const bool bOnSurface = TraceTumbleSurface(Surface);
+	const float SlopeDegrees =
+	    bOnSurface ? FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Surface.Normal.Z, 0.0f, 1.0f))) : 0.0f;
+	const FVector Velocity = Mesh->GetPhysicsLinearVelocity(Bones.Hips);
+	const FVector Downhill =
+	    bOnSurface ? FVector(Surface.Normal.X, Surface.Normal.Y, 0.0f).GetSafeNormal() : FVector::ZeroVector;
+	const float DownhillSpeed = FVector::DotProduct(Velocity, Downhill);
+
+	if (!bSlopeTumbling)
+	{
+		TumbleCooldownTime = FMath::Max(0.0f, TumbleCooldownTime - DeltaTime);
+		const bool bShouldTumble = TumbleCooldownTime <= 0.0f && !Movement.bJumping && bOnSurface &&
+		                           SlopeDegrees >= TumbleSlopeDegrees && DownhillSpeed >= TumbleDownhillSpeed;
+		// 坡度和下滑速度持续满足条件后才开始翻滚，避免经过坡边时误触发
+		TumbleEntryTime = bShouldTumble ? TumbleEntryTime + DeltaTime : 0.0f;
+		if (TumbleEntryTime < TumbleEntryDelay)
+		{
+			return;
+		}
+		bSlopeTumbling = true;
+		TumbleElapsed = TumbleRecoveryTime = 0.0f;
+		TumbleEntryTime = 0.0f;
+		if (ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner()))
+		{
+			if (UDeliveryGrabComponent* Grab = Character->GetGrabComponent())
+			{
+				Grab->ForceRelease();
+			}
+		}
+		EndBodyDrivenPunch();
+		ApplyLimpState(true);
+		if (HasPhysicsBody(Mesh, Bones.Spine) && !Downhill.IsNearlyZero())
+		{
+			Mesh->AddAngularImpulseInRadians(FVector::CrossProduct(Downhill, FVector::UpVector) *
+			                                     TumbleStartAngularSpeed,
+			                                 Bones.Spine, true);
+		}
+		return;
+	}
+
+	TumbleElapsed += DeltaTime;
+	const bool bSafeToRise =
+	    bOnSurface && SlopeDegrees <= TumbleRecoverySlopeDegrees && Velocity.Size2D() <= TumbleRecoverySpeed;
+	// 坡度变缓且速度降低后继续等待一段时间，身体稳定后才结束翻滚
+	TumbleRecoveryTime = bSafeToRise ? TumbleRecoveryTime + DeltaTime : 0.0f;
+	if (TumbleElapsed >= TumbleMinimumDuration && TumbleRecoveryTime >= TumbleRecoveryDelay)
+	{
+		bSlopeTumbling = false;
+		TumbleRecoveryTime = 0.0f;
+		TumbleCooldownTime = 1.0f;
+	}
+}
+
+// 等待身体和地面稳定后逐步恢复站立
+void UDeliveryActiveRagdollComponent::UpdateLimpRecovery(float DeltaTime)
+{
+	if (!bIsActive || !Mesh)
+	{
+		return;
+	}
+	// 同时检查躯干恢复情况，髋部站直时脊柱仍可能弯折
+	const FBodyInstance* HipBody = Mesh->GetBodyInstance(Bones.Hips);
+	const FBodyInstance* ChestBody = Mesh->GetBodyInstance(Bones.Spine);
+	FPhysicsControlTarget ChestTarget;
+	const bool bTorsoAligned =
+	    HipBody && ChestBody && PhysicsControl &&
+	    PhysicsControl->GetControlTarget(ChestControl, ChestTarget) &&
+	    (HipBody->GetUnrealWorldTransform().GetRotation().Inverse() *
+		 ChestBody->GetUnrealWorldTransform().GetRotation())
+	            .AngularDistance(ChestTarget.TargetOrientation.Quaternion()) < FMath::DegreesToRadians(25.f);
+	if (ReplicatedControlMode == EDeliveryRagdollControlMode::Active && !bIsLimp)
+	{
+		FGroundHit Surface;
+		const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
+		const bool bGrabbing =
+		    Character && Character->GetGrabComponent() && Character->GetGrabComponent()->IsGrabbing();
+		const bool bCollapsed =
+		    !Movement.bJumping && !Movement.bPelvisAirborne && !bExternalLimpRequested && !Punch.IsActive() &&
+		    !bGrabbing && GetUprightDot() < 0.35f && TraceTumbleSurface(Surface) &&
+		    Surface.Normal.Z >= FMath::Cos(FMath::DegreesToRadians(TumbleRecoverySlopeDegrees)) &&
+		    Mesh->GetPhysicsLinearVelocity(Bones.Hips).Size() <= LimpRecoveryMaxSpeed;
+		Recovery.UpdateStanding(bCollapsed, DeltaTime);
+		if (Recovery.GetStandingTime() >= 0.6f)
+		{
+			// 角色清醒时保持生命值和电机状态，仅释放过时的脚部支撑并原地恢复
+			// 不切换物理模拟，也不直接移动整条身体骨骼
+			SetPunchFeetPlanted(false);
+			SetHitFeetPlanted(false);
+			ReseedFromCurrentPose();
+			Recovery.ResetStanding();
+			ReplicatedControlMode = EDeliveryRagdollControlMode::Recovering;
+			GetOwner()->ForceNetUpdate();
+		}
+		return;
+	}
+	if (ReplicatedControlMode == EDeliveryRagdollControlMode::Recovering && !bIsLimp)
+	{
+		// 起身是否结束由服务器按真实物理姿态决定；客户端在此之前只播放快照
+		FGroundHit StandingSurface;
+		const FVector Hips = Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace);
+		const bool bStanding = !Recovery.IsRising() && bTorsoAligned && TraceTumbleSurface(StandingSurface) &&
+		                       GetUprightDot() >= 0.55f &&
+		                       FVector::DotProduct(Hips - StandingSurface.Point, StandingSurface.Normal) >=
+		                           StandHeight * 0.65f &&
+		                       Mesh->GetPhysicsLinearVelocity(Bones.Hips).Size() <= LimpRecoveryMaxSpeed;
+		Recovery.UpdateStanding(bStanding, DeltaTime);
+		if (Recovery.GetStandingTime() >= 0.2f)
+		{
+			Recovery.ResetStanding();
+			ReplicatedControlMode = EDeliveryRagdollControlMode::Active;
+			GetOwner()->ForceNetUpdate();
+		}
+		return;
+	}
+	if (!bIsLimp || bExternalLimpRequested || bSlopeTumbling)
+	{
+		Recovery.ResetStable();
+		return;
+	}
+
+	FGroundHit Surface;
+	const bool bOnSafeGround =
+	    TraceTumbleSurface(Surface) &&
+	    Surface.Normal.Z >= FMath::Cos(FMath::DegreesToRadians(TumbleRecoverySlopeDegrees));
+	const FVector Velocity = Mesh->GetPhysicsLinearVelocity(Bones.Hips);
+	const bool bSettled = bOnSafeGround && Velocity.Size() <= LimpRecoveryMaxSpeed;
+	Recovery.UpdateStable(bSettled, DeltaTime);
+	if (Recovery.GetStableTime() >= LimpRecoveryStableDuration)
+	{
+		Recovery.ResetStable();
+		ApplyLimpState(false);
+	}
+}

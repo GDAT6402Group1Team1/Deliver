@@ -1,3 +1,4 @@
+// 创建五槽快捷栏，并根据背包数据更新图标和耐久
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
@@ -6,44 +7,55 @@
 #include "Blueprint/UserWidget.h"
 #include "DeliveryHotbarWidget.generated.h"
 
+class UDeliveryHotbarController;
 class UBorder;
 class UDeliveryInventoryComponent;
 class UImage;
 class UProgressBar;
 class UTexture2D;
 
-/** Always-visible, compact five-slot UMG hotbar. Its tree is built here so every pawn gets identical UI. */
+/** 五格快捷栏，由代码创建控件并根据背包状态更新 */
 UCLASS(Blueprintable)
+
 class DELIVERY_API UDeliveryHotbarWidget : public UUserWidget
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-public:
-	void SetInventory(UDeliveryInventoryComponent* InInventory);
+  public:
+    UFUNCTION(BlueprintPure, Category = "Inventory")
+    UDeliveryHotbarController *GetWidgetController() const
+    {
+        return WidgetController;
+    }
+    UPROPERTY(Transient)
+    TObjectPtr<UDeliveryHotbarController> WidgetController;
+    // 背包绑定
+    void SetInventory(UDeliveryInventoryComponent *InInventory);
 
-protected:
-	virtual TSharedRef<SWidget> RebuildWidget() override;
-	virtual void NativeConstruct() override;
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+  protected:
+    virtual TSharedRef<SWidget> RebuildWidget() override;
+    virtual void NativeConstruct() override;
+    virtual void NativeTick(const FGeometry &MyGeometry, float InDeltaTime) override;
 
-private:
-	void BuildWidgetTree();
-	void Refresh();
+  private:
+    // 界面构建与刷新
+    void BuildWidgetTree();
+    void Refresh();
 
-	UPROPERTY(Transient)
-	TObjectPtr<UDeliveryInventoryComponent> Inventory;
+    // 数据源与控件缓存
+    UPROPERTY(Transient)
+    TObjectPtr<UDeliveryInventoryComponent> Inventory;
 
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UBorder>> SlotBorders;
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UBorder>> SlotBorders;
 
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UImage>> SlotIcons;
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UImage>> SlotIcons;
 
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UProgressBar>> DurabilityBars;
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UProgressBar>> DurabilityBars;
 
-	/** Original connected hotbar artwork generated for the game's soft cartoon visual style. */
-	UPROPERTY(Transient)
-	TObjectPtr<UTexture2D> ConnectedHotbarTexture;
-
+    /** 快捷栏的连贯背景贴图 */
+    UPROPERTY(Transient)
+    TObjectPtr<UTexture2D> ConnectedHotbarTexture;
 };

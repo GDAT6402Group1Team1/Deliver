@@ -11,75 +11,93 @@ class UDeliveryInteractableComponent;
 class UDeliveryInventoryItemComponent;
 class UStaticMeshComponent;
 
-/** Physical world actor that can move between a player's hand, backpack and the ground. */
+/** 可在手中、背包和地面之间转移的物理物品 */
 UCLASS(Blueprintable)
+
 class DELIVERY_API ADeliveryHandheldItem : public AActor
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-public:
-	ADeliveryHandheldItem();
-	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaSeconds) override;
+  public:
+    // 普通道具提供默认拾取行为，任务快递覆盖这两个方法
+    virtual bool CanPickup(APawn *Interactor, bool bCheckTaskAvailability) const;
+    virtual bool Pickup(APawn *Interactor);
 
-	/** Native input dispatch; configured axe swings do not depend on a Blueprint Use override. */
-	void UseFromInventory(APawn* User);
+    ADeliveryHandheldItem();
+    virtual void BeginPlay() override;
+    virtual void Tick(float DeltaSeconds) override;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Item|Attack")
-	bool bUsesAxeSwing = false;
+    // 物品使用
+    /** 优先执行代码中的斧头动作，不依赖蓝图重写使用事件 */
+    void UseFromInventory(APawn *User);
 
-	/** Item-specific LMB behavior for items without the native axe action. */
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Item")
-	void Use(APawn* User);
-	virtual void Use_Implementation(APawn* User);
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Attack")
+    bool bUsesAxeSwing = false;
 
-	void SetInventoryPresentation(bool bInHand, bool bInInventory, USceneComponent* HandParent);
-	void DropFromInventory(const FVector& WorldLocation, const FVector& InitialVelocity);
+    /** 没有配置斧头动作时，由蓝图实现物品的左键使用行为 */
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Item")
+    void Use(APawn *User);
+    virtual void Use_Implementation(APawn *User);
 
-	/**
-	 * 焊到载具的货架上。
-	 *
-	 * 和手上那套的区别是**不走每帧跟随**：`HeldAnchor` 那条路是为了过滤 Chaos 的
-	 * 手部抖动，而载具是运动学的、位置由代码直接写，一点抖都没有。硬附着不但更省，
-	 * 还天然没有"快递落后车半个身位"的拖影——指数跟随在高速时必然欠一截。
-	 */
-	void SetVehicleCargoPresentation(USceneComponent* CargoParent);
+    // 手持、背包与地面显示
+    void SetInventoryPresentation(bool bInHand, bool bInInventory, USceneComponent *HandParent);
+    void DropFromInventory(const FVector &WorldLocation, const FVector &InitialVelocity);
 
-	UFUNCTION(BlueprintPure, Category="Item")
-	UDeliveryInventoryItemComponent* GetItemComponent() const { return ItemComponent; }
+    /**
+     * 焊到载具的货架上
+     *
+     * 和手上那套的区别是不走每帧跟随：`HeldAnchor` 那条路是为了过滤 Chaos 的
+     * 手部抖动，而载具是运动学的、位置由代码直接写，一点抖都没有；硬附着不但更省，
+     * 还天然没有"快递落后车半个身位"的拖影——指数跟随在高速时必然欠一截
+     */
+    void SetVehicleCargoPresentation(USceneComponent *CargoParent);
 
-	UFUNCTION(BlueprintPure, Category="Item")
-	UStaticMeshComponent* GetItemMesh() const { return ItemMesh; }
+    UFUNCTION(BlueprintPure, Category = "Item")
 
-protected:
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-	TObjectPtr<UStaticMeshComponent> ItemMesh;
+    UDeliveryInventoryItemComponent *GetItemComponent() const
+    {
+        return ItemComponent;
+    }
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-	TObjectPtr<UDeliveryInventoryItemComponent> ItemComponent;
+    UFUNCTION(BlueprintPure, Category = "Item")
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-	TObjectPtr<UDeliveryInteractableComponent> InteractableComponent;
+    UStaticMeshComponent *GetItemMesh() const
+    {
+        return ItemMesh;
+    }
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Item|Holding")
-	FName HandSocket = TEXT("RightHand");
+  protected:
+    // 模型与物品组件
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UStaticMeshComponent> ItemMesh;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Item|Holding")
-	FTransform HeldRelativeTransform = FTransform(FRotator(0.0f, 0.0f, 90.0f), FVector::ZeroVector);
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UDeliveryInventoryItemComponent> ItemComponent;
 
-	/** Exponential follow speeds. High enough to feel attached, low enough to filter Chaos hand jitter. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Item|Holding", meta=(ClampMin="0.1"))
-	float HeldPositionFollowSpeed = 28.0f;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UDeliveryInteractableComponent> InteractableComponent;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Item|Holding", meta=(ClampMin="0.1"))
-	float HeldRotationFollowSpeed = 24.0f;
+    // 手持位置与跟随参数
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Holding")
+    FName HandSocket = TEXT("RightHand");
 
-private:
-	void UpdateHeldTransform(float DeltaSeconds, bool bSnap);
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Holding")
+    FTransform HeldRelativeTransform = FTransform(FRotator(0.0f, 0.0f, 90.0f), FVector::ZeroVector);
 
-	TWeakObjectPtr<USceneComponent> HeldAnchor;
-	bool bHeldPresentationActive = false;
+    /** 位置和旋转的平滑跟随速度，数值越大越贴近手部，也越容易带出物理抖动 */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Holding", meta = (ClampMin = "0.1"))
+    float HeldPositionFollowSpeed = 28.0f;
 
-	UFUNCTION()
-	void HandleInteract(APawn* Interactor);
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Holding", meta = (ClampMin = "0.1"))
+    float HeldRotationFollowSpeed = 24.0f;
+
+  private:
+    // 本机握持更新
+    void UpdateHeldTransform(float DeltaSeconds, bool bSnap);
+
+    TWeakObjectPtr<USceneComponent> HeldAnchor;
+    bool bHeldPresentationActive = false;
+
+    UFUNCTION()
+    void HandleInteract(APawn *Interactor);
 };

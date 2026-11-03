@@ -5,9 +5,10 @@
 #include "Vehicle/DeliveryRiderPose.h"
 #include "DeliveryRiderAnimInstance.generated.h"
 
-// 主线程把车上的输入/目标点复制进这个快照；动画求值线程不读取 Actor 或场景。
+// 主线程把车上的输入/目标点复制进这个快照；动画求值线程不读取 Actor 或场景
 struct FDeliveryRiderFrame
 {
+	// 动画线程读取的运动与接触数据
 	FDeliveryRiderMotion Motion;
 	FDeliveryRiderSettings Settings;
 	FTransform Contacts[4];
@@ -15,12 +16,13 @@ struct FDeliveryRiderFrame
 	bool bActive = false;
 };
 
-/** ABP_MotorbikeRider 的原生父类。原生动画代理输出坐姿＋惯性＋四肢 IK。 */
+/** ABP_MotorbikeRider 的原生父类；原生动画代理输出坐姿＋惯性＋四肢 IK */
 UCLASS(Transient, Blueprintable)
+
 class DELIVERY_API UDeliveryRiderAnimInstance : public UAnimInstance
 {
 	GENERATED_BODY()
-protected:
+  protected:
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;
 	virtual void DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy) override;
 };

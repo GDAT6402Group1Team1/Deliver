@@ -17,7 +17,9 @@
 ## 目前已实现的内容（从 git 历史与代码整理）
 
 ### 1. 角色移动 —— 主动布娃娃（Active Ragdoll），非常规 Character Movement
-- 坡上松键的髋部切向站立目标保持在停步位置，不再每帧跟随下滑的身体重建；恢复移动、跳跃、攻击/受击、失衡或离支撑点超过 80 cm 时解除。只固定电机参考，不修改刚体变换；移动地面按命中点速度推进参考。
+- 低帧率步态：身体目标按项目物理设置限制时间步长（开启子步时为 MaxSubstepDeltaTime × MaxSubsteps），避免物理推进慢于脚步计时。Tick 顺序明确为网格、布娃娃目标、PhysicsControl；网络采样仍按世界时间进行。
+- 本机网络校正：小幅偏差通过全身相同的速度增量追上服务器，不再逐包传送刚体；超过强制校正距离时才整体平移，并同步迈步起点、落点和世界空间控制目标，保留迈步进度、目标速度和驱动开关。快照按物理资产采集全部刚体，包含大腿和小腿，避免远端只更新髋和脚。回归检查：`Delivery.Ragdoll.NetworkCorrection`。已验证同机双人 PIE 的前进、转向、反向移动和停步；原地图约 10 FPS 下完成相同检查。21 项自动化通过，其中 6 项带警告。
+- 平地和坡面松键后，髋部切向站立目标保持在停步位置，不再每帧跟随下滑的身体重建；恢复移动、跳跃、攻击/受击、失衡或离支撑点超过 80 cm 时解除。只固定电机参考，不修改刚体变换；移动地面按命中点速度推进参考。
 - 坡面防滑：落脚最后 15% 不再被跟随髋部的横向纠偏移动目标。已贴地且未启用位置驱动的支撑脚，在 5° 至翻滚阈值之间施加有上限的切向摩擦辅助（`SlopeSupportTraction` / `SlopeSupportMaxAcceleration`），补偿顺坡重力并阻尼相对地面速度；不锁位置、不施加法线吸附，摆动/释放恢复/离地及明显失衡时不介入。动态地面按表面速度计算。
 代码阅读顺序：`DeliveryActiveRagdollComponent.cpp` 保留状态和每帧入口；同目录的 `DeliveryActiveRagdollSetup.cpp`、`DeliveryActiveRagdollStance.cpp`、`DeliveryActiveRagdollGait.cpp`、`DeliveryActiveRagdollGround.cpp`、`DeliveryActiveRagdollCombat.cpp`、`DeliveryActiveRagdollNetwork.cpp` 分别处理物理控制初始化、身体目标、脚步、地面/翻滚、物理受击和复制。它们仍实现同一个组件，蓝图参数与复制字段都在原头文件。无场景依赖的落点和摆动公式在 `DeliveryFootPlacement.h`，拳路公式在 `Combat/DeliveryPunchTrajectory.h`；拳击资产补全单独在 `Combat/DeliveryBoxingPhysicsAsset.cpp`。改物理时先看每帧入口及调用顺序。
 下坡双脚防交叉：落点左右轴跟随 `CurrentFacingYaw`（身体朝向），不随 WASD 方向瞬时翻转；仅在着地可控状态对内滑的脚/小腿刚体施加有上限的水平纠偏加速度。迈步最后 15% 固定落点，最多额外等待 0.18 秒到位；停步后也允许纠正已交叉的脚。回归检查：`Delivery.Ragdoll.FootSeparation`。
@@ -31,7 +33,7 @@
 - 下坡姿态恢复：前倾按起步时长（默认 0.4 秒）衰减，不再按目标速度与实际速度的差持续施加；否则一旦前扑失速就会持续前倾。迈步最低直立点积降到 0.35，让中等幅度前倾时仍能迈步找回支撑，完全倒下时仍不盲目迈步。
 - 停步补脚的落点如果暂时探不到地面，保留补步请求并在下一帧重试；不能在失败时也清掉标记，否则坡沿的一次探测失败会让脚永远不再补位。
 - 陡坡翻滚：服务器从髋部向下探测原始坡面法线（不受可行走坡角过滤）；坡角默认 ≥48°、实际顺坡速度 ≥120 cm/s 持续 0.18 秒，暂时关闭电机并给胸部一次轻微翻滚角冲量。到 ≤30° 的缓坡/平地、速度 ≤140 cm/s 且稳定 0.45 秒后，按现有姿势重新播种电机起身。此状态与 HP 晕倒分开；晕倒优先，不可被坡地自动起身解除。坡度、速度和计时均可在组件上调。
-- [Source/Delivery/DeliveryCharacter.h](Source/Delivery/DeliveryCharacter.h) —— 第三人称 Pawn，组装胶囊/网格/相机/布娃娃/战斗组件，实现 `IAbilitySystemInterface` 与 `IDeliveryCombatInterface`。移动与跳跃走网络复制（`ServerSetMoveInput` 为 Unreliable，`ServerJump` 为 Reliable，带最小跳跃间隔）。
+- [Source/Delivery/Character/DeliveryCharacter.h](Source/Delivery/Character/DeliveryCharacter.h) —— 第三人称 Pawn，组装胶囊/网格/相机/布娃娃/战斗组件，实现 `IAbilitySystemInterface` 与 `IDeliveryCombatInterface`。移动与跳跃走网络复制（`ServerSetMoveInput` 为 Unreliable，`ServerJump` 为 Reliable，带最小跳跃间隔）。
 - 电瓶车受击：地面探测只查 `WorldStatic/WorldDynamic`，排除 `Vehicle`；离地时暂停髋部世界空间电机，重新探到地面后恢复。撞击镜头只在受击玩家本机平滑拉远约 120 cm 并回归，不改全局相机遮挡。
 
 - 撞后缩身恢复：脊柱、肩根、腿和脚踝的父空间电机使用 `CreateReferencePoseControls` 从资产参考骨架计算固定相对旋转，不依赖可变动画/物理骨骼缓存；迈步仍由脚位置目标驱动。起身完成额外要求胸相对髋目标误差 <25°；清醒、非抓取/出拳/跳跃、在安全地面低速且直立点积 <0.35 持续 0.6 秒时重新进入原地恢复，不切物理、不瞬移、不改 HP。测试显式使用玩家覆盖的 `renwu_Physics1`，验证畸变缓存不改变目标；自动化不等于真实撞飞验收。
@@ -55,7 +57,7 @@
 - [Source/Delivery/Combat/DeliveryCombatTypes.h](Source/Delivery/Combat/DeliveryCombatTypes.h) —— `FDeliveryArmPoseSettings`：A 姿势、后收蓄力、直拳三段姿态的参数化定义，握拳靠手指弯曲角度模拟（无手指刚体）。蓄力目标在肩后略向外、略向下；释放时直接插值手的位置，向外偏移用于避免拳路经过肩关节原点。
 - 出拳下半身稳定：拧身改由胸腰完成，不再扭动骨盆；髋部前压默认从 24 cm 降到 4 cm，手部释放冲量从 1800 降到 900，蓄力默认 0.32 秒。原地、着地且直立时短暂启用脚部位置电机并固定髋目标的水平基准；移动、跳跃、受击、晕倒或明显偏离支撑点时解除，不关闭物理模拟。行走时出拳保留步态，只减小髋部摆动。
 - [Source/Delivery/Combat/DeliveryHandPose.h](Source/Delivery/Combat/DeliveryHandPose.h)、[DeliveryBoxingPose.h](Source/Delivery/Combat/DeliveryBoxingPose.h)（含单测）。
-- 左右拳通过 GAS 技能 [GA_DeliverPunch](Source/Delivery/GAS/Abilities/GA_DeliverPunch.h) 触发，对应 tag `Ability.Attack.Punch.Left/Right`。
+- 左右拳通过 GAS 技能 [GA_DeliverPunch](Source/Delivery/AbilitySystem/Abilities/GA_DeliverPunch.h) 触发，对应 tag `Ability.Attack.Punch.Left/Right`。
 
 ### 2b. 抓取系统（双手托举物品 + 单手物理拖人）
 - [DeliveryGrabComponent](Source/Delivery/Grab/DeliveryGrabComponent.h)：左右键 0.2 秒内组合抓取（原 0.12 秒，放宽窗口方便按成"同时"），单键出拳；双键持续按住时不断重试寻找目标。普通物品不再要求短手先碰到地面上的箱子：服务端通过抓取校验后立即记为双手持有。`FindUndersideGripPoints` 从任意物体底部两侧向碰撞体查询支撑点，抓点只在开始时算一次并存成物体局部坐标；`CarryCenterWorld` 把这两个抓点的中点放到胸口前的双手支撑位置，按物体真实尺寸、Pivot 和缩放反推中心，因此物体在手上方。首次抓取先将箱子朝向与身体对齐。单人时双手直接追这个胸口相对目标，而不是追箱子滞后的世界位置，以免手臂持续反拉躯干。两人争抢时手仍追共享箱子的实际抓点。晕倒玩家则由服务端选离身体碰撞表面最近的一只手和刚体，以服务端真实表面重新核对距离、朝向和视线（眼位或服务器相机）；第一个抓人者通过遮挡检查后，服务器把倒地角色整条物理刚体链平移，使抓点直接贴到手上，再立即建立锁定的单手 Physics Constraint，不要求短手预先碰到。第二个抓人者不能瞬移已被拖拽的角色，保留有限力的柔性连接，靠近到 `DragAttachDistance` 再锁定以形成争抢。双键任意一键松开即断开。拖人期间髋目标平滑降低默认 25 cm 并向抓点前倾默认 8°，不影响普通物品托举。
@@ -69,27 +71,27 @@
 五格 Hotbar 用 `DeliveryInventoryItemComponent::Icon` 显示图片，不显示物品名或数字。测试斧头与快递的生成图标源图在 `Content/UI/Inventory/Source`，导入贴图在 `Content/UI/Inventory/Textures`；空格不显示图标，普通道具仍显示耐久条。
 
 ### 3. GAS（Gameplay Ability System）
-- [DeliverAbilitySystemComponent](Source/Delivery/GAS/DeliverAbilitySystemComponent.h) 挂在 **PlayerState**（[DeliverPlayerState](Source/Delivery/GAS/DeliverPlayerState.h)）而非 Character 上，随 PlayerState 复制；`ADeliveryCharacter::OnRep_PlayerState` 里处理绑定。
-- [DeliverAttributeSet](Source/Delivery/GAS/DeliverAttributeSet.h) —— 已接入属性表；HP 回血 GE 目前隐藏。
-- [DeliverGameplayTags](Source/Delivery/GAS/DeliverGameplayTags.h) —— Native Gameplay Tags：`Ability.Attack.Punch.Left/Right`、`Effect.Type.Damage`、`State.Stunned`。
+- [DeliverAbilitySystemComponent](Source/Delivery/AbilitySystem/DeliverAbilitySystemComponent.h) 挂在 **PlayerState**（[DeliverPlayerState](Source/Delivery/Player/DeliverPlayerState.h)）而非 Character 上，随 PlayerState 复制；`ADeliveryCharacter::OnRep_PlayerState` 里处理绑定。
+- [DeliverAttributeSet](Source/Delivery/AbilitySystem/DeliverAttributeSet.h) —— 已接入属性表；HP 回血 GE 目前隐藏。
+- [DeliverGameplayTags](Source/Delivery/AbilitySystem/DeliverGameplayTags.h) —— Native Gameplay Tags：`Ability.Attack.Punch.Left/Right`、`Effect.Type.Damage`、`State.Stunned`。
 - Character 上的 `HealthRegenEffect` / `DamageEffect`（Instant + SetByCaller `Effect.Type.Damage`）及左右拳 GA 类，均在蓝图 `BP_DeliveryMan` 中指定，C++ 侧只留 `TSubclassOf` 插槽。
 
 ### 4. 任务系统（电话接任务）
 **快递从取货点领，不再手摆在地上**（2026-10-20 改）。按住 E 和取货点交互，
 服务器当场生成一件快递交给玩家：**步行拿在手上，骑车绑在车上**。
 
-- [DeliveryPickupPointComponent](Source/Delivery/Task/DeliveryPickupPointComponent.h) ——
+- [DeliveryPickupPointComponent](Source/Delivery/Task/World/DeliveryPickupPointComponent.h) ——
   挂在取货点上。**不填任务**，而是按地点 ID 反查：登记在册、状态是待取件、
   且 `PickupLocationId` 等于本点 ID 的那个任务。所以同一个取货点能在一局里
   先后发好几个任务的快递，和 `Tasks.csv` 里"每个任务各自写取货点"的数据形状对得上。
   `PackageClass` 留空时退回内置测试快递——摆了点却一件都领不到又没有报错，
   是最难查的那种空配置。
-- [ADeliveryPickupPoint](Source/Delivery/Task/DeliveryPickupPoint.h) ——
+- [ADeliveryPickupPoint](Source/Delivery/Task/World/DeliveryPickupPoint.h) ——
   拖进关卡填个 `LocationId` 就能用的现成 Actor（继承 `ADeliveryLocationMarker`，
   连 Billboard 和"Python 加的组件存不住"那条都一起继承了）。取货点本来就是关卡里
   某个模型时不用摆它，直接在那个 Actor 上加
   `DeliveryLocationComponent` + `DeliveryInteractableComponent` + `DeliveryPickupPointComponent` 三件套。
-- [ADeliveryDropOffPoint](Source/Delivery/Task/DeliveryDropOffPoint.h) ——
+- [ADeliveryDropOffPoint](Source/Delivery/Task/World/DeliveryDropOffPoint.h) ——
   成对的收件点，填 `LocationId` + `ExpectedTask` 就能交付。
   一个能用的收件点需要**三个**组件（地点 + 可交互 + 收件），手加三次还要把
   `InteractionKey` 调成 `PickupE`、`HoldDuration` 调成 0.5，漏任何一个的表现
@@ -184,24 +186,24 @@
 快递 E 拾取与交付改为纯范围判定，不要求准星、朝向或视线；本机以 20Hz 优先选可用目标；同等可用性下准星附近目标优先，未瞄准任何目标时回退到最近目标（准星只排序，不作为交互门槛），长按期间目标仍有效则保持选中，不可取快递仅作为原因提示的后备。服务端复核范围、任务状态和长按时间。保留快递 0.5 秒长按及现有交付半径，F 交互和双键物理抓取不变。
 **结构、接口清单、配置方式、完整调用链、待确认假设都写在 [Document/TaskSystem.md](Document/TaskSystem.md)——改任务系统前先读这份。** 要点：
 
-- 任务状态全局共享（多人下解锁/来电/接取/计时/完成对所有玩家是同一份数据），权威在 GameState 上的 [DeliveryTaskManagerComponent](Source/Delivery/Task/DeliveryTaskManagerComponent.h)；只有"当前追踪哪个任务"是每玩家各自的，在 PlayerState 上的 [DeliveryTaskTrackerComponent](Source/Delivery/Task/DeliveryTaskTrackerComponent.h)。
+- 任务状态全局共享（多人下解锁/来电/接取/计时/完成对所有玩家是同一份数据），权威在 GameState 上的 [DeliveryTaskManagerComponent](Source/Delivery/Task/DeliveryTaskManagerComponent.h)；只有"当前追踪哪个任务"是每玩家各自的，在 PlayerState 上的 [DeliveryTaskTrackerComponent](Source/Delivery/Task/Tracking/DeliveryTaskTrackerComponent.h)。
 - 计时在**接通任务解锁电话**时开始，用服务器时间戳相减，不是 Tick 累加；通话、前往取餐、掉落、换手、进车后备箱、持有者晕倒都影响不到计时。漏接后直接取餐会以取餐时刻兜底，避免任务锁死。
 - **取件要求"按过接听"**，不是"电话响过"：`CanAcquireItem` 查 `bTimerStarted`（只由 `AnswerCurrentCall` 置上），`IsTaskAccepted()` 是它的公开查询。早先允许漏接直接取件、由 `TryAcquireItem` 以取件时刻兜底开始计时，结果是电话沦为纯播片——不接也照样做任务，接听这个动作没有任何后果。那条兜底已删。
 - **挂断必须配重拨，这两件不能拆开做。** 拒接/漏接会把电话**移出队列且永不重拨**，所以只加"必须接听"这道门槛、不补重拨的话，挂一次电话那个任务就永久推不动，和"四个状态无失败态"直接冲突。现在 `DeliveryPhoneCallQueueComponent::ScheduleRedial`在 `RedialDelaySeconds`（默认 20 秒）后重拨，重拨前复核"状态仍是待取件且仍未接单"，否则不打；**只重拨 `TaskUnlocked`**，催促电话错过就错过、重拨只会烦人。
 - 取件被拦时要分得出原因：「先接电话才能接这一单」和「请先完成正在进行的快递任务」都会让 `CanAcquireItem` 返回 false，但玩家该做的事完全不同（去接电话 vs 先送完手上这单）。
 - 全世界同时只有一个已接单并计时的任务：后续任务解锁来电会在 PhoneQueue 里暂停，当前任务的超时催促电话可插队；`CanAcquireItem()` 同时阻止拿起其他任务的快递。
 - 四个状态、无失败态：`Locked / AwaitingPickup / InProgress / Completed`。超时只打一次催促电话 + 降低奖励倍率，任务不会结束，倒计时转正计时。
-- 电话队列 [DeliveryPhoneCallQueueComponent](Source/Delivery/Task/DeliveryPhoneCallQueueComponent.h) 由服务器按每通电话配置的时长推进，不等客户端播完回报（队列是全局共享的）。
-- 一个任务 = 一份 [DeliveryTaskDefinition](Source/Delivery/Task/DeliveryTaskDefinition.h) 资产；关卡任务清单填在 GameState 蓝图的 `TaskDefinitions` 数组里，顺序即同时解锁时的来电顺序。
-- 快递 Actor 挂 [DeliveryItemComponent](Source/Delivery/Task/DeliveryItemComponent.h)、收件人挂 [DeliveryTargetComponent](Source/Delivery/Task/DeliveryTargetComponent.h)，交互/背包系统只需要调 `CanBeAcquired` / `NotifyAcquired` / `TryDeliver` 三个口。
+- 电话队列 [DeliveryPhoneCallQueueComponent](Source/Delivery/Phone/DeliveryPhoneCallQueueComponent.h) 由服务器按每通电话配置的时长推进，不等客户端播完回报（队列是全局共享的）。
+- 一个任务 = 一份 [DeliveryTaskDefinition](Source/Delivery/Task/Data/DeliveryTaskDefinition.h) 资产；关卡任务清单填在 GameState 蓝图的 `TaskDefinitions` 数组里，顺序即同时解锁时的来电顺序。
+- 快递 Actor 挂 [DeliveryItemComponent](Source/Delivery/Task/World/DeliveryItemComponent.h)、收件人挂 [DeliveryTargetComponent](Source/Delivery/Task/World/DeliveryTargetComponent.h)，交互/背包系统只需要调 `CanBeAcquired` / `NotifyAcquired` / `TryDeliver` 三个口。
 - 任务数值由策划在 `Design/Tasks.csv` 里维护，编辑器菜单 **Delivery → Import / Reimport Tasks** 导入成 DataAsset（脚本在 `Content/Python/delivery_task_import.py`，按 TaskId 增量更新，不会冲掉资产上手填的字段）。时间评价档位用**剩余秒数**表达，正数提前、负数超时，和策划表一一对应。
-- 调试用控制台命令（`Delivery.Task.Dump` / `Acquire` / `Deliver` / `Event`）见 [DeliveryTaskDebugCommands.cpp](Source/Delivery/Task/DeliveryTaskDebugCommands.cpp)，在 PIE 里不用 UI 就能跑完整个任务流程；`DeliveryTaskDefinition` 有 `IsDataValid` 校验，阈值配反、档位顺序错会在编辑器里标红。
+- 调试用控制台命令（`Delivery.Task.Dump` / `Acquire` / `Deliver` / `Event`）见 [DeliveryTaskDebugCommands.cpp](Source/Delivery/Task/Debug/DeliveryTaskDebugCommands.cpp)，在 PIE 里不用 UI 就能跑完整个任务流程；`DeliveryTaskDefinition` 有 `IsDataValid` 校验，阈值配反、档位顺序错会在编辑器里标红。
 - **钱包**：[DeliveryWalletComponent](Source/Delivery/Economy/DeliveryWalletComponent.h) 挂在 `ADeliverPlayerState` 上（和 ASC 同理——钱要在角色死亡/重生/上下载具之后还在）。**入账全自动**：组件自己订阅 GameState 上的 `OnTaskCompleted`，那个委托自带 `APlayerState* Deliverer`，多人抢单时钱记给谁天然就对，任务系统那边一行都不用改。余额 `COND_OwnerOnly` 复制，不做客户端预测。PlayerState 可能比 GameState 先 `BeginPlay`，订阅不到时每 0.5 秒重试——不重试的话这个玩家整局收不到钱且毫无报错。UI 接 `OnTaskPaid(Task, Reward)` 拿完整奖励明细做结算飘字。
-- **地点 ID 解析**：[DeliveryLocationRegistry](Source/Delivery/Task/DeliveryLocationRegistry.h)（WorldSubsystem）+ [DeliveryLocationComponent](Source/Delivery/Task/DeliveryLocationComponent.h)。关卡里的取件点/收件点/收件人 NPC 挂后者、填 `LocationId`（和 `Tasks.csv` 一致），任务定义里那几个裸 `FName` 才能变成世界坐标。三种点共用一个组件，因为在数据上它们是同一种东西；继承 SceneComponent 是为了能带相对偏移（收件点挂在整栋楼上时楼的原点可能在地下，箭头该指门口）。查找走注册表而不是遍历关卡，和交互系统同一个理由：碰撞查询在本项目静默失效过一次。
+- **地点 ID 解析**：[DeliveryLocationRegistry](Source/Delivery/World/DeliveryLocationRegistry.h)（WorldSubsystem）+ [DeliveryLocationComponent](Source/Delivery/World/DeliveryLocationComponent.h)。关卡里的取件点/收件点/收件人 NPC 挂后者、填 `LocationId`（和 `Tasks.csv` 一致），任务定义里那几个裸 `FName` 才能变成世界坐标。三种点共用一个组件，因为在数据上它们是同一种东西；继承 SceneComponent 是为了能带相对偏移（收件点挂在整栋楼上时楼的原点可能在地下，箭头该指门口）。查找走注册表而不是遍历关卡，和交互系统同一个理由：碰撞查询在本项目静默失效过一次。
 - **任务地点建筑高亮已停用**：`TaskTracker` 不再给目的地建筑开启 `CustomDepth/Stencil`，也不再定时扫描建筑；罗盘、小地图和脚边箭头继续提供指引。`DeliveryPlayerController` 的后处理仍用于交互物和抓取候选，不能为了关建筑高亮而移除。
 - **"该去哪"**：`Tracker::GetTrackedTaskDestination()`。**目的地按任务状态自动切换**（待取件→取件点，进行中→收件点），调用方不要自己判——判错的表现是"箭头指向已经拿过的地方"，四个界面会各错各的。ID 在关卡里找不到对应点时返回 false 并在日志点名；静默失败的话表现只是"箭头不显示"，根因几乎查不到。
 - **丢件恢复**：`NotifyItemLost` 把进行中的任务退回待取件，但接电话时开始的计时、催促状态和特殊事件继续保留；`UDeliveryItemComponent::EndPlay` 在 Actor 被销毁时自动上报（掉出世界会走到）。**"正常交付"和"意外丢失"靠执行顺序区分**——`TryDeliver` 先标已完成再销毁快递，所以 `EndPlay` 时状态已不是进行中，`NotifyItemLost` 自己返回 false；**调换这两步会让每次成功交付都被误判成丢件**。退回待取件之后**回取货点再领一件**即可，不再需要关卡里还躺着那件原物——这是取货点流程修掉的那个死锁。
-- **指引换算**：[DeliveryGuidanceLibrary](Source/Delivery/Task/DeliveryGuidanceLibrary.h) 返回距离、相对镜头的水平夹角、在不在前方、高度差，UI 画屏幕边缘箭头直接用。**角度基于镜头不是角色**——骑车时镜头和车头可能不一致（摩托车有自由/固定两套视角），用角色朝向算的话自由视角下箭头会指错。
+- **指引换算**：[DeliveryGuidanceLibrary](Source/Delivery/Task/Tracking/DeliveryGuidanceLibrary.h) 返回距离、相对镜头的水平夹角、在不在前方、高度差，UI 画屏幕边缘箭头直接用。**角度基于镜头不是角色**——骑车时镜头和车头可能不一致（摩托车有自由/固定两套视角），用角色朝向算的话自由视角下箭头会指错。
 - 顶部水平罗盘条用 `DeliveryGuidanceLibrary::GetTrackedTaskCompass`：目标与 N/E/S/W 都返回同一条水平轴上的 `-1~1` 偏移，乘罗盘条半宽即可。北方取项目设置 `MapNorthWorldYaw`（和小地图同一个值，不再是函数参数）；背后的任务目标会夹在左右边缘持续提示。
 - **罗盘条只在接到任务后出现**（`WBP_Compass`，蓝图侧；C++ 只出数据）。判据用 `GetTrackedTaskCompass().bHasTarget`（`Locked`/`Completed` 为 false；`AwaitingPickup` 指取件点、`InProgress` 指收件点为 true），在 `UpdateCompass` 末尾用以它为 Index 的「选择」节点（Option 0 = `Collapsed`）去 `SetVisibility` **根面板 `CanvasPanel_19`**，只有一处判断。原来的 bug 是那个 Select **两个选项都填了 `Visible`**，等于没判断。**控件树必须先查清**：五个 `Compass_*` 是变量，但树里还有个 `Image_138`（那条横线）不是变量、没有可见性逻辑，只接那五个会「还剩一条线」。**收根面板是安全的**——Slate 不 tick `Collapsed` 的控件只对 UserWidget 自己成立，`CanvasPanel_19` 是它内部的顶层面板，「事件Tick」挂在 UserWidget 上；真收 UserWidget 自己才会自锁、永远恢复不了。拿引用走 `Get Compass_N` → `GetParent` ×3（`bIsVariable` 是 protected 写不了、`GetWidgetFromName` 五种路径都解析不上），代价是把三层嵌套写死了、层级一改就指错。脚本顺序：`dump_compass_widget.py` → `gate_compass_on_task.py` → `dump_compass_tree.py` → `gate_compass_root.py` → `clean_compass_orphans.py` → `compile_compass.py`。
 - **罗盘图钉按任务阶段切换**：`FDeliveryCompassGuidance.Marker`（`EDeliveryCompassMarker`）——
@@ -773,3 +775,72 @@ Document/AudioSystem.md               人物电子语音（合成器+文本节�
 
 ### 通话结束后自动收起
 在用的 `/Game/UI/Task/WBP_TaskHUD.RefreshPhone` 在电话状态回到 `Idle` 后调用 `SetPhoneOpen(false)`，接通进入 `InCall` 时保持展开，整段通话结束（或手动挂断）才收起；不影响任务计时。`SetPhoneOpen` 统一调用 `DeliveryPlayerController.ReportPhoneUIOpen`，同步 `bPhoneUIOpen` 和 `OpenUIPanels`；已移除该函数内直接修改光标/输入模式的四个旧节点，统一由 C++ 按所有面板状态管理。因此来电自动展开、通话结束收起与 J 手动开关都同步，自动收起后下一次 J 直接打开。`Content/Python/phone_autoclose.py` 可幂等修补并编译保存该蓝图；原资产备份在 Saved，不提交。
+
+## 代码阅读入口（2026-11-02）
+
+[Document/READING_GUIDE.md](Document/READING_GUIDE.md) 按角色组装、布娃娃、出拳、网络、快捷栏安排阅读；[Document/README.md](Document/README.md) 索引专题。关键源文件新增分类导引与流程注释，本次按职责拆分 Ragdoll 实现文件夹并调整包含路径，未改变 Delivery 运行逻辑或参数。原理、历史与当前代码需区分阅读，正常预测不等同于输入回滚重放。
+
+目录调整后的实际入口：[Ragdoll/README.md](Source/Delivery/Ragdoll/README.md)。Setup 保存初始化与质量修正，Movement 保存 Stance/Gait/Ground，Combat 保存战斗与动画转换，Network 保存快照，Tests 保存落脚检查；组件共享声明仍在 Ragdoll 根目录。DeliveryEditor 已重新编译通过，未以目录整理替代多人实机回归。
+
+
+### 布娃娃与出拳调参工具（2026-11-03）
+新增 Editor-only 的 Plugins/DeliveryTuning，入口“窗口 → Delivery 布娃娃与出拳调参”。左侧读取 Document/RagdollTuning.json 的中文说明，右侧分别编辑明确选中的关卡角色的 RagdollCombat 和 ActiveRagdoll；PIE 时禁用编辑，不自动保存或修改角色蓝图。按钮可打开 BP_DeliveryMan，蓝图默认参数仍通过原生组件 Details 编辑。76 项常用字段增加中文名称、用途、单位及软拖动范围，保留原默认值和硬范围。出拳新增 HandImpulseScale / ForearmImpulseScale / UpperArmImpulseScale，默认 1 / 0.5 / 0.1，替代固定倍率，仍使用速度变化模式。ArmPose 在控制创建时复制，改参数后重新启动 PIE；不承诺热更新。教程见 Document/RagdollTuning.html。
+
+调参窗口使用“出拳 / 布娃娃”分页，左侧简短帮助默认折叠。Document/RagdollTuning.json 只供窗口显示；完整文档由 Document/RagdollTuningDetailed.json 生成，二者分开维护，避免简化界面时删减详细教程。
+
+## 系统组织与角色职责
+
+角色中的长按执行已移到 Interaction/DeliveryInteractionComponent，快递查询和接收已移到 Carry/DeliveryCarryComponent，攻击方向与命中查询归 Combat/DeliveryRagdollCombatComponent
+玩家交互请求统一可经 PlayerController 校验控制权，角色旧 RPC 与蓝图函数保留为兼容入口
+UI/Controllers 提供任务、快捷栏与交互显示数据，现有控件保留显示方式
+源码按 Character、Player、Game、AbilitySystem、Phone、World 及各玩法目录组织，类型名和资产路径不变
+详细结构见 Document/Architecture.md
+
+输入与界面拆分：`Input/DeliveryInputComponent` 负责步行输入绑定、组合键判断及失去控制权后的取消；Character 仅保留绑定接入点和玩法入口。`UI/DeliveryHUD` 由 GameMode 创建，管理本机快捷栏并在步行/骑车时解析角色背包。输入配置只在 PlayerInput 组件上编辑，快捷栏配置只在 HUD 上编辑，角色不再保留重复字段。车辆驾驶输入、手机蓝图和既有 UI Controller 沿用原实现。
+
+双人低帧率：物理子步上限为 24，每步最多 0.008333 秒，避免 10 FPS 时每帧只模拟 0.05 秒。详细身体诊断默认关闭，需要时执行 `Delivery.Physics.Trace 1`。拳头释放后开启检测窗口，服务器在物理更新后沿上一帧到当前帧的拳头路径做球体扫掠；结束或取消时关闭。同一技能实例用 HitActors 保证每拳每目标只结算一次。已删除不再参与检测的 HitWindowDelay。
+
+验证补充：新增 Delivery.Boxing.LowFrameRate，在 60 FPS 与 10 FPS 下检查真实物理位移、技能命中与晕倒，并检查同一拳重复接触和取消后的检测关闭。测试世界销毁前先调用 EndPlay，释放 Water 等系统的物理回调，避免跨测试回收时访问已销毁的物理场景。
+
+本轮验证：DeliveryEditor 完整编译通过，22 项自动化全部通过（17 项无警告、5 项带警告）。同机双人 PIE 原地图的前进、右移、反向移动平均速度约为 57、58、60 cm/s，修复前约为 47、36、45 cm/s；停步采样中脚部最大单轴变化约 0.02 cm。该结果证明本次改动有改善，不表示低帧率步态与单人高帧率完全一致。
+
+兼容字段清理：删除角色的 10 个旧输入字段和旧快捷栏字段、输入反射迁移、HUD 旧值回退；删除无效的 HitWindowDelay、RiderSteerRatio、RiderNeckSteerRatio、RiderNeckBone、HighlightActors 及无调用的高亮查询。保留仍在使用的骑手姿态更新与小地图旧摄像机停用逻辑。
+
+本次清理验证：完整编译通过，主角与摩托车蓝图编译通过，两张地图加载通过；清理前后输入动作、0.75 鼠标灵敏度、R 召车键与快捷栏类保持一致。22 项自动化通过，其中 5 项带警告，没有失败。
+
+
+## 交互登记与操作命名
+
+DeliveryInteractionRegistry 是世界子系统，每个世界分别保存交互组件的弱引用
+组件在 BeginPlay 登记，在 EndPlay 注销；查询时清理失效引用，世界结束时清空列表
+玩家探测器向本世界注册表取候选目标，注册表拒绝其他世界的组件和查询者
+范围检查与最近目标排序统一使用 GetInteractionDistance，因此门口锚点与碰撞表面都会参与距离判断
+
+公共操作条件使用 CanUse，执行委托使用 Use；InteractionComponent 用 BeginUse、CancelUse 和 ExecuteUse 管理过程
+物品真正进入背包的函数仍叫 Pickup，取货点领取包裹也保留拾取命名
+收件点的交互回调改为 CanDeliver 和 Deliver，内部仍使用原有任务检查与 TryDeliver 完成交付
+蓝图已有的 E 键输入、角色入口和任务配置保持原有资产引用，运行时执行转交给新的公共操作方法
+
+这次检查同时核对地点注册表、任务与电话状态、携带和背包接口
+地点已经归 WorldSubsystem，共享任务和电话状态已经归 GameState，不新增重复管理器
+本次修正集中在交互组件的静态运行时列表、公共操作命名、收件点命名与交互距离排序
+
+验证：完整编译通过，23 项自动化通过（5 项带警告、无失败），其中 WorldRegistry 检查双世界隔离和登记生命周期；主角与摩托车蓝图编译、两张地图加载通过。UE MCP 已完成原地图双人 PIE 启动与退出检查，此检查不替代所有玩法的手动验收。
+
+布娃娃状态重构：保留单个组件与原物理前后 Tick 顺序，内部使用 Movement、Punch、Recovery、Network 管理步态、出拳、恢复进度和快照。网络位移经 Movement.Translate/CorrectStandAnchor 调整步态缓存，不在网络代码中逐个写脚步位置。身体模式、复制字段和物理应用仍由主组件负责；诊断移到 Debug。详细流程见 Document/RagdollUpdate.md。
+
+本轮验证：127 项 UE 属性声明保持一致；完整编译与 23 项自动化通过（5 项带警告、无失败）。低帧率出拳、收拳目标、步态和网络校正的诊断结果与重构前一致；网络校正测试新增起身交接和快照序号回绕检查。
+
+
+## 玩家镜头组件
+
+`Camera/DeliveryCameraComponent` 管理本机撞击反馈，`Camera/DeliveryCameraConfig` 提供基础、跟随、撞击三组参数，玩家配置为 `/Game/Blueprint/Camera/DA_PlayerCamera`。Character 继续创建原 CameraBoom / FollowCamera 并保留网络通知和视角访问入口，镜头逐帧更新及状态已移入组件。配置共享只读，反馈状态每个组件独立保存。连续撞击不累计距离，恢复结束或失去本机控制后关闭更新。摩托车镜头不在本次拆分范围内。配置方法见 [Document/Camera.md](Document/Camera.md)
+
+镜头拆分验证：完整编译通过，原有 23 项测试及新增 Delivery.Camera.Impact 测试通过；双人 PIE 验证客户端通知只影响拥有者镜头，距离恢复后停止更新
+
+
+## 对象事件与游戏音效
+
+`Events/DeliveryEventComponent` 提供对象范围的本地事件，`Audio/DeliveryAudioComponent` 在开始时订阅、结束时解绑，通过 `DeliveryAudioConfig.Sounds` 查找一次性音效。角色取件和交付 RPC 只发布事件；车辆用命名枚举的 `MulticastVehicleEvent` 代替数字音效编号。`DeliveryVehicleAudioComponent` 继承普通音效组件，独立控制原 EngineAudio 的循环播放，车辆只传入驾驶状态和速度比例。配置资源为 `/Game/Sound/Config/DA_PlayerAudio` 与 `DA_VehicleAudio`，原蓝图参数已迁移，地图车辆无单独音效覆盖。背景音乐、电子语音、电话音效保持原流程，未全部纳入新事件。详见 Document/GameplayAudio.md
+
+事件音效验证：完整编译、25 项自动化测试通过；配置重启后保持，双人验证对应玩家事件隔离、下车通知和发动机启停，原始参数审计与验证报告在本次工作目录 work/delivery_audio

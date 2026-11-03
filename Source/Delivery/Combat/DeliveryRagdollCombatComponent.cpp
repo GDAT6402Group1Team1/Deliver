@@ -1,8 +1,10 @@
+// 安排出拳时间、释放冲量并发出命中窗口事件
 // Copyright Epic Games, Inc. All Rights Reserved.
-// 这个组件只安排出拳时间：开始蓄力 → 放拳并给手臂冲量 → 开放命中窗口 → 结束。
-// 每帧的手臂轨迹由 DeliveryBoxingPose 更新，受击判定由监听命中窗口的战斗逻辑处理。
 
-#include "DeliveryRagdollCombatComponent.h"
+#include "Combat/DeliveryRagdollCombatComponent.h"
+#include "Player/DeliverPlayerState.h"
+#include "Character/DeliveryCharacter.h"
+#include "Engine/World.h"
 
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Actor.h"
@@ -14,131 +16,201 @@
 
 UDeliveryRagdollCombatComponent::UDeliveryRagdollCombatComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
-	// 组件自己没有要复制的属性，开这个只为了能发 NetMulticast（命中音）。
-	// 组件上的 RPC 要求组件被标记为复制，否则调用会被静默丢掉。
-	SetIsReplicatedByDefault(true);
+    PrimaryComponentTick.bCanEverTick = true;
+    PrimaryComponentTick.bStartWithTickEnabled = false;
+    PrimaryComponentTick.TickGroup = TG_PostPhysics;
+    // 启用组件复制，以支持命中音效的多播调用
+    SetIsReplicatedByDefault(true);
 }
 
-void UDeliveryRagdollCombatComponent::MulticastPlayPunchHit_Implementation(
-	FVector_NetQuantize10 Location)
+// 在各客户端播放服务器确认的命中音效
+void UDeliveryRagdollCombatComponent::MulticastPlayPunchHit_Implementation(FVector_NetQuantize10 Location)
 {
-	if (PunchHitSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, PunchHitSound, Location);
-	}
+    if (PunchHitSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, PunchHitSound, Location);
+    }
 }
 
+// 连接角色身体，为后续物理出拳准备引用
 void UDeliveryRagdollCombatComponent::BeginPlay()
 {
-	Super::BeginPlay();
-	Mesh = GetOwner()->FindComponentByClass<USkeletalMeshComponent>();
-	ActiveRagdoll = GetOwner()->FindComponentByClass<UDeliveryActiveRagdollComponent>();
+    Super::BeginPlay();
+    Mesh = GetOwner()->FindComponentByClass<USkeletalMeshComponent>();
+    ActiveRagdoll = GetOwner()->FindComponentByClass<UDeliveryActiveRagdollComponent>();
 }
 
+// 记录出拳手和方向，并安排释放、命中与结束时间
 bool UDeliveryRagdollCombatComponent::StartPunch(EMeleeHand Hand, FVector AimDir)
 {
-	// 先确认身体当前能出拳，再把平面瞄准方向存下来；本次出拳全程用同一方向。
-	UWorld* World = GetWorld();
-	if (bIsPunching || !World || !Mesh || !ActiveRagdoll || !ActiveRagdoll->IsRagdollActive()
-		|| ActiveRagdoll->IsPunchRecovering())
-	{
-		return false;
-	}
+    // 身体尚未准备好，或上一拳还在收回时，不开始下一拳
+    UWorld *World = GetWorld();
+    if (bIsPunching || !World || !Mesh || !ActiveRagdoll || !ActiveRagdoll->IsRagdollActive() ||
+        ActiveRagdoll->IsPunchRecovering())
+    {
+        return false;
+    }
 
-	CachedAimDir = FVector(AimDir.X, AimDir.Y, 0.f).GetSafeNormal();
-	if (CachedAimDir.IsNearlyZero() || !ActiveRagdoll->CanDrivePunch(Hand == EMeleeHand::Left ? 1.f : -1.f))
-	{
-		return false;
-	}
+    // 本次出拳使用按下攻击时的水平方向
+    CachedAimDir = FVector(AimDir.X, AimDir.Y, 0.f).GetSafeNormal();
+    if (CachedAimDir.IsNearlyZero() || !ActiveRagdoll->CanDrivePunch(Hand == EMeleeHand::Left ? 1.f : -1.f))
+    {
+        return false;
+    }
 
-	ActiveHand = Hand;
-	bIsPunching = true;
-	const float HandSide = Hand == EMeleeHand::Left ? 1.0f : -1.0f;
-	ActiveRagdoll->BeginBodyDrivenPunch(CachedAimDir, HandSide);
+    ActiveHand = Hand;
+    bIsPunching = true;
+    bHitWindowOpen = false;
+    const float HandSide = Hand == EMeleeHand::Left ? 1.0f : -1.0f;
+    ActiveRagdoll->BeginBodyDrivenPunch(CachedAimDir, HandSide);
 #if !UE_BUILD_SHIPPING
-	UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=Begin hand=%d aim=%s"),
-		*GetNameSafe(GetOwner()), World->GetTimeSeconds(), int32(Hand), *CachedAimDir.ToCompactString());
+    UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=Begin hand=%d aim=%s"),
+           *GetNameSafe(GetOwner()), World->GetTimeSeconds(), int32(Hand), *CachedAimDir.ToCompactString());
 #endif
 
-	FTimerManager& TimerManager = World->GetTimerManager();
-	// 三个计时点相互独立：蓄力结束时发拳；稍后才允许检测命中；最后收拳结束。
-	// 命中窗口只在服务器触发，避免各客户端各自认定击中一次。
-	const float ReleaseTime = FMath::Max(WindupDelay, 0.05f);
-	const float HitTime = FMath::Max(HitWindowDelay, ReleaseTime + 0.16f);
-	TimerManager.SetTimer(PunchDriveTimer, this, &UDeliveryRagdollCombatComponent::FirePunchDrive, ReleaseTime, false);
-	TimerManager.SetTimer(EndTimer, this, &UDeliveryRagdollCombatComponent::FirePunchEnded, FMath::Max(PunchEndDelay, HitTime + 0.06f), false);
-	if (GetOwner()->HasAuthority())
-	{
-		TimerManager.SetTimer(HitWindowTimer, this, &UDeliveryRagdollCombatComponent::FireHitWindow, HitTime, false);
-	}
+    FTimerManager &TimerManager = World->GetTimerManager();
+    // 动作计时只负责释放与结束，是否命中由有效窗口中的实际拳路决定
+    const float ReleaseTime = FMath::Max(WindupDelay, 0.05f);
+    TimerManager.SetTimer(PunchDriveTimer, this, &UDeliveryRagdollCombatComponent::FirePunchDrive,
+                          ReleaseTime, false);
+    TimerManager.SetTimer(EndTimer, this, &UDeliveryRagdollCombatComponent::FirePunchEnded,
+                          FMath::Max(PunchEndDelay, ReleaseTime + 0.06f), false);
 
-	return true;
+    return true;
 }
 
+// 清除本次攻击的计时器并恢复身体状态
 void UDeliveryRagdollCombatComponent::CancelPunch()
 {
-	// 晕倒或其他动作打断时清掉未触发的事件，避免角色倒地后仍突然出拳。
-	if (!bIsPunching) return;
-	GetWorld()->GetTimerManager().ClearTimer(HitWindowTimer);
+    // 晕倒或其他动作打断时清掉未触发的事件，避免角色倒地后仍突然出拳
+    if (!bIsPunching)
+        return;
 #if !UE_BUILD_SHIPPING
-	UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=Cancel hand=%d"),
-		*GetNameSafe(GetOwner()), GetWorld()->GetTimeSeconds(), int32(ActiveHand));
+    UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=Cancel hand=%d"),
+           *GetNameSafe(GetOwner()), GetWorld()->GetTimeSeconds(), int32(ActiveHand));
 #endif
-	GetWorld()->GetTimerManager().ClearTimer(PunchDriveTimer);
-	GetWorld()->GetTimerManager().ClearTimer(EndTimer);
-	ActiveRagdoll->EndBodyDrivenPunch();
-	bIsPunching = false;
+    GetWorld()->GetTimerManager().ClearTimer(PunchDriveTimer);
+    GetWorld()->GetTimerManager().ClearTimer(EndTimer);
+    bHitWindowOpen = false;
+    SetComponentTickEnabled(false);
+    ActiveRagdoll->EndBodyDrivenPunch();
+    bIsPunching = false;
 }
 
+// 释放拳头并施加起始冲量，本机同时播放出拳声音
 void UDeliveryRagdollCombatComponent::FirePunchDrive()
 {
-	if (!bIsPunching) return;
-	ActiveRagdoll->ReleaseBodyDrivenPunch();
+    if (!bIsPunching)
+        return;
+    ActiveRagdoll->ReleaseBodyDrivenPunch();
+    if (GetOwner()->HasAuthority())
+    {
+        // 从释放时的拳头位置开始记录，避免把蓄力阶段也算作攻击
+        PreviousTraceCenter = GetPunchTraceTransform().GetLocation();
+        bHitWindowOpen = true;
+        SetComponentTickEnabled(true);
+    }
 #if !UE_BUILD_SHIPPING
-	UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=Release hand=%d impulse=%.1f"),
-		*GetNameSafe(GetOwner()), GetWorld()->GetTimeSeconds(), int32(ActiveHand), PunchImpulse);
+    UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=Release hand=%d impulse=%.1f"),
+           *GetNameSafe(GetOwner()), GetWorld()->GetTimeSeconds(), int32(ActiveHand), PunchImpulse);
 #endif
 
-	// 姿势电机负责轨迹，冲量负责让拳头一开始就带着速度出去。
-	// 大头给拳头，前臂跟上，上臂只给一点，免得整条手臂把身体推走。
-	const bool bLeft = ActiveHand == EMeleeHand::Left;
-	Mesh->AddImpulse(CachedAimDir * PunchImpulse, bLeft ? LeftHandBone : RightHandBone, true);
-	Mesh->AddImpulse(CachedAimDir * PunchImpulse * 0.5f, bLeft ? LeftForearmBone : RightForearmBone, true);
-	Mesh->AddImpulse(CachedAimDir * PunchImpulse * 0.1f, bLeft ? LeftArmBone : RightArmBone, true);
+    // 姿势电机负责轨迹，冲量负责让拳头一开始就带着速度出去
+    // 三段手臂分别使用可配置的倍率；默认让手部获得最大速度增量
+    const bool bLeft = ActiveHand == EMeleeHand::Left;
+    Mesh->AddImpulse(CachedAimDir * PunchImpulse * FMath::Max(0.f, HandImpulseScale),
+                     bLeft ? LeftHandBone : RightHandBone, true);
+    Mesh->AddImpulse(CachedAimDir * PunchImpulse * FMath::Max(0.f, ForearmImpulseScale),
+                     bLeft ? LeftForearmBone : RightForearmBone, true);
+    Mesh->AddImpulse(CachedAimDir * PunchImpulse * FMath::Max(0.f, UpperArmImpulseScale),
+                     bLeft ? LeftArmBone : RightArmBone, true);
 
-	// 操作音跟本机预测走，左右键反馈不会多等一次网络往返。
-	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	USoundBase* PunchSound = bLeft ? LeftPunchSound : RightPunchSound;
-	if (OwnerPawn && OwnerPawn->IsLocallyControlled() && PunchSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(
-			this, PunchSound, Mesh->GetBoneLocation(bLeft ? LeftHandBone : RightHandBone));
-	}
+    // 操作音跟本机预测走，左右键反馈不会多等一次网络往返
+    const APawn *OwnerPawn = Cast<APawn>(GetOwner());
+    USoundBase *PunchSound = bLeft ? LeftPunchSound : RightPunchSound;
+    if (OwnerPawn && OwnerPawn->IsLocallyControlled() && PunchSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, PunchSound,
+                                              Mesh->GetBoneLocation(bLeft ? LeftHandBone : RightHandBone));
+    }
 }
 
+// 计算本次出拳用于命中查询的位置和方向
 FTransform UDeliveryRagdollCombatComponent::GetPunchTraceTransform() const
 {
-	// 命中检测从当前拳头骨骼位置开始，沿本次缓存的瞄准方向稍微向前延伸。
-	const FName HandBone = ActiveHand == EMeleeHand::Left ? LeftHandBone : RightHandBone;
-	const FVector Location = Mesh->GetBoneLocation(HandBone, EBoneSpaces::WorldSpace) + CachedAimDir * ArmReachOffset;
-	return FTransform(CachedAimDir.ToOrientationQuat(), Location);
+    // 在拳头位置沿出拳方向偏移，得到命中检测的中心
+    const FName HandBone = ActiveHand == EMeleeHand::Left ? LeftHandBone : RightHandBone;
+    const FVector Location =
+        Mesh->GetBoneLocation(HandBone, EBoneSpaces::WorldSpace) + CachedAimDir * ArmReachOffset;
+    return FTransform(CachedAimDir.ToOrientationQuat(), Location);
 }
 
-void UDeliveryRagdollCombatComponent::FireHitWindow()
+// 物理更新后检查拳头经过的路径，低帧率时也不会跳过两帧之间的目标
+void UDeliveryRagdollCombatComponent::TickComponent(float DeltaTime, ELevelTick TickType,
+    FActorComponentTickFunction* ThisTickFunction)
 {
-	// 只发出“现在可判定命中”的事件；实际伤害规则不放在姿态组件里。
-	OnPunchHitWindow.Broadcast(ActiveHand);
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    if (!bIsPunching || !bHitWindowOpen || !GetOwner()->HasAuthority())
+        return;
+
+    TraceStart = PreviousTraceCenter;
+    TraceEnd = GetPunchTraceTransform().GetLocation();
+    PreviousTraceCenter = TraceEnd;
+    OnPunchHitWindow.Broadcast(ActiveHand);
 }
 
+// 结束出拳状态，通知技能清理本次攻击
 void UDeliveryRagdollCombatComponent::FirePunchEnded()
 {
-	if (!bIsPunching) return;
+    if (!bIsPunching)
+        return;
 #if !UE_BUILD_SHIPPING
-	UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=End hand=%d"),
-		*GetNameSafe(GetOwner()), GetWorld()->GetTimeSeconds(), int32(ActiveHand));
+    UE_LOG(LogDelivery, Log, TEXT("PunchDiagEvent actor=%s time=%.3f event=End hand=%d"),
+           *GetNameSafe(GetOwner()), GetWorld()->GetTimeSeconds(), int32(ActiveHand));
 #endif
-	ActiveRagdoll->EndBodyDrivenPunch();
-	bIsPunching = false;
-	OnPunchEnded.Broadcast(ActiveHand);
+    bHitWindowOpen = false;
+    SetComponentTickEnabled(false);
+    ActiveRagdoll->EndBodyDrivenPunch();
+    bIsPunching = false;
+    OnPunchEnded.Broadcast(ActiveHand);
+}
+
+// 根据身体朝向发动出拳，不使用镜头方向改变拳路
+bool UDeliveryRagdollCombatComponent::StartAttack(EMeleeHand Hand)
+{
+    const ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(GetOwner());
+    if (!Character)
+        return false;
+    const UDeliveryActiveRagdollComponent *Body = Character->GetActiveRagdoll();
+    const FVector Direction =
+        Body ? Body->GetBodyForward() : Character->GetActorForwardVector().GetSafeNormal2D();
+    return !Direction.IsNearlyZero() && StartPunch(Hand, Direction);
+}
+// 在服务器查询命中的角色，同一角色只返回一次
+TArray<AActor *> UDeliveryRagdollCombatComponent::GatherHits(EMeleeHand Hand) const
+{
+    TArray<AActor *> Results;
+    const AActor *Owner = GetOwner();
+    if (!Owner || !Owner->HasAuthority() || !GetWorld() || !bHitWindowOpen || Hand != ActiveHand)
+    {
+        return Results;
+    }
+    TArray<FHitResult> Hits;
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(PunchHit), false, Owner);
+    // 球体覆盖拳头从上一帧到本帧的移动，遇到阻挡时不继续穿过后方目标
+    GetWorld()->SweepMultiByChannel(Hits, TraceStart, TraceEnd, FQuat::Identity, ECC_PhysicsBody,
+                                    FCollisionShape::MakeSphere(GetHitRadius()), Params);
+
+    for (const FHitResult& Hit : Hits)
+    {
+        ADeliveryCharacter *Other = Cast<ADeliveryCharacter>(Hit.GetActor());
+        if (Other && Other != Owner && Other->GetPlayerState<ADeliverPlayerState>() &&
+            Other->GetActiveRagdoll() && Other->GetActiveRagdoll()->IsRagdollActive())
+        {
+            // 一个角色有多个刚体，同一拳命中多个部位也只结算一次
+            Results.AddUnique(Other);
+        }
+    }
+
+    return Results;
 }

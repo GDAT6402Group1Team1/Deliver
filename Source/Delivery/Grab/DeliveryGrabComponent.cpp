@@ -4,7 +4,7 @@
 #include "Camera/CameraComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "DeliveryCharacter.h"
+#include "Character/DeliveryCharacter.h"
 #include "Combat/DeliveryRagdollCombatComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
@@ -21,9 +21,9 @@
 
 namespace
 {
-	constexpr uint8 LeftBit = 1;
-	constexpr uint8 RightBit = 2;
-	const FName HandBones[2] = { TEXT("LeftHand"), TEXT("RightHand") };
+constexpr uint8 LeftBit = 1;
+constexpr uint8 RightBit = 2;
+const FName HandBones[2] = {TEXT("LeftHand"), TEXT("RightHand")};
 }
 
 UDeliveryGrabComponent::UDeliveryGrabComponent()
@@ -32,6 +32,7 @@ UDeliveryGrabComponent::UDeliveryGrabComponent()
 	SetIsReplicatedByDefault(true);
 }
 
+// 抓取先更新手部目标，布娃娃随后使用这些目标驱动身体
 void UDeliveryGrabComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -44,6 +45,7 @@ void UDeliveryGrabComponent::BeginPlay()
 	}
 }
 
+// 角色离开世界时释放抓取关系
 void UDeliveryGrabComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	ForceRelease();
@@ -51,6 +53,7 @@ void UDeliveryGrabComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+// 同步双手抓取目标、抓点和抓取状态
 void UDeliveryGrabComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -65,8 +68,7 @@ void UDeliveryGrabComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 
 bool UDeliveryGrabComponent::IsCarryingProp() const
 {
-	return IsValid(GrabTarget.Get()) && AttachedHands != 0
-		&& !GrabTarget->IsA<ADeliveryCharacter>();
+	return IsValid(GrabTarget.Get()) && AttachedHands != 0 && !GrabTarget->IsA<ADeliveryCharacter>();
 }
 
 bool UDeliveryGrabComponent::IsDraggingCharacter() const
@@ -74,11 +76,13 @@ bool UDeliveryGrabComponent::IsDraggingCharacter() const
 	return IsValid(GrabTarget.Get()) && GrabTarget->IsA<ADeliveryCharacter>() && WantedHands != 0;
 }
 
+// 根据镜头方向寻找可抓取目标，并检查人数和抓取距离
 bool UDeliveryGrabComponent::FindCandidate(AActor*& OutActor, FVector& OutPoint) const
 {
 	OutActor = nullptr;
 	const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
-	if (!Character || !Character->GetFollowCamera() || !GetWorld()) return false;
+	if (!Character || !Character->GetFollowCamera() || !GetWorld())
+		return false;
 	const FVector Start = Character->GetFollowCamera()->GetComponentLocation();
 	const FVector Aim = Character->GetFollowCamera()->GetForwardVector();
 	const FVector End = Start + Aim * 1000.0f;
@@ -88,10 +92,10 @@ bool UDeliveryGrabComponent::FindCandidate(AActor*& OutActor, FVector& OutPoint)
 	auto IsGrabHit = [&](const FHitResult& CandidateHit)
 	{
 		const AActor* Target = CandidateHit.GetActor();
-		const UDeliveryGrabbableComponent* Grabbable = Target
-			? Target->FindComponentByClass<UDeliveryGrabbableComponent>() : nullptr;
-		return Grabbable && Grabbable->GrabberCount < 2 && Grabbable->CanGrab(Character)
-			&& FVector::DistSquared(Hips, CandidateHit.ImpactPoint) <= FMath::Square(GrabDistance);
+		const UDeliveryGrabbableComponent* Grabbable =
+		    Target ? Target->FindComponentByClass<UDeliveryGrabbableComponent>() : nullptr;
+		return Grabbable && Grabbable->GrabberCount < 2 && Grabbable->CanGrab(Character) &&
+		       FVector::DistSquared(Hips, CandidateHit.ImpactPoint) <= FMath::Square(GrabDistance);
 	};
 	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params) && IsGrabHit(Hit))
 	{
@@ -100,33 +104,39 @@ bool UDeliveryGrabComponent::FindCandidate(AActor*& OutActor, FVector& OutPoint)
 		return true;
 	}
 
-	// 准星稍微偏离小物品时仍可选中：只考虑身边的物理目标，且镜头到目标必须无遮挡。
+	// 准星稍微偏离小物品时仍可选中：只考虑身边的物理目标，且镜头到目标必须无遮挡
 	FCollisionObjectQueryParams ObjectTypes;
 	ObjectTypes.AddObjectTypesToQuery(ECC_PhysicsBody);
 	ObjectTypes.AddObjectTypesToQuery(ECC_WorldDynamic);
 	TArray<FOverlapResult> Nearby;
 	GetWorld()->OverlapMultiByObjectType(Nearby, Hips, FQuat::Identity, ObjectTypes,
-		FCollisionShape::MakeSphere(GrabDistance + HighlightAimMargin), Params);
+	                                     FCollisionShape::MakeSphere(GrabDistance + HighlightAimMargin),
+	                                     Params);
 	float BestMiss = TNumericLimits<float>::Max();
 	for (const FOverlapResult& Overlap : Nearby)
 	{
 		AActor* Target = Overlap.GetActor();
-		UDeliveryGrabbableComponent* Grabbable = Target
-			? Target->FindComponentByClass<UDeliveryGrabbableComponent>() : nullptr;
-		if (!Grabbable || Grabbable->GrabberCount >= 2 || !Grabbable->CanGrab(Character)) continue;
+		UDeliveryGrabbableComponent* Grabbable =
+		    Target ? Target->FindComponentByClass<UDeliveryGrabbableComponent>() : nullptr;
+		if (!Grabbable || Grabbable->GrabberCount >= 2 || !Grabbable->CanGrab(Character))
+			continue;
 		FName Bone;
 		const UPrimitiveComponent* Body = Grabbable->GetGrabBody(Bone);
-		if (!Body) continue;
+		if (!Body)
+			continue;
 		const FVector Focus = Bone.IsNone() ? Body->Bounds.Origin : Body->GetSocketLocation(Bone);
 		const float AlongRay = FVector::DotProduct(Focus - Start, Aim);
-		if (AlongRay <= 0.0f || AlongRay > 1000.0f) continue;
+		if (AlongRay <= 0.0f || AlongRay > 1000.0f)
+			continue;
 		const float Miss = FVector::Dist(Focus, Start + Aim * AlongRay);
-		const float AllowedMiss = FMath::Clamp(Body->Bounds.SphereRadius * 0.5f
-			+ HighlightAimMargin, 35.0f, 70.0f);
-		if (Miss > AllowedMiss || Miss >= BestMiss) continue;
+		const float AllowedMiss =
+		    FMath::Clamp(Body->Bounds.SphereRadius * 0.5f + HighlightAimMargin, 35.0f, 70.0f);
+		if (Miss > AllowedMiss || Miss >= BestMiss)
+			continue;
 		FHitResult SightHit;
-		if (!GetWorld()->LineTraceSingleByChannel(SightHit, Start, Focus, ECC_Visibility, Params)
-			|| SightHit.GetActor() != Target || !IsGrabHit(SightHit)) continue;
+		if (!GetWorld()->LineTraceSingleByChannel(SightHit, Start, Focus, ECC_Visibility, Params) ||
+		    SightHit.GetActor() != Target || !IsGrabHit(SightHit))
+			continue;
 		BestMiss = Miss;
 		OutActor = Target;
 		OutPoint = SightHit.ImpactPoint;
@@ -134,15 +144,18 @@ bool UDeliveryGrabComponent::FindCandidate(AActor*& OutActor, FVector& OutPoint)
 	return OutActor != nullptr;
 }
 
+// 本机先显示抓取反馈，再请求服务器确认目标
 void UDeliveryGrabComponent::RequestBegin()
 {
 	ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
-	if (!Character || !Character->IsLocallyControlled() || IsGrabbing()
-		|| (Character->GetInventoryComponent() && Character->GetInventoryComponent()->HasHeldItem())
-		|| (Character->GetRagdollCombat() && Character->GetRagdollCombat()->IsPunching())) return;
+	if (!Character || !Character->IsLocallyControlled() || IsGrabbing() ||
+	    (Character->GetInventoryComponent() && Character->GetInventoryComponent()->HasHeldItem()) ||
+	    (Character->GetRagdollCombat() && Character->GetRagdollCombat()->IsPunching()))
+		return;
 	AActor* Candidate = nullptr;
 	FVector HitPoint;
-	if (!FindCandidate(Candidate, HitPoint)) return;
+	if (!FindCandidate(Candidate, HitPoint))
+		return;
 	const bool bNewPredictedGrab = PredictedTarget.Get() != Candidate;
 	PredictedTarget = Candidate;
 	PredictedGripPoint = HitPoint;
@@ -150,18 +163,22 @@ void UDeliveryGrabComponent::RequestBegin()
 	{
 		const FVector LeftHand = Character->GetMesh()->GetBoneLocation(HandBones[0]);
 		const FVector RightHand = Character->GetMesh()->GetBoneLocation(HandBones[1]);
-		PredictedHands = FVector::DistSquared(LeftHand, HitPoint)
-			<= FVector::DistSquared(RightHand, HitPoint) ? LeftBit : RightBit;
+		PredictedHands = FVector::DistSquared(LeftHand, HitPoint) <= FVector::DistSquared(RightHand, HitPoint)
+		                     ? LeftBit
+		                     : RightBit;
 	}
-	else PredictedHands = LeftBit | RightBit;
+	else
+		PredictedHands = LeftBit | RightBit;
 	LocallyReleasedHands = 0;
 	PredictionExpiresAt = GetWorld()->GetTimeSeconds() + 0.5f;
 	if (bNewPredictedGrab && GrabStartSound)
 	{
 		UGameplayStatics::PlaySound2D(this, GrabStartSound);
 	}
-	if (Character->HasAuthority()) BeginOnServer(Candidate, HitPoint);
-	else ServerRequestBegin(Candidate, HitPoint);
+	if (Character->HasAuthority())
+		BeginOnServer(Candidate, HitPoint);
+	else
+		ServerRequestBegin(Candidate, HitPoint);
 }
 
 void UDeliveryGrabComponent::ServerRequestBegin_Implementation(AActor* Target, FVector_NetQuantize10 HitPoint)
@@ -169,48 +186,74 @@ void UDeliveryGrabComponent::ServerRequestBegin_Implementation(AActor* Target, F
 	BeginOnServer(Target, HitPoint);
 }
 
+// 服务器核对距离、朝向和遮挡，通过后记录目标与双手接触点
 void UDeliveryGrabComponent::BeginOnServer(AActor* Target, const FVector& HitPoint)
 {
 	ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
-	UDeliveryGrabbableComponent* Grabbable = IsValid(Target)
-		? Target->FindComponentByClass<UDeliveryGrabbableComponent>() : nullptr;
-	if (!Character || !Character->HasAuthority() || GrabTarget || !Grabbable
-		|| (Character->GetInventoryComponent() && Character->GetInventoryComponent()->HasHeldItem())
-		|| !FMath::IsFinite(HitPoint.X) || !FMath::IsFinite(HitPoint.Y) || !FMath::IsFinite(HitPoint.Z)
-		|| (Character->GetRagdollCombat() && Character->GetRagdollCombat()->IsPunching())
-		|| !Character->GetActiveRagdoll()
-		|| Character->GetActiveRagdoll()->GetControlMode() != EDeliveryRagdollControlMode::Active)
+	UDeliveryGrabbableComponent* Grabbable =
+	    IsValid(Target) ? Target->FindComponentByClass<UDeliveryGrabbableComponent>() : nullptr;
+	if (!Character || !Character->HasAuthority() || GrabTarget || !Grabbable)
 	{
 		return;
 	}
+
+	// 手持物品占用双手时，不允许再建立抓取关系
+	const UDeliveryInventoryComponent* Inventory = Character->GetInventoryComponent();
+	if (Inventory && Inventory->HasHeldItem())
+	{
+		return;
+	}
+
+	// 客户端传入的坐标必须是有限数值，避免无效位置进入后续距离和射线计算
+	if (!FMath::IsFinite(HitPoint.X) || !FMath::IsFinite(HitPoint.Y) || !FMath::IsFinite(HitPoint.Z))
+	{
+		return;
+	}
+
+	const UDeliveryRagdollCombatComponent* Combat = Character->GetRagdollCombat();
+	if (Combat && Combat->IsPunching())
+	{
+		return;
+	}
+
+	// 只有身体处于正常控制状态时才能抓取，倒地和起身阶段不建立新连接
+	const UDeliveryActiveRagdollComponent* Ragdoll = Character->GetActiveRagdoll();
+	if (!Ragdoll || Ragdoll->GetControlMode() != EDeliveryRagdollControlMode::Active)
+	{
+		return;
+	}
+
 	FName Bone;
 	UPrimitiveComponent* Body = Grabbable->GetGrabBody(Bone);
-	if (!Body || !Grabbable->CanGrab(Character)) return;
+	if (!Body || !Grabbable->CanGrab(Character))
+		return;
 	int32 DragSide = INDEX_NONE;
 	FVector DragPoint = HitPoint;
 	const bool bGrabCharacter = Target->IsA<ADeliveryCharacter>();
 	if (const ADeliveryCharacter* DraggedCharacter = Cast<ADeliveryCharacter>(Target))
 	{
-		if (!FindClosestDragGrip(DraggedCharacter, DragSide, Bone, DragPoint)) return;
+		if (!FindClosestDragGrip(DraggedCharacter, DragSide, Bone, DragPoint))
+			return;
 	}
 	const FVector Hips = Character->GetMesh()->GetBoneLocation(TEXT("Hips"));
 	const FVector ValidatedPoint = bGrabCharacter ? DragPoint : HitPoint;
 	if (FVector::Dist(Hips, ValidatedPoint) > GrabDistance)
 	{
 		UE_LOG(LogDelivery, Warning, TEXT("Grab rejected: target %s is %.1f cm from hips (limit %.1f)"),
-			*GetNameSafe(Target), FVector::Dist(Hips, ValidatedPoint), GrabDistance);
+		       *GetNameSafe(Target), FVector::Dist(Hips, ValidatedPoint), GrabDistance);
 		return;
 	}
 	// 客户端只提交意图；倒地身体的姿态可能与客户端快照略有差异，
-	// 因此服务端以自己选出的身体表面重新核对距离、朝向和无遮挡视线。
+	// 因此服务端以自己选出的身体表面重新核对距离、朝向和无遮挡视线
 	const FVector Eye = Character->GetPawnViewLocation();
 	const FVector ToPoint = (ValidatedPoint - Eye).GetSafeNormal();
 	const FVector Facing = Character->GetController()
-		? Character->GetController()->GetControlRotation().Vector() : Character->GetActorForwardVector();
+	                           ? Character->GetController()->GetControlRotation().Vector()
+	                           : Character->GetActorForwardVector();
 	if (FVector::DotProduct(ToPoint, Facing) < (bGrabCharacter ? 0.2f : 0.35f))
 	{
 		UE_LOG(LogDelivery, Warning, TEXT("Grab rejected: target %s is outside server facing"),
-			*GetNameSafe(Target));
+		       *GetNameSafe(Target));
 		return;
 	}
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(ServerGrabAim), false, Character);
@@ -218,48 +261,47 @@ void UDeliveryGrabComponent::BeginOnServer(AActor* Target, const FVector& HitPoi
 	{
 		const FVector Direction = (ValidatedPoint - Start).GetSafeNormal();
 		FHitResult SightHit;
-		return GetWorld()->LineTraceSingleByChannel(SightHit, Start,
-			ValidatedPoint + Direction * 10.0f, ECC_Visibility, Params)
-			&& SightHit.GetActor() == Target
-			&& (bGrabCharacter || FVector::Dist(SightHit.ImpactPoint, HitPoint) <= 55.0f);
+		return GetWorld()->LineTraceSingleByChannel(SightHit, Start, ValidatedPoint + Direction * 10.0f,
+		                                            ECC_Visibility, Params) &&
+		       SightHit.GetActor() == Target &&
+		       (bGrabCharacter || FVector::Dist(SightHit.ImpactPoint, HitPoint) <= 55.0f);
 	};
-	const bool bVisible = HasClearSight(Eye)
-		|| (bGrabCharacter && Character->GetFollowCamera()
-			&& HasClearSight(Character->GetFollowCamera()->GetComponentLocation()));
+	const bool bVisible =
+	    HasClearSight(Eye) || (bGrabCharacter && Character->GetFollowCamera() &&
+		                       HasClearSight(Character->GetFollowCamera()->GetComponentLocation()));
 	if (!bVisible || !Grabbable->RegisterGrabber(Character))
 	{
-		UE_LOG(LogDelivery, Warning, TEXT("Grab rejected: target %s %s"),
-			*GetNameSafe(Target), bVisible ? TEXT("registration failed") : TEXT("server sight blocked"));
+		UE_LOG(LogDelivery, Warning, TEXT("Grab rejected: target %s %s"), *GetNameSafe(Target),
+		       bVisible ? TEXT("registration failed") : TEXT("server sight blocked"));
 		return;
 	}
 	if (Grabbable->bKinematicCarry && Grabbable->GrabberCount == 1)
 	{
-		// 第一次抬起时先把箱子朝向对齐身体，再把两个接触点存成局部坐标。
-		// 否则手记住的是箱子旧朝向的那一面，箱子转正后手会追到侧面甚至背面。
+		// 第一次抬起时先把箱子朝向对齐身体，再把两个接触点存成局部坐标
+		// 否则手记住的是箱子旧朝向的那一面，箱子转正后手会追到侧面甚至背面
 		const FVector BodyForward = Character->GetActiveRagdoll()->GetBodyForward().GetSafeNormal2D();
 		if (!BodyForward.IsNearlyZero())
 		{
 			Target->SetActorRotation(FRotator(0.0f, BodyForward.Rotation().Yaw, 0.0f),
-				ETeleportType::TeleportPhysics);
+			                         ETeleportType::TeleportPhysics);
 		}
 	}
 	GrabTarget = Target;
 	GrabBone = Bone;
 	CarryForward = Character->GetController()
-		? Character->GetController()->GetControlRotation().Vector().GetSafeNormal2D()
-		: Character->GetActorForwardVector().GetSafeNormal2D();
-	// A ragdoll joint is solved in rigid-body space. Keep the replicated grip in that
-	// same space; the skeletal socket pose can lag behind the Chaos body during drag.
-	const FBodyInstance* DragBodyInstance = bGrabCharacter
-		? Body->GetBodyInstance(Bone) : nullptr;
-	const FTransform BodyTransform = DragBodyInstance
-		? DragBodyInstance->GetUnrealWorldTransform() : Body->GetSocketTransform(Bone);
+	                   ? Character->GetController()->GetControlRotation().Vector().GetSafeNormal2D()
+	                   : Character->GetActorForwardVector().GetSafeNormal2D();
+	// 抓取点记录在物理刚体的局部坐标中
+	// 骨骼挂点更新可能落后于物理模拟，直接使用会造成拖拽偏移
+	const FBodyInstance* DragBodyInstance = bGrabCharacter ? Body->GetBodyInstance(Bone) : nullptr;
+	const FTransform BodyTransform =
+	    DragBodyInstance ? DragBodyInstance->GetUnrealWorldTransform() : Body->GetSocketTransform(Bone);
 	FVector LeftPoint = HitPoint;
 	FVector RightPoint = HitPoint;
 	if (!Target->IsA<ADeliveryCharacter>())
 	{
-		FindUndersideGripPoints(Body,
-			Character->GetActiveRagdoll()->GetBodyForward().GetSafeNormal2D(), LeftPoint, RightPoint);
+		FindUndersideGripPoints(Body, Character->GetActiveRagdoll()->GetBodyForward().GetSafeNormal2D(),
+		                        LeftPoint, RightPoint);
 	}
 	else
 	{
@@ -268,23 +310,25 @@ void UDeliveryGrabComponent::BeginOnServer(AActor* Target, const FVector& HitPoi
 	}
 	GripLocalLeft = BodyTransform.InverseTransformPosition(LeftPoint);
 	GripLocalRight = BodyTransform.InverseTransformPosition(RightPoint);
-	WantedHands = DragSide == INDEX_NONE ? LeftBit | RightBit
-		: (DragSide == 0 ? LeftBit : RightBit);
+	WantedHands = DragSide == INDEX_NONE ? LeftBit | RightBit : (DragSide == 0 ? LeftBit : RightBit);
 	AttachedHands = Grabbable->bKinematicCarry ? WantedHands : 0;
 	Character->ForceNetUpdate();
 }
 
-bool UDeliveryGrabComponent::FindClosestDragGrip(const ADeliveryCharacter* Target,
-	int32& OutSide, FName& OutBone, FVector& OutPoint) const
+// 从目标的物理身体上选择抓取位置，避免使用滞后的动画姿态
+bool UDeliveryGrabComponent::FindClosestDragGrip(const ADeliveryCharacter* Target, int32& OutSide,
+                                                 FName& OutBone, FVector& OutPoint) const
 {
 	const ADeliveryCharacter* Grabber = Cast<ADeliveryCharacter>(GetOwner());
 	const USkeletalMeshComponent* TargetMesh = Target ? Target->GetMesh() : nullptr;
 	const UPhysicsAsset* Asset = TargetMesh ? TargetMesh->GetPhysicsAsset() : nullptr;
-	if (!Grabber || !Asset) return false;
+	if (!Grabber || !Asset)
+		return false;
 	float BestDistanceSq = TNumericLimits<float>::Max();
 	for (const USkeletalBodySetup* Setup : Asset->SkeletalBodySetups)
 	{
-		if (!Setup || !TargetMesh->IsSimulatingPhysics(Setup->BoneName)) continue;
+		if (!Setup || !TargetMesh->IsSimulatingPhysics(Setup->BoneName))
+			continue;
 		for (int32 Side = 0; Side < 2; ++Side)
 		{
 			const FVector Hand = Grabber->GetMesh()->GetBoneLocation(HandBones[Side]);
@@ -294,17 +338,19 @@ bool UDeliveryGrabComponent::FindClosestDragGrip(const ADeliveryCharacter* Targe
 				Surface = TargetMesh->GetBoneLocation(Setup->BoneName);
 			}
 			const float DistanceSq = FVector::DistSquared(Hand, Surface);
-			if (DistanceSq >= BestDistanceSq) continue;
+			if (DistanceSq >= BestDistanceSq)
+				continue;
 			BestDistanceSq = DistanceSq;
 			OutSide = Side;
 			OutBone = Setup->BoneName;
 			OutPoint = Surface;
 		}
 	}
-	if (OutSide == INDEX_NONE) return false;
-	// 抓点取自物理资产碰撞体（胶囊）表面，胶囊通常比可见网格略胖一圈；
-	// 抓点停在胶囊表面，手在画面上就会离衣服/皮肤差几厘米。向该刚体质心收进一点，
-	// 最多收到表面到质心距离的一半，细的四肢不会被收穿。
+	if (OutSide == INDEX_NONE)
+		return false;
+	// 抓点取自物理资产碰撞体（胶囊）表面，胶囊通常比可见网格略胖一圈
+	// 抓点停在胶囊表面，手在画面上就会离衣服/皮肤差几厘米；向该刚体质心收进一点，
+	// 最多收到表面到质心距离的一半，细的四肢不会被收穿
 	const FVector Center = TargetMesh->GetCenterOfMass(OutBone);
 	const FVector Inward = Center - OutPoint;
 	const float Depth = Inward.Size();
@@ -315,102 +361,120 @@ bool UDeliveryGrabComponent::FindClosestDragGrip(const ADeliveryCharacter* Targe
 	return true;
 }
 
+// 取得目标的抓取刚体和对应骨骼
 UPrimitiveComponent* UDeliveryGrabComponent::GetTargetBody() const
 {
-	const UDeliveryGrabbableComponent* Grabbable = IsValid(GrabTarget.Get())
-		? GrabTarget->FindComponentByClass<UDeliveryGrabbableComponent>() : nullptr;
+	const UDeliveryGrabbableComponent* Grabbable =
+	    IsValid(GrabTarget.Get()) ? GrabTarget->FindComponentByClass<UDeliveryGrabbableComponent>() : nullptr;
 	FName Bone;
 	return Grabbable ? Grabbable->GetGrabBody(Bone) : nullptr;
 }
 
+// 把保存在目标局部空间的抓点转换为世界坐标
 FVector UDeliveryGrabComponent::GripWorld(int32 Side) const
 {
 	if (UPrimitiveComponent* Body = GetTargetBody())
 	{
-		const FBodyInstance* DragBodyInstance = GrabTarget->IsA<ADeliveryCharacter>()
-			? Body->GetBodyInstance(GrabBone) : nullptr;
-		const FTransform BodyTransform = DragBodyInstance
-			? DragBodyInstance->GetUnrealWorldTransform() : Body->GetSocketTransform(GrabBone);
-		return BodyTransform.TransformPosition(
-			Side == 0 ? FVector(GripLocalLeft) : FVector(GripLocalRight));
+		const FBodyInstance* DragBodyInstance =
+		    GrabTarget->IsA<ADeliveryCharacter>() ? Body->GetBodyInstance(GrabBone) : nullptr;
+		const FTransform BodyTransform = DragBodyInstance ? DragBodyInstance->GetUnrealWorldTransform()
+		                                                  : Body->GetSocketTransform(GrabBone);
+		return BodyTransform.TransformPosition(Side == 0 ? FVector(GripLocalLeft) : FVector(GripLocalRight));
 	}
 	return FVector::ZeroVector;
 }
 
-void UDeliveryGrabComponent::FindUndersideGripPoints(const UPrimitiveComponent* Body,
-	const FVector& Forward, FVector& OutLeft, FVector& OutRight) const
+// 根据物体范围计算底部两侧的托举抓点
+void UDeliveryGrabComponent::FindUndersideGripPoints(const UPrimitiveComponent* Body, const FVector& Forward,
+                                                     FVector& OutLeft, FVector& OutRight) const
 {
 	// 从物体底面两侧向上查最近的真实碰撞表面，不假设网格原点位于中心，
-	// 也不假设它是固定尺寸的立方体。两个抓点只在开始抓取时计算一次。
+	// 也不假设它是固定尺寸的立方体；两个抓点只在开始抓取时计算一次
 	const FBoxSphereBounds& Bounds = Body->Bounds;
 	const FVector Right = FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal();
-	const float HalfSpacing = FMath::Clamp(
-		FMath::Min(Bounds.BoxExtent.X, Bounds.BoxExtent.Y) * 0.7f, 5.0f, 18.0f);
-	const FVector Probe = Bounds.Origin
-		- FVector::UpVector * (Bounds.BoxExtent.Z + 30.0f)
-		- Forward * FMath::Min(Bounds.SphereRadius * 0.2f, 20.0f);
+	const float HalfSpacing =
+	    FMath::Clamp(FMath::Min(Bounds.BoxExtent.X, Bounds.BoxExtent.Y) * 0.7f, 5.0f, 18.0f);
+	const FVector Probe = Bounds.Origin - FVector::UpVector * (Bounds.BoxExtent.Z + 30.0f) -
+	                      Forward * FMath::Min(Bounds.SphereRadius * 0.2f, 20.0f);
 	const FVector Fallback = Bounds.Origin - FVector::UpVector * Bounds.BoxExtent.Z;
 	FVector Surface;
 	OutLeft = Body->GetClosestPointOnCollision(Probe - Right * HalfSpacing, Surface) > 0.0f
-		? Surface : Fallback - Right * HalfSpacing;
+	              ? Surface
+	              : Fallback - Right * HalfSpacing;
 	OutRight = Body->GetClosestPointOnCollision(Probe + Right * HalfSpacing, Surface) > 0.0f
-		? Surface : Fallback + Right * HalfSpacing;
+	               ? Surface
+	               : Fallback + Right * HalfSpacing;
 }
 
+// 计算角色面前适合托举物体的位置
 FVector UDeliveryGrabComponent::CarryCenterWorld(const UPrimitiveComponent* Body) const
 {
 	const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
-	if (!Character || !Body) return FVector::ZeroVector;
+	if (!Character || !Body)
+		return FVector::ZeroVector;
 	FVector Forward = Character->GetActiveRagdoll()
-		? Character->GetActiveRagdoll()->GetBodyForward().GetSafeNormal2D()
-		: FVector(CarryForward).GetSafeNormal2D();
-	if (Forward.IsNearlyZero()) Forward = Character->GetActorForwardVector().GetSafeNormal2D();
-	// 先给双手一个胸口前的稳定支撑位置，再根据物体真实底面抓点反推物体中心。
-	// 因而无论网格大小或 Pivot 在哪里，物体都在双手之上，而不是悬在手下。
-	const FVector HandSupport = Character->GetMesh()->GetBoneLocation(TEXT("Spine"))
-		+ Forward * CarryHandDistance + FVector::UpVector * CarryHeightAboveSpine;
+	                      ? Character->GetActiveRagdoll()->GetBodyForward().GetSafeNormal2D()
+	                      : FVector(CarryForward).GetSafeNormal2D();
+	if (Forward.IsNearlyZero())
+		Forward = Character->GetActorForwardVector().GetSafeNormal2D();
+	// 先给双手一个胸口前的稳定支撑位置，再根据物体真实底面抓点反推物体中心
+	// 因而无论网格大小或 Pivot 在哪里，物体都在双手之上，而不是悬在手下
+	const FVector HandSupport = Character->GetMesh()->GetBoneLocation(TEXT("Spine")) +
+	                            Forward * CarryHandDistance + FVector::UpVector * CarryHeightAboveSpine;
 	const FVector LocalGripMidpoint = (FVector(GripLocalLeft) + FVector(GripLocalRight)) * 0.5f;
 	const FQuat Rotation = FRotator(0.0f, Forward.Rotation().Yaw, 0.0f).Quaternion();
 	const FTransform Orientation(Rotation, FVector::ZeroVector, Body->GetComponentScale());
 	return HandSupport - Orientation.TransformVector(LocalGripMidpoint);
 }
 
-bool UDeliveryGrabComponent::GetCarryPoseFor(const AActor* Target, FVector& OutCenter, FVector& OutForward) const
+// 向被搬物体提供当前角色的托举位置和朝向
+bool UDeliveryGrabComponent::GetCarryPoseFor(const AActor* Target, FVector& OutCenter,
+                                             FVector& OutForward) const
 {
-	if (!IsValid(GrabTarget.Get()) || GrabTarget.Get() != Target || !WantedHands
-		|| Target->IsA<ADeliveryCharacter>()) return false;
+	if (!IsValid(GrabTarget.Get()) || GrabTarget.Get() != Target || !WantedHands ||
+	    Target->IsA<ADeliveryCharacter>())
+		return false;
 	const UPrimitiveComponent* Body = GetTargetBody();
-	if (!Body) return false;
+	if (!Body)
+		return false;
 	OutCenter = CarryCenterWorld(Body);
 	const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
 	OutForward = Character && Character->GetActiveRagdoll()
-		? Character->GetActiveRagdoll()->GetBodyForward().GetSafeNormal2D()
-		: FVector(CarryForward).GetSafeNormal2D();
+	                 ? Character->GetActiveRagdoll()->GetBodyForward().GetSafeNormal2D()
+	                 : FVector(CarryForward).GetSafeNormal2D();
 	return true;
 }
 
+// 接近抓取目标时限制移动方向，避免身体穿过目标
 FVector UDeliveryGrabComponent::FilterApproachWish(const FVector& Wish) const
 {
 	const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
 	const AActor* Target = IsValid(GrabTarget.Get()) ? GrabTarget.Get() : PredictedTarget.Get();
-	if (!Character || !Target || Target->IsA<ADeliveryCharacter>() || AttachedHands == (LeftBit | RightBit)
-		|| Wish.IsNearlyZero()) return Wish;
+	if (!Character || !Target || Target->IsA<ADeliveryCharacter>() || AttachedHands == (LeftBit | RightBit) ||
+	    Wish.IsNearlyZero())
+		return Wish;
 	const UDeliveryGrabbableComponent* Marker = Target->FindComponentByClass<UDeliveryGrabbableComponent>();
 	FName Bone;
 	const UPrimitiveComponent* Body = Marker ? Marker->GetGrabBody(Bone) : nullptr;
-	if (!Body) return Wish;
+	if (!Body)
+		return Wish;
 	const FVector Hips = Character->GetMesh()->GetBoneLocation(TEXT("Hips"));
 	FVector Surface;
-	if (Body->GetClosestPointOnCollision(Hips, Surface) <= 0.0f) return Wish;
+	if (Body->GetClosestPointOnCollision(Hips, Surface) <= 0.0f)
+		return Wish;
 	const FVector Toward = (Surface - Hips).GetSafeNormal2D();
 	const float TowardAmount = FVector::DotProduct(Wish, Toward);
-	if (TowardAmount <= 0.0f) return Wish;
+	if (TowardAmount <= 0.0f)
+		return Wish;
 	const float Distance = FVector::Dist2D(Hips, Surface);
-	const float Scale = FMath::Clamp((Distance - ApproachStopDistance)
-		/ FMath::Max(ApproachSlowDistance - ApproachStopDistance, 1.0f), 0.0f, 1.0f);
+	const float Scale = FMath::Clamp((Distance - ApproachStopDistance) /
+	                                     FMath::Max(ApproachSlowDistance - ApproachStopDistance, 1.0f),
+	                                 0.0f, 1.0f);
+	// 只减弱向物体靠近的移动，保留侧移和后退，避免身体挤进物体
 	return Wish - Toward * (TowardAmount * (1.0f - Scale));
 }
 
+// 计算指定手应到达的位置，区分接近、抓住和搬运阶段
 bool UDeliveryGrabComponent::GetHandGoal(bool bLeft, FVector& OutGoal) const
 {
 	const int32 Side = bLeft ? 0 : 1;
@@ -418,10 +482,11 @@ bool UDeliveryGrabComponent::GetHandGoal(bool bLeft, FVector& OutGoal) const
 	if (IsValid(GrabTarget.Get()) && (WantedHands & Bit) && !(LocallyReleasedHands & Bit))
 	{
 		OutGoal = GripWorld(Side);
-		// 单人持物时，手和箱子取同一个胸口相对托举目标。若手追箱子已平滑后的
-		// 世界位置，箱子每次滞后都会把肩膀朝反方向拉，引起整段躯干扭动。
-		if (const UDeliveryGrabbableComponent* Marker = GrabTarget->FindComponentByClass<UDeliveryGrabbableComponent>();
-			Marker && Marker->bKinematicCarry && Marker->GrabberCount == 1)
+		// 单人持物时，手和箱子取同一个胸口相对托举目标；若手追箱子已平滑后的
+		// 世界位置，箱子每次滞后都会把肩膀朝反方向拉，引起整段躯干扭动
+		if (const UDeliveryGrabbableComponent* Marker =
+		        GrabTarget->FindComponentByClass<UDeliveryGrabbableComponent>();
+		    Marker && Marker->bKinematicCarry && Marker->GrabberCount == 1)
 		{
 			FVector Center, Forward;
 			if (GetCarryPoseFor(GrabTarget.Get(), Center, Forward))
@@ -430,8 +495,8 @@ bool UDeliveryGrabComponent::GetHandGoal(bool bLeft, FVector& OutGoal) const
 				{
 					const FQuat Rotation = FRotator(0.0f, Forward.Rotation().Yaw, 0.0f).Quaternion();
 					const FTransform CarryTransform(Rotation, Center, Body->GetComponentScale());
-					OutGoal = CarryTransform.TransformPosition(
-						Side == 0 ? FVector(GripLocalLeft) : FVector(GripLocalRight));
+					OutGoal = CarryTransform.TransformPosition(Side == 0 ? FVector(GripLocalLeft)
+					                                                     : FVector(GripLocalRight));
 				}
 			}
 		}
@@ -439,17 +504,19 @@ bool UDeliveryGrabComponent::GetHandGoal(bool bLeft, FVector& OutGoal) const
 	}
 	if (PredictedTarget.IsValid() && (PredictedHands & Bit))
 	{
-		OutGoal = PredictedGripPoint + CastChecked<ADeliveryCharacter>(GetOwner())->GetActorRightVector()
-			* (bLeft ? -10.0f : 10.0f);
+		OutGoal = PredictedGripPoint + CastChecked<ADeliveryCharacter>(GetOwner())->GetActorRightVector() *
+		                                   (bLeft ? -10.0f : 10.0f);
 		return true;
 	}
 	return false;
 }
 
+// 根据抓取目标确定角色应该面对的方向
 bool UDeliveryGrabComponent::GetGrabFacingDirection(FVector& OutDirection) const
 {
 	const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
-	if (!Character) return false;
+	if (!Character)
+		return false;
 	const FVector Hips = Character->GetMesh()->GetBoneLocation(TEXT("Hips"));
 	if (IsCarryingProp() && !FVector(CarryForward).IsNearlyZero())
 	{
@@ -458,30 +525,37 @@ bool UDeliveryGrabComponent::GetGrabFacingDirection(FVector& OutDirection) const
 	}
 	const int32 Side = (WantedHands & RightBit) ? 1 : 0;
 	const FVector Point = IsValid(GrabTarget.Get()) ? GripWorld(Side) : PredictedGripPoint;
-	if (!IsValid(GrabTarget.Get()) && !PredictedTarget.IsValid()) return false;
+	if (!IsValid(GrabTarget.Get()) && !PredictedTarget.IsValid())
+		return false;
 	const FVector ToGrip = FVector::VectorPlaneProject(Point - Hips, FVector::UpVector);
-	if (ToGrip.SizeSquared() < FMath::Square(30.0f)) return false;
+	if (ToGrip.SizeSquared() < FMath::Square(30.0f))
+		return false;
 	OutDirection = ToGrip.GetSafeNormal();
 	return true;
 }
 
+// 在服务器检查抓取条件，并建立对应手与目标的关系
 void UDeliveryGrabComponent::TryAttach(int32 Side)
 {
 	ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
 	UPrimitiveComponent* Body = GetTargetBody();
-	if (!Character || !Body || HandConstraints[Side]) return;
+	if (!Character || !Body || HandConstraints[Side])
+		return;
 	const uint8 Bit = Side == 0 ? LeftBit : RightBit;
-	if (!(WantedHands & Bit)) return;
+	if (!(WantedHands & Bit))
+		return;
 	const FVector HandPoint = Character->GetMesh()->GetBoneLocation(HandBones[Side]);
 	FVector Point = GripWorld(Side);
 	const bool bGrabCharacter = GrabTarget->IsA<ADeliveryCharacter>();
 	bool bSnappedCharacter = false;
-	if (!bGrabCharacter && FVector::Dist(HandPoint, Point) > AttachDistance) return;
+	if (!bGrabCharacter && FVector::Dist(HandPoint, Point) > AttachDistance)
+		return;
 	if (bGrabCharacter)
 	{
-		const UDeliveryGrabbableComponent* Marker = GrabTarget->FindComponentByClass<UDeliveryGrabbableComponent>();
-		// 第一个抓人者：整条物理刚体链平移，让选中的身体抓点直接贴到手上。
-		// 第二个人加入争抢时不能再瞬移目标，否则会扯断第一人的 joint；仍使用柔性连接。
+		const UDeliveryGrabbableComponent* Marker =
+		    GrabTarget->FindComponentByClass<UDeliveryGrabbableComponent>();
+		// 第一个抓人者：整条物理刚体链平移，让选中的身体抓点直接贴到手上
+		// 第二个人加入争抢时不能再瞬移目标，否则会扯断第一人的 joint；仍使用柔性连接
 		if (Marker && Marker->GrabberCount == 1)
 		{
 			USkeletalMeshComponent* TargetMesh = Cast<USkeletalMeshComponent>(Body);
@@ -500,26 +574,27 @@ void UDeliveryGrabComponent::TryAttach(int32 Side)
 			if (GetWorld()->LineTraceSingleByObjectType(Blocker, Point, HandPoint, Blockers, Params))
 			{
 				UE_LOG(LogDelivery, Warning, TEXT("Drag snap blocked by %s at %s"),
-					*GetNameSafe(Blocker.GetActor()), *Blocker.ImpactPoint.ToCompactString());
+				       *GetNameSafe(Blocker.GetActor()), *Blocker.ImpactPoint.ToCompactString());
 				ForceRelease();
 				return;
 			}
 			const FVector Offset = HandPoint - Point;
-			TargetMesh->SetAllPhysicsPosition(
-				RootBody->GetUnrealWorldTransform().GetLocation() + Offset);
+			TargetMesh->SetAllPhysicsPosition(RootBody->GetUnrealWorldTransform().GetLocation() + Offset);
 			GrabTarget->ForceNetUpdate();
 			UE_LOG(LogDelivery, Log, TEXT("Drag snapped %s by %s (offset %.1f cm)"),
-				*GetNameSafe(GrabTarget.Get()), *GetNameSafe(Character), Offset.Size());
+			       *GetNameSafe(GrabTarget.Get()), *GetNameSafe(Character), Offset.Size());
 			Point = HandPoint;
 			bSnappedCharacter = true;
 		}
 	}
 	else
 	{
-		// 普通物品仍在实际接触时固定局部抓点。
+		// 普通物品仍在实际接触时固定局部抓点
 		const FVector LocalPoint = Body->GetSocketTransform(GrabBone).InverseTransformPosition(Point);
-		if (Side == 0) GripLocalLeft = LocalPoint;
-		else GripLocalRight = LocalPoint;
+		if (Side == 0)
+			GripLocalLeft = LocalPoint;
+		else
+			GripLocalRight = LocalPoint;
 	}
 	UPhysicsConstraintComponent* Constraint = NewObject<UPhysicsConstraintComponent>(Character);
 	Constraint->RegisterComponent();
@@ -528,7 +603,7 @@ void UDeliveryGrabComponent::TryAttach(int32 Side)
 	Constraint->SetLinearXLimit(bGrabCharacter && !bSnappedCharacter ? LCM_Free : LCM_Locked, 0.0f);
 	Constraint->SetLinearYLimit(bGrabCharacter && !bSnappedCharacter ? LCM_Free : LCM_Locked, 0.0f);
 	Constraint->SetLinearZLimit(bGrabCharacter && !bSnappedCharacter ? LCM_Free : LCM_Locked, 0.0f);
-	// 单手拖人要允许对方自然翻滚，不额外拧紧肩膀和躯干。
+	// 单手拖人要允许对方自然翻滚，不额外拧紧肩膀和躯干
 	Constraint->SetAngularSwing1Limit(ACM_Free, 0.0f);
 	Constraint->SetAngularSwing2Limit(ACM_Free, 0.0f);
 	Constraint->SetAngularTwistLimit(ACM_Free, 0.0f);
@@ -536,36 +611,37 @@ void UDeliveryGrabComponent::TryAttach(int32 Side)
 	Constraint->SetConstrainedComponents(Character->GetMesh(), HandBones[Side], Body, GrabBone);
 	if (bGrabCharacter && !Constraint->ConstraintInstance.IsValidConstraintInstance())
 	{
-		UE_LOG(LogDelivery, Warning, TEXT("Drag joint could not bind %s to %s"),
-			*HandBones[Side].ToString(), *GrabBone.ToString());
+		UE_LOG(LogDelivery, Warning, TEXT("Drag joint could not bind %s to %s"), *HandBones[Side].ToString(),
+		       *GrabBone.ToString());
 		Constraint->DestroyComponent();
 		ForceRelease();
 		return;
 	}
-	// 默认两侧参考帧都取抓点，会永久保留“手还差 20–35 cm”的间隔。
-	// 改为把手骨骼的真实位置锁到物体抓点，消除视觉上的隔空抓取。
+	// 默认两侧参考帧都取抓点，会永久保留“手还差 20–35 cm”的间隔
+	// 改为把手骨骼的真实位置锁到物体抓点，消除视觉上的隔空抓取
 	if (const FBodyInstance* HandBody = Character->GetMesh()->GetBodyInstance(HandBones[Side]))
 	{
-		Constraint->SetConstraintReferencePosition(EConstraintFrame::Frame1,
-			HandBody->GetUnrealWorldTransform().InverseTransformPosition(HandPoint));
+		Constraint->SetConstraintReferencePosition(
+		    EConstraintFrame::Frame1,
+		    HandBody->GetUnrealWorldTransform().InverseTransformPosition(HandPoint));
 	}
 	if (bGrabCharacter)
 	{
-		// Both the visual grip and the joint's second anchor now refer to the same
-		// physics body point, so they cannot diverge when the ragdoll animates.
-		Constraint->SetConstraintReferencePosition(EConstraintFrame::Frame2,
-			Side == 0 ? FVector(GripLocalLeft) : FVector(GripLocalRight));
+		// 手部显示位置和约束抓取点使用同一个刚体坐标
+		// 避免骨骼姿势变化后，手和实际抓取位置分离
+		Constraint->SetConstraintReferencePosition(
+		    EConstraintFrame::Frame2, Side == 0 ? FVector(GripLocalLeft) : FVector(GripLocalRight));
 		if (bSnappedCharacter)
 		{
-			// Locked joints can accumulate a large soft error between two full ragdolls.
-			// Projection is an emergency correction, not a continuous pulling motor.
+			// 两个布娃娃之间的固定约束可能累积较大的位置误差
+			// 约束投影只用于纠正严重偏离，不能代替持续拖拽的力
 			Constraint->SetProjectionParams(0.0f, 0.0f, 15.0f, 180.0f);
 			Constraint->SetProjectionEnabled(true);
 		}
 	}
 	if (bGrabCharacter && !bSnappedCharacter)
 	{
-		// 多人争抢时第二人的两端从当前真实位置开始，有限力靠近后才硬锁。
+		// 多人争抢时第二人的两端从当前真实位置开始，有限力靠近后才硬锁
 		Constraint->SetLinearDriveParams(DragReelStrength, DragReelDamping, DragReelForceLimit);
 		Constraint->SetLinearPositionTarget(FVector::ZeroVector);
 		Constraint->SetLinearPositionDrive(true, true, true);
@@ -573,56 +649,63 @@ void UDeliveryGrabComponent::TryAttach(int32 Side)
 	}
 	HandConstraints[Side] = Constraint;
 	AttachedHands |= Bit;
-	UE_LOG(LogDelivery, Log, TEXT("Grab joint attached: grabber=%s target=%s side=%d snapped=%d initialGap=%.1f"),
-		*GetNameSafe(Character), *GetNameSafe(GrabTarget.Get()), Side, bSnappedCharacter ? 1 : 0,
-		FVector::Dist(HandPoint, GripWorld(Side)));
+	UE_LOG(LogDelivery, Log,
+	       TEXT("Grab joint attached: grabber=%s target=%s side=%d snapped=%d initialGap=%.1f"),
+	       *GetNameSafe(Character), *GetNameSafe(GrabTarget.Get()), Side, bSnappedCharacter ? 1 : 0,
+	       FVector::Dist(HandPoint, GripWorld(Side)));
 	Character->ForceNetUpdate();
 }
 
+// 拖动倒地角色时施加辅助力量，减少身体卡在地面的情况
 bool UDeliveryGrabComponent::ApplyDragAssist(ADeliveryCharacter* Character, int32 Side)
 {
 	USkeletalMeshComponent* TargetMesh = Cast<USkeletalMeshComponent>(GetTargetBody());
 	USkeletalMeshComponent* GrabberMesh = Character ? Character->GetMesh() : nullptr;
-	if (!TargetMesh || !GrabberMesh || !TargetMesh->IsSimulatingPhysics(GrabBone)) return true;
+	if (!TargetMesh || !GrabberMesh || !TargetMesh->IsSimulatingPhysics(GrabBone))
+		return true;
 
 	FName ShoulderBone = GrabberMesh->GetParentBone(GrabberMesh->GetParentBone(HandBones[Side]));
-	if (ShoulderBone.IsNone()) ShoulderBone = TEXT("Spine");
+	if (ShoulderBone.IsNone())
+		ShoulderBone = TEXT("Spine");
 	const FVector Shoulder = GrabberMesh->GetBoneLocation(ShoulderBone);
 	const FVector Grip = GripWorld(Side);
-	if (FVector::Dist(Shoulder, Grip) > DragMaxShoulderDistance) return false;
+	if (FVector::Dist(Shoulder, Grip) > DragMaxShoulderDistance)
+		return false;
 	const FVector Hand = GrabberMesh->GetBoneLocation(HandBones[Side]);
 	const float HandGap = FVector::Dist(Hand, Grip);
 
-	// ① 被抓的那根骨骼直接跟手走（速度伺服），不再靠力。
-	// 实测：锁死 joint 两端质量悬殊（约 1 kg 的手 vs 几十公斤趴地的人），会被拉开 25–80 cm；
-	// 改成有上限的弹簧力后仍被地面摩擦和身体其余部分拖住、力一直打满，缺口照样随步速变大。
+	// ① 被抓的那根骨骼直接跟手走（速度伺服），不再靠力
+	// 实测：锁死 joint 两端质量悬殊（约 1 kg 的手 vs 几十公斤趴地的人），会被拉开 25–80 cm
+	// 改成有上限的弹簧力后仍被地面摩擦和身体其余部分拖住、力一直打满，缺口照样随步速变大
 	// 所以每帧直接把这根骨骼的速度设成"手的速度 + 缺口 / 响应时间"：缺口在一两帧内收回，
-	// 手走多快它就跟多快。身体其余部分仍然是物理的，靠关节 + 下面的跟随力被它带着走。
+	// 手走多快它就跟多快；身体其余部分仍然是物理的，靠关节 + 下面的跟随力被它带着走
 	const FVector HandVelocity = GrabberMesh->GetPhysicsLinearVelocity(HandBones[Side]);
 	FVector GripVelocity = HandVelocity + (Hand - Grip) / FMath::Max(DragGripResponseTime, 0.01f);
 	if (Character->GetActiveRagdoll() && Character->GetActiveRagdoll()->IsJumping())
 	{
-		// 设计要求：抓人时可以跳，被抓的人不跟着跳起。
+		// 设计要求：抓人时可以跳，被抓的人不跟着跳起
 		GripVelocity.Z = TargetMesh->GetPhysicsLinearVelocity(GrabBone).Z;
 	}
 	GripVelocity = GripVelocity.GetClampedToMaxSize(DragGripMaxSpeed);
 	TargetMesh->SetPhysicsLinearVelocity(GripVelocity, false, GrabBone);
 
-	// ② 其余刚体跟随"被抓的部位"水平移动，按 DragBodyFollowWeight 分配。
-	// 不帮忙的话，十几块刚体的地面摩擦全压在被抓部位和它的关节上，关节会被拉长。
-	const FVector Lead = FVector::VectorPlaneProject(GripVelocity, FVector::UpVector)
-		.GetClampedToMaxSize(DragFollowSpeed);
+	// ② 其余刚体跟随"被抓的部位"水平移动，按 DragBodyFollowWeight 分配
+	// 不帮忙的话，十几块刚体的地面摩擦全压在被抓部位和它的关节上，关节会被拉长
+	const FVector Lead =
+	    FVector::VectorPlaneProject(GripVelocity, FVector::UpVector).GetClampedToMaxSize(DragFollowSpeed);
 	if (DragBodyFollowWeight > 0.0f)
 	{
 		for (FBodyInstance* Body : TargetMesh->Bodies)
 		{
 			const UBodySetup* Setup = Body ? Body->GetBodySetup() : nullptr;
 			// 用组件接口判断是否模拟：FBodyInstance::IsInstanceSimulatingPhysics 内联到
-			// PhysicsCore 模块的符号，本模块没依赖 PhysicsCore，会链接失败（LNK2019）。
-			if (!Setup || Setup->BoneName == GrabBone || !TargetMesh->IsSimulatingPhysics(Setup->BoneName)) continue;
-			const FVector Actual = FVector::VectorPlaneProject(Body->GetUnrealWorldVelocity(), FVector::UpVector);
-			const FVector Acceleration = ((Lead - Actual) * 8.0f)
-				.GetClampedToMaxSize(DragFollowAcceleration) * DragBodyFollowWeight;
+			// PhysicsCore 模块的符号，本模块没依赖 PhysicsCore，会链接失败（LNK2019）
+			if (!Setup || Setup->BoneName == GrabBone || !TargetMesh->IsSimulatingPhysics(Setup->BoneName))
+				continue;
+			const FVector Actual =
+			    FVector::VectorPlaneProject(Body->GetUnrealWorldVelocity(), FVector::UpVector);
+			const FVector Acceleration =
+			    ((Lead - Actual) * 8.0f).GetClampedToMaxSize(DragFollowAcceleration) * DragBodyFollowWeight;
 			Body->AddForce(Acceleration, true, true);
 		}
 	}
@@ -631,100 +714,114 @@ bool UDeliveryGrabComponent::ApplyDragAssist(ADeliveryCharacter* Character, int3
 	if (Now - LastDragLogTime >= 1.0f)
 	{
 		LastDragLogTime = Now;
-		UE_LOG(LogDelivery, Log, TEXT("Drag assist: grabber=%s bone=%s handGap=%.1f handSpeed=%.1f gripSpeed=%.1f"),
-			*GetNameSafe(Character), *GrabBone.ToString(), HandGap, HandVelocity.Size(), GripVelocity.Size());
+		UE_LOG(LogDelivery, Log,
+		       TEXT("Drag assist: grabber=%s bone=%s handGap=%.1f handSpeed=%.1f gripSpeed=%.1f"),
+		       *GetNameSafe(Character), *GrabBone.ToString(), HandGap, HandVelocity.Size(),
+		       GripVelocity.Size());
 	}
 	return true;
 }
 
-void UDeliveryGrabComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+// 更新双手接近目标、抓住目标和失效释放的过程
+void UDeliveryGrabComponent::TickComponent(float DeltaTime, ELevelTick TickType,
+                                           FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
-	if (!Character || !GetWorld()) return;
+	if (!Character || !GetWorld())
+		return;
 	LeftHandGap = (AttachedHands & LeftBit)
-		? FVector::Dist(Character->GetMesh()->GetBoneLocation(HandBones[0]),
-			GripWorld(0)) : 0.0f;
+	                  ? FVector::Dist(Character->GetMesh()->GetBoneLocation(HandBones[0]), GripWorld(0))
+	                  : 0.0f;
 	RightHandGap = (AttachedHands & RightBit)
-		? FVector::Dist(Character->GetMesh()->GetBoneLocation(HandBones[1]),
-			GripWorld(1)) : 0.0f;
+	                   ? FVector::Dist(Character->GetMesh()->GetBoneLocation(HandBones[1]), GripWorld(1))
+	                   : 0.0f;
 	if (Character->IsLocallyControlled())
 	{
 		AActor* Candidate = nullptr;
 		FVector Point;
-		if (!IsGrabbing()) FindCandidate(Candidate, Point);
+		if (!IsGrabbing())
+			FindCandidate(Candidate, Point);
 		UpdateHighlight(Candidate);
 	}
-	if (PredictedTarget.IsValid()
-		&& (GrabTarget || GetWorld()->GetTimeSeconds() >= PredictionExpiresAt))
+	if (PredictedTarget.IsValid() && (GrabTarget || GetWorld()->GetTimeSeconds() >= PredictionExpiresAt))
 	{
 		PredictedTarget.Reset();
 		PredictedHands = 0;
 	}
 	if (Character->IsLocallyControlled() && Character->IsGrabChordHeld() && !IsGrabbing())
 	{
-		// 双键一直按着时持续寻找目标；第一次按下时没对准箱子也不必松手重按。
+		// 双键一直按着时持续寻找目标；第一次按下时没对准箱子也不必松手重按
 		RequestBegin();
 	}
 	LocallyReleasedHands &= WantedHands;
-	if (!Character->HasAuthority() || !GrabTarget) return;
+	if (!Character->HasAuthority() || !GrabTarget)
+		return;
 	if (!IsValid(GrabTarget.Get()))
 	{
 		ForceRelease();
 		return;
 	}
 	UDeliveryGrabbableComponent* Grabbable = GrabTarget->FindComponentByClass<UDeliveryGrabbableComponent>();
-	if (!Grabbable || !Grabbable->CanGrab(Character)
-		|| Character->GetActiveRagdoll()->GetControlMode() != EDeliveryRagdollControlMode::Active)
+	if (!Grabbable || !Grabbable->CanGrab(Character) ||
+	    Character->GetActiveRagdoll()->GetControlMode() != EDeliveryRagdollControlMode::Active)
 	{
 		ForceRelease();
 		return;
 	}
 	if (Character->GetController())
 	{
-		const FVector NewForward = Character->GetController()->GetControlRotation().Vector().GetSafeNormal2D();
+		const FVector NewForward =
+		    Character->GetController()->GetControlRotation().Vector().GetSafeNormal2D();
 		if (!NewForward.IsNearlyZero() && FVector::DotProduct(NewForward, FVector(CarryForward)) < 0.995f)
 		{
 			CarryForward = NewForward;
 			Character->ForceNetUpdate();
 		}
 	}
-	if (Grabbable->bKinematicCarry) return;
+	// 普通物体的搬运位置由目标组件更新，这里只继续维护物理拖拽约束
+	if (Grabbable->bKinematicCarry)
+		return;
 	for (int32 Side = 0; Side < 2; ++Side)
 	{
 		const uint8 Bit = Side == 0 ? LeftBit : RightBit;
-		if (!(WantedHands & Bit)) continue;
+		if (!(WantedHands & Bit))
+			continue;
 		if (HandConstraints[Side] && HandConstraints[Side]->IsBroken())
 		{
 			UE_LOG(LogDelivery, Warning, TEXT("Grab joint broke: grabber=%s target=%s side=%d"),
-				*GetNameSafe(Character), *GetNameSafe(GrabTarget.Get()), Side);
+			       *GetNameSafe(Character), *GetNameSafe(GrabTarget.Get()), Side);
 			ReleaseHandOnServer(Side);
-			if (!GrabTarget) return;
+			if (!GrabTarget)
+				return;
 			continue;
 		}
-		const float Separation = FVector::Dist(
-			Character->GetMesh()->GetBoneLocation(HandBones[Side]), GripWorld(Side));
+		const float Separation =
+		    FVector::Dist(Character->GetMesh()->GetBoneLocation(HandBones[Side]), GripWorld(Side));
 		const bool bGrabCharacter = GrabTarget->IsA<ADeliveryCharacter>();
-		if (HandConstraints[Side]
-			&& Separation > (bGrabCharacter ? DragBreakDistance : MaxHandSeparation))
+		if (HandConstraints[Side] && Separation > (bGrabCharacter ? DragBreakDistance : MaxHandSeparation))
 		{
 			UE_LOG(LogDelivery, Warning, TEXT("Grab joint released: grabber=%s target=%s gap=%.1f"),
-				*GetNameSafe(Character), *GetNameSafe(GrabTarget.Get()), Separation);
+			       *GetNameSafe(Character), *GetNameSafe(GrabTarget.Get()), Separation);
 			ReleaseHandOnServer(Side);
-			if (!GrabTarget) return;
+			if (!GrabTarget)
+				return;
 			continue;
 		}
-		if (!HandConstraints[Side]) TryAttach(Side);
+		if (!HandConstraints[Side])
+			TryAttach(Side);
 		if (HandConstraints[Side])
 		{
 			if (bGrabCharacter && !bDragReeling[Side] && !ApplyDragAssist(Character, Side))
 			{
 				UE_LOG(LogDelivery, Warning, TEXT("Drag released: %s is too far from %s's shoulder"),
-					*GetNameSafe(GrabTarget.Get()), *GetNameSafe(Character));
+				       *GetNameSafe(GrabTarget.Get()), *GetNameSafe(Character));
 				ReleaseHandOnServer(Side);
-				if (!GrabTarget) return;
+				if (!GrabTarget)
+					return;
 				continue;
 			}
+			// 手已拉到抓点附近后改为固定连接，不再继续用位置驱动拉近
 			if (bDragReeling[Side] && Separation <= DragAttachDistance)
 			{
 				HandConstraints[Side]->SetLinearPositionDrive(false, false, false);
@@ -735,8 +832,10 @@ void UDeliveryGrabComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 				HandConstraints[Side]->SetProjectionEnabled(true);
 				bDragReeling[Side] = false;
 			}
-			if (bDragReeling[Side]) continue;
+			if (bDragReeling[Side])
+				continue;
 			const bool bJumping = Character->GetActiveRagdoll()->IsJumping();
+			// 跳跃时放开上下约束，避免手臂连接把身体压在地面
 			if (bJumping && !bVerticalFree[Side])
 			{
 				HandConstraints[Side]->SetLinearZLimit(LCM_Free, 0.0f);
@@ -751,13 +850,14 @@ void UDeliveryGrabComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	}
 }
 
+// 请求松开指定手，必要时转交服务器
 void UDeliveryGrabComponent::RequestReleaseHand(bool bLeft)
 {
 	const bool bHadLocalGrab = IsGrabbing() || PredictedTarget.IsValid();
 	const bool bFirstLocalRelease = LocallyReleasedHands == 0;
 	const uint8 Bit = bLeft ? LeftBit : RightBit;
-	const bool bDraggingCharacter = IsDraggingCharacter()
-		|| (PredictedTarget.IsValid() && PredictedTarget->IsA<ADeliveryCharacter>());
+	const bool bDraggingCharacter =
+	    IsDraggingCharacter() || (PredictedTarget.IsValid() && PredictedTarget->IsA<ADeliveryCharacter>());
 	if (bDraggingCharacter)
 	{
 		PredictedHands = 0;
@@ -768,13 +868,16 @@ void UDeliveryGrabComponent::RequestReleaseHand(bool bLeft)
 		PredictedHands &= ~Bit;
 		LocallyReleasedHands |= Bit;
 	}
-	if (!PredictedHands) PredictedTarget.Reset();
+	if (!PredictedHands)
+		PredictedTarget.Reset();
 	if (bHadLocalGrab && bFirstLocalRelease && GrabReleaseSound)
 	{
 		UGameplayStatics::PlaySound2D(this, GrabReleaseSound);
 	}
-	if (GetOwner() && GetOwner()->HasAuthority()) ReleaseHandOnServer(bLeft ? 0 : 1);
-	else ServerReleaseHand(bLeft);
+	if (GetOwner() && GetOwner()->HasAuthority())
+		ReleaseHandOnServer(bLeft ? 0 : 1);
+	else
+		ServerReleaseHand(bLeft);
 }
 
 void UDeliveryGrabComponent::ServerReleaseHand_Implementation(bool bLeft)
@@ -782,10 +885,12 @@ void UDeliveryGrabComponent::ServerReleaseHand_Implementation(bool bLeft)
 	ReleaseHandOnServer(bLeft ? 0 : 1);
 }
 
+// 在服务器解除指定手与目标的抓取关系
 void UDeliveryGrabComponent::ReleaseHandOnServer(int32 Side)
 {
-	if (!GetOwner() || !GetOwner()->HasAuthority()) return;
-	// 拖人只允许一只手：双键中任意一键松开，就断开唯一的 joint。
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+		return;
+	// 拖人只允许一只手：双键中任意一键松开，就断开唯一的 joint
 	if (IsDraggingCharacter())
 	{
 		ForceRelease();
@@ -802,13 +907,17 @@ void UDeliveryGrabComponent::ReleaseHandOnServer(int32 Side)
 	}
 	bVerticalFree[Side] = false;
 	bDragReeling[Side] = false;
-	if (!WantedHands) ForceRelease();
-	else GetOwner()->ForceNetUpdate();
+	if (!WantedHands)
+		ForceRelease();
+	else
+		GetOwner()->ForceNetUpdate();
 }
 
+// 立即释放双手，并清理抓取状态和提示
 void UDeliveryGrabComponent::ForceRelease()
 {
-	if (!GetOwner() || !GetOwner()->HasAuthority()) return;
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+		return;
 	for (int32 Side = 0; Side < 2; ++Side)
 	{
 		if (HandConstraints[Side])
@@ -822,7 +931,8 @@ void UDeliveryGrabComponent::ForceRelease()
 	}
 	if (IsValid(GrabTarget.Get()))
 	{
-		if (UDeliveryGrabbableComponent* Marker = GrabTarget->FindComponentByClass<UDeliveryGrabbableComponent>())
+		if (UDeliveryGrabbableComponent* Marker =
+		        GrabTarget->FindComponentByClass<UDeliveryGrabbableComponent>())
 		{
 			Marker->UnregisterGrabber(Cast<ADeliveryCharacter>(GetOwner()));
 		}
@@ -833,16 +943,18 @@ void UDeliveryGrabComponent::ForceRelease()
 	GetOwner()->ForceNetUpdate();
 }
 
+// 高亮当前可抓取目标，切换目标时恢复旧显示
 void UDeliveryGrabComponent::UpdateHighlight(AActor* Candidate)
 {
 	UPrimitiveComponent* NewBody = nullptr;
-	if (UDeliveryGrabbableComponent* Marker = IsValid(Candidate)
-		? Candidate->FindComponentByClass<UDeliveryGrabbableComponent>() : nullptr)
+	if (UDeliveryGrabbableComponent* Marker =
+	        IsValid(Candidate) ? Candidate->FindComponentByClass<UDeliveryGrabbableComponent>() : nullptr)
 	{
 		FName Bone;
 		NewBody = Marker->GetGrabBody(Bone);
 	}
-	if (HighlightedBody.Get() == NewBody) return;
+	if (HighlightedBody.Get() == NewBody)
+		return;
 	ClearHighlight();
 	if (NewBody)
 	{
@@ -854,6 +966,7 @@ void UDeliveryGrabComponent::UpdateHighlight(AActor* Candidate)
 	}
 }
 
+// 恢复之前高亮物体的原始显示设置
 void UDeliveryGrabComponent::ClearHighlight()
 {
 	if (UPrimitiveComponent* Body = HighlightedBody.Get())

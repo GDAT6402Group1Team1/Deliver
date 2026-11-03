@@ -2,7 +2,7 @@
 
 #include "Vehicle/DeliveryVehicleSummonComponent.h"
 #include "Delivery.h"
-#include "DeliveryCharacter.h"
+#include "Character/DeliveryCharacter.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -13,21 +13,22 @@
 UDeliveryVehicleSummonComponent::UDeliveryVehicleSummonComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	// 只用来刷左下角那条提示，10Hz 足够，读秒的小数位也看不出跳。
+	// 只用来刷左下角那条提示，10Hz 足够，读秒的小数位也看不出跳
 	PrimaryComponentTick.TickInterval = 0.1f;
 	SetIsReplicatedByDefault(true);
-	DefaultVehicleClass = TSoftClassPtr<ADeliveryMotorbike>(FSoftObjectPath(
-		TEXT("/Game/Vehicle/Motorbike/BP_Motorbike.BP_Motorbike_C")));
+	DefaultVehicleClass = TSoftClassPtr<ADeliveryMotorbike>(
+	    FSoftObjectPath(TEXT("/Game/Vehicle/Motorbike/BP_Motorbike.BP_Motorbike_C")));
 
 	ReadyHintFormat = NSLOCTEXT("Delivery", "SummonReady", "按 {0} 召唤摩托车");
 	CooldownHintFormat = NSLOCTEXT("Delivery", "SummonCooling", "召唤冷却 {0}s");
 }
 
+// 同步召唤车辆引用和冷却时间
 void UDeliveryVehicleSummonComponent::GetLifetimeReplicatedProps(
-	TArray<FLifetimeProperty>& OutLifetimeProps) const
+    TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	// 只发给拥有者：别人的冷却和我无关，没必要占带宽。
+	// 只发给拥有者：别人的冷却和我无关，没必要占带宽
 	DOREPLIFETIME_CONDITION(UDeliveryVehicleSummonComponent, ReadyServerTime, COND_OwnerOnly);
 }
 
@@ -37,20 +38,22 @@ float UDeliveryVehicleSummonComponent::GetCooldownRemaining() const
 	return World ? FMath::Max(0.0f, ReadyServerTime - World->GetTimeSeconds()) : 0.0f;
 }
 
-void UDeliveryVehicleSummonComponent::TickComponent(
-	float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+// 更新本机召唤提示，不在这里创建车辆
+void UDeliveryVehicleSummonComponent::TickComponent(float DeltaTime, ELevelTick TickType,
+                                                    FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	const APawn* Owner = Cast<APawn>(GetOwner());
 	// 上了车之后控制器去 Possess 摩托车了，这具身体不再是本机操控的，
-	// 于是召唤提示自动让位给车上那条"按 P 切换视角"，两条不会打架。
+	// 于是召唤提示自动让位给车上那条"按 P 切换视角"，两条不会打架
 	if (Owner && Owner->IsLocallyControlled())
 	{
 		PushHint();
 	}
 }
 
+// 根据冷却和车辆状态显示召唤说明
 void UDeliveryVehicleSummonComponent::PushHint()
 {
 	UDeliveryPromptSubsystem* Prompt = UDeliveryPromptSubsystem::Get(this);
@@ -59,7 +62,7 @@ void UDeliveryVehicleSummonComponent::PushHint()
 		return;
 	}
 
-	// 空地图也能生成默认车型，因此不能只按场景里有没有车决定提示。
+	// 空地图也能生成默认车型，因此不能只按场景里有没有车决定提示
 	bool bAnyBike = false;
 	if (const UWorld* World = GetWorld())
 	{
@@ -78,7 +81,7 @@ void UDeliveryVehicleSummonComponent::PushHint()
 	if (Remaining > 0.0f)
 	{
 		Prompt->PushCornerHint(
-			FText::Format(CooldownHintFormat, FText::AsNumber(FMath::CeilToInt(Remaining))), true);
+		    FText::Format(CooldownHintFormat, FText::AsNumber(FMath::CeilToInt(Remaining))), true);
 	}
 	else
 	{
@@ -86,9 +89,10 @@ void UDeliveryVehicleSummonComponent::PushHint()
 	}
 }
 
+// 将本机召唤意图提交给服务器
 void UDeliveryVehicleSummonComponent::RequestSummon()
 {
-	// 本机先挡一道，纯粹是省一次无用的 RPC；真正的冷却判定在服务器。
+	// 本机先检查冷却，减少无效请求；服务器收到后还会再次检查
 	if (GetCooldownRemaining() > 0.0f)
 	{
 		return;
@@ -96,6 +100,7 @@ void UDeliveryVehicleSummonComponent::RequestSummon()
 	ServerSummon();
 }
 
+// 查找范围内最近的空闲摩托车
 ADeliveryMotorbike* UDeliveryVehicleSummonComponent::FindSummonTarget() const
 {
 	UWorld* World = GetWorld();
@@ -112,7 +117,7 @@ ADeliveryMotorbike* UDeliveryVehicleSummonComponent::FindSummonTarget() const
 	for (TActorIterator<ADeliveryMotorbike> It(World); It; ++It)
 	{
 		ADeliveryMotorbike* Bike = *It;
-		// 别人正骑着的车不能抽走。
+		// 别人正骑着的车不能抽走
 		if (!IsValid(Bike) || Bike->GetDriver() != nullptr)
 		{
 			continue;
@@ -131,6 +136,7 @@ ADeliveryMotorbike* UDeliveryVehicleSummonComponent::FindSummonTarget() const
 	return Best;
 }
 
+// 由服务器检查冷却和位置，再创建或移动车辆
 void UDeliveryVehicleSummonComponent::ServerSummon_Implementation()
 {
 	UWorld* World = GetWorld();
@@ -146,7 +152,7 @@ void UDeliveryVehicleSummonComponent::ServerSummon_Implementation()
 		return;
 	}
 
-	// 放在玩家正前方、车头朝着玩家的朝向——召唤出来就是"可以直接骑上去往前开"的姿态。
+	// 召唤位置取玩家前方，车头保持与玩家相同的水平朝向
 	const FRotator OwnerRot = Owner->GetActorRotation();
 	const FVector Forward = FRotator(0.0f, OwnerRot.Yaw, 0.0f).Vector();
 	const FVector Target = Owner->GetActorLocation() + Forward * PlaceDistance;
@@ -155,7 +161,7 @@ void UDeliveryVehicleSummonComponent::ServerSummon_Implementation()
 	bool bSpawnedBike = false;
 	if (!Bike)
 	{
-		// 只补地图缺车的情况。已有车被占用或超出搜索范围时不能靠新生成绕过规则。
+		// 只补地图缺车的情况；已有车被占用或超出搜索范围时不能靠新生成绕过规则
 		for (TActorIterator<ADeliveryMotorbike> It(World); It; ++It)
 		{
 			if (IsValid(*It))
@@ -168,14 +174,14 @@ void UDeliveryVehicleSummonComponent::ServerSummon_Implementation()
 		if (!VehicleClass)
 		{
 			UE_LOG(LogDelivery, Warning, TEXT("召唤失败：地图没有摩托车，默认车型无法加载：%s"),
-				*DefaultVehicleClass.ToString());
+			       *DefaultVehicleClass.ToString());
 			return;
 		}
 		FActorSpawnParameters SpawnParams;
-		// SummonTo 负责探地落位；失败时销毁临时车辆，不留下空中车或消耗冷却。
+		// SummonTo 负责探地落位；失败时销毁临时车辆，不留下空中车或消耗冷却
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		Bike = World->SpawnActor<ADeliveryMotorbike>(VehicleClass, Target,
-			FRotator(0.0f, OwnerRot.Yaw, 0.0f), SpawnParams);
+		Bike = World->SpawnActor<ADeliveryMotorbike>(VehicleClass, Target, FRotator(0.0f, OwnerRot.Yaw, 0.0f),
+		                                             SpawnParams);
 		if (!Bike)
 		{
 			UE_LOG(LogDelivery, Warning, TEXT("召唤失败：无法生成默认摩托车。"));
@@ -184,7 +190,7 @@ void UDeliveryVehicleSummonComponent::ServerSummon_Implementation()
 		bSpawnedBike = true;
 	}
 
-	// 失败（探不到地面）就不进冷却：玩家没得到任何东西，不该被罚等 10 秒。
+	// 找不到可用落点时取消召唤，不消耗冷却时间
 	if (!Bike->SummonTo(Target, OwnerRot.Yaw))
 	{
 		UE_LOG(LogDelivery, Log, TEXT("召唤失败：%s 的落点探不到地面，不计冷却。"), *Bike->GetName());

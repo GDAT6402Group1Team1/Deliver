@@ -294,11 +294,23 @@ def _import_into_unreal(paths: list[Path]) -> None:
 
     # These are deliberately only the phone/task defaults. Punch, grab and vehicle sounds
     # remain empty until suitable physical recordings are chosen.
+    # 角色提示音写入事件配置，不再写角色类的声音字段
+    audio_config = unreal.load_asset("/Game/Sound/Config/DA_PlayerAudio")
+    if audio_config:
+        sounds = dict(audio_config.get_editor_property("Sounds"))
+        for event, asset in {
+            unreal.DeliveryEvent.PICKUP_SUCCEEDED: "SFX_Task_Pickup",
+            unreal.DeliveryEvent.DELIVERY_SUCCEEDED: "SFX_Task_Delivered",
+        }.items():
+            settings = sounds.get(event, unreal.DeliverySoundSettings())
+            settings.set_editor_property("Sound", unreal.load_asset(f"{DESTINATION}/{asset}"))
+            sounds[event] = settings
+        audio_config.set_editor_property("Sounds", sounds)
+        unreal.EditorAssetLibrary.save_loaded_asset(audio_config, only_if_is_dirty=False)
+    else:
+        unreal.log_warning("[SFX] 缺少 DA_PlayerAudio，请在角色音效配置中绑定取件和交付声音")
+
     bindings = {
-        "/Game/Blueprint/Character/DeliverMan/BP_DeliveryMan": {
-            "pickup_success_sound": f"{DESTINATION}/SFX_Task_Pickup",
-            "delivery_success_sound": f"{DESTINATION}/SFX_Task_Delivered",
-        },
         "/Game/Blueprint/PlayerController/BP_DeliveryManPC": {
             "phone_toggle_sound": f"{DESTINATION}/SFX_Phone_Toggle",
             "incoming_call_sound": f"{DESTINATION}/SFX_Phone_Ring",

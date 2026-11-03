@@ -1,3 +1,4 @@
+// 提供可抓取物体的基础网格、物理与交互配置
 #pragma once
 
 #include "CoreMinimal.h"
@@ -7,22 +8,25 @@
 class UStaticMeshComponent;
 class UDeliveryGrabbableComponent;
 
-/** Simple physics prop base; replace the cube mesh in a Blueprint child for game items. */
+/** 可抓取物体的基础类，可在蓝图子类中替换模型 */
 UCLASS(Blueprintable)
+
 class DELIVERY_API ADeliveryGrabbableProp : public AActor
 {
 	GENERATED_BODY()
 
-public:
+  public:
 	ADeliveryGrabbableProp();
 	virtual void BeginPlay() override;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Grab")
+	// 物理模型与抓取组件
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grab")
 	TObjectPtr<UStaticMeshComponent> PhysicsMesh;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Grab")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grab")
 	TObjectPtr<UDeliveryGrabbableComponent> Grabbable;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Grab", meta=(ClampMin="0.1"))
+	// 物体质量
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grab", meta = (ClampMin = "0.1"))
 	float MassKg = 3.0f;
 };

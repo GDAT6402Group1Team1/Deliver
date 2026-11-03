@@ -11,215 +11,202 @@ class APlayerState;
 class UDeliveryPhoneCallQueueComponent;
 class UDeliveryTaskDefinition;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeliveryTaskStatusChanged, UDeliveryTaskDefinition*, Task, EDeliveryTaskStatus, NewStatus);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnDeliveryTaskCompleted, UDeliveryTaskDefinition*, Task, const FDeliveryRewardBreakdown&, Reward, APlayerState*, Deliverer);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeliveryTaskStatusChanged, UDeliveryTaskDefinition*, Task,
+                                             EDeliveryTaskStatus, NewStatus);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnDeliveryTaskCompleted, UDeliveryTaskDefinition*, Task,
+                                               const FDeliveryRewardBreakdown&, Reward, APlayerState*,
+                                               Deliverer);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDeliveryTaskOverdue, UDeliveryTaskDefinition*, Task);
 
 /**
- * 全局任务状态的唯一权威，挂在 GameState 上，所以多人模式下所有人共享同一份解锁、计时和完成结果。
- * 所有改状态的接口只在服务器生效；客户端通过复制 + OnRep 得到同样的事件。
- *
- * 计时不用 Tick：接通任务电话时记一个服务器时间戳，之后所有人按"当前服务器时间 - 时间戳"算，
- * 快递掉落、换手、进后备箱、玩家晕倒都影响不到它，正好符合"计时不停"的规则。
+ * 在游戏状态上保存所有玩家共享的任务进度
+ * 服务器修改状态并同步给客户端，客户端通过通知更新界面
+ * 接听后按服务器时间差计时，掉件、换手和晕倒均不暂停计时
  */
-UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
+UCLASS(ClassGroup = (Delivery), meta = (BlueprintSpawnableComponent))
+
 class DELIVERY_API UDeliveryTaskManagerComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
-public:
-
+  public:
 	UDeliveryTaskManagerComponent();
 
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	/** 从任意对象拿到全局任务管理器（挂在 GameState 上）。 */
-	UFUNCTION(BlueprintPure, Category="Task", meta=(WorldContext="WorldContextObject", DisplayName="Get Delivery Task Manager"))
+	/** 从任意对象拿到全局任务管理器（挂在 GameState 上） */
+	UFUNCTION(BlueprintPure, Category = "Task",
+	          meta = (WorldContext = "WorldContextObject", DisplayName = "Get Delivery Task Manager"))
 	static UDeliveryTaskManagerComponent* Get(const UObject* WorldContextObject);
 
+	// 服务器任务操作
 	/** —— 取件与交付（服务器）—— */
 
 	/**
-	 * 接通任务解锁电话时开始计时。幂等：同一任务重复调用不会重置。
-	 * 已有另一项任务在计时时返回 false。
+	 * 接通任务解锁电话时开始计时；幂等：同一任务重复调用不会重置
+	 * 已有另一项任务在计时时返回 假
 	 */
 	bool StartTaskTimerFromAcceptedCall(UDeliveryTaskDefinition* Task);
 
 	/**
-	 * 这件快递现在能不能被拿起来。交互 / 背包系统在允许拾取前问这一句。
-	 * 规则：已经进行中的那个任务的快递随便捡（掉了还能捡回来）；
-	 * 只要世界上存在进行中的任务，其他任务的快递一律拿不起来。
+	 * 这件快递现在能不能被拿起来；交互 / 背包系统在允许拾取前问这一句
+	 * 规则：已经进行中的那个任务的快递随便捡（掉了还能捡回来）
+	 * 只要世界上存在进行中的任务，其他任务的快递一律拿不起来
 	 */
-	UFUNCTION(BlueprintPure, Category="Task")
+	UFUNCTION(BlueprintPure, Category = "Task")
 	bool CanAcquireItem(const UDeliveryTaskDefinition* Task) const;
 
-	/**
-	 * 这个任务**接过电话了吗**（玩家按过接听）。
-	 *
-	 * 和"状态是不是 AwaitingPickup"是两件事：解锁时状态就变成待取件了，
-	 * 但在接听之前不能取件。UI 要区分「电话响了」和「已接单」时查这个；
-	 * 重拨前也用它判断这通电话还该不该打。
-	 */
-	UFUNCTION(BlueprintPure, Category="Task")
+	/** 玩家取得快递后进入配送中，沿用接听时的计时，换手和重新拾取不重置 */
+	UFUNCTION(BlueprintPure, Category = "Task")
 	bool IsTaskAccepted(const UDeliveryTaskDefinition* Task) const;
 
 	bool IsTaskRegistered(const UDeliveryTaskDefinition* Task) const;
 
 	/**
-	 * 服务器：玩家拿到了某个任务的快递。首次取件让任务进入进行中，但不会重置接电话时
-	 * 已经开始的计时；漏接后直接取件时才以取件时刻兜底启动。换手、捡回不会重置。
+	 * 服务器：玩家拿到了某个任务的快递；首次取件让任务进入进行中，但不会重置接电话时
+	 * 已经开始的计时；漏接后直接取件时才以取件时刻兜底启动；换手、捡回不会重置
 	 */
-	UFUNCTION(BlueprintCallable, Category="Task")
+	UFUNCTION(BlueprintCallable, Category = "Task")
 	bool TryAcquireItem(UDeliveryTaskDefinition* Task, APlayerState* Player);
 
-	/** 服务器：在正确的收件人处完成交付。奖励结算给 Deliverer，任务对所有人结束。 */
-	UFUNCTION(BlueprintCallable, Category="Task")
+	/** 服务器：在正确的收件人处完成交付；奖励结算给 Deliverer，任务对所有人结束 */
+	UFUNCTION(BlueprintCallable, Category = "Task")
 	bool TryCompleteDelivery(UDeliveryTaskDefinition* Task, APlayerState* Deliverer);
 
-	/** 服务器：上报一个影响奖励的特殊事件（沿途恶作剧、完好送达之类）。重复的 Tag 只记一次。 */
-	UFUNCTION(BlueprintCallable, Category="Task")
+	/** 服务器：上报一个影响奖励的特殊事件（沿途恶作剧、完好送达之类）；重复的 Tag 只记一次 */
+	UFUNCTION(BlueprintCallable, Category = "Task")
 	void ReportSpecialEvent(UDeliveryTaskDefinition* Task, FGameplayTag EventTag);
 
 	/**
-	 * 快递没了（掉出世界、被误删、关卡里被销毁），把任务退回待取件。
-	 *
-	 * 不处理的话这个任务会永远卡在进行中，而且因为同一时间只允许一个计时任务，
-	 * 整局再也接不了任何别的任务——一次意外就把这局玩废了。
-	 *
-	 * **选择退回而不是判失败**，和"四个状态无失败态"一致：退回不是惩罚，是重来一次。
-	 * 也不在取件点重新生成一份——那需要把 DeliveryItemId 解析成可生成的类，
-	 * 而那一步还没做；退回之后关卡里原本那份快递还在原地（如果是手摆的），
-	 * 玩家按指引回取件点就能重新拿。
-	 *
-	 * **计时不会重置**：订单在接电话时已经开始，掉件、销毁、重新取件都属于同一趟订单。
-	 *
-	 * 只在服务器有效。已完成的任务不受影响（交付时快递本来就会被销毁）。
+	 * 服务器在快递丢失时将任务退回待取件，允许玩家回取货点重新领取
+	 * 保留原计时，已完成的任务不受影响
 	 */
-	UFUNCTION(BlueprintCallable, Category="Task")
+	UFUNCTION(BlueprintCallable, Category = "Task")
 	bool NotifyItemLost(UDeliveryTaskDefinition* Task);
 
 	/**
-	 * 服务器：重新评估所有未解锁任务的解锁条件。
-	 * 任务完成后会自动调一次；外部系统（剧情、金钱）改变了解锁条件时也要主动调。
+	 * 服务器：重新评估所有未解锁任务的解锁条件
+	 * 任务完成后会自动调一次；外部系统（剧情、金钱）改变了解锁条件时也要主动调
 	 */
-	UFUNCTION(BlueprintCallable, Category="Task")
+	UFUNCTION(BlueprintCallable, Category = "Task")
 	void ReevaluateUnlocks();
 
+	// 任务状态查询
 	/** —— 查询（双端）—— */
 
-	UFUNCTION(BlueprintPure, Category="Task")
+	UFUNCTION(BlueprintPure, Category = "Task")
 	EDeliveryTaskStatus GetTaskStatus(const UDeliveryTaskDefinition* Task) const;
 
-	/** 当前进行中的任务，没有则为空。全世界最多一个。 */
-	UFUNCTION(BlueprintPure, Category="Task")
+	/** 当前进行中的任务，没有则为空；全世界最多一个 */
+	UFUNCTION(BlueprintPure, Category = "Task")
 	UDeliveryTaskDefinition* GetActiveTask() const;
 
-	/** 当前已经接单并在计时的任务；待取件和进行中都算，全世界最多一个。 */
-	UFUNCTION(BlueprintPure, Category="Task")
+	/** 当前已经接单并在计时的任务；待取件和进行中都算，全世界最多一个 */
+	UFUNCTION(BlueprintPure, Category = "Task")
 	UDeliveryTaskDefinition* GetTimedTask() const;
 
-	UFUNCTION(BlueprintPure, Category="Task")
+	UFUNCTION(BlueprintPure, Category = "Task")
 	void GetTasksByStatus(EDeliveryTaskStatus Status, TArray<UDeliveryTaskDefinition*>& OutTasks) const;
 
 	/**
-	 * 关卡配置里的全部任务，含未解锁的。
-	 *
-	 * **这是配置清单，不是玩家可见的任务列表**——手机 UI 要按状态过滤（未解锁的
-	 * 不显示灰条，见设计文档第九节第 6 条）。这个接口是给校验和工具用的。
+	 * 取得全部配置任务，包括未解锁任务，供检查工具使用
+	 * 玩家界面需要按任务状态筛选
 	 */
-	UFUNCTION(BlueprintPure, Category="Task")
+	UFUNCTION(BlueprintPure, Category = "Task")
 	const TArray<UDeliveryTaskDefinition*>& GetAllTaskDefinitions() const;
 
-	/** UI 每帧拿倒计时和配色用。接听前 bRunning=false，接听后待取件阶段也为 true。 */
-	UFUNCTION(BlueprintPure, Category="Task")
+	// 时间与奖励计算
+	/** UI 每帧拿倒计时和配色用；接听前 bRunning=假，接听后待取件阶段也为 真 */
+	UFUNCTION(BlueprintPure, Category = "Task")
 	FDeliveryTaskTimeSnapshot GetTimeSnapshot(const UDeliveryTaskDefinition* Task) const;
 
-	/** 纯计算，不读状态。完成结算和 UI 预览都走它。 */
-	UFUNCTION(BlueprintPure, Category="Task")
-	FDeliveryRewardBreakdown EvaluateReward(const UDeliveryTaskDefinition* Task, float ElapsedSeconds, const TArray<FGameplayTag>& SpecialEvents) const;
+	/** 纯计算，不读状态；完成结算和 UI 预览都走它 */
+	UFUNCTION(BlueprintPure, Category = "Task")
+	FDeliveryRewardBreakdown EvaluateReward(const UDeliveryTaskDefinition* Task, float ElapsedSeconds,
+	                                        const TArray<FGameplayTag>& SpecialEvents) const;
 
-	/** 按任务当前的用时和已累计的特殊事件预览奖励，给手机 UI 显示"现在送到能拿多少"。 */
-	UFUNCTION(BlueprintPure, Category="Task")
+	/** 按任务当前的用时和已累计的特殊事件预览奖励，给手机 UI 显示"现在送到能拿多少" */
+	UFUNCTION(BlueprintPure, Category = "Task")
 	FDeliveryRewardBreakdown PreviewReward(const UDeliveryTaskDefinition* Task) const;
 
 	/**
-	 * 关卡开始到现在过了多少秒。
-	 *
-	 * 不能直接用 UWorld::GetTimeSeconds()——那是世界时钟的绝对值，PIE 下它的起点
-	 * 不保证是 0（实测编辑器开久了之后一进游戏就是个很大的数），会让"开局 N 秒后"
-	 * 这类条件在 BeginPlay 当场就成立。以管理器自己 BeginPlay 的时刻为基准才是
-	 * 这个语义真正要的东西。
+	 * 返回管理器开始运行后的秒数
+	 * 以自身开始运行的时刻为基准，避免将世界时钟的初始偏移计入解锁条件
 	 */
-	UFUNCTION(BlueprintPure, Category="Task")
+	UFUNCTION(BlueprintPure, Category = "Task")
 	float GetTimeSinceLevelStart() const;
 
 	/**
-	 * 把 GetTimeSnapshot 的剩余秒数格式化成 UI 显示的样子：`05:00`；
-	 * 超时后剩余为负，输出 `+00:07` 并继续往上走。
+	 * 把 GetTimeSnapshot 的剩余秒数格式化成 UI 显示的样子：`05:00`
+	 * 超时后剩余为负，输出 `+00:07` 并继续往上走
 	 */
-	UFUNCTION(BlueprintPure, Category="Task")
+	UFUNCTION(BlueprintPure, Category = "Task")
 	static FText FormatCountdown(float RemainingSeconds);
 
+	// 任务事件
 	/** —— 事件（服务器与客户端都会广播）—— */
 
-	UPROPERTY(BlueprintAssignable, Category="Task")
+	UPROPERTY(BlueprintAssignable, Category = "Task")
 	FOnDeliveryTaskStatusChanged OnTaskStatusChanged;
 
-	UPROPERTY(BlueprintAssignable, Category="Task")
+	UPROPERTY(BlueprintAssignable, Category = "Task")
 	FOnDeliveryTaskCompleted OnTaskCompleted;
 
-	UPROPERTY(BlueprintAssignable, Category="Task")
+	UPROPERTY(BlueprintAssignable, Category = "Task")
 	FOnDeliveryTaskOverdue OnTaskOverdue;
 
-protected:
-
+  protected:
+	// 关卡配置与同步进度
 	/**
-	 * 本关卡的全部任务。在 GameState 蓝图上配置。
-	 * 数组顺序就是同时解锁时进入电话队列的顺序。
+	 * 本关卡的全部任务；在 GameState 蓝图上配置
+	 * 数组顺序就是同时解锁时进入电话队列的顺序
 	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Task")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Task")
 	TArray<TObjectPtr<UDeliveryTaskDefinition>> TaskDefinitions;
 
-	UPROPERTY(ReplicatedUsing=OnRep_Tasks)
+	UPROPERTY(ReplicatedUsing = OnRep_Tasks)
 	TArray<FDeliveryTaskState> Tasks;
 
+	// 状态更新与客户端通知
 	UFUNCTION()
 	void OnRep_Tasks();
 
 	FDeliveryTaskState* FindState(const UDeliveryTaskDefinition* Task);
 	const FDeliveryTaskState* FindState(const UDeliveryTaskDefinition* Task) const;
 
-	/** 服务器改状态的唯一入口，负责广播。 */
+	/** 服务器改状态的唯一入口，负责广播 */
 	void SetTaskStatus(FDeliveryTaskState& State, EDeliveryTaskStatus NewStatus);
 
-	/** 限时到点：打一次催促电话，任务继续。 */
+	/** 限时到点：打一次催促电话，任务继续 */
 	void HandleOverdue(UDeliveryTaskDefinition* Task);
 
 	UDeliveryPhoneCallQueueComponent* GetPhoneQueue() const;
 
-	/** 服务器时间。客户端拿到的是同一条时间轴，倒计时不会各算各的。 */
+	/** 服务器时间；客户端拿到的是同一条时间轴，倒计时不会各算各的 */
 	float GetServerTimeSeconds() const;
 
 	/**
-	 * 还有未解锁任务时，每秒重新评估一次解锁条件。
-	 * 像"开局 15 秒后"这类条件不会有人来通知我们，只能主动轮询；
-	 * 全部解锁完就停掉，不留常驻定时器。
+	 * 还有未解锁任务时，每秒重新评估一次解锁条件
+	 * 像"开局 15 秒后"这类条件不会有人来通知我们，只能主动轮询
+	 * 全部解锁完就停掉，不留常驻定时器
 	 */
 	void UpdateUnlockPolling();
 
-	/** 同一时间只有一个已经接单并计时的任务，一个句柄就够。 */
+	// 服务器定时器
+	/** 同一时间只有一个已经接单并计时的任务，一个句柄就够 */
 	FTimerHandle OverdueTimerHandle;
 
 	FTimerHandle UnlockPollTimerHandle;
 
-	/** 客户端上一次看到的状态，用来在 OnRep 里做差分并广播事件。 */
+	// 客户端变化比较
+	/** 客户端上一次看到的状态，用来在 OnRep 里做差分并广播事件 */
 	UPROPERTY(Transient)
 	TMap<TObjectPtr<UDeliveryTaskDefinition>, FDeliveryTaskState> KnownStates;
 
-	/** 客户端是否已经收到过首次同步。首次同步是"现状"，不是"刚刚发生的变化"。 */
+	/** 客户端是否已经收到过首次同步；首次同步是"现状"，不是"刚刚发生的变化" */
 	bool bReceivedInitialState = false;
 
-	/** 本组件 BeginPlay 的时刻，作为"关卡开始"的基准。 */
+	/** 本组件 BeginPlay 的时刻，作为"关卡开始"的基准 */
 	float LevelStartServerTime = 0.f;
 };

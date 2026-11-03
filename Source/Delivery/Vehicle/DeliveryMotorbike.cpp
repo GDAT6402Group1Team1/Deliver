@@ -4,6 +4,7 @@
 #include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/AudioComponent.h"
+#include "Audio/DeliveryVehicleAudioComponent.h"
 #include "Components/BoxComponent.h"
 #include "Vehicle/DeliveryRiderAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -11,7 +12,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "CollisionQueryParams.h"
 #include "Delivery.h"
-#include "DeliveryCharacter.h"
+#include "Character/DeliveryCharacter.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Inventory/DeliveryPackageItem.h"
 #include "Engine/CollisionProfile.h"
@@ -22,8 +23,8 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameplayEffect.h"
-#include "GAS/DeliverAttributeSet.h"
-#include "GAS/DeliverGameplayTags.h"
+#include "AbilitySystem/DeliverAttributeSet.h"
+#include "AbilitySystem/DeliverGameplayTags.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
@@ -56,6 +57,8 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	EngineAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("EngineAudio"));
 	EngineAudio->SetupAttachment(RootComponent);
 	EngineAudio->bAutoActivate = false;
+    Events = CreateDefaultSubobject<UDeliveryEventComponent>(TEXT("Events"));
+    VehicleAudio = CreateDefaultSubobject<UDeliveryVehicleAudioComponent>(TEXT("VehicleAudio"));
 
 	MeshRoot = CreateDefaultSubobject<USceneComponent>(TEXT("MeshRoot"));
 	MeshRoot->SetupAttachment(RootComponent);
@@ -75,26 +78,26 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	RiderPivot = CreateDefaultSubobject<USceneComponent>(TEXT("RiderPivot"));
 	RiderPivot->SetupAttachment(MeshAlign);
 
-	// 轮轴也用定额槽位。这里先一律挂 MeshAlign，前轮那个会在 ApplyBodyMeshes 里改挂到
-	// SteerPivot 下面——挂哪边取决于脚本认出来的下标，构造函数这时还不知道。
+	// 轮轴先挂在模型校正层，识别出前轮后再改挂到转向层
+	
 	WheelPivots.Reserve(MaxWheels);
 	for (int32 Index = 0; Index < MaxWheels; ++Index)
 	{
-		USceneComponent* Pivot = CreateDefaultSubobject<USceneComponent>(
-			*FString::Printf(TEXT("WheelPivot%d"), Index));
+		USceneComponent* Pivot =
+		    CreateDefaultSubobject<USceneComponent>(*FString::Printf(TEXT("WheelPivot%d"), Index));
 		Pivot->SetupAttachment(MeshAlign);
 		WheelPivots.Add(Pivot);
 	}
 
-	// 定额槽位而不是运行时创建组件：构造脚本每次重跑都动态建/删组件，在编辑器里很容易
-	// 留下重复实例或者丢掉实例覆盖（这个项目在样条实例数据上已经吃过类似的亏）。
+	// 预先创建固定组件槽位，避免重跑构造脚本时产生重复组件或丢失实例配置
+	
 	BodyParts.Reserve(MaxBodyParts);
 	for (int32 Index = 0; Index < MaxBodyParts; ++Index)
 	{
-		UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(
-			*FString::Printf(TEXT("BodyPart%02d"), Index));
+		UStaticMeshComponent* Part =
+		    CreateDefaultSubobject<UStaticMeshComponent>(*FString::Printf(TEXT("BodyPart%02d"), Index));
 		Part->SetupAttachment(MeshAlign);
-		// 车体只负责好看，碰撞统一交给 CollisionBox，省得几十个部件各自算碰撞。
+		// 车体只负责好看，碰撞统一交给 CollisionBox，省得几十个部件各自算碰撞
 		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Part->SetGenerateOverlapEvents(false);
 		BodyParts.Add(Part);
@@ -104,7 +107,7 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	RiderMesh->SetupAttachment(RiderPivot);
 	RiderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	RiderMesh->SetGenerateOverlapEvents(false);
-	// 动画蓝图以坐姿参考骨架为起点，程序化求身体惯性，再用 IK 固定手脚。
+	// 动画蓝图以坐姿参考骨架为起点，程序化求身体惯性，再用 IK 固定手脚
 	RiderMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
 	RiderMesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	RiderMesh->bEnableUpdateRateOptimizations = false;
@@ -113,21 +116,19 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	RightHandGrip = CreateDefaultSubobject<USceneComponent>(TEXT("RightHandGrip"));
 	LeftFootPeg = CreateDefaultSubobject<USceneComponent>(TEXT("LeftFootPeg"));
 	RightFootPeg = CreateDefaultSubobject<USceneComponent>(TEXT("RightFootPeg"));
-	LeftHandGrip->SetupAttachment(BarPivot); RightHandGrip->SetupAttachment(BarPivot);
-	LeftFootPeg->SetupAttachment(MeshAlign); RightFootPeg->SetupAttachment(MeshAlign);
+	LeftHandGrip->SetupAttachment(BarPivot);
+	RightHandGrip->SetupAttachment(BarPivot);
+	LeftFootPeg->SetupAttachment(MeshAlign);
+	RightFootPeg->SetupAttachment(MeshAlign);
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = 650.0f;
 	CameraBoom->SocketOffset = FVector(0.0f, 0.0f, 120.0f);
-	// 这里配的是**固定车尾视角**那一套，也是 bFreeLookCamera 关掉时回退到的状态。
-	// 运行时由 ApplyCameraMode() 按开关改写，两套设置都完整保留着。
-	//
-	// 之前用 bUsePawnControlRotation=true + 延时回正，结果是上车瞬间镜头还停在人物
-	// 原来的朝向上，车头却朝别处——玩家按 W 看到车"横着走"，方向感整个是错的。
-	// 载具阶段"W 永远是往屏幕里开"比自由视角重要得多，所以这里直接写死。
-	// 俯仰用组件自己的相对角度（bInheritPitch=false 时弹簧臂就取相对值），
-	// 这样车爬坡低头时镜头不会跟着翻。
+	// 先配置固定车尾镜头，运行时再按视角开关切换
+
+// 镜头俯仰使用独立角度，不随车身上坡或下坡翻转
+	
 	CameraBoom->bUsePawnControlRotation = false;
 	CameraBoom->bInheritPitch = false;
 	CameraBoom->bInheritYaw = true;
@@ -146,30 +147,36 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	DrivePromptText = NSLOCTEXT("Delivery", "MotorbikeDrivePrompt", "按 F 驾驶");
 	ExitPromptText = NSLOCTEXT("Delivery", "MotorbikeExitPrompt", "按 F 下车");
 
-	static ConstructorHelpers::FObjectFinder<UInputAction> MoveActionFinder(TEXT("/Game/Input/Actions/IA_Move"));
+	static ConstructorHelpers::FObjectFinder<UInputAction> MoveActionFinder(
+	    TEXT("/Game/Input/Actions/IA_Move"));
 	if (MoveActionFinder.Succeeded())
 	{
 		MoveAction = MoveActionFinder.Object;
 	}
 
-	// 和角色身上用的是同两个 IA，鼠标/手柄灵敏度手感一致，也省得再建资产。
-	static ConstructorHelpers::FObjectFinder<UInputAction> LookActionFinder(TEXT("/Game/Input/Actions/IA_Look"));
+	// 和角色身上用的是同两个 IA，鼠标/手柄灵敏度手感一致，也省得再建资产
+	static ConstructorHelpers::FObjectFinder<UInputAction> LookActionFinder(
+	    TEXT("/Game/Input/Actions/IA_Look"));
 	if (LookActionFinder.Succeeded())
 	{
 		LookAction = LookActionFinder.Object;
 	}
-	static ConstructorHelpers::FObjectFinder<UInputAction> MouseLookActionFinder(TEXT("/Game/Input/Actions/IA_MouseLook"));
+	static ConstructorHelpers::FObjectFinder<UInputAction> MouseLookActionFinder(
+	    TEXT("/Game/Input/Actions/IA_MouseLook"));
 	if (MouseLookActionFinder.Succeeded())
 	{
 		MouseLookAction = MouseLookActionFinder.Object;
 	}
-	InteractAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
-	PickupAction = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Pickup.IA_Pickup")));
+	InteractAction =
+	    TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
+	PickupAction =
+	    TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Pickup.IA_Pickup")));
 	CameraToggleKey = EKeys::P;
 	RiderMeshAsset = TSoftObjectPtr<USkeletalMesh>(
-		FSoftObjectPath(TEXT("/Game/Vehicle/Motorbike/SK_MotorbikeRider.SK_MotorbikeRider")));
+	    FSoftObjectPath(TEXT("/Game/Vehicle/Motorbike/SK_MotorbikeRider.SK_MotorbikeRider")));
 }
 
+// 同步驾驶员、货物和车辆运动所需状态
 void ADeliveryMotorbike::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -178,20 +185,25 @@ void ADeliveryMotorbike::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(ADeliveryMotorbike, ReplicatedRiderMotion);
 }
 
+// 在编辑器中根据配置更新车辆外观
 void ADeliveryMotorbike::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	ApplyBodyMeshes();
-	if (bAutoCalibrateRiderContacts) CalibrateRiderContacts();
+	if (bAutoCalibrateRiderContacts)
+		CalibrateRiderContacts();
 }
 
+// 准备车辆网格、驾驶交互和运行时状态
 void ADeliveryMotorbike::BeginPlay()
 {
 	Super::BeginPlay();
 	ApplyBodyMeshes();
-	if (bAutoCalibrateRiderContacts) CalibrateRiderContacts();
-	RiderMesh->SetAnimInstanceClass(RiderAnimationClass ? RiderAnimationClass.Get() : UDeliveryRiderAnimInstance::StaticClass());
-	// 先算完车体/车把的变换，再让动画读取接触点，避免手比车把慢一帧。
+	if (bAutoCalibrateRiderContacts)
+		CalibrateRiderContacts();
+	RiderMesh->SetAnimInstanceClass(RiderAnimationClass ? RiderAnimationClass.Get()
+	                                                    : UDeliveryRiderAnimInstance::StaticClass());
+	// 先算完车体/车把的变换，再让动画读取接触点，避免手比车把慢一帧
 	RiderMesh->AddTickPrerequisiteActor(this);
 
 	if (Interactable)
@@ -202,28 +214,24 @@ void ADeliveryMotorbike::BeginPlay()
 
 	ApplyDriverPresentation();
 	ApplyCameraMode();
-	if (EngineAudio)
-	{
-		EngineAudio->SetSound(EngineLoopSound);
-		EngineAudio->Stop();
-	}
 }
 
+// 根据车身和车轮网格确定车辆尺寸与显示位置
 void ADeliveryMotorbike::AutoConfigureFromMeshes()
 {
-	// 骑手网格：组件上没挂就按软引用补一个。组件类型改过之后 CDO 里那份引用会丢，
-	// 不兜底的话表现是"车上突然没人了"，而且只能靠重跑脚本修。
+	// 骑手组件未配置模型时，按需加载备用模型
+	
 	if (RiderMesh && !RiderMesh->GetSkinnedAsset())
 	{
 		if (USkeletalMesh* Loaded = RiderMeshAsset.LoadSynchronous())
 		{
 			RiderMesh->SetSkinnedAssetAndUpdate(Loaded);
-			UE_LOG(LogDelivery, Log, TEXT("%s：骑手网格是按软引用兜底加载的（%s）。"),
-				*GetName(), *Loaded->GetName());
+			UE_LOG(LogDelivery, Log, TEXT("%s：骑手网格是按软引用兜底加载的（%s）。"), *GetName(),
+			       *Loaded->GetName());
 		}
 	}
 
-	// 下面全是"只填空的"：脚本量过的、或者在 BP 上手调过的，一律不碰。
+	// 仅自动补全未配置的参数，保留手动设置
 	const bool bNeedWheels = WheelPartIndices.Num() == 0;
 	const bool bNeedSteer = SteeringPartIndices.Num() == 0 && HandlebarPartIndices.Num() == 0;
 	const bool bNeedCargo = CargoOffset.IsNearlyZero();
@@ -232,8 +240,8 @@ void ADeliveryMotorbike::AutoConfigureFromMeshes()
 		return;
 	}
 
-	// 顶点留在 FBX 场景绝对坐标里（导入时 transform_vertex_to_absolute=True），
-	// 所以每个部件的包围盒本身就是它在整车里的位置，不用再拼一次相对变换。
+	// 导入部件保留整车坐标，可直接用包围盒识别部件位置
+	
 	TArray<FBox> Boxes;
 	Boxes.SetNum(BodyMeshes.Num());
 	FBox Whole(ForceInit);
@@ -258,8 +266,8 @@ void ADeliveryMotorbike::AutoConfigureFromMeshes()
 
 	if (bNeedWheels)
 	{
-		// 轮子 = 正圆（长/高比 > 0.9）且窄（宽 < 直径 * 0.6）。
-		// 两条缺一不可：车架那种部件圆度能到 0.96，但它比直径还宽。
+		// 轮子需同时满足接近圆形且厚度较小，避免将车架误识别为轮子
+		
 		float RadiusSum = 0.0f;
 		for (int32 Index = 0; Index < Boxes.Num(); ++Index)
 		{
@@ -284,14 +292,14 @@ void ADeliveryMotorbike::AutoConfigureFromMeshes()
 		if (WheelPartIndices.Num() > 0)
 		{
 			WheelRadius = RadiusSum / WheelPartIndices.Num();
-			UE_LOG(LogDelivery, Log, TEXT("%s：自动认出 %d 个轮子，半径 %.0fcm。"),
-				*GetName(), WheelPartIndices.Num(), WheelRadius);
+			UE_LOG(LogDelivery, Log, TEXT("%s：自动认出 %d 个轮子，半径 %.0fcm。"), *GetName(),
+			       WheelPartIndices.Num(), WheelRadius);
 		}
 	}
 
 	if (bNeedSteer)
 	{
-		// 车把 = X 方向最宽的那个（实测 136cm，第二名才 80cm，分得很开）。
+		// 将横向最宽的部件识别为车把
 		int32 BarIndex = INDEX_NONE;
 		float BestWidth = -1.0f;
 		int32 FrontMost = INDEX_NONE;
@@ -317,41 +325,34 @@ void ADeliveryMotorbike::AutoConfigureFromMeshes()
 		}
 		if (BarIndex != INDEX_NONE && FrontMost != INDEX_NONE)
 		{
-			// 前轮/前叉 = 包围盒中心落在车身前四分之一的部件。导入空间里车头朝 +Y。
+			// 前轮/前叉 = 包围盒中心落在车身前四分之一的部件；导入空间里车头朝 +Y
 			const float FrontLine = Whole.Min.Y + Whole.GetSize().Y * 0.75f;
 			for (int32 Index = 0; Index < Boxes.Num(); ++Index)
 			{
-				if (Boxes[Index].IsValid && Index != BarIndex
-					&& Boxes[Index].GetCenter().Y >= FrontLine)
+				if (Boxes[Index].IsValid && Index != BarIndex && Boxes[Index].GetCenter().Y >= FrontLine)
 				{
 					SteeringPartIndices.Add(Index);
 				}
 			}
 			HandlebarPartIndices.Add(BarIndex);
 
-			// 转向轴取"车把中心"和"最前部件中心"的水平中点，大致就是前叉的位置。
-			// 用竖直轴而不是带后倾角的真实转向轴：这个尺寸下看不出差别，且省一层旋转补偿。
+			// 转向轴取"车把中心"和"最前部件中心"的水平中点，大致就是前叉的位置
+			// 用竖直轴而不是带后倾角的真实转向轴：这个尺寸下看不出差别，且省一层旋转补偿
 			const FVector BarCenter = Boxes[BarIndex].GetCenter();
 			const FVector FrontCenter = Boxes[FrontMost].GetCenter();
-			SteerPivotLocation = FVector(
-				(BarCenter.X + FrontCenter.X) * 0.5f,
-				(BarCenter.Y + FrontCenter.Y) * 0.5f,
-				BarCenter.Z);
-			UE_LOG(LogDelivery, Log,
-				TEXT("%s：自动认出车把槽位 %d（宽 %.0fcm）、跟转槽位 %d 个。"),
-				*GetName(), BarIndex, BestWidth, SteeringPartIndices.Num());
+			SteerPivotLocation = FVector((BarCenter.X + FrontCenter.X) * 0.5f,
+			                             (BarCenter.Y + FrontCenter.Y) * 0.5f, BarCenter.Z);
+			UE_LOG(LogDelivery, Log, TEXT("%s：自动认出车把槽位 %d（宽 %.0fcm）、跟转槽位 %d 个。"),
+			       *GetName(), BarIndex, BestWidth, SteeringPartIndices.Num());
 		}
 	}
 
 	if (bNeedCargo)
 	{
-		// 货架 = 车尾那批部件的顶面中点。
-		//
-		// **只取车尾 35%**，不是整车：整车包围盒的 Max.Z 是车把/风挡的高度，
-		// 用它会把快递架到半空中。而"后备架在车尾、坐垫后面"这件事在任何摩托车上都成立，
-		// 所以按位置筛一批部件再取它们的顶面，换模型也不会错。
-		// 导入空间里车头朝 +Y，所以"尾部"是 Y 小的那一端。
-		const float RearLine = Whole.Min.Y + Whole.GetSize().Y * 0.35f;
+		// 从车尾部件的顶部计算货架位置，避免车把高度抬高货架
+		// 模型局部纵轴较小的一端为车尾
+
+const float RearLine = Whole.Min.Y + Whole.GetSize().Y * 0.35f;
 		FBox Rear(ForceInit);
 		for (const FBox& Box : Boxes)
 		{
@@ -361,29 +362,29 @@ void ADeliveryMotorbike::AutoConfigureFromMeshes()
 			}
 		}
 
-		// 车尾一个部件都没筛到（模型被合并成一整块？）就退回整车，
-		// 位置会偏高但至少在车上，而不是留在原点、让快递挂在前轮里
+		// 未识别到独立车尾部件时，使用整车范围估算货架位置
+		
 		const FBox& Source = Rear.IsValid ? Rear : Whole;
 
-		// 再往上垫一点，免得箱子一半陷进车尾的壳里。
-		// 12cm 大致是测试快递（32×26×20）的一半高再多一点；
-		// 换了明显更大的箱子就在 BP 上手填 CargoOffset，自动标定会让开
+		// 为快递底部预留高度，较大的快递可手动调整货架偏移
+		
+		
 		constexpr float CargoLift = 12.0f;
 		CargoOffset = FVector(Whole.GetCenter().X, Source.GetCenter().Y, Source.Max.Z + CargoLift);
 
-		UE_LOG(LogDelivery, Log,
-			TEXT("%s：自动量出货架位置 (%.0f, %.0f, %.0f)%s。"),
-			*GetName(), CargoOffset.X, CargoOffset.Y, CargoOffset.Z,
-			Rear.IsValid ? TEXT("") : TEXT("（没筛到车尾部件，退回整车包围盒，可能偏高）"));
+		UE_LOG(LogDelivery, Log, TEXT("%s：自动量出货架位置 (%.0f, %.0f, %.0f)%s。"), *GetName(),
+		       CargoOffset.X, CargoOffset.Y, CargoOffset.Z,
+		       Rear.IsValid ? TEXT("") : TEXT("（没筛到车尾部件，退回整车包围盒，可能偏高）"));
 	}
 }
 
+// 应用车身、车轮和骑手的资源配置
 void ADeliveryMotorbike::ApplyBodyMeshes()
 {
 	AutoConfigureFromMeshes();
 
-	// 三个转轴都只是"挂点"：自己摆到轴心上，孩子再把这段偏移减回去，
-	// 于是网格留在原地不动，但从此绕这根轴转。
+	// 将挂点移到旋转中心，再反向补偿子模型位置，保持模型原位
+	
 	if (SteerPivot)
 	{
 		SteerPivot->SetRelativeLocation(SteerPivotLocation);
@@ -396,16 +397,16 @@ void ADeliveryMotorbike::ApplyBodyMeshes()
 	{
 		RiderPivot->SetRelativeLocation(RiderPivotLocation);
 	}
-	// 货架不是转轴，是个纯挂点：孩子（快递）不需要把偏移减回去，
-	// 所以这里直接把位置和朝向都写上
+	// 货架只负责放置快递，不需要对子物体抵消位置偏移
+	
 	if (CargoPivot)
 	{
 		CargoPivot->SetRelativeLocationAndRotation(CargoOffset, CargoRotation);
 	}
 	if (RiderMesh)
 	{
-		// 显式改挂：已有的蓝图资产是按"骑手挂在 MeshAlign 上"那一版存下来的，
-		// 光改构造函数里的 SetupAttachment 不一定能把老实例带过来。
+		// 显式更新骑手的附着关系，兼容已有蓝图实例保存的层级
+		
 		if (RiderPivot && RiderMesh->GetAttachParent() != RiderPivot)
 		{
 			RiderMesh->AttachToComponent(RiderPivot, FAttachmentTransformRules::KeepRelativeTransform);
@@ -437,11 +438,11 @@ void ADeliveryMotorbike::ApplyBodyMeshes()
 			bOnSteerAxis = true;
 		}
 
-		// 轮子再往下挂一层自己的轮轴。前轮的轮轴挂在 SteerPivot 下面，
-		// 于是它先跟着龙头转、再绕轮心自转，两件事互不干扰。
+		// 前轮挂在转向层下，同时支持转向和绕轮心自转
+		
 		const int32 WheelSlot = WheelPartIndices.IndexOfByKey(Index);
-		if (WheelSlot != INDEX_NONE && WheelPivots.IsValidIndex(WheelSlot)
-			&& WheelCenters.IsValidIndex(WheelSlot))
+		if (WheelSlot != INDEX_NONE && WheelPivots.IsValidIndex(WheelSlot) &&
+		    WheelCenters.IsValidIndex(WheelSlot))
 		{
 			USceneComponent* Pivot = WheelPivots[WheelSlot];
 			const FVector Center = WheelCenters[WheelSlot];
@@ -451,14 +452,14 @@ void ADeliveryMotorbike::ApplyBodyMeshes()
 				{
 					Pivot->AttachToComponent(Target, FAttachmentTransformRules::KeepRelativeTransform);
 				}
-				// 轮轴在父级里的位置：挂在 SteerPivot 下时父级原点已经是转向轴，要减掉。
+				// 轮轴在父级里的位置：挂在 SteerPivot 下时父级原点已经是转向轴，要减掉
 				Pivot->SetRelativeLocation(bOnSteerAxis ? Center - SteerPivotLocation : Center);
 
 				if (Part->GetAttachParent() != Pivot)
 				{
 					Part->AttachToComponent(Pivot, FAttachmentTransformRules::KeepRelativeTransform);
 				}
-				// 网格把轮心这段偏移减回去，顶点仍落在导入空间原处。
+				// 网格把轮心这段偏移减回去，顶点仍落在导入空间原处
 				Part->SetRelativeLocation(-Center);
 				Part->SetRelativeRotation(FRotator::ZeroRotator);
 				continue;
@@ -475,12 +476,12 @@ void ADeliveryMotorbike::ApplyBodyMeshes()
 
 	if (BodyMeshes.Num() > MaxBodyParts)
 	{
-		UE_LOG(LogDelivery, Warning,
-			TEXT("%s：车体网格有 %d 个，超过了 %d 个固定槽位，多出来的不会显示。"),
-			*GetName(), BodyMeshes.Num(), MaxBodyParts);
+		UE_LOG(LogDelivery, Warning, TEXT("%s：车体网格有 %d 个，超过了 %d 个固定槽位，多出来的不会显示。"),
+		       *GetName(), BodyMeshes.Num(), MaxBodyParts);
 	}
 }
 
+// 根据是否有驾驶员更新角色隐藏和骑手显示
 void ADeliveryMotorbike::ApplyDriverPresentation()
 {
 	const bool bHasDriver = Driver != nullptr;
@@ -490,12 +491,13 @@ void ADeliveryMotorbike::ApplyDriverPresentation()
 	}
 	if (Interactable)
 	{
-		// 有人骑着的时候别人不该再看到"按 F 驾驶"。
+		// 有人骑着的时候别人不该再看到"按 F 驾驶"
 		Interactable->bInteractEnabled = !bHasDriver;
 	}
 	ApplyRiderMaterials();
 }
 
+// 将驾驶员材质应用到车辆上的骑手模型
 void ADeliveryMotorbike::ApplyRiderMaterials()
 {
 	if (!RiderMesh)
@@ -503,8 +505,8 @@ void ADeliveryMotorbike::ApplyRiderMaterials()
 		return;
 	}
 
-	// 没人骑（或者关掉了这个功能）就还原成骨骼网格资产自带的那套。
-	// EmptyOverrideMaterials 是"清掉组件级覆盖"，不用自己记原来是什么。
+	// 无人驾驶或关闭材质同步时，清除覆盖材质并恢复模型默认材质
+	
 	if (!Driver || !bUseDriverMaterials)
 	{
 		RiderMesh->EmptyOverrideMaterials();
@@ -517,28 +519,21 @@ void ADeliveryMotorbike::ApplyRiderMaterials()
 		return;
 	}
 
-	// **按槽位名一一对应。**
-	// 玩家网格（Characters/A/renwu）和车模型自带的骑手是同一个基础角色，槽位名完全一样：
-	// tripo_mat_c9b1ab96 / 材质 / 材质_001…材质_006 / Eyes_Black。区别只在玩家那边给这 9 个槽
-	// 配了 character_hat（绿帽）、character_cloth（黄衣）、character_pants（浅蓝裤）、
-	// character_shoe1/shoe2（深蓝鞋）、socks、skin、eyes、prime，骑手这边九个槽共用一个
-	// 没有任何贴图的 tripo_mat。
-	//
-	// 别按下标猜，更别"所有非眼睛槽都用同一个材质"——后者会把整个人涂成衣服那一种黄色。
-	// 同一个基础角色也意味着 UV 是同一套，贴过去就是玩家本人的样子，不会错位。
-	const TArray<FName> DriverSlots = DriverMesh->GetMaterialSlotNames();
+	// 优先按材质槽名称匹配驾驶员和骑手，避免槽位顺序不同导致贴错材质
+
+const TArray<FName> DriverSlots = DriverMesh->GetMaterialSlotNames();
 	const TArray<FName> RiderSlots = RiderMesh->GetMaterialSlotNames();
 
 	for (int32 Index = 0; Index < RiderSlots.Num(); ++Index)
 	{
-		UMaterialInterface* Chosen = RiderMaterialOverrides.IsValidIndex(Index)
-			? RiderMaterialOverrides[Index].Get() : nullptr;
+		UMaterialInterface* Chosen =
+		    RiderMaterialOverrides.IsValidIndex(Index) ? RiderMaterialOverrides[Index].Get() : nullptr;
 
 		if (!Chosen)
 		{
 			const int32 DriverIndex = DriverSlots.IndexOfByKey(RiderSlots[Index]);
-			// 名字对不上才退回同下标：万一哪天有一边被重导成不同的槽位名，
-			// 至少还是九个槽对九个槽，不会全糊成一色。
+			// 槽位名称不匹配时，尝试使用相同下标的材质
+			
 			Chosen = DriverMesh->GetMaterial(DriverIndex != INDEX_NONE ? DriverIndex : Index);
 		}
 
@@ -559,6 +554,7 @@ void ADeliveryMotorbike::OnRep_Cargo()
 	ApplyCargoPresentation();
 }
 
+// 把当前快递显示在货架位置
 void ADeliveryMotorbike::ApplyCargoPresentation()
 {
 	if (Cargo && CargoPivot)
@@ -567,13 +563,15 @@ void ADeliveryMotorbike::ApplyCargoPresentation()
 	}
 }
 
+// 返回仍然有效的货架快递
 ADeliveryPackageItem* ADeliveryMotorbike::GetCargo() const
 {
-	// 实现放在 cpp：头文件里只有 ADeliveryPackageItem 的前向声明，
-	// IsValid() 要的那个 UObject* 转换需要完整类型，写成内联会编不过
+	// 有效性检查需要快递类的完整类型，因此实现放在此文件
+	
 	return IsValid(Cargo) ? Cargo.Get() : nullptr;
 }
 
+// 在服务器登记货物归属并固定到货架
 bool ADeliveryMotorbike::AttachCargo(ADeliveryPackageItem* Package)
 {
 	if (!HasAuthority() || HasCargo() || !IsValid(Package) || !CargoPivot)
@@ -582,18 +580,19 @@ bool ADeliveryMotorbike::AttachCargo(ADeliveryPackageItem* Package)
 	}
 
 	Cargo = Package;
-	// 让快递归车所有：下车/销毁时的所有权链条要对得上，
-	// 而且 Owner 为空的 Actor 在"这件东西归谁"的判断里会被当成地上的野物
+	// 将快递归属设为车辆，防止被当作无人持有的地面物品
+	
 	Package->SetOwner(this);
 	ApplyCargoPresentation();
 
 	return true;
 }
 
+// 清空货架并解除物品归属，后续去向交给调用方处理
 ADeliveryPackageItem* ADeliveryMotorbike::ReleaseCargo()
 {
 	ADeliveryPackageItem* Released = GetCargo();
-	// 悬空指针也要清掉：快递在别处被销毁过，这里还留着的话下一件就绑不上
+	// 清除已失效的快递引用，允许车辆接收下一件快递
 	Cargo = nullptr;
 	if (!HasAuthority() || !Released)
 	{
@@ -602,8 +601,8 @@ ADeliveryPackageItem* ADeliveryMotorbike::ReleaseCargo()
 	Released->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	Released->SetOwner(nullptr);
 
-	// 这里**故意不恢复物理、也不摆位置**：接下来它要进手里还是掉地上，
-	// 只有调用方知道。两处都恢复一遍的话，先恢复的那次会让它在地上弹一下
+	// 只解除车辆关系，后续位置和物理状态由接收快递的调用方决定
+	
 	return Released;
 }
 
@@ -612,6 +611,7 @@ void ADeliveryMotorbike::HandleInteractRequested(APawn* Interactor)
 	TryEnter(Cast<ADeliveryCharacter>(Interactor));
 }
 
+// 检查驾驶员条件，转移快递和控制权，再切换骑手表现
 bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 {
 	if (!HasAuthority() || Driver || !IsValid(NewDriver))
@@ -619,8 +619,8 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 		return false;
 	}
 
-	// 血空/晕倒的人不能上车。客户端那边探测组件已经不给提示了，这里是服务器权威的那一道：
-	// 按键走的是 ServerInteract -> Execute，客户端状态不可信，必须在这儿再判一次。
+	// 服务器再次检查驾驶员状态，禁止晕倒角色上车
+	
 	if (NewDriver->IsIncapacitated())
 	{
 		return false;
@@ -635,15 +635,15 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	Driver = NewDriver;
 	ResetRiderMotion();
 
-	// 手上还抓着东西就先松开：抓取是用物理约束把目标连在手骨上的，
-	// 驾驶员一会儿要被停掉物理并隐藏，约束留着会把货物/别的玩家一路拖在车上。
+	// 上车前释放抓取约束，避免停用身体物理后继续拖住其他物体
+	
 	if (UDeliveryGrabComponent* Grab = NewDriver->GetGrabComponent())
 	{
 		Grab->ForceRelease();
 	}
 
-	// 先把那具布娃娃停掉再隐藏：StopRagdoll 会关掉刚体模拟并把网格挂回胶囊，
-	// 否则被挂到车上的身体还在自己模拟，会一路被车拖着抽搐。
+	// 先停止身体物理再隐藏角色，避免角色附着到车辆后仍独立模拟
+	
 	if (UDeliveryActiveRagdollComponent* Ragdoll = NewDriver->GetActiveRagdoll())
 	{
 		Ragdoll->StopRagdoll();
@@ -652,15 +652,15 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	NewDriver->SetActorHiddenInGame(true);
 	NewDriver->AttachToComponent(CollisionBox, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 
-	// 手上拿着快递就搬到车上。**必须排在 attach 之后**：
-	// GetCurrentVehicle() 是从附着父级推出来的，attach 之前这个人还"不在车上"，
-	// ReceiveTaskPackage 会把快递又塞回手里
+	// 角色附着到车辆后再转移快递，使接收逻辑能够识别当前驾驶状态
+	
+	
 	if (UDeliveryInventoryComponent* Inventory = NewDriver->GetInventoryComponent())
 	{
 		if (ADeliveryPackageItem* Package = Cast<ADeliveryPackageItem>(Inventory->GetHeldItem()))
 		{
-			// 先从背包摘出来再绑车上：顺序反了的话这件快递会同时挂在
-			// 背包槽位和车的货架上，交付时摘哪一边都留下另一边的残影
+			// 先清除背包槽位再固定到车上，避免同一快递同时属于背包和车辆
+			
 			if (Inventory->ConsumeHeldItem(Package))
 			{
 				AttachCargo(Package);
@@ -671,8 +671,8 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	DriverController->Possess(this);
 	if (APlayerController* PC = Cast<APlayerController>(DriverController))
 	{
-		// 先对齐再混合，否则过渡的起点是人物原来的朝向，看着像镜头甩了一下。
-		// 自由视角下这也是鼠标的起始朝向：上车先给你摆到车尾后方，再交给鼠标。
+		// 先将镜头对齐车尾再过渡，上车后从这一方向开始观察
+		
 		ApplyCameraMode();
 		PC->SetControlRotation(FRotator(CameraPitch, GetActorRotation().Yaw, 0.0f));
 		PC->SetViewTargetWithBlend(this, 0.35f);
@@ -686,10 +686,11 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	TrafficImpactCount = 0;
 	LastImpactTime = -1000.0f;
 	ApplyDriverPresentation();
-	MulticastPlayAudioEvent(0);
+	MulticastVehicleEvent(EDeliveryEvent::VehicleEntered);
 	return true;
 }
 
+// 把无人驾驶的车辆放到经过检查的召唤位置
 bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredYaw)
 {
 	UWorld* World = GetWorld();
@@ -698,26 +699,24 @@ bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredY
 		return false;
 	}
 
-	// 往下探一条地面射线再落位。直接按给的 Z 放会把车埋进坡里或者吊在半空，
-	// 而贴地那一步是按 GroundSnapSpeed 慢慢收敛的，刚召唤出来会看到车往下沉一截。
+	// 召唤时先探测地面，再确定车辆高度，避免生成在地下或空中
+	
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(MotorbikeSummon), false, this);
 	FHitResult GroundHit;
 	const bool bHit = World->LineTraceSingleByChannel(
-		GroundHit,
-		DesiredLocation + FVector(0.0f, 0.0f, GroundTraceUp + 200.0f),
-		DesiredLocation - FVector(0.0f, 0.0f, GroundTraceDown),
-		ECC_Visibility, Params);
+	    GroundHit, DesiredLocation + FVector(0.0f, 0.0f, GroundTraceUp + 200.0f),
+	    DesiredLocation - FVector(0.0f, 0.0f, GroundTraceDown), ECC_Visibility, Params);
 	if (!bHit)
 	{
 		return false;
 	}
 
 	const FVector Target(DesiredLocation.X, DesiredLocation.Y, GroundHit.ImpactPoint.Z + HoverHeight);
-	SetActorLocationAndRotation(Target, FRotator(0.0f, DesiredYaw, 0.0f),
-		false, nullptr, ETeleportType::TeleportPhysics);
+	SetActorLocationAndRotation(Target, FRotator(0.0f, DesiredYaw, 0.0f), false, nullptr,
+	                            ETeleportType::TeleportPhysics);
 
-	// 残余状态必须清干净：车速还在的话它会立刻从玩家脚边滑走，
-	// 被撞状态还在的话会一边抖一边歪着出现。
+	// 清除旧车速和撞击状态，避免召唤后继续滑动或倾斜
+	
 	CurrentSpeed = 0.0f;
 	VerticalVelocity = 0.0f;
 	ThrottleInput = 0.0f;
@@ -733,56 +732,56 @@ bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredY
 	LastImpactTime = -1000.0f;
 	bWheelLocationValid = false;
 
-	UE_LOG(LogDelivery, Log, TEXT("%s：被召唤到 (%.0f, %.0f, %.0f)"),
-		*GetName(), Target.X, Target.Y, Target.Z);
-	MulticastPlayAudioEvent(2);
+	UE_LOG(LogDelivery, Log, TEXT("%s：被召唤到 (%.0f, %.0f, %.0f)"), *GetName(), Target.X, Target.Y,
+	       Target.Z);
+	MulticastVehicleEvent(EDeliveryEvent::VehicleSummoned);
 	return true;
 }
 
+// 记录交通撞击，更新车辆失控和驾驶员受击
 bool ADeliveryMotorbike::NotifyTrafficImpact(const FVector& CarVelocity)
 {
-	// 车上没人就不记账：空车被撞不该攒次数，下次有人骑上来是干净的。
+	// 空车不累计撞击次数
 	if (!HasAuthority() || !Driver)
 	{
 		return false;
 	}
 
-	// 最小间隔：挡住"多辆车同一帧各打一下"把次数一次扣满。
-	// 必须排在计数、音效、击退**之前**——放在后面等于白挡。
-	// 返回 false 让来车那边不记录这次命中，它下一帧还会来问，继续被挡掉，代价只是一次比较。
+	// 先检查撞击间隔，再计数和播放反馈，避免多辆车同时碰撞造成重复结算
+	
+	
 	if (const UWorld* World = GetWorld())
 	{
 		const float Now = World->GetTimeSeconds();
 		if (MinImpactInterval > 0.0f && Now - LastImpactTime < MinImpactInterval)
 		{
-			UE_LOG(LogDelivery, Verbose,
-				TEXT("%s：撞击被最小间隔挡掉（距上次 %.2f 秒 < %.2f 秒）"),
-				*GetName(), Now - LastImpactTime, MinImpactInterval);
+			UE_LOG(LogDelivery, Verbose, TEXT("%s：撞击被最小间隔挡掉（距上次 %.2f 秒 < %.2f 秒）"),
+			       *GetName(), Now - LastImpactTime, MinImpactInterval);
 			return false;
 		}
 		LastImpactTime = Now;
 	}
 
 	const float ImpactSpeed = CarVelocity.Size2D();
-	MulticastPlayAudioEvent(3);
+	MulticastVehicleEvent(EDeliveryEvent::VehicleImpacted);
 	++TrafficImpactCount;
-	UE_LOG(LogDelivery, Log, TEXT("%s：被交通车撞击 %d/%d 次（来车速度 %.0f cm/s）"),
-		*GetName(), TrafficImpactCount, ImpactsToDismount, ImpactSpeed);
+	UE_LOG(LogDelivery, Log, TEXT("%s：被交通车撞击 %d/%d 次（来车速度 %.0f cm/s）"), *GetName(),
+	       TrafficImpactCount, ImpactsToDismount, ImpactSpeed);
 
 	const FVector Direction = CarVelocity.GetSafeNormal2D();
 	RiderImpact = FVector2D(FVector::DotProduct(Direction, GetActorForwardVector()),
-		FVector::DotProduct(Direction, GetActorRightVector()))
-		* FMath::Clamp(ImpactSpeed / FMath::Max(KnockDownSpeedReference, 1.f), .2f, 1.f);
+	                        FVector::DotProduct(Direction, GetActorRightVector())) *
+	              FMath::Clamp(ImpactSpeed / FMath::Max(KnockDownSpeedReference, 1.f), .2f, 1.f);
 	ReplicatedRiderMotion.Impact = RiderImpact;
 	ForceNetUpdate();
 	if (!Direction.IsNearlyZero())
 	{
-		// 被撞歪的正负取"来车方向相对车身的左右分量"：从右边撞来就往左歪，反之亦然。
+		// 被撞歪的正负取"来车方向相对车身的左右分量"：从右边撞来就往左歪，反之亦然
 		const float Side = FVector::DotProduct(Direction, GetActorRightVector());
 
 		KnockVelocity += Direction * FMath::Min(ImpactSpeed * KnockbackFraction, MaxKnockbackSpeed);
 		KnockYawRate += Side * KnockYawPerHit;
-		// UE 里正 Roll 是往左倒；从右边撞来（Side<0）应该往左倒，所以取负号。
+		// UE 里正 Roll 是往左倒；从右边撞来（Side<0）应该往左倒，所以取负号
 		KnockTilt += -Side * KnockTiltPerHit;
 		ShakeAmount = 1.0f;
 	}
@@ -790,43 +789,42 @@ bool ADeliveryMotorbike::NotifyTrafficImpact(const FVector& CarVelocity)
 	ADeliveryCharacter* Rider = Driver;
 	if (TrafficImpactCount >= ImpactsToDismount)
 	{
-		// 车会被击退推向 Side 那一侧，人就放到相反的一侧，免得车追上去压住他。
-		const float Side = Direction.IsNearlyZero()
-			? 0.0f : FVector::DotProduct(Direction, GetActorRightVector());
+		// 车会被击退推向 Side 那一侧，人就放到相反的一侧，免得车追上去压住他
+		const float Side =
+		    Direction.IsNearlyZero() ? 0.0f : FVector::DotProduct(Direction, GetActorRightVector());
 		const float AwaySign = (FMath::Abs(Side) > 0.1f) ? -FMath::Sign(Side) : 0.0f;
 		PendingExitSideSign = AwaySign;
 
-		// 和按 F 下车走同一条路：人放回车边地面、镜头切回角色、布娃娃重新站起来。
+		// 和按 F 下车走同一条路：人放回车边地面、镜头切回角色、布娃娃重新站起来
 		ExitVehicle();
 
-		// 车不许再动：残余的车速和击退速度会让它继续朝人的方向滑过去。
+		// 车不许再动：残余的车速和击退速度会让它继续朝人的方向滑过去
 		CurrentSpeed = 0.0f;
 		KnockVelocity = FVector::ZeroVector;
 		KnockYawRate = 0.0f;
 
 		if (bKnockDownDriverOnDismount)
 		{
-			// 必须排在 ExitVehicle 之后：它内部的 StartRagdoll 会重建刚体，
-			// 之前加的冲量会被冲掉；血也要等人真下了车再清，才看得到倒地。
-			//
-			// 抛射方向也不用来车方向，而是"车身横向背离车的那一侧" + 一点来车方向，
-			// 这样人是被掀到路边去的，不是和车一起往前飞。
-			FVector LaunchDir = Direction;
+			// 先完成下车和身体重建，再扣血并施加向车侧的冲量
+
+FVector LaunchDir = Direction;
 			if (!FMath::IsNearlyZero(AwaySign))
 			{
 				LaunchDir = (GetActorRightVector() * AwaySign * 1.6f + Direction).GetSafeNormal2D();
 			}
-			// 撞得越快飞得越远，但保底也要飞一点：慢车蹭一下不该看起来像自己躺下的。
+			// 撞得越快飞得越远，但保底也要飞一点：慢车蹭一下不该看起来像自己躺下的
 			const float LaunchScale = FMath::Lerp(
-				KnockDownLaunchMinScale, 1.0f,
-				FMath::Clamp(ImpactSpeed / FMath::Max(KnockDownSpeedReference, 1.0f), 0.0f, 1.0f));
+			    KnockDownLaunchMinScale, 1.0f,
+			    FMath::Clamp(ImpactSpeed / FMath::Max(KnockDownSpeedReference, 1.0f), 0.0f, 1.0f));
 			KnockDownDriver(Rider, LaunchDir, LaunchScale);
 		}
 	}
 	return true;
 }
 
-void ADeliveryMotorbike::KnockDownDriver(ADeliveryCharacter* Rider, const FVector& LaunchDirection, float LaunchScale)
+// 让驾驶员脱离车辆，并施加倒地冲量
+void ADeliveryMotorbike::KnockDownDriver(ADeliveryCharacter* Rider, const FVector& LaunchDirection,
+                                         float LaunchScale)
 {
 	if (!IsValid(Rider))
 	{
@@ -843,7 +841,7 @@ void ADeliveryMotorbike::KnockDownDriver(ADeliveryCharacter* Rider, const FVecto
 	const FGameplayAttribute HealthAttribute = UDeliverAttributeSet::GetHealthAttribute();
 	const float Health = ASC->GetNumericAttribute(HealthAttribute);
 
-	// 优先走既有的伤害 GE，和"被车撞倒"保持完全同一条结算路径。
+	// 优先走既有的伤害 GE，和"被车撞倒"保持完全同一条结算路径
 	if (Health > 0.0f && Rider->GetDamageEffect())
 	{
 		const FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
@@ -854,42 +852,43 @@ void ADeliveryMotorbike::KnockDownDriver(ADeliveryCharacter* Rider, const FVecto
 			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 		}
 	}
-	// 兜底：回血 GE 还活着时可能把这次扣血抵掉一部分，导致偶发不晕倒。
-	// 交通车撞人那边也是这么补的，这里照搬。
+	// 检查伤害结算后的生命值，必要时补足扣减，避免回复效果抵消本次击倒
+	
 	if (ASC->GetNumericAttribute(HealthAttribute) > 0.5f)
 	{
 		ASC->SetNumericAttributeBase(HealthAttribute, 0.0f);
 	}
 
-	// 血清零之后 ASC 自己会把角色切进 Stunned/Limp。这一记冲量把人掀到路边去，
-	// 而不是原地瘫成一摊、更不是和车一起往前滑。
+	// 生命值归零后由技能组件进入晕倒状态，再将身体推离车辆
+	
 	const FVector Direction = LaunchDirection.GetSafeNormal2D();
 	if (!Direction.IsNearlyZero())
 	{
 		const float Scale = FMath::Clamp(LaunchScale, 0.0f, 1.0f);
 		const FVector Launch =
-			(Direction * KnockDownLaunchSpeed + FVector::UpVector * KnockDownLaunchUp) * Scale;
-		// 只推髋部的话冲量会被整条受约束刚体链分摊掉大半，人几乎飞不起来；
-		// 撞人那边也是这么给全身的。
+		    (Direction * KnockDownLaunchSpeed + FVector::UpVector * KnockDownLaunchUp) * Scale;
+		// 将速度变化应用到全身，避免只推髋部后被关节约束分摊
+		
 		Mesh->AddImpulse(Launch, TEXT("Hips"), true);
-		Mesh->AddImpulseToAllBodiesBelow(FVector::UpVector * KnockDownLaunchUp * 0.5f,
-			TEXT("Hips"), true, true);
+		Mesh->AddImpulseToAllBodiesBelow(FVector::UpVector * KnockDownLaunchUp * 0.5f, TEXT("Hips"), true,
+		                                 true);
 	}
 
-	// 镜头反馈：这时候视角已经切回角色了，车上那套抖动看不见，
-	// 所以复用角色自己"被车撞"的镜头脉冲。
+	// 镜头已切回角色，使用角色的撞击镜头反馈
+	
 	Rider->NotifyVehicleImpact();
 
-	UE_LOG(LogDelivery, Log, TEXT("%s：驾驶员 %s 被撞下车并打晕（抛射力度 %.0f%%）"),
-		*GetName(), *GetNameSafe(Rider), FMath::Clamp(LaunchScale, 0.0f, 1.0f) * 100.0f);
+	UE_LOG(LogDelivery, Log, TEXT("%s：驾驶员 %s 被撞下车并打晕（抛射力度 %.0f%%）"), *GetName(),
+	       *GetNameSafe(Rider), FMath::Clamp(LaunchScale, 0.0f, 1.0f) * 100.0f);
 }
 
+// 逐步更新车辆受撞后的偏移和恢复
 void ADeliveryMotorbike::UpdateImpactReaction(float DeltaSeconds)
 {
-	// 统一的指数衰减：撞击是个尖峰，之后一路平滑回到 0。
+	// 统一的指数衰减：撞击是个尖峰，之后一路平滑回到 0
 	const float Decay = FMath::Exp(-KnockDecay * DeltaSeconds);
 
-	// 只有自己在跑运动的那一端才推，否则会和复制过来的位置打架。
+	// 只有自己在跑运动的那一端才推，否则会和复制过来的位置打架
 	const bool bSimulate = HasAuthority() || IsLocallyControlled();
 
 	if (!KnockVelocity.IsNearlyZero())
@@ -929,13 +928,13 @@ void ADeliveryMotorbike::UpdateImpactReaction(float DeltaSeconds)
 
 	if (CameraBoom)
 	{
-		// 两个轴用不同频率，不然抖动看着像单纯在点头。
+		// 两个轴用不同频率，不然抖动看着像单纯在点头
 		const float Roll = FMath::Sin(ShakePhase * 1.7f) * ShakeAngle * ShakeAmount;
 		if (bFreeLookCamera)
 		{
-			// 自由视角下 Pitch/Yaw 都归控制旋转管，写进相对角度会被 GetTargetRotation() 顶掉，
-			// 硬要抖就得每帧去改控制旋转、和玩家的鼠标打架。所以只留 Roll 这一轴
-			// （bInheritRoll=false 时弹簧臂取的正是相对 Roll）——左右晃一样读得出"被撞了"。
+			// 自由视角的水平和俯仰由玩家控制，仅叠加侧倾震动
+			
+			
 			CameraBoom->SetRelativeRotation(FRotator(0.0f, 0.0f, Roll));
 		}
 		else
@@ -946,6 +945,7 @@ void ADeliveryMotorbike::UpdateImpactReaction(float DeltaSeconds)
 	}
 }
 
+// 寻找下车位置，恢复角色与物品并交回控制权
 void ADeliveryMotorbike::ExitVehicle()
 {
 	if (!HasAuthority() || !Driver)
@@ -953,7 +953,7 @@ void ADeliveryMotorbike::ExitVehicle()
 		return;
 	}
 
-	// 落点要在清掉 Driver 之前算：FindExitLocation 会把驾驶员排除出扫描。
+	// 落点要在清掉 Driver 之前算：FindExitLocation 会把驾驶员排除出扫描
 	const FVector ExitLocation = FindExitLocation(PendingExitSideSign);
 	PendingExitSideSign = 0.0f;
 
@@ -962,18 +962,17 @@ void ADeliveryMotorbike::ExitVehicle()
 	ResetRiderMotion();
 	AController* BikeController = GetController();
 
-	// 车上的快递跟着人下车，回到手上。
-	// **要在清掉 Driver 之后、detach 之前取下来**：清掉 Driver 之后
-	// GetCurrentVehicle() 已经返回 null，所以下面交回去时走的是"步行"那条路。
-	// 交不回去（背包满、人已经晕倒）就留在车上——总比掉进地里强，
-	// 车还能用 R 召唤回来，而掉出世界的快递要重新跑一趟取货点
-	ADeliveryPackageItem* ReturningCargo = ReleaseCargo();
+	// 车上的快递跟着人下车，回到手上
+	// 先清除驾驶员关系再取下快递，使角色按步行状态接收
+	// 接收失败时重新固定到车上
+
+ADeliveryPackageItem* ReturningCargo = ReleaseCargo();
 
 	Leaving->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	Leaving->SetActorEnableCollision(true);
 	Leaving->SetActorHiddenInGame(false);
-	Leaving->SetActorLocationAndRotation(
-		ExitLocation, FRotator(0.0f, GetActorRotation().Yaw, 0.0f), false, nullptr, ETeleportType::TeleportPhysics);
+	Leaving->SetActorLocationAndRotation(ExitLocation, FRotator(0.0f, GetActorRotation().Yaw, 0.0f), false,
+	                                     nullptr, ETeleportType::TeleportPhysics);
 
 	if (BikeController)
 	{
@@ -984,18 +983,18 @@ void ADeliveryMotorbike::ExitVehicle()
 		}
 	}
 
-	// StartRagdoll 里带 PlaceOnGround，所以要在挪好位置之后再开。
+	// StartRagdoll 里带 PlaceOnGround，所以要在挪好位置之后再开
 	if (UDeliveryActiveRagdollComponent* Ragdoll = Leaving->GetActiveRagdoll())
 	{
 		Ragdoll->StartRagdoll();
 	}
 
-	// 快递交回手上。排在 StartRagdoll 之后：手上那套表现要跟着手骨走，
-	// 刚体还没重建时算出来的手部位置是旧的，快递会先出现在错的地方再弹过去。
+	// 身体重建完成后再将快递放回手中，确保使用新的手部位置
+	
 	// 不放取件音效——这是搬运，不是又领了一件
-	if (IsValid(ReturningCargo) && !Leaving->ReceiveTaskPackage(ReturningCargo, /*bPlayFeedback=*/false))
+	if (IsValid(ReturningCargo) && !Leaving->ReceiveTaskPackage(ReturningCargo, /* 播放反馈= */false))
 	{
-		// 收不下就绑回车上，别让它悬在空中（已经 detach 过、物理还是关的）
+		// 角色无法接收时将快递重新固定到车上
 		AttachCargo(ReturningCargo);
 	}
 
@@ -1007,60 +1006,16 @@ void ADeliveryMotorbike::ExitVehicle()
 	TrafficImpactCount = 0;
 	LastImpactTime = -1000.0f;
 	ApplyDriverPresentation();
-	MulticastPlayAudioEvent(1);
+	MulticastVehicleEvent(EDeliveryEvent::VehicleExited);
 }
 
-void ADeliveryMotorbike::MulticastPlayAudioEvent_Implementation(uint8 EventIndex)
+// 网络通知到达后，各端只发布自己这辆车的事件
+void ADeliveryMotorbike::MulticastVehicleEvent_Implementation(EDeliveryEvent Event)
 {
-	USoundBase* Sound = nullptr;
-	switch (EventIndex)
-	{
-	case 0: Sound = EnterVehicleSound; break;
-	case 1: Sound = ExitVehicleSound; break;
-	case 2: Sound = SummonSound; break;
-	case 3: Sound = TrafficImpactSound; break;
-	default: break;
-	}
-
-	if (Sound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation());
-	}
+    Events->Publish(Event);
 }
 
-void ADeliveryMotorbike::UpdateMotorbikeAudio()
-{
-	if (!EngineAudio)
-	{
-		return;
-	}
-
-	if (!Driver || !EngineLoopSound)
-	{
-		if (EngineAudio->IsPlaying())
-		{
-			EngineAudio->Stop();
-		}
-		return;
-	}
-
-	if (EngineAudio->Sound != EngineLoopSound)
-	{
-		EngineAudio->SetSound(EngineLoopSound);
-	}
-	if (!EngineAudio->IsPlaying())
-	{
-		EngineAudio->Play();
-	}
-
-	const float VisualSpeed = !HasAuthority() && !IsLocallyControlled()
-		? ReplicatedRiderMotion.Speed * MaxSpeed : CurrentSpeed;
-	const float SpeedAlpha = FMath::Clamp(
-		FMath::Abs(VisualSpeed) / FMath::Max(MaxSpeed, 1.0f), 0.0f, 1.0f);
-	EngineAudio->SetPitchMultiplier(FMath::Lerp(EngineIdlePitch, EngineMaxPitch, SpeedAlpha));
-	EngineAudio->SetVolumeMultiplier(FMath::Lerp(EngineIdleVolume, EngineMaxVolume, SpeedAlpha));
-}
-
+// 在车辆附近寻找不会被障碍挡住的下车位置
 FVector ADeliveryMotorbike::FindExitLocation(float PreferredSideSign) const
 {
 	const UWorld* World = GetWorld();
@@ -1073,48 +1028,50 @@ FVector ADeliveryMotorbike::FindExitLocation(float PreferredSideSign) const
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(MotorbikeExit), false, this);
 	Params.AddIgnoredActor(Driver);
 
-	// 横向至少要让开"车身半宽 + 角色胶囊半径 + 余量"，否则人落下来还压在车上。
-	// 直接用碰撞盒的实际尺寸，车模型换了也不用回来改这个数。
-	const FVector BoxExtent = CollisionBox ? CollisionBox->GetScaledBoxExtent() : FVector(110.0f, 45.0f, 45.0f);
+	// 横向至少要让开"车身半宽 + 角色胶囊半径 + 余量"，否则人落下来还压在车上
+	// 直接用碰撞盒的实际尺寸，车模型换了也不用回来改这个数
+	const FVector BoxExtent =
+	    CollisionBox ? CollisionBox->GetScaledBoxExtent() : FVector(110.0f, 45.0f, 45.0f);
 	const float SideDistance = FMath::Max(FMath::Abs(ExitSideOffset), BoxExtent.Y + 42.0f + 60.0f);
 
-	// 首选侧由调用方指定（被撞下车时是"车被推离的那一侧"），没指定就用配置的默认侧。
+	// 首选侧由调用方指定（被撞下车时是"车被推离的那一侧"），没指定就用配置的默认侧
 	const float FirstSign = !FMath::IsNearlyZero(PreferredSideSign)
-		? FMath::Sign(PreferredSideSign)
-		: FMath::Sign(ExitSideOffset != 0.0f ? ExitSideOffset : -1.0f);
+	                            ? FMath::Sign(PreferredSideSign)
+	                            : FMath::Sign(ExitSideOffset != 0.0f ? ExitSideOffset : -1.0f);
 
 	const FVector Right = GetActorRightVector();
 	const FVector Back = -GetActorForwardVector();
 	const FVector Candidates[3] = {
-		Center + Right * (SideDistance * FirstSign),
-		Center + Right * (SideDistance * -FirstSign),
-		Center + Back * (BoxExtent.X + 90.0f),
+	    Center + Right * (SideDistance * FirstSign),
+	    Center + Right * (SideDistance * -FirstSign),
+	    Center + Back * (BoxExtent.X + 90.0f),
 	};
 
 	for (const FVector& Candidate : Candidates)
 	{
 		FHitResult BlockHit;
 		if (World->SweepSingleByChannel(BlockHit, Center, Candidate, FQuat::Identity, ECC_Visibility,
-			FCollisionShape::MakeSphere(45.0f), Params))
+		                                FCollisionShape::MakeSphere(45.0f), Params))
 		{
 			continue;
 		}
 
 		FHitResult GroundHit;
 		if (World->LineTraceSingleByChannel(GroundHit, Candidate + FVector(0.0f, 0.0f, 150.0f),
-			Candidate - FVector(0.0f, 0.0f, 500.0f), ECC_Visibility, Params))
+		                                    Candidate - FVector(0.0f, 0.0f, 500.0f), ECC_Visibility, Params))
 		{
-			// 角色胶囊半高 96，落点抬到地面上方一个胶囊高度。
+			// 角色胶囊半高 96，落点抬到地面上方一个胶囊高度
 			return GroundHit.ImpactPoint + FVector(0.0f, 0.0f, 100.0f);
 		}
 		return Candidate;
 	}
 
-	// 三个方向全被占：抬到车顶上方放下，让他自己掉下来。
-	// 不能放回 Center——那就是车身内部，布娃娃会直接卡在车底下。
+	// 周围无安全落点时放到车顶上方，避免将角色放进车身内部
+	
 	return Center + FVector(0.0f, 0.0f, BoxExtent.Z + 140.0f);
 }
 
+// 绑定驾驶、视角、下车和骑车取件操作
 void ADeliveryMotorbike::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
@@ -1130,46 +1087,51 @@ void ADeliveryMotorbike::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ADeliveryMotorbike::MoveInput);
 		EnhancedInput->BindAction(MoveAction, ETriggerEvent::Completed, this, &ADeliveryMotorbike::MoveInput);
 	}
-	// Look 一直绑着，但 LookInput 里会看 bFreeLookCamera——关掉开关时鼠标就是不起作用，
-	// 不用在绑定这一层做分支（SetupPlayerInputComponent 只在 Possess 时跑一次，
-	// 而开关是可以在运行时改的）。
+	// 始终绑定视角输入，由回调读取当前模式，支持运行时切换
+	
+	
 	if (LookAction)
 	{
 		EnhancedInput->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADeliveryMotorbike::LookInput);
 	}
 	if (MouseLookAction)
 	{
-		EnhancedInput->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &ADeliveryMotorbike::MouseLookInput);
+		EnhancedInput->BindAction(MouseLookAction, ETriggerEvent::Triggered, this,
+		                          &ADeliveryMotorbike::MouseLookInput);
 	}
 
-	// 直接绑键，不走 InputAction + IMC 映射：IMC_Default 从来没被提交过，
-	// 每次 git 拉取都会把新加的映射冲掉（F 键就这么没过两次）。
+	// 直接绑定操作键，不依赖额外输入映射资源
+	
 	if (CameraToggleKey.IsValid())
 	{
-		PlayerInputComponent->BindKey(CameraToggleKey, IE_Pressed, this, &ADeliveryMotorbike::ToggleCameraMode);
+		PlayerInputComponent->BindKey(CameraToggleKey, IE_Pressed, this,
+		                              &ADeliveryMotorbike::ToggleCameraMode);
 	}
 	if (UInputAction* Interact = InteractAction.LoadSynchronous())
 	{
-		EnhancedInput->BindAction(Interact, ETriggerEvent::Started, this, &ADeliveryMotorbike::InteractPressed);
+		EnhancedInput->BindAction(Interact, ETriggerEvent::Started, this,
+		                          &ADeliveryMotorbike::InteractPressed);
 	}
 	if (UInputAction* Pickup = PickupAction.LoadSynchronous())
 	{
-		// 松开和取消都要绑：长按取件要能中途放弃，少绑一个的话松手之后
-		// 服务器那边的长按记录一直留着，下一次按 E 会被当成"还在按着上一个"
+		// 松开和取消输入都要结束长按，防止服务器保留上次操作
+		
 		EnhancedInput->BindAction(Pickup, ETriggerEvent::Started, this, &ADeliveryMotorbike::PickupPressed);
-		EnhancedInput->BindAction(Pickup, ETriggerEvent::Completed, this, &ADeliveryMotorbike::PickupReleased);
+		EnhancedInput->BindAction(Pickup, ETriggerEvent::Completed, this,
+		                          &ADeliveryMotorbike::PickupReleased);
 		EnhancedInput->BindAction(Pickup, ETriggerEvent::Canceled, this, &ADeliveryMotorbike::PickupReleased);
 	}
 }
 
+// 读取驾驶输入，按当前控制方式转换成油门和转向
 void ADeliveryMotorbike::MoveInput(const FInputActionValue& Value)
 {
 	const FVector2D Axis = Value.Get<FVector2D>();
 	MoveInputRaw.X = FMath::Clamp(Axis.X, -1.0f, 1.0f);
 	MoveInputRaw.Y = FMath::Clamp(Axis.Y, -1.0f, 1.0f);
 
-	// 车头相对模式下这里就是最终值，直接发；镜头相对模式要等 Tick 里按
-	// 当前镜头朝向换算，发送也移到那边（镜头每帧都在动，这里算了也会马上过期）。
+	// 车头模式直接发送输入，镜头模式每帧换算后再发送
+	
 	if (!UsesCameraRelativeMove())
 	{
 		SteerInput = MoveInputRaw.X;
@@ -1183,13 +1145,15 @@ void ADeliveryMotorbike::MoveInput(const FInputActionValue& Value)
 	}
 }
 
+// 判断是否使用镜头方向作为驾驶输入参考
 bool ADeliveryMotorbike::UsesCameraRelativeMove() const
 {
-	// 固定视角不走这条路：那套镜头的 yaw 本来就跟着车头，两种解释等价，
-	// 多绕一层换算只会引入误差。
+	// 固定视角已跟随车头，无需再做镜头方向换算
+	
 	return bCameraRelativeMoveInFreeLook && bFreeLookCamera;
 }
 
+// 把相对镜头的移动意图转换为车辆转向和前后行驶
 void ADeliveryMotorbike::ApplyCameraRelativeInput()
 {
 	if (!UsesCameraRelativeMove())
@@ -1197,7 +1161,7 @@ void ADeliveryMotorbike::ApplyCameraRelativeInput()
 		return;
 	}
 
-	// 松手就彻底归零，别留残值——否则松手后车还会按最后一次的方向继续修正。
+	// 松手就彻底归零，别留残值——否则松手后车还会按最后一次的方向继续修正
 	if (MoveInputRaw.IsNearlyZero())
 	{
 		ThrottleInput = 0.0f;
@@ -1205,117 +1169,100 @@ void ADeliveryMotorbike::ApplyCameraRelativeInput()
 		TurnAroundSign = 0.0f;
 		bBrakingForTurn = false;
 	}
-	// **S 是后退，不参与"按镜头方向走"的换算。**
-	// 纯按方向解释的话 S = 往屏幕下方开 = 掉头，但按 S 想后退（以及先刹停）
-	// 是所有驾驶游戏的肌肉记忆，掉头应该是"把镜头转过去再按 W"。
-	// 这里直接把负的 Y 当油门交给 UpdateSpeed：还在前进时它按 BrakeDeceleration
-	// 刹车（油门与车速反向 = 刹车），停下后继续推就往 MaxReverseSpeed 倒。
-	// 转向用 X 原值（车头相对），和倒车时扭头看后方的直觉一致；
-	// UpdateSteering 里 Direction 已按车速取负，倒车时左右不会反。
-	else if (MoveInputRaw.Y < -UE_KINDA_SMALL_NUMBER)
+	// 后退输入直接用于刹车和倒车，不将后退解释为掉头
+	// 倒车转向仍按车身方向计算
+
+else if (MoveInputRaw.Y < -UE_KINDA_SMALL_NUMBER)
 	{
 		ThrottleInput = FMath::Clamp(MoveInputRaw.Y, -1.0f, 1.0f);
 		SteerInput = FMath::Clamp(MoveInputRaw.X, -1.0f, 1.0f);
-		// 后退不是掉头动作，两个锁定都不该留着（否则松开 S 按 W 会沿用上次的侧）。
+		// 后退不是掉头动作，两个锁定都不该留着（否则松开 S 按 W 会沿用上次的侧）
 		TurnAroundSign = 0.0f;
 		bBrakingForTurn = false;
 	}
 	else
 	{
-		// 镜头的 yaw，而不是车头的。取控制旋转：自由视角下它**就是**镜头朝向
-		// （ApplyCameraMode 里弹簧臂 bUsePawnControlRotation=true 且继承 pitch/yaw）。
-		// 读 FollowCamera 的世界朝向也行，但那一份带弹簧臂的迟滞（CameraLagSpeed），
-		// 用它会让方向跟着镜头晃、手感发糊。
-		float CameraYaw = GetActorRotation().Yaw;
+		// 使用玩家控制的镜头方向换算输入，避免镜头位置滞后影响驾驶响应
+
+float CameraYaw = GetActorRotation().Yaw;
 		if (const APlayerController* PC = Cast<APlayerController>(GetController()))
 		{
 			CameraYaw = PC->GetControlRotation().Yaw;
 		}
 
-		// 摇杆方向在镜头空间里的朝向：Y 是"往屏幕里"，X 是"往右"。
-		// atan2(X, Y) 而不是 atan2(Y, X)——UE 的 yaw 以 +X 为 0 度、向右手正方向增长，
-		// 而这里的"前"对应 Y 分量，两者正好差一次参数对调。
-		const float InputYaw = FMath::RadiansToDegrees(
-			FMath::Atan2(MoveInputRaw.X, MoveInputRaw.Y));
+		// 输入纵轴表示前后，横轴表示左右，据此计算相对镜头的目标方向
+		
+		
+		const float InputYaw = FMath::RadiansToDegrees(FMath::Atan2(MoveInputRaw.X, MoveInputRaw.Y));
 		const float DesiredYaw = CameraYaw + InputYaw;
 
-		// 车头到目标方向的带符号夹角（-180~180）。正值表示目标在车头右侧。
+		// 车头到目标方向的带符号夹角（-180~180）；正值表示目标在车头右侧
 		const float Error = FRotator::NormalizeAxis(DesiredYaw - GetActorRotation().Yaw);
 		const float AbsError = FMath::Abs(Error);
 
-		// 输入强度（摇杆可以推一半）。WASD 是 0/1，这里对两者都成立。
+		// 输入强度（摇杆可以推一半）；WASD 是 0/1，这里对两者都成立
 		const float Magnitude = FMath::Min(MoveInputRaw.Size(), 1.0f);
 
-		// **分段转向**：方向差超过 CameraRelativeStageSideAngle（90°）时不直接奔最终方向，
-		// 而是先锁定一侧、只朝那一侧的"侧面"打舵，转过侧面之后才由真实误差收尾。
-		// 这一段同时解决两个独立的颤抖来源，缺一个都还会抖：
-		//   (1) Error 用 NormalizeAxis 归到 (-180, 180]，**180 是奇点**——鼠标或车身一丝抖动
-		//       就让它在 +180 和 −180 之间翻号，满舵方向每帧左右互换。
-		//       **实测踩中的场景：车头朝前、把镜头转 180° 再按 W**——目标方向正好落在
-		//       车身后方，Error 恰好 180。（S 不会踩中：它是后退，不走这条换算。）
-		//   (2) 大角度时刹车分支和掉头分支在**同一个速度阈值**上来回弹：车一加速越过
-		//       TurnSpeedReference*0.25 就进刹车（油门 −1、舵角归零），刹到阈值以下又回掉头
-		//       （油门 +0.4、满舵），没有滞环就是个极限循环。这一条和角度是不是 180 无关，
-		//       所以镜头转到任何大角度再按 W/A/D 都会抖，不止正后方。
-		// 对策都是**锁定**：侧别和"刹车还是直接掉头"都只在动作开始那一帧定一次，
-		// 整个动作里不再重新判断。
-		float StagedError = Error;
+		// 大角度转向先锁定一侧，转到侧面后再对准目标
+		// 同时锁定是否先刹车，避免方向正负号和速度临界值引起反复切换
+
+float StagedError = Error;
 		if (AbsError > CameraRelativeStageSideAngle)
 		{
 			if (FMath::IsNearlyZero(TurnAroundSign))
 			{
-				// 侧别只在这一帧读一次。顺着当前误差的符号转（玩家镜头已经偏了一点
-				// 就顺着偏的那边），正好 180 时 NormalizeAxis 给的是 +180、符号恒为正，
-				// 结果是确定的，不会两帧之间换边。
+				// 仅在进入掉头时确定转向侧，后续保持不变
+				
+				
 				const float ErrorSign = FMath::Sign(Error);
 				TurnAroundSign = FMath::IsNearlyZero(ErrorSign) ? 1.0f : ErrorSign;
 
-				// 刹车还是直接掉头，也在这一帧定下来。**不能每帧重判**——那正是 (2)。
-				// 判据和原来一样：方向差大到该当"想停下来"，而且车确实还在往前跑。
-				bBrakingForTurn = AbsError > CameraRelativeBrakeAngle
-					&& CurrentSpeed > TurnSpeedReference * 0.25f;
+				// 仅在动作开始时决定是否先刹车，不每帧重新选择
+				
+				bBrakingForTurn =
+				    AbsError > CameraRelativeBrakeAngle && CurrentSpeed > TurnSpeedReference * 0.25f;
 			}
 			StagedError = TurnAroundSign * CameraRelativeStageSideAngle;
 		}
 		else
 		{
-			// 已经转到侧面以内，动作结束，解锁交给常规换算。
+			// 已经转到侧面以内，动作结束，解锁交给常规换算
 			TurnAroundSign = 0.0f;
 			bBrakingForTurn = false;
 		}
 
-		// 刹车一旦开始就刹到**很慢**才松（CameraRelativeBrakeExitSpeed），
-		// 不是刹到进入阈值就松：进出用同一个阈值就是 (2) 那个极限循环。
+		// 降到较低的退出速度后才结束刹车，避免在同一速度附近反复切换
+		
 		if (bBrakingForTurn && CurrentSpeed > CameraRelativeBrakeExitSpeed)
 		{
-			// 反向油门，UpdateSpeed 会按 BrakeDeceleration（比加速大得多）处理，
-			// 按一下就明显慢下来。
+			// 反向油门用于快速减速
+			
 			ThrottleInput = -Magnitude;
-			// 刹车时不强行扭车头：这时候横向摆车看着像甩尾，不是刹车。
+			// 刹车时不强行扭车头：这时候横向摆车看着像甩尾，不是刹车
 			SteerInput = 0.0f;
 		}
 		else
 		{
-			// 刹够了就接着掉头，同一个键走完整个动作。
+			// 刹够了就接着掉头，同一个键走完整个动作
 			bBrakingForTurn = false;
 
-			SteerInput = FMath::Clamp(
-				StagedError / FMath::Max(CameraRelativeFullSteerAngle, 1.0f), -1.0f, 1.0f);
-			// 方向差越大油门越收，但**不能收到 0**：转向量正比于车速，
-			// 停下来就再也转不动，想掉头会卡成死局（见头文件里 CameraRelativeMinThrottle）。
-			// 这里用分段后的误差：第一段的目标是侧面，按最终方向算会把油门压到下限、
-			// 掉头全程只剩最低速。
+			SteerInput =
+			    FMath::Clamp(StagedError / FMath::Max(CameraRelativeFullSteerAngle, 1.0f), -1.0f, 1.0f);
+			// 大角度转向仍保留最低油门，确保车辆移动时能够继续转向
+			
+			// 按当前分段目标计算油门，不直接使用最终方向误差
+			
 			const float Align = FMath::Cos(FMath::DegreesToRadians(FMath::Abs(StagedError)));
 			const float Scale = FMath::Max(Align, CameraRelativeMinThrottle);
 			ThrottleInput = Magnitude * Scale;
 		}
 	}
 
-	// 换算出来的值每帧都可能变，但只在变化够大时才发，省掉同值重复 RPC。
+	// 换算出来的值每帧都可能变，但只在变化够大时才发，省掉同值重复 RPC
 	if (!HasAuthority())
 	{
-		if (FMath::Abs(ThrottleInput - LastSentThrottle) > 0.02f
-			|| FMath::Abs(SteerInput - LastSentSteer) > 0.02f)
+		if (FMath::Abs(ThrottleInput - LastSentThrottle) > 0.02f ||
+		    FMath::Abs(SteerInput - LastSentSteer) > 0.02f)
 		{
 			ServerSetDriveInput(ThrottleInput, SteerInput);
 			LastSentThrottle = ThrottleInput;
@@ -1324,6 +1271,7 @@ void ADeliveryMotorbike::ApplyCameraRelativeInput()
 	}
 }
 
+// 更新手柄视角输入
 void ADeliveryMotorbike::LookInput(const FInputActionValue& Value)
 {
 	if (!bFreeLookCamera)
@@ -1331,11 +1279,12 @@ void ADeliveryMotorbike::LookInput(const FInputActionValue& Value)
 		return;
 	}
 	const FVector2D Axis = Value.Get<FVector2D>();
-	// 俯仰的上下限走 PlayerCameraManager 的 ViewPitchMin/Max，和角色那边同一套限制。
+	// 俯仰的上下限走 PlayerCameraManager 的 ViewPitchMin/Max，和角色那边同一套限制
 	AddControllerYawInput(Axis.X);
 	AddControllerPitchInput(Axis.Y);
 }
 
+// 按鼠标灵敏度更新视角
 void ADeliveryMotorbike::MouseLookInput(const FInputActionValue& Value)
 {
 	if (!bFreeLookCamera)
@@ -1347,17 +1296,18 @@ void ADeliveryMotorbike::MouseLookInput(const FInputActionValue& Value)
 	AddControllerPitchInput(Axis.Y);
 }
 
+// 切换驾驶视角，并保存对应镜头设置
 void ADeliveryMotorbike::ToggleCameraMode()
 {
 	bFreeLookCamera = !bFreeLookCamera;
 	ApplyCameraMode();
 
-	// 切到车头相对模式时立刻按原始输入重算一次：ThrottleInput/SteerInput 里现在存的是
-	// 镜头相对模式算出来的值，语义完全不同（那边的 SteerInput 是"到目标方向的误差"，
-	// 这边是"转向量"）。不接这一下，按着 W 切过去会有一帧按旧语义开。
+	// 切换到车头模式时立即用原始输入重算，避免沿用镜头模式的转向结果
+	
+	
 	if (!UsesCameraRelativeMove())
 	{
-		// 掉头锁定是镜头相对模式独有的状态，切走就清掉，免得切回来沿用旧侧。
+		// 掉头锁定是镜头相对模式独有的状态，切走就清掉，免得切回来沿用旧侧
 		TurnAroundSign = 0.0f;
 		bBrakingForTurn = false;
 		SteerInput = MoveInputRaw.X;
@@ -1369,14 +1319,11 @@ void ADeliveryMotorbike::ToggleCameraMode()
 			LastSentSteer = SteerInput;
 		}
 	}
-	if (CameraToggleSound)
-	{
-		UGameplayStatics::PlaySound2D(this, CameraToggleSound);
-	}
+	Events->Publish(EDeliveryEvent::CameraChanged);
 
-	// 切换的那一帧要把控制旋转接上，否则视角会跳一下：
-	// 切到固定视角时 SyncControlRotation 会把它拉回车头朝向（下车后角色的弹簧臂要用）；
-	// 切到自由视角时保留当前的镜头朝向当起点，鼠标从"你现在看到的地方"接着转。
+	// 切换时衔接当前镜头方向，避免视角跳变
+	
+	
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		if (!bFreeLookCamera)
@@ -1385,15 +1332,17 @@ void ADeliveryMotorbike::ToggleCameraMode()
 		}
 		else
 		{
-			PC->SetControlRotation(FRotator(CameraPitch, GetActorRotation().Yaw, PC->GetControlRotation().Roll));
+			PC->SetControlRotation(
+			    FRotator(CameraPitch, GetActorRotation().Yaw, PC->GetControlRotation().Roll));
 		}
 	}
 
-	ShowNotice(bFreeLookCamera
-		? NSLOCTEXT("Delivery", "MotorbikeFreeLook", "自由视角（P 切换）")
-		: NSLOCTEXT("Delivery", "MotorbikeFixedLook", "固定视角（P 切换）"), 1.5f);
+	ShowNotice(bFreeLookCamera ? NSLOCTEXT("Delivery", "MotorbikeFreeLook", "自由视角（P 切换）")
+	                           : NSLOCTEXT("Delivery", "MotorbikeFixedLook", "固定视角（P 切换）"),
+	           1.5f);
 }
 
+// 将当前驾驶视角配置应用到镜头
 void ADeliveryMotorbike::ApplyCameraMode()
 {
 	if (!CameraBoom)
@@ -1403,18 +1352,18 @@ void ADeliveryMotorbike::ApplyCameraMode()
 
 	if (bFreeLookCamera)
 	{
-		// 弹簧臂吃控制旋转。Pitch/Yaw 必须都设成继承，否则 GetTargetRotation() 会拿
-		// 组件的相对角度把控制旋转那一轴顶掉，鼠标就只剩一个轴能转。
+		// 自由视角继承玩家控制的水平角和俯仰角，确保两个方向都能操作
+		
 		CameraBoom->bUsePawnControlRotation = true;
 		CameraBoom->bInheritPitch = true;
 		CameraBoom->bInheritYaw = true;
-		// Roll 仍然不继承——留着这一轴给被撞时的镜头抖动用（见 UpdateImpactReaction）。
+		// Roll 仍然不继承——留着这一轴给被撞时的镜头抖动用（见 UpdateImpactReaction）
 		CameraBoom->bInheritRoll = false;
 		CameraBoom->SetRelativeRotation(FRotator::ZeroRotator);
 	}
 	else
 	{
-		// 固定车尾视角：原样还原最早那套。
+		// 固定车尾视角：原样还原最早那套
 		CameraBoom->bUsePawnControlRotation = false;
 		CameraBoom->bInheritPitch = false;
 		CameraBoom->bInheritYaw = true;
@@ -1429,18 +1378,20 @@ void ADeliveryMotorbike::ServerSetDriveInput_Implementation(float InThrottle, fl
 	SteerInput = FMath::IsFinite(InSteer) ? FMath::Clamp(InSteer, -1.0f, 1.0f) : 0.0f;
 }
 
-void ADeliveryMotorbike::PickupPressed(const FInputActionValue& /*Value*/)
+// 骑车按下取件键时转交驾驶员的交互组件
+void ADeliveryMotorbike::PickupPressed(const FInputActionValue& /* 未使用 */)
 {
-	// 转发给驾驶员那具身体：它身上的探测器、长按计时和服务器复核都还在工作
-	// （探测器已经放宽成"本机操控、或者我是本机操控的车的驾驶员"）。
-	// 车自己不认识取货点和收件点，也不该认识
+	// 将取件操作转发给驾驶员，复用角色的探测和长按逻辑
+	
+	
 	if (IsValid(Driver))
 	{
 		Driver->DoPickup();
 	}
 }
 
-void ADeliveryMotorbike::PickupReleased(const FInputActionValue& /*Value*/)
+// 骑车松开取件键时取消驾驶员的长按操作
+void ADeliveryMotorbike::PickupReleased(const FInputActionValue& /* 未使用 */)
 {
 	if (IsValid(Driver))
 	{
@@ -1448,7 +1399,8 @@ void ADeliveryMotorbike::PickupReleased(const FInputActionValue& /*Value*/)
 	}
 }
 
-void ADeliveryMotorbike::InteractPressed(const FInputActionValue& /*Value*/)
+// 将驾驶中的交互按键作为下车请求
+void ADeliveryMotorbike::InteractPressed(const FInputActionValue& /* 未使用 */)
 {
 	if (HasAuthority())
 	{
@@ -1458,13 +1410,15 @@ void ADeliveryMotorbike::InteractPressed(const FInputActionValue& /*Value*/)
 	ServerRequestExit();
 }
 
+// 在服务器处理驾驶员下车请求
 void ADeliveryMotorbike::ServerRequestExit_Implementation()
 {
-	// Server RPC 只能由拥有这个 Pawn 的连接发起，也就是现在骑着它的那个玩家，
-	// 所以这里不需要再校验身份；ExitVehicle 自己会挡住"没人骑"的情况。
+	// 驾驶员所属客户端发送下车请求，服务器执行下车流程
+	
 	ExitVehicle();
 }
 
+// 更新驾驶状态、车辆运动和车轮骑手表现
 void ADeliveryMotorbike::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -1475,16 +1429,17 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 		ApplyDriverPresentation();
 	}
 
-	// 服务器一直算（这样停在路边的空车也会自己落到路面上）；
-	// 本地驾驶者同步预测一份，免得转向/加速要等一个来回才有反馈。
+	// 服务器持续计算车辆移动，本机驾驶员同时预测以获得即时响应
+	
 	const bool bSimulate = HasAuthority() || (Driver && IsLocallyControlled());
 	if (bSimulate)
 	{
 		if (Driver)
 		{
-			// 必须排在 UpdateSpeed/UpdateSteering 之前：它改的就是这两个函数要读的
-			// ThrottleInput/SteerInput。只有本机驾驶者算得出来（镜头是本机的东西），
-			// 服务器用的是 ServerSetDriveInput 发过去的结果。
+			// 先换算镜头方向输入，再更新速度和转向
+			// 服务器使用客户端发送的换算结果
+			
+			
 			if (IsLocallyControlled())
 			{
 				ApplyCameraRelativeInput();
@@ -1504,18 +1459,21 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 	UpdateLean(DeltaSeconds);
 	UpdateSteerVisual(DeltaSeconds);
 	UpdateWheelSpin(DeltaSeconds);
-	UpdateMotorbikeAudio();
+    // 远端车辆使用复制的速度，本机和服务器使用当前速度
+    const float AudioSpeed = !HasAuthority() && !IsLocallyControlled()
+        ? ReplicatedRiderMotion.Speed * MaxSpeed : CurrentSpeed;
+    VehicleAudio->UpdateEngine(Driver != nullptr, AudioSpeed / FMath::Max(MaxSpeed, 1.0f));
 
 	if (Driver && IsLocallyControlled())
 	{
-		// 自由视角下控制旋转**就是**镜头，每帧同步成车头朝向等于把玩家的鼠标抹掉。
+		// 自由视角下控制旋转就是镜头，每帧同步成车头朝向等于把玩家的鼠标抹掉
 		if (!bFreeLookCamera)
 		{
 			SyncControlRotation();
 		}
 
-		// 刚上车那一下才提示"按 F 下车"，之后自己消失——它吊在车顶上方，一直挂着挡视野，
-		// 而这条信息玩家看一次就记住了。下次上车重新计时。
+		// 下车提示只在上车后短暂显示，避免长期遮挡画面
+		
 		if (!bHadDriverLastFrame)
 		{
 			ShowNotice(ExitPromptText, ExitPromptDuration);
@@ -1525,7 +1483,7 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 			NoticeRemaining -= DeltaSeconds;
 			PushNotice();
 		}
-		// 左下角那条是常驻的，和车顶上方那条世界浮窗是两个独立槽位，不会互相顶掉。
+		// 左下角那条是常驻的，和车顶上方那条世界浮窗是两个独立槽位，不会互相顶掉
 		PushCameraHint();
 		bHadDriverLastFrame = true;
 	}
@@ -1536,6 +1494,7 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 	}
 }
 
+// 根据油门、刹车和阻力更新车速
 void ADeliveryMotorbike::UpdateSpeed(float DeltaSeconds)
 {
 	const float Throttle = FMath::Clamp(ThrottleInput, -1.0f, 1.0f);
@@ -1545,13 +1504,14 @@ void ADeliveryMotorbike::UpdateSpeed(float DeltaSeconds)
 		return;
 	}
 
-	// 油门方向和当前车速反着来 = 刹车，用大得多的减速度，手感上按一下就明显慢下来。
+	// 油门方向和当前车速反着来 = 刹车，用大得多的减速度，手感上按一下就明显慢下来
 	const bool bOpposing = (Throttle * CurrentSpeed) < -UE_KINDA_SMALL_NUMBER;
 	const float Rate = bOpposing ? BrakeDeceleration : ThrottleAcceleration;
 	const float Target = Throttle > 0.0f ? MaxSpeed * Throttle : MaxReverseSpeed * Throttle;
 	CurrentSpeed = FMath::FInterpConstantTo(CurrentSpeed, Target, DeltaSeconds, Rate);
 }
 
+// 根据转向输入平滑更新转向角
 void ADeliveryMotorbike::UpdateSteering(float DeltaSeconds)
 {
 	if (FMath::IsNearlyZero(SteerInput))
@@ -1559,13 +1519,14 @@ void ADeliveryMotorbike::UpdateSteering(float DeltaSeconds)
 		return;
 	}
 
-	// 摩托车靠前进才能转向，停着打把是原地转圈，很出戏。
+	// 摩托车靠前进才能转向，停着打把是原地转圈，很出戏
 	const float SpeedFactor = FMath::Clamp(FMath::Abs(CurrentSpeed) / TurnSpeedReference, 0.0f, 1.0f);
 	const float Direction = CurrentSpeed >= 0.0f ? 1.0f : -1.0f;
 	const float YawDelta = SteerInput * MaxTurnRate * SpeedFactor * Direction * DeltaSeconds;
 	AddActorWorldRotation(FRotator(0.0f, YawDelta, 0.0f));
 }
 
+// 检测地面并执行带碰撞的车辆移动
 void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 {
 	UWorld* World = GetWorld();
@@ -1574,7 +1535,7 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 		return;
 	}
 
-	// 1) 水平推进。带 sweep，撞墙就掉速而不是穿过去；撞的是矮台阶就先试着跨上去。
+	// 1) 水平推进；带 sweep，撞墙就掉速而不是穿过去；撞的是矮台阶就先试着跨上去
 	if (!FMath::IsNearlyZero(CurrentSpeed))
 	{
 		const FVector Delta = GetActorForwardVector() * CurrentSpeed * DeltaSeconds;
@@ -1582,7 +1543,7 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 		AddActorWorldOffset(Delta, true, &MoveHit);
 		if (MoveHit.bBlockingHit)
 		{
-			// 这一帧还没走完的那一段，跨上去之后要接着走完。
+			// 这一帧还没走完的那一段，跨上去之后要接着走完
 			const FVector Remaining = Delta * (1.0f - MoveHit.Time);
 			if (!TryStepUp(Remaining, MoveHit))
 			{
@@ -1591,20 +1552,18 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 		}
 	}
 
-	// 2) 竖直贴地。这一步不能用 sweep：sweep 会被地面挡住，和"我要贴到地面上"互相打架。
+	// 2) 竖直贴地；这一步不能用 sweep：sweep 会被地面挡住，和"我要贴到地面上"互相打架
 	FVector Location = GetActorLocation();
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(MotorbikeGround), false, this);
 	Params.AddIgnoredActor(Driver);
 
 	FHitResult GroundHit;
 	const bool bHitGround = World->LineTraceSingleByChannel(
-		GroundHit,
-		Location + FVector(0.0f, 0.0f, GroundTraceUp),
-		Location - FVector(0.0f, 0.0f, GroundTraceDown),
-		ECC_Visibility, Params);
+	    GroundHit, Location + FVector(0.0f, 0.0f, GroundTraceUp),
+	    Location - FVector(0.0f, 0.0f, GroundTraceDown), ECC_Visibility, Params);
 
-	// 再往前看一小段。上坡/上台阶时提前抬车，不然等车头撞上坡面才反应就已经掉速了。
-	// 前瞻距离跟着车速走，停着时为 0——否则停在坡底也会莫名浮起来。
+	// 再往前看一小段；上坡/上台阶时提前抬车，不然等车头撞上坡面才反应就已经掉速了
+	// 前瞻距离跟着车速走，停着时为 0——否则停在坡底也会莫名浮起来
 	float DesiredZ = bHitGround ? GroundHit.ImpactPoint.Z + HoverHeight : 0.0f;
 	if (bHitGround && GroundLookAhead > 0.0f)
 	{
@@ -1613,14 +1572,12 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 		{
 			const FVector Ahead = Location + GetActorForwardVector() * AheadDist;
 			FHitResult AheadHit;
-			if (World->LineTraceSingleByChannel(
-					AheadHit,
-					Ahead + FVector(0.0f, 0.0f, GroundTraceUp),
-					Ahead - FVector(0.0f, 0.0f, GroundTraceDown),
-					ECC_Visibility, Params))
+			if (World->LineTraceSingleByChannel(AheadHit, Ahead + FVector(0.0f, 0.0f, GroundTraceUp),
+			                                    Ahead - FVector(0.0f, 0.0f, GroundTraceDown), ECC_Visibility,
+			                                    Params))
 			{
-				// 只取更高的那个：前方更高就提前爬，前方更低（下坡/悬崖）不提前掉，
-				// 掉下去是重力的事，提前掉会让车在坡顶就开始往下钻。
+				// 只提前跟随更高的地面，前方变低时仍由当前地面和重力决定下落
+				
 				DesiredZ = FMath::Max(DesiredZ, AheadHit.ImpactPoint.Z + HoverHeight);
 			}
 		}
@@ -1628,15 +1585,15 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 
 	if (bHitGround)
 	{
-		// 离地超过这个高度就当是飞出去了，交给重力。阈值必须大于 MaxStepHeight，
-		// 否则刚跨上一级台阶就被判成起飞，车会在台阶上反复弹。
+		// 离地阈值应高于可跨台阶高度，避免刚跨上台阶就进入下落状态
+		
 		if (Location.Z <= DesiredZ + FMath::Max(GroundStickTolerance, MaxStepHeight + 10.0f))
 		{
 			float NewZ = FMath::FInterpTo(Location.Z, DesiredZ, DeltaSeconds, GroundSnapSpeed);
 			if (DesiredZ > Location.Z)
 			{
-				// 上坡时给一个爬升率下限。只靠指数插值会一直欠着一截（坡越陡车越快欠得越多），
-				// 而下一帧的水平 sweep 是在那个偏低的位置做的，于是直接撞在坡面上掉速。
+				// 上坡时保证最低抬升速度，避免车身偏低导致下一帧撞到坡面
+				
 				const float MinClimbZ = FMath::Min(DesiredZ, Location.Z + MaxClimbRate * DeltaSeconds);
 				NewZ = FMath::Max(NewZ, MinClimbZ);
 			}
@@ -1660,21 +1617,22 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 
 	SetActorLocation(Location, false, nullptr, ETeleportType::None);
 
-	// 3) 车身跟着坡面抬头/低头。太陡的面（马路牙子、墙根）不跟，跟了会把车竖起来。
+	// 3) 车身跟着坡面抬头/低头；太陡的面（马路牙子、墙根）不跟，跟了会把车竖起来
 	if (bHitGround && bWasGrounded)
 	{
 		const FVector Normal = GroundHit.ImpactNormal;
 		const float SlopeAngle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Normal.Z, -1.0f, 1.0f)));
 		if (SlopeAngle <= MaxGroundAlignAngle)
 		{
-			const FVector PlanarForward = FVector::VectorPlaneProject(GetActorForwardVector(), Normal).GetSafeNormal();
+			const FVector PlanarForward =
+			    FVector::VectorPlaneProject(GetActorForwardVector(), Normal).GetSafeNormal();
 			if (!PlanarForward.IsNearlyZero())
 			{
 				const FRotator Current = GetActorRotation();
-				FRotator Aligned = FMath::RInterpTo(
-					Current, FRotationMatrix::MakeFromXZ(PlanarForward, Normal).Rotator(),
-					DeltaSeconds, GroundAlignSpeed);
-				// 朝向只由转向控制，别让地面对齐把车头带跑。
+				FRotator Aligned =
+				    FMath::RInterpTo(Current, FRotationMatrix::MakeFromXZ(PlanarForward, Normal).Rotator(),
+					                 DeltaSeconds, GroundAlignSpeed);
+				// 朝向只由转向控制，别让地面对齐把车头带跑
 				Aligned.Yaw = Current.Yaw;
 				SetActorRotation(Aligned);
 			}
@@ -1682,6 +1640,7 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 	}
 }
 
+// 尝试越过低矮障碍，并检查上方与前方空间
 bool ADeliveryMotorbike::TryStepUp(const FVector& RemainingDelta, const FHitResult& BlockingHit)
 {
 	if (MaxStepHeight <= 0.0f || RemainingDelta.IsNearlyZero())
@@ -1689,7 +1648,7 @@ bool ADeliveryMotorbike::TryStepUp(const FVector& RemainingDelta, const FHitResu
 		return false;
 	}
 
-	// 撞到倒挂的面（天花板、桥底）就别往上抬了，抬也是白抬。
+	// 顶部碰撞时不尝试抬高跨越
 	if (BlockingHit.ImpactNormal.Z < -0.1f)
 	{
 		return false;
@@ -1698,7 +1657,7 @@ bool ADeliveryMotorbike::TryStepUp(const FVector& RemainingDelta, const FHitResu
 	const FVector StartLocation = GetActorLocation();
 	const FVector StepUp(0.0f, 0.0f, MaxStepHeight);
 
-	// ① 抬。头顶有东西（低矮的桥洞、车库门）就整体放弃。
+	// ① 抬；头顶有东西（低矮的桥洞、车库门）就整体放弃
 	FHitResult UpHit;
 	AddActorWorldOffset(StepUp, true, &UpHit);
 	if (UpHit.bBlockingHit)
@@ -1707,9 +1666,9 @@ bool ADeliveryMotorbike::TryStepUp(const FVector& RemainingDelta, const FHitResu
 		return false;
 	}
 
-	// ② 往前走完这一帧剩下的位移。抬起来之后还是几乎走不动，说明挡着的是一堵真墙。
-	// 阈值做成参数（StepUpMinProgress）而不是写死：真墙和"台阶上方还蹭到点东西"
-	// 在这个判据下长得一样，写死 0.1 的话后者会被误判成墙、车就卡在那儿。
+	// 抬高后继续前移，未达到最小前进比例时撤回，按撞墙处理
+	
+	
 	FHitResult ForwardHit;
 	AddActorWorldOffset(RemainingDelta, true, &ForwardHit);
 	if (ForwardHit.bBlockingHit && ForwardHit.Time < StepUpMinProgress)
@@ -1718,17 +1677,17 @@ bool ADeliveryMotorbike::TryStepUp(const FVector& RemainingDelta, const FHitResu
 		return false;
 	}
 
-	// ③ 落回地面。没落到东西也算成功——那是"从台阶上飞出去"，交给贴地/重力那一步。
+	// ③ 落回地面；没落到东西也算成功——那是"从台阶上飞出去"，交给贴地/重力那一步
 	FHitResult DownHit;
 	AddActorWorldOffset(-StepUp, true, &DownHit);
 	if (DownHit.bBlockingHit)
 	{
-		const float StepSlope = FMath::RadiansToDegrees(
-			FMath::Acos(FMath::Clamp(DownHit.ImpactNormal.Z, -1.0f, 1.0f)));
+		const float StepSlope =
+		    FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(DownHit.ImpactNormal.Z, -1.0f, 1.0f)));
 		if (StepSlope > MaxClimbAngle)
 		{
-			// 落在一个比能爬的坡还陡的面上，不算站住——这多半是墙根的斜角，
-			// 不撤回的话车会顺着墙一点点往上蹭。
+			// 落点坡度超过可行驶范围时撤回，避免沿墙角不断向上爬
+			
 			SetActorLocation(StartLocation, false, nullptr, ETeleportType::TeleportPhysics);
 			return false;
 		}
@@ -1737,6 +1696,7 @@ bool ADeliveryMotorbike::TryStepUp(const FVector& RemainingDelta, const FHitResu
 	return true;
 }
 
+// 根据转向和速度更新车身侧倾
 void ADeliveryMotorbike::UpdateLean(float DeltaSeconds)
 {
 	if (!MeshRoot)
@@ -1748,14 +1708,15 @@ void ADeliveryMotorbike::UpdateLean(float DeltaSeconds)
 	const float VisualSpeed = bRemote ? ReplicatedRiderMotion.Speed * MaxSpeed : CurrentSpeed;
 	const float VisualSteer = bRemote ? ReplicatedRiderMotion.Steer : SteerInput;
 	const float SpeedFactor = FMath::Clamp(FMath::Abs(VisualSpeed) / TurnSpeedReference, 0.0f, 1.0f);
-	// 远端也用复制的驾驶输入表现车身侧倾；不把这些值写回实际驾驶状态。
+	// 远端也用复制的驾驶输入表现车身侧倾；不把这些值写回实际驾驶状态
 	const float TargetLean = -VisualSteer * MaxLeanAngle * SpeedFactor;
 	CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaSeconds, LeanSpeed);
-	// 被撞歪的倾斜直接叠在转弯侧倾上：它自己按 KnockDecay 衰减，不用再插值一次，
-	// 不然撞击那一下的尖峰会被抹平，看着就不像挨了一下。
+	// 撞击侧倾直接叠加到转弯侧倾，不再平滑削弱撞击瞬间的反馈
+	
 	MeshRoot->SetRelativeRotation(FRotator(0.0f, 0.0f, CurrentLean + KnockTilt));
 }
 
+// 让车把与前轮跟随转向角
 void ADeliveryMotorbike::UpdateSteerVisual(float DeltaSeconds)
 {
 	if (!SteerPivot)
@@ -1763,13 +1724,14 @@ void ADeliveryMotorbike::UpdateSteerVisual(float DeltaSeconds)
 		return;
 	}
 
-	// 和车身实际转向不同，龙头**不乘速度系数**：停着打把车把也该跟着动，
-	// 那是玩家按键有没有被接收到的即时反馈。车身不转、龙头转，观感上也正确。
-	const float VisualSteer = !HasAuthority() && !IsLocallyControlled() ? ReplicatedRiderMotion.Steer : SteerInput;
+	// 车把转动不受车速缩放，停车时也能显示转向输入
+	
+	const float VisualSteer =
+	    !HasAuthority() && !IsLocallyControlled() ? ReplicatedRiderMotion.Steer : SteerInput;
 	const float Target = FMath::Clamp(VisualSteer, -1.0f, 1.0f) * MaxVisualSteerAngle;
 	CurrentVisualSteer = FMath::FInterpTo(CurrentVisualSteer, Target, DeltaSeconds, SteerVisualSpeed);
 
-	// 局部 Yaw：+X 转向 +Y 就是往右打，和 SteerInput>0 = 按 D 对得上。
+	// 局部 Yaw：+X 转向 +Y 就是往右打，和 SteerInput>0 = 按 D 对得上
 	SteerPivot->SetRelativeRotation(FRotator(0.0f, CurrentVisualSteer, 0.0f));
 	if (BarPivot)
 	{
@@ -1777,11 +1739,12 @@ void ADeliveryMotorbike::UpdateSteerVisual(float DeltaSeconds)
 	}
 	if (RiderPivot)
 	{
-		// 转身由胸腰骨骼完成，整具骑手不再绕座位转，脚踏目标因而保持稳定。
+		// 转身由胸腰骨骼完成，整具骑手不再绕座位转，脚踏目标因而保持稳定
 		RiderPivot->SetRelativeRotation(FRotator::ZeroRotator);
 	}
 }
 
+// 根据实际行驶距离更新车轮旋转
 void ADeliveryMotorbike::UpdateWheelSpin(float DeltaSeconds)
 {
 	if (!bSpinWheels || WheelPivots.Num() == 0 || DeltaSeconds <= 0.0f)
@@ -1789,20 +1752,21 @@ void ADeliveryMotorbike::UpdateWheelSpin(float DeltaSeconds)
 		return;
 	}
 
-	// 远端客户端不跑 UpdateSpeed，CurrentSpeed 恒为 0，轮子会僵在那儿不动。
-	// 那边就用实际位移在车头方向上的分量反推车速——复制过来的位置本来就是真的。
+	// 远端客户端从实际位移估算车速，用于驱动轮子旋转
+	
 	const FVector Location = GetActorLocation();
 	float Speed = CurrentSpeed;
 	if (!HasAuthority() && !IsLocallyControlled())
 	{
-		Speed = bWheelLocationValid
-			? FVector::DotProduct(Location - LastWheelLocation, GetActorForwardVector()) / DeltaSeconds
-			: 0.0f;
+		Speed =
+		    bWheelLocationValid
+		        ? FVector::DotProduct(Location - LastWheelLocation, GetActorForwardVector()) / DeltaSeconds
+		        : 0.0f;
 	}
 	LastWheelLocation = Location;
 	bWheelLocationValid = true;
 
-	// 纯滚动：接地点速度为 0，所以角速度 = 线速度 / 半径。
+	// 纯滚动：接地点速度为 0，所以角速度 = 线速度 / 半径
 	const float Radius = FMath::Max(WheelRadius, 1.0f);
 	WheelSpinAngle += FMath::RadiansToDegrees(Speed / Radius) * DeltaSeconds * WheelSpinSign;
 
@@ -1810,23 +1774,25 @@ void ADeliveryMotorbike::UpdateWheelSpin(float DeltaSeconds)
 	{
 		if (Pivot)
 		{
-			// 只动 Roll（绕局部 X = 轮轴）。轮轴组件上没有别的旋转，
-			// 所以不用担心 FRotator 的 Roll→Pitch→Yaw 顺序把它变成点头。
+			// 轮轴只绕局部横轴旋转，其他姿态由父组件控制
+			
 			Pivot->SetRelativeRotation(FRotator(0.0f, 0.0f, WheelSpinAngle));
 		}
 	}
 }
 
+// 将驾驶视角同步到控制器
 void ADeliveryMotorbike::SyncControlRotation()
 {
-	// 镜头自己不吃控制旋转，但下车后角色的弹簧臂要用它。一路同步着车头朝向，
-	// 下车那一瞬间视角就是连续的，不会突然甩回上车之前的方向。
+	// 固定镜头模式同步车头方向到控制旋转，使下车后镜头连续
+	
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		PC->SetControlRotation(FRotator(CameraPitch, GetActorRotation().Yaw, 0.0f));
 	}
 }
 
+// 显示当前驾驶视角对应的按键提示
 void ADeliveryMotorbike::PushCameraHint()
 {
 	UDeliveryPromptSubsystem* Prompt = UDeliveryPromptSubsystem::Get(this);
@@ -1834,12 +1800,13 @@ void ADeliveryMotorbike::PushCameraHint()
 	{
 		return;
 	}
-	// 键名从实际绑的键取，改了 CameraToggleKey 提示会跟着变。
-	Prompt->PushCornerHint(FText::Format(
-		bFreeLookCamera
-			? NSLOCTEXT("Delivery", "MotorbikeHintFree", "按 {0} 切换视角（当前：自由）")
-			: NSLOCTEXT("Delivery", "MotorbikeHintFixed", "按 {0} 切换视角（当前：固定）"),
-		CameraToggleKey.GetDisplayName(false)), false);
+	// 键名从实际绑的键取，改了 CameraToggleKey 提示会跟着变
+	Prompt->PushCornerHint(
+	    FText::Format(bFreeLookCamera
+	                      ? NSLOCTEXT("Delivery", "MotorbikeHintFree", "按 {0} 切换视角（当前：自由）")
+						  : NSLOCTEXT("Delivery", "MotorbikeHintFixed", "按 {0} 切换视角（当前：固定）"),
+		              CameraToggleKey.GetDisplayName(false)),
+	    false);
 }
 
 void ADeliveryMotorbike::ShowNotice(const FText& Text, float Seconds)
@@ -1848,12 +1815,13 @@ void ADeliveryMotorbike::ShowNotice(const FText& Text, float Seconds)
 	NoticeRemaining = Seconds;
 }
 
+// 显示短时车辆操作提示
 void ADeliveryMotorbike::PushNotice()
 {
 	if (UDeliveryPromptSubsystem* Prompt = UDeliveryPromptSubsystem::Get(this))
 	{
-		const FVector Anchor = GetActorLocation()
-			+ (Interactable ? Interactable->PromptOffset : FVector(0.0f, 0.0f, 180.0f));
+		const FVector Anchor =
+		    GetActorLocation() + (Interactable ? Interactable->PromptOffset : FVector(0.0f, 0.0f, 180.0f));
 		Prompt->PushPrompt(NoticeText, Anchor);
 	}
 }

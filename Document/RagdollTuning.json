@@ -1,0 +1,34 @@
+[
+  {
+    "title": "使用方法",
+    "body": "入口：窗口 → Delivery 布娃娃与出拳调参。\n\n改当前角色：在关卡中选中角色，点击“读取选中角色”，改完保存地图。\n改角色默认值：点击“打开角色蓝图默认值”，选择 RagdollCombat 或 ActiveRagdoll 组件，改完编译并保存蓝图。\n\n先停止运行，再改参数，重新运行看效果。每次只改一项，先小幅调整；效果变差就撤销。"
+  },
+  {
+    "title": "出拳｜速度与拳路",
+    "body": "RagdollCombat 调出拳时机和起始速度；ActiveRagdoll → ArmPose 调手臂姿势。\n\n出拳慢：小幅增加 PunchExtendSpeed。\n收拳慢：小幅增加 PunchRetractSpeed。\n手臂跟不上目标：降低 PunchExtendSpeed，再检查 PunchStrength。\n拳头伸不远：先检查肩肘关节是否卡住，再调整 PunchReach。\n拳路横摆：减小 WindupOutward 或 WindupBack；转体太大时再减小 PunchSideStanceAngle。\n\nPunchImpulse 控制释放时的速度增量，不是伤害。手、前臂、上臂倍率分别为 HandImpulseScale、ForearmImpulseScale、UpperArmImpulseScale，默认 1、0.5、0.1。"
+  },
+  {
+    "title": "出拳｜命中与连贯性",
+    "body": "拳头释放后持续检测实际移动路径，结束或被打断后停止。同一拳对同一角色只扣一次血。命中偏差先检查 HitRadius 与 ArmReachOffset。\n下一拳按不出来：先看手臂是否收回，再调整 PunchRetractSpeed；只缩短 PunchEndDelay 不一定有效。\n\nWindupDelay：开始出拳到释放的时间，至少 0.05 秒。\nPunchEndDelay：开始出拳到结束通知的时间，释放后保持有效窗口，直到出拳结束。\n\n命中范围只影响判定，不会让拳头伸得更远。伤害由 GAS 技能配置。"
+  },
+  {
+    "title": "身体稳定",
+    "body": "一出拳就前扑：先降低 PunchImpulse 或 UpperArmImpulseScale；仍然前扑，再减小 PunchLungeDistance 或 PunchTorsoFollowLeanAngle。\n\n手臂抖动：先检查碰撞体和关节，再小幅增加 ArmPose.DampingRatio；驱动太强时降低 PunchStrength。\n\n整个身体抖动：先检查身体部位是否互相挤压，再分别调整 RootLinearStrength（髋部位置）和 StabilizedRootAngularStrength（身体直立）。\n\n调整后都测试左右拳、连续出拳和移动中出拳。"
+  },
+  {
+    "title": "走路",
+    "body": "脚跟不上身体：先降低 DesiredMoveSpeed，再调整 ControlledStrideLength（步幅）和 ControlledStrideDuration（单步时间）。\n\n拖脚：检查地面碰撞，再适当增加 ControlledStepHeight（抬脚高度）。\n\n左右脚交叉：检查 StableMinimumFootSide（脚离身体中线的最小距离）和站姿间距。\n\n坡地打滑：先确认脚能接触地面，再小幅调整 SlopeSupportTraction（防滑辅助）。"
+  },
+  {
+    "title": "受击与起身",
+    "body": "受击太僵硬：降低 HitReactionStrengthMultiplier，让身体在受击时更松。\n受击反应太短：增加 HitReactionDuration。\n起身太突然：增加 LimpRecoveryRiseDuration。\n一直不起身：先检查晕倒状态、地面和移动速度，再查看 LimpRecoveryMaxSpeed。\n\n这些参数调整身体表现，不改变伤害。"
+  },
+  {
+    "title": "网络",
+    "body": "只在其他玩家视角中跳动时，再检查网络参数。\n\nNetworkSnapshotRate：身体状态的发送频率。\nOwnerCorrectionSpeed：本机位置纠正的速度。\nOwnerHardCorrectionDistance：位置误差多大时直接纠正。\nMaxSnapshotExtrapolation：没收到新数据时，最多继续预测多久。\n\n先保证单机动作正常，再用两名玩家测试。两端使用相同的已保存配置。"
+  },
+  {
+    "title": "参数说明",
+    "body": "悬停参数可查看用途，括号里的英文名用于搜索代码。\nUE 会自动换算单位：1200 cm/s 可能显示为 12 m/s。\n滑块范围只是方便拖动，不代表推荐值。\n蓝图和关卡可能有自己的参数，以当前编辑对象的数值为准。\n部分设置只在角色创建时读取，修改后要重新运行。"
+  }
+]

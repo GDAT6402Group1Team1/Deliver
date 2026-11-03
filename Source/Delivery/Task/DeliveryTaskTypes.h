@@ -11,244 +11,240 @@ class UDeliveryTaskDefinition;
 class USoundBase;
 
 /**
- * 任务状态。没有失败态：超时只影响奖励倍率，不会结束任务。
- * 流转：Locked →(解锁条件满足，来电入队) Offered →(**玩家按接听**) AwaitingPickup
- *       →(有人拿到快递) InProgress →(交付) Completed
- *
- * 拒接/漏接**不改状态**，留在 Offered；电话队列会在 RedialDelaySeconds 后重拨。
+ * 任务依次经历未解锁、等待接听、待取件、配送中和已完成
+ * 未接电话时保持等待接听，超时只影响奖励，不结束任务
  */
 UENUM(BlueprintType)
 enum class EDeliveryTaskStatus : uint8
 {
-	/** 解锁条件未满足，手机里看不到。 */
-	Locked UMETA(DisplayName="未解锁"),
+	/** 解锁条件未满足，手机里看不到 */
+	Locked UMETA(DisplayName = "未解锁"),
 	/**
-	 * 解锁条件满足、电话已入队，**但玩家还没按接听**。
-	 *
-	 * 这一档必须是独立状态，不能靠「AwaitingPickup + 一个 bool」表示：
-	 * 全项目有十几处按状态分支（任务条、脚边箭头、罗盘图钉、建筑高亮、取货点、
-	 * 调试命令），只要有一处忘了额外判那个 bool，表现就是"电话还没接，
-	 * 取货引导就全亮了"——而这正是之前那一版的毛病。状态自己说清楚，
-	 * 这类漏判在结构上就不可能发生。
+	 * 任务已解锁并安排来电，但尚未接听
+	 * 此时不显示取货指引，接听后才进入待取件状态
 	 */
-	Offered UMETA(DisplayName="已来电未接"),
-	/** 已接听、计时已开始，等着去取件。 */
-	AwaitingPickup UMETA(DisplayName="待取件"),
-	/** 有人取过件，全局计时中。同一时间全世界只允许一个。 */
-	InProgress UMETA(DisplayName="进行中"),
-	/** 已交付。 */
-	Completed UMETA(DisplayName="已完成")
+	Offered UMETA(DisplayName = "已来电未接"),
+	/** 已接听、计时已开始，等着去取件 */
+	AwaitingPickup UMETA(DisplayName = "待取件"),
+	/** 有人取过件，全局计时中；同一时间全世界只允许一个 */
+	InProgress UMETA(DisplayName = "进行中"),
+	/** 已交付 */
+	Completed UMETA(DisplayName = "已完成")
 };
 
-/** 倒计时配色阶段，只驱动 UI。 */
+/** 倒计时配色阶段，只驱动 UI */
 UENUM(BlueprintType)
 enum class EDeliveryTaskUrgency : uint8
 {
-	Green UMETA(DisplayName="充裕"),
-	Yellow UMETA(DisplayName="偏紧"),
-	Red UMETA(DisplayName="紧迫")
+	Green UMETA(DisplayName = "充裕"),
+	Yellow UMETA(DisplayName = "偏紧"),
+	Red UMETA(DisplayName = "紧迫")
 };
 
 UENUM(BlueprintType)
 enum class EDeliveryPhoneCallType : uint8
 {
-	/** 任务解锁来电。 */
-	TaskUnlocked UMETA(DisplayName="任务解锁"),
-	/** 首次超时的催促来电，同一任务只会有一次。 */
-	Overdue UMETA(DisplayName="超时催促")
+	/** 任务解锁来电 */
+	TaskUnlocked UMETA(DisplayName = "任务解锁"),
+	/** 首次超时的催促来电，同一任务只会有一次 */
+	Overdue UMETA(DisplayName = "超时催促")
 };
 
 /**
- * 手机当前处于哪个阶段。队列是全局共享的，所以这个状态对所有玩家是同一份：
- * 任意一个人接听，所有人一起进入通话。
+ * 手机当前处于哪个阶段；队列是全局共享的，所以这个状态对所有玩家是同一份：
+ * 任意一个人接听，所有人一起进入通话
  */
 UENUM(BlueprintType)
 enum class EDeliveryPhoneCallState : uint8
 {
-	/** 没有电话，手机待机。 */
-	Idle UMETA(DisplayName="待机"),
-	/** 响铃中，等人接听。超时没人接就算未接来电。 */
-	Ringing UMETA(DisplayName="来电中"),
-	/** 已接通，正在播台词。 */
-	InCall UMETA(DisplayName="通话中")
+	/** 没有电话，手机待机 */
+	Idle UMETA(DisplayName = "待机"),
+	/** 响铃中，等人接听；超时没人接就算未接来电 */
+	Ringing UMETA(DisplayName = "来电中"),
+	/** 已接通，正在播台词 */
+	InCall UMETA(DisplayName = "通话中")
 };
 
-/** 一通电话的内容。真正的播放由 UI / 音频层负责，这里只存数据。 */
+/** 一通电话的内容；真正的播放由 UI / 音频层负责，这里只存数据 */
 USTRUCT(BlueprintType)
+
 struct FDeliveryPhoneCallContent
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Phone")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Phone")
 	FText CallerName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Phone", meta=(MultiLine="true"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Phone", meta = (MultiLine = "true"))
 	FText Dialogue;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Phone")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Phone")
 	TSoftObjectPtr<USoundBase> Voice;
 
 	/**
-	 * 接通之后台词播多久。到点自动挂断，进下一通。
+	 * 接通之后台词播多久；到点自动挂断，进下一通
 	 * 由服务器计时而不是等客户端播完回报：队列是全局共享的，
-	 * 不能让某一个客户端的播放进度决定所有人什么时候进下一通。
+	 * 不能让某一个客户端的播放进度决定所有人什么时候进下一通
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Phone", meta=(ClampMin="0.5", Units="s"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Phone", meta = (ClampMin = "0.5", Units = "s"))
 	float DurationSeconds = 6.f;
 
-	/** 响铃等待多久算未接来电。 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Phone", meta=(ClampMin="1.0", Units="s"))
+	/** 响铃等待多久算未接来电 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Phone", meta = (ClampMin = "1.0", Units = "s"))
 	float RingDurationSeconds = 8.f;
 };
 
 /**
- * 时间评价的一档。用**交付时的剩余秒数**表达：正数是提前，负数是超时。
- * 按从大到小配置，和策划表里 `150,1.2|60,1.1|0,1|-60,0.9` 的顺序一致。
- *
- * 用剩余时间而不是已用时间，一是填表时能直接抄、不用拿限时去心算，
- * 二是超时档位天然就是负数，不需要再单独配一个"超时倍率"。
+ * 按交付时的剩余秒数配置奖励档位，并按时间从大到小排列
+ * 正数表示提前送达，负数表示超时
  */
 USTRUCT(BlueprintType)
+
 struct FDeliveryTimeGrade
 {
 	GENERATED_BODY()
 
-	/** 交付时剩余不少于这个秒数就吃这一档。负数表示已经超时了这么多秒。 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reward", meta=(Units="s"))
+	/** 交付时剩余不少于这个秒数就吃这一档；负数表示已经超时了这么多秒 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward", meta = (Units = "s"))
 	float RemainingSeconds = 0.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reward", meta=(ClampMin="0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward", meta = (ClampMin = "0.0"))
 	float Multiplier = 1.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reward")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward")
 	FText GradeName;
 };
 
-/** 特殊事件奖励规则：途中上报的事件 Tag 命中哪条就乘哪条倍率。 */
+/** 特殊事件奖励规则：途中上报的事件 Tag 命中哪条就乘哪条倍率 */
 USTRUCT(BlueprintType)
+
 struct FDeliverySpecialEventRule
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reward")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward")
 	FGameplayTag EventTag;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reward", meta=(ClampMin="0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward", meta = (ClampMin = "0.0"))
 	float Multiplier = 1.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Reward")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward")
 	FText DisplayName;
 };
 
 /**
- * 一个任务的运行时状态。整个数组由 GameState 上的任务管理器持有并复制，
- * 所以所有客户端看到的解锁、计时、完成都是同一份数据。
+ * 一个任务的运行时状态；整个数组由 GameState 上的任务管理器持有并复制，
+ * 所以所有客户端看到的解锁、计时、完成都是同一份数据
  */
 USTRUCT(BlueprintType)
+
 struct FDeliveryTaskState
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	TObjectPtr<UDeliveryTaskDefinition> Definition = nullptr;
 
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	EDeliveryTaskStatus Status = EDeliveryTaskStatus::Locked;
 
-	/** 接通任务解锁电话时的服务器时间；漏接后直接取件时以取件时刻兜底。 */
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	/** 接听任务电话时记录的服务器时间，后续取件和换手不重置 */
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	float StartServerTime = 0.f;
 
-	/** StartServerTime 可能合法地等于 0，所以不能拿时间戳本身充当是否已开始的标记。 */
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	/** StartServerTime 可能合法地等于 0，所以不能拿时间戳本身充当是否已开始的标记 */
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	bool bTimerStarted = false;
 
-	/** 交付完成时的服务器时间，用于结算时间评价。 */
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	/** 交付完成时的服务器时间，用于结算时间评价 */
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	float CompleteServerTime = 0.f;
 
-	/** 催促电话只打一次，打过就置位。 */
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	/** 催促电话只打一次，打过就置位 */
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	bool bOverdueCallPlayed = false;
 
-	/** 途中累计的特殊事件，交付时参与奖励倍率计算。 */
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	/** 途中累计的特殊事件，交付时参与奖励倍率计算 */
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	TArray<FGameplayTag> SpecialEvents;
 
-	/** 最终完成交付的玩家。奖励只结算给他，其他人只是任务一起结束。 */
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	/** 最终完成交付的玩家；奖励只结算给他，其他人只是任务一起结束 */
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	TObjectPtr<APlayerState> Deliverer = nullptr;
 };
 
-/** UI 每帧查询用的计时快照。 */
+/** UI 每帧查询用的计时快照 */
 USTRUCT(BlueprintType)
+
 struct FDeliveryTaskTimeSnapshot
 {
 	GENERATED_BODY()
 
-	/** 任务是否在计时（接听后，AwaitingPickup 和 InProgress 都可能为 true）。 */
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	/** 任务是否在计时（接听后，AwaitingPickup 和 InProgress 都可能为 真） */
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	bool bRunning = false;
 
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	float ElapsedSeconds = 0.f;
 
-	/** 剩余秒数。超时后为负值，UI 用它的绝对值配合 "+" 号做正计时显示。 */
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	/** 剩余秒数；超时后为负值，UI 用它的绝对值配合 "+" 号做正计时显示 */
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	float RemainingSeconds = 0.f;
 
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	bool bOverdue = false;
 
-	UPROPERTY(BlueprintReadOnly, Category="Task")
+	UPROPERTY(BlueprintReadOnly, Category = "Task")
 	EDeliveryTaskUrgency Urgency = EDeliveryTaskUrgency::Green;
 };
 
-/** 奖励结算明细：最终奖励 = 基础奖励 × 时间评价 × 特殊事件。 */
+/** 奖励结算明细：最终奖励 = 基础奖励 × 时间评价 × 特殊事件 */
 USTRUCT(BlueprintType)
+
 struct FDeliveryRewardBreakdown
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, Category="Reward")
+	UPROPERTY(BlueprintReadOnly, Category = "Reward")
 	int32 BaseReward = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category="Reward")
+	UPROPERTY(BlueprintReadOnly, Category = "Reward")
 	float TimeMultiplier = 1.f;
 
-	UPROPERTY(BlueprintReadOnly, Category="Reward")
+	UPROPERTY(BlueprintReadOnly, Category = "Reward")
 	float SpecialMultiplier = 1.f;
 
-	UPROPERTY(BlueprintReadOnly, Category="Reward")
+	UPROPERTY(BlueprintReadOnly, Category = "Reward")
 	int32 FinalReward = 0;
 
-	/** 命中的时间评价档名字；超时交付时为空。 */
-	UPROPERTY(BlueprintReadOnly, Category="Reward")
+	/** 命中的时间评价档名字；超时交付时为空 */
+	UPROPERTY(BlueprintReadOnly, Category = "Reward")
 	FText TimeGradeName;
 
-	UPROPERTY(BlueprintReadOnly, Category="Reward")
+	UPROPERTY(BlueprintReadOnly, Category = "Reward")
 	TArray<FGameplayTag> SpecialEvents;
 
-	UPROPERTY(BlueprintReadOnly, Category="Reward")
+	UPROPERTY(BlueprintReadOnly, Category = "Reward")
 	float ElapsedSeconds = 0.f;
 
-	UPROPERTY(BlueprintReadOnly, Category="Reward")
+	UPROPERTY(BlueprintReadOnly, Category = "Reward")
 	bool bOverdue = false;
 };
 
-/** 电话队列里的一项。 */
+/** 电话队列里的一项 */
 USTRUCT(BlueprintType)
+
 struct FDeliveryPhoneCall
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, Category="Phone")
+	UPROPERTY(BlueprintReadOnly, Category = "Phone")
 	TObjectPtr<UDeliveryTaskDefinition> Task = nullptr;
 
-	UPROPERTY(BlueprintReadOnly, Category="Phone")
+	UPROPERTY(BlueprintReadOnly, Category = "Phone")
 	EDeliveryPhoneCallType CallType = EDeliveryPhoneCallType::TaskUnlocked;
 
-	/** 递增编号。客户端靠它判断队首换人了没有，不能只比 Task 指针。 */
-	UPROPERTY(BlueprintReadOnly, Category="Phone")
+	/** 递增编号；客户端靠它判断队首换人了没有，不能只比 Task 指针 */
+	UPROPERTY(BlueprintReadOnly, Category = "Phone")
 	int32 CallId = 0;
 };

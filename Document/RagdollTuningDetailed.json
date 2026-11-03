@@ -1,0 +1,58 @@
+[
+  {
+    "title": "开始调参：先确认改的是谁",
+    "body": "入口：窗口 → Delivery 布娃娃与出拳调参。关卡里选中角色后，点击“读取选中角色”编辑该实例；没有角色实例时，点击“角色蓝图”，在 BP_DeliveryMan 的组件树选择 RagdollCombat 或 ActiveRagdoll。\n\n关卡实例参数只影响这个角色，保存地图才保留；蓝图默认值影响没有单独覆盖该字段的实例，修改后编译并保存蓝图。实例旁的重置箭头恢复的是继承值，不一定是 C++ 初始值。先记下当前值或保存测试蓝图，不要把文档中的 C++ 默认值当作实际配置。"
+  },
+  {
+    "title": "一次只改一个因素",
+    "body": "先在平地测试站立，再测试左右单拳、连续出拳和出拳后行走，最后测试坡地、受击和联网。每次只改一个字段或一组明确关联的时序，先尝试当前值的约 5%—10%，记录前后差异。这是排查方法，不是适合所有骨架的推荐数值。\n\n停止 PIE 后再修改，再重新运行。ArmPose 在物理控制创建时复制，关节限位和部分驱动在启动时建立；运行中数字改变，不代表真实控制器已经重建。工具不提供热重建身体功能。"
+  },
+  {
+    "title": "出拳速度、姿势与伤害",
+    "body": "RagdollCombat 的 PunchImpulse 提供释放瞬间的速度增量。HandImpulseScale、ForearmImpulseScale、UpperArmImpulseScale 分别决定手、前臂、上臂获得多少，默认仍为 1 / 0.5 / 0.1。AddImpulse 使用速度变化模式，所以参数不是牛顿秒，也不是伤害。\n\nActiveRagdoll 的 ArmPose 决定拳头目标在哪里、目标移动多快、手臂怎样追随。起始速度和姿势驱动共同影响拳路，实际运动仍受物理碰撞约束。\n\n命中半径和检测时刻决定何时算打中，不会把真实拳头推得更远。GAS 负责伤害。"
+  },
+  {
+    "title": "拳头伸不出去、只甩前臂",
+    "body": "先检查 Physics Asset 的肩肘关节是否允许目标姿势、骨骼名称是否正确、碰撞体是否互相阻挡，不要先加 PunchImpulse。\n\n确认关节正常后，看 ArmPose.PunchReach 是否足够，再看 PunchExtendSpeed 是否过快，让实际手臂跟不上目标。目标已经前送、手臂仍落后时，先减小前送速度，再小幅比较 PunchStrength 和 UpperArmStrengthScale。肩部跟着晃时，再检查 PunchBraceStrength。关节修改后重新运行。"
+  },
+  {
+    "title": "出拳像横着扇过去",
+    "body": "先减小 ArmPose.WindupOutward 和 WindupBack，观察收拳点是否过于偏向身体侧后方。保留肩旁的通过空间，不要直接把外移归零。\n\n再检查 PunchSideStanceAngle 和 PunchFollowThroughAngle：转体过大也会把直拳带成横摆。PunchInward 控制终点向身体中线收的程度，过大可能横穿胸前。每次只改一个方向参数，左右手都测试。"
+  },
+  {
+    "title": "一出拳身体就前扑或被带倒",
+    "body": "先比较 PunchImpulse 和 UpperArmImpulseScale 是否过大。再小幅降低 PunchLungeDistance、PunchTorsoFollowLeanAngle，判断是否由髋部前压或胸腰前摆造成失衡。\n\n角色站稳时再检查 PunchBraceStrength 与 PunchFootSupportStrength，不要用过大的支撑强度掩盖目标位置错误。PunchSupportBreakDistance 用于被推离后解除支撑，随意调大可能让身体被脚吊住。原地和移动中出拳都需要测试。"
+  },
+  {
+    "title": "前送太慢、收拳太慢、下一拳按不出来",
+    "body": "前送主要看 ArmPose.PunchExtendSpeed，收回主要看 PunchRetractSpeed；WindupReleaseSpeed 只控制旧蓄力姿势的退出。\n\nPunchEndDelay 是攻击结束通知时间，不等于手臂已经收回。StartPunch 还会拒绝仍在恢复中的手臂。先检查动作是否真的收回，再调收回速度，不要只缩短结束时间。过快的前送或收回会让目标突然变化，实际刚体不一定跟得上。"
+  },
+  {
+    "title": "拳头碰到了却不算命中",
+    "body": "释放拳头时开启有效窗口，服务器在每次物理更新后，用球体检测拳头从上一帧到本帧经过的路径。攻击结束或被打断时关闭检测，同一拳对同一角色只结算一次伤害。\n\nWindupDelay 控制释放时刻，PunchEndDelay 控制攻击结束，HitWindowDelay 已不再使用。先确认实际拳路，再调整 HitRadius 和 ArmReachOffset；范围过大会产生隔空命中。低帧率时也需要保证物理时间正常推进，不能靠扩大检测范围补偿慢动作。"
+  },
+  {
+    "title": "站立或手臂持续抖动",
+    "body": "先检查 Physics Asset 的内部碰撞、相邻刚体质量和关节限位，确认身体部位没有互相挤压。\n\n只在手臂抖时，小幅比较 ArmPose.DampingRatio；驱动过强时，也可降低对应阶段强度。整个身体抖时，分别检查 RootLinearStrength（髋部位置驱动）与 StabilizedRootAngularStrength（直立驱动）。不要同时改全身强度，否则无法判断原因。Physics Control 的 Hz 参数是自然频率，不是传统弹簧刚度。"
+  },
+  {
+    "title": "走得快但脚跟不上、交叉或拖地",
+    "body": "先确认蓝图实际使用的 DesiredMoveSpeed，再看 ControlledStrideLength、ControlledStrideDuration 与 ControlledStepHeight。加速后脚跟不上，先恢复速度基线，再逐个测试步幅和单步时间。时间过短可能来不及落地。\n\n脚交叉时检查 StableMinimumFootSide 和站姿间距，不能只加抬脚高度。坡地滑动先核对坡角、地面碰撞和脚接触，再小幅调整 SlopeSupportTraction；它提供有上限的切向辅助，不会把脚锁在地上。"
+  },
+  {
+    "title": "受击不明显、恢复太突然",
+    "body": "受击太僵硬时，可小幅降低 HitReactionStrengthMultiplier，或延长 HitReactionDuration。前者减弱受击期间的上身驱动，后者延长持续时间，都不改变伤害。\n\n起身太突然可增加 LimpRecoveryRiseDuration，并检查 LimpRecoveryInitialDriveStrength。一直不起身，先检查是否仍在晕倒、地面是否有效、速度是否超过 LimpRecoveryMaxSpeed，不要先把稳定等待时间归零。"
+  },
+  {
+    "title": "本机正常，其他玩家看起来跳动",
+    "body": "先在单机确认物理正常，再用两名玩家测试。NetworkSnapshotRate 调整快照频率，OwnerCorrectionSpeed 与 OwnerHardCorrectionDistance 调整本机位置校正，MaxSnapshotExtrapolation 限制数据未到时继续推算的时间。\n\n不要用网络平滑参数修复单机抖动，也不要盲目增加推算时间。两端应使用一致的已保存角色配置；修改字段不会自动向已连接客户端分发新的参数。"
+  },
+  {
+    "title": "看懂面板里的 meta",
+    "body": "中文名称后保留代码名，便于搜索。鼠标悬停可查看用途；数值按秒、厘米、角度或速度显示单位。ClampMin / ClampMax 限制编辑输入，UIMax 只是拖动范围，不是经过实机验证的推荐值，也不是完整的运行时校验。\n\n原有参数默认值和硬范围保持不变。新增三项冲量比例保留原固定倍率。关节约束和质量问题仍需在 Physics Asset 中检查。\n\nUE 会自动换算单位，例如 1200 cm/s 显示为 12 m/s；输入时留意数值框后的单位。"
+  },
+  {
+    "title": "记录与恢复",
+    "body": "记录当前蓝图或实例、原值、新值、复现场景、左右拳表现和是否改善。单项变差就使用 Ctrl+Z 或恢复记录值，不要重置整份角色蓝图。\n\n默认值调好后保存并重新运行，再检查子蓝图和关卡实例是否存在旧覆盖。平地测试通过以后，还需要检查坡地、受击和多人表现。"
+  }
+]

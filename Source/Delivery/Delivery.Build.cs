@@ -30,6 +30,6 @@ public class Delivery : ModuleRules
             "DeveloperSettings"
         });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] { "PhysicsCore", "Chaos" });
 	}
 }

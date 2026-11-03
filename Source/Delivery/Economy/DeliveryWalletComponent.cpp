@@ -1,14 +1,14 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "DeliveryWalletComponent.h"
+#include "Economy/DeliveryWalletComponent.h"
 
-#include "DeliveryGameState.h"
+#include "Game/DeliveryGameState.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
-#include "Task/DeliveryTaskDefinition.h"
+#include "Task/Data/DeliveryTaskDefinition.h"
 #include "Task/DeliveryTaskManagerComponent.h"
 #include "TimerManager.h"
 
@@ -16,8 +16,8 @@ DEFINE_LOG_CATEGORY_STATIC(LogDeliveryWallet, Log, All);
 
 namespace
 {
-	/** GameState 还没就绪时的重试间隔。PlayerState 可能比 GameState 先 BeginPlay。 */
-	constexpr float BindRetrySeconds = 0.5f;
+/** GameState 还没就绪时的重试间隔；PlayerState 可能比 GameState 先 BeginPlay */
+constexpr float BindRetrySeconds = 0.5f;
 }
 
 UDeliveryWalletComponent::UDeliveryWalletComponent()
@@ -26,6 +26,7 @@ UDeliveryWalletComponent::UDeliveryWalletComponent()
 	SetIsReplicatedByDefault(true);
 }
 
+// 从玩家状态、角色或控制器查找对应的钱包
 UDeliveryWalletComponent* UDeliveryWalletComponent::FindWallet(AActor* Actor)
 {
 	if (!Actor)
@@ -60,6 +61,7 @@ UDeliveryWalletComponent* UDeliveryWalletComponent::FindWallet(AActor* Actor)
 	return nullptr;
 }
 
+// 设置服务器初始余额，并订阅任务结算
 void UDeliveryWalletComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -72,6 +74,7 @@ void UDeliveryWalletComponent::BeginPlay()
 	BindToTaskManager();
 }
 
+// 只向钱包所属玩家同步余额
 void UDeliveryWalletComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -80,6 +83,7 @@ void UDeliveryWalletComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProper
 	DOREPLIFETIME_CONDITION(UDeliveryWalletComponent, Balance, COND_OwnerOnly);
 }
 
+// 找到共享任务管理器并订阅结算，尚未就绪时稍后重试
 void UDeliveryWalletComponent::BindToTaskManager()
 {
 	// 只有服务器需要订阅：入账是权威侧的事，客户端靠 Balance 复制拿结果
@@ -99,10 +103,10 @@ void UDeliveryWalletComponent::BindToTaskManager()
 
 	if (!Manager)
 	{
-		// PlayerState 可能比 GameState 先 BeginPlay，这时候订阅不到。
+		// PlayerState 可能比 GameState 先 BeginPlay，这时候订阅不到
 		// 不能就此放弃——那样这个玩家整局都收不到钱，而且完全没有报错
-		World->GetTimerManager().SetTimer(
-			BindRetryTimer, this, &UDeliveryWalletComponent::BindToTaskManager, BindRetrySeconds, false);
+		World->GetTimerManager().SetTimer(BindRetryTimer, this, &UDeliveryWalletComponent::BindToTaskManager,
+		                                  BindRetrySeconds, false);
 
 		return;
 	}
@@ -111,10 +115,12 @@ void UDeliveryWalletComponent::BindToTaskManager()
 	Manager->OnTaskCompleted.AddUniqueDynamic(this, &UDeliveryWalletComponent::HandleTaskCompleted);
 }
 
+// 只为实际完成交付的玩家计算并发放奖励
 void UDeliveryWalletComponent::HandleTaskCompleted(UDeliveryTaskDefinition* Task,
-	const FDeliveryRewardBreakdown& Reward, APlayerState* Deliverer)
+                                                   const FDeliveryRewardBreakdown& Reward,
+                                                   APlayerState* Deliverer)
 {
-	// 委托是广播给所有钱包的，这里挑出"是不是我送的"。
+	// 委托是广播给所有钱包的，这里挑出"是不是我送的"
 	// 多人抢单时只有送达者拿钱，判据直接用委托带过来的 Deliverer，
 	// 不需要各调用点自己去比对
 	if (Deliverer != GetOwner())
@@ -125,11 +131,13 @@ void UDeliveryWalletComponent::HandleTaskCompleted(UDeliveryTaskDefinition* Task
 	AddBalance(Reward.FinalReward);
 	OnTaskPaid.Broadcast(Task, Reward);
 
-	UE_LOG(LogDeliveryWallet, Log, TEXT("[Wallet] %s 送达 %s，入账 %d（底薪 %d × 时间 %.2f × 特殊 %.2f），余额 %d"),
-		*GetNameSafe(Deliverer), Task ? *Task->TaskId.ToString() : TEXT("<空>"),
-		Reward.FinalReward, Reward.BaseReward, Reward.TimeMultiplier, Reward.SpecialMultiplier, Balance);
+	UE_LOG(LogDeliveryWallet, Log,
+	       TEXT("[Wallet] %s 送达 %s，入账 %d（底薪 %d × 时间 %.2f × 特殊 %.2f），余额 %d"),
+	       *GetNameSafe(Deliverer), Task ? *Task->TaskId.ToString() : TEXT("<空>"), Reward.FinalReward,
+	       Reward.BaseReward, Reward.TimeMultiplier, Reward.SpecialMultiplier, Balance);
 }
 
+// 由服务器增加余额并通知相关界面
 void UDeliveryWalletComponent::AddBalance(int32 Amount)
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority() || Amount == 0)
@@ -149,6 +157,7 @@ void UDeliveryWalletComponent::AddBalance(int32 Amount)
 	}
 }
 
+// 由服务器检查余额并扣除费用，不足时保持原余额
 bool UDeliveryWalletComponent::TrySpend(int32 Amount)
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority() || Amount <= 0)

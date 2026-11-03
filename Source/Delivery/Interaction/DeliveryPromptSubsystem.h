@@ -8,58 +8,49 @@
 
 class SWidget;
 
-/** 世界里的"按键提示"浮窗，跟着目标 Actor 的世界坐标贴在屏幕上。
- *
- * 为什么是 C++ Slate 而不是 UMG 资产：提示只有一行字加一个底框，做成 WBP 反而多一份
- * 要手工维护、又不能从脚本可靠生成的资产。这里直接建一个视口 Widget，中文靠 Slate 自带的
- * 字体回退（引擎自带 DroidSansFallback）渲染，不需要额外导字体。
- *
- * 调用约定是"每帧推一次"：PushPrompt 只刷新内容和时间戳，停止推送 PromptTimeout 秒后浮窗
- * 自己消失。这样调用方（探测组件、载具）不需要成对写 Show/Hide，也就不会因为某条退出分支
- * 漏掉 Hide 而把提示永久留在屏幕上。
+/**
+ * 显示跟随世界物体的屏幕提示
+ * 调用方持续推送提示内容，停止推送后自动隐藏
+ * 提示界面由代码创建，不依赖界面蓝图
  */
 UCLASS()
+
 class DELIVERY_API UDeliveryPromptSubsystem : public UWorldSubsystem
 {
 	GENERATED_BODY()
 
-public:
-
+  public:
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 	virtual void Deinitialize() override;
 
 	static UDeliveryPromptSubsystem* Get(const UObject* WorldContextObject);
 
-	/** 每帧调用一次。WorldAnchor 是浮窗要贴住的世界坐标。 */
+	// 提示内容更新
+	/** 每帧调用一次；WorldAnchor 是浮窗要贴住的世界坐标 */
 	void PushPrompt(const FText& Text, const FVector& WorldAnchor, float HoldProgress = -1.0f);
 
 	/**
-	 * 屏幕左下角的常驻提示（"按 R 召唤摩托车"这类）。和世界浮窗是两个独立的槽位，
-	 * 各有各的时间戳，互不覆盖——不然走到车边上时召唤提示就被"按 F 驾驶"顶掉了。
-	 * 同样是"每帧推一次"的约定。bDimmed 用来表示这个功能当前不可用（冷却中）。
+	 * 屏幕左下角的常驻提示（"按 R 召唤摩托车"这类）；和世界浮窗是两个独立的槽位，
+	 * 各有各的时间戳，互不覆盖——不然走到车边上时召唤提示就被"按 F 驾驶"顶掉了
+	 * 同样是"每帧推一次"的约定；bDimmed 用来表示这个功能当前不可用（冷却中）
 	 */
 	void PushCornerHint(const FText& Text, bool bDimmed = false);
 
 	/**
-	 * 屏幕顶部中央的任务条（"送到 独居老头家 / ↗ 120 米 · 剩余 4:32"）。
-	 *
-	 * 第三个独立槽位。不和左下角挤：左下角归"当前能按什么键"（召唤、切视角），
-	 * 顶部归"当前在做什么任务"。两者同时出现是常态，共用一个槽会互相顶掉。
-	 *
-	 * bUrgent 为 true 时标红，用于超时和来电这类需要立刻注意的状态。
-	 * 同样是"每帧推一次"的约定。
+	 * 更新屏幕顶部的任务提示，与左下角按键提示分别保存
+	 * 紧急提示显示为红色，调用方停止推送后自动隐藏
 	 */
 	void PushObjective(const FText& Title, const FText& Detail, bool bUrgent = false);
 
 	/**
-	 * 屏幕下方中央的对白字幕。和三个短时提示槽不同，它会一直保留到 ClearSubtitle，
-	 * 因为一句话说完后通常还要停留到通话结束，不能靠 0.25 秒刷新维持。
+	 * 屏幕下方中央的对白字幕；和三个短时提示槽不同，它会一直保留到 ClearSubtitle，
+	 * 因为一句话说完后通常还要停留到通话结束，不能靠 0.25 秒刷新维持
 	 */
 	void SetSubtitle(const FText& Speaker, const FText& Text);
 	void ClearSubtitle();
 
-private:
-
+  private:
+	// 控件创建与可见性检查
 	void EnsureWidget();
 	bool ComputeScreenPosition(FVector2D& OutPosition) const;
 	bool IsPromptFresh() const;
@@ -68,22 +59,26 @@ private:
 	bool IsObjectiveFresh() const;
 
 	TSharedPtr<SWidget> PromptWidget;
+	// 左下角操作提示
 	FText CornerText;
 	bool bCornerDimmed = false;
 	double LastCornerPushTime = -1000.0;
 
+	// 顶部任务提示
 	FText ObjectiveTitle;
 	FText ObjectiveDetail;
 	bool bObjectiveUrgent = false;
 	double LastObjectivePushTime = -1000.0;
+	// 对白字幕
 	FText SubtitleSpeaker;
 	FText SubtitleText;
 	bool bSubtitleVisible = false;
+	// 世界物体的屏幕提示
 	FText PromptText;
 	FVector PromptAnchor = FVector::ZeroVector;
 	float PromptHoldProgress = -1.0f;
 	double LastPushTime = -1000.0;
 
-	/** 超过这么久没人推送就隐藏。取两三帧的量级，够盖住偶尔掉帧，又不会拖出残留。 */
+	/** 超过这么久没人推送就隐藏；取两三帧的量级，够盖住偶尔掉帧，又不会拖出残留 */
 	static constexpr double PromptTimeout = 0.25;
 };

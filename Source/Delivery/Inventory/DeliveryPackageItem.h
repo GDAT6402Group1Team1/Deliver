@@ -1,3 +1,4 @@
+// 实现带任务身份的手持快递物品
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
@@ -8,30 +9,39 @@
 
 class UDeliveryItemComponent;
 
-/** Single-hand physical package. It can occupy only the hand slot and owns task identity. */
+/** 带任务信息的快递物体，只能放在手持槽中 */
 UCLASS(Blueprintable)
+
 class DELIVERY_API ADeliveryPackageItem : public ADeliveryHandheldItem
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-public:
-	ADeliveryPackageItem();
+  public:
+    ADeliveryPackageItem();
+    virtual bool CanPickup(APawn *Interactor, bool bCheckTaskAvailability) const override;
+    virtual bool Pickup(APawn *Interactor) override;
 
-	UFUNCTION(BlueprintPure, Category="Delivery")
-	UDeliveryItemComponent* GetDeliveryItemComponent() const { return DeliveryItemComponent; }
+    // 快递任务信息
+    UFUNCTION(BlueprintPure, Category = "Delivery")
 
-protected:
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-	TObjectPtr<UDeliveryItemComponent> DeliveryItemComponent;
+    UDeliveryItemComponent *GetDeliveryItemComponent() const
+    {
+        return DeliveryItemComponent;
+    }
+
+  protected:
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UDeliveryItemComponent> DeliveryItemComponent;
 };
 
-/** Code-built package for the first end-to-end task test. */
+/** 由代码创建的测试快递，用于验证完整任务流程 */
 UCLASS(Blueprintable)
+
 class DELIVERY_API ADeliveryTestPackage : public ADeliveryPackageItem
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-public:
-	ADeliveryTestPackage();
-	virtual void BeginPlay() override;
+  public:
+    ADeliveryTestPackage();
+    virtual void BeginPlay() override;
 };

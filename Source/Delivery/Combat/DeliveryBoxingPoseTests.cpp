@@ -1,7 +1,7 @@
-#include "DeliveryBoxingPose.h"
-#include "DeliveryPunchTrajectory.h"
+#include "Combat/DeliveryBoxingPose.h"
+#include "Combat/DeliveryPunchTrajectory.h"
 #if WITH_DEV_AUTOMATION_TESTS
-#include "DeliveryHandPose.h"
+#include "Combat/DeliveryHandPose.h"
 #include "Misc/AutomationTest.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -13,71 +13,92 @@
 #include "PhysicsControlComponent.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryPunchTrajectoryTest, "Delivery.Boxing.TrajectoryMath",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 bool FDeliveryPunchTrajectoryTest::RunTest(const FString&)
 {
-	// 以肩为原点核对三段拳路。修改姿势参数时，这些方向关系不能颠倒。
-	const FVector Back = DeliveryPunchTrajectory::WindupOffset(FVector::ForwardVector,
-		FVector::RightVector, 100.0f, 0.24f, -0.06f, 0.16f);
-	const FVector Forward = DeliveryPunchTrajectory::StrikeOffset(FVector::ForwardVector,
-		FVector::RightVector, 100.0f, 1.0f, 0.05f, -0.062f);
+	// 以肩为原点核对三段拳路；修改姿势参数时，这些方向关系不能颠倒
+	const FVector Back = DeliveryPunchTrajectory::WindupOffset(FVector::ForwardVector, FVector::RightVector,
+	                                                           100.0f, 0.24f, -0.06f, 0.16f);
+	const FVector Forward = DeliveryPunchTrajectory::StrikeOffset(
+	    FVector::ForwardVector, FVector::RightVector, 100.0f, 1.0f, 0.05f, -0.062f);
 	TestTrue(TEXT("蓄力位置在肩后且远离身体中线"), Back.X < 0.0f && Back.Y > 0.0f);
 	TestTrue(TEXT("直拳终点在肩前"), Forward.X > 0.0f);
 	TestTrue(TEXT("前送中段已越过半程"), DeliveryPunchTrajectory::StrikeProgress(0.5f) > 0.5f);
 	TestTrue(TEXT("回收两端比中间慢"), DeliveryPunchTrajectory::RetractProgress(0.1f) < 0.1f);
 	for (float Yaw : {0.f, 90.f, -120.f})
-	for (float Side : {-1.f, 1.f})
-	{
-		const FVector Aim = FRotator(0,Yaw,0).Vector();
-		const FVector ReleasedUp = DeliveryPunchTrajectory::TorsoSway(FVector::UpVector,Aim,Side*9.f,7.f).RotateVector(FVector::UpVector);
-		const FVector WindupUp = DeliveryPunchTrajectory::TorsoSway(FVector::UpVector,Aim,-Side*8.f,-2.f).RotateVector(FVector::UpVector);
-		TestTrue(TEXT("chest follows punch direction for either hand"), FVector::DotProduct(ReleasedUp,Aim)>0.1f);
-		TestTrue(TEXT("windup leans slightly away from punch"), FVector::DotProduct(WindupUp,Aim)<0.f);
-		TestTrue(TEXT("chest sway remains small"), FVector::DotProduct(ReleasedUp,FVector::UpVector)>0.99f);
-		TestTrue(TEXT("recovered chest has no residual offset"), DeliveryPunchTrajectory::TorsoSway(FVector::UpVector,Aim,0,0).Equals(FQuat::Identity));
-	}
+		for (float Side : {-1.f, 1.f})
+		{
+			const FVector Aim = FRotator(0, Yaw, 0).Vector();
+			const FVector ReleasedUp =
+			    DeliveryPunchTrajectory::TorsoSway(FVector::UpVector, Aim, Side * 9.f, 7.f)
+			        .RotateVector(FVector::UpVector);
+			const FVector WindupUp =
+			    DeliveryPunchTrajectory::TorsoSway(FVector::UpVector, Aim, -Side * 8.f, -2.f)
+			        .RotateVector(FVector::UpVector);
+			TestTrue(TEXT("chest follows punch direction for either hand"),
+			         FVector::DotProduct(ReleasedUp, Aim) > 0.1f);
+			TestTrue(TEXT("windup leans slightly away from punch"), FVector::DotProduct(WindupUp, Aim) < 0.f);
+			TestTrue(TEXT("chest sway remains small"),
+			         FVector::DotProduct(ReleasedUp, FVector::UpVector) > 0.99f);
+			TestTrue(
+			    TEXT("recovered chest has no residual offset"),
+			    DeliveryPunchTrajectory::TorsoSway(FVector::UpVector, Aim, 0, 0).Equals(FQuat::Identity));
+		}
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryBoxingGeometryTest, "Delivery.Boxing.StraightReach",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 bool FDeliveryBoxingGeometryTest::RunTest(const FString&)
 {
-	for (float Yaw : { 0.f, 90.f, 173.f })
-	for (float Side : { -1.f, 1.f })
-	for (float Alpha : { 0.f, 0.5f, 1.f })
-	{
-		const FVector Forward = FRotator(0,Yaw,0).Vector();
-		const FVector Right = FVector::CrossProduct(FVector::UpVector, Forward);
-		const FVector Shoulder = Right * Side * 20;
-		const FVector Hand = Shoulder + Forward * FMath::Lerp(25.2f,56.4f,Alpha)
-			- FVector::UpVector * FMath::Lerp(7.2f,1.8f,Alpha);
-		const FVector Elbow = FDeliveryBoxingPose::SolveElbow(Shoulder, Hand,
-			-FVector::UpVector + Right * Side * 0.22f, 30,30);
-		TestTrue(TEXT("upper length preserved"), FMath::IsNearlyEqual(float((Elbow-Shoulder).Size()),30.f,0.01f));
-		TestTrue(TEXT("forearm length preserved"), FMath::IsNearlyEqual(float((Hand-Elbow).Size()),30.f,0.01f));
-		TestTrue(TEXT("elbow stays below shoulder"), Elbow.Z < Shoulder.Z);
-		TestTrue(TEXT("hand stays in forward lane"), FMath::Abs(FVector::DotProduct(Hand-Shoulder,Right)) < 0.01f);
-	}
+	for (float Yaw : {0.f, 90.f, 173.f})
+		for (float Side : {-1.f, 1.f})
+			for (float Alpha : {0.f, 0.5f, 1.f})
+			{
+				const FVector Forward = FRotator(0, Yaw, 0).Vector();
+				const FVector Right = FVector::CrossProduct(FVector::UpVector, Forward);
+				const FVector Shoulder = Right * Side * 20;
+				const FVector Hand = Shoulder + Forward * FMath::Lerp(25.2f, 56.4f, Alpha) -
+				                     FVector::UpVector * FMath::Lerp(7.2f, 1.8f, Alpha);
+				const FVector Elbow = FDeliveryBoxingPose::SolveElbow(
+				    Shoulder, Hand, -FVector::UpVector + Right * Side * 0.22f, 30, 30);
+				TestTrue(TEXT("upper length preserved"),
+				         FMath::IsNearlyEqual(float((Elbow - Shoulder).Size()), 30.f, 0.01f));
+				TestTrue(TEXT("forearm length preserved"),
+				         FMath::IsNearlyEqual(float((Hand - Elbow).Size()), 30.f, 0.01f));
+				TestTrue(TEXT("elbow stays below shoulder"), Elbow.Z < Shoulder.Z);
+				TestTrue(TEXT("hand stays in forward lane"),
+				         FMath::Abs(FVector::DotProduct(Hand - Shoulder, Right)) < 0.01f);
+			}
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryBoxingAssetTest, "Delivery.Boxing.BossPhysicsAndControls",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 bool FDeliveryBoxingAssetTest::RunTest(const FString&)
 {
-	USkeletalMesh* Asset = LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Characters/TestDeliveryMan/The_Boss.The_Boss"));
-	if (!TestNotNull(TEXT("Boss mesh"), Asset)) return false;
-	const auto Settings = UWorld::InitializationValues().AllowAudioPlayback(false).CreatePhysicsScene(true)
-		.ShouldSimulatePhysics(true).CreateNavigation(false).CreateAISystem(false);
-	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false, NAME_None, nullptr, true, ERHIFeatureLevel::Num, &Settings);
+	USkeletalMesh* Asset =
+	    LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Characters/TestDeliveryMan/The_Boss.The_Boss"));
+	if (!TestNotNull(TEXT("Boss mesh"), Asset))
+		return false;
+	const auto Settings = UWorld::InitializationValues()
+	                          .AllowAudioPlayback(false)
+	                          .CreatePhysicsScene(true)
+	                          .ShouldSimulatePhysics(true)
+	                          .CreateNavigation(false)
+	                          .CreateAISystem(false);
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false, NAME_None, nullptr, true,
+	                                    ERHIFeatureLevel::Num, &Settings);
 	GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
 	AActor* Actor = World->SpawnActor<AActor>();
 	USkeletalMeshComponent* Mesh = NewObject<USkeletalMeshComponent>(Actor);
 	Actor->SetRootComponent(Mesh);
 	Mesh->SetSkeletalMeshAsset(Asset);
-	Mesh->SetWorldRotation(FRotator(0,-90,0));
-	// Collision has to be on before registering, or the component never creates its bodies.
+	Mesh->SetWorldRotation(FRotator(0, -90, 0));
+	// 注册组件前启用碰撞，确保测试世界能创建物理刚体
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	Mesh->SetEnableGravity(false);
 	Mesh->RegisterComponent();
@@ -89,14 +110,17 @@ bool FDeliveryBoxingAssetTest::RunTest(const FString&)
 	TestEqual(TEXT("source asset untouched"), Original->SkeletalBodySetups.Num(), OriginalCount);
 	TestTrue(TEXT("left elbow body"), Runtime->FindBodyIndex(TEXT("LeftForeArm")) != INDEX_NONE);
 	TestTrue(TEXT("right elbow body"), Runtime->FindBodyIndex(TEXT("RightForeArm")) != INDEX_NONE);
-	TestTrue(TEXT("left wrist attached to forearm"), Runtime->FindConstraintIndex(TEXT("LeftHand"),TEXT("LeftForeArm")) != INDEX_NONE);
-	TestTrue(TEXT("right wrist attached to forearm"), Runtime->FindConstraintIndex(TEXT("RightHand"),TEXT("RightForeArm")) != INDEX_NONE);
-	// The stock shoulder cone is 45 degrees, which is less than the 90 the arm needs to
-	// point forward at all. Without this the punch can only ever move the forearm.
-	for (const FString Side : { FString(TEXT("Left")), FString(TEXT("Right")) })
+	TestTrue(TEXT("left wrist attached to forearm"),
+	         Runtime->FindConstraintIndex(TEXT("LeftHand"), TEXT("LeftForeArm")) != INDEX_NONE);
+	TestTrue(TEXT("right wrist attached to forearm"),
+	         Runtime->FindConstraintIndex(TEXT("RightHand"), TEXT("RightForeArm")) != INDEX_NONE);
+	// 原肩部限位不足以让上臂朝前，需要先放宽限位
+	// 否则上臂无法参与出拳，只能看到前臂摆动
+	for (const FString Side : {FString(TEXT("Left")), FString(TEXT("Right"))})
 	{
 		const int32 Index = Runtime->FindConstraintIndex(FName(*(Side + TEXT("Arm"))), TEXT("Spine2"));
-		if (!TestTrue(TEXT("shoulder joint found"), Index != INDEX_NONE)) continue;
+		if (!TestTrue(TEXT("shoulder joint found"), Index != INDEX_NONE))
+			continue;
 		const FConstraintInstance& Joint = Runtime->ConstraintSetup[Index]->DefaultInstance;
 		TestTrue(TEXT("shoulder can swing past straight ahead"), Joint.GetAngularSwing1Limit() > 90.f);
 		TestTrue(TEXT("shoulder can twist"), Joint.GetAngularTwistLimit() > 45.f);
@@ -107,57 +131,59 @@ bool FDeliveryBoxingAssetTest::RunTest(const FString&)
 	UPhysicsControlComponent* Controls = NewObject<UPhysicsControlComponent>(Actor);
 	Controls->RegisterComponent();
 	FDeliveryBoxingPose Pose;
-	Pose.Create(Mesh,Controls);
+	Pose.Create(Mesh, Controls);
 	TestTrue(TEXT("left arm controls created"), Pose.IsReady(0));
 	TestTrue(TEXT("right arm controls created"), Pose.IsReady(1));
-	// Only the control targets are checked. This bare world does not step physics
-	// (a falling body drops 0.18 cm in a second), so simulated poses prove nothing.
+	// 这个测试世界不推进有效的物理模拟，因此只检查控制目标
+	// 实际身体是否按目标运动，需要在运行中的关卡验证
 	const auto Step = [&](int32 Count, int32 Side, bool Released)
 	{
-		for (int32 Frame=0;Frame<Count;++Frame) Pose.Update(Mesh,Controls,0,1.f/60,Side,Released);
+		for (int32 Frame = 0; Frame < Count; ++Frame)
+			Pose.Update(Mesh, Controls, 0, 1.f / 60, Side, Released);
 	};
-	// A target orientation implies a bone direction: take the reference direction into bone space
-	// and back out through the target. Chaining both bones gives the fist relative to the shoulder.
+	// 将参考骨骼方向转换到目标朝向，再沿上下臂计算拳头位置
+	// 计算结果以肩部为起点，用于检查拳路
 	const auto TargetBones = [&](const FDeliveryBoxingPose::FArm& Arm)
 	{
 		FPhysicsControlTarget Upper, Lower;
-		const bool bFound = Controls->GetControlTarget(Arm.UpperControl, Upper)
-			&& Controls->GetControlTarget(Arm.LowerControl, Lower);
+		const bool bFound = Controls->GetControlTarget(Arm.UpperControl, Upper) &&
+		                    Controls->GetControlTarget(Arm.LowerControl, Lower);
 		TestTrue(TEXT("arm control targets exist"), bFound);
-		// Lower targets are parent-relative, not world rotations.
-		Lower.TargetOrientation = (Upper.TargetOrientation.Quaternion()
-			* Lower.TargetOrientation.Quaternion()).Rotator();
-		const auto Direction = [](const FPhysicsControlTarget& Target, const FQuat& Reference, const FVector& Bone)
+		// 前臂目标相对父刚体，不能直接当作世界旋转
+		Lower.TargetOrientation =
+		    (Upper.TargetOrientation.Quaternion() * Lower.TargetOrientation.Quaternion()).Rotator();
+		const auto Direction =
+		    [](const FPhysicsControlTarget& Target, const FQuat& Reference, const FVector& Bone)
 		{
-			return Target.TargetOrientation.Quaternion().RotateVector(Reference.UnrotateVector(Bone.GetSafeNormal()));
+			return Target.TargetOrientation.Quaternion().RotateVector(
+			    Reference.UnrotateVector(Bone.GetSafeNormal()));
 		};
-		return TPair<FVector, FVector>(
-			Direction(Upper, Arm.UpperReference, Arm.UpperDirection),
-			Direction(Lower, Arm.LowerReference, Arm.LowerDirection));
+		return TPair<FVector, FVector>(Direction(Upper, Arm.UpperReference, Arm.UpperDirection),
+		                               Direction(Lower, Arm.LowerReference, Arm.LowerDirection));
 	};
 	const auto TargetFist = [&](const FDeliveryBoxingPose::FArm& Arm)
 	{
 		const TPair<FVector, FVector> Bones = TargetBones(Arm);
 		return Bones.Key * Arm.UpperLength + Bones.Value * Arm.LowerLength;
 	};
-	Step(60,-1,false);
-	for (int32 Side=0;Side<2;++Side)
+	Step(60, -1, false);
+	for (int32 Side = 0; Side < 2; ++Side)
 	{
 		const FDeliveryBoxingPose::FArm& Arm = Pose.Arms[Side];
 		const float Length = Arm.UpperLength + Arm.LowerLength;
 		const FVector Rest = TargetFist(Arm);
-		Step(30,Side,false);
+		Step(30, Side, false);
 		const FVector Windup = TargetFist(Arm);
-		const FVector OtherWindup = TargetFist(Pose.Arms[1-Side]);
-		// Sample the whole strike, not just its end. The fist can land in the right spot
-		// while getting there sideways past the ribs (a slap) or down from overhead (a chop).
+		const FVector OtherWindup = TargetFist(Pose.Arms[1 - Side]);
+		// 检查整段挥拳轨迹，避免只检查终点而漏掉途中绕行
+		// 拳头即使最终到位，途中仍可能从侧面或头顶绕过来
 		const float Outward = Side == 0 ? -1.f : 1.f;
 		float WorstLateral = 0, WorstBackstep = 0;
 		float HighestFist = Windup.Z, LowestFist = Windup.Z;
 		float PreviousForward = Windup.X;
-		for (int32 Sample=0;Sample<20;++Sample)
+		for (int32 Sample = 0; Sample < 20; ++Sample)
 		{
-			Step(1,Side,true);
+			Step(1, Side, true);
 			const FVector Fist = TargetFist(Arm);
 			WorstLateral = FMath::Max(WorstLateral, Fist.Y * Outward);
 			WorstBackstep = FMath::Max(WorstBackstep, PreviousForward - Fist.X);
@@ -165,24 +191,25 @@ bool FDeliveryBoxingAssetTest::RunTest(const FString&)
 			LowestFist = FMath::Min(LowestFist, Fist.Z);
 			PreviousForward = Fist.X;
 		}
-		Step(10,Side,true);
+		Step(10, Side, true);
 		const FVector Strike = TargetFist(Arm);
 		const TPair<FVector, FVector> StrikeBones = TargetBones(Arm);
-		Step(1,-1,false);
+		Step(1, -1, false);
 		TestTrue(TEXT("retraction eases away from full extension"),
-			FVector::Distance(TargetFist(Arm), Strike) < 0.04f * Length);
-		Step(60,-1,false);
+		         FVector::Distance(TargetFist(Arm), Strike) < 0.04f * Length);
+		Step(60, -1, false);
 		const FVector Relaxed = TargetFist(Arm);
 		AddInfo(FString::Printf(
-			TEXT("Side %d rest=%s windup=%s strike=%s lateral=%.1f backstep=%.2f rise=%.1f upperDot=%.2f"),
-			Side,*Rest.ToString(),*Windup.ToString(),*Strike.ToString(),WorstLateral,WorstBackstep,
-			HighestFist-LowestFist,FVector::DotProduct(StrikeBones.Key,StrikeBones.Value)));
+		    TEXT("Side %d rest=%s windup=%s strike=%s lateral=%.1f backstep=%.2f rise=%.1f upperDot=%.2f"),
+		    Side, *Rest.ToString(), *Windup.ToString(), *Strike.ToString(), WorstLateral, WorstBackstep,
+		    HighestFist - LowestFist, FVector::DotProduct(StrikeBones.Key, StrikeBones.Value)));
 		TestTrue(TEXT("the fist never swings out past the ribs"), WorstLateral < 0.25f * Length);
 		TestTrue(TEXT("the fist only travels forward once released"), WorstBackstep < 0.01f * Length);
-		TestTrue(TEXT("the fist drives level instead of chopping down"), HighestFist - LowestFist < 0.2f * Length);
-		// The whole point: the upper arm has to end up pointing down the punch, not just the forearm.
+		TestTrue(TEXT("the fist drives level instead of chopping down"),
+		         HighestFist - LowestFist < 0.2f * Length);
+		// 上臂也应朝向出拳方向，不能只有前臂向前
 		TestTrue(TEXT("the upper arm lines up with the forearm"),
-			FVector::DotProduct(StrikeBones.Key, StrikeBones.Value) > 0.9f);
+		         FVector::DotProduct(StrikeBones.Key, StrikeBones.Value) > 0.9f);
 		TestTrue(TEXT("the upper arm points down the punch"), StrikeBones.Key.X > 0.85f);
 		TestTrue(TEXT("idle arm hangs well below the shoulder"), Rest.Z < -0.6f * Length);
 		TestTrue(TEXT("idle arm stays beside the body"), Rest.X < 0.3f * Length);
@@ -197,32 +224,37 @@ bool FDeliveryBoxingAssetTest::RunTest(const FString&)
 		TestTrue(TEXT("fist drops back to the A pose"), Relaxed.Z < Windup.Z - 0.5f * Length);
 	}
 	Controls->DestroyControlsInSet(TEXT("All"));
-	World->DestroyWorld(false);
+	World->EndPlay(EEndPlayReason::Quit); World->DestroyWorld(false);
 	GEngine->DestroyWorldContext(World);
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryHandFistTest, "Delivery.Boxing.HandMakesAFist",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 bool FDeliveryHandFistTest::RunTest(const FString&)
 {
-	USkeletalMesh* Asset = LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Characters/TestDeliveryMan/The_Boss.The_Boss"));
-	if (!TestNotNull(TEXT("Boss mesh"), Asset)) return false;
+	USkeletalMesh* Asset =
+	    LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Characters/TestDeliveryMan/The_Boss.The_Boss"));
+	if (!TestNotNull(TEXT("Boss mesh"), Asset))
+		return false;
 	const FReferenceSkeleton& Skeleton = Asset->GetRefSkeleton();
 
-	for (const TCHAR* Side : { TEXT("Left"), TEXT("Right") })
-	for (const TCHAR* Finger : { TEXT("Thumb"), TEXT("Index"), TEXT("Middle"), TEXT("Ring"), TEXT("Pinky") })
-	for (int32 Segment = 1; Segment <= 3; ++Segment)
-	{
-		const FString Name = FString::Printf(TEXT("%sHand%s%d"), Side, Finger, Segment);
-		TestTrue(*FString::Printf(TEXT("skeleton has %s"), *Name), Skeleton.FindBoneIndex(FName(*Name)) != INDEX_NONE);
-	}
+	for (const TCHAR* Side : {TEXT("Left"), TEXT("Right")})
+		for (const TCHAR* Finger :
+		     {TEXT("Thumb"), TEXT("Index"), TEXT("Middle"), TEXT("Ring"), TEXT("Pinky")})
+			for (int32 Segment = 1; Segment <= 3; ++Segment)
+			{
+				const FString Name = FString::Printf(TEXT("%sHand%s%d"), Side, Finger, Segment);
+				TestTrue(*FString::Printf(TEXT("skeleton has %s"), *Name),
+				         Skeleton.FindBoneIndex(FName(*Name)) != INDEX_NONE);
+			}
 
 	const FDeliveryArmPoseSettings Settings;
 	TArray<DeliveryHandPose::FCurledBone> Curled;
 	DeliveryHandPose::BuildFist(Skeleton, Settings.FingerCurlAngle, Settings.ThumbCurlAngle, Curled);
-	// Ten fingers, three segments each. Anything less means a finger was too straight in the
-	// reference pose to tell which way the palm is, and got left alone.
+	// 检查十根手指的全部关节，确保没有手指仍保持张开
+	// 参考姿势中的手指过直时，也必须能够确定握拳方向
 	TestEqual(TEXT("every finger segment is curled"), Curled.Num(), 30);
 
 	TArray<FTransform> Local = Skeleton.GetRefBonePose();
@@ -244,25 +276,28 @@ bool FDeliveryHandFistTest::RunTest(const FString&)
 	}
 	const TArray<FTransform> After = ComponentSpace(Local);
 
-	for (const TCHAR* Side : { TEXT("Left"), TEXT("Right") })
-	for (const TCHAR* Finger : { TEXT("Index"), TEXT("Middle"), TEXT("Ring"), TEXT("Pinky") })
-	{
-		const int32 Wrist = Skeleton.FindBoneIndex(FName(*FString::Printf(TEXT("%sHand"), Side)));
-		const int32 Tip = Skeleton.FindBoneIndex(FName(*FString::Printf(TEXT("%sHand%s3"), Side, Finger)));
-		const int32 Thumb = Skeleton.FindBoneIndex(FName(*FString::Printf(TEXT("%sHandThumb3"), Side)));
-		if (!TestTrue(TEXT("finger bones found"), Wrist != INDEX_NONE && Tip != INDEX_NONE && Thumb != INDEX_NONE)) continue;
+	for (const TCHAR* Side : {TEXT("Left"), TEXT("Right")})
+		for (const TCHAR* Finger : {TEXT("Index"), TEXT("Middle"), TEXT("Ring"), TEXT("Pinky")})
+		{
+			const int32 Wrist = Skeleton.FindBoneIndex(FName(*FString::Printf(TEXT("%sHand"), Side)));
+			const int32 Tip =
+			    Skeleton.FindBoneIndex(FName(*FString::Printf(TEXT("%sHand%s3"), Side, Finger)));
+			const int32 Thumb = Skeleton.FindBoneIndex(FName(*FString::Printf(TEXT("%sHandThumb3"), Side)));
+			if (!TestTrue(TEXT("finger bones found"),
+			              Wrist != INDEX_NONE && Tip != INDEX_NONE && Thumb != INDEX_NONE))
+				continue;
 
-		// The thumb sits on the palm side, so closing the hand carries the fingertips towards it.
-		// Curling the other way folds the fingers onto the back of the hand and away from it.
-		// This asset has one hand with dead straight fingers, so the reference pose itself cannot
-		// be used to say which side the palm is on.
-		TestTrue(TEXT("the fingertip curls towards the thumb"),
-			FVector::Dist(After[Tip].GetLocation(), Before[Thumb].GetLocation())
-				< FVector::Dist(Before[Tip].GetLocation(), Before[Thumb].GetLocation()));
-		TestTrue(TEXT("the fingertip folds in against the wrist"),
-			FVector::Dist(After[Tip].GetLocation(), After[Wrist].GetLocation())
-				< FVector::Dist(Before[Tip].GetLocation(), Before[Wrist].GetLocation()) * 0.8f);
-	}
+			// 握拳时指尖应朝拇指所在的手掌一侧弯曲
+			// 反向弯曲会把手指折向手背
+			// 该资源的一只手在参考姿势中完全伸直
+			// 因此不能只靠手指原始弯曲方向判断手掌朝向
+			TestTrue(TEXT("the fingertip curls towards the thumb"),
+			         FVector::Dist(After[Tip].GetLocation(), Before[Thumb].GetLocation()) <
+			             FVector::Dist(Before[Tip].GetLocation(), Before[Thumb].GetLocation()));
+			TestTrue(TEXT("the fingertip folds in against the wrist"),
+			         FVector::Dist(After[Tip].GetLocation(), After[Wrist].GetLocation()) <
+			             FVector::Dist(Before[Tip].GetLocation(), Before[Wrist].GetLocation()) * 0.8f);
+		}
 	return true;
 }
 #endif

@@ -1,47 +1,57 @@
+// 验证载具召唤及重复调用的处理
 #include "Vehicle/DeliveryVehicleSummonComponent.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
 #include "Components/BoxComponent.h"
-#include "DeliveryCharacter.h"
+#include "Character/DeliveryCharacter.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Vehicle/DeliveryMotorbike.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryVehicleSummonTest, "Delivery.Vehicle.Summon.EmptyMap",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FDeliveryVehicleSummonTest::RunTest(const FString&)
 {
-	const auto Settings = UWorld::InitializationValues().AllowAudioPlayback(false).CreatePhysicsScene(true)
-		.ShouldSimulatePhysics(false).CreateNavigation(false).CreateAISystem(false);
+	const auto Settings = UWorld::InitializationValues()
+	                          .AllowAudioPlayback(false)
+	                          .CreatePhysicsScene(true)
+	                          .ShouldSimulatePhysics(false)
+	                          .CreateNavigation(false)
+	                          .CreateAISystem(false);
 	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false, NAME_None, nullptr, true,
-		ERHIFeatureLevel::Num, &Settings);
-	if (!TestNotNull(TEXT("test world"), World)) return false;
+	                                    ERHIFeatureLevel::Num, &Settings);
+	if (!TestNotNull(TEXT("test world"), World))
+		return false;
 	GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
 	ON_SCOPE_EXIT
 	{
 		GEngine->DestroyWorldContext(World);
-		World->DestroyWorld(false);
+		World->EndPlay(EEndPlayReason::Quit); World->DestroyWorld(false);
 	};
 
 	ADeliveryCharacter* Player = World->SpawnActor<ADeliveryCharacter>();
-	if (!TestNotNull(TEXT("player"), Player)) return false;
+	if (!TestNotNull(TEXT("player"), Player))
+		return false;
 	Player->SetActorLocation(FVector(0, 0, 200));
 	UDeliveryVehicleSummonComponent* Summon = Player->FindComponentByClass<UDeliveryVehicleSummonComponent>();
-	if (!TestNotNull(TEXT("summon component"), Summon)) return false;
-	if (!TestNotNull(TEXT("default bike asset loads"), Summon->DefaultVehicleClass.LoadSynchronous())) return false;
+	if (!TestNotNull(TEXT("summon component"), Summon))
+		return false;
+	if (!TestNotNull(TEXT("default bike asset loads"), Summon->DefaultVehicleClass.LoadSynchronous()))
+		return false;
 	const auto CountBikes = [&]()
 	{
 		int32 Count = 0;
 		for (TActorIterator<ADeliveryMotorbike> It(World); It; ++It)
-			if (IsValid(*It)) ++Count;
+			if (IsValid(*It))
+				++Count;
 		return Count;
 	};
 
-	// First summon must not leave a stranded vehicle or start cooldown when there is no ground.
+	// 无可用地面时，首次召唤不能遗留车辆，也不能进入冷却
 	Summon->RequestSummon();
 	TestEqual(TEXT("failed placement cleans up new bike"), CountBikes(), 0);
 	TestEqual(TEXT("failed placement has no cooldown"), Summon->GetCooldownRemaining(), 0.f);
@@ -61,10 +71,12 @@ bool FDeliveryVehicleSummonTest::RunTest(const FString&)
 	TestEqual(TEXT("empty map spawns exactly one bike"), CountBikes(), 1);
 	TActorIterator<ADeliveryMotorbike> BikeIt(World);
 	ADeliveryMotorbike* Bike = BikeIt ? *BikeIt : nullptr;
-	if (!TestNotNull(TEXT("spawned bike"), Bike)) return false;
+	if (!TestNotNull(TEXT("spawned bike"), Bike))
+		return false;
 	TestTrue(TEXT("spawn uses configured blueprint"), Bike->IsA(Summon->DefaultVehicleClass.Get()));
 	TestTrue(TEXT("bike replicates to clients"), Bike->GetIsReplicated() && Bike->IsReplicatingMovement());
-	TestTrue(TEXT("bike placed in front of player"), FMath::IsNearlyEqual(Bike->GetActorLocation().X, double(Summon->PlaceDistance)));
+	TestTrue(TEXT("bike placed in front of player"),
+	         FMath::IsNearlyEqual(Bike->GetActorLocation().X, double(Summon->PlaceDistance)));
 
 	Bike->Driver = Player;
 	const FVector OccupiedLocation = Bike->GetActorLocation();
@@ -78,7 +90,8 @@ bool FDeliveryVehicleSummonTest::RunTest(const FString&)
 	Summon->Cooldown = 10.f;
 	Summon->RequestSummon();
 	TestEqual(TEXT("repeat summon reuses existing bike"), CountBikes(), 1);
-	TestTrue(TEXT("existing bike follows new player position"), FMath::IsNearlyEqual(Bike->GetActorLocation().Y, 500.0));
+	TestTrue(TEXT("existing bike follows new player position"),
+	         FMath::IsNearlyEqual(Bike->GetActorLocation().Y, 500.0));
 	TestEqual(TEXT("successful summon starts cooldown"), Summon->GetCooldownRemaining(), 10.f);
 	const FVector CoolingLocation = Bike->GetActorLocation();
 	Player->SetActorLocation(FVector(0, 1000, 200));

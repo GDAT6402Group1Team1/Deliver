@@ -1,0 +1,91 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Abilities/GameplayAbility.h"
+#include "Combat/DeliveryCombatTypes.h"
+#include "GA_DeliverPunch.generated.h"
+
+class ADeliveryCharacter;
+class UDeliveryRagdollCombatComponent;
+
+/** 物理挥拳 Ability 基类：调 CombatInterface 挥拳，命中窗口扣血 */
+UCLASS()
+
+class DELIVERY_API UGA_DeliverPunch : public UGameplayAbility
+{
+	GENERATED_BODY()
+
+  public:
+	UGA_DeliverPunch();
+
+	// 技能检查与生命周期
+	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
+	                                const FGameplayAbilityActorInfo* ActorInfo,
+	                                const FGameplayTagContainer* SourceTags,
+	                                const FGameplayTagContainer* TargetTags,
+	                                FGameplayTagContainer* OptionalRelevantTags) const override;
+
+	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle,
+	                             const FGameplayAbilityActorInfo* ActorInfo,
+	                             const FGameplayAbilityActivationInfo ActivationInfo,
+	                             const FGameplayEventData* TriggerEventData) override;
+
+	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle,
+	                        const FGameplayAbilityActorInfo* ActorInfo,
+	                        const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility,
+	                        bool bWasCancelled) override;
+
+  protected:
+	// 攻击配置
+	EMeleeHand Hand = EMeleeHand::Left;
+
+	/**
+	 * 每拳伤害；配合 0.75 秒攻击间隔和 6/秒回血，单人连打第 5 拳把 HP 打到 0：
+	 * 76 → 56.5 → 37 → 17.5 → 0；改这个数会直接改变几拳晕倒
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Punch")
+	float PunchDamage = 24.f;
+
+	/** 命中后由服务器额外施加给受击者胸部的冲量；不推髋和腿 */
+	UPROPERTY(EditDefaultsOnly, Category = "Punch|Hit Reaction", meta = (ClampMin = "0.0"))
+	float HitReactionImpulse = 1500.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Punch|Hit Reaction", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float HitReactionUpwardFraction = 0.08f;
+
+	// 一次出拳可以持续接触，同一目标只结算一次
+	TSet<TWeakObjectPtr<AActor>> HitActors;
+	bool bPlayedHitSound = false;
+
+	// 战斗组件回调
+	UFUNCTION()
+	void OnHitWindow(EMeleeHand FiredHand);
+
+	UFUNCTION()
+	void OnPunchEnded(EMeleeHand FiredHand);
+
+	UPROPERTY()
+	TObjectPtr<UDeliveryRagdollCombatComponent> RagdollCombat;
+};
+
+UCLASS()
+
+class DELIVERY_API UGA_DeliverPunchLeft : public UGA_DeliverPunch
+{
+	GENERATED_BODY()
+
+  public:
+	UGA_DeliverPunchLeft();
+};
+
+UCLASS()
+
+class DELIVERY_API UGA_DeliverPunchRight : public UGA_DeliverPunch
+{
+	GENERATED_BODY()
+
+  public:
+	UGA_DeliverPunchRight();
+};

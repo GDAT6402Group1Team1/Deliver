@@ -1,5 +1,6 @@
+// 注册物品栏拾取、切换与丢弃的调试命令
 #include "Delivery.h"
-#include "DeliveryCharacter.h"
+#include "Character/DeliveryCharacter.h"
 #include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/Paths.h"
@@ -13,10 +14,12 @@ namespace
 {
 UWorld* FindGameWorld()
 {
-	if (!GEngine) return nullptr;
+	if (!GEngine)
+		return nullptr;
 	for (const FWorldContext& Context : GEngine->GetWorldContexts())
 	{
-		if (Context.World() && (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game))
+		if (Context.World() &&
+		    (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game))
 		{
 			return Context.World();
 		}
@@ -31,32 +34,46 @@ void InventorySmokeTest()
 	TArray<ADeliveryHandheldItem*> Items;
 	if (World)
 	{
-		for (TActorIterator<ADeliveryCharacter> It(World); It; ++It) { Character = *It; break; }
-		for (TActorIterator<ADeliveryHandheldItem> It(World); It; ++It) Items.Add(*It);
+		for (TActorIterator<ADeliveryCharacter> It(World); It; ++It)
+		{
+			Character = *It;
+			break;
+		}
+		for (TActorIterator<ADeliveryHandheldItem> It(World); It; ++It)
+			Items.Add(*It);
 	}
-	Items.Sort([](const ADeliveryHandheldItem& A, const ADeliveryHandheldItem& B)
-	{
-		return A.GetName() < B.GetName();
-	});
+	// 固定物品处理顺序，避免场景遍历顺序影响测试结果
+	Items.Sort(
+	    [](const ADeliveryHandheldItem& A, const ADeliveryHandheldItem& B)
+	    {
+		    return A.GetName() < B.GetName();
+	    });
 	UDeliveryInventoryComponent* Inventory = Character ? Character->GetInventoryComponent() : nullptr;
 	if (!Inventory || Items.Num() < 6)
 	{
-		UE_LOG(LogDelivery, Error, TEXT("Inventory smoke: FAIL setup character=%s items=%d"), *GetNameSafe(Character), Items.Num());
+		UE_LOG(LogDelivery, Error, TEXT("Inventory smoke: FAIL setup character=%s items=%d"),
+		       *GetNameSafe(Character), Items.Num());
 		return;
 	}
 
 	bool bPass = true;
-	for (int32 Index = 0; Index < 5; ++Index) bPass &= Inventory->TryPickup(Items[Index]);
+	for (int32 Index = 0; Index < 5; ++Index)
+		bPass &= Inventory->TryPickup(Items[Index]);
+	// 装满后第六件必须被拒绝，已有槽位仍应保留
 	bPass &= !Inventory->TryPickup(Items[5]);
-	for (int32 Index = 0; Index < 5; ++Index) bPass &= Inventory->GetItemInSlot(Index) != nullptr;
+	for (int32 Index = 0; Index < 5; ++Index)
+		bPass &= Inventory->GetItemInSlot(Index) != nullptr;
 	ADeliveryHandheldItem* OldHand = Inventory->GetHeldItem();
 	ADeliveryHandheldItem* OldSlot2 = Inventory->GetItemInSlot(1);
 	Inventory->RequestSlotAction(1);
 	bPass &= Inventory->GetHeldItem() == OldSlot2 && Inventory->GetItemInSlot(1) == OldHand;
+	// 对手持槽执行操作应丢出物品，后面的断言检查背包未被清空
 	Inventory->RequestSlotAction(0);
 	bPass &= Inventory->GetHeldItem() == nullptr;
-	for (int32 Index = 1; Index < 5; ++Index) bPass &= Inventory->GetItemInSlot(Index) != nullptr;
-	UE_LOG(LogDelivery, Log, TEXT("Inventory smoke: %s (pickup5/full-reject/swap/drop/backpack-retain)"), bPass ? TEXT("PASS") : TEXT("FAIL"));
+	for (int32 Index = 1; Index < 5; ++Index)
+		bPass &= Inventory->GetItemInSlot(Index) != nullptr;
+	UE_LOG(LogDelivery, Log, TEXT("Inventory smoke: %s (pickup5/full-reject/swap/drop/backpack-retain)"),
+	       bPass ? TEXT("PASS") : TEXT("FAIL"));
 }
 
 void InventoryVisualCapture()
@@ -68,17 +85,23 @@ void InventoryVisualCapture()
 		return;
 	}
 	FTimerHandle ScreenshotTimer;
-	World->GetTimerManager().SetTimer(ScreenshotTimer, []
-	{
-		const FString Filename = FPaths::ProjectSavedDir() / TEXT("Screenshots/InventoryHotbar.png");
-		FScreenshotRequest::RequestScreenshot(Filename, true, false);
-		UE_LOG(LogDelivery, Log, TEXT("Inventory visual requested: %s"), *Filename);
-	}, 1.0f, false);
+	World->GetTimerManager().SetTimer(
+	    ScreenshotTimer,
+	    []
+	    {
+		    const FString Filename = FPaths::ProjectSavedDir() / TEXT("Screenshots/InventoryHotbar.png");
+		    FScreenshotRequest::RequestScreenshot(Filename, true, false);
+		    UE_LOG(LogDelivery, Log, TEXT("Inventory visual requested: %s"), *Filename);
+	    },
+	    1.0f, false);
 	FTimerHandle ExitTimer;
-	World->GetTimerManager().SetTimer(ExitTimer, []
-	{
-		FPlatformMisc::RequestExit(false);
-	}, 2.5f, false);
+	World->GetTimerManager().SetTimer(
+	    ExitTimer,
+	    []
+	    {
+		    FPlatformMisc::RequestExit(false);
+	    },
+	    2.5f, false);
 }
 
 void InventoryFullVisualCapture()
@@ -88,37 +111,52 @@ void InventoryFullVisualCapture()
 	TArray<ADeliveryHandheldItem*> Items;
 	if (World)
 	{
-		for (TActorIterator<ADeliveryCharacter> It(World); It; ++It) { Character = *It; break; }
-		for (TActorIterator<ADeliveryHandheldItem> It(World); It; ++It) Items.Add(*It);
+		for (TActorIterator<ADeliveryCharacter> It(World); It; ++It)
+		{
+			Character = *It;
+			break;
+		}
+		for (TActorIterator<ADeliveryHandheldItem> It(World); It; ++It)
+			Items.Add(*It);
 	}
 	UDeliveryInventoryComponent* Inventory = Character ? Character->GetInventoryComponent() : nullptr;
-	if (!World || !Inventory || Items.Num() < 6) return;
-	for (int32 Index = 0; Index < 5; ++Index) Inventory->TryPickup(Items[Index]);
+	if (!World || !Inventory || Items.Num() < 6)
+		return;
+	for (int32 Index = 0; Index < 5; ++Index)
+		Inventory->TryPickup(Items[Index]);
 	Inventory->TryPickup(Items[5]);
 
 	FTimerHandle ScreenshotTimer;
-	World->GetTimerManager().SetTimer(ScreenshotTimer, []
-	{
-		const FString Filename = FPaths::ProjectSavedDir() / TEXT("Screenshots/InventoryHotbarFull.png");
-		FScreenshotRequest::RequestScreenshot(Filename, true, false);
-	}, 0.15f, false);
+	World->GetTimerManager().SetTimer(
+	    ScreenshotTimer,
+	    []
+	    {
+		    const FString Filename = FPaths::ProjectSavedDir() / TEXT("Screenshots/InventoryHotbarFull.png");
+		    FScreenshotRequest::RequestScreenshot(Filename, true, false);
+	    },
+	    0.15f, false);
 	FTimerHandle ExitTimer;
-	World->GetTimerManager().SetTimer(ExitTimer, [] { FPlatformMisc::RequestExit(false); }, 2.0f, false);
+	World->GetTimerManager().SetTimer(
+	    ExitTimer,
+	    []
+	    {
+		    FPlatformMisc::RequestExit(false);
+	    },
+	    2.0f, false);
 }
 
 FAutoConsoleCommand InventorySmokeCommand(
-	TEXT("Delivery.Inventory.Smoke"),
-	TEXT("Run the server-authoritative five-slot inventory smoke test in PIE/game."),
-	FConsoleCommandDelegate::CreateStatic(&InventorySmokeTest));
+    TEXT("Delivery.Inventory.Smoke"),
+    TEXT("Run the server-authoritative five-slot inventory smoke test in PIE/game."),
+    FConsoleCommandDelegate::CreateStatic(&InventorySmokeTest));
 
 FAutoConsoleCommand InventoryVisualCommand(
-	TEXT("Delivery.Inventory.Visual"),
-	TEXT("Capture the empty hotbar in a rendered game window, then exit."),
-	FConsoleCommandDelegate::CreateStatic(&InventoryVisualCapture));
+    TEXT("Delivery.Inventory.Visual"), TEXT("Capture the empty hotbar in a rendered game window, then exit."),
+    FConsoleCommandDelegate::CreateStatic(&InventoryVisualCapture));
 
 FAutoConsoleCommand InventoryFullVisualCommand(
-	TEXT("Delivery.Inventory.VisualFull"),
-	TEXT("Fill the hotbar, trigger full feedback, capture UI, then exit."),
-	FConsoleCommandDelegate::CreateStatic(&InventoryFullVisualCapture));
+    TEXT("Delivery.Inventory.VisualFull"),
+    TEXT("Fill the hotbar, trigger full feedback, capture UI, then exit."),
+    FConsoleCommandDelegate::CreateStatic(&InventoryFullVisualCapture));
 }
 #endif

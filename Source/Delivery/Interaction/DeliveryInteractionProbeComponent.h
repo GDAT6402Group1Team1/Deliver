@@ -10,55 +10,62 @@ class UDeliveryInteractableComponent;
 class UPrimitiveComponent;
 
 /**
- * 挂在玩家 Pawn 上的本地交互探测器：F 找附近通用目标，E 在范围内优先选准星附近目标，否则选最近目标。
- *
- * 纯本地表现：只在本机操控的 Pawn 上跑，找到最近的可交互物就把浮窗推给
- * UDeliveryPromptSubsystem。真正的交互要走服务器复核（见 ADeliveryCharacter::ServerInteract），
- * 这里找到的目标只是客户端的"我想按这个"。
+ * 在本机查找角色附近的交互目标，并更新提示和高亮
+ * 拾取目标优先选择准星附近的物体，其次选择最近的物体
+ * 实际操作仍由服务器检查和执行
  */
-UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
+UCLASS(ClassGroup = (Delivery), meta = (BlueprintSpawnableComponent))
+
 class DELIVERY_API UDeliveryInteractionProbeComponent : public UActorComponent
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
-public:
+  public:
+    UDeliveryInteractionProbeComponent();
 
-	UDeliveryInteractionProbeComponent();
+    virtual void TickComponent(float DeltaTime, ELevelTick TickType,
+                               FActorComponentTickFunction *ThisTickFunction) override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    // 当前交互目标
+    /** 当前瞄到的可交互物；没有就是 空指针 */
+    UDeliveryInteractableComponent *GetFocused() const
+    {
+        return FocusedGeneral.Get();
+    }
 
-	/** 当前瞄到的可交互物；没有就是 null。 */
-	UDeliveryInteractableComponent* GetFocused() const { return FocusedGeneral.Get(); }
+    UFUNCTION(BlueprintPure, Category = "Interaction")
+    AActor *GetFocusedActor() const;
 
-	UFUNCTION(BlueprintPure, Category="Interaction")
-	AActor* GetFocusedActor() const;
+    /** 当前范围内的 E 目标；与 F 目标分开保存，不会改动 F 绑定 */
+    UFUNCTION(BlueprintPure, Category = "Interaction")
+    AActor *GetFocusedPickupActor() const;
 
-	/** 当前范围内的 E 目标；与 F 目标分开保存，不会改动 F 绑定。 */
-	UFUNCTION(BlueprintPure, Category="Interaction")
-	AActor* GetFocusedPickupActor() const;
+  protected:
+    // 提示开关
+    /** 关掉就只探测不显示浮窗，留给以后想用 UMG 自己画提示的情况 */
+    UPROPERTY(EditAnywhere, Category = "Interaction")
+    bool bShowPrompt = true;
 
-protected:
+  private:
+    UPROPERTY(Transient)
+    TObjectPtr<class UDeliveryInteractionController> WidgetController;
 
-	/** 关掉就只探测不显示浮窗，留给以后想用 UMG 自己画提示的情况。 */
-	UPROPERTY(EditAnywhere, Category="Interaction")
-	bool bShowPrompt = true;
+    // 目标选择与高亮恢复
+    UDeliveryInteractableComponent *FindPreferredPickup(const APawn *Owner) const;
+    void SetPickupHighlight(AActor *Actor);
+    void RestorePickupHighlight();
 
-private:
+    struct FPrimitiveHighlightState
+    {
+        TWeakObjectPtr<UPrimitiveComponent> Component;
+        bool bRenderCustomDepth = false;
+        int32 StencilValue = 0;
+    };
 
-	UDeliveryInteractableComponent* FindPreferredPickup(const APawn* Owner) const;
-	void SetPickupHighlight(AActor* Actor);
-	void RestorePickupHighlight();
-
-	struct FPrimitiveHighlightState
-	{
-		TWeakObjectPtr<UPrimitiveComponent> Component;
-		bool bRenderCustomDepth = false;
-		int32 StencilValue = 0;
-	};
-
-	TWeakObjectPtr<UDeliveryInteractableComponent> FocusedGeneral;
-	TWeakObjectPtr<UDeliveryInteractableComponent> FocusedPickup;
-	TWeakObjectPtr<AActor> HighlightedActor;
-	TArray<FPrimitiveHighlightState> HighlightStates;
+    // 本机目标缓存
+    TWeakObjectPtr<UDeliveryInteractableComponent> FocusedGeneral;
+    TWeakObjectPtr<UDeliveryInteractableComponent> FocusedPickup;
+    TWeakObjectPtr<AActor> HighlightedActor;
+    TArray<FPrimitiveHighlightState> HighlightStates;
 };

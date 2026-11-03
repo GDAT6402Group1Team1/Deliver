@@ -1,6 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "DeliveryMusicComponent.h"
+#include "Audio/DeliveryMusicComponent.h"
 
 #include "Components/AudioComponent.h"
 #include "Delivery.h"
@@ -9,19 +9,19 @@
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
-#include "Task/DeliveryPhoneCallQueueComponent.h"
-#include "Task/DeliveryTaskDefinition.h"
+#include "Phone/DeliveryPhoneCallQueueComponent.h"
+#include "Task/Data/DeliveryTaskDefinition.h"
 #include "Task/DeliveryTaskManagerComponent.h"
-#include "Task/DeliveryTaskTrackerComponent.h"
+#include "Task/Tracking/DeliveryTaskTrackerComponent.h"
 
 namespace DeliveryMusic
 {
-	/**
-	 * 10Hz 足够。音乐决策只看"任务阶段变了没""电话响了没"，都是秒级事件；
-	 * 每帧跑一遍要做好几次组件查找，纯浪费。
-	 * 闪避的插值用的是真实 DeltaTime，不受这个间隔影响。
-	 */
-	constexpr float TickInterval = 0.1f;
+/**
+ * 10Hz 足够；音乐决策只看"任务阶段变了没""电话响了没"，都是秒级事件
+ * 每帧跑一遍要做好几次组件查找，纯浪费
+ * 闪避的插值用的是真实 DeltaTime，不受这个间隔影响
+ */
+constexpr float TickInterval = 0.1f;
 }
 
 UDeliveryMusicComponent::UDeliveryMusicComponent()
@@ -29,10 +29,11 @@ UDeliveryMusicComponent::UDeliveryMusicComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.TickInterval = DeliveryMusic::TickInterval;
 
-	// 纯本机表现。音乐是每个玩家自己听的，服务器不参与
+	// 纯本机表现；音乐是每个玩家自己听的，服务器不参与
 	SetIsReplicatedByDefault(false);
 }
 
+// 只为本机玩家启用音乐，并选择初始曲目
 void UDeliveryMusicComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -40,7 +41,7 @@ void UDeliveryMusicComponent::BeginPlay()
 	const APlayerController* Controller = Cast<APlayerController>(GetOwner());
 	if (!Controller || !Controller->IsLocalController())
 	{
-		// 远端 Controller 不该发声。关掉 Tick 省得每 0.1 秒白跑一次
+		// 远端 Controller 不该发声；关掉 Tick 省得每 0.1 秒白跑一次
 		SetComponentTickEnabled(false);
 
 		return;
@@ -49,11 +50,12 @@ void UDeliveryMusicComponent::BeginPlay()
 	RefreshTrack();
 }
 
+// 停止并销毁当前和正在淡出的音乐组件
 void UDeliveryMusicComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// 音频组件是 bAutoDestroy=false 建的，必须自己收——否则关卡切换时
+	// 音频组件是 bAutoDestroy=假 建的，必须自己收——否则关卡切换时
 	// 音乐会继续放，下一张图再起一条，叠成两轨
-	for (UAudioComponent* Audio : { ActiveAudio.Get(), FadingAudio.Get() })
+	for (UAudioComponent* Audio : {ActiveAudio.Get(), FadingAudio.Get()})
 	{
 		if (Audio)
 		{
@@ -67,6 +69,7 @@ void UDeliveryMusicComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+// 判断是否正在响铃或通话，用于降低背景音乐音量
 bool UDeliveryMusicComponent::IsPhoneBusy() const
 {
 	const UDeliveryPhoneCallQueueComponent* Phone = UDeliveryPhoneCallQueueComponent::Get(this);
@@ -81,6 +84,7 @@ bool UDeliveryMusicComponent::IsPhoneBusy() const
 	return State == EDeliveryPhoneCallState::Ringing || State == EDeliveryPhoneCallState::InCall;
 }
 
+// 根据追踪任务的状态选择探索、配送或超时曲目
 EDeliveryMusicTrack UDeliveryMusicComponent::EvaluateTrack() const
 {
 	if (!bMusicEnabled)
@@ -91,7 +95,7 @@ EDeliveryMusicTrack UDeliveryMusicComponent::EvaluateTrack() const
 	const APlayerController* Controller = Cast<APlayerController>(GetOwner());
 	const APlayerState* State = Controller ? Controller->PlayerState : nullptr;
 	const UDeliveryTaskTrackerComponent* Tracker =
-		State ? State->FindComponentByClass<UDeliveryTaskTrackerComponent>() : nullptr;
+	    State ? State->FindComponentByClass<UDeliveryTaskTrackerComponent>() : nullptr;
 	const UDeliveryTaskManagerComponent* Manager = UDeliveryTaskManagerComponent::Get(this);
 
 	if (!Tracker || !Manager)
@@ -111,19 +115,21 @@ EDeliveryMusicTrack UDeliveryMusicComponent::EvaluateTrack() const
 	return Time.bOverdue ? EDeliveryMusicTrack::Overdue : EDeliveryMusicTrack::TaskActive;
 }
 
+// 取得曲目资源，未配置时尝试使用较基础的曲目
 USoundBase* UDeliveryMusicComponent::ResolveTrackSound(EDeliveryMusicTrack Track) const
 {
-	// 逐级回退：只填了探索轨也能用，不会出现"切到任务轨结果没声音"。
-	// 这比"没填就静音"好——静音在游戏里和"音乐坏了"分不出来
+	// 超时曲目未配置时尝试配送曲目，再尝试探索曲目
 	switch (Track)
 	{
 	case EDeliveryMusicTrack::Overdue:
-		if (OverdueTrack) return OverdueTrack;
-		// fallthrough
+		if (OverdueTrack)
+			return OverdueTrack;
+		// 继续尝试下一种可用曲目
 
 	case EDeliveryMusicTrack::TaskActive:
-		if (TaskActiveTrack) return TaskActiveTrack;
-		// fallthrough
+		if (TaskActiveTrack)
+			return TaskActiveTrack;
+		// 继续尝试下一种可用曲目
 
 	case EDeliveryMusicTrack::Explore:
 		return ExploreTrack;
@@ -133,6 +139,7 @@ USoundBase* UDeliveryMusicComponent::ResolveTrackSound(EDeliveryMusicTrack Track
 	}
 }
 
+// 创建由本组件管理生命周期的二维音乐播放组件
 UAudioComponent* UDeliveryMusicComponent::SpawnMusicAudio(USoundBase* Sound)
 {
 	if (!Sound || !GetWorld())
@@ -140,31 +147,31 @@ UAudioComponent* UDeliveryMusicComponent::SpawnMusicAudio(USoundBase* Sound)
 		return nullptr;
 	}
 
-	// bAutoDestroy=false：要留着句柄做淡出和换轨，自动销毁就抓不住了。
-	// 代价是 EndPlay 必须自己收，上面做了。
+	// bAutoDestroy=假：要留着句柄做淡出和换轨，自动销毁就抓不住了
+	// 代价是 EndPlay 必须自己收，上面做了
 	// 起始音量直接给到位，不要给 0 等 Tick 补——中间那一帧会是静音
 	UAudioComponent* Audio = UGameplayStatics::SpawnSound2D(
-		this, Sound, /*VolumeMultiplier=*/MusicVolume * DuckScale, /*PitchMultiplier=*/1.f,
-		/*StartTime=*/0.f, /*ConcurrencySettings=*/nullptr,
-		/*bPersistAcrossLevelTransition=*/false, /*bAutoDestroy=*/false);
+	    this, Sound, /* 音量= */MusicVolume * DuckScale, /* 音高= */1.f,
+	    /* 起播时间= */0.f, /* 并发设置= */nullptr,
+	    /* 跨关卡保留= */false, /* 自动销毁= */false);
 
 	if (!Audio)
 	{
 		return nullptr;
 	}
 
-	// 标成 UI 音：不受时间膨胀和暂停影响。暂停菜单里音乐断掉会显得像卡死
+	// 标成 UI 音：不受时间膨胀和暂停影响；暂停菜单里音乐断掉会显得像卡死
 	Audio->bIsUISound = bKeepPlayingWhilePaused;
 
 	return Audio;
 }
 
+// 切换曲目，让旧曲目淡出、新曲目淡入
 void UDeliveryMusicComponent::StartTrack(EDeliveryMusicTrack Track)
 {
 	USoundBase* Sound = ResolveTrackSound(Track);
 
-	// 回退之后可能和现在放的是同一个资产。这时候**不要重起**——
-	// 换轨会把音乐从头播，而玩家听到的是"任务一进行中音乐就跳回开头"
+	// 不同任务状态可能使用同一首音乐，此时保留播放进度
 	if (ActiveAudio && ActiveAudio->GetSound() == Sound)
 	{
 		CurrentTrack = Track;
@@ -172,7 +179,7 @@ void UDeliveryMusicComponent::StartTrack(EDeliveryMusicTrack Track)
 		return;
 	}
 
-	// 上一条还在淡出就直接收掉：同时存在三条音轨没有意义，只会糊成一片
+	// 清理上一次淡出的音乐，避免连续切换时多首音乐叠加
 	if (FadingAudio)
 	{
 		FadingAudio->Stop();
@@ -197,20 +204,19 @@ void UDeliveryMusicComponent::StartTrack(EDeliveryMusicTrack Track)
 	ActiveAudio = SpawnMusicAudio(Sound);
 	if (ActiveAudio)
 	{
-		// **FadeIn 的第二个参数是"占组件已计算音量的百分比"，不是绝对音量**
-		// （引擎注释：The percentage of the AudioComponent's calculated volume to fade to）。
-		// 这里必须传 1：实际音量由每帧的 SetVolumeMultiplier 决定，
-		// 淡入淡出只负责 0→1 的包络。两边都传 MusicVolume 的话会乘两次——
-		// 0.45 × 0.45 ≈ 0.20，听上去就是"进游戏比 Content Browser 里小一半"。
+		// 淡入目标设为完整音量，实际音量由 SetVolumeMultiplier 控制
+		// 不要再次乘 MusicVolume，否则音量会重复降低
 		ActiveAudio->FadeIn(CrossfadeSeconds, 1.f);
 	}
 }
 
+// 根据当前任务状态重新选择曲目
 void UDeliveryMusicComponent::RefreshTrack()
 {
 	StartTrack(EvaluateTrack());
 }
 
+// 在指定时间内降低音乐音量
 void UDeliveryMusicComponent::DuckFor(float Seconds, float VolumeScale)
 {
 	if (Seconds <= 0.f)
@@ -222,8 +228,9 @@ void UDeliveryMusicComponent::DuckFor(float Seconds, float VolumeScale)
 	ManualDuckUntil = GetWorld() ? GetWorld()->GetTimeSeconds() + Seconds : 0.0;
 }
 
+// 更新曲目和音量，并清理已经淡出结束的音乐
 void UDeliveryMusicComponent::TickComponent(float DeltaTime, ELevelTick TickType,
-	FActorComponentTickFunction* ThisTickFunction)
+                                            FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 

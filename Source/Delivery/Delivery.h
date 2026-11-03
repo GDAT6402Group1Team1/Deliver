@@ -4,5 +4,5 @@
 
 #include "CoreMinimal.h"
 
-/** Main log category used across the project */
+/** 项目共用的日志分类 */
 DECLARE_LOG_CATEGORY_EXTERN(LogDelivery, Log, All);
