@@ -64,6 +64,8 @@ UDeliveryInputComponent::UDeliveryInputComponent()
 
 }
 
+// 输入动作绑定
+
 // 绑定步行输入，玩法组件仍负责检查操作条件
 void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
 {
@@ -78,6 +80,7 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
         return;
     }
 
+    // 记住本次绑定对象，同一输入组件再次传入时不重复绑定
     BoundInput = PlayerInputComponent;
     if (LookAction)
     {
@@ -166,6 +169,7 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
 
 }
 
+// 移动与视角
 
 void UDeliveryInputComponent::Move(const FInputActionValue &Value)
 {
@@ -193,6 +197,8 @@ void UDeliveryInputComponent::JumpStarted(const FInputActionValue & /* 未使用
     if (!IsValid(Character)) return;
     Character->DoJumpStart();
 }
+
+// 左右拳与双键抓取
 
 void UDeliveryInputComponent::AttackLeftStarted(const FInputActionValue & /* 未使用 */)
 {
@@ -298,6 +304,8 @@ void UDeliveryInputComponent::MouseReleased(bool bLeft)
     }
 }
 
+// 交互与物品栏
+
 void UDeliveryInputComponent::InteractStarted(const FInputActionValue & /* 未使用 */)
 {
     if (!IsValid(Character)) return;
@@ -339,6 +347,8 @@ void UDeliveryInputComponent::InventorySlot3()
     if (InventoryComponent)
         InventoryComponent->RequestSlotAction(2);
 }
+
+// 输入状态清理
 
 void UDeliveryInputComponent::InventorySlot4()
 {

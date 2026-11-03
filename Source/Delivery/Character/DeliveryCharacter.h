@@ -8,16 +8,21 @@
 #include "GameFramework/Pawn.h"
 #include "DeliveryCharacter.generated.h"
 
+// 交互与携带组件
 class UDeliveryInteractionComponent;
 class UDeliveryCarryComponent;
 class UAbilitySystemComponent;
 class UGameplayEffect;
+
+// 身体与镜头组件
 class UCapsuleComponent;
 class UDeliveryActiveRagdollComponent;
 class UDeliveryRagdollCombatComponent;
 class UDeliveryGrabComponent;
 class UDeliveryGrabbableComponent;
 class UDeliveryInteractionProbeComponent;
+
+// 物品与车辆组件
 class UDeliveryInventoryComponent;
 class UDeliveryVehicleSummonComponent;
 class ADeliveryMotorbike;
@@ -40,6 +45,7 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
 {
     GENERATED_BODY()
 
+    // 输入组件
     // 输入处理
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
     TObjectPtr<UDeliveryInputComponent> PlayerInput;
@@ -82,6 +88,7 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
     TObjectPtr<UDeliveryCameraComponent> PlayerCamera;
 
+    // 物理身体与抓取组件
     /** 控制身体站立、行走、跳跃和倒地恢复 */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components",
               meta = (AllowPrivateAccess = "true"))
@@ -112,7 +119,7 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
               meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UDeliveryInventoryComponent> InventoryComponent;
 
-    /** 召唤摩托车，管理召唤冷却并显示按键提示 */
+    /** 召唤摩托车并保存冷却状态，按键提示由提示组件更新 */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components",
               meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UDeliveryVehicleSummonComponent> VehicleSummon;
@@ -123,11 +130,14 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
     TObjectPtr<USceneComponent> HeldItemAnchor;
 
   protected:
+
+    // 跳跃限制
     // 起跳限制
     /** 服务器接受两次起跳的最短间隔，单位为秒；用于限制重复请求，实际能否起跳仍由布娃娃组件判断 */
     UPROPERTY(EditAnywhere, Category = "Ragdoll|Network", meta = (ClampMin = "0.0"))
     float MinimumJumpInterval = 0.05f;
 
+    // 技能与生命配置
     // 技能与生命值
     // 持续恢复生命值的效果，在角色蓝图中配置
     UPROPERTY(EditDefaultsOnly, Category = "Ability")
@@ -179,6 +189,8 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
     virtual void SetupPlayerInputComponent(class UInputComponent *PlayerInputComponent) override;
 
   public:
+
+    // 移动与视角接口
     /** 接收左右、前后输入，交给布娃娃组件处理，并向服务器发送输入 */
     UFUNCTION(BlueprintCallable, Category = "Input")
     virtual void DoMove(float Right, float Forward);
@@ -203,6 +215,7 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
     UFUNCTION(BlueprintCallable, Category = "Input")
     virtual void DoAttackRight();
 
+    // 交互接口
     /** 向服务器请求与当前选中的物体交互，由服务器检查并执行 */
     UFUNCTION(BlueprintCallable, Category = "Input")
     virtual void DoInteract();

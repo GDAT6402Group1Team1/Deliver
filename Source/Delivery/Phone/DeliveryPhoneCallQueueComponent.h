@@ -34,6 +34,7 @@ class DELIVERY_API UDeliveryPhoneCallQueueComponent : public UActorComponent
 	          meta = (WorldContext = "WorldContextObject", DisplayName = "Get Delivery Phone Queue"))
 	static UDeliveryPhoneCallQueueComponent* Get(const UObject* WorldContextObject);
 
+	// 来电入队与接听
 	// 服务器队列操作
 	/** 服务器：来电入队；同一任务同一类型不会重复入队 */
 	void EnqueueCall(UDeliveryTaskDefinition* Task, EDeliveryPhoneCallType CallType);
@@ -60,6 +61,7 @@ class DELIVERY_API UDeliveryPhoneCallQueueComponent : public UActorComponent
 		return CallState;
 	}
 
+	// 通话状态查询
 	/** 当前这通电话；Idle 时返回 假 */
 	UFUNCTION(BlueprintPure, Category = "Phone")
 	bool GetCurrentCall(FDeliveryPhoneCall& OutCall) const;
@@ -122,6 +124,7 @@ class DELIVERY_API UDeliveryPhoneCallQueueComponent : public UActorComponent
 	UFUNCTION()
 	void OnRep_Queue();
 
+	// 客户端状态通知
 	UFUNCTION()
 	void OnRep_CallState();
 
@@ -137,6 +140,7 @@ class DELIVERY_API UDeliveryPhoneCallQueueComponent : public UActorComponent
 	/** 服务器改状态的唯一入口，负责记时间戳和广播 */
 	void SetCallState(EDeliveryPhoneCallState NewState, float Duration);
 
+	// 未接来电处理
 	// 未接任务的重拨
 	/** 拒接/漏接之后，若任务还没被接单就排一次重拨 */
 	void ScheduleRedial(UDeliveryTaskDefinition* Task);

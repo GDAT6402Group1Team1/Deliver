@@ -92,8 +92,11 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
 	                           FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void RegisterComponentTickFunctions(bool bRegister) override;
+
+	// 网络复制与更新入口
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	// 身体驱动启停
 	// 身体状态与移动
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Ragdoll")
 	void StartRagdoll();
@@ -104,6 +107,7 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Ragdoll")
 	void SetLimp(bool bLimp);
 
+	// 移动与跳跃入口
 	UFUNCTION(BlueprintCallable, Category = "Ragdoll")
 	void SetMoveInput(FVector2D RightForward);
 
@@ -113,6 +117,7 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 	/** 仅服务器在确认受到一拳后调用；受击者自己承受冲量并短暂放松直立控制 */
 	void ApplyMeleeImpact(const FVector& Impulse, const FVector& ImpactPoint);
 
+	// 出拳姿态接口
 	// 身体出拳控制
 	/** 开始直拳：记录攻击方向和手侧 */
 	void BeginBodyDrivenPunch(FVector AimDirection, float HandSide);
@@ -133,6 +138,7 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 		return FRotator(0, CurrentFacingYaw, 0).Vector();
 	}
 
+	// 挥斧动作接口
 	// 斧头动作
 	/** 请求斧头下劈，由服务器校验当前持物和动作状态 */
 	void RequestAxeSwing();
@@ -607,7 +613,6 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 		FVector Normal = FVector::UpVector;
 		FVector SurfaceVelocity = FVector::ZeroVector;
 	};
-
 
 	// 各职责的运行状态，只有主组件安排更新顺序
 	FDeliveryRagdollMovement Movement;

@@ -31,6 +31,7 @@ class DELIVERY_API UDeliveryInventoryComponent : public UActorComponent
 	UPROPERTY(BlueprintAssignable, Category = "Inventory")
 	FDeliveryInventoryChanged OnInventoryChanged;
 
+	// 物品栏查询
 	// 物品查询
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	ADeliveryHandheldItem* GetItemInSlot(int32 SlotIndex) const;
@@ -55,6 +56,7 @@ class DELIVERY_API UDeliveryInventoryComponent : public UActorComponent
 	UFUNCTION(BlueprintPure, Category = "Inventory|UI")
 	float GetFullFeedbackAlpha() const;
 
+	// 拾取与物品操作
 	// 拾取、切换和移除
 	/** 服务器拾取接口，检查物品和槽位条件后更新背包 */
 	bool TryPickup(ADeliveryHandheldItem* Item);
@@ -85,6 +87,8 @@ class DELIVERY_API UDeliveryInventoryComponent : public UActorComponent
 	float DropForwardSpeed = 80.0f;
 
   private:
+
+	// 服务器槽位操作
 	// 网络请求与同步回调
 	UFUNCTION(Server, Reliable)
 	void ServerSlotAction(int32 SlotIndex);
@@ -92,6 +96,7 @@ class DELIVERY_API UDeliveryInventoryComponent : public UActorComponent
 	UFUNCTION(Client, Reliable)
 	void ClientInventoryFull();
 
+	// 客户端物品栏刷新
 	UFUNCTION()
 	void OnRep_Slots();
 

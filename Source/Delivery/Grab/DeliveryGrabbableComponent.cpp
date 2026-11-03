@@ -13,6 +13,8 @@ UDeliveryGrabbableComponent::UDeliveryGrabbableComponent()
 	SetIsReplicatedByDefault(true);
 }
 
+// 初始化与更新
+
 // 为普通可搬动物体启用位置同步
 void UDeliveryGrabbableComponent::BeginPlay()
 {
@@ -114,6 +116,8 @@ UPrimitiveComponent* UDeliveryGrabbableComponent::GetGrabBody(FName& OutBone) co
 	return nullptr;
 }
 
+// 抓取条件与抓取者登记
+
 // 检查物体是否可抓，角色只有倒地时允许被拖动
 bool UDeliveryGrabbableComponent::CanGrab(const ADeliveryCharacter* Requester) const
 {
@@ -181,6 +185,8 @@ void UDeliveryGrabbableComponent::UnregisterGrabber(ADeliveryCharacter* Requeste
 	GetOwner()->ForceNetUpdate();
 }
 
+// 携带状态同步
+
 // 客户端收到搬运模式变化后更新物理和碰撞
 void UDeliveryGrabbableComponent::OnRep_KinematicCarry()
 {
@@ -221,6 +227,8 @@ void UDeliveryGrabbableComponent::ApplyCarryMode()
 			Body->SetPhysicsLinearVelocity(LastCarryVelocity);
 	}
 }
+
+// 释放全部抓取者
 
 // 通知所有搬运者松手，并清空物体的抓取记录
 void UDeliveryGrabbableComponent::ReleaseAllGrabbers()

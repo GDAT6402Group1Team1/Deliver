@@ -136,6 +136,8 @@ FName FindVisualSole(const USkeletalMeshComponent* Mesh, const FName LimbRoot, c
 }
 }
 
+// 组件与骨骼检查
+
 // 取得身体网格和所需的物理控制组件
 void UDeliveryActiveRagdollComponent::ResolveOwnerComponents()
 {
@@ -224,6 +226,8 @@ bool UDeliveryActiveRagdollComponent::ValidateSetup() const
 	return true;
 }
 
+// 初始落地位置
+
 // 根据身体和地面位置调整初始落点
 void UDeliveryActiveRagdollComponent::PlaceOnGround()
 {
@@ -274,6 +278,8 @@ void UDeliveryActiveRagdollComponent::PlaceOnGround()
 	}
 }
 
+// 物理模拟配置
+
 // 配置身体碰撞和物理模拟参数
 void UDeliveryActiveRagdollComponent::ConfigurePhysics()
 {
@@ -317,6 +323,8 @@ void UDeliveryActiveRagdollComponent::ConfigurePhysics()
 	DeliveryRagdollPhysicsHelpers::StabilizePelvisMass(Mesh, Bones.Hips);
 	Mesh->WakeAllRigidBodies();
 }
+
+// 创建与销毁身体控制器
 
 // 为躯干、手臂和双脚创建对应的物理控制
 bool UDeliveryActiveRagdollComponent::CreateControls()
@@ -528,6 +536,8 @@ void UDeliveryActiveRagdollComponent::DestroyControls()
 	Movement.LeftFoot.Control = NAME_None;
 	Movement.RightFoot.Control = NAME_None;
 }
+
+// 记录站立姿态
 
 // 记录初始站姿尺寸，供站立高度和步态计算使用
 void UDeliveryActiveRagdollComponent::CacheStandingState()

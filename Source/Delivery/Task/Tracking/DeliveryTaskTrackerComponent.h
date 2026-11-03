@@ -39,6 +39,7 @@ class DELIVERY_API UDeliveryTaskTrackerComponent : public UActorComponent
 		return TrackedTask;
 	}
 
+	// 选择跟踪任务
 	/** 手机 UI 选中某个任务；客户端调用会转成 Server RPC */
 	UFUNCTION(BlueprintCallable, Category = "Task")
 	void RequestTrackTask(UDeliveryTaskDefinition* Task);
@@ -59,6 +60,7 @@ class DELIVERY_API UDeliveryTaskTrackerComponent : public UActorComponent
 	UFUNCTION(BlueprintPure, Category = "Task")
 	bool GetTrackedTaskDestination(FVector& OutLocation, FName& OutLocationId) const;
 
+	// 目的地查询
 	/** 同上，但指定任务而不是当前追踪的那个；任务列表 UI 里显示各任务距离时用 */
 	UFUNCTION(BlueprintPure, Category = "Task")
 	bool GetTaskDestination(const UDeliveryTaskDefinition* Task, FVector& OutLocation,
@@ -72,6 +74,7 @@ class DELIVERY_API UDeliveryTaskTrackerComponent : public UActorComponent
 	/** 服务器权威地设置追踪目标 */
 	void SetTrackedTask(UDeliveryTaskDefinition* Task);
 
+	// 自动选择有效任务
 	/** 服务器：按当前全局任务状态修正追踪目标 */
 	void RefreshAutoSelection();
 

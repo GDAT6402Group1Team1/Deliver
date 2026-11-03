@@ -29,6 +29,8 @@ void UDeliveryTaskTrackerComponent::GetLifetimeReplicatedProps(
 	DOREPLIFETIME_CONDITION(UDeliveryTaskTrackerComponent, TrackedTask, COND_OwnerOnly);
 }
 
+// 连接任务管理器
+
 // 连接任务管理器并初始化个人追踪目标
 void UDeliveryTaskTrackerComponent::BeginPlay()
 {
@@ -81,6 +83,8 @@ UDeliveryTaskTrackerComponent* UDeliveryTaskTrackerComponent::FindTracker(AActor
 
 	return Actor ? Actor->FindComponentByClass<UDeliveryTaskTrackerComponent>() : nullptr;
 }
+
+// 任务选择与服务器请求
 
 // 检查任务是否允许作为当前追踪目标
 bool UDeliveryTaskTrackerComponent::CanTrackTask(const UDeliveryTaskDefinition* Task) const
@@ -139,6 +143,8 @@ void UDeliveryTaskTrackerComponent::SetTrackedTask(UDeliveryTaskDefinition* Task
 	OnTrackedTaskChanged.Broadcast(TrackedTask);
 }
 
+// 任务变化后的自动选择
+
 // 当前任务不可追踪时，按阶段选择合适的新目标
 void UDeliveryTaskTrackerComponent::RefreshAutoSelection()
 {
@@ -192,6 +198,8 @@ void UDeliveryTaskTrackerComponent::OnRep_TrackedTask()
 {
 	OnTrackedTaskChanged.Broadcast(TrackedTask);
 }
+
+// 根据任务状态确定目的地
 
 bool UDeliveryTaskTrackerComponent::GetTrackedTaskDestination(FVector& OutLocation,
                                                               FName& OutLocationId) const

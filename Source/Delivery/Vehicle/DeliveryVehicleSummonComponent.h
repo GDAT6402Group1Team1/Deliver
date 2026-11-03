@@ -26,11 +26,12 @@ class DELIVERY_API UDeliveryVehicleSummonComponent : public UActorComponent
 	                           FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// 召唤操作与冷却查询
+	// 召唤操作
 	/** 玩家按键；客户端只是"我想召唤"，真正的判定和冷却都在服务器 */
 	UFUNCTION(BlueprintCallable, Category = "Vehicle|Summon")
 	void RequestSummon();
 
+	// 冷却查询
 	/** 还要等多少秒才能再召唤；0 = 现在就能按 */
 	UFUNCTION(BlueprintPure, Category = "Vehicle|Summon")
 	float GetCooldownRemaining() const;

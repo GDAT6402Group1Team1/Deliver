@@ -70,6 +70,8 @@ UDeliveryTrafficCarComponent::UDeliveryTrafficCarComponent()
 	PrimaryComponentTick.TickGroup = TG_PostPhysics;
 }
 
+// 路线初始化
+
 // 准备道路路线、车辆初始位置和碰撞检测
 void UDeliveryTrafficCarComponent::BeginPlay()
 {
@@ -242,6 +244,8 @@ void UDeliveryTrafficCarComponent::UpdateScaleAnim(float RawDeltaTime)
 	}
 }
 
+// 车辆生成
+
 // 按批次创建后续交通车辆
 void UDeliveryTrafficCarComponent::SpawnNextWave()
 {
@@ -327,6 +331,8 @@ Clone->Tags.Add(FName(*FString::Printf(TEXT("%s%d"), WaveTagPrefix, GetWaveIndex
 
 	Clone->FinishSpawning(SecondWaveTransform);
 }
+
+// 路线与速度更新
 
 // 推进车辆行驶、路线恢复和碰撞处理
 void UDeliveryTrafficCarComponent::TickComponent(float DeltaTime, ELevelTick TickType,
@@ -548,6 +554,8 @@ void UDeliveryTrafficCarComponent::NotifyResetToStart()
 	DebugAccelerationPauseRemaining = 0.0f;
 }
 
+// 车辆碰撞处理
+
 // 检查交通车辆对角色或其他物体的撞击
 void UDeliveryTrafficCarComponent::ProcessVehicleImpacts(float DeltaTime)
 {
@@ -723,6 +731,8 @@ void UDeliveryTrafficCarComponent::ProcessMotorbikeImpacts(const FVector& Start,
 		}
 	}
 }
+
+// 前方车辆距离
 
 // 寻找前方同路线车辆，提供跟车距离
 float UDeliveryTrafficCarComponent::GetDistanceToCarAhead()

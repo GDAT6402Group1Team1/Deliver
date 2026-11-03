@@ -23,6 +23,8 @@ public:
     bool IsGrabChordHeld() const { return bGrabChordActive && bLeftMouseDown && bRightMouseDown; }
 protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+    // 移动与视角动作
     // 输入配置
     UPROPERTY(EditAnywhere, Category = "Input")
     TObjectPtr<UInputAction> JumpAction;
@@ -40,12 +42,14 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Input", meta = (ClampMin = "0.1", ClampMax = "2.0"))
     float MouseLookSensitivity = 0.75f;
 
+    // 战斗动作
     UPROPERTY(EditAnywhere, Category = "Input")
     TObjectPtr<UInputAction> AttackLeftAction;
 
     UPROPERTY(EditAnywhere, Category = "Input")
     TObjectPtr<UInputAction> AttackRightAction;
 
+    // 交互与物品动作
     /** 交互输入，默认按 F 触发；绑定输入时再加载资源，允许在编辑器中稍后创建该资源 */
     UPROPERTY(EditAnywhere, Category = "Input")
     TSoftObjectPtr<UInputAction> InteractAction;
@@ -60,13 +64,19 @@ protected:
 
 private:
     friend class FDeliveryInputLifecycleTest;
+
+    // 当前绑定对象
     TWeakObjectPtr<UInputComponent> BoundInput;
     UPROPERTY(Transient)
     TObjectPtr<ADeliveryCharacter> Character;
+
+    // 移动输入回调
     void Move(const FInputActionValue &Value);
     void Look(const FInputActionValue &Value);
     void MouseLook(const FInputActionValue &Value);
     void JumpStarted(const FInputActionValue &Value);
+
+    // 出拳与双键抓取回调
     void AttackLeftStarted(const FInputActionValue &Value);
     void AttackRightStarted(const FInputActionValue &Value);
     void AttackLeftEnded(const FInputActionValue &Value);
@@ -77,6 +87,8 @@ private:
     void MousePressed(bool bLeft);
     /** 松开对应的抓取手；短按未触发抓取时执行一次出拳 */
     void MouseReleased(bool bLeft);
+
+    // 交互与物品回调
     void InteractStarted(const FInputActionValue &Value);
     void PickupStarted(const FInputActionValue &Value);
     void PickupEnded(const FInputActionValue &Value);

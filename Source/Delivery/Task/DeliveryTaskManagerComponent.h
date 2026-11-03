@@ -63,6 +63,7 @@ class DELIVERY_API UDeliveryTaskManagerComponent : public UActorComponent
 
 	bool IsTaskRegistered(const UDeliveryTaskDefinition* Task) const;
 
+	// 取件与交付
 	/**
 	 * 服务器：玩家拿到了某个任务的快递；首次取件让任务进入进行中，但不会重置接电话时
 	 * 已经开始的计时；漏接后直接取件时才以取件时刻兜底启动；换手、捡回不会重置
@@ -78,6 +79,7 @@ class DELIVERY_API UDeliveryTaskManagerComponent : public UActorComponent
 	UFUNCTION(BlueprintCallable, Category = "Task")
 	void ReportSpecialEvent(UDeliveryTaskDefinition* Task, FGameplayTag EventTag);
 
+	// 丢件与特殊事件
 	/**
 	 * 服务器在快递丢失时将任务退回待取件，允许玩家回取货点重新领取
 	 * 保留原计时，已完成的任务不受影响
@@ -95,6 +97,7 @@ class DELIVERY_API UDeliveryTaskManagerComponent : public UActorComponent
 	// 任务状态查询
 	/** —— 查询（双端）—— */
 
+	// 任务查询
 	UFUNCTION(BlueprintPure, Category = "Task")
 	EDeliveryTaskStatus GetTaskStatus(const UDeliveryTaskDefinition* Task) const;
 
@@ -168,6 +171,7 @@ class DELIVERY_API UDeliveryTaskManagerComponent : public UActorComponent
 	UPROPERTY(ReplicatedUsing = OnRep_Tasks)
 	TArray<FDeliveryTaskState> Tasks;
 
+	// 客户端任务通知
 	// 状态更新与客户端通知
 	UFUNCTION()
 	void OnRep_Tasks();

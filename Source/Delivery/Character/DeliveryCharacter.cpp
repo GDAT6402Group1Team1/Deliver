@@ -192,29 +192,7 @@ UAbilitySystemComponent *ADeliveryCharacter::GetAbilitySystemComponent() const
     return PS ? PS->GetAbilitySystemComponent() : nullptr;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// 移动与视角输入
 
 // 调整控制器视角，身体转向由身体组件处理
 void ADeliveryCharacter::DoLook(float Yaw, float Pitch)
@@ -292,23 +270,7 @@ void ADeliveryCharacter::DoAttackRight()
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// 交互与携带操作
 
 void ADeliveryCharacter::DoInteract()
 {
@@ -401,6 +363,8 @@ void ADeliveryCharacter::ServerCancelPickupHold_Implementation(AActor *Target)
     InteractionComponent->CancelServerHold(Target);
 }
 
+// 近战技能接口
+
 bool ADeliveryCharacter::StartMeleeAttack(EMeleeHand Hand)
 {
     return RagdollCombat && RagdollCombat->StartAttack(Hand);
@@ -417,6 +381,8 @@ bool ADeliveryCharacter::IsMeleeAttacking() const
 {
     return RagdollCombat && RagdollCombat->IsPunching();
 }
+
+// 服务器移动请求
 
 // 过滤无效输入，再更新服务器上的朝向和移动意图
 void ADeliveryCharacter::ServerSetMoveInput_Implementation(FVector2D Input, float AimYaw)
@@ -458,6 +424,8 @@ void ADeliveryCharacter::ServerJump_Implementation()
         LastServerJumpTime = Now;
     }
 }
+
+// 输入绑定与控制权切换
 
 // 角色只提供输入组件的接入点，具体绑定由输入组件完成
 void ADeliveryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

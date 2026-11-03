@@ -40,6 +40,8 @@ void UDeliveryRagdollCombatComponent::BeginPlay()
     ActiveRagdoll = GetOwner()->FindComponentByClass<UDeliveryActiveRagdollComponent>();
 }
 
+// 出拳请求与蓄力
+
 // 记录出拳手和方向，并安排释放、命中与结束时间
 bool UDeliveryRagdollCombatComponent::StartPunch(EMeleeHand Hand, FVector AimDir)
 {
@@ -96,6 +98,8 @@ void UDeliveryRagdollCombatComponent::CancelPunch()
     ActiveRagdoll->EndBodyDrivenPunch();
     bIsPunching = false;
 }
+
+// 释放拳头与命中窗口
 
 // 释放拳头并施加起始冲量，本机同时播放出拳声音
 void UDeliveryRagdollCombatComponent::FirePunchDrive()
@@ -174,6 +178,8 @@ void UDeliveryRagdollCombatComponent::FirePunchEnded()
     bIsPunching = false;
     OnPunchEnded.Broadcast(ActiveHand);
 }
+
+// 技能调用与命中收集
 
 // 根据身体朝向发动出拳，不使用镜头方向改变拳路
 bool UDeliveryRagdollCombatComponent::StartAttack(EMeleeHand Hand)

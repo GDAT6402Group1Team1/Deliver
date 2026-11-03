@@ -34,6 +34,8 @@ void UDeliveryTaskManagerComponent::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(UDeliveryTaskManagerComponent, Tasks);
 }
 
+// 初始化任务与电话队列
+
 // 为配置的任务建立运行状态，并检查初始解锁条件
 void UDeliveryTaskManagerComponent::BeginPlay()
 {
@@ -116,6 +118,8 @@ const FDeliveryTaskState* UDeliveryTaskManagerComponent::FindState(const UDelive
 	    });
 }
 
+// 任务状态与解锁
+
 // 更新任务状态，并通知服务器上的监听者
 void UDeliveryTaskManagerComponent::SetTaskStatus(FDeliveryTaskState& State, EDeliveryTaskStatus NewStatus)
 {
@@ -197,6 +201,8 @@ void UDeliveryTaskManagerComponent::UpdateUnlockPolling()
 		    true);
 	}
 }
+
+// 取件条件与接单计时
 
 // 判断任务快递现在能否领取或重新捡回
 bool UDeliveryTaskManagerComponent::CanAcquireItem(const UDeliveryTaskDefinition* Task) const
@@ -288,6 +294,8 @@ bool UDeliveryTaskManagerComponent::IsTaskRegistered(const UDeliveryTaskDefiniti
 	return Task && FindState(Task) != nullptr;
 }
 
+// 取件与交付结算
+
 // 确认任务允许领取后进入配送中，保留接听时的计时
 bool UDeliveryTaskManagerComponent::TryAcquireItem(UDeliveryTaskDefinition* Task, APlayerState* Player)
 {
@@ -375,6 +383,8 @@ const TArray<UDeliveryTaskDefinition*>& UDeliveryTaskManagerComponent::GetAllTas
 	return reinterpret_cast<const TArray<UDeliveryTaskDefinition*>&>(TaskDefinitions);
 }
 
+// 丢件与特殊事件
+
 // 快递意外丢失时退回待取件，保留原计时
 bool UDeliveryTaskManagerComponent::NotifyItemLost(UDeliveryTaskDefinition* Task)
 {
@@ -419,6 +429,8 @@ void UDeliveryTaskManagerComponent::ReportSpecialEvent(UDeliveryTaskDefinition* 
 	State->SpecialEvents.AddUnique(EventTag);
 }
 
+// 超时处理
+
 // 首次超时时安排催促电话，任务本身继续进行
 void UDeliveryTaskManagerComponent::HandleOverdue(UDeliveryTaskDefinition* Task)
 {
@@ -440,6 +452,8 @@ void UDeliveryTaskManagerComponent::HandleOverdue(UDeliveryTaskDefinition* Task)
 
 	OnTaskOverdue.Broadcast(Task);
 }
+
+// 任务状态查询
 
 // 查询指定任务的当前状态
 EDeliveryTaskStatus UDeliveryTaskManagerComponent::GetTaskStatus(const UDeliveryTaskDefinition* Task) const
@@ -529,6 +543,8 @@ FDeliveryTaskTimeSnapshot UDeliveryTaskManagerComponent::GetTimeSnapshot(
 	return Snapshot;
 }
 
+// 奖励计算与预览
+
 // 根据用时和特殊事件计算奖励明细
 FDeliveryRewardBreakdown UDeliveryTaskManagerComponent::EvaluateReward(
     const UDeliveryTaskDefinition* Task, float ElapsedSeconds,
@@ -593,6 +609,8 @@ FDeliveryRewardBreakdown UDeliveryTaskManagerComponent::PreviewReward(
 
 	return EvaluateReward(Task, GetTimeSnapshot(Task).ElapsedSeconds, State->SpecialEvents);
 }
+
+// 客户端任务更新
 
 // 比较新旧任务状态，在客户端补发变化通知
 void UDeliveryTaskManagerComponent::OnRep_Tasks()

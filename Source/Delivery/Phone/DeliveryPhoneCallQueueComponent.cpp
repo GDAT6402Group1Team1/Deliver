@@ -62,6 +62,8 @@ FDeliveryPhoneCallContent UDeliveryPhoneCallQueueComponent::GetCallContent(const
 	return Call.CallType == EDeliveryPhoneCallType::Overdue ? Call.Task->OverdueCall : Call.Task->UnlockCall;
 }
 
+// 通话状态查询
+
 // 读取正在处理的来电，没有来电时返回失败
 bool UDeliveryPhoneCallQueueComponent::GetCurrentCall(FDeliveryPhoneCall& OutCall) const
 {
@@ -85,6 +87,8 @@ float UDeliveryPhoneCallQueueComponent::GetStateRemainingSeconds() const
 
 	return FMath::Max(0.f, StateDurationSeconds - (GetServerTimeSeconds() - StateStartServerTime));
 }
+
+// 来电排队与响铃
 
 // 登记新来电，并处理重复请求和队列启动
 void UDeliveryPhoneCallQueueComponent::EnqueueCall(UDeliveryTaskDefinition* Task,
@@ -164,6 +168,8 @@ void UDeliveryPhoneCallQueueComponent::StartRinging()
 	    CallTimerHandle, this, &UDeliveryPhoneCallQueueComponent::HandleRingTimeout, RingDuration, false);
 }
 
+// 接听与挂断
+
 // 接听来电，任务电话同时尝试正式接单
 bool UDeliveryPhoneCallQueueComponent::AnswerCurrentCall()
 {
@@ -220,6 +226,8 @@ void UDeliveryPhoneCallQueueComponent::HandleCallFinished()
 {
 	FinishCurrentCall(false);
 }
+
+// 结束通话与状态通知
 
 // 清理当前来电，再决定重拨或开始下一通电话
 void UDeliveryPhoneCallQueueComponent::FinishCurrentCall(bool bMissed)
@@ -293,6 +301,8 @@ void UDeliveryPhoneCallQueueComponent::OnRep_CallState()
 {
 	BroadcastStateIfChanged();
 }
+
+// 未接来电重拨
 
 // 为未接电话安排延迟重拨
 void UDeliveryPhoneCallQueueComponent::ScheduleRedial(UDeliveryTaskDefinition* Task)

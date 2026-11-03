@@ -12,6 +12,8 @@
 #include "PhysicsEngine/BodyInstance.h"
 using DeliveryRagdollPhysicsHelpers::HasPhysicsBody;
 
+// 地面检测
+
 // 更新脚下地面信息，供站立和步态使用
 bool UDeliveryActiveRagdollComponent::SampleGround(const FVector& Planned, const FVector& Fallback,
                                                    const FVector& AlongNormal, FGroundHit& OutHit) const
@@ -118,6 +120,8 @@ bool UDeliveryActiveRagdollComponent::TraceTumbleSurface(FGroundHit& OutHit) con
 	return true;
 }
 
+// 陡坡翻滚
+
 // 根据坡度、速度和持续时间进入或退出翻滚状态
 void UDeliveryActiveRagdollComponent::UpdateSlopeTumble(float DeltaTime)
 {
@@ -188,6 +192,8 @@ void UDeliveryActiveRagdollComponent::UpdateSlopeTumble(float DeltaTime)
 		TumbleCooldownTime = 1.0f;
 	}
 }
+
+// 倒地恢复
 
 // 等待身体和地面稳定后逐步恢复站立
 void UDeliveryActiveRagdollComponent::UpdateLimpRecovery(float DeltaTime)

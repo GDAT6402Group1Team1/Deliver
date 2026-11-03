@@ -23,6 +23,8 @@ class DELIVERY_API UDeliveryInteractionComponent : public UActorComponent
     // 本机操作与查询
     /** 请求执行当前选中的通用交互 */
     void Interact();
+
+    // 本机长按交互
     /** 根据目标配置立即执行或开始长按 */
     void BeginUse();
     /** 清除本机进度，并按需通知服务器取消 */
@@ -39,6 +41,8 @@ class DELIVERY_API UDeliveryInteractionComponent : public UActorComponent
     void BeginServerHold(AActor *Target);
     void CompleteServerHold(AActor *Target);
     void CancelServerHold(AActor *Target);
+
+    // 服务器目标检查
     bool ValidateTarget(AActor *Target) const;
 
   protected:
@@ -47,6 +51,8 @@ class DELIVERY_API UDeliveryInteractionComponent : public UActorComponent
   private:
     // 长按期间检查目标是否仍然可用
     void UpdateHold();
+
+    // 交互请求分发
     void SendRequest(EDeliveryInteractionRequest Request, AActor *Target);
     // 本机长按状态
     bool bUseHeld = false;

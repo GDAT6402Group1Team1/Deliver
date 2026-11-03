@@ -32,14 +32,20 @@ class DELIVERY_API UDeliveryRagdollCombatComponent : public UActorComponent
     UDeliveryRagdollCombatComponent();
 
     virtual void BeginPlay() override;
+
+    // 命中窗口更新
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+    // 近战技能接口
     // 出拳控制与查询
     /** 使用身体朝向发动攻击，镜头转动不会改变拳路 */
     bool StartAttack(EMeleeHand Hand);
+
+    // 命中目标收集
     /** 服务器查询本次命中的角色，同一角色只返回一次 */
     TArray<AActor *> GatherHits(EMeleeHand Hand) const;
 
+    // 蓄力与出拳操作
     /**
      * 启动一次出拳并注册阶段计时器
      * @param Hand 本次出拳使用的手

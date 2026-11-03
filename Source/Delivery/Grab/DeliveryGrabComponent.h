@@ -26,6 +26,7 @@ class DELIVERY_API UDeliveryGrabComponent : public UActorComponent
 	                           FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	// 抓取与松手请求
 	// 抓取操作
 	void RequestBegin();
 	void RequestReleaseHand(bool bLeft);
@@ -39,11 +40,15 @@ class DELIVERY_API UDeliveryGrabComponent : public UActorComponent
 	// 抓取状态与手部目标
 	bool IsCarryingProp() const;
 	bool IsDraggingCharacter() const;
+
+	// 身体驱动需要的手部目标
 	bool GetHandGoal(bool bLeft, FVector& OutGoal) const;
 	bool GetGrabFacingDirection(FVector& OutDirection) const;
 	FVector FilterApproachWish(const FVector& Wish) const;
 	bool GetCarryPoseFor(const AActor* Target, FVector& OutCenter, FVector& OutForward) const;
 #if !UE_BUILD_SHIPPING
+
+	// 候选物体检查
 	/** PIE 诊断：与正常抓取使用同一个候选查询 */
 	bool DebugFindCandidate(AActor*& OutActor, FVector& OutPoint) const
 	{
@@ -132,6 +137,8 @@ class DELIVERY_API UDeliveryGrabComponent : public UActorComponent
 	float ApproachStopDistance = 55.0f;
 
   private:
+
+	// 服务器抓取操作
 	// 服务器请求与目标选择
 	UFUNCTION(Server, Reliable)
 	void ServerRequestBegin(AActor* Target, FVector_NetQuantize10 HitPoint);

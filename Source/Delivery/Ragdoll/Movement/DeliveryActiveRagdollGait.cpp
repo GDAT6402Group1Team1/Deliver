@@ -10,6 +10,8 @@
 #include "PhysicsEngine/BodyInstance.h"
 #include "Kismet/GameplayStatics.h"
 
+// 左右脚的迈步安排
+
 // 步态入口：先区分支撑、摆动和恢复状态，再决定是否开始新一步
 // 脚部目标用于驱动物理运动，实际脚位置仍受碰撞和关节约束影响
 void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector& Wish)
@@ -118,6 +120,8 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 	}
 }
 
+// 迈步起点与落点
+
 // 开始一步：记录本次摆动的起点与目标；后续帧沿这一段推进，避免每帧重新开始迈步
 bool UDeliveryActiveRagdollComponent::BeginStep(FDeliveryRagdollFoot& Foot, const FVector& Wish)
 {
@@ -199,6 +203,8 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FDeliveryRagdollFoot& Foo
 	}
 }
 
+// 落点规划与坡面方向
+
 // 根据移动方向和地面情况选择下一次落脚位置
 bool UDeliveryActiveRagdollComponent::PlanFootLanding(FDeliveryRagdollFoot& Foot, const FVector& Wish)
 {
@@ -276,6 +282,8 @@ FVector UDeliveryActiveRagdollComponent::GetSlopeRight(const FVector& /* 未使�
 	return DeliveryFootPlacement::SideAxis(Movement.CurrentGroundNormal, CurrentFacingYaw);
 }
 
+// 防止双脚交叉
+
 // 限制左右脚越过身体中线，减少双脚交叉
 void UDeliveryActiveRagdollComponent::KeepFeetOnOwnSide()
 {
@@ -297,6 +305,8 @@ void UDeliveryActiveRagdollComponent::KeepFeetOnOwnSide()
 		Mesh->AddForce(Outward * Acceleration, Foot->Bone, true);
 	}
 }
+
+// 坡面支撑与防滑
 
 // 在支撑脚上施加坡面辅助力，减少静止下滑
 void UDeliveryActiveRagdollComponent::ApplySlopeSupportTraction(float DeltaTime)
@@ -349,6 +359,8 @@ FQuat UDeliveryActiveRagdollComponent::MakeSlopeAlignedFootRotation(const FDeliv
 	const FQuat ReferenceBasis(FRotationMatrix::MakeFromZX(FVector::UpVector, ReferenceForward));
 	return SlopeBasis * ReferenceBasis.Inverse() * Foot.ReferenceRotation;
 }
+
+// 落脚声音
 
 // 根据落脚状态和速度播放脚步音效
 void UDeliveryActiveRagdollComponent::PlayFootstep(bool bLeft, const FVector& Location, float Stride)

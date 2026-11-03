@@ -15,6 +15,8 @@
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "PhysicsEngine/SkeletalBodySetup.h"
 
+// 本帧身体控制目标
+
 // 身体目标：把当前输入和状态整理为电机目标；目标位置不等于身体已经到达的位置；真实身体还受碰撞与约束影响
 void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 {
@@ -108,6 +110,8 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	                  Punch.IsActive() ? Punch.GetDirection() : FVector::ZeroVector, GrabGoals, GrabMask,
 	                  bAxeSwing ? &AnimationPose : nullptr);
 }
+
+// 髋部位置与站立支撑
 
 // 计算髋部的高度和水平目标，结合移动、坡面与身体状态更新控制
 void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const FVector& Wish)
@@ -289,6 +293,8 @@ void UDeliveryActiveRagdollComponent::UpdatePelvisTarget(float DeltaTime, const 
 	WriteBodyRotationTargets(DeltaTime, Wish, Wobble, bCarryingProp, Target);
 }
 
+// 跳跃高度
+
 // 更新跳跃阶段对身体高度的影响
 void UDeliveryActiveRagdollComponent::UpdateJumpHeight(float DeltaTime)
 {
@@ -314,6 +320,8 @@ void UDeliveryActiveRagdollComponent::UpdateJumpHeight(float DeltaTime)
 		Movement.JumpOffset = 0.0f;
 	}
 }
+
+// 身体朝向
 
 // 平滑更新身体朝向，协调移动、抓取和攻击方向
 void UDeliveryActiveRagdollComponent::UpdateFacingYaw(float DeltaTime, const FVector& Wish,
@@ -455,6 +463,8 @@ void UDeliveryActiveRagdollComponent::WriteBodyRotationTargets(float DeltaTime, 
 	PhysicsControl->SetControlTargetPositionAndOrientation(
 	    HeadControl, FVector::ZeroVector, HeadRotation.Rotator(), DeltaTime, true, false, true, false);
 }
+
+// 全身重心
 
 // 按各刚体质量计算整体重心
 FVector UDeliveryActiveRagdollComponent::GetWholeBodyCenterOfMass() const

@@ -143,6 +143,7 @@ bool UDeliveryTaskController::PushTaskState()
         return false;
     }
 
+    // 从该玩家的跟踪组件取得当前任务，不直接显示全局任务列表的第一项
     const APlayerState *State = Cast<APlayerController>(Player.Get())->PlayerState;
     const UDeliveryTaskTrackerComponent *Tracker =
         State ? State->FindComponentByClass<UDeliveryTaskTrackerComponent>() : nullptr;
@@ -158,6 +159,7 @@ bool UDeliveryTaskController::PushTaskState()
         return false;
     }
 
+    // 等待取件时提示去取件，配送中则提示送达
     const bool bPickup = Status == EDeliveryTaskStatus::AwaitingPickup;
     const FText TaskTitle = bPickup ? FText::Format(LOCTEXT("GoPickup", "去取件：{0}"), Task->DisplayName)
                                     : FText::Format(LOCTEXT("GoDeliver", "送达：{0}"), Task->DisplayName);
@@ -172,6 +174,7 @@ bool UDeliveryTaskController::PushTaskState()
                                   *UDeliveryGuidanceLibrary::FormatDistance(Guidance.Distance).ToString()));
     }
 
+    // 方向和倒计时分别生成，地点缺失时仍可显示剩余时间
     bool bTaskUrgent = false;
     const FDeliveryTaskTimeSnapshot Time = Manager->GetTimeSnapshot(Task);
     if (Time.bRunning)

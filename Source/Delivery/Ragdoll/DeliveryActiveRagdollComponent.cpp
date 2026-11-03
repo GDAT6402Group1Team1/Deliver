@@ -56,6 +56,8 @@ void UDeliveryActiveRagdollComponent::GetLifetimeReplicatedProps(
 	DOREPLIFETIME_CONDITION(UDeliveryActiveRagdollComponent, CurrentFacingYaw, COND_SimulatedOnly);
 }
 
+// 物理前后更新顺序
+
 // 将身体更新安排在合适的物理阶段
 void UDeliveryActiveRagdollComponent::RegisterComponentTickFunctions(bool bRegister)
 {
@@ -108,6 +110,8 @@ void UDeliveryActiveRagdollComponent::TickComponent(float DeltaTime, ELevelTick 
     else
         UpdateBeforePhysics(DeltaTime);
 }
+
+// 动作状态与物理目标
 
 // 保留原有检查时机，前后物理阶段都处理失效动作和到期受击
 void UDeliveryActiveRagdollComponent::UpdateActionState()
@@ -205,7 +209,7 @@ void UDeliveryActiveRagdollComponent::UpdateAfterPhysics(float DeltaTime)
 	}
 }
 
-
+// 启停物理驱动
 
 // 准备物理身体、控制目标和同步状态，开始主动布娃娃运行
 void UDeliveryActiveRagdollComponent::StartRagdoll()
@@ -327,6 +331,8 @@ void UDeliveryActiveRagdollComponent::StopRagdoll()
 	Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 }
 
+// 倒地与恢复状态
+
 // 由服务器切换身体是否失去主动支撑
 void UDeliveryActiveRagdollComponent::SetLimp(bool bLimp)
 {
@@ -433,6 +439,8 @@ void UDeliveryActiveRagdollComponent::SetLimpRecoveryDriveStrength(float Alpha)
 	PhysicsControl->SetControlMultipliersInSet(TEXT("All"), Multiplier, false);
 }
 
+// 移动输入与跳跃
+
 // 保存经过限制的移动意图，供后续身体和步态更新使用
 void UDeliveryActiveRagdollComponent::SetMoveInput(FVector2D RightForward)
 {
@@ -486,6 +494,8 @@ bool UDeliveryActiveRagdollComponent::TryStartJump()
 	CancelFootSteps();
 	return true;
 }
+
+// 重新记录身体位置
 
 // 用身体当前姿势重建控制目标，避免恢复时拉回旧位置
 void UDeliveryActiveRagdollComponent::ReseedFromCurrentPose()

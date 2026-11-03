@@ -30,6 +30,7 @@ class ADeliveryPlayerController : public APlayerController
   public:
     ADeliveryPlayerController();
 
+    // 交互请求转发
     // 步行与骑车共用的交互请求入口
     UFUNCTION(Server, Reliable)
     void ServerRequestInteraction(ADeliveryCharacter *ActingCharacter, EDeliveryInteractionRequest Request,
@@ -58,6 +59,7 @@ class ADeliveryPlayerController : public APlayerController
         return Music;
     }
 
+    // 电话操作请求
     // 电话操作
     /**
      * 接听当前来电；客户端调用会自动转成 Server RPC
@@ -165,6 +167,7 @@ class ADeliveryPlayerController : public APlayerController
     UPROPERTY(EditDefaultsOnly, Category = "Delivery|Audio|Phone")
     TObjectPtr<USoundBase> HangUpCallSound;
 
+    // 控制器输入绑定
     virtual void SetupInputComponent() override;
 
     /** TogglePhoneKey 按下时的转发；BindKey 需要一个无参成员函数，不能直接绑 BlueprintImplementableEvent */

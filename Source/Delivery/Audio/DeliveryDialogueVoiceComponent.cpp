@@ -306,6 +306,8 @@ UDeliveryDialogueVoiceComponent* UDeliveryDialogueVoiceComponent::FindVoice(AAct
 	return Actor ? Actor->FindComponentByClass<UDeliveryDialogueVoiceComponent>() : nullptr;
 }
 
+// 对白播放入口
+
 void UDeliveryDialogueVoiceComponent::SpeakText(const FText& Text)
 {
 	SpeakTextWithSettings(Text, DefaultSettings);
@@ -359,6 +361,8 @@ void UDeliveryDialogueVoiceComponent::StopSpeaking()
 		static_cast<FDeliveryVoiceGenerator*>(VoiceGenerator.Get())->Silence();
 	}
 }
+
+// 人物声音预设
 
 // 为不同角色生成音高、音色和语速配置
 FDeliveryVoiceSettings UDeliveryDialogueVoiceComponent::MakePresetSettings(EDeliveryVoicePreset Preset)
@@ -437,6 +441,8 @@ ISoundGeneratorPtr UDeliveryDialogueVoiceComponent::CreateSoundGenerator(
 	                                                                                 InParams.NumChannels);
 }
 
+// 逐字显示与发声
+
 // 显示下一个字符，发声后安排下一个字符的时间
 void UDeliveryDialogueVoiceComponent::RevealNextGlyph()
 {
@@ -482,6 +488,8 @@ void UDeliveryDialogueVoiceComponent::TriggerGlyphSound(TCHAR Glyph, int32 Glyph
 		          ActiveSettings.VibratoDepthSemitones, ActiveSettings.VibratoRate,
 		          ActiveSettings.FormantAmount, GlyphHash);
 }
+
+// 文字间隔与语调
 
 // 根据字符和标点决定停顿时长
 float UDeliveryDialogueVoiceComponent::DelayForGlyph(TCHAR Glyph) const

@@ -12,6 +12,8 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 
+// 本机交互与长按
+
 // 读取当前目标，根据配置立即操作或开始长按
 void UDeliveryInteractionComponent::BeginUse()
 {
@@ -101,6 +103,9 @@ float UDeliveryInteractionComponent::GetProgress(const AActor *Target) const
     const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
     return FMath::Clamp((Now - UseHoldStartedAt) / UseHoldDuration, 0.0f, 1.0f);
 }
+
+// 角色与目标检查
+
 // 先检查玩家能否操作，再询问目标是否允许执行
 bool UDeliveryInteractionComponent::CanUse(const AActor *Target, bool bCheckTaskAvailability) const
 {
@@ -137,6 +142,9 @@ bool UDeliveryInteractionComponent::ValidateTarget(AActor *Target) const
     // 检查目标所在世界、交互距离和操作条件，不要求角色或镜头朝向目标
     return IsValid(Target) && Target->GetWorld() == GetWorld() && CanUse(Target);
 }
+
+// 服务器执行交互
+
 // 在服务器执行通过检查的 F 键通用交互
 void UDeliveryInteractionComponent::ExecuteInteract(AActor *Target)
 {
@@ -168,6 +176,9 @@ void UDeliveryInteractionComponent::ExecuteUse(AActor *Target)
     if (TargetAction->Use.IsBound())
         TargetAction->Use.Execute(Character);
 }
+
+// 服务器长按计时
+
 // 记录服务器收到长按开始请求的时间
 void UDeliveryInteractionComponent::BeginServerHold(AActor *Target)
 {
@@ -227,12 +238,15 @@ void UDeliveryInteractionComponent::Interact()
     }
 }
 
+// 请求发送与分发
+
 // 服务器直接处理请求，客户端通过玩家控制器发送
 void UDeliveryInteractionComponent::SendRequest(EDeliveryInteractionRequest Request, AActor *Target)
 {
     ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(GetOwner());
     if (!Character)
         return;
+    // 服务器直接执行，客户端才通过自己的玩家控制器发送请求
     if (Character->HasAuthority())
     {
         HandleRequest(Request, Target);

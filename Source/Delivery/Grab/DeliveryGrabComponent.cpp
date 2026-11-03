@@ -32,6 +32,8 @@ UDeliveryGrabComponent::UDeliveryGrabComponent()
 	SetIsReplicatedByDefault(true);
 }
 
+// 初始化与网络复制
+
 // 抓取先更新手部目标，布娃娃随后使用这些目标驱动身体
 void UDeliveryGrabComponent::BeginPlay()
 {
@@ -76,6 +78,8 @@ bool UDeliveryGrabComponent::IsDraggingCharacter() const
 	return IsValid(GrabTarget.Get()) && GrabTarget->IsA<ADeliveryCharacter>() && WantedHands != 0;
 }
 
+// 寻找抓取目标
+
 // 根据镜头方向寻找可抓取目标，并检查人数和抓取距离
 bool UDeliveryGrabComponent::FindCandidate(AActor*& OutActor, FVector& OutPoint) const
 {
@@ -89,6 +93,7 @@ bool UDeliveryGrabComponent::FindCandidate(AActor*& OutActor, FVector& OutPoint)
 	const FVector Hips = Character->GetMesh()->GetBoneLocation(TEXT("Hips"));
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(GrabAim), false, Character);
 	FHitResult Hit;
+	// 候选目标必须允许抓取，且命中位置在角色可触及的距离内
 	auto IsGrabHit = [&](const FHitResult& CandidateHit)
 	{
 		const AActor* Target = CandidateHit.GetActor();
@@ -97,6 +102,7 @@ bool UDeliveryGrabComponent::FindCandidate(AActor*& OutActor, FVector& OutPoint)
 		return Grabbable && Grabbable->GrabberCount < 2 && Grabbable->CanGrab(Character) &&
 		       FVector::DistSquared(Hips, CandidateHit.ImpactPoint) <= FMath::Square(GrabDistance);
 	};
+	// 先使用准星直接指向的目标，未找到时再检查周围物件
 	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params) && IsGrabHit(Hit))
 	{
 		OutActor = Hit.GetActor();
@@ -112,6 +118,7 @@ bool UDeliveryGrabComponent::FindCandidate(AActor*& OutActor, FVector& OutPoint)
 	GetWorld()->OverlapMultiByObjectType(Nearby, Hips, FQuat::Identity, ObjectTypes,
 	                                     FCollisionShape::MakeSphere(GrabDistance + HighlightAimMargin),
 	                                     Params);
+	// 在可抓取的邻近物件中，优先选择最接近瞄准射线的一个
 	float BestMiss = TNumericLimits<float>::Max();
 	for (const FOverlapResult& Overlap : Nearby)
 	{
@@ -143,6 +150,8 @@ bool UDeliveryGrabComponent::FindCandidate(AActor*& OutActor, FVector& OutPoint)
 	}
 	return OutActor != nullptr;
 }
+
+// 抓取请求与服务器检查
 
 // 本机先显示抓取反馈，再请求服务器确认目标
 void UDeliveryGrabComponent::RequestBegin()
@@ -314,6 +323,8 @@ void UDeliveryGrabComponent::BeginOnServer(AActor* Target, const FVector& HitPoi
 	AttachedHands = Grabbable->bKinematicCarry ? WantedHands : 0;
 	Character->ForceNetUpdate();
 }
+
+// 抓点与手部目标
 
 // 从目标的物理身体上选择抓取位置，避免使用滞后的动画姿态
 bool UDeliveryGrabComponent::FindClosestDragGrip(const ADeliveryCharacter* Target, int32& OutSide,
@@ -534,6 +545,8 @@ bool UDeliveryGrabComponent::GetGrabFacingDirection(FVector& OutDirection) const
 	return true;
 }
 
+// 建立抓取约束
+
 // 在服务器检查抓取条件，并建立对应手与目标的关系
 void UDeliveryGrabComponent::TryAttach(int32 Side)
 {
@@ -655,6 +668,8 @@ void UDeliveryGrabComponent::TryAttach(int32 Side)
 	       FVector::Dist(HandPoint, GripWorld(Side)));
 	Character->ForceNetUpdate();
 }
+
+// 拖拽辅助与每帧更新
 
 // 拖动倒地角色时施加辅助力量，减少身体卡在地面的情况
 bool UDeliveryGrabComponent::ApplyDragAssist(ADeliveryCharacter* Character, int32 Side)
@@ -850,6 +865,8 @@ void UDeliveryGrabComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	}
 }
 
+// 松手与约束清理
+
 // 请求松开指定手，必要时转交服务器
 void UDeliveryGrabComponent::RequestReleaseHand(bool bLeft)
 {
@@ -942,6 +959,8 @@ void UDeliveryGrabComponent::ForceRelease()
 	AttachedHands = 0;
 	GetOwner()->ForceNetUpdate();
 }
+
+// 本机目标高亮
 
 // 高亮当前可抓取目标，切换目标时恢复旧显示
 void UDeliveryGrabComponent::UpdateHighlight(AActor* Candidate)

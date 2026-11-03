@@ -153,6 +153,8 @@ void ADeliveryPlayerController::BindPhoneVoice()
     }
 }
 
+// 手机界面操作转发
+
 // 根据响铃、通话和挂断阶段更新声音、字幕和手机界面
 void ADeliveryPlayerController::HandlePhoneVoiceStateChanged(EDeliveryPhoneCallState NewState,
                                                              const FDeliveryPhoneCall &Call)
@@ -249,6 +251,8 @@ void ADeliveryPlayerController::StopIncomingCallAudio()
     }
 }
 
+// 角色交互的服务器入口
+
 // 逐字语音更新时同步字幕显示
 void ADeliveryPlayerController::HandlePhoneVoiceGlyphRevealed(const FString &Glyph, int32 GlyphIndex)
 {
@@ -319,6 +323,8 @@ void ADeliveryPlayerController::EnsureInteractMapping(UEnhancedInputLocalPlayerS
                 "（正常情况下它应该在 IMC_Default 里，检查那个资产是不是被拉取冲掉了）"),
            *GetNameSafe(Interact), *InteractKey.ToString());
 }
+
+// 控制器输入
 
 // 绑定手机、交互和本机界面相关按键
 void ADeliveryPlayerController::SetupInputComponent()
@@ -449,6 +455,8 @@ void ADeliveryPlayerController::ApplyUIInputMode()
         SetInputMode(FInputModeGameOnly());
     }
 }
+
+// 接听与挂断请求
 
 // 通过服务器入口请求接听共享来电
 void ADeliveryPlayerController::RequestAnswerCall()

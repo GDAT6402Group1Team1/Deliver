@@ -194,6 +194,8 @@ void ADeliveryMotorbike::OnConstruction(const FTransform& Transform)
 		CalibrateRiderContacts();
 }
 
+// 车辆初始化
+
 // 准备车辆网格、驾驶交互和运行时状态
 void ADeliveryMotorbike::BeginPlay()
 {
@@ -544,6 +546,8 @@ const TArray<FName> DriverSlots = DriverMesh->GetMaterialSlotNames();
 	}
 }
 
+// 驾驶员与货物同步
+
 void ADeliveryMotorbike::OnRep_Driver()
 {
 	ApplyDriverPresentation();
@@ -610,6 +614,8 @@ void ADeliveryMotorbike::HandleInteractRequested(APawn* Interactor)
 {
 	TryEnter(Cast<ADeliveryCharacter>(Interactor));
 }
+
+// 上车与驾驶权切换
 
 // 检查驾驶员条件，转移快递和控制权，再切换骑手表现
 bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
@@ -690,6 +696,8 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	return true;
 }
 
+// 召唤与车辆复位
+
 // 把无人驾驶的车辆放到经过检查的召唤位置
 bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredYaw)
 {
@@ -737,6 +745,8 @@ bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredY
 	MulticastVehicleEvent(EDeliveryEvent::VehicleSummoned);
 	return true;
 }
+
+// 交通撞击与摔落
 
 // 记录交通撞击，更新车辆失控和驾驶员受击
 bool ADeliveryMotorbike::NotifyTrafficImpact(const FVector& CarVelocity)
@@ -945,6 +955,8 @@ void ADeliveryMotorbike::UpdateImpactReaction(float DeltaSeconds)
 	}
 }
 
+// 下车与角色控制恢复
+
 // 寻找下车位置，恢复角色与物品并交回控制权
 void ADeliveryMotorbike::ExitVehicle()
 {
@@ -1070,6 +1082,8 @@ FVector ADeliveryMotorbike::FindExitLocation(float PreferredSideSign) const
 	
 	return Center + FVector(0.0f, 0.0f, BoxExtent.Z + 140.0f);
 }
+
+// 驾驶输入
 
 // 绑定驾驶、视角、下车和骑车取件操作
 void ADeliveryMotorbike::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -1296,6 +1310,8 @@ void ADeliveryMotorbike::MouseLookInput(const FInputActionValue& Value)
 	AddControllerPitchInput(Axis.Y);
 }
 
+// 驾驶视角切换
+
 // 切换驾驶视角，并保存对应镜头设置
 void ADeliveryMotorbike::ToggleCameraMode()
 {
@@ -1372,6 +1388,8 @@ void ADeliveryMotorbike::ApplyCameraMode()
 	}
 }
 
+// 服务器驾驶请求
+
 void ADeliveryMotorbike::ServerSetDriveInput_Implementation(float InThrottle, float InSteer)
 {
 	ThrottleInput = FMath::IsFinite(InThrottle) ? FMath::Clamp(InThrottle, -1.0f, 1.0f) : 0.0f;
@@ -1417,6 +1435,8 @@ void ADeliveryMotorbike::ServerRequestExit_Implementation()
 	
 	ExitVehicle();
 }
+
+// 车辆每帧更新
 
 // 更新驾驶状态、车辆运动和车轮骑手表现
 void ADeliveryMotorbike::Tick(float DeltaSeconds)
@@ -1494,6 +1514,8 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 	}
 }
 
+// 加速与制动
+
 // 根据油门、刹车和阻力更新车速
 void ADeliveryMotorbike::UpdateSpeed(float DeltaSeconds)
 {
@@ -1525,6 +1547,8 @@ void ADeliveryMotorbike::UpdateSteering(float DeltaSeconds)
 	const float YawDelta = SteerInput * MaxTurnRate * SpeedFactor * Direction * DeltaSeconds;
 	AddActorWorldRotation(FRotator(0.0f, YawDelta, 0.0f));
 }
+
+// 地面检测与车辆移动
 
 // 检测地面并执行带碰撞的车辆移动
 void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
@@ -1696,6 +1720,8 @@ bool ADeliveryMotorbike::TryStepUp(const FVector& RemainingDelta, const FHitResu
 	return true;
 }
 
+// 车身与车轮表现
+
 // 根据转向和速度更新车身侧倾
 void ADeliveryMotorbike::UpdateLean(float DeltaSeconds)
 {
@@ -1808,6 +1834,8 @@ void ADeliveryMotorbike::PushCameraHint()
 		              CameraToggleKey.GetDisplayName(false)),
 	    false);
 }
+
+// 驾驶提示
 
 void ADeliveryMotorbike::ShowNotice(const FText& Text, float Seconds)
 {

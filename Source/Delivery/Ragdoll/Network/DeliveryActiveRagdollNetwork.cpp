@@ -10,6 +10,8 @@
 #include "PhysicsEngine/SkeletalBodySetup.h"
 #include "PhysicsControlComponent.h"
 
+// 角色根位置与控制状态
+
 // 让角色根位置跟随物理髋部，保持镜头和交互位置一致
 void UDeliveryActiveRagdollComponent::SyncOwnerToPelvis(float DeltaTime)
 {
@@ -76,6 +78,8 @@ void UDeliveryActiveRagdollComponent::OnRep_ControlMode()
 	}
 }
 
+// 服务器姿态采样
+
 // 在物理更新后记录身体各部位的位置、旋转和速度
 void UDeliveryActiveRagdollComponent::CaptureNetworkSnapshot()
 {
@@ -123,6 +127,8 @@ void UDeliveryActiveRagdollComponent::CaptureNetworkSnapshot()
 	GetOwner()->ForceNetUpdate();
 }
 
+// 客户端接收姿态
+
 // 保存新收到的物理快照，供远端平滑播放和本机校正
 void UDeliveryActiveRagdollComponent::OnRep_RagdollSnapshot()
 {
@@ -163,6 +169,8 @@ void UDeliveryActiveRagdollComponent::FinishClientRecoveryPlayback()
 	Network.ResetOwnerCorrection();
 	UpdateControlTargets(0.0f);
 }
+
+// 客户端物理校正
 
 // 远端播放服务器姿态，本机保留物理运动并修正位置偏差
 // 位置使用速度作短时推算；旋转在快照之间平滑过渡

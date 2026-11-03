@@ -257,6 +257,7 @@ int32 RemoveGenerated(ULandscapeSplinesComponent* Splines, const FString& Requir
 		return 0;
 	}
 
+	// 记录编辑器撤销状态，再修改生成的地形样条
 	Splines->Modify();
 	int32 Removed = 0;
 	const TArray<TObjectPtr<ULandscapeSplineSegment>> SegmentsCopy = Splines->GetSegments();
@@ -1083,6 +1084,7 @@ void UPS2DEMLandscapeSplineLibrary::AssignSelectedMeshToGeneratedLandscapeSpline
 		return;
 	}
 
+	// 读取内容浏览器当前选中的网格，未选中时保留原样条
 	UStaticMesh* Mesh = GetSelectedStaticMesh(Error);
 	if (!Mesh)
 	{

@@ -19,6 +19,8 @@ UDeliveryInventoryComponent::UDeliveryInventoryComponent()
 	Slots.SetNum(SlotCount);
 }
 
+// 初始化与物品栏同步
+
 // 初始化槽位，并根据当前物品恢复显示
 void UDeliveryInventoryComponent::BeginPlay()
 {
@@ -39,6 +41,8 @@ ADeliveryCharacter* UDeliveryInventoryComponent::GetCharacter() const
 {
 	return Cast<ADeliveryCharacter>(GetOwner());
 }
+
+// 物品栏查询
 
 ADeliveryHandheldItem* UDeliveryInventoryComponent::GetItemInSlot(int32 SlotIndex) const
 {
@@ -84,6 +88,8 @@ bool UDeliveryInventoryComponent::CanMutateInventory() const
 	const UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
 	return !ASC || !ASC->HasMatchingGameplayTag(TAG_State_Stunned);
 }
+
+// 拾取与快捷栏操作
 
 // 在服务器检查物品归属和任务条件，分配槽位后同步表现与背包通知
 bool UDeliveryInventoryComponent::TryPickup(ADeliveryHandheldItem* Item)
@@ -193,6 +199,8 @@ void UDeliveryInventoryComponent::PerformSlotAction(int32 SlotIndex)
 	GetOwner()->ForceNetUpdate();
 }
 
+// 物品存放与丢弃
+
 // 记录槽位中的物品，并将物品归属设为角色
 void UDeliveryInventoryComponent::StoreItem(int32 SlotIndex, ADeliveryHandheldItem* Item)
 {
@@ -260,6 +268,8 @@ void UDeliveryInventoryComponent::UseHeldItem()
 	if (ADeliveryHandheldItem* Item = GetHeldItem())
 		Item->UseFromInventory(GetCharacter());
 }
+
+// 本机反馈与物品显示
 
 void UDeliveryInventoryComponent::ClientInventoryFull_Implementation()
 {

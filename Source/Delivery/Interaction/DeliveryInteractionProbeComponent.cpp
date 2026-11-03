@@ -59,6 +59,7 @@ void UDeliveryInteractionProbeComponent::TickComponent(float DeltaTime, ELevelTi
         return;
     }
 
+    // 分别查找拾取键和交互键的目标，两个按键可以对应不同物件
     UDeliveryInteractableComponent *Pickup = FindPreferredPickup(Owner);
     UDeliveryInteractableComponent *General =
         GetWorld()->GetSubsystem<UDeliveryInteractionRegistry>()->FindNearest(Owner, EDeliveryInteractionKey::GeneralF);
@@ -66,6 +67,7 @@ void UDeliveryInteractionProbeComponent::TickComponent(float DeltaTime, ELevelTi
     FocusedGeneral = General;
     SetPickupHighlight(Pickup ? Pickup->GetOwner() : nullptr);
 
+    // 同时存在两个目标时，屏幕提示优先显示拾取操作
     UDeliveryInteractableComponent *PromptTarget = Pickup ? Pickup : General;
     if (bShowPrompt && PromptTarget)
     {

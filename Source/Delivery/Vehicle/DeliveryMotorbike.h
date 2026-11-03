@@ -46,14 +46,18 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
+
+	// 驾驶输入绑定
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	// 上车与下车接口
 	// 上下车与召唤
 	/** 服务器：让 NewDriver 上车；成功返回 真 */
 	UFUNCTION(BlueprintCallable, Category = "Motorbike")
 	bool TryEnter(ADeliveryCharacter* NewDriver);
 
+	// 召唤与撞击接口
 	/**
 	 * 服务器：把车挪到指定位置（召唤）；会自己往下探地面、清掉残余车速和被撞状态
 	 * 车上有人时拒绝——不能把别人正骑着的车抽走；找不到地面也拒绝，免得把车塞进虚空
@@ -540,7 +544,6 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	UPROPERTY(EditAnywhere, Category = "Motorbike|被撞", meta = (ClampMin = "1.0", Units = "cm/s"))
 	float KnockDownSpeedReference = 1200.0f;
 
-	
 	UPROPERTY(EditAnywhere, Category = "Motorbike|被撞", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float KnockDownLaunchMinScale = 0.35f;
 
@@ -599,6 +602,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	void PickupPressed(const FInputActionValue& Value);
 	void PickupReleased(const FInputActionValue& Value);
 
+	// 服务器驾驶输入
 	// 网络请求与同步
 	UFUNCTION(Server, Unreliable)
 	void ServerSetDriveInput(float InThrottle, float InSteer);
@@ -638,6 +642,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	/** 把驾驶员身上的材质映射到骑手网格的槽位上；没人骑就还原成资产自带的 */
 	void ApplyRiderMaterials();
 
+	// 速度与转向计算
 	// 驾驶计算
 	void UpdateSpeed(float DeltaSeconds);
 	void UpdateSteering(float DeltaSeconds);
@@ -647,6 +652,8 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 
 	/** 现在是不是按镜头方向开（开关打开 且 处于自由视角） */
 	bool UsesCameraRelativeMove() const;
+
+	// 地面检测与移动
 	void UpdateGroundAndMove(float DeltaSeconds);
 
 	/**
@@ -658,6 +665,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	void UpdateLean(float DeltaSeconds);
 	void UpdateSteerVisual(float DeltaSeconds);
 
+	// 车辆外观更新
 	/** 轮子按车速自转 */
 	void UpdateWheelSpin(float DeltaSeconds);
 

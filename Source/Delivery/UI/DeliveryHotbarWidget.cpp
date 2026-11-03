@@ -52,6 +52,7 @@ void UDeliveryHotbarWidget::BuildWidgetTree()
 {
     if (!WidgetTree || SlotBorders.Num() == UDeliveryInventoryComponent::SlotCount)
         return;
+    // 重建前清空旧控件引用，避免槽位与图标数组错位
     WidgetTree->RootWidget = nullptr;
     SlotBorders.Reset();
     SlotIcons.Reset();
@@ -82,6 +83,7 @@ void UDeliveryHotbarWidget::BuildWidgetTree()
     FrameSlot->SetPosition(FVector2D(0.0f, -24.0f));
     FrameSlot->SetAutoSize(true);
 
+    // 按背包槽位顺序创建图标和耐久条，后续刷新使用相同索引
     for (int32 Index = 0; Index < UDeliveryInventoryComponent::SlotCount; ++Index)
     {
         USizeBox *Size = WidgetTree->ConstructWidget<USizeBox>();

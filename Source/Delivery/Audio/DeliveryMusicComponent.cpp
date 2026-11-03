@@ -84,6 +84,8 @@ bool UDeliveryMusicComponent::IsPhoneBusy() const
 	return State == EDeliveryPhoneCallState::Ringing || State == EDeliveryPhoneCallState::InCall;
 }
 
+// 根据任务选择音乐
+
 // 根据追踪任务的状态选择探索、配送或超时曲目
 EDeliveryMusicTrack UDeliveryMusicComponent::EvaluateTrack() const
 {
@@ -138,6 +140,8 @@ USoundBase* UDeliveryMusicComponent::ResolveTrackSound(EDeliveryMusicTrack Track
 		return nullptr;
 	}
 }
+
+// 音乐播放与切换
 
 // 创建由本组件管理生命周期的二维音乐播放组件
 UAudioComponent* UDeliveryMusicComponent::SpawnMusicAudio(USoundBase* Sound)
@@ -215,6 +219,8 @@ void UDeliveryMusicComponent::RefreshTrack()
 {
 	StartTrack(EvaluateTrack());
 }
+
+// 对白期间降低音乐音量
 
 // 在指定时间内降低音乐音量
 void UDeliveryMusicComponent::DuckFor(float Seconds, float VolumeScale)

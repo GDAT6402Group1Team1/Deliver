@@ -42,6 +42,8 @@ UDeliveryPromptSubsystem* UDeliveryPromptSubsystem::Get(const UObject* WorldCont
 	return World ? World->GetSubsystem<UDeliveryPromptSubsystem>() : nullptr;
 }
 
+// 交互提示与固定提示
+
 // 更新交互提示的文字、世界位置和长按进度
 void UDeliveryPromptSubsystem::PushPrompt(const FText& Text, const FVector& WorldAnchor, float HoldProgress)
 {
@@ -60,6 +62,8 @@ void UDeliveryPromptSubsystem::PushCornerHint(const FText& Text, bool bDimmed)
 	LastCornerPushTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	EnsureWidget();
 }
+
+// 目的地与字幕
 
 // 更新顶部任务提示
 void UDeliveryPromptSubsystem::PushObjective(const FText& Title, const FText& Detail, bool bUrgent)
@@ -100,6 +104,8 @@ bool UDeliveryPromptSubsystem::IsCornerFresh() const
 	return World && (World->GetTimeSeconds() - LastCornerPushTime) < PromptTimeout;
 }
 
+// 提示有效性检查
+
 bool UDeliveryPromptSubsystem::IsPromptFresh() const
 {
 	const UWorld* World = GetWorld();
@@ -119,6 +125,8 @@ bool UDeliveryPromptSubsystem::ComputeScreenPosition(FVector2D& OutPosition) con
 	// 它已经把 DPI 缩放折算进去了，返回的就是 Slate 坐标，直接当 Offset 用
 	return UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(PC, PromptAnchor, OutPosition, false);
 }
+
+// 创建提示控件
 
 // 在本机创建提示控件，并连接各项显示数据
 void UDeliveryPromptSubsystem::EnsureWidget()
