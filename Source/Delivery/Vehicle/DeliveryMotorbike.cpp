@@ -974,6 +974,11 @@ ADeliveryPackageItem* ReturningCargo = ReleaseCargo();
 	Leaving->SetActorLocationAndRotation(ExitLocation, FRotator(0.0f, GetActorRotation().Yaw, 0.0f), false,
 	                                     nullptr, ETeleportType::TeleportPhysics);
 
+#if !UE_BUILD_SHIPPING
+	UE_LOG(LogDelivery, Log, TEXT("InputDiag %.3f ExitVehicle 开始占有 leaving=%s controller=%s"),
+	       GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f, *GetNameSafe(Leaving),
+	       *GetNameSafe(BikeController));
+#endif
 	if (BikeController)
 	{
 		BikeController->Possess(Leaving);

@@ -55,6 +55,14 @@ class DELIVERY_API UGA_DeliverPunch : public UGameplayAbility
 	UPROPERTY(EditDefaultsOnly, Category = "Punch|Hit Reaction", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float HitReactionUpwardFraction = 0.08f;
 
+	/**
+	 * 打路人时冲量的额外倍率
+	 * 路人的刚体质量和玩家布娃娃不是一个量级（玩家那套做过髋部质量修正），
+	 * 共用一个数值的话要么推不动、要么一拳飞上天，所以单独给一个
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Punch|Hit Reaction", meta = (ClampMin = "0.0"))
+	float PedestrianImpulseScale = 1.6f;
+
 	// 一次出拳可以持续接触，同一目标只结算一次
 	TSet<TWeakObjectPtr<AActor>> HitActors;
 	bool bPlayedHitSound = false;

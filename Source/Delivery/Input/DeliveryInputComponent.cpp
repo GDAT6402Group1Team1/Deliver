@@ -67,6 +67,16 @@ UDeliveryInputComponent::UDeliveryInputComponent()
 // 绑定步行输入，玩法组件仍负责检查操作条件
 void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
 {
+#if !UE_BUILD_SHIPPING
+    // 同名不等于同一个对象，所以要打指针；"绑过了"这道早退一旦误判，
+    // 表现就是整具身体一个键都不响应，而外部完全看不出来
+    UE_LOG(LogDelivery, Log,
+           TEXT("InputDiag %.3f Bind 请求 input=%s(%p) 已绑=%s(%p) 早退=%s owner=%s"),
+           GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f, *GetNameSafe(PlayerInputComponent),
+           PlayerInputComponent, *GetNameSafe(BoundInput.Get()), BoundInput.Get(),
+           (PlayerInputComponent && BoundInput.Get() == PlayerInputComponent) ? TEXT("是！") : TEXT("否"),
+           *GetNameSafe(GetOwner()));
+#endif
     if (!PlayerInputComponent || BoundInput.Get() == PlayerInputComponent) return;
     Character = Cast<ADeliveryCharacter>(GetOwner());
     if (!Character) return;
@@ -164,6 +174,13 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
         }
     }
 
+    // 刚接手的身体从"没有移动意图"开始。
+    // 不能只靠失去控制权时的 ResetInput：那一帧 Enhanced Input 还会再派发一次
+    // Triggered，把刚清掉的意图重新写回去（实测日志里 ResetInput 和 Move=(0,1)
+    // 是同一个时间戳），而之后这具身体就被解除占有了，那次松开永远收不到。
+    // 结果是上车时按着 W，下车后人就一直往前走；上车时没按，就定在原地。
+    // 玩家真按着键的话，下一帧的 Triggered 自然会把意图补回来，不影响手感。
+    Character->DoMove(0.f, 0.f);
 }
 
 
@@ -370,10 +387,19 @@ void UDeliveryInputComponent::SummonVehiclePressed()
 // 清除未完成的输入，避免控制权切换后继续执行旧操作
 void UDeliveryInputComponent::ResetInput()
 {
+#if !UE_BUILD_SHIPPING
+    UE_LOG(LogDelivery, Log, TEXT("InputDiag %.3f ResetInput owner=%s"),
+           GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f, *GetNameSafe(GetOwner()));
+#endif
     if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(MouseChordTimer);
     // 先清掉组合键状态，后续松开事件不会再触发短按攻击
     bLeftMouseDown = bRightMouseDown = bGrabChordActive = false;
     bSingleMouseResolved = bFirstMouseLeft = false;
+    // 失去控制权时引擎会销毁这具身体的 InputComponent，绑定记录按定义当场作废。
+    // 不清的话，下次重新占有时新建的组件可能复用同一个对象槽位，
+    // Bind() 开头那道"已经绑过了"的早退就会误判，结果是一个键都不绑、
+    // 整具身体彻底没反应——而且从外面看绑定关系是"对"的，极难查。
+    BoundInput.Reset();
     ADeliveryCharacter* OwnerCharacter = Cast<ADeliveryCharacter>(GetOwner());
     if (!IsValid(OwnerCharacter)) return;
     // 远端角色没有本机按键状态，不从模拟代理发送操作请求

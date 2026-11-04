@@ -4,6 +4,7 @@
 #include "AbilitySystem/Abilities/GA_DeliverPunch.h"
 
 #include "AbilitySystemComponent.h"
+#include "Combat/DeliveryImpactReceiver.h"
 #include "Combat/DeliveryRagdollCombatComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "AbilitySystem/DeliverGameplayTags.h"
@@ -130,6 +131,29 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 	{
 		if (HitActors.Contains(HitActor))
 			continue;
+		// 路人这类不走 GAS 的目标：没有血量也没有晕倒，只有被打飞和退场。
+		// 判据是"实现了受击接口"而不是"Cast 成 ADeliveryPedestrian"——
+		// 后者会让战斗代码反向依赖 NPC 模块，而且同一个判断在撞车那边还要再写一遍
+		if (IDeliveryImpactReceiver* Receiver = Cast<IDeliveryImpactReceiver>(HitActor))
+		{
+			if (Receiver->IsKnockedDown())
+			{
+				continue;
+			}
+			if (HitReactionImpulse > 0.0f && !PunchDirection.IsNearlyZero())
+			{
+				const FVector ReactionDirection =
+				    (PunchDirection + FVector::UpVector * HitReactionUpwardFraction).GetSafeNormal();
+				// 冲量乘一个倍率：路人的刚体质量和玩家布娃娃不是一个量级，
+				// 用同一个数值的话要么推不动要么飞上天，所以单独给
+				Receiver->ReceiveImpact(ReactionDirection * HitReactionImpulse * PedestrianImpulseScale,
+				                        ImpactPoint);
+			}
+			HitActors.Add(HitActor);
+			bAnyHit = true;
+			continue;
+		}
+
 		ADeliveryCharacter* TargetCharacter = Cast<ADeliveryCharacter>(HitActor);
 		const ADeliverPlayerState* TargetPS =
 		    TargetCharacter ? TargetCharacter->GetPlayerState<ADeliverPlayerState>() : nullptr;

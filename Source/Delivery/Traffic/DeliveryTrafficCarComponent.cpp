@@ -8,6 +8,8 @@
 #include "GameFramework/Actor.h"
 #include "Character/DeliveryCharacter.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
+#include "Combat/DeliveryCollisionChannels.h"
+#include "Combat/DeliveryImpactReceiver.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "AbilitySystem/DeliverAttributeSet.h"
 #include "AbilitySystem/DeliverGameplayTags.h"
@@ -673,11 +675,64 @@ void UDeliveryTrafficCarComponent::ProcessVehicleImpacts(float DeltaTime)
 	}
 
 	ProcessMotorbikeImpacts(Start, End, Current.GetRotation(), CarVelocity, Params);
+	ProcessPedestrianImpacts(Start, End, Current.GetRotation(), CarVelocity, Params);
 
 	PreviousImpactTransform = Current;
 }
 
 // 处理交通车辆与玩家摩托车之间的撞击
+// 撞飞路人：单独一次扫描，结算只有"给一记冲量"
+void UDeliveryTrafficCarComponent::ProcessPedestrianImpacts(const FVector& Start, const FVector& End,
+                                                            const FQuat& Rotation,
+                                                            const FVector& CarVelocity,
+                                                            const FCollisionQueryParams& Params)
+{
+	UWorld* World = GetWorld();
+	if (!World || PedestrianImpactImpulse <= 0.0f)
+	{
+		return;
+	}
+
+	const FVector Direction = CarVelocity.GetSafeNormal2D();
+	if (Direction.IsNearlyZero())
+	{
+		return;
+	}
+
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(DeliveryCollision::Pedestrian);
+	TArray<FHitResult> Hits;
+	World->SweepMultiByObjectType(Hits, Start, End, Rotation, Objects,
+	                              FCollisionShape::MakeBox(ImpactHalfExtent.GetAbs()), Params);
+
+	// 一次扫描可能碰到同一个路人的多个部位（躺下之后更是每根骨头一个刚体）
+	TSet<AActor*> Seen;
+	for (const FHitResult& Hit : Hits)
+	{
+		AActor* HitActor = Hit.GetActor();
+		if (!HitActor || Seen.Contains(HitActor))
+		{
+			continue;
+		}
+		Seen.Add(HitActor);
+
+		IDeliveryImpactReceiver* Receiver = Cast<IDeliveryImpactReceiver>(HitActor);
+		if (!Receiver || Receiver->IsKnockedDown())
+		{
+			continue;
+		}
+
+		// 力度跟着车速走，但**不用那条 CarVelocity 的量级直接乘**：
+		// OnRouteLost 把车瞬移回出生点的那一帧会算出假的巨大速度
+		// （实测 3053 cm/s，而 MaxSpeed 随机范围只有 600~1500），
+		// 那一下会把路人抽到天上去。所以这里只取方向，力度用固定基准
+		const FVector Impulse =
+		    (Direction + FVector::UpVector * PedestrianImpactUpwardFraction).GetSafeNormal() *
+		    PedestrianImpactImpulse;
+		Receiver->ReceiveImpact(Impulse, Hit.ImpactPoint);
+	}
+}
+
 void UDeliveryTrafficCarComponent::ProcessMotorbikeImpacts(const FVector& Start, const FVector& End,
                                                            const FQuat& Rotation, const FVector& CarVelocity,
                                                            const FCollisionQueryParams& Params)

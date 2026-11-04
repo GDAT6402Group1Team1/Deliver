@@ -58,6 +58,13 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Input")
     FKey SummonVehicleKey;
 
+public:
+    /** 只读当前绑定到哪个 InputComponent；为空就说明这具身体根本没接上按键 */
+    const UInputComponent *GetBoundInputForDebug() const
+    {
+        return BoundInput.Get();
+    }
+
 private:
     friend class FDeliveryInputLifecycleTest;
     TWeakObjectPtr<UInputComponent> BoundInput;

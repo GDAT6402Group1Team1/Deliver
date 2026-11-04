@@ -2,6 +2,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/DeliveryRagdollCombatComponent.h"
+
+#include "Combat/DeliveryCollisionChannels.h"
+#include "Combat/DeliveryImpactReceiver.h"
 #include "Player/DeliverPlayerState.h"
 #include "Character/DeliveryCharacter.h"
 #include "Engine/World.h"
@@ -209,6 +212,29 @@ TArray<AActor *> UDeliveryRagdollCombatComponent::GatherHits(EMeleeHand Hand) co
         {
             // 一个角色有多个刚体，同一拳命中多个部位也只结算一次
             Results.AddUnique(Other);
+        }
+    }
+
+    // 路人**另开一次扫掠**，不并进上面那一次。
+    // 两个原因：①路人在自己的碰撞通道上（见 DeliveryCollisionChannels.h），
+    // ②上面那条查询是调通过的，往里加通道会改变它的命中集合——
+    // 摩托车受击那次就是因为这个才单开一次 ECC_Pawn 查询。
+    TArray<FHitResult> PedestrianHits;
+    GetWorld()->SweepMultiByChannel(PedestrianHits, TraceStart, TraceEnd, FQuat::Identity,
+                                    DeliveryCollision::Pedestrian,
+                                    FCollisionShape::MakeSphere(GetHitRadius()), Params);
+    for (const FHitResult& Hit : PedestrianHits)
+    {
+        AActor *HitActor = Hit.GetActor();
+        if (!HitActor || HitActor == Owner)
+        {
+            continue;
+        }
+        const IDeliveryImpactReceiver *Receiver = Cast<IDeliveryImpactReceiver>(HitActor);
+        // 已经躺下的不再算进命中：否则一拳打在尸体上也会播命中音效
+        if (Receiver && !Receiver->IsKnockedDown())
+        {
+            Results.AddUnique(HitActor);
         }
     }
 

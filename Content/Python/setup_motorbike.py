@@ -44,6 +44,9 @@ import unreal
 
 # ---------------------------------------------------------------- 配置
 
+# 源美术文件统一放在 Design/Art/ 下，不散在工程根目录。
+# 这是**相对工程目录**的路径，拼接见 _fbx_path()。
+FBX_DIR = u"Design/Art/Vehicles"
 FBX_NAME = u"摩托车.fbx"
 DEST = "/Game/Vehicle/Motorbike"
 # 车体网格的**正式位置**。原来在 DEST + "/Parts"，队友在 673f3cb「调整地图」
@@ -124,7 +127,7 @@ def _tools():
 
 
 def _fbx_path():
-    return unreal.Paths.project_dir() + FBX_NAME
+    return unreal.Paths.project_dir() + FBX_DIR + "/" + FBX_NAME
 
 
 # ---------------------------------------------------------------- 1. 导入
@@ -586,7 +589,7 @@ def _warn_if_not_absolute(meshes):
     if spread < 10.0:
         w(u"！警告：%d 个车体部件的原点全挤在 %.1fcm 以内，说明导入时"
           u"「Transform Vertex to Absolute」没生效，整车会叠成一坨。" % (len(meshes), spread))
-        w(u"  手动兜底：把 摩托车.fbx 拖进 Content/Vehicle/Motorbike/Parts，导入对话框里")
+        w(u"  手动兜底：把 Design/Art/Vehicles/摩托车.fbx 拖进 Content/Vehicle/Motorbike/Parts，导入对话框里")
         w(u"  取消勾选 Combine Meshes、勾上 Transform Vertex to Absolute、Uniform Scale 填 %.2f，"
           u"再重跑 build_blueprint()。" % IMPORT_SCALE)
 

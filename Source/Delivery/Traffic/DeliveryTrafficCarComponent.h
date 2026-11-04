@@ -127,6 +127,18 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	UPROPERTY(EditAnywhere, Category = "Traffic|跟车", meta = (ClampMin = "0.0"))
 	float PushSlowLeaderSelfPenalty = 100.0f;
 
+	// 撞飞路人
+	/**
+	 * 撞到路人时给的冲量基准
+	 * 路人不扣血、没有晕倒，被撞就是直接打飞，所以只有这一个量
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "0.0"))
+	float PedestrianImpactImpulse = 42000.0f;
+
+	/** 撞飞路人时往上抬的比例，纯水平的话人会贴着地面滑出去，不像被撞飞 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float PedestrianImpactUpwardFraction = 0.35f;
+
 	/** 协调车速时允许本车降低到的最小速度，避免连续调整后速度过低 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|跟车", meta = (ClampMin = "0.0"))
 	float MinPushedMaxSpeed = 600.0f;
@@ -328,6 +340,14 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	void ProcessVehicleImpacts(float DeltaTime);
 
 	/** 单独检测玩家摩托车的碰撞，避免与角色身体检测重复 */
+	/**
+	 * 撞飞路人
+	 * 路人在自己的碰撞通道上，而且不走 GAS（没有血量和晕倒），所以单独一次扫描、
+	 * 单独一条结算——并进撞角色那一次会把已经调通的伤害/抛起逻辑搅乱
+	 */
+	void ProcessPedestrianImpacts(const FVector& Start, const FVector& End, const FQuat& Rotation,
+	                              const FVector& CarVelocity, const FCollisionQueryParams& Params);
+
 	void ProcessMotorbikeImpacts(const FVector& Start, const FVector& End, const FQuat& Rotation,
 	                             const FVector& CarVelocity, const FCollisionQueryParams& Params);
 	FTransform PreviousImpactTransform = FTransform::Identity;

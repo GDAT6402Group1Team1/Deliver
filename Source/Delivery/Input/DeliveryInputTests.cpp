@@ -9,6 +9,7 @@
 #include "EnhancedInputComponent.h"
 #include "UObject/UnrealType.h"
 #include "Character/DeliveryCharacter.h"
+#include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Player/DeliveryPlayerController.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "UI/DeliveryHUD.h"
@@ -55,6 +56,42 @@ bool FDeliveryInputLifecycleTest::RunTest(const FString&)
     TestTrue(TEXT("Chord works after returning to character"), Character->IsGrabChordHeld());
     Input->ResetInput();
     TestFalse(TEXT("Reset releases chord"), Character->IsGrabChordHeld());
+
+    // 上下车的输入交接。真实流程里引擎会在 UnPossessed 时销毁这具身体的
+    // InputComponent，重新占有时再新建一个——而新建的那个有可能复用同一个
+    // 对象槽位。Bind() 开头"已经绑过了"的早退因此会误判成不用再绑，
+    // 结果整具身体一个键都不响应，且从外面看绑定关系是"对"的。
+    // 这里直接钉住那个不变量：失去控制权之后，绑定记录必须是空的。
+    UEnhancedInputComponent* FirstStack = NewObject<UEnhancedInputComponent>(Character);
+    Input->Bind(FirstStack);
+    TestEqual(TEXT("Bound to the component just handed over"),
+              Input->GetBoundInputForDebug(), static_cast<const UInputComponent*>(FirstStack));
+    Player->Possess(Bike);
+    TestNull(TEXT("Losing control clears the binding record"),
+             Input->GetBoundInputForDebug());
+
+    // 重新占有必须真的绑上，而不是被早退吃掉
+    Player->Possess(Character);
+    UEnhancedInputComponent* SecondStack = NewObject<UEnhancedInputComponent>(Character);
+    Input->Bind(SecondStack);
+    TestTrue(TEXT("Re-possession binds the new component"),
+             SecondStack->GetActionEventBindings().Num() > 0);
+    TestEqual(TEXT("Binding record follows the new component"),
+              Input->GetBoundInputForDebug(), static_cast<const UInputComponent*>(SecondStack));
+
+    // 刚接手的身体不能带着上一任留下的移动意图：实测日志里 ResetInput 和
+    // Move=(0,1) 是同一个时间戳，清完又被当帧的 Triggered 写了回去，
+    // 于是下车后人一直往前走
+    if (UDeliveryActiveRagdollComponent* Body = Character->GetActiveRagdoll())
+    {
+        Character->DoMove(0.f, 1.f);
+        TestFalse(TEXT("Move intent is set before the handover"),
+                  Body->GetMoveInputForDebug().IsNearlyZero());
+        UEnhancedInputComponent* ThirdStack = NewObject<UEnhancedInputComponent>(Character);
+        Input->Bind(ThirdStack);
+        TestTrue(TEXT("A freshly bound body starts with no move intent"),
+                 Body->GetMoveInputForDebug().IsNearlyZero());
+    }
 
     // HUD 在步行和驾驶时必须找到同一个角色，避免切换到车辆背包
     TestEqual(TEXT("Walking HUD source"), ADeliveryHUD::ResolveCharacter(Character), Character);

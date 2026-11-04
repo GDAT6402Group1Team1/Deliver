@@ -48,7 +48,7 @@ def register_delivery_menu():
         _entry(
             "Delivery.SetupMotorbike",
             "Setup Motorbike",
-            "导入摩托车.fbx、建 BP_Motorbike、配好 F 键，并在当前关卡放一辆（幂等，可重复点）",
+            "导入 Design/Art/Vehicles/摩托车.fbx、建 BP_Motorbike、配好 F 键，并在当前关卡放一辆（幂等，可重复点）",
             "import importlib, setup_motorbike; "
             "importlib.reload(setup_motorbike); setup_motorbike.run()",
         ),

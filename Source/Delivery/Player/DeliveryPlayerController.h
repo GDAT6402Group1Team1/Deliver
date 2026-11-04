@@ -108,6 +108,12 @@ class ADeliveryPlayerController : public APlayerController
         return bPhoneUIOpen;
     }
 
+    /** 只读当前开着的面板集合，供诊断命令列名字 */
+    const TSet<FName> &GetOpenUIPanelsForDebug() const
+    {
+        return OpenUIPanels;
+    }
+
   protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

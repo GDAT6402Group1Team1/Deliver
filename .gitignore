@@ -119,3 +119,8 @@ Config/DefaultEditorPerProjectUserSettings.ini
 Delivery.uproject
 Config/DefaultEditorPerProjectUserSettings.ini
 Delivery.uproject
+
+# FBX 导入时解出来的内嵌贴图中间目录。
+# 贴图本身已经导成 Content/Characters/NPC/*.uasset 了，这里是同一份数据的副本，
+# 提交它只会让仓库凭空多出几 MB，而且每次重导时间戳都变。
+*.fbm/
