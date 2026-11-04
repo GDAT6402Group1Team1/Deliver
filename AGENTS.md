@@ -941,3 +941,10 @@ DeliveryInteractionRegistry 是世界子系统，每个世界分别保存交互�
 `Events/DeliveryEventComponent` 提供对象范围的本地事件，`Audio/DeliveryAudioComponent` 在开始时订阅、结束时解绑，通过 `DeliveryAudioConfig.Sounds` 查找一次性音效。角色取件和交付 RPC 只发布事件；车辆用命名枚举的 `MulticastVehicleEvent` 代替数字音效编号。`DeliveryVehicleAudioComponent` 继承普通音效组件，独立控制原 EngineAudio 的循环播放，车辆只传入驾驶状态和速度比例。配置资源为 `/Game/Sound/Config/DA_PlayerAudio` 与 `DA_VehicleAudio`，原蓝图参数已迁移，地图车辆无单独音效覆盖。背景音乐、电子语音、电话音效保持原流程，未全部纳入新事件。详见 Document/GameplayAudio.md
 
 事件音效验证：完整编译、25 项自动化测试通过；配置重启后保持，双人验证对应玩家事件隔离、下车通知和发动机启停，原始参数审计与验证报告在本次工作目录 work/delivery_audio
+
+### model 模型碰撞设置（2026-11-05）
+按用户要求，/Game/model 及所有子目录的 62 个静态网格体统一使用 Use Complex Collision As Simple；本次修改并保存 55 个，7 个原已符合。骨骼网格体、材质、纹理和重定向器不属于该设置范围。原资产备份及逐项结果位于 Saved/CollisionBackups 和 Saved/model_complex_collision_report.json；独立 StaticMeshEditorSubsystem 读取核对 62/62 符合。此变更尚未验证角色持续上升问题是否消失。
+
+
+### 地图生成范围与角色升空修复（2026-11-05）
+TestForCharacter 的 ROAD-CREATE、POLE-CREATE、GRASSBED-CREATE1 的 PCG BrushComponent 原为 QueryOnly，运行时 WorldStatic/WorldDynamic 地面对象查询会在体积内部得到 initial_overlap、distance=0 的命中，把射线起点误当支撑面，导致主动布娃娃持续上升。已将三个 PCG 范围和 NewProceduralFoliageSpawner 的 BrushComponent 统一设为 NoCollision，并保存地图；生成的模型和树石植被实例碰撞保持开启。原地图 PIE 验证：地面命中改为 Landscape，连续采样髋高度约 2010.43 cm 保持稳定，不再持续升空。未改角色移动参数；排查时对 BP_Axe 的试验碰撞调整已恢复 PhysicsActor。
