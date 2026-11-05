@@ -45,6 +45,7 @@ void UDeliveryInteractionProbeComponent::TickComponent(float DeltaTime, ELevelTi
     {
         FocusedGeneral = nullptr;
         FocusedPickup = nullptr;
+        FocusedAction = nullptr;
         RestorePickupHighlight();
         return;
     }
@@ -55,18 +56,34 @@ void UDeliveryInteractionProbeComponent::TickComponent(float DeltaTime, ELevelTi
     {
         FocusedGeneral = nullptr;
         FocusedPickup = nullptr;
+        FocusedAction = nullptr;
         RestorePickupHighlight();
         return;
     }
 
+    UDeliveryInteractionRegistry *Registry = GetWorld()->GetSubsystem<UDeliveryInteractionRegistry>();
     UDeliveryInteractableComponent *Pickup = FindPreferredPickup(Owner);
     UDeliveryInteractableComponent *General =
-        GetWorld()->GetSubsystem<UDeliveryInteractionRegistry>()->FindNearest(Owner, EDeliveryInteractionKey::GeneralF);
+        Registry->FindNearest(Owner, EDeliveryInteractionKey::GeneralF);
+    /**
+     * 左键目标只认"现在真能操作"的
+     *
+     * 左键平时是出拳，所以这里不像 E 那样保留"不可用也显示原因提示"——
+     * 留着不可用的目标会在站到车尾时把拳头吃掉，而玩家看不出为什么挥不动。
+     */
+    UDeliveryInteractableComponent *Action =
+        Registry->FindNearest(Owner, EDeliveryInteractionKey::ActionLeft);
+    if (Action && Character && !Character->CanUseActionTarget(Action->GetOwner()))
+    {
+        Action = nullptr;
+    }
     FocusedPickup = Pickup;
     FocusedGeneral = General;
+    FocusedAction = Action;
     SetPickupHighlight(Pickup ? Pickup->GetOwner() : nullptr);
 
-    UDeliveryInteractableComponent *PromptTarget = Pickup ? Pickup : General;
+    // 左键目标比 F 优先：手上有货走到车尾时，该出现的是"左键装货"而不是"按 F 驾驶"
+    UDeliveryInteractableComponent *PromptTarget = Pickup ? Pickup : (Action ? Action : General);
     if (bShowPrompt && PromptTarget)
     {
         if (UDeliveryPromptSubsystem *Prompt = UDeliveryPromptSubsystem::Get(this))
@@ -75,7 +92,7 @@ void UDeliveryInteractionProbeComponent::TickComponent(float DeltaTime, ELevelTi
                 WidgetController = NewObject<UDeliveryInteractionController>(this);
             const float Progress =
                 Pickup ? WidgetController->GetProgress(Character, Pickup->GetOwner()) : -1.f;
-            const FText Text = WidgetController->GetPrompt(PromptTarget, Pickup != nullptr);
+            const FText Text = WidgetController->GetPrompt(PromptTarget, Pickup != nullptr, Owner);
             Prompt->PushPrompt(Text, PromptTarget->GetPromptLocation(), Progress);
         }
     }
@@ -90,6 +107,12 @@ AActor *UDeliveryInteractionProbeComponent::GetFocusedActor() const
 AActor *UDeliveryInteractionProbeComponent::GetFocusedPickupActor() const
 {
     const UDeliveryInteractableComponent *Target = FocusedPickup.Get();
+    return Target ? Target->GetOwner() : nullptr;
+}
+
+AActor *UDeliveryInteractionProbeComponent::GetFocusedActionActor() const
+{
+    const UDeliveryInteractableComponent *Target = FocusedAction.Get();
     return Target ? Target->GetOwner() : nullptr;
 }
 

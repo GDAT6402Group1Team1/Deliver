@@ -13,7 +13,14 @@ UENUM(BlueprintType)
 enum class EDeliveryInteractionKey : uint8
 {
     GeneralF UMETA(DisplayName = "F - General Interaction"),
-    PickupE UMETA(DisplayName = "E - 物品操作")
+    PickupE UMETA(DisplayName = "E - 物品操作"),
+    /**
+     * 左键一次性操作（摩托车后备箱装卸货）
+     *
+     * 左键平时是出拳，所以这类目标**只在 CanUse 通过时**才抢走左键：
+     * 手上没货、箱子也空着的时候站在车尾照样能挥拳。
+     */
+    ActionLeft UMETA(DisplayName = "左键 - 就地操作")
 };
 
 DECLARE_DELEGATE_RetVal_TwoParams(bool, FDeliveryCanUse, APawn *, bool);
@@ -112,4 +119,14 @@ class DELIVERY_API UDeliveryInteractableComponent : public UActorComponent
 
     /** 从指定物体取得交互组件，用于服务器复核目标 */
     static UDeliveryInteractableComponent *FindOn(const AActor *Actor);
+
+    /**
+     * 按交互键在物体上找交互组件
+     *
+     * 一个 Actor 可以挂多个交互组件（摩托车就是"按 F 驾驶"+"左键装卸货"两个），
+     * 这时不带键的那个重载只会拿到第一个，服务器复核就会复核错对象——
+     * 表现是"提示是装货、按下去却上了车"。凡是已经知道自己在处理哪个键的
+     * 代码路径，都该走这个重载。
+     */
+    static UDeliveryInteractableComponent *FindOn(const AActor *Actor, EDeliveryInteractionKey Key);
 };

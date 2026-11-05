@@ -41,6 +41,10 @@ class DELIVERY_API UDeliveryInteractionProbeComponent : public UActorComponent
     UFUNCTION(BlueprintPure, Category = "Interaction")
     AActor *GetFocusedPickupActor() const;
 
+    /** 当前范围内的左键就地操作目标（摩托车后备箱） */
+    UFUNCTION(BlueprintPure, Category = "Interaction")
+    AActor *GetFocusedActionActor() const;
+
   protected:
     // 提示开关
     /** 关掉就只探测不显示浮窗，留给以后想用 UMG 自己画提示的情况 */
@@ -66,6 +70,7 @@ class DELIVERY_API UDeliveryInteractionProbeComponent : public UActorComponent
     // 本机目标缓存
     TWeakObjectPtr<UDeliveryInteractableComponent> FocusedGeneral;
     TWeakObjectPtr<UDeliveryInteractableComponent> FocusedPickup;
+    TWeakObjectPtr<UDeliveryInteractableComponent> FocusedAction;
     TWeakObjectPtr<AActor> HighlightedActor;
     TArray<FPrimitiveHighlightState> HighlightStates;
 };

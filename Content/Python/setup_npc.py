@@ -78,26 +78,18 @@ EXPECTED_LEVEL = "testfortraffic"
 ROUTE_TAG = "ClaudeGenPedestrianRoute"
 ROUTE_LABEL = "PedestrianRoute_Test"
 
-# **一张小路网**，不是一条线。路人走到端点会换一条相连的路线继续走
-# （ADeliveryPedestrianRoute 的接驳），所以这里给的是若干首尾相接的线段。
-#
-# 端点**必须真的重合**（或者差距小于路线的 ConnectDistance，默认 400），
-# 连通判据只看端点到端点——中段靠得近的两条路不算连通，否则路人会在路中央凭空拐弯。
-#
-# 画的是一个"目"字形：一条南北主街 + 两条东西横街 + 一条回头路，
-# 这样路口有分叉（走到路口会随机挑一条），而不是一条来回走的死路。
-# 坐标都在原点一侧的测试区里，交通已经被 arrange_test_area.py 挪到 +X+Y 角。
+# 普通街道路人只在各自点位周围 300 cm 游走。四个中心相距至少 2600 cm，
+# 活动圆不会重叠；长样条接驳留给以后学校门口的小孩过马路场景单独配置。
 ROUTE_Z = 5.0
-PEDESTRIAN_ROUTES = [
-    # (名字, [(x, y), ...])
-    ("Main_NS",   [(-600.0, -3000.0), (-600.0, 3000.0)]),
-    ("Cross_S",   [(-600.0, -3000.0), (-3200.0, -3000.0)]),
-    ("Cross_N",   [(-600.0, 3000.0), (-3200.0, 3000.0)]),
-    ("Back_NS",   [(-3200.0, -3000.0), (-3200.0, 3000.0)]),
+PEDESTRIAN_AREAS = [
+    ("South_East", (-600.0, -3000.0)),
+    ("North_East", (-600.0, 3000.0)),
+    ("South_West", (-3200.0, -3000.0)),
+    ("North_West", (-3200.0, 3000.0)),
 ]
 
 # (资产名, 权重, 身高系数)
-# 只勾两个小孩：先按要求测试小男孩小女孩，其余四个导入了但权重留 0，随时能开。
+# 普通街道六种外观都可出现；学校门口的小孩队伍以后单独配置权重和路线。
 #
 # **身高系数必须在这里写**：六份源模型按老的 FbxFactory 路线、缩放 1.0 导进来的
 # 包围盒高度实测全是 99.8 cm（归一化过的），同一个导入缩放会把所有人拉到
@@ -349,12 +341,7 @@ def _ground_z(world, x, y, z_hint):
 
 
 def place_route():
-    u"""摆一张首尾相接的人行路网（幂等）。
-
-    端点写死在 PEDESTRIAN_ROUTES 里。摆完在编辑器里拖端点就能改——
-    但**拖开之后两条路就不连通了**（判据是端点距离 < ConnectDistance，默认 400），
-    表现是路人走到那儿就缩掉消失，而不是拐过去。要改路网记得两头一起拖。
-    """
+    u"""摆四个互不重叠的普通路人活动区（幂等）。"""
     world = _editor_world()
     if world is None:
         w(u"！取不到编辑器世界。")
@@ -375,7 +362,7 @@ def place_route():
 
     eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 
-    # 外观只解析一次，四条路线共用同一份配置
+    # 外观只解析一次，四个活动区共用同一份配置
     kinds = []
     for asset_name, weight, height in INITIAL_KINDS:
         path = "%s/%s.%s" % (DEST, asset_name, asset_name)
@@ -389,7 +376,7 @@ def place_route():
         kind.set_editor_property("height_scale", height)
         kinds.append(kind)
     if not kinds:
-        w(u"！一个外观都没配上，路线会是空的。")
+        w(u"！一个外观都没配上，活动区会是空的。")
 
     # 幂等：按 tag 删掉上次摆的。按 tag 而不是按名字——
     # 改过 label 的话按名字匹配会漏掉，然后越摆越多
@@ -402,20 +389,16 @@ def place_route():
         except Exception:
             pass
     if removed:
-        w(u"  删掉旧路线 %d 条。" % removed)
+        w(u"  删掉旧路人点 %d 个。" % removed)
 
     made = []
-    for name, points in PEDESTRIAN_ROUTES:
-        ends = []
-        for x, y in points:
-            z = _ground_z(world, x, y, ROUTE_Z)
-            if z is None:
-                # commandlet 里没有完整物理场景，射线常常恒不命中，所以这不算异常；
-                # 路人每帧还会自己贴地，这里只要给样条一个合理的起点
-                z = ROUTE_Z
-            ends.append(unreal.Vector(x, y, z + 2.0))
+    for name, (x, y) in PEDESTRIAN_AREAS:
+        z = _ground_z(world, x, y, ROUTE_Z)
+        if z is None:
+            z = ROUTE_Z
+        center = unreal.Vector(x, y, z + 2.0)
 
-        route = eas.spawn_actor_from_class(route_class, ends[0], unreal.Rotator(0.0, 0.0, 0.0))
+        route = eas.spawn_actor_from_class(route_class, center, unreal.Rotator(0.0, 0.0, 0.0))
         if route is None:
             w(u"！%s 生成失败。" % name)
             continue
@@ -428,57 +411,29 @@ def place_route():
             w(u"！%s 上没有样条组件，C++ 侧的 Route 组件没建起来？" % label)
             continue
 
-        # **写点之前先 modify(True)**。clear/add/update 这类普通函数调用只改内存、
-        # 不把对象标记为已修改，保存时整个对象不被序列化——现象是写完立刻读回是好的，
-        # 存盘重载就变回默认值（本项目在这条上栽过，存活率从 1/8 变成 8/8）
+        # 保留一个短样条供特殊路线模式使用；普通模式只读 Actor 中心。
         spline.modify(True)
         route.modify(True)
         spline.clear_spline_points(False)
-        for p in ends:
+        for p in (center, unreal.Vector(x + 100.0, y, z + 2.0)):
             spline.add_spline_point(p, WS, False)
-        for i in range(len(ends)):
+        for i in range(2):
             spline.set_spline_point_type(i, unreal.SplinePointType.LINEAR, False)
         spline.set_closed_loop(False, False)
         spline.update_spline()
 
         route.set_editor_property("kinds", kinds)
-        # 四条路线分担人数，每条给少一点——接驳之后人会在路网里流动，
-        # 每条都按单线那套给 6 个的话一眼看过去街上太挤
+        route.set_editor_property("roam_in_area", True)
+        route.set_editor_property("roam_radius", 300.0)
+        route.set_editor_property("allow_handoff", False)
         route.set_editor_property("max_alive", 3)
+        made.append((label, center))
 
-        made.append((label, spline.get_spline_length(), ends))
-
-    # 回读验证：连通性靠端点重合，所以把每条的端点打出来，便于人工核对
-    w(u"")
-    for label, length, ends in made:
-        w(u"  %s：%.0f cm  (%.0f, %.0f) → (%.0f, %.0f)"
-          % (label, length, ends[0].x, ends[0].y, ends[-1].x, ends[-1].y))
-
-    # 端点重合核对：算一遍两两端点距离，报告哪些端点会被判为连通。
-    # 不报的话"路人走到路口就消失"要靠猜，而根因就是这里差了几厘米
-    w(u"")
-    w(u"  端点连通核对（阈值 = 路线的 ConnectDistance，默认 400）：")
-    ends_all = []
-    for label, _length, ends in made:
-        ends_all.append((label + "[起]", ends[0]))
-        ends_all.append((label + "[终]", ends[-1]))
-    linked = 0
-    for i in range(len(ends_all)):
-        for j in range(i + 1, len(ends_all)):
-            na, pa = ends_all[i]
-            nb, pb = ends_all[j]
-            if na.split("[")[0] == nb.split("[")[0]:
-                continue
-            d = math.sqrt((pa.x - pb.x) ** 2 + (pa.y - pb.y) ** 2)
-            if d <= 400.0:
-                linked += 1
-                w(u"    %s ↔ %s  相距 %.0f cm" % (na, nb, d))
-    w(u"  共 %d 处连通。" % linked)
-    if linked == 0:
-        w(u"  ！一处都不连通，路人走到端点会直接缩掉消失，和没做接驳一样。")
+    for label, center in made:
+        w(u"  %s：中心 (%.0f, %.0f)，半径 300 cm" % (label, center.x, center.y))
 
     enabled = [u"%s×%.2f" % (n, h) for n, wt, h in INITIAL_KINDS if wt > 0.0]
-    w(u"  %d 条路线，每条上限 3 人，启用外观：%s" % (len(made), u"、".join(enabled)))
+    w(u"  %d 个活动区，每区上限 3 人，启用外观：%s" % (len(made), u"、".join(enabled)))
     w(u"  在大纲里搜 %s 可以定位。" % ROUTE_LABEL)
     return made
 
@@ -492,16 +447,14 @@ def run():
     meshes = import_npcs()
     w(u"   导入 %d 个。" % len(meshes))
     w(u"")
-    w(u"2. 在 %s 摆人行路线" % EXPECTED_LEVEL)
+    w(u"2. 在 %s 摆普通路人活动区" % EXPECTED_LEVEL)
     place_route()
     w(u"")
     w(u"验收：进 PIE，控制台 Delivery.Pedestrian.Dump 看在场路人和配置问题；")
     w(u"      Delivery.Pedestrian.Spawn 立刻补一个；Delivery.Pedestrian.Clear 清场。")
-    w(u"注意：这几份 FBX 里扫不到贴图，路人很可能是灰白的——那不是导入出错。")
+    w(u"长样条接驳留给以后学校门口的小孩过马路场景。")
     flush()
 
 
 if __name__ == "__main__":
-    run()
-else:
     run()

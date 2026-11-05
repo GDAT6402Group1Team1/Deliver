@@ -36,9 +36,15 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Input")
     TObjectPtr<UInputAction> MouseLookAction;
 
-    /** 鼠标视角灵敏度；手柄右摇杆不受影响 */
+    /**
+     * 鼠标视角灵敏度；手柄右摇杆不受影响
+     *
+     * 0.4 = 原始输入的 40%（之前是 0.75，用户反馈转视角太快）。
+     * 步行和骑车各有一个同名字段，**两边要一起调**——只改一个的表现是
+     * "走路正常、一上车就甩飞"，而两个数单看都像是对的。
+     */
     UPROPERTY(EditAnywhere, Category = "Input", meta = (ClampMin = "0.1", ClampMax = "2.0"))
-    float MouseLookSensitivity = 0.75f;
+    float MouseLookSensitivity = 0.4f;
 
     UPROPERTY(EditAnywhere, Category = "Input")
     TObjectPtr<UInputAction> AttackLeftAction;

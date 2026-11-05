@@ -42,6 +42,8 @@ const TCHAR* PhaseToString(EDeliveryPedestrianPhase Phase)
 			return TEXT("消失中");
 		case EDeliveryPedestrianPhase::KnockedDown:
 			return TEXT("被打飞");
+		case EDeliveryPedestrianPhase::StandingUp:
+			return TEXT("起身中");
 		default:
 			return TEXT("未知");
 	}
@@ -134,8 +136,13 @@ void Dump(UWorld* World)
 			    Pedestrian->GetDistanceAlongRoute(), Length,
 			    Pedestrian->IsWalkingForward() ? TEXT("正向") : TEXT("反向"), Pedestrian->GetWalkSpeed(),
 			    Pedestrian->GetAppearAlpha(), PhaseToString(Pedestrian->GetPhase()),
-			    Pedestrian->IsKnockedDown()
-			        ? *FString::Printf(TEXT("（还剩 %.1f 秒退场）"), Pedestrian->GetKnockedRemaining())
+			    Pedestrian->IsYielding()
+			        ? *FString::Printf(TEXT("（正在让路，前方%s）"),
+			                           Pedestrian->IsBlockedAhead() ? TEXT("有人") : TEXT("已空"))
+			        : Pedestrian->IsStandingUp()
+			        ? *FString::Printf(TEXT("（起身 %.0f%%）"), Pedestrian->GetGetUpAlpha() * 100.f)
+			        : Pedestrian->IsKnockedDown()
+			        ? *FString::Printf(TEXT("（还剩 %.1f 秒起身）"), Pedestrian->GetKnockedRemaining())
 			        : (Pedestrian->IsPaused()
 			               ? *FString::Printf(TEXT("（停着，还剩 %.1f 秒）换线 %d 次"),
 			                                  Pedestrian->GetPauseRemaining(),
