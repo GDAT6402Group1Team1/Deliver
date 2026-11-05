@@ -44,8 +44,8 @@ struct FDeliveryPedestrianKind
 };
 
 /**
- * 关卡里的一条人行路线，自己按配置生成路人并在两端回收
- * 样条默认两个点就是一条线段，保留样条是为了以后想画转弯或绕行不用换类
+ * 关卡里的路人生成点。普通路人默认在生成点周围短距离游走；
+ * 需要指定路线时可关闭 bRoamInArea，继续使用样条和接驳。
  * 生成只在服务器执行，路人自己复制移动，和交通车同一套做法
  */
 UCLASS()
@@ -109,6 +109,29 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	/** 允许路人从终点往起点走，即双向人流 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|生成")
 	bool bBothDirections = true;
+
+	/** 普通路人在本生成点周围游走，不沿长样条或接驳到别的生成点。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|游走")
+	bool bRoamInArea = true;
+
+	/** 活动半径；路人每一步的目标都在这个圆内。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|游走",
+	          meta = (ClampMin = "50.0", Units = "cm", EditCondition = "bRoamInArea"))
+	float RoamRadius = 300.f;
+
+	/** 同一生成点的路人出生时至少相隔的距离。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|游走",
+	          meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bRoamInArea"))
+	float RoamSpawnSpacing = 90.f;
+
+	/** 普通路人走多远后随机停一下，和长路线的停顿参数分开。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|游走",
+	          meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bRoamInArea"))
+	float RoamPauseDistanceMin = 120.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|游走",
+	          meta = (ClampMin = "0.0", Units = "cm", EditCondition = "bRoamInArea"))
+	float RoamPauseDistanceMax = 320.f;
 
 	// 行走
 	/** 随机速度下限（cm/s） */
@@ -192,6 +215,9 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 		return MinVisibleScale;
 	}
 
+	/** 只在活动圆内选点；起身和转向也使用同一范围。 */
+	FVector PickRoamPoint(const FVector& From, float MinTravelDistance = 0.f) const;
+
 	/** 路人退场时回报，便于立刻补一个新的而不用等下一次扫描 */
 	void NotifyPedestrianFinished(ADeliveryPedestrian* Pedestrian);
 
@@ -210,6 +236,14 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 
 	/** 这一端有没有下家；路人据此决定要不要在接近端点时缩小 */
 	bool HasContinuation(bool bFromFinishEnd);
+
+	/**
+	 * 样条上离这个世界坐标最近的那一点对应的距离（cm）
+	 *
+	 * 被打飞的路人起身时用它回到线上：人可能滑出去很远，
+	 * 不重新对齐的话起身结束那一帧会横向瞬移一下。
+	 */
+	float GetDistanceAtLocation(const FVector& WorldLocation) const;
 
 	/** 本路线两个端点的世界位置，调试命令用 */
 	void GetEndpoints(FVector& OutStart, FVector& OutFinish) const;

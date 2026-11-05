@@ -150,8 +150,22 @@ bool UDeliveryPickupPointComponent::CanDispense() const
 }
 
 // 提供取货点当前无法发货的原因
-FText UDeliveryPickupPointComponent::GetBlockedReason() const
+FText UDeliveryPickupPointComponent::GetBlockedReason(const APawn *Interactor) const
 {
+    /**
+     * 骑着车停在取货点时，要告诉玩家该做什么，而不是报任务配置问题
+     *
+     * 判据取"传进来的这个交互者"，不去抓第一个 PlayerController——
+     * 同机多人时那样会按别人的骑车状态显示我的提示。
+     */
+    if (const ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(Interactor))
+    {
+        if (Character->IsRidingVehicle())
+        {
+            return NSLOCTEXT("DeliveryPickup", "DismountToTake", "[按 F] 下车取货");
+        }
+    }
+
     if (GetLocationId().IsNone())
     {
         return NSLOCTEXT("DeliveryPickup", "PointNoId", "取货点没填地点 ID");
@@ -252,7 +266,26 @@ bool UDeliveryPickupPointComponent::TryDispense(ADeliveryCharacter *Receiver)
 
 bool UDeliveryPickupPointComponent::CanPickup(APawn *Interactor, bool bCheckTaskAvailability) const
 {
-    return Interactor && (!bCheckTaskAvailability || CanDispense());
+    if (!Interactor)
+    {
+        return false;
+    }
+    /**
+     * 骑着车领不了货：快递必须经后备箱装卸
+     *
+     * 否则骑车按 E 会把快递直接塞进后备箱、没有开盖动画，和"走到车尾按左键装货"
+     * 两条路并存。原因文字由 GetBlockedReason() 给出，所以玩家看到的是
+     * 「下车取货」而不是走过去什么都不出现。
+     */
+    if (const ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(Interactor))
+    {
+        if (Character->IsRidingVehicle())
+        {
+            return false;
+        }
+    }
+
+    return !bCheckTaskAvailability || CanDispense();
 }
 
 bool UDeliveryPickupPointComponent::Pickup(APawn *Interactor)

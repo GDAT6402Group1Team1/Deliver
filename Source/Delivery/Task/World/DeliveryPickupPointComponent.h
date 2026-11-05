@@ -71,7 +71,7 @@ class DELIVERY_API UDeliveryPickupPointComponent : public UActorComponent
      * 和 `UDeliveryItemComponent::GetPickupBlockedReason()` 一样的约定：提示浮窗
      * 拿它替掉默认提示词；"按了没反应"在游戏里完全无法自查，必须说出原因
      */
-    FText GetBlockedReason() const;
+    FText GetBlockedReason(const APawn *Interactor = nullptr) const;
 
     /** 服务器：生成一件快递交给 Receiver；成功返回 真 */
     UFUNCTION(BlueprintCallable, Category = "Delivery|Pickup")

@@ -5,7 +5,8 @@
 #include "Task/World/DeliveryItemComponent.h"
 
 // 优先显示目标无法操作的原因，否则使用目标配置的提示
-FText UDeliveryInteractionController::GetPrompt(UDeliveryInteractableComponent *Target, bool bPickup) const
+FText UDeliveryInteractionController::GetPrompt(UDeliveryInteractableComponent *Target, bool bPickup,
+                                                const APawn *Interactor) const
 {
     if (!IsValid(Target))
         return FText::GetEmpty();

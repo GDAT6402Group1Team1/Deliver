@@ -108,17 +108,100 @@
 - **"放哪"只有一处判断**：`ADeliveryCharacter::ReceiveTaskPackage()`。取货点发货、
   地上捡回、上车、下车四条路全走它。散在四处各判一遍的话迟早出现"车上和手上各有一件"，
   而交付时取到哪一件是不确定的。
-- **车上的货**：`ADeliveryMotorbike::AttachCargo/ReleaseCargo`，焊在 `CargoPivot`
+- **整车尺寸：`VisualScale` 默认 0.73（2026-11-05）**。导入时 `IMPORT_SCALE = 1.9` 是按
+  "主角身高 192cm"算的，而那个 192 来自胶囊半高 96、**是个错的数**；主角实测只有 **140cm**
+  （胶囊半高 70、renwu 网格高 139.9）。所以这辆车和车上那个骑手都是照一个 190cm 的人做的，
+  整车 256×136×168cm，站在 140cm 的主角旁边明显过大，而且一上车视野里那个骑手
+  比刚才操控的人高出一头——用户说的"坐上去尺寸也会变大"就是这个，不是什么缩放 bug。
+  0.73 = 140 / 190，车变成约 187×99×123cm。
+  - **不重导资产**：重导要人跑脚本，还会冲掉蓝图上手调过的覆盖值；运行时缩一层在打包版里
+    一样有效（和 `AutoConfigureFromMeshes()` 同一个理由）。
+  - **缩放单独占一层 `MeshScale`**（夹在 `MeshRoot` 和 `MeshAlign` 之间）。`MeshAlign` 的位置和
+    朝向是 `setup_motorbike.py` 量出来写进蓝图的，缩放写在它身上会和那份配置混在一起；
+    而 `MeshRoot` 每帧被写 Roll（压弯）。这一层只由 C++ 管，蓝图里没有它的覆盖值。
+    老蓝图实例上 `MeshAlign` 还挂在 `MeshRoot` 下，`ApplyVisualScale()` 会重新挂一次
+    （和 `RiderMesh` 那条兼容处理同一个手法）。
+  - **缩完必须把视觉整体往下挪**，否则车悬空一截。缩放绕 `MeshScale` 原点做，车底原来在
+    z = Bottom（负数），缩完抬到 Bottom × Scale，所以下移 `(AlignZ + Bottom) × (1 − Scale)`
+    正好抵掉。**不去动 `HoverHeight`**——那是"车辆原点离地多高"，和模型多大无关。
+    `MeshAlign` 只有 Yaw，所以它的旋转不改变 Z，直接加它的相对高度就行。
+  - **碰撞盒跟着缩**（`BaseCollisionExtent` × `VisualScale`）：只缩画面不缩碰撞的话，
+    车会在离墙十几厘米的地方就"撞上"，而画面里还差一截。下车落点用的是碰撞盒实际尺寸，
+    自动跟着变。
+  - **轮子转速要除以缩放**：纯滚动算的是线速度 / **世界**半径，而 `WheelRadius` 是导入
+    空间的数，缩放之后世界半径是它乘 `VisualScale`。不除的话轮子会转快一截（打滑感）。
+  - 回归测试 `Delivery.Vehicle.Trunk` 里断言"缩放前后车底高度不变"（容差 1cm）
+    和"碰撞盒跟着缩"。
+- **车上的货在后备箱里，装卸是一个独立动作（2026-11-05 改）**。
+  `ADeliveryMotorbike::AttachCargo/ReleaseCargo` 仍然是登记入口，快递焊在 `CargoPivot`
   （挂 `MeshAlign` 下面，所以继承车头朝向修正和压弯侧倾）。**用焊接不用物理约束**——
   车是运动学的，约束另一端相当于无穷重刚体，Chaos 会把误差全算到快递头上，
-  表现是快递在车后面疯狂抽动（拖人那套踩过同一个坑）。`CargoOffset` **留零时由
-  `AutoConfigureFromMeshes()` 自动量**（取车尾 35% 那批部件的顶面中点——整车包围盒的
-  `Max.Z` 是车把高度，用它会把快递架到半空）。要手填的话注意"往后"是 **−Y 不是 −X**：
-  MeshAlign 局部空间里 +Y 才是车头，填错的表现是快递挂在车侧面。
-- **上下车自动换手**：`TryEnter` 把手上的快递搬到车上（**必须排在 attach 之后**，
-  因为 `GetCurrentVehicle()` 是从附着父级推出来的，attach 之前这个人还"不在车上"），
-  `ExitVehicle` 搬回手上（排在 `StartRagdoll` 之后，刚体没重建时算出来的手部位置是旧的）。
-  交回去失败（背包满、人晕了）就留在车上——车还能用 R 召唤回来，掉出世界的快递要重跑一趟。
+  表现是快递在车后面疯狂抽动（拖人那套踩过同一个坑）。
+  - **流程**：手上有货走到车边 → 浮窗显示「左键装货」→ 开盖、快递落进箱子、合盖（约 1.15 秒）
+    → 这之后才显示「按 F 驾驶」。下车后再走到车边 →「左键取货」→ 开盖、快递升出来、
+    合盖 → 回到手上。实现在 `Vehicle/DeliveryMotorbikeTrunk.cpp`（和骑手一样是
+    `ADeliveryMotorbike` 的一部分，分文件只是因为主文件已经很长）。
+  - **"手上有货不给上车"和"装货动作"必须一起做**。只加装货、不去掉 `TryEnter` 里
+    原来那段"顺手把手上的快递搬到车上"，表现就是按 F 直接带货上车、新动作永远用不到。
+    现在那段删了，门槛收在 `CanDriveNow()` 一处，车身那个 F 交互组件通过
+    `CanUse` 委托问它——**提示和按键读同一个条件**，不会出现"提示说能上、按下去没反应"。
+  - **F 目标的 `CanUse` 是在 `CanInteract()` 里问的，而且只对 F 问**。E 那边刻意保留
+    "不能取的快递也要显示原因提示"，在 `CanInteract` 里拦掉会把提示一起拦没，
+    玩家只看到"走过去什么都不出现"。
+  - **左键这个交互键是新加的**（`EDeliveryInteractionKey::ActionLeft`）。左键平时是出拳，
+    所以这类目标**只在 `CanUse` 通过时**才被探测器选中：手上没货、箱子也空着的时候
+    站在车尾照样能挥拳。路由只有一处——`ADeliveryCharacter::DoAttackLeft()` 开头
+    `InteractionComponent->TryActionLeft()`，返回假就按原来的逻辑出拳。
+  - **一个 Actor 上有两个交互组件，所以 `FindOn` 必须按键找**。摩托车同时挂着
+    "按 F 驾驶"和"左键装卸货"，不带键的 `FindOn` 只拿第一个，服务器就会复核错对象，
+    表现是"提示是装货、按下去却上了车"。`UDeliveryInteractableComponent::FindOn(Actor, Key)`
+    是为此加的，交互组件里原来那几处不带键的调用都已经改成带键。
+  - **交互半径和 F 一样是 300**（`TrunkInteractRadius`）。手上有货时 F 提示被压掉，
+    这个半径更小就会出现"站在车头什么提示都没有"的死区；提示浮窗吊在后备箱上方，
+    "该走到车尾"是靠提示的位置告诉玩家的。
+  - **箱盖、箱体、箱内位置全是按包围盒自动认的**（`AutoConfigureFromMeshes`）。
+    这 9 个网格叫 `摩托车_车_001`…`_008`，名字里没有任何信息。判据：箱盖 = 车尾那块
+    **最高的扁平件**（厚度不到平面尺寸四成），箱体 = 紧贴它下面、平面上和它重叠的那块。
+    实测这辆车箱盖是槽位 **1**（79×63×14，顶面 z=93，整车最高）、箱体是槽位 **7**
+    （69×56×56，顶面 z=80）；铰链在箱盖后沿底边 (−49, −68, 79)、箱内 (−49, −37, 52)、
+    箱口 (−49, −37, 118)。认不出来时退回车尾、盖子不动并点名一次——
+    **"盖子乱翻"比"盖子不动"难查得多**。
+  - **箱盖铰链在前沿、向后翻开**（`bTrunkLidHingeAtFront`，默认开）。
+    **这一个开关同时决定"铰链落在箱盖哪条边"和"往哪边转"**，所以配不出
+    "铰链在后沿却往后转"这种把盖子转进车身的组合——那种错只能靠眼睛发现。
+    `TrunkLidOpenAngle` 因此是个正数（开多少度），不再承担方向。
+    旋转用 `FQuat(X 轴, 角度)` 写、不用 `FRotator` 的 Roll：绕 +X 的四元数旋转在代数上
+    一定是 +Y → +Z，方向是推得出来的；而 Roll 的正负约定本仓库的注释和引擎实现
+    曾经对不上（"UE 里正 Roll 是往左倒"那句）。盖子挂在自己的 `TrunkLidPivot` 上、
+    网格把铰链偏移减回去，和轮子那套手法完全一样。回归测试断言的也是**几何方向**
+    （铰链对面那条边必须往上、铰链那侧必须往下），不是角度数值。
+  - **装好之后快递整件隐藏**。它在一个关好的箱子里，看不见才是对的；而且快递比内腔大时
+    不藏就会穿出箱盖。只有动画期间才显示（从箱口落进去 / 从箱里升出来）。
+  - **交接只在动画结束那一刻做**：装货是结束时才隐藏，取货是结束时才 `ReceiveTaskPackage`。
+    中途被打断快递仍然在箱子里，不会凭空出现在两个地方。交不回去（背包满、人晕）
+    就重新入箱，走回来再按一次。
+  - **动画只靠一条多播起始通知，不复制进度**。两端各自从头播同一条时间线——
+    这是个一秒多的表现动画，同步中间进度不值当。
+  - **下车不再自动把货交回手上**：`ExitVehicle` 连 `ReleaseCargo` 都不调，
+    调了就等于"下车即卸货"，车上那条记录也没了。
+  - **`Delivery.Carry.Dump` 现在扫全场的车**，每辆报后备箱里有什么、驾驶员是谁、
+    你离箱子多远、此刻能不能装/能不能取。装箱之后下车时 `GetCarriedTaskPackage()`
+    是空的（它只在骑车时才查车上），光看上面那两行会显示"没带"，
+    而货其实在车屁股里——**这正是最容易被当成"快递丢了"的状态**。
+  - 回归测试 `Delivery.Vehicle.Trunk`。「取货成功交回手上」依赖任务管理器，
+    自动化世界里没有，所以那一条只验了"交不回去就留在车上"的兜底，成功路径要在真实关卡验收。
+- **骑车时不能在取货点领货（2026-11-05）**：`UDeliveryPickupPointComponent::CanPickup`
+  拦掉 `IsRidingVehicle()`，`GetBlockedReason()` 返回「按 F 下车取货」。
+  不拦的话骑车按 E 会把快递**直接塞进后备箱、没有开盖动画**，和"走到车尾按左键装货"
+  两条路并存。原因文字走的是 E 目标那条"不可用也要显示原因"的既有通路，
+  所以玩家看到的是该做什么，而不是走过去什么都不出现。
+  `GetBlockedReason(Interactor)` 带上了交互者参数——早先那版在函数里抓
+  `GetFirstPlayerController()`，同机多人时会按别人的骑车状态显示我的提示。
+  交付（收件点）**没有加这道拦**：骑到门口直接交货是现在就通的，也更顺手。
+- **鼠标视角灵敏度 0.75 → 0.4（2026-11-05，用户反馈转视角太快）**。
+  `UDeliveryInputComponent::MouseLookSensitivity` 和 `ADeliveryMotorbike::MouseLookSensitivity`
+  **两个同名字段要一起调**：只改一个的表现是"走路正常、一上车就甩飞"，
+  而两个数单看都像是对的。手柄右摇杆和摩托车的固定车尾视角都不受这个值影响。
 - **骑车时按 E**：摩托车绑 `IA_Pickup` 后**转发给驾驶员那具身体**
   （`Driver->DoPickup()` / `DoPickupRelease()`），不在车上另写一套。
   配套地，交互探测器的门槛从"本机操控"放宽成"本机操控**或者**我是本机操控的车的驾驶员"
@@ -265,9 +348,11 @@
 
 ### 5c. 街上的路人（NPC）
 
+普通街道路人默认使用 `ADeliveryPedestrianRoute::bRoamInArea`：以生成点为中心在默认 300 cm 半径内随机选短目标，走 120–320 cm 后停一下，再换方向；同点出生位置至少相隔 90 cm。`testfortraffic` 既有四个生成点相距至少 2600 cm，活动圆互不重叠，运行时不接驳长路线。`setup_npc.py` 重摆时也按这四个独立活动区配置。长样条与端点接驳代码保留为 `bRoamInArea=false` 的特殊模式，**以后单独用于学校门口一群小孩过马路**；这次没有实现过街编队和交通灯联动。
+
 `Design/Art/NPC/` 下六份未导入的 FBX（小男孩 / 小女孩 / 中年男 / 中年女 / 老爷爷 / 老奶奶）。源美术文件统一放 `Design/Art/`，不散在工程根目录。离线解析结论：有蒙皮（Skin 1 / Cluster 29）、骨骼是 **Mixamo 标准命名**（六个完全一致，所以共用一个 Skeleton）、**没有走路动画**（`AnimStack` 1 个但 `AnimCurveNode`/`AnimLayer` 都是 0，空壳）、绑定姿势就是站姿（导入时 `use_t0_as_ref_pose` 保持关闭，和摩托车骑手相反）。**贴图是内嵌的、六个都有**，真导进去会解出六张 base color 和六个 `tripo_mat_*` 材质；早先「贴图大概率缺失、导进来是灰白」的结论是错的（离线扫法按文件名找引用，内嵌贴图没有文件名）。导入会在 FBX 旁生成 `<名字>.fbm/` 存解出来的贴图，是中间产物、已 `.gitignore`。
 
-- [ADeliveryPedestrianRoute](Source/Delivery/NPC/DeliveryPedestrianRoute.h) —— 关卡里的一条人行路线，自己生成路人并在两端回收。样条默认两点即线段；留样条是为了以后画绕行不必换类。生成只在服务器做，路人自己复制移动（和交通车同一套假设）。
+- [ADeliveryPedestrianRoute](Source/Delivery/NPC/DeliveryPedestrianRoute.h) —— 普通模式是小范围生成点；关闭 `bRoamInArea` 才沿样条走并在两端回收。生成只在服务器做，路人自己复制移动。
 - [ADeliveryPedestrian](Source/Delivery/NPC/DeliveryPedestrian.h) —— 运动学推进、不进物理、不接 AI 与寻路，每帧向下打射线贴地。
 
 - **出入场按距离算不按时间**：快走和慢走的人要在同一个位置完成出场，按时间算快的人会在离端点很远处就已满尺寸。
@@ -282,8 +367,8 @@
 - 导入与摆点：`Content/Python/setup_npc.py`。**缩放是量出来的**：1:1 导入后量"中年男"的高度反推一个六人共用的系数再干净重导（共用一个系数才保留相对高矮；各自拉到同一身高会把小孩拉成大人）。重导**先删再导**——带已有资产做 `replace_existing` 会被路由到 Interchange、`FbxImportUI` 选项被整份忽略。路线只摆 `testfortraffic`，搜 `PedestrianRoute_Test` 定位。
 - **身高必须按种类单独写**（`FDeliveryPedestrianKind::HeightScale`）：六份源模型按老的 FbxFactory 路线、缩放 1.0 的包围盒高度实测**全是 99.8 cm**（归一化过的；被 Interchange 接走时同样的调用量到 192 cm，那条路忽略 FbxImportUI 的缩放，报告里"导入路"那一列要看一眼），所以导入时那个共用缩放把所有人都拉到同一身高——小男孩和中年男一样高。相对高矮不在模型里，只能在配置里表达（当前小孩 0.60 = 84 cm、中年 1.00 = 140 cm、老人 0.80 = 112 cm；基准 `TARGET_ADULT_HEIGHT = 140` = **主角实测身高**，BP_DeliveryMan 的胶囊半高是 **70**、renwu 网格高 139.9；**不是 96**，按 96 反推 192 会让路人比主角高出一头）。身高写进**出生变换**而不是生成后再 `SetActorScale3D`：路人在 `BeginPlay` 把当时的缩放记成 `BaseScale`、出入场曲线乘在它上面，生成后再改会被出入场缩放当场覆盖。挑"哪一种"和取"它的身高"是同一次决定（`PickKind` 一次输出两个值），分两次查会在权重随机那步各挑一次，表现是小孩配着大人的身高。
 - **把没有骨骼的网格交给 `PoseableMesh` 会崩**（`AllocateTransformData` → `FillComponentSpaceTransforms` 按骨骼数索引，数组大小 0 时直接断言）。`BeginWalk` 现在先查 `GetRefSkeleton().GetNum()`，没骨骼就退回静态外观并点名一次；自动化测试用的临时网格正好是这种，第一版就崩在那里。
-- **受击与被车撞**：路人有自己的碰撞通道 `Pedestrian`（`ECC_GameTraceChannel3`，见 `Combat/DeliveryCollisionChannels.h`），**刻意不复用玩家布娃娃的 `PhysicsBody`**——那个通道被抓取候选、拖人、摩托车贴地探测一堆查询盯着，路人挂上去会被全部捎上。拳头和车**各自单开一次扫掠**，不并进已经调通的那两条。判据是"实现了 `IDeliveryImpactReceiver`"而不是 Cast 成路人类（否则 Combat/ 和 Traffic/ 反向依赖 NPC/，且同一判断要写两遍）。打中切成真布娃娃吃冲量、躺 `KnockedLieDuration` 再缩掉；冲量倍率单独给（路人刚体质量和玩家不是一个量级）；撞车**只取方向、力度用固定基准**（`CarVelocity` 在 `OnRouteLost` 瞬移那帧会算出假的 3053 cm/s）。导入必须 `create_physics_asset=True`，没有物理资产时退回"原地退场"并点名，**不能崩**。再被打不重置退场计时（否则车流里被反复蹭的人永不退场）；被打飞立刻从在场名单摘掉（否则人数上限被尸体占住）。验收 `Delivery.Pedestrian.Knock`。
-- **走走停停 + 路网接驳**：停下来腿自动停（步态相位按路程推进），所以只需要让它停。停顿按**路程**抽不按时间；**出入场窗口里不许停**（会卡成半大小的人站着不动），碰上推迟而不是取消；站住要有按**时间**走的轻微晃动且只晃躯干（动腿会变成原地滑步）。接驳：走到端点找相连路线继续走，连通**只看端点到端点**（`ConnectDistance` 400）；**换线那头不淡入、还有下家那头不淡出**（否则在路口缩到看不见再长回来），"还有下家"要同时满足次数没用完和那端真有下家；`MaxHandoffs` 必须有上限（否则开局那批人一直转、再也不生成新人）；在场名单**先摘后加**；目标满员不接；下家随机挑（固定挑第一条的话路网看不出分叉）；连通表懒加载。`Dump` 会报两端有没有下家——"走到路口就消失"最常见的原因就是端点差一点没判成连通。
+- **受击与被车撞**：路人有自己的碰撞通道 `Pedestrian`（`ECC_GameTraceChannel3`），不复用玩家的 `PhysicsBody`。拳头和车辆各自扫掠命中 `IDeliveryImpactReceiver`。普通路人受击后保留原模型，沿冲量方向在 `FallDuration`（0.55 秒）内倾倒，在地上停留 `KnockedLieDuration`（5 秒），再用 1.2 秒程序化屈腿、转身爬起；不再缩小销毁，也不从生成点的在场名单摘掉。`bUsePhysicalKnockdown` 可选真实布娃娃，缺少物理资产时仍退回可见的程序化跌倒。手臂默认下垂角度 84°、外张 5°、前后摆幅 22°。碰撞测试仍需真实关卡目视验收。
+- **走走停停 + 特殊路线接驳**：停下来腿自动停（步态相位按路程推进），所以只需要让它停。停顿按**路程**抽不按时间；普通游走区按出生后的时间放大，不使用样条两端窗口。以下接驳规则只适用于 `bRoamInArea=false`：走到端点找相连路线继续走，连通只看端点到端点；换线那头不淡入、还有下家那头不淡出；接驳次数有上限，目标满员不接，在场名单先摘后加，下家随机挑，连通表懒加载。学校过马路玩法尚待单独接入。
 - 调试：`Delivery.Pedestrian.Dump` / `.Spawn` / `.Clear`；回归测试 `Delivery.NPC.PedestrianWalk`。
 
 
@@ -296,7 +381,7 @@
 - 32 个交通 actor **整体平移** +(5500, 6300)，现在占 X [3420, 8233] / Y [3310, 8324]。**平移量必须对所有交通 actor 相同**：`BP_Intersection` 靠自己的 Box 和路段 Box 重叠找子节点，各自挪不同量会让路口找不到灯组，表现是"红绿灯没了"。
 - **幂等靠 `ClaudeGenTrafficMoved` 标签**，不靠判坐标（用户可能自己拖回来一点，而重跑就再平移一遍）。玩家摩托车刻意不跟着挪（留在 (1540, 0)）。这张图没有 PlayerStart，玩家出生在原点、正好在测试区里。
 
-测试区内容：`Task001_PickupPoint` (-2000, -1500) = `Location_Restaurant_001`（PackageClass 留空 → 内置测试快递）、`Task001_DropOffPoint` (2000, 1500) = `Location_OldManHouse_001` + `DA_Task_001`（相距 5000 cm、半径各 200）、`PedestrianRoute_Test` (-600, ±3000) 60m 直线。地点编号和主地图相同（`Tasks.csv` 里 Task_001 就是这两个；两图不同时加载）。任务清单在 `BP_DeliveryGameState.TaskDefinitions`、GameMode 全局默认且这张图没覆盖，所以任务系统本来就通。
+测试区内容：`Task001_PickupPoint` (-2000, -1500) = `Location_Restaurant_001`（PackageClass 留空 → 内置测试快递）、`Task001_DropOffPoint` (2000, 1500) = `Location_OldManHouse_001` + `DA_Task_001`（相距 5000 cm、半径各 200）、四个 `PedestrianRoute_Test_*` 活动点，中心为 (-600/-3200, ±3000)，各自半径 300 cm。地点编号和主地图相同（`Tasks.csv` 里 Task_001 就是这两个；两图不同时加载）。任务清单在 `BP_DeliveryGameState.TaskDefinitions`、GameMode 全局默认且这张图没覆盖，所以任务系统本来就通。
 
 `Content/Python/thin_out_traffic.py`（`KEEP` / `MAX_SPEED`）减车并放慢，四件事缺一不可：①删到剩 KEEP 辆；②写低 `MaxSpeed`（低速不影响接路：扫描长度 = 60 × 5 × 车速）；③关 `bSpawnExtraWaves`，不关的话 3 辆 45 秒后变 9 辆；④**关 `bPushSlowLeader` 并压低 `MinPushedMaxSpeed`**——两车近距离跟车时组件把前车 `MaxSpeed` 写成自己的、并把自己压到不低于 `MinPushedMaxSpeed`（默认 600），所以跟过一次车车速就永久回到 600，表现是"车速改了、跑一会儿又快起来了"。恢复满车流跑 `spawn_test_cars.py`。
 
@@ -572,6 +657,30 @@ GetFuturePostionandRotationAlongSpline:
 - 骑车时镜头写死在车尾后方（`bUsePawnControlRotation=false`，只继承 Yaw），鼠标不参与——用控制旋转 + 延时回正时，上车瞬间镜头还停在人物原朝向上，按 W 看到车"横着走"。控制旋转仍每帧同步成车头朝向，供下车后的角色弹簧臂使用。
 - 上车顺序：`GrabComponent->ForceRelease()`（不松手的话约束会把货物/别的玩家拖在车上）→ `StopRagdoll()`（关刚体并把网格挂回胶囊）→ 隐藏 + 关碰撞 + 挂到车上 → `Controller->Possess(bike)`。下车反过来，先摆好位置再 `StartRagdoll()`（它内部带 `PlaceOnGround`）。
 - **车把与骑手独立求解**：SteerPivot 前叉、BarPivot 车把继续沿用原转角；RiderPivot 不再整人旋转。双手目标挂 BarPivot，双脚目标挂 MeshAlign，由骑手动画代理解四肢 IK。转向角仍不乘速度系数，停车打把也有反馈。
+- **红灯停车线 + 斑马线（2026-11-05）**：`UDeliveryTrafficCarComponent` 自己按固定距离
+  （`RedLightScanDistance`）往前找带 `StopAtInter` 的路口段、校验同向、再查
+  `StopLineRequiredTag`（默认 `Crosswalk`），对得上就按真实剩余距离把速度系数刹到 0，
+  使车停在路口前 `StopLineSetback`（默认 400 cm）处，空出行人和斑马线的位置。
+  斑马线由 `Content/Python/setup_crosswalks.py` 在已有 `Crosswalk_*` 位置重建为贴地静态网格：
+  保留原锚点与方向，沿横向量双向道路的连续路面边界，白条/间隔各约 50 cm、过街带长 400 cm；
+  每 25 cm 采样路面高度，抬高 0.8 cm 防闪烁，关闭碰撞和投影阴影。
+  材质 `/Game/materials/M_CrosswalkPaint` 是不透明 Surface 路漆，不会像旧贴花那样投到人物和车辆上。
+  旧版只按同向车道算出 360/720 cm，且投影半深 600 cm，导致半幅覆盖和车身白条；不可重用。
+  脚本只替换已有斑马线，不重选路口、不改交通 actor/tag/样条；全量测量通过后才替换并保存，
+  测不到路面直接报错，不拿样条高度兜底。资产保存在 `/Game/Environment/RoadMarkings`，打包无需 Python。
+  `Content/Python/add_crosswalks_30_45.py` 另给 `Intersection_30`、`Intersection_45` 各四个入口补了同规格的全路宽标线；
+  它只读交通样条与路口盒子，实测路面后生成 8 个网格，并仅给对应 10 条入口段补 `Crosswalk` 停车 tag，
+  不移动交通线或原有斑马线。重跑时按固定标签跳过已添加的标线。
+  蓝图图表和交通 actor 的位置都没改；
+  没 tag 的路口行为完全不变。路口中心的 133 盏红绿灯已由
+  `remove_center_traffic_lights.py` 删除（灯该立在路两侧，删灯不影响车停红灯）。细节见 CLAUDE.md。
+- **路人实心 + 让路 + 起身 + 骑车撞人（2026-11-05）**：挨打的胶囊改成 `QueryAndPhysics`
+  并对 `PhysicsBody` Block（玩家走过去被挡住），**刻意不挡 `Pawn`**（挡了路人会把摩托车别停）；
+  配套 `bYieldToObstacles` 让路人停下来等，带 `MaxYieldSeconds` 超时兜底避免面对面死锁。
+  被打倒后先播 0.55 秒倾倒、躺 5 秒，再播 1.2 秒屈腿起身并继续走；起身恢复 `QueryAndPhysics`，不再缩小消失。
+  `ADeliveryMotorbike::ProcessPedestrianImpacts` 让骑车也能撞人（单开一次扫描、
+  判据是 `IDeliveryImpactReceiver`、挡住按 R 召唤的瞬移帧）；交通车本来就能撞，未改动。细节见 CLAUDE.md。
+- **步行角色与电动车碰撞（2026-11-05）**：主动布娃娃运行时角色胶囊关闭，身体刚体现在阻挡 `Pawn`；电动车仍保持 `Pawn` 类型供交通车识别，并阻挡 `PhysicsBody`。车身盒半尺寸调至 130×68×70 cm（再乘 `VisualScale`），覆盖缩小后的车体主体；骑车时角色整体关闭碰撞的既有流程不变。
 - **被交通车撞**：`UDeliveryTrafficCarComponent` 在原有的逐帧扫掠撞击之外**单开一次 `ECC_Pawn` 查询**（摩托车碰撞盒是 Pawn 配置，而撞人查的是布娃娃刚体 `ECC_PhysicsBody`；并进同一次查询会把角色胶囊也扫进来、扰动那条已经调通的撞人逻辑），命中后调 `ADeliveryMotorbike::NotifyTrafficImpact()`。
   **共用同一张冷却表 `LastImpactTimeByActor`（0.75 秒）**——一次碰撞会连着好几帧重叠，不设冷却的话"撞两下才下车"会在同一次碰撞里就被扣完。
   每撞一下：按来车方向给击退速度、按左右分量给撞歪的角速度和车身倾斜（`KnockTilt` 直接叠在转弯侧倾上，**不再插值**，插了会把撞击那一下的尖峰抹平）、镜头两轴不同频率抖动。四个量统一按 `KnockDecay` 指数衰减。

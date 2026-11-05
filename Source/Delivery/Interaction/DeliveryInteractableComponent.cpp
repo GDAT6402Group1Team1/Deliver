@@ -39,8 +39,25 @@ bool UDeliveryInteractableComponent::CanInteract(const APawn *Interactor) const
         return false;
     }
     const float Distance = GetInteractionDistance(Interactor);
+    if (Distance < 0.0f || Distance > InteractRadius)
+    {
+        return false;
+    }
 
-    return Distance >= 0.0f && Distance <= InteractRadius;
+    /**
+     * F 目标可以再声明一条自己的条件（摩托车：手上有快递时不让直接上车）
+     *
+     * 只对 F 生效：E 那边刻意保留"不能取的快递也要显示原因提示"，
+     * 在这里拦掉会把提示一起拦没，玩家就只看到"走过去什么都不出现"。
+     * E 的条件由交互组件在 CanUse 里单独问一遍。
+     */
+    if (InteractionKey == EDeliveryInteractionKey::GeneralF && CanUse.IsBound() &&
+        !CanUse.Execute(const_cast<APawn *>(Interactor), true))
+    {
+        return false;
+    }
+
+    return true;
 }
 
 // 优先使用配置的交互位置，物品可使用碰撞表面作为距离起点
@@ -131,4 +148,23 @@ FVector UDeliveryInteractableComponent::GetPromptLocation() const
 UDeliveryInteractableComponent *UDeliveryInteractableComponent::FindOn(const AActor *Actor)
 {
     return Actor ? Actor->FindComponentByClass<UDeliveryInteractableComponent>() : nullptr;
+}
+
+UDeliveryInteractableComponent *UDeliveryInteractableComponent::FindOn(const AActor *Actor,
+                                                                      EDeliveryInteractionKey Key)
+{
+    if (!Actor)
+    {
+        return nullptr;
+    }
+    TArray<UDeliveryInteractableComponent *> Components;
+    Actor->GetComponents(Components);
+    for (UDeliveryInteractableComponent *Component : Components)
+    {
+        if (Component && Component->InteractionKey == Key)
+        {
+            return Component;
+        }
+    }
+    return nullptr;
 }

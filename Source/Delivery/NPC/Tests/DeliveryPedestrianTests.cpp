@@ -2,6 +2,8 @@
 #include "NPC/DeliveryPedestrianRoute.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
+#include "Components/BoxComponent.h"
+#include "Components/PoseableMeshComponent.h"
 #include "Components/SplineComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
@@ -51,6 +53,8 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	TestEqual(TEXT("route length"), Spline->GetSplineLength(), 1000.f, 1.f);
 
 	Route->bBothDirections = false;
+	// 本段保留长样条与接驳的回归检查；普通街道路人默认走局部游走模式。
+	Route->bRoamInArea = false;
 	Route->bPrewarmOnBeginPlay = false;
 	// 这一段只验直线行走，先关掉走走停停和接驳；它们各有单独的断言
 	Route->bAllowHandoff = false;
@@ -72,9 +76,7 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	// （AllocateTransformData → FillComponentSpaceTransforms 按骨骼数索引，
 	// 数组大小 0 时直接断言），第一版就是这么崩在自动化里的
 	AddExpectedMessage(TEXT("没有骨骼"), EAutomationExpectedMessageFlags::Contains, 0);
-	// 同一张临时网格也没有物理资产，被打飞时会点名并退回"原地退场"。
-	// 这条也是回归点：没有物理资产时**不能崩**，也不能静默站着不动
-	AddExpectedMessage(TEXT("没有物理资产"), EAutomationExpectedMessageFlags::Contains, 0);
+	// 同一张临时网格没有物理资产；受击时仍应播放程序化跌倒与爬起。
 
 	FDeliveryPedestrianKind Kind;
 	Kind.Mesh = DummyMesh;
@@ -177,6 +179,7 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 		ADeliveryPedestrianRoute* RouteB = World->SpawnActor<ADeliveryPedestrianRoute>();
 		if (!TestNotNull(TEXT("route B"), RouteB))
 			return false;
+		RouteB->bRoamInArea = false;
 		USplineComponent* SplineB = RouteB->GetSpline();
 		SplineB->ClearSplinePoints(false);
 		// 从 A 的终点 (1000,0) 接出去
@@ -240,11 +243,19 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 		ADeliveryPedestrian* Stroller = Route->SpawnOnePedestrian(true);
 		if (!TestNotNull(TEXT("spawn stroller"), Stroller))
 			return false;
-		// 逼它马上停：走 1 cm 就触发，停 1 秒
+		// 逼它马上停：走 1 cm 就触发，停 1 秒。
+		// **注意这里改的是"下一次"的间隔，改不掉已经抽好的那一次**：
+		// BeginWalk 在生成时就调过一次 ScheduleNextPause，用的是默认区间
+		// （700~2600 cm），所以第一次停顿仍然要走完那个随机距离。
+		// 下面那个循环的预算必须盖得住 PauseIntervalMax，否则抽到大值就失败——
+		// 实测这个测试原来的预算只有 2000 cm，抽到 >2250 的约 18% 会偶发红，
+		// 而症状（"走出窗口之后会停" 为假）看着像让路逻辑把人卡住了，极易误判
 		Stroller->PauseIntervalMin = 1.f;
 		Stroller->PauseIntervalMax = 1.f;
 		Stroller->PauseDurationMin = 1.f;
 		Stroller->PauseDurationMax = 1.f;
+		// 这里只测随机停顿，让路有单独的断言；隔离世界里残留碰撞不该影响它。
+		Stroller->bYieldToObstacles = false;
 
 		// 先走出出入场窗口（窗口里不许停，这是刻意的——
 		// 在里面停住会卡成一个半大小的人站着不动）
@@ -255,7 +266,9 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 		}
 		TestFalse(TEXT("出入场窗口里不停"), Stroller->IsPaused());
 
-		for (int32 Step = 0; Step < 200 && !Stroller->IsPaused(); ++Step)
+		// 每帧走 10 cm，700 帧 = 7000 cm，盖得住 PauseIntervalMax 的 2600 和
+		// 出入场窗口那一次 200 的重置，不依赖随机抽到多少
+		for (int32 Step = 0; Step < 700 && !Stroller->IsPaused(); ++Step)
 		{
 			Stroller->Tick(0.05f);
 		}
@@ -277,8 +290,110 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 		World->Tick(LEVELTICK_All, 0.01f);
 	}
 
-	// 被打飞：没有物理资产的网格也不能崩（临时网格就是这种），
-	// 而且必须立刻从在场名单里摘掉——不摘的话躺在地上的人会占着人数上限，越打街越空
+	// 让路：前方有别的路人就停下来等，但**不能永久互相礼让**。
+	// 两个人面对面是最容易死锁的情形，交通车那边栽过同一个坑
+	ClearAll();
+	{
+		// **必须先把两个人弄出出入场窗口、并恢复原尺寸**，否则这一段测的是空气：
+		//   ① 窗口里刻意不让路（那两个窗口按距离算缩放，在里面停住会卡成半个人）；
+		//   ② 窗口起点的缩放只有 MinVisibleScale（2%），胶囊只有半厘米高，
+		//      探测球扫不到——而那和"让路逻辑没生效"长得一模一样。
+		// 第一版就是直接在端点上摆两个人，三条断言全红。
+		const float SavedAppearDistance = Route->AppearDistance;
+		Route->AppearDistance = 1.f;
+
+		ADeliveryPedestrian* Front = Route->SpawnOnePedestrian(true);
+		ADeliveryPedestrian* Back = Route->SpawnOnePedestrian(true);
+		if (TestNotNull(TEXT("让路：前车"), Front) && TestNotNull(TEXT("让路：后车"), Back))
+		{
+			Front->PauseDurationMax = 0.f;
+			Front->PauseDurationMin = 0.f;
+			Back->PauseDurationMax = 0.f;
+			Back->PauseDurationMin = 0.f;
+			// 布置期间先关掉让路：两个人这会儿是重叠在同一个端点上的，
+			// 开着的话他们会当场互相礼让、谁都走不出窗口
+			Front->bYieldToObstacles = false;
+			Back->bYieldToObstacles = false;
+			for (int32 Step = 0; Step < 5; ++Step)
+			{
+				Front->Tick(0.1f);
+				Back->Tick(0.1f);
+			}
+			TestTrue(TEXT("让路测试前已走出窗口、恢复原尺寸"),
+			         Back->GetAppearAlpha() > 0.95f && Front->GetAppearAlpha() > 0.95f);
+
+			Back->bYieldToObstacles = true;
+			// 挡在正前方：探测距离 95，放到 60 cm 处一定命中
+			Front->SetActorLocation(Back->GetActorLocation() +
+			                        Back->GetActorForwardVector() * 60.f);
+			TestTrue(TEXT("前方有人时判定为被挡住"), Back->IsBlockedAhead());
+
+			// 让够 MaxYieldSeconds 之前不该前进
+			Back->MaxYieldSeconds = 1.f;
+			const float BeforeYield = Back->GetDistanceAlongRoute();
+			Back->Tick(0.1f);
+			TestEqual(TEXT("被挡住时停下来等"), Back->GetDistanceAlongRoute(), BeforeYield, 0.01f);
+			TestTrue(TEXT("正在让路"), Back->IsYielding());
+
+			// 让超时之后必须硬挤过去，否则两个人会贴在一起永久不动
+			for (int32 Step = 0; Step < 20; ++Step)
+			{
+				Back->Tick(0.1f);
+				// Back 每帧都会被 UpdateTransform 拉回样条上，所以要跟着把
+				// 挡路的人重新摆到它正前方，不然"挡住"这件事自己就消失了
+				Front->SetActorLocation(Back->GetActorLocation() +
+				                        Back->GetActorForwardVector() * 60.f);
+			}
+			TestTrue(TEXT("让超时后硬挤过去"), Back->GetDistanceAlongRoute() > BeforeYield + 1.f);
+
+			// 挡路的人躺下之后不用再让：绕不过去，而且他过几秒自己就起来了
+			Front->ReceiveImpact(FVector(0.f, 0.f, 1000.f), Front->GetActorLocation());
+			Front->SetActorLocation(Back->GetActorLocation() +
+			                        Back->GetActorForwardVector() * 60.f);
+			TestFalse(TEXT("躺着的人不用让"), Back->IsBlockedAhead());
+		}
+
+		ClearAll();
+		ADeliveryPedestrian* StaticWalker = Route->SpawnOnePedestrian(true);
+		if (TestNotNull(TEXT("固定障碍：路人"), StaticWalker))
+		{
+			StaticWalker->PauseDurationMin = 0.f;
+			StaticWalker->PauseDurationMax = 0.f;
+			StaticWalker->MaxYieldSeconds = 0.1f;
+			for (int32 Step = 0; Step < 5; ++Step)
+			{
+				StaticWalker->Tick(0.1f);
+			}
+			AActor* Wall = World->SpawnActor<AActor>();
+			UBoxComponent* Box = NewObject<UBoxComponent>(Wall);
+			Wall->SetRootComponent(Box);
+			Box->SetBoxExtent(FVector(20.f, 40.f, 80.f));
+			Box->SetCollisionObjectType(ECC_WorldStatic);
+			Box->SetCollisionResponseToAllChannels(ECR_Block);
+			Box->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+			Box->RegisterComponent();
+			Wall->SetActorLocation(StaticWalker->GetActorLocation() +
+			                       StaticWalker->GetActorForwardVector() * 60.f + FVector(0.f, 0.f, 70.f));
+
+			bool bFixed = false;
+			TestTrue(TEXT("房屋类障碍挡住前方"), StaticWalker->IsBlockedAhead(&bFixed));
+			TestTrue(TEXT("房屋类障碍被识别为固定障碍"), bFixed);
+			const float BeforeWall = StaticWalker->GetDistanceAlongRoute();
+			for (int32 Step = 0; Step < 20; ++Step)
+			{
+				StaticWalker->Tick(0.1f);
+			}
+			TestEqual(TEXT("固定障碍超过让路时间也不穿过"), StaticWalker->GetDistanceAlongRoute(),
+			          BeforeWall, 0.01f);
+			Wall->Destroy();
+			StaticWalker->Tick(0.1f);
+			TestTrue(TEXT("障碍移开后继续走"), StaticWalker->GetDistanceAlongRoute() > BeforeWall);
+		}
+
+		Route->AppearDistance = SavedAppearDistance;
+	}
+
+	// 被打倒：没有物理资产的网格也必须保留并爬起。
 	ClearAll();
 	ADeliveryPedestrian* Victim = Route->SpawnOnePedestrian(true);
 	if (!TestNotNull(TEXT("spawn victim"), Victim))
@@ -289,23 +404,92 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	TestTrue(TEXT("受击后进入被打飞状态"), Victim->IsKnockedDown());
 	TestEqual(TEXT("被打飞阶段"), static_cast<int32>(Victim->GetPhase()),
 	          static_cast<int32>(EDeliveryPedestrianPhase::KnockedDown));
-	TestEqual(TEXT("立刻从在场名单摘掉"), Route->GetAlivePedestrians().Num(), 0);
+	// 倒地期间不从在场名单摘掉，避免路线补出新人。
+	TestEqual(TEXT("会起身时不摘出在场名单"), Route->GetAlivePedestrians().Num(), 1);
 
-	// 再被打一次只是多吃冲量，**不能重置退场计时**：
-	// 在车流里被反复蹭的路人会永远不退场、一直占着人数上限
+	// 再被打一次只是多吃冲量，**不能重置躺着的计时**：
+	// 在车流里被反复蹭的路人会一直躺着起不来
 	Victim->Tick(1.0f);
+	TestTrue(TEXT("跌倒动画已完成"), Victim->GetFallAlpha() > 0.99f);
+	TestTrue(TEXT("受击后仍是正常尺寸"), Victim->GetAppearAlpha() > 0.95f);
+	TestTrue(TEXT("身体已经倾倒"), FVector::DotProduct(Victim->GetActorUpVector(), FVector::UpVector) < 0.5f);
 	const float RemainingAfterOneSecond = Victim->GetKnockedRemaining();
 	Victim->ReceiveImpact(FVector(0.f, 0.f, 1000.f), Victim->GetActorLocation());
-	TestEqual(TEXT("再被打不重置退场计时"), Victim->GetKnockedRemaining(), RemainingAfterOneSecond,
+	TestEqual(TEXT("再被打不重置躺着的计时"), Victim->GetKnockedRemaining(), RemainingAfterOneSecond,
 	          0.01f);
 
-	// 躺够之后缩掉并销毁
-	for (int32 Step = 0; Step < 200 && !Victim->IsActorBeingDestroyed(); ++Step)
+	// 被打飞时人会被推离样条，起身要能回到线上。
+	// 挪到横向 600 cm 外，验证起身结束时横向偏移被收掉
+	Victim->SetActorLocation(Victim->GetActorLocation() + FVector(0.f, 600.f, 0.f));
+
+	// 躺够之后进入起身，**不是销毁**
+	for (int32 Step = 0; Step < 200 && !Victim->IsStandingUp(); ++Step)
 	{
 		Victim->Tick(0.1f);
 	}
-	TestTrue(TEXT("躺够之后销毁"), Victim->IsActorBeingDestroyed());
+	TestTrue(TEXT("躺够之后进入起身而不是消失"), Victim->IsStandingUp());
+	TestFalse(TEXT("起身时已不算被打飞"), Victim->IsKnockedDown());
+	TestFalse(TEXT("起身期间不销毁"), Victim->IsActorBeingDestroyed());
+	TestEqual(TEXT("起身阶段"), static_cast<int32>(Victim->GetPhase()),
+	          static_cast<int32>(EDeliveryPedestrianPhase::StandingUp));
+	// 起身一开始身体还是躺着的朝向，所以不能一上来就是直立
+	TestTrue(TEXT("起身进度从零开始"), Victim->GetGetUpAlpha() < 0.2f);
+
+	// 推进到起身结束：必须回到 Walking，并且立起来、回到样条上
+	for (int32 Step = 0; Step < 400 && Victim->IsStandingUp(); ++Step)
+	{
+		Victim->Tick(0.02f);
+	}
+	TestEqual(TEXT("起身完回到行走"), static_cast<int32>(Victim->GetPhase()),
+	          static_cast<int32>(EDeliveryPedestrianPhase::Walking));
+	TestFalse(TEXT("起身完没被销毁"), Victim->IsActorBeingDestroyed());
+	// 站直：俯仰和翻滚都该收掉。躺着那会儿是侧倒/趴着的朝向，
+	// 不收掉的表现是人立起来了但整个身体是歪的
+	const FRotator Upright = Victim->GetActorRotation();
+	TestTrue(TEXT("起身完站直（俯仰）"), FMath::Abs(Upright.Pitch) < 2.f);
+	TestTrue(TEXT("起身完站直（翻滚）"), FMath::Abs(Upright.Roll) < 2.f);
+	// 回到线上：这条直线样条在 Y=0 上，所以横向偏移应该已经收掉
+	TestTrue(TEXT("起身完回到样条上"), FMath::Abs(Victim->GetActorLocation().Y) < 50.f);
+	// 缩放要回到原尺寸：被打飞那条路没碰过 AppearAlpha，但不起身那条路会把它缩下去，
+	// 两条路共用同一组字段，漏了归位的表现是起身之后人只有半个大小
+	TestTrue(TEXT("起身完恢复原尺寸"), Victim->GetAppearAlpha() > 0.95f);
+
+	// 起身之后还能再被打倒一次：挨打的胶囊必须还回来了，
+	// 不还的表现是站起来的人再也打不中（而那和"命中窗口没对上"长得一模一样）
+	Victim->ReceiveImpact(FVector(0.f, 0.f, 1000.f), Victim->GetActorLocation());
+	TestTrue(TEXT("起身后还能再被打倒"), Victim->IsKnockedDown());
+
+	// 第二次受击也会再次起身，不得在地上缩小消失。
+	for (int32 Step = 0; Step < 200 && !Victim->IsStandingUp(); ++Step)
+	{
+		Victim->Tick(0.1f);
+	}
+	TestTrue(TEXT("第二次受击后仍会起身"), Victim->IsStandingUp());
+	TestFalse(TEXT("反复受击不销毁"), Victim->IsActorBeingDestroyed());
 	World->Tick(LEVELTICK_All, 0.01f);
+
+	// 用真正的 NPC 模型检查显示槽位：旧测试只用没有骨骼的临时网格，
+	// 无法发现受击时把唯一可见的身体隐藏掉。
+	ClearAll();
+	USkeletalMesh* RealMesh = LoadObject<USkeletalMesh>(nullptr,
+	    TEXT("/Game/Characters/NPC/SK_NpcMan.SK_NpcMan"));
+	if (!TestNotNull(TEXT("实际路人模型"), RealMesh))
+		return false;
+	Route->Kinds[0].Mesh = RealMesh;
+	ADeliveryPedestrian* VisibleVictim = Route->SpawnOnePedestrian(true);
+	if (!TestNotNull(TEXT("实际路人生成"), VisibleVictim))
+		return false;
+	UPoseableMeshComponent* VisibleBody = VisibleVictim->FindComponentByClass<UPoseableMeshComponent>();
+	if (!TestNotNull(TEXT("实际路人可见身体"), VisibleBody))
+		return false;
+	TestTrue(TEXT("行走时保留可见模型"), VisibleBody->IsVisible());
+	VisibleVictim->ReceiveImpact(FVector(1200.f, 0.f, 200.f), VisibleVictim->GetActorLocation());
+	VisibleVictim->Tick(1.f);
+	TestTrue(TEXT("跌倒后模型仍可见"), VisibleBody->IsVisible());
+	TestTrue(TEXT("跌倒后模型仍有网格"), VisibleBody->GetSkinnedAsset() == RealMesh);
+	TestFalse(TEXT("跌倒后不销毁实际路人"), VisibleVictim->IsActorBeingDestroyed());
+	ClearAll();
+	Route->Kinds[0].Mesh = DummyMesh;
 
 	// 线段退化成一个点时不该生成，也不该崩
 	Spline->ClearSplinePoints(false);
@@ -313,6 +497,31 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	Spline->AddSplinePoint(FVector::ZeroVector, ESplineCoordinateSpace::World, false);
 	Spline->UpdateSpline();
 	TestNull(TEXT("零长度线段不生成"), Route->SpawnOnePedestrian(true));
+
+	// 普通路人只在各自的小圆内走走停停，不能接驳到另一条长路线。
+	ClearAll();
+	Route->bRoamInArea = true;
+	Route->RoamRadius = 300.f;
+	Route->RoamPauseDistanceMin = 100.f;
+	Route->RoamPauseDistanceMax = 150.f;
+	ADeliveryPedestrian* Roamer = Route->SpawnOnePedestrian(true);
+	if (!TestNotNull(TEXT("游走：零长度样条也能生成"), Roamer))
+		return false;
+	Roamer->bYieldToObstacles = false;
+	bool bSawPause = false;
+	float Furthest = 0.f;
+	for (int32 Step = 0; Step < 500; ++Step)
+	{
+		Roamer->Tick(0.05f);
+		bSawPause |= Roamer->IsPaused();
+		Furthest = FMath::Max(Furthest,
+		                      FVector::Dist2D(Roamer->GetActorLocation(), Route->GetActorLocation()));
+	}
+	TestTrue(TEXT("游走：确实走了一段"), Roamer->GetDistanceAlongRoute() > 300.f);
+	TestTrue(TEXT("游走：中途停过"), bSawPause);
+	TestTrue(TEXT("游走：始终在本点半径内"), Furthest <= Route->RoamRadius + 1.f);
+	TestEqual(TEXT("游走：不接驳别的路线"), Roamer->GetHandoffCount(), 0);
+	TestFalse(TEXT("游走：走久了也不在端点消失"), Roamer->IsActorBeingDestroyed());
 
 	return true;
 }

@@ -82,6 +82,31 @@ float ADeliveryPedestrianRoute::GetRouteLength() const
 	return Spline ? Spline->GetSplineLength() : 0.f;
 }
 
+FVector ADeliveryPedestrianRoute::PickRoamPoint(const FVector& From, float MinTravelDistance) const
+{
+	const FVector Center = GetActorLocation();
+	const float Radius = FMath::Max(RoamRadius, 50.f);
+	FVector Best = Center;
+	float BestDistanceSq = -1.f;
+	for (int32 Attempt = 0; Attempt < 12; ++Attempt)
+	{
+		const float Angle = FMath::FRandRange(-PI, PI);
+		const float Distance = Radius * FMath::Sqrt(FMath::FRand());
+		const FVector Candidate = Center + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * Distance;
+		const float TravelSq = FVector::DistSquared2D(Candidate, From);
+		if (TravelSq >= FMath::Square(MinTravelDistance))
+		{
+			return Candidate;
+		}
+		if (TravelSq > BestDistanceSq)
+		{
+			Best = Candidate;
+			BestDistanceSq = TravelSq;
+		}
+	}
+	return Best;
+}
+
 FVector ADeliveryPedestrianRoute::GetLocationAtDistance(float Distance) const
 {
 	if (!Spline)
@@ -184,7 +209,7 @@ ADeliveryPedestrian* ADeliveryPedestrianRoute::SpawnOnePedestrian(bool bAtEntran
 	}
 
 	const float Length = GetRouteLength();
-	if (Length <= KINDA_SMALL_NUMBER)
+	if (!bRoamInArea && Length <= KINDA_SMALL_NUMBER)
 	{
 		UE_LOG(LogDelivery, Warning, TEXT("[Pedestrian] %s 的线段长度为 0，摆两个端点才会有人出现。"),
 		       *GetName());
@@ -203,13 +228,42 @@ ADeliveryPedestrian* ADeliveryPedestrianRoute::SpawnOnePedestrian(bool bAtEntran
 	}
 
 	const bool bWalkForward = bBothDirections ? (FMath::FRand() < 0.5f) : true;
-	const float StartDistance = bAtEntrance ? (bWalkForward ? 0.f : Length)
-	                                        : FMath::FRandRange(0.f, Length);
+	const float StartDistance = bRoamInArea ? 0.f
+	    : bAtEntrance ? (bWalkForward ? 0.f : Length) : FMath::FRandRange(0.f, Length);
 
-	FVector SpawnLocation = GetLocationAtDistance(StartDistance);
+	FVector SpawnLocation = bRoamInArea ? PickRoamPoint(GetActorLocation())
+	                                     : GetLocationAtDistance(StartDistance);
+	if (bRoamInArea)
+	{
+		bool bFoundSpace = false;
+		for (int32 Attempt = 0; Attempt < 16; ++Attempt)
+		{
+			bool bTooClose = false;
+			for (const TWeakObjectPtr<ADeliveryPedestrian>& Existing : Alive)
+			{
+				if (Existing.IsValid() &&
+				    FVector::DistSquared2D(SpawnLocation, Existing->GetActorLocation()) <
+				        FMath::Square(RoamSpawnSpacing))
+				{
+					bTooClose = true;
+					break;
+				}
+			}
+			if (!bTooClose)
+			{
+				bFoundSpace = true;
+				break;
+			}
+			SpawnLocation = PickRoamPoint(GetActorLocation());
+		}
+		if (!bFoundSpace)
+		{
+			return nullptr;
+		}
+	}
 
 	// 横向抖一下，免得人流排成一条笔直的线
-	if (LateralJitter > 0.f)
+	if (!bRoamInArea && LateralJitter > 0.f)
 	{
 		const FVector Forward = GetDirectionAtDistance(StartDistance);
 		const FVector Right = FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal();
@@ -233,8 +287,10 @@ ADeliveryPedestrian* ADeliveryPedestrianRoute::SpawnOnePedestrian(bool bAtEntran
 	// 身高写进出生变换，而不是生成之后再 SetActorScale3D：
 	// 路人在 BeginPlay 里把当时的缩放记成 BaseScale，出入场曲线乘在它上面。
 	// 生成后再改的话 BaseScale 已经被记成 1，这一下会被出入场缩放当场覆盖掉
-	const FTransform SpawnTransform(GetDirectionAtDistance(StartDistance).Rotation(), SpawnLocation,
-	                                FVector(HeightScale));
+	const FRotator SpawnRotation = bRoamInArea
+	    ? FRotator(0.f, FMath::FRandRange(-180.f, 180.f), 0.f)
+	    : GetDirectionAtDistance(StartDistance).Rotation();
+	const FTransform SpawnTransform(SpawnRotation, SpawnLocation, FVector(HeightScale));
 	ADeliveryPedestrian* Pedestrian =
 	    World->SpawnActor<ADeliveryPedestrian>(ClassToSpawn, SpawnTransform, SpawnParams);
 	if (!Pedestrian)
@@ -245,11 +301,29 @@ ADeliveryPedestrian* ADeliveryPedestrianRoute::SpawnOnePedestrian(bool bAtEntran
 	const float Speed = FMath::FRandRange(FMath::Max(WalkSpeedMin, 1.f),
 	                                      FMath::Max(WalkSpeedMax, FMath::Max(WalkSpeedMin, 1.f)));
 
+	if (bRoamInArea)
+	{
+		Pedestrian->PauseIntervalMin = RoamPauseDistanceMin;
+		Pedestrian->PauseIntervalMax = RoamPauseDistanceMax;
+	}
 	Pedestrian->BeginWalk(this, PickedMesh, WalkAnim.LoadSynchronous(), StartDistance, bWalkForward,
 	                      Speed, WalkAnimReferenceSpeed);
 
 	Alive.Add(Pedestrian);
 	return Pedestrian;
+}
+
+float ADeliveryPedestrianRoute::GetDistanceAtLocation(const FVector& WorldLocation) const
+{
+	if (!Spline || Spline->GetNumberOfSplinePoints() < 2)
+	{
+		return 0.f;
+	}
+
+	// 先求最近的输入键再换成弧长；直接按弧长扫一遍要自己采样，
+	// 而这两个函数引擎已经配好了
+	const float Key = Spline->FindInputKeyClosestToWorldLocation(WorldLocation);
+	return Spline->GetDistanceAlongSplineAtSplineInputKey(Key);
 }
 
 void ADeliveryPedestrianRoute::GetEndpoints(FVector& OutStart, FVector& OutFinish) const
