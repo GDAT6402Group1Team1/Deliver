@@ -18,6 +18,7 @@ class UAudioComponent;
 class USoundBase;
 class UDeliveryGroundArrowComponent;
 class UDeliveryObjectiveRingComponent;
+class UDeliverySettlementComponent;
 class UUserWidget;
 
 /** 管理玩家输入、手机界面、任务指引和本机音频 */
@@ -43,6 +44,10 @@ class ADeliveryPlayerController : public APlayerController
     /** 当前任务目的地的地面圈；和脚边箭头同位置、同一个目的地来源 */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Delivery")
     TObjectPtr<UDeliveryObjectiveRingComponent> ObjectiveRing;
+
+    /** 交付成功后弹出本机结算界面；WBP 类填在 BP_DeliveryManPC 上 */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Delivery")
+    TObjectPtr<UDeliverySettlementComponent> Settlement;
 
     /** 本机人物电子语音生成器；电话/NPC UI 都复用这一份 */
     UFUNCTION(BlueprintPure, Category = "Delivery|Voice")
