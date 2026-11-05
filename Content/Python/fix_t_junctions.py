@@ -31,6 +31,8 @@ import unreal
 
 LANE_TAG_PREFIX = "ClaudeGenLane"
 LEFT_COMP, RIGHT_COMP, MAIN_COMP = "SplineLeft", "SplineRight", "Spline"
+ONLY_INTERSECTIONS = ("Intersection_18", "Intersection_31")
+CLUSTER_DIST = 2500.0
 
 # 端点多近算"接得上"。生成时的空隙是 TARGET_GAP=150，留足余量；
 # 但不能太大——路口里几条车道的端点相距也就几百，放太宽会把隔壁车道认成自己的下一段。
@@ -193,9 +195,17 @@ def write_spline(sp, pts):
 
 def run():
     eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    actors = eas.get_all_level_actors()
+    focuses = []
+    if ONLY_INTERSECTIONS:
+        by_label = {a.get_actor_label(): a for a in actors}
+        missing = [name for name in ONLY_INTERSECTIONS if name not in by_label]
+        if missing:
+            raise RuntimeError("指定路口不存在，拒绝回退到全图: %s" % missing)
+        focuses = [(name, by_label[name].get_actor_location()) for name in ONLY_INTERSECTIONS]
 
-    lanes, lane_objs, inters = [], [], []
-    for a in eas.get_all_level_actors():
+    lanes, lane_objs, inters, all_inters = [], [], [], []
+    for a in actors:
         try:
             if not unreal.SystemLibrary.is_valid(a) or a.is_actor_being_destroyed():
                 continue
@@ -214,10 +224,24 @@ def run():
             lanes.append((lbl, p[0], p[-1]))
             lane_objs.append((lbl, a, sp))
         elif lbl.startswith("Inter_"):
-            inters.append((lbl, a, sp, p[0], p[-1]))
+            item = (lbl, a, sp, p[0], p[-1])
+            all_inters.append(item)
+            center = unreal.Vector((p[0].x+p[-1].x)*0.5,
+                                   (p[0].y+p[-1].y)*0.5,
+                                   (p[0].z+p[-1].z)*0.5)
+            if not focuses or min((center-focus).length() for _name,focus in focuses) < CLUSTER_DIST:
+                inters.append(item)
 
     inters.sort(key=lambda t: t[0])
-    w("车道段 %d 条，路口段 %d 条" % (len(lanes), len(inters)))
+    w("车道段 %d 条，范围内路口段 %d 条" % (len(lanes), len(inters)))
+    if focuses:
+        for name, center in focuses:
+            count = sum(1 for _lbl,_a,_sp,p0,pn in inters if
+                        ((p0.x+pn.x)*0.5-center.x)**2+
+                        ((p0.y+pn.y)*0.5-center.y)**2 < CLUSTER_DIST**2)
+            w("  %s @ (%.0f, %.0f)：候选段 %d" % (name,center.x,center.y,count))
+            if count == 0:
+                raise RuntimeError("指定路口没有可处理的段: " + name)
     w("接得上的判据：端点相距 < %.0fcm" % LINK_MAX)
     w("")
     if not inters:
@@ -282,7 +306,7 @@ def run():
     # （实测 360cm），会把逆行当成合法下家——Inter_形状13_-0540_I03 和
     # Inter_形状13_+0180_I03 的废转弯就是这么漏过去的。
     anchors = []
-    for nm, a2, sp2, p0, _pn in inters:
+    for nm, a2, sp2, p0, _pn in all_inters:
         if nm in dead:
             continue
         d = dir_at(sp2, True)

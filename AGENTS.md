@@ -681,6 +681,10 @@ GetFuturePostionandRotationAlongSpline:
   `ADeliveryMotorbike::ProcessPedestrianImpacts` 让骑车也能撞人（单开一次扫描、
   判据是 `IDeliveryImpactReceiver`、挡住按 R 召唤的瞬移帧）；交通车本来就能撞，未改动。细节见 CLAUDE.md。
 - **步行角色与电动车碰撞（2026-11-05）**：主动布娃娃运行时角色胶囊关闭，身体刚体现在阻挡 `Pawn`；电动车仍保持 `Pawn` 类型供交通车识别，并阻挡 `PhysicsBody`。车身盒半尺寸调至 130×68×70 cm（再乘 `VisualScale`），覆盖缩小后的车体主体；骑车时角色整体关闭碰撞的既有流程不变。
+- **斑马线 tag 以标线 actor 为准（2026-11-05）**：`Content/Python/sync_crosswalk_tags.py`
+  按几何关系（标线必须在段入口正后方 150~800 cm、横向 ≤1100）对齐 `Inter_*` 上的
+  `Crosswalk` tag，只改 tag。实测修掉 `Intersection_18` 的 3 条孤儿 tag（车在那儿白停）；
+  现在 35 条 tag 对应 7 个有标线的路口。标线是关碰撞的，所以"运行时扫前方斑马线"行不通。
 - **被交通车撞**：`UDeliveryTrafficCarComponent` 在原有的逐帧扫掠撞击之外**单开一次 `ECC_Pawn` 查询**（摩托车碰撞盒是 Pawn 配置，而撞人查的是布娃娃刚体 `ECC_PhysicsBody`；并进同一次查询会把角色胶囊也扫进来、扰动那条已经调通的撞人逻辑），命中后调 `ADeliveryMotorbike::NotifyTrafficImpact()`。
   **共用同一张冷却表 `LastImpactTimeByActor`（0.75 秒）**——一次碰撞会连着好几帧重叠，不设冷却的话"撞两下才下车"会在同一次碰撞里就被扣完。
   每撞一下：按来车方向给击退速度、按左右分量给撞歪的角速度和车身倾斜（`KnockTilt` 直接叠在转弯侧倾上，**不再插值**，插了会把撞击那一下的尖峰抹平）、镜头两轴不同频率抖动。四个量统一按 `KnockDecay` 指数衰减。
