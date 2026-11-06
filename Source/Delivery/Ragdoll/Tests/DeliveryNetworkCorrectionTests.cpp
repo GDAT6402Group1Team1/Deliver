@@ -1,5 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
+#include "Ragdoll/Debug/DeliveryPoseDebug.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -41,16 +42,29 @@ bool FDeliveryNetworkCorrectionTest::RunTest(const FString&)
     Rag->StartRagdoll();
     auto* Controls = Rag->PhysicsControl.Get();
 
+
+#if WITH_EDITOR
+    // 诊断读取不得修改步态或身体，只返回与当前刚体一致的位置
+    FDeliveryPoseDebug DebugPose;
+    const FVector BeforeDebug = Mesh->GetCenterOfMass(Rag->Bones.Hips);
+    const float BeforeStep = Rag->Movement.LeftFoot.Alpha;
+    TestTrue(TEXT("debug snapshot is available for active ragdoll"), Rag->ReadPoseDebug(DebugPose));
+    TestTrue(TEXT("debug snapshot uses actual pelvis"), DebugPose.Hips.Equals(BeforeDebug));
+    TestTrue(TEXT("debug read preserves body position"), Mesh->GetCenterOfMass(Rag->Bones.Hips).Equals(BeforeDebug));
+    TestEqual(TEXT("debug read preserves step progress"), Rag->Movement.LeftFoot.Alpha, BeforeStep);
+
+#endif
+
     // 长帧不能消耗超过实际物理模拟步长的恢复时间
-    Rag->Movement.BlockedStepRecoveryRemaining = 1.0f;
+    Rag->Recovery.ReportIssue(EDeliveryRecoveryIssue::FootBlocked, 1.f);
     const auto* Settings = UPhysicsSettings::Get();
     const float MaxStep = Settings->bSubstepping
         ? Settings->MaxSubstepDeltaTime * Settings->MaxSubsteps : Settings->MaxPhysicsDeltaTime;
     Rag->UpdateControlTargets(.2f);
     const float ExpectedStep = MaxStep > 0.f ? FMath::Min(.2f, MaxStep) : .2f;
     TestTrue(TEXT("gait timing follows the physics step during a long frame"),
-        FMath::IsNearlyEqual(Rag->Movement.BlockedStepRecoveryRemaining, 1.f - ExpectedStep));
-    Rag->Movement.BlockedStepRecoveryRemaining = 0.f;
+        FMath::IsNearlyEqual(Rag->Recovery.GetReleaseRemaining(), 1.f - ExpectedStep));
+    Rag->Recovery.ResetFeet();
 
     // 身体发生小幅偏移后，平地站立目标仍留在原位置
     Rag->UpdateControlTargets(.016f);

@@ -12,6 +12,7 @@
 #include "Combat/DeliveryBoxingPose.h"
 #include "DeliveryActiveRagdollComponent.generated.h"
 
+struct FDeliveryPoseDebug;
 class USoundBase;
 class UCapsuleComponent;
 class UPhysicsControlComponent;
@@ -93,6 +94,11 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 	friend class FDeliveryLegIsolationTest;
 	friend class FDeliveryNetworkCorrectionTest;
 
+#if WITH_EDITOR
+    // 只读当前物理姿态，供编辑器显示实际位置与控制目标
+    bool ReadPoseDebug(FDeliveryPoseDebug& Out) const;
+#endif
+
 	UDeliveryActiveRagdollComponent();
 
 	virtual void BeginPlay() override;
@@ -132,7 +138,7 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 	bool CanDrivePunch(float HandSide) const
 	{
 		return bIsActive && ReplicatedControlMode == EDeliveryRagdollControlMode::Active &&
-		       BoxingPose.IsReady(HandSide > 0 ? 0 : 1);
+		       !Recovery.IsRecoveringArms() && BoxingPose.IsReady(HandSide > 0 ? 0 : 1);
 	}
 
 	bool IsPunchRecovering() const
@@ -332,6 +338,29 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 
 	UPROPERTY(EditAnywhere, Category = "Ragdoll|步态", meta = (ClampMin = "0.0", ClampMax = "1.0", DisplayName = "允许迈步的直立阈值 (MinimumStepUprightDot)", ToolTip = "身体向上方向与世界向上的点积下限。越低越允许倾斜时迈步。", UIMax = "1"))
 	float MinimumStepUprightDot = 0.35f;
+
+    // 正常收拳结束后，手臂持续偏离目标才进入恢复
+    UPROPERTY(EditAnywhere, Category = "Ragdoll|恢复", meta = (ClampMin = "10", ClampMax = "180", Units = "deg", DisplayName = "手臂异常角度"))
+    float ArmRecoveryErrorAngle = 70.f;
+
+    UPROPERTY(EditAnywhere, Category = "Ragdoll|恢复", meta = (ClampMin = "0.1", Units = "s", DisplayName = "手臂异常确认时间"))
+    float ArmRecoveryConfirmTime = .45f;
+
+    UPROPERTY(EditAnywhere, Category = "Ragdoll|恢复", meta = (ClampMin = "0.1", Units = "s", DisplayName = "手臂恢复时间"))
+    float ArmRecoveryDuration = .65f;
+
+    // 脚交叉恢复
+    UPROPERTY(EditAnywhere, Category = "Ragdoll|恢复", meta = (ClampMin = "0.1", Units = "cm", DisplayName = "交叉确认距离", ToolTip = "两脚在身体左右方向上的顺序颠倒超过此距离才累计异常时间"))
+    float FootCrossDistance = 3.f;
+
+    UPROPERTY(EditAnywhere, Category = "Ragdoll|恢复", meta = (ClampMin = "0.05", Units = "s", DisplayName = "交叉确认时间"))
+    float FootCrossConfirmTime = .18f;
+
+    UPROPERTY(EditAnywhere, Category = "Ragdoll|恢复", meta = (ClampMin = "0.05", Units = "s", DisplayName = "双脚稳定等待"))
+    float FootRecoveryStableTime = .15f;
+
+    UPROPERTY(EditAnywhere, Category = "Ragdoll|恢复", meta = (ClampMin = "0.5", Units = "s", DisplayName = "补步最长时间", ToolTip = "超过此时间先退出，避免无法落脚时一直阻止玩家移动"))
+    float FootRecoveryMaxTime = 2.f;
 
 	// 坡面支撑与翻滚
 	/** 可行走斜坡上已落地支撑脚的切向摩擦辅助；0 关闭，不锁脚、不吸附地面 */
@@ -731,6 +760,9 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 	void WriteBodyRotationTargets(float DeltaTime, const FVector& Wish, float Wobble, bool bCarryingProp,
 	                              const FVector& Target);
 	// 迈步与落脚
+	// 按实际脚位检测持续交叉，受击和离地时退出补步恢复
+	void UpdateFootRecovery(float DeltaTime);
+    void UpdateArmRecovery(float DeltaTime);
 	void UpdateFeet(float DeltaTime, const FVector& Wish);
 	void KeepFeetOnOwnSide();
 	void ApplySlopeSupportTraction(float DeltaTime);

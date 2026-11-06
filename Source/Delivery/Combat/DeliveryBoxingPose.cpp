@@ -5,6 +5,7 @@
 #include "Combat/DeliveryPunchTrajectory.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "PhysicsControlComponent.h"
+#include "PhysicsEngine/BodyInstance.h"
 #include "Delivery.h"
 
 using DeliveryPunchTrajectory::FArmReach;
@@ -92,7 +93,7 @@ FVector FDeliveryBoxingPose::SolveElbow(const FVector& Shoulder, const FVector& 
 void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* Controls,
                                  float FacingYaw, float DeltaTime, int32 PunchArm, bool bReleased,
                                  FVector PunchDirection, const FVector* GrabGoals, uint8 GrabMask,
-                                 const FDeliveryAnimationArmPose* AnimationPose)
+                                 const FDeliveryAnimationArmPose* AnimationPose, FVector2D RecoveryProgress)
 {
 	// 同一条更新路径同时处理自然垂手、向后蓄力、向前出拳、收拳和抓取
 	// 先算手在肩附近的目标，再求肘与三段骨骼的朝向，最后交给物理电机
@@ -229,9 +230,19 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 			Upper = FQuat::Slerp(Upper, AnimatedUpper, AnimationWeight).GetNormalized();
 			Lower = FQuat::Slerp(Lower, AnimatedLower, AnimationWeight).GetNormalized();
 		}
+        // 恢复只改变控制目标，碰撞和约束继续决定手臂实际运动
+        const float Progress = Side == 0 ? RecoveryProgress.X : RecoveryProgress.Y;
+        if (Progress < 1.f && !bWindup && !bGrab && AnimationWeight <= 0.f)
+        {
+            const float Alpha = FMath::SmoothStep(0.f, 1.f, Progress);
+            Upper = FQuat::Slerp(Yaw * Arm.CorrectionUpper, Upper, Alpha).GetNormalized();
+            Lower = FQuat::Slerp(Yaw * Arm.CorrectionLower, Lower, Alpha).GetNormalized();
+        }
 		Arm.UpperTransport = (Yaw.Inverse() * Upper).GetNormalized();
 		Arm.LowerTransport = (Yaw.Inverse() * Lower).GetNormalized();
-		const FQuat Wrist = Lower * Arm.LowerReference.Inverse() * Arm.HandReference;
+		FQuat Wrist = Lower * Arm.LowerReference.Inverse() * Arm.HandReference;
+        if (Progress < 1.f && !bWindup && !bGrab && AnimationWeight <= 0.f)
+            Wrist = FQuat::Slerp(Yaw * Arm.CorrectionHand, Wrist, FMath::SmoothStep(0.f, 1.f, Progress)).GetNormalized();
 
 		// 站着可以松，收拳要绷住，前送必须硬，否则拳头追不上目标点
 		const float Strength =
@@ -258,12 +269,49 @@ void FDeliveryBoxingPose::Update(USkeletalMeshComponent* Mesh, UPhysicsControlCo
 		const FQuat HandTarget = FQuat::Slerp(Yaw * Arm.HandReference, Wrist, Settle).GetNormalized();
 		// 肘、腕跟随物理父刚体，而不是各自追一个独立世界朝向
 		// 父肢体受撞偏转时，仍保持同一套可达的相对关节目标
-		Controls->SetControlTargetOrientation(Arm.UpperControl, UpperTarget.Rotator(), DeltaTime, true, false,
+		// 重建目标的首帧清除目标角速度，避免旧目标到实际姿态的差值产生突发驱动
+        const float TargetDeltaTime = Arm.bCorrectionStarted ? 0.f : DeltaTime;
+        Arm.bCorrectionStarted = false;
+        Controls->SetControlTargetOrientation(Arm.UpperControl, UpperTarget.Rotator(), TargetDeltaTime, true, false,
 		                                      true, false);
 		Controls->SetControlTargetOrientation(Arm.LowerControl,
-		                                      (UpperTarget.Inverse() * LowerTarget).Rotator(), DeltaTime,
+		                                      (UpperTarget.Inverse() * LowerTarget).Rotator(), TargetDeltaTime,
 		                                      true, false, true, false);
 		Controls->SetControlTargetOrientation(Arm.HandControl, (LowerTarget.Inverse() * HandTarget).Rotator(),
-		                                      DeltaTime, true, false, true, false);
+		                                      TargetDeltaTime, true, false, true, false);
 	}
+}
+
+// 读取实际刚体旋转，不移动骨骼，也不清除速度
+bool FDeliveryBoxingPose::BeginArmRecovery(USkeletalMeshComponent* Mesh, int32 Side, float FacingYaw)
+{
+    if (!Mesh || !IsReady(Side)) return false;
+    FArm& Arm = Arms[Side];
+    const FBodyInstance* Upper = Mesh->GetBodyInstance(Arm.Upper);
+    const FBodyInstance* Lower = Mesh->GetBodyInstance(Arm.Lower);
+    const FBodyInstance* Hand = Mesh->GetBodyInstance(Arm.Hand);
+    if (!Upper || !Lower || !Hand) return false;
+    const FQuat Yaw(FVector::UpVector, FMath::DegreesToRadians(FacingYaw - ReferenceYaw));
+    Arm.CorrectionUpper = Yaw.Inverse() * Upper->GetUnrealWorldTransform().GetRotation();
+    Arm.CorrectionLower = Yaw.Inverse() * Lower->GetUnrealWorldTransform().GetRotation();
+    Arm.CorrectionHand = Yaw.Inverse() * Hand->GetUnrealWorldTransform().GetRotation();
+    Arm.bCorrectionStarted = true;
+    return true;
+}
+
+// 上臂用世界旋转，小臂用相对上臂旋转，缺少数据时不报告异常
+float FDeliveryBoxingPose::GetArmError(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* Controls, int32 Side) const
+{
+    if (!Mesh || !Controls || !IsReady(Side)) return 0.f;
+    const FArm& Arm = Arms[Side];
+    const FBodyInstance* Upper = Mesh->GetBodyInstance(Arm.Upper);
+    const FBodyInstance* Lower = Mesh->GetBodyInstance(Arm.Lower);
+    FPhysicsControlTarget UpperTarget, LowerTarget;
+    if (!Upper || !Lower || !Controls->GetControlTarget(Arm.UpperControl, UpperTarget) ||
+        !Controls->GetControlTarget(Arm.LowerControl, LowerTarget)) return 0.f;
+    const FQuat UpperRotation = Upper->GetUnrealWorldTransform().GetRotation();
+    const FQuat LowerRotation = UpperRotation.Inverse() * Lower->GetUnrealWorldTransform().GetRotation();
+    return FMath::RadiansToDegrees(FMath::Max(
+        UpperRotation.AngularDistance(UpperTarget.TargetOrientation.Quaternion()),
+        LowerRotation.AngularDistance(LowerTarget.TargetOrientation.Quaternion())));
 }

@@ -3,12 +3,55 @@
 // 脚的实际位置由物理模拟给出，因此落点与刚体之间允许短暂误差
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Ragdoll/DeliveryFootPlacement.h"
+#include "Character/DeliveryCharacter.h"
+#include "Grab/DeliveryGrabComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "Math/RotationMatrix.h"
 #include "PhysicsControlComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Kismet/GameplayStatics.h"
+
+// 身体左右轴取真实骨盆朝向，不随输入方向突然翻转
+void UDeliveryActiveRagdollComponent::UpdateFootRecovery(float DeltaTime)
+{
+    const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
+    const bool bGrabbing = Character && Character->GetGrabComponent() && Character->GetGrabComponent()->IsGrabbing();
+    const bool bCanCorrect = !bIsLimp && !Recovery.IsRising() &&
+        ReplicatedControlMode == EDeliveryRagdollControlMode::Active &&
+        !Movement.bJumping && !Movement.bPelvisAirborne && Movement.StartupPlantRemaining <= 0.f &&
+        !bHitFeetPlanted && !Punch.IsActive() && !BoxingPose.HasPendingPunchRecovery() &&
+        !SwingAxe.IsValid() && !bGrabbing && GetUprightDot() >= MinimumStepUprightDot;
+    if (!bCanCorrect)
+    {
+        // 战斗和空中状态优先，不能保留交叉计时并在落地后立即补判
+        const bool bWasCorrecting = Recovery.IsCorrectingFeet();
+        Recovery.CancelFootCorrection();
+        if (bWasCorrecting) CancelFootSteps();
+        return;
+    }
+
+    const FVector Right = GetSlopeRight(FVector::ZeroVector);
+    const FVector LeftPosition = Mesh->GetCenterOfMass(Movement.LeftFoot.Bone);
+    const FVector RightPosition = Mesh->GetCenterOfMass(Movement.RightFoot.Bone);
+    float Separation = FVector::DotProduct(RightPosition - LeftPosition, Right);
+    // 摆动脚还没落下时不能把瞬间分开算作站稳
+    if (Recovery.IsCorrectingFeet() && (Movement.LeftFoot.Alpha < 1.f || Movement.RightFoot.Alpha < 1.f))
+        Separation = FMath::Min(Separation, 0.f);
+    const bool bWasCorrecting = Recovery.IsCorrectingFeet();
+    if (Recovery.ObserveFeet(Separation, DeltaTime, FootCrossDistance, FootCrossConfirmTime,
+        StableMinimumFootSide, FootRecoveryStableTime, FootRecoveryMaxTime))
+    {
+        // 撤销旧落点，先释放双脚，再从实际位置重新规划补步
+        CancelFootSteps();
+        Movement.bStandAnchored = false;
+    }
+    else if (bWasCorrecting && !Recovery.IsCorrectingFeet())
+    {
+        // 正常结束和超时退出都清掉未完成的补步目标
+        CancelFootSteps();
+    }
+}
 
 // 左右脚的迈步安排
 
@@ -17,7 +60,7 @@
 void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector& Wish)
 {
 	// 调用者已经排除了跳跃和晕倒；这里只在角色还能站立时把两只脚维持在各自一侧
-	if (GetUprightDot() >= MinimumStepUprightDot)
+	if (!Recovery.ShouldPauseWalking() && GetUprightDot() >= MinimumStepUprightDot)
 		KeepFeetOnOwnSide();
 	// 先完成已有步伐，避免每帧重新选择起点
 	UpdateFootTarget(Movement.LeftFoot, DeltaTime);
@@ -26,7 +69,7 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 	// 迈步超时后保留一段释放时间，让脚部恢复自由运动
 	// 若立即重新选择同一只脚，会在本帧重新启用无法到达的落点
 	// 这样物理模拟就没有机会真正释放脚部控制
-	if (Movement.BlockedStepRecoveryRemaining > 0.0f)
+	if (Recovery.IsReleasingFeet())
 		return;
 
 	const bool bMoving = !Wish.IsNearlyZero();
@@ -76,6 +119,9 @@ void UDeliveryActiveRagdollComponent::UpdateFeet(float DeltaTime, const FVector&
 			Movement.bStepLeftNext = !bLeft;
 		return;
 	}
+
+	if (Recovery.IsCorrectingFeet())
+		return;
 
 	if (Wish.IsNearlyZero())
 	{
@@ -191,7 +237,7 @@ void UDeliveryActiveRagdollComponent::UpdateFootTarget(FDeliveryRagdollFoot& Foo
 		if (Gap > 18.0f)
 		{
 			CancelFootSteps();
-			Movement.BlockedStepRecoveryRemaining = 0.45f;
+			Recovery.ReportIssue(EDeliveryRecoveryIssue::FootBlocked);
 			Movement.bPendingStopRecovery = true;
 		}
 
@@ -312,7 +358,7 @@ void UDeliveryActiveRagdollComponent::KeepFeetOnOwnSide()
 // 在支撑脚上施加坡面辅助力，减少静止下滑
 void UDeliveryActiveRagdollComponent::ApplySlopeSupportTraction(float DeltaTime)
 {
-	if (GetUprightDot() < 0.65f || Movement.BlockedStepRecoveryRemaining > 0.f || SlopeSupportTraction <= 0.f ||
+	if (GetUprightDot() < 0.65f || Recovery.IsReleasingFeet() || SlopeSupportTraction <= 0.f ||
 	    !GetWorld())
 		return;
 	for (const FDeliveryRagdollFoot* Foot : {&Movement.LeftFoot, &Movement.RightFoot})

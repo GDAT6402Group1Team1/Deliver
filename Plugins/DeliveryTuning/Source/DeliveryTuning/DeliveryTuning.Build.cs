@@ -7,7 +7,7 @@ public class DeliveryTuning : ModuleRules
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PrivateDependencyModuleNames.AddRange(new[] {
             "Core", "CoreUObject", "Engine", "Slate", "SlateCore", "UnrealEd",
-            "PropertyEditor", "ToolMenus", "Delivery", "Json"
+            "PropertyEditor", "ToolMenus", "Delivery", "Json", "InputCore"
         });
     }
 }

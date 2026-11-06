@@ -54,10 +54,10 @@ struct FDeliveryRagdollMovement
 	float JumpOffset = 0.0f;
 	float StartupPlantRemaining = 0.0f;
 	float LastMoveInputTime = 0.0f;
-	// 停步补位与脚步超时后的释放等待
+	// 停步补位
 	bool bWasMoving = false;
 	bool bPendingStopRecovery = false;
-	float BlockedStepRecoveryRemaining = 0.0f;
+
 	bool bStepLeftNext = true;
 	bool bJumping = false;
 

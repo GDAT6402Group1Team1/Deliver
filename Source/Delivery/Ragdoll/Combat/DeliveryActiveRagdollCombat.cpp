@@ -211,7 +211,8 @@ void UDeliveryActiveRagdollComponent::ReleaseBodyDrivenPunch()
 // 结束身体出拳状态并清除动作影响
 void UDeliveryActiveRagdollComponent::EndBodyDrivenPunch()
 {
-	// 清除出拳状态，让上半身和手臂逐渐回到自然姿势
+	// 正常收拳后仍持续偏离目标时，才允许尝试一次异常恢复
+    if (Punch.IsActive()) Recovery.WatchArm(Punch.GetHandSide() > 0.f ? 0 : 1);
 	Punch.End();
 	SetPunchFeetPlanted(false);
 }

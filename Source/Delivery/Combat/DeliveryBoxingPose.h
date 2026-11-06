@@ -29,6 +29,9 @@ struct FDeliveryBoxingPose
 		// 蓄力和挥拳期间不累积这些旋转，避免手臂不断扭转
 		FQuat UpperTransport = FQuat::Identity, LowerTransport = FQuat::Identity;
 		FQuat UpperRecovery = FQuat::Identity, LowerRecovery = FQuat::Identity;
+        // 异常恢复从当前物理姿态开始，不沿用卡住前的目标
+        FQuat CorrectionUpper = FQuat::Identity, CorrectionLower = FQuat::Identity, CorrectionHand = FQuat::Identity;
+        bool bCorrectionStarted = false;
 		bool bWasPunching = false;
 		float AppliedStrength = -1;
 		bool bReady = false;
@@ -48,7 +51,11 @@ struct FDeliveryBoxingPose
 	void Update(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* Controls, float FacingYaw,
 	            float DeltaTime, int32 PunchArm, bool bReleased, FVector PunchDirection = FVector::ZeroVector,
 	            const FVector* GrabGoals = nullptr, uint8 GrabMask = 0,
-	            const FDeliveryAnimationArmPose* AnimationPose = nullptr);
+	            const FDeliveryAnimationArmPose* AnimationPose = nullptr,
+                FVector2D RecoveryProgress = FVector2D(1.f, 1.f));
+
+    bool BeginArmRecovery(USkeletalMeshComponent* Mesh, int32 Side, float FacingYaw);
+    float GetArmError(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* Controls, int32 Side) const;
 
 	bool IsReady(int32 Side) const
 	{

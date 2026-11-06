@@ -550,7 +550,7 @@ void UDeliveryActiveRagdollComponent::ReseedFromCurrentPose()
 	bHasHitFacing = false;
 
 	// 脚回到"站着、不迈步"的状态，并给一小段站定时间再开始走
-	Movement.BlockedStepRecoveryRemaining = 0.0f;
+	Recovery.ResetFeet();
 	CancelFootSteps();
 	Movement.LeftFoot.Start = Mesh->GetCenterOfMass(Movement.LeftFoot.Bone);
 	Movement.RightFoot.Start = Mesh->GetCenterOfMass(Movement.RightFoot.Bone);

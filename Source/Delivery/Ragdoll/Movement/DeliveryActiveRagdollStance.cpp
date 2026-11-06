@@ -55,7 +55,8 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	}
 	Movement.bHadMoveWishLastTick = bHasMoveWish;
 	Movement.AccelerationLeanRemaining = FMath::Max(0.0f, Movement.AccelerationLeanRemaining - DeltaTime);
-	Movement.BlockedStepRecoveryRemaining = FMath::Max(0.f, Movement.BlockedStepRecoveryRemaining - DeltaTime);
+	Recovery.UpdateFeet(DeltaTime);
+	UpdateFootRecovery(DeltaTime);
 	if (bPunchFeetPlanted && FVector::Dist2D(Mesh->GetBoneLocation(Bones.Hips, EBoneSpaces::WorldSpace),
 	                                         PunchSupportLocation) > PunchSupportBreakDistance)
 	{
@@ -71,7 +72,7 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 	// 保留玩家原始意图，恢复或失衡期间只暂停本帧身体移动
 	const FVector EffectiveWish = ReplicatedControlMode == EDeliveryRagdollControlMode::Recovering ||
 	                                      Recovery.IsRising() || Movement.StartupPlantRemaining > 0.0f ||
-	                                      bHitFeetPlanted || Movement.BlockedStepRecoveryRemaining > 0.0f
+	                                      bHitFeetPlanted || Recovery.ShouldPauseWalking()
 	                                  ? FVector::ZeroVector
 	                                  : Wish;
 	// 先确定本帧髋部打算移动到哪里；脚的目标和身体朝向都以这个结果为基准
@@ -107,11 +108,12 @@ void UDeliveryActiveRagdollComponent::UpdateControlTargets(float DeltaTime)
 				GrabMask |= 2;
 		}
 	}
+    UpdateArmRecovery(DeltaTime);
 	// 最后把出拳、抓取或斧头动作交给手臂姿态计算，不在这里检测伤害
 	BoxingPose.Update(Mesh, PhysicsControl, CurrentFacingYaw, DeltaTime,
 	                  Punch.IsActive() ? (Punch.GetHandSide() > 0 ? 0 : 1) : -1, Punch.IsReleased(),
 	                  Punch.IsActive() ? Punch.GetDirection() : FVector::ZeroVector, GrabGoals, GrabMask,
-	                  bAxeSwing ? &AnimationPose : nullptr);
+	                  bAxeSwing ? &AnimationPose : nullptr, Recovery.GetArmProgress());
 }
 
 // 髋部位置与站立支撑
@@ -505,4 +507,32 @@ FVector UDeliveryActiveRagdollComponent::GetWholeBodyCenterOfMass() const
 	}
 
 	return TotalMass > UE_SMALL_NUMBER ? WeightedCenter / TotalMass : Mesh->GetComponentLocation();
+}
+
+// 战斗结束后检查手臂，受击、抓取和离地会取消观察与恢复
+void UDeliveryActiveRagdollComponent::UpdateArmRecovery(float DeltaTime)
+{
+    const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
+    const bool bHandsOccupied = Punch.IsActive() || GetAxeSwingWeight() > 0.f ||
+        (Character && Character->GetGrabComponent() && Character->GetGrabComponent()->IsGrabbing());
+    const bool bBodyUnstable = bIsLimp || Recovery.IsRising() || Movement.bJumping ||
+        Movement.bPelvisAirborne || bHitFeetPlanted || GetUprightDot() < .65f;
+    if (bHandsOccupied || bBodyUnstable || ReplicatedControlMode != EDeliveryRagdollControlMode::Active)
+    {
+        Recovery.ResetArms();
+        return;
+    }
+    Recovery.AdvanceArms(DeltaTime);
+    for (int32 Side = 0; Side < 2; ++Side)
+    {
+        if (!Recovery.IsWatchingArm(Side)) continue;
+        const FDeliveryBoxingPose::FArm& Arm = BoxingPose.Arms[Side];
+        // 先让正常收拳完成，不能把收拳过程中的误差当成失败
+        const bool bFinishedReturn = !Arm.bWasPunching && Arm.Windup <= 0.f && Arm.Extension <= 0.f;
+        const bool bBlocked = bFinishedReturn && BoxingPose.GetArmError(Mesh, PhysicsControl, Side) > ArmRecoveryErrorAngle;
+        if (Recovery.ObserveArm(Side, bBlocked, DeltaTime, ArmRecoveryConfirmTime, ArmRecoveryDuration))
+        {
+            if (!BoxingPose.BeginArmRecovery(Mesh, Side, CurrentFacingYaw)) Recovery.ResetArms();
+        }
+    }
 }

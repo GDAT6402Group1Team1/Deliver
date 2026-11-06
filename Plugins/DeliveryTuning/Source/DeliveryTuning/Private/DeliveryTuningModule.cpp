@@ -1,3 +1,4 @@
+#include "SDeliveryPoseDebug.h"
 #include "Modules/ModuleManager.h"
 #include "Combat/DeliveryRagdollCombatComponent.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
@@ -77,16 +78,20 @@ public:
                     + SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
                     [ SNew(SButton).Text(FText::FromString(TEXT("出拳")))
                       .ButtonColorAndOpacity_Lambda([this] { return SectionIndex == 0 ? FLinearColor(.15f, .4f, .7f) : FLinearColor(.2f, .2f, .2f); })
-                      .OnClicked_Lambda([this] { SectionIndex = 0; return FReply::Handled(); }) ]
+                      .OnClicked_Lambda([this] { PoseDebug->StopDiagnostics(); SectionIndex = 0; return FReply::Handled(); }) ]
                     + SHorizontalBox::Slot().AutoWidth()
                     [ SNew(SButton).Text(FText::FromString(TEXT("布娃娃")))
                       .ButtonColorAndOpacity_Lambda([this] { return SectionIndex == 1 ? FLinearColor(.15f, .4f, .7f) : FLinearColor(.2f, .2f, .2f); })
-                      .OnClicked_Lambda([this] { SectionIndex = 1; return FReply::Handled(); }) ]
+                      .OnClicked_Lambda([this] { PoseDebug->StopDiagnostics(); SectionIndex = 1; return FReply::Handled(); }) ]
+                    + SHorizontalBox::Slot().AutoWidth().Padding(8, 0)
+                    [ SNew(SButton).Text(FText::FromString(TEXT("实时诊断")))
+                      .OnClicked_Lambda([this] { SectionIndex = 2; return FReply::Handled(); }) ]
                   ]
                   + SVerticalBox::Slot().FillHeight(1)
                   [ SNew(SWidgetSwitcher).WidgetIndex_Lambda([this] { return SectionIndex; })
                     + SWidgetSwitcher::Slot() [ CombatDetails.ToSharedRef() ]
                     + SWidgetSwitcher::Slot() [ RagdollDetails.ToSharedRef() ]
+                    + SWidgetSwitcher::Slot() [ SAssignNew(PoseDebug, SDeliveryPoseDebug) ]
                   ]
                 ]
             ]
@@ -173,7 +178,8 @@ private:
         return FReply::Handled();
     }
 
-    // 零表示出拳页，一表示布娃娃页
+    // 零表示出拳页，一表示布娃娃页，二表示实时诊断
+    TSharedPtr<SDeliveryPoseDebug> PoseDebug;
     int32 SectionIndex = 0;
     TSharedPtr<IDetailsView> CombatDetails;
     TSharedPtr<IDetailsView> RagdollDetails;

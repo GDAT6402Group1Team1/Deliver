@@ -223,6 +223,18 @@ bool FDeliveryPunchRecoveryTest::RunTest(const FString&)
 			TestTrue(TEXT("recovery has no large single-frame rotation jump"), Worst < 25.f);
 			TestEqual(TEXT("extension fully recovered"), Pose.Arms[Side].Extension, 0.f);
 			TestFalse(TEXT("next punch allowed after retraction"), Pose.HasPendingPunchRecovery());
+            // 异常恢复的第一帧从实际旋转开始，不能由旧目标差值生成巨大角速度
+            const FQuat ActualUpper = Mesh->GetBodyInstance(Pose.Arms[Side].Upper)->GetUnrealWorldTransform().GetRotation();
+            TestTrue(TEXT("arm recovery captures live pose"), Pose.BeginArmRecovery(Mesh, Side, 0.f));
+            FVector2D Progress(1.f, 1.f);
+            Progress[Side] = 0.f;
+            Pose.Update(Mesh, Controls, 0.f, 1.f / 60, -1, false, FVector::ForwardVector, nullptr, 0, nullptr, Progress);
+            FPhysicsControlTarget RecoveryTarget;
+            Controls->GetControlTarget(Pose.Arms[Side].UpperControl, RecoveryTarget);
+            TestTrue(TEXT("first target equals actual pose"), ActualUpper.AngularDistance(RecoveryTarget.TargetOrientation.Quaternion()) < .001f);
+            TestTrue(TEXT("reseed clears target angular velocity"), RecoveryTarget.TargetAngularVelocity.IsNearlyZero());
+            TestTrue(TEXT("recovery does not teleport actual body"), ActualUpper.AngularDistance(
+                Mesh->GetBodyInstance(Pose.Arms[Side].Upper)->GetUnrealWorldTransform().GetRotation()) < .001f);
 			Controls->DestroyControlsInSet(TEXT("All"));
 		}
 	World->EndPlay(EEndPlayReason::Quit); World->DestroyWorld(false);
@@ -294,9 +306,9 @@ bool FDeliveryLegIsolationTest::RunTest(const FString&)
 			Rag->SetMoveInput(FVector2D(0, 1));
 			for (int32 I = 0; I < 30; ++I)
 				Rag->UpdateControlTargets(.03f);
-			Rag->Movement.BlockedStepRecoveryRemaining = .2f;
+			Rag->Recovery.ReportIssue(EDeliveryRecoveryIssue::FootBlocked, .2f);
 			Rag->UpdateControlTargets(.03f);
-			Rag->Movement.BlockedStepRecoveryRemaining = 0.f;
+			Rag->Recovery.ResetFeet();
 			Rag->UpdateControlTargets(.03f);
 			TestEqual(TEXT("held input across blocked-step release cannot restart startup lean"),
 			          Rag->Movement.AccelerationLeanRemaining, 0.f);
@@ -311,7 +323,7 @@ bool FDeliveryLegIsolationTest::RunTest(const FString&)
 		Rag->Movement.RightFoot.Elapsed = 1.f;
 		Rag->Movement.RightFoot.Target = Mesh->GetCenterOfMass(Rag->Movement.RightFoot.Bone) + FVector(1000, 0, 0);
 		Rag->UpdateFeet(.03f, FVector::ForwardVector);
-		TestTrue(TEXT("failed step starts a release interval"), Rag->Movement.BlockedStepRecoveryRemaining > 0.f);
+		TestTrue(TEXT("failed step starts a release interval"), Rag->Recovery.GetReleaseRemaining() > 0.f);
 		TestFalse(TEXT("failed foot is not re-enabled in same UpdateFeet"),
 		          Controls->GetControlEnabled(Rag->Movement.RightFoot.Control));
 		Rag->UpdateFeet(.03f, FVector::ForwardVector);

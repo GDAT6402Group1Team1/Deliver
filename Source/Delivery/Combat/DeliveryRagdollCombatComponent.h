@@ -77,6 +77,16 @@ class DELIVERY_API UDeliveryRagdollCombatComponent : public UActorComponent
         return bIsPunching;
     }
 
+#if WITH_EDITOR
+    // 显示服务器实际使用的扫掠段，不额外执行命中查询
+    bool ReadHitDebug(FVector& Start, FVector& End) const
+    {
+        Start = TraceStart;
+        End = TraceEnd;
+        return bIsPunching && bHitWindowOpen && GetOwner() && GetOwner()->HasAuthority();
+    }
+#endif
+
     // 命中窗口与结束通知
     UPROPERTY(BlueprintAssignable, Category = "Punch")
     FDeliverPunchHitWindow OnPunchHitWindow;
