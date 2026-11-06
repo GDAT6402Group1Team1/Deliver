@@ -210,6 +210,12 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 		return ReplicatedControlMode;
 	}
 
+	/** 只读当前移动意图；诊断"没按键却一直走"时要能分清是输入还是步态 */
+	FVector2D GetMoveInputForDebug() const
+	{
+		return Movement.MoveInput;
+	}
+
 	// 脚步通知与声音
 	/** 脚落地时广播；音效、脚印、扬尘都可以接这里 */
 	UPROPERTY(BlueprintAssignable, Category = "Delivery|Ragdoll")

@@ -233,6 +233,10 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
     /** 检查目标和角色是否满足拾取或交付条件；可选择跳过任务可用性检查 */
     bool CanUsePickupTarget(const AActor *Target, bool bCheckTaskAvailability = true) const;
 
+    /** 左键就地操作目标现在能不能用（摩托车后备箱装卸货） */
+    UFUNCTION(BlueprintPure, Category = "Interaction")
+    bool CanUseActionTarget(const AActor *Target) const;
+
     // 任务快递
 
     /** 服务器接收任务快递；步行时放到手上，骑车时放到车上；接收失败时返回假 */

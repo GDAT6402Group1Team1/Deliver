@@ -6,6 +6,8 @@
 #include "Components/AudioComponent.h"
 #include "Audio/DeliveryVehicleAudioComponent.h"
 #include "Components/BoxComponent.h"
+#include "Combat/DeliveryImpactReceiver.h"
+#include "Combat/DeliveryCollisionChannels.h"
 #include "Vehicle/DeliveryRiderAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Materials/MaterialInterface.h"
@@ -48,8 +50,12 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	bUseControllerRotationRoll = false;
 
 	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
-	CollisionBox->InitBoxExtent(FVector(110.0f, 45.0f, 45.0f));
+	// 碰撞盒跟着视觉一起缩：只缩画面不缩碰撞的话，车会在离墙一截的地方就撞上
+	CollisionBox->InitBoxExtent(BaseCollisionExtent * VisualScale);
 	CollisionBox->SetCollisionProfileName(UCollisionProfile::Pawn_ProfileName);
+	// 保持 Pawn 类型：交通车靠它识别电动车；步行身体单独阻挡 Pawn。
+	CollisionBox->SetCollisionObjectType(ECC_Pawn);
+	CollisionBox->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
 	CollisionBox->SetSimulatePhysics(false);
 	CollisionBox->SetEnableGravity(false);
 	RootComponent = CollisionBox;
@@ -63,11 +69,20 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	MeshRoot = CreateDefaultSubobject<USceneComponent>(TEXT("MeshRoot"));
 	MeshRoot->SetupAttachment(RootComponent);
 
+	MeshScale = CreateDefaultSubobject<USceneComponent>(TEXT("MeshScale"));
+	MeshScale->SetupAttachment(MeshRoot);
+
 	MeshAlign = CreateDefaultSubobject<USceneComponent>(TEXT("MeshAlign"));
-	MeshAlign->SetupAttachment(MeshRoot);
+	MeshAlign->SetupAttachment(MeshScale);
 
 	CargoPivot = CreateDefaultSubobject<USceneComponent>(TEXT("CargoPivot"));
 	CargoPivot->SetupAttachment(MeshAlign);
+
+	TrunkLidPivot = CreateDefaultSubobject<USceneComponent>(TEXT("TrunkLidPivot"));
+	TrunkLidPivot->SetupAttachment(MeshAlign);
+
+	TrunkAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("TrunkAnchor"));
+	TrunkAnchor->SetupAttachment(MeshAlign);
 
 	SteerPivot = CreateDefaultSubobject<USceneComponent>(TEXT("SteerPivot"));
 	SteerPivot->SetupAttachment(MeshAlign);
@@ -144,8 +159,18 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 
 	Interactable = CreateDefaultSubobject<UDeliveryInteractableComponent>(TEXT("Interactable"));
 
+	// 后备箱是第二个交互组件，按键是左键；两个组件在同一个 Actor 上，
+	// 所以服务器复核目标时必须按"键"去找组件，不能拿第一个（见 FindOn 的键重载）
+	TrunkInteractable = CreateDefaultSubobject<UDeliveryInteractableComponent>(TEXT("TrunkInteractable"));
+	TrunkInteractable->InteractionKey = EDeliveryInteractionKey::ActionLeft;
+	TrunkInteractable->InteractRadius = TrunkInteractRadius;
+	TrunkInteractable->HoldDuration = 0.0f;
+	TrunkInteractable->PromptOffset = FVector(0.0f, 0.0f, 60.0f);
+
 	DrivePromptText = NSLOCTEXT("Delivery", "MotorbikeDrivePrompt", "按 F 驾驶");
 	ExitPromptText = NSLOCTEXT("Delivery", "MotorbikeExitPrompt", "按 F 下车");
+	TrunkLoadPromptText = NSLOCTEXT("Delivery", "MotorbikeTrunkLoad", "左键装货");
+	TrunkUnloadPromptText = NSLOCTEXT("Delivery", "MotorbikeTrunkUnload", "左键取货");
 
 	static ConstructorHelpers::FObjectFinder<UInputAction> MoveActionFinder(
 	    TEXT("/Game/Input/Actions/IA_Move"));
@@ -200,6 +225,9 @@ void ADeliveryMotorbike::OnConstruction(const FTransform& Transform)
 void ADeliveryMotorbike::BeginPlay()
 {
 	Super::BeginPlay();
+	// 交通车靠 Pawn 类型识别电动车，旧蓝图实例也在运行时明确对齐。
+	CollisionBox->SetCollisionObjectType(ECC_Pawn);
+	CollisionBox->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
 	ApplyBodyMeshes();
 	if (bAutoCalibrateRiderContacts)
 		CalibrateRiderContacts();
@@ -212,8 +240,17 @@ void ADeliveryMotorbike::BeginPlay()
 	{
 		Interactable->PromptText = DrivePromptText;
 		Interactable->OnInteract.AddDynamic(this, &ADeliveryMotorbike::HandleInteractRequested);
+		// 手上有快递时不让直接上车：提示和按键读同一个条件，不会一个说能一个不能
+		Interactable->CanUse.BindLambda(
+		    [this](APawn* Interactor, bool) { return CanDriveNow(Cast<ADeliveryCharacter>(Interactor)); });
+	}
+	if (TrunkInteractable)
+	{
+		TrunkInteractable->CanUse.BindUObject(this, &ADeliveryMotorbike::CanUseTrunk);
+		TrunkInteractable->Use.BindUObject(this, &ADeliveryMotorbike::UseTrunk);
 	}
 
+	ApplyTrunkPresentation();
 	ApplyDriverPresentation();
 	ApplyCameraMode();
 }
@@ -236,8 +273,9 @@ void ADeliveryMotorbike::AutoConfigureFromMeshes()
 	// 仅自动补全未配置的参数，保留手动设置
 	const bool bNeedWheels = WheelPartIndices.Num() == 0;
 	const bool bNeedSteer = SteeringPartIndices.Num() == 0 && HandlebarPartIndices.Num() == 0;
-	const bool bNeedCargo = CargoOffset.IsNearlyZero();
-	if (!bNeedWheels && !bNeedSteer && !bNeedCargo)
+	const bool bNeedTrunk = TrunkInsideOffset.IsNearlyZero() || TrunkLidPartIndex == INDEX_NONE ||
+	                        TrunkLidHinge.IsNearlyZero() || TrunkOpeningOffset.IsNearlyZero();
+	if (!bNeedWheels && !bNeedSteer && !bNeedTrunk)
 	{
 		return;
 	}
@@ -349,34 +387,121 @@ void ADeliveryMotorbike::AutoConfigureFromMeshes()
 		}
 	}
 
-	if (bNeedCargo)
+	if (bNeedTrunk)
 	{
-		// 从车尾部件的顶部计算货架位置，避免车把高度抬高货架
-		// 模型局部纵轴较小的一端为车尾
-
-const float RearLine = Whole.Min.Y + Whole.GetSize().Y * 0.35f;
-		FBox Rear(ForceInit);
-		for (const FBox& Box : Boxes)
+		/**
+		 * 认后备箱：箱盖 = 车尾那块"最高的扁平件"，箱体 = 紧贴它下面、平面上和它重叠的那块
+		 *
+		 * 判据只用包围盒，和认轮子/车把一样——这 9 个网格的名字是
+		 * `摩托车_车_001`…`_008`，名字里没有任何信息可用。
+		 * 实测这辆车：箱盖是槽位 1（79×63×14，顶面 z=93，整车最高）、
+		 * 箱体是槽位 7（69×56×56，顶面 z=80，正好接在箱盖下面）。
+		 */
+		const float RearLine = Whole.Min.Y + Whole.GetSize().Y * 0.4f;
+		int32 LidIndex = TrunkLidPartIndex;
+		if (LidIndex == INDEX_NONE)
 		{
-			if (Box.IsValid && Box.GetCenter().Y <= RearLine)
+			float BestTop = -FLT_MAX;
+			for (int32 Index = 0; Index < Boxes.Num(); ++Index)
 			{
-				Rear += Box;
+				if (!Boxes[Index].IsValid || WheelPartIndices.Contains(Index) ||
+				    SteeringPartIndices.Contains(Index) || HandlebarPartIndices.Contains(Index))
+				{
+					continue;
+				}
+				const FVector Size = Boxes[Index].GetSize();
+				const float Footprint = FMath::Min(Size.X, Size.Y);
+				// 扁平：厚度不到平面尺寸的四成；车架、箱体这些都过不了这一条
+				if (Footprint <= KINDA_SMALL_NUMBER || Size.Z > Footprint * 0.4f)
+				{
+					continue;
+				}
+				if (Boxes[Index].GetCenter().Y <= RearLine && Boxes[Index].Max.Z > BestTop)
+				{
+					BestTop = Boxes[Index].Max.Z;
+					LidIndex = Index;
+				}
 			}
 		}
 
-		// 未识别到独立车尾部件时，使用整车范围估算货架位置
-		
-		const FBox& Source = Rear.IsValid ? Rear : Whole;
+		int32 BoxIndex = TrunkBoxPartIndex;
+		if (BoxIndex == INDEX_NONE && Boxes.IsValidIndex(LidIndex))
+		{
+			const FBox& Lid = Boxes[LidIndex];
+			float BestTop = -FLT_MAX;
+			for (int32 Index = 0; Index < Boxes.Num(); ++Index)
+			{
+				if (Index == LidIndex || !Boxes[Index].IsValid || WheelPartIndices.Contains(Index))
+				{
+					continue;
+				}
+				const FBox& Candidate = Boxes[Index];
+				// 平面上要和箱盖重叠，而且顶面在箱盖下面——"盖子底下那一件"
+				const bool bOverlapXY = Candidate.Min.X <= Lid.Max.X && Candidate.Max.X >= Lid.Min.X &&
+				                        Candidate.Min.Y <= Lid.Max.Y && Candidate.Max.Y >= Lid.Min.Y;
+				if (bOverlapXY && Candidate.Max.Z <= Lid.Max.Z && Candidate.Max.Z > BestTop)
+				{
+					BestTop = Candidate.Max.Z;
+					BoxIndex = Index;
+				}
+			}
+		}
 
-		// 为快递底部预留高度，较大的快递可手动调整货架偏移
-		
-		
-		constexpr float CargoLift = 12.0f;
-		CargoOffset = FVector(Whole.GetCenter().X, Source.GetCenter().Y, Source.Max.Z + CargoLift);
-
-		UE_LOG(LogDelivery, Log, TEXT("%s：自动量出货架位置 (%.0f, %.0f, %.0f)%s。"), *GetName(),
-		       CargoOffset.X, CargoOffset.Y, CargoOffset.Z,
-		       Rear.IsValid ? TEXT("") : TEXT("（没筛到车尾部件，退回整车包围盒，可能偏高）"));
+		if (Boxes.IsValidIndex(LidIndex))
+		{
+			const FBox& Lid = Boxes[LidIndex];
+			const FBox& Container = Boxes.IsValidIndex(BoxIndex) ? Boxes[BoxIndex] : Lid;
+			if (TrunkLidPartIndex == INDEX_NONE)
+			{
+				TrunkLidPartIndex = LidIndex;
+			}
+			if (TrunkBoxPartIndex == INDEX_NONE)
+			{
+				TrunkBoxPartIndex = BoxIndex;
+			}
+			if (TrunkLidHinge.IsNearlyZero())
+			{
+				/**
+				 * 铰链在箱盖的一条边的底面：局部 +Y 朝车头，所以前沿是 Max.Y、后沿是 Min.Y
+				 *
+				 * 哪条边由 bTrunkLidHingeAtFront 决定，旋转方向读的也是同一个开关
+				 * （见 GetTrunkLidLiftDirection），所以不会配出"铰链在后沿却往后转"
+				 * 这种把盖子转进车身的组合。
+				 */
+				TrunkLidHinge = FVector(Lid.GetCenter().X,
+				                        bTrunkLidHingeAtFront ? Lid.Max.Y : Lid.Min.Y, Lid.Min.Z);
+			}
+			if (TrunkInsideOffset.IsNearlyZero())
+			{
+				TrunkInsideOffset = Container.GetCenter();
+			}
+			if (TrunkOpeningOffset.IsNearlyZero())
+			{
+				// 箱口上方：装卸动画里快递要从这儿看得见地落进去/升出来
+				TrunkOpeningOffset =
+				    FVector(Container.GetCenter().X, Container.GetCenter().Y, Lid.Max.Z + 25.0f);
+			}
+			UE_LOG(LogDelivery, Log,
+			       TEXT("%s：自动认出后备箱——箱盖槽位 %d、箱体槽位 %d，铰链 (%.0f, %.0f, %.0f)，")
+			           TEXT("箱内 (%.0f, %.0f, %.0f)。"),
+			       *GetName(), TrunkLidPartIndex, TrunkBoxPartIndex, TrunkLidHinge.X, TrunkLidHinge.Y,
+			       TrunkLidHinge.Z, TrunkInsideOffset.X, TrunkInsideOffset.Y, TrunkInsideOffset.Z);
+		}
+		else
+		{
+			// 认不出来就退回整车尾部，盖子不动——"盖子乱翻"比"盖子不动"难查得多
+			if (TrunkInsideOffset.IsNearlyZero())
+			{
+				TrunkInsideOffset = FVector(Whole.GetCenter().X, RearLine, Whole.Max.Z);
+			}
+			if (TrunkOpeningOffset.IsNearlyZero())
+			{
+				TrunkOpeningOffset = TrunkInsideOffset + FVector(0.0f, 0.0f, 40.0f);
+			}
+			UE_LOG(LogDelivery, Warning,
+			       TEXT("%s：没认出后备箱的箱盖（车尾没有扁平件），装卸货仍然可用但盖子不会开合。"),
+			       *GetName());
+		}
 	}
 }
 
@@ -399,12 +524,27 @@ void ADeliveryMotorbike::ApplyBodyMeshes()
 	{
 		RiderPivot->SetRelativeLocation(RiderPivotLocation);
 	}
-	// 货架只负责放置快递，不需要对子物体抵消位置偏移
+	// 快递挂点在箱子里面，不需要对子物体抵消位置偏移
 	
 	if (CargoPivot)
 	{
-		CargoPivot->SetRelativeLocationAndRotation(CargoOffset, CargoRotation);
+		CargoPivot->SetRelativeLocationAndRotation(TrunkInsideOffset, CargoRotation);
 	}
+	if (TrunkLidPivot)
+	{
+		TrunkLidPivot->SetRelativeLocation(TrunkLidHinge);
+	}
+	if (TrunkAnchor)
+	{
+		TrunkAnchor->SetRelativeLocation(TrunkInsideOffset);
+	}
+	if (TrunkInteractable)
+	{
+		// 交互距离从箱子量起：车辆原点在车身中间，按它算的话站在车尾也显得老远
+		TrunkInteractable->InteractAnchor = TrunkAnchor;
+		TrunkInteractable->InteractRadius = TrunkInteractRadius;
+	}
+	ApplyVisualScale();
 	if (RiderMesh)
 	{
 		// 显式更新骑手的附着关系，兼容已有蓝图实例保存的层级
@@ -438,6 +578,20 @@ void ADeliveryMotorbike::ApplyBodyMeshes()
 		{
 			Target = BarPivot;
 			bOnSteerAxis = true;
+		}
+
+		// 箱盖挂在自己的铰链层上，开盖时绕铰链转
+		if (TrunkLidPivot && Index == TrunkLidPartIndex)
+		{
+			if (Part->GetAttachParent() != TrunkLidPivot)
+			{
+				Part->AttachToComponent(TrunkLidPivot,
+				                        FAttachmentTransformRules::KeepRelativeTransform);
+			}
+			// 和轮子同一个手法：挂点挪到旋转中心，网格把这段偏移减回去
+			Part->SetRelativeLocation(-TrunkLidHinge);
+			Part->SetRelativeRotation(FRotator::ZeroRotator);
+			continue;
 		}
 
 		// 前轮挂在转向层下，同时支持转向和绕轮心自转
@@ -496,6 +650,7 @@ void ADeliveryMotorbike::ApplyDriverPresentation()
 		// 有人骑着的时候别人不该再看到"按 F 驾驶"
 		Interactable->bInteractEnabled = !bHasDriver;
 	}
+	ApplyTrunkPresentation();
 	ApplyRiderMaterials();
 }
 
@@ -558,13 +713,22 @@ void ADeliveryMotorbike::OnRep_Cargo()
 	ApplyCargoPresentation();
 }
 
-// 把当前快递显示在货架位置
+// 把当前快递固定到箱内挂点；装好之后整件藏起来
 void ADeliveryMotorbike::ApplyCargoPresentation()
 {
 	if (Cargo && CargoPivot)
 	{
 		Cargo->SetVehicleCargoPresentation(CargoPivot);
+		/**
+		 * 箱子关着的时候把快递藏起来
+		 *
+		 * 它在一个关好的箱子里，看不见才是对的；而且快递比箱子内腔大时
+		 * 不藏就会穿出箱盖。装卸动画期间由 UpdateTrunkAnimation 临时显示。
+		 */
+		Cargo->SetActorHiddenInGame(TrunkPhase == EDeliveryTrunkPhase::Idle);
+		Cargo->SetActorRelativeLocation(FVector::ZeroVector);
 	}
+	ApplyTrunkPresentation();
 }
 
 // 返回仍然有效的货架快递
@@ -625,9 +789,9 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 		return false;
 	}
 
-	// 服务器再次检查驾驶员状态，禁止晕倒角色上车
+	// 服务器复核上车条件：晕倒、手上还拿着快递、正在播装卸动画都不给上车
 	
-	if (NewDriver->IsIncapacitated())
+	if (!CanDriveNow(NewDriver))
 	{
 		return false;
 	}
@@ -658,22 +822,14 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	NewDriver->SetActorHiddenInGame(true);
 	NewDriver->AttachToComponent(CollisionBox, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 
-	// 角色附着到车辆后再转移快递，使接收逻辑能够识别当前驾驶状态
-	
-	
-	if (UDeliveryInventoryComponent* Inventory = NewDriver->GetInventoryComponent())
-	{
-		if (ADeliveryPackageItem* Package = Cast<ADeliveryPackageItem>(Inventory->GetHeldItem()))
-		{
-			// 先清除背包槽位再固定到车上，避免同一快递同时属于背包和车辆
-			
-			if (Inventory->ConsumeHeldItem(Package))
-			{
-				AttachCargo(Package);
-			}
-		}
-	}
-
+	/**
+	 * 上车不再顺手把手上的快递搬到车上
+	 *
+	 * 装货现在是一个独立动作（走到车尾按左键、开盖、放进去、合盖），
+	 * 所以手上有货的人根本进不到这里——CanDriveNow 已经把他挡在外面了。
+	 * 这两件事必须一起改：只加装货动作、不去掉这里的自动搬运，
+	 * 表现就是"按 F 直接把货带上车"，那个新动作永远不会被用到。
+	 */
 	DriverController->Possess(this);
 	if (APlayerController* PC = Cast<APlayerController>(DriverController))
 	{
@@ -701,6 +857,9 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 // 把无人驾驶的车辆放到经过检查的召唤位置
 bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredYaw)
 {
+	// 召唤是瞬移：清掉扫描锚点，下一帧重新建立。
+	// 不清的话那一帧会算出一段巨大的"路径"，把沿途的路人全部撞飞
+	bHasPedestrianSweepLocation = false;
 	UWorld* World = GetWorld();
 	if (!HasAuthority() || !World || Driver)
 	{
@@ -893,6 +1052,95 @@ void ADeliveryMotorbike::KnockDownDriver(ADeliveryCharacter* Rider, const FVecto
 }
 
 // 逐步更新车辆受撞后的偏移和恢复
+// 服务器沿本帧路径扫路人，撞到就打飞
+void ADeliveryMotorbike::ProcessPedestrianImpacts(float DeltaSeconds)
+{
+	UWorld* World = GetWorld();
+	if (!World || PedestrianImpactImpulse <= 0.0f || !CollisionBox)
+	{
+		return;
+	}
+
+	const FVector Current = GetActorLocation();
+	if (!bHasPedestrianSweepLocation)
+	{
+		PreviousPedestrianSweepLocation = Current;
+		bHasPedestrianSweepLocation = true;
+		return;
+	}
+
+	const FVector Start = PreviousPedestrianSweepLocation;
+	const FVector Travel = Current - Start;
+	PreviousPedestrianSweepLocation = Current;
+
+	// 按 R 召唤会把车瞬移过来，那一帧的位移远大于车速能走的距离。
+	// 不挡住的话被召唤的车会把沿途（其实根本没经过）的路人全部撞飞。
+	// 交通车那边是同一类问题（OnRouteLost 瞬移那一帧算出假的 3053 cm/s）
+	const float MaxTravel = FMath::Max(FMath::Abs(CurrentSpeed), MaxSpeed) * DeltaSeconds + 50.0f;
+	if (Travel.Size() > MaxTravel)
+	{
+		return;
+	}
+
+	// 停着或者慢慢挪不撞人：蹭一下就把人撞飞很出戏
+	if (FMath::Abs(CurrentSpeed) < PedestrianImpactMinSpeed)
+	{
+		return;
+	}
+
+	const FVector Direction = (FMath::Abs(Travel.SizeSquared2D()) > 1.0f)
+	                              ? Travel.GetSafeNormal2D()
+	                              : GetActorForwardVector().GetSafeNormal2D();
+	if (Direction.IsNearlyZero())
+	{
+		return;
+	}
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(MotorbikePedestrianImpact), false, this);
+	Params.AddIgnoredActor(this);
+	// 驾驶员那具身体被挂在车上，扫到它没有意义
+	Params.AddIgnoredActor(Driver);
+
+	// 按**物体类型**查：路人通道的默认响应是 Ignore，按通道查会被响应筛掉、
+	// 扫描恒为空（避让检测当年就是这么死的）
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(DeliveryCollision::Pedestrian);
+
+	TArray<FHitResult> Hits;
+	World->SweepMultiByObjectType(Hits, Start, Current, GetActorQuat(), Objects,
+	                              FCollisionShape::MakeBox(CollisionBox->GetScaledBoxExtent()),
+	                              Params);
+
+	// 一次扫描会碰到同一个人的多个部位（躺下之后更是每根骨头一个刚体）
+	TSet<AActor*> Seen;
+	for (const FHitResult& Hit : Hits)
+	{
+		AActor* HitActor = Hit.GetActor();
+		if (!HitActor || Seen.Contains(HitActor))
+		{
+			continue;
+		}
+		Seen.Add(HitActor);
+
+		// 判据是"实现了 IDeliveryImpactReceiver"，不是 Cast<ADeliveryPedestrian>：
+		// 后者会让 Vehicle/ 反向依赖 NPC/，而且同一个判断要在撞车和出拳两处各写一遍
+		IDeliveryImpactReceiver* Receiver = Cast<IDeliveryImpactReceiver>(HitActor);
+		if (!Receiver || Receiver->IsKnockedDown())
+		{
+			continue;
+		}
+
+		// 力度按车速缩放，但留一个下限：慢车蹭一下人是原地瘫软，看着像自己躺下的
+		const float SpeedScale =
+		    FMath::Clamp(FMath::Abs(CurrentSpeed) / FMath::Max(PedestrianImpactSpeedReference, 1.0f),
+		                 PedestrianImpactMinScale, 1.0f);
+		const FVector Impulse =
+		    (Direction + FVector::UpVector * PedestrianImpactUpwardFraction).GetSafeNormal() *
+		    PedestrianImpactImpulse * SpeedScale;
+		Receiver->ReceiveImpact(Impulse, Hit.ImpactPoint);
+	}
+}
+
 void ADeliveryMotorbike::UpdateImpactReaction(float DeltaSeconds)
 {
 	// 统一的指数衰减：撞击是个尖峰，之后一路平滑回到 0
@@ -974,11 +1222,12 @@ void ADeliveryMotorbike::ExitVehicle()
 	ResetRiderMotion();
 	AController* BikeController = GetController();
 
-	// 车上的快递跟着人下车，回到手上
-	// 先清除驾驶员关系再取下快递，使角色按步行状态接收
-	// 接收失败时重新固定到车上
-
-ADeliveryPackageItem* ReturningCargo = ReleaseCargo();
+	/**
+	 * 下车时快递**留在后备箱里**，不再自动回到手上
+	 *
+	 * 要取出来得走到车尾按左键（和装进去对称）。所以这里连 ReleaseCargo 都不调——
+	 * 调了就等于"下车即卸货"，车上那条记录也就没了。
+	 */
 
 	Leaving->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	Leaving->SetActorEnableCollision(true);
@@ -986,6 +1235,11 @@ ADeliveryPackageItem* ReturningCargo = ReleaseCargo();
 	Leaving->SetActorLocationAndRotation(ExitLocation, FRotator(0.0f, GetActorRotation().Yaw, 0.0f), false,
 	                                     nullptr, ETeleportType::TeleportPhysics);
 
+#if !UE_BUILD_SHIPPING
+	UE_LOG(LogDelivery, Log, TEXT("InputDiag %.3f ExitVehicle 开始占有 leaving=%s controller=%s"),
+	       GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f, *GetNameSafe(Leaving),
+	       *GetNameSafe(BikeController));
+#endif
 	if (BikeController)
 	{
 		BikeController->Possess(Leaving);
@@ -999,15 +1253,6 @@ ADeliveryPackageItem* ReturningCargo = ReleaseCargo();
 	if (UDeliveryActiveRagdollComponent* Ragdoll = Leaving->GetActiveRagdoll())
 	{
 		Ragdoll->StartRagdoll();
-	}
-
-	// 身体重建完成后再将快递放回手中，确保使用新的手部位置
-	
-	// 不放取件音效——这是搬运，不是又领了一件
-	if (IsValid(ReturningCargo) && !Leaving->ReceiveTaskPackage(ReturningCargo, /* 播放反馈= */false))
-	{
-		// 角色无法接收时将快递重新固定到车上
-		AttachCargo(ReturningCargo);
 	}
 
 	ThrottleInput = 0.0f;
@@ -1469,8 +1714,15 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 			CurrentSpeed = 0.0f;
 		}
 		UpdateGroundAndMove(DeltaSeconds);
+		// 排在移动之后：要扫的是"这一帧车走过的那段路径"，
+		// 放在移动之前扫的是上一帧的位置，高速时会整段漏掉
+		if (HasAuthority())
+		{
+			ProcessPedestrianImpacts(DeltaSeconds);
+		}
 	}
 
+	UpdateTrunkAnimation(DeltaSeconds);
 	UpdateImpactReaction(DeltaSeconds);
 	UpdateRiderMotion(DeltaSeconds);
 	UpdateLean(DeltaSeconds);
@@ -1787,8 +2039,13 @@ void ADeliveryMotorbike::UpdateWheelSpin(float DeltaSeconds)
 	LastWheelLocation = Location;
 	bWheelLocationValid = true;
 
-	// 纯滚动：接地点速度为 0，所以角速度 = 线速度 / 半径
-	const float Radius = FMath::Max(WheelRadius, 1.0f);
+	/**
+	 * 纯滚动：接地点速度为 0，所以角速度 = 线速度 / 半径
+	 *
+	 * 半径要乘 VisualScale——`WheelRadius` 是导入空间量出来的数，而车轮在世界里
+	 * 已经被缩放层缩过了。不乘的话轮子会按原尺寸算，转得比实际快一截，看着像在打滑。
+	 */
+	const float Radius = FMath::Max(WheelRadius * FMath::Max(VisualScale, 0.01f), 1.0f);
 	WheelSpinAngle += FMath::RadiansToDegrees(Speed / Radius) * DeltaSeconds * WheelSpinSign;
 
 	for (USceneComponent* Pivot : WheelPivots)

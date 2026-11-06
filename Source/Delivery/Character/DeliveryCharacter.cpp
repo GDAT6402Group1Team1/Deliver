@@ -246,6 +246,15 @@ void ADeliveryCharacter::DoAttackLeft()
 {
     if (GrabComponent && GrabComponent->IsGrabbing())
         return;
+    /**
+     * 站在能就地操作的地方（摩托车后备箱）时，左键先给那个操作
+     *
+     * 排在手持物品之前：手上拿着快递走到车尾，这一下该是装货，
+     * 不是对着车挥一下手上的东西。目标不可用时 TryActionLeft 返回假，
+     * 出拳和原来完全一样——判断只有这一处。
+     */
+    if (InteractionComponent->TryActionLeft())
+        return;
     if (InventoryComponent && InventoryComponent->HasHeldItem())
     {
         InventoryComponent->UseHeldItem();
@@ -305,6 +314,11 @@ float ADeliveryCharacter::GetPickupHoldProgress(const AActor *Target) const
 bool ADeliveryCharacter::CanUsePickupTarget(const AActor *Target, bool bCheckTaskAvailability) const
 {
     return InteractionComponent->CanUse(Target, bCheckTaskAvailability);
+}
+
+bool ADeliveryCharacter::CanUseActionTarget(const AActor *Target) const
+{
+    return InteractionComponent->CanUseActionLeft(Target);
 }
 
 ADeliveryMotorbike *ADeliveryCharacter::GetCurrentVehicle() const

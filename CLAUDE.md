@@ -227,17 +227,100 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - **"放哪"只有一处判断**：`ADeliveryCharacter::ReceiveTaskPackage()`。取货点发货、
   地上捡回、上车、下车四条路全走它。散在四处各判一遍的话迟早出现"车上和手上各有一件"，
   而交付时取到哪一件是不确定的。
-- **车上的货**：`ADeliveryMotorbike::AttachCargo/ReleaseCargo`，焊在 `CargoPivot`
+- **整车尺寸：`VisualScale` 默认 0.73（2026-11-05）**。导入时 `IMPORT_SCALE = 1.9` 是按
+  "主角身高 192cm"算的，而那个 192 来自胶囊半高 96、**是个错的数**；主角实测只有 **140cm**
+  （胶囊半高 70、renwu 网格高 139.9）。所以这辆车和车上那个骑手都是照一个 190cm 的人做的，
+  整车 256×136×168cm，站在 140cm 的主角旁边明显过大，而且一上车视野里那个骑手
+  比刚才操控的人高出一头——用户说的"坐上去尺寸也会变大"就是这个，不是什么缩放 bug。
+  0.73 = 140 / 190，车变成约 187×99×123cm。
+  - **不重导资产**：重导要人跑脚本，还会冲掉蓝图上手调过的覆盖值；运行时缩一层在打包版里
+    一样有效（和 `AutoConfigureFromMeshes()` 同一个理由）。
+  - **缩放单独占一层 `MeshScale`**（夹在 `MeshRoot` 和 `MeshAlign` 之间）。`MeshAlign` 的位置和
+    朝向是 `setup_motorbike.py` 量出来写进蓝图的，缩放写在它身上会和那份配置混在一起；
+    而 `MeshRoot` 每帧被写 Roll（压弯）。这一层只由 C++ 管，蓝图里没有它的覆盖值。
+    老蓝图实例上 `MeshAlign` 还挂在 `MeshRoot` 下，`ApplyVisualScale()` 会重新挂一次
+    （和 `RiderMesh` 那条兼容处理同一个手法）。
+  - **缩完必须把视觉整体往下挪**，否则车悬空一截。缩放绕 `MeshScale` 原点做，车底原来在
+    z = Bottom（负数），缩完抬到 Bottom × Scale，所以下移 `(AlignZ + Bottom) × (1 − Scale)`
+    正好抵掉。**不去动 `HoverHeight`**——那是"车辆原点离地多高"，和模型多大无关。
+    `MeshAlign` 只有 Yaw，所以它的旋转不改变 Z，直接加它的相对高度就行。
+  - **碰撞盒跟着缩**（`BaseCollisionExtent` × `VisualScale`）：只缩画面不缩碰撞的话，
+    车会在离墙十几厘米的地方就"撞上"，而画面里还差一截。下车落点用的是碰撞盒实际尺寸，
+    自动跟着变。
+  - **轮子转速要除以缩放**：纯滚动算的是线速度 / **世界**半径，而 `WheelRadius` 是导入
+    空间的数，缩放之后世界半径是它乘 `VisualScale`。不除的话轮子会转快一截（打滑感）。
+  - 回归测试 `Delivery.Vehicle.Trunk` 里断言"缩放前后车底高度不变"（容差 1cm）
+    和"碰撞盒跟着缩"。
+- **车上的货在后备箱里，装卸是一个独立动作（2026-11-05 改）**。
+  `ADeliveryMotorbike::AttachCargo/ReleaseCargo` 仍然是登记入口，快递焊在 `CargoPivot`
   （挂 `MeshAlign` 下面，所以继承车头朝向修正和压弯侧倾）。**用焊接不用物理约束**——
   车是运动学的，约束另一端相当于无穷重刚体，Chaos 会把误差全算到快递头上，
-  表现是快递在车后面疯狂抽动（拖人那套踩过同一个坑）。`CargoOffset` **留零时由
-  `AutoConfigureFromMeshes()` 自动量**（取车尾 35% 那批部件的顶面中点——整车包围盒的
-  `Max.Z` 是车把高度，用它会把快递架到半空）。要手填的话注意"往后"是 **−Y 不是 −X**：
-  MeshAlign 局部空间里 +Y 才是车头，填错的表现是快递挂在车侧面。
-- **上下车自动换手**：`TryEnter` 把手上的快递搬到车上（**必须排在 attach 之后**，
-  因为 `GetCurrentVehicle()` 是从附着父级推出来的，attach 之前这个人还"不在车上"），
-  `ExitVehicle` 搬回手上（排在 `StartRagdoll` 之后，刚体没重建时算出来的手部位置是旧的）。
-  交回去失败（背包满、人晕了）就留在车上——车还能用 R 召唤回来，掉出世界的快递要重跑一趟。
+  表现是快递在车后面疯狂抽动（拖人那套踩过同一个坑）。
+  - **流程**：手上有货走到车边 → 浮窗显示「左键装货」→ 开盖、快递落进箱子、合盖（约 1.15 秒）
+    → 这之后才显示「按 F 驾驶」。下车后再走到车边 →「左键取货」→ 开盖、快递升出来、
+    合盖 → 回到手上。实现在 `Vehicle/DeliveryMotorbikeTrunk.cpp`（和骑手一样是
+    `ADeliveryMotorbike` 的一部分，分文件只是因为主文件已经很长）。
+  - **"手上有货不给上车"和"装货动作"必须一起做**。只加装货、不去掉 `TryEnter` 里
+    原来那段"顺手把手上的快递搬到车上"，表现就是按 F 直接带货上车、新动作永远用不到。
+    现在那段删了，门槛收在 `CanDriveNow()` 一处，车身那个 F 交互组件通过
+    `CanUse` 委托问它——**提示和按键读同一个条件**，不会出现"提示说能上、按下去没反应"。
+  - **F 目标的 `CanUse` 是在 `CanInteract()` 里问的，而且只对 F 问**。E 那边刻意保留
+    "不能取的快递也要显示原因提示"，在 `CanInteract` 里拦掉会把提示一起拦没，
+    玩家只看到"走过去什么都不出现"。
+  - **左键这个交互键是新加的**（`EDeliveryInteractionKey::ActionLeft`）。左键平时是出拳，
+    所以这类目标**只在 `CanUse` 通过时**才被探测器选中：手上没货、箱子也空着的时候
+    站在车尾照样能挥拳。路由只有一处——`ADeliveryCharacter::DoAttackLeft()` 开头
+    `InteractionComponent->TryActionLeft()`，返回假就按原来的逻辑出拳。
+  - **一个 Actor 上有两个交互组件，所以 `FindOn` 必须按键找**。摩托车同时挂着
+    "按 F 驾驶"和"左键装卸货"，不带键的 `FindOn` 只拿第一个，服务器就会复核错对象，
+    表现是"提示是装货、按下去却上了车"。`UDeliveryInteractableComponent::FindOn(Actor, Key)`
+    是为此加的，交互组件里原来那几处不带键的调用都已经改成带键。
+  - **交互半径和 F 一样是 300**（`TrunkInteractRadius`）。手上有货时 F 提示被压掉，
+    这个半径更小就会出现"站在车头什么提示都没有"的死区；提示浮窗吊在后备箱上方，
+    "该走到车尾"是靠提示的位置告诉玩家的。
+  - **箱盖、箱体、箱内位置全是按包围盒自动认的**（`AutoConfigureFromMeshes`）。
+    这 9 个网格叫 `摩托车_车_001`…`_008`，名字里没有任何信息。判据：箱盖 = 车尾那块
+    **最高的扁平件**（厚度不到平面尺寸四成），箱体 = 紧贴它下面、平面上和它重叠的那块。
+    实测这辆车箱盖是槽位 **1**（79×63×14，顶面 z=93，整车最高）、箱体是槽位 **7**
+    （69×56×56，顶面 z=80）；铰链在箱盖后沿底边 (−49, −68, 79)、箱内 (−49, −37, 52)、
+    箱口 (−49, −37, 118)。认不出来时退回车尾、盖子不动并点名一次——
+    **"盖子乱翻"比"盖子不动"难查得多**。
+  - **箱盖铰链在前沿、向后翻开**（`bTrunkLidHingeAtFront`，默认开）。
+    **这一个开关同时决定"铰链落在箱盖哪条边"和"往哪边转"**，所以配不出
+    "铰链在后沿却往后转"这种把盖子转进车身的组合——那种错只能靠眼睛发现。
+    `TrunkLidOpenAngle` 因此是个正数（开多少度），不再承担方向。
+    旋转用 `FQuat(X 轴, 角度)` 写、不用 `FRotator` 的 Roll：绕 +X 的四元数旋转在代数上
+    一定是 +Y → +Z，方向是推得出来的；而 Roll 的正负约定本仓库的注释和引擎实现
+    曾经对不上（"UE 里正 Roll 是往左倒"那句）。盖子挂在自己的 `TrunkLidPivot` 上、
+    网格把铰链偏移减回去，和轮子那套手法完全一样。回归测试断言的也是**几何方向**
+    （铰链对面那条边必须往上、铰链那侧必须往下），不是角度数值。
+  - **装好之后快递整件隐藏**。它在一个关好的箱子里，看不见才是对的；而且快递比内腔大时
+    不藏就会穿出箱盖。只有动画期间才显示（从箱口落进去 / 从箱里升出来）。
+  - **交接只在动画结束那一刻做**：装货是结束时才隐藏，取货是结束时才 `ReceiveTaskPackage`。
+    中途被打断快递仍然在箱子里，不会凭空出现在两个地方。交不回去（背包满、人晕）
+    就重新入箱，走回来再按一次。
+  - **动画只靠一条多播起始通知，不复制进度**。两端各自从头播同一条时间线——
+    这是个一秒多的表现动画，同步中间进度不值当。
+  - **下车不再自动把货交回手上**：`ExitVehicle` 连 `ReleaseCargo` 都不调，
+    调了就等于"下车即卸货"，车上那条记录也没了。
+  - **`Delivery.Carry.Dump` 现在扫全场的车**，每辆报后备箱里有什么、驾驶员是谁、
+    你离箱子多远、此刻能不能装/能不能取。装箱之后下车时 `GetCarriedTaskPackage()`
+    是空的（它只在骑车时才查车上），光看上面那两行会显示"没带"，
+    而货其实在车屁股里——**这正是最容易被当成"快递丢了"的状态**。
+  - 回归测试 `Delivery.Vehicle.Trunk`。「取货成功交回手上」依赖任务管理器，
+    自动化世界里没有，所以那一条只验了"交不回去就留在车上"的兜底，成功路径要在真实关卡验收。
+- **骑车时不能在取货点领货（2026-11-05）**：`UDeliveryPickupPointComponent::CanPickup`
+  拦掉 `IsRidingVehicle()`，`GetBlockedReason()` 返回「按 F 下车取货」。
+  不拦的话骑车按 E 会把快递**直接塞进后备箱、没有开盖动画**，和"走到车尾按左键装货"
+  两条路并存。原因文字走的是 E 目标那条"不可用也要显示原因"的既有通路，
+  所以玩家看到的是该做什么，而不是走过去什么都不出现。
+  `GetBlockedReason(Interactor)` 带上了交互者参数——早先那版在函数里抓
+  `GetFirstPlayerController()`，同机多人时会按别人的骑车状态显示我的提示。
+  交付（收件点）**没有加这道拦**：骑到门口直接交货是现在就通的，也更顺手。
+- **鼠标视角灵敏度 0.75 → 0.4（2026-11-05，用户反馈转视角太快）**。
+  `UDeliveryInputComponent::MouseLookSensitivity` 和 `ADeliveryMotorbike::MouseLookSensitivity`
+  **两个同名字段要一起调**：只改一个的表现是"走路正常、一上车就甩飞"，
+  而两个数单看都像是对的。手柄右摇杆和摩托车的固定车尾视角都不受这个值影响。
 - **骑车时按 E**：摩托车绑 `IA_Pickup` 后**转发给驾驶员那具身体**
   （`Driver->DoPickup()` / `DoPickupRelease()`），不在车上另写一套。
   配套地，交互探测器的门槛从"本机操控"放宽成"本机操控**或者**我是本机操控的车的驾驶员"
@@ -415,6 +498,324 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - 奖励结算有单元测试（`Task/DeliveryRewardTests.cpp`，筛 `Delivery.Task` 跑）。`EvaluateReward` 是纯函数，档位顺序、超时边界、特殊事件重复计数这些在 PIE 里只表现为"钱好像不太对"，靠肉眼对不出来。
 - 仍没做：手机 UI、存档；`DeliveryItemId` / `SpecialEventId` 的解析。对接点见文档第七、八节。
 
+### 源美术文件的位置（`Design/Art/`）
+未导入的源文件（FBX/Blend 之类）统一放 `Design/Art/<类别>/`，**不要散在工程根目录**。
+和 `Design/Audio/GeneratedSFX`（音效源 WAV）同一个约定：`Design/` 存"进引擎之前的东西"。
+
+| 位置 | 内容 | 谁读它 |
+|---|---|---|
+| `Design/Art/Vehicles/摩托车.fbx` | 摩托车整车 + 坐姿骑手 | `setup_motorbike.py` 的 `FBX_DIR` |
+| `Design/Art/NPC/*.fbx` | 六个路人 | `setup_npc.py` 的 `FBX_DIR` |
+| `Design/Art/Buildings/laotoujia1_fixed.fbx` | 老头家（修过的） | 暂时没有脚本读 |
+| `Design/Debug/Ragdoll/*.png` | 早期布娃娃排查截图 | 没人读，留着当记录 |
+
+**路径只写在脚本顶部的 `FBX_DIR` 一处**，拼接走 `unreal.Paths.project_dir() + FBX_DIR`。
+早先 `setup_motorbike.py` 是 `project_dir() + FBX_NAME`（直接拼根目录），
+那种写法把"文件在哪"和"文件叫什么"混成一个常量，挪一次位置要改两处。
+
+**`pcg/PATH-CREATE2.uasset` 还留在根目录没动**：`.uasset` 放在 `Content/` 外面引擎根本看不见，
+而它和 `Content/PCG/ROAD-CREATE*.uasset` 是一套，看着像是导出时落错了地方。
+搬进 `Content/PCG/` 会**凭空多出一个资产**、还可能带着解析不了的引用，
+这种改动得在编辑器里看着它的引用关系做，不该由脚本顺手搬——先留着，等要用它时再处理。
+
+### 街上的路人（NPC）
+普通街道路人默认使用 `ADeliveryPedestrianRoute::bRoamInArea`：以生成点为中心在默认 300 cm 半径内随机选短目标，走 120–320 cm 后停一下，再换方向；同点出生位置至少相隔 90 cm。`testfortraffic` 既有四个生成点相距至少 2600 cm，活动圆互不重叠，运行时不接驳长路线。`setup_npc.py` 重摆时也按这四个独立活动区配置。长样条与端点接驳代码保留为 `bRoamInArea=false` 的特殊模式，**以后单独用于学校门口一群小孩过马路**；这次没有实现过街编队和交通灯联动。
+
+`Design/Art/NPC/` 下是六份未导入的 FBX（小男孩、小女孩、中年男、中年女、老爷爷、老奶奶）。
+**源美术文件统一放在 `Design/Art/` 下，不散在工程根目录**（见上面「源美术文件的位置」一节）。
+离线解析过的事实：
+
+- **有蒙皮**（Skin 1 / Cluster 29），骨骼是 **Mixamo 标准命名**
+  （`Hips` / `Spine`→`Spine2` / `Neck` / `Head` / `LeftUpLeg` / `LeftLeg` / `LeftArm`…），
+  六个角色骨骼名完全一致 → **共用一个 Skeleton**，以后一份走路动画六个人通用。
+- **没有走路动画**：`AnimStack` 有 1 个，但 `AnimCurveNode` 和 `AnimLayer` 都是 **0**，是个空壳。
+- **绑定姿势就是站姿**，所以导入时 `use_t0_as_ref_pose` **保持关闭**。摩托车骑手那次要开，
+  是因为那份 FBX 的坐姿写在骨骼节点的当前变换里；在这里开着反而会用 t0 覆盖绑定姿势。
+- **贴图是内嵌的，六个都有**（每人一张 base color JPEG）。**这一条推翻了之前「贴图大概率缺失、导进来是灰白模型」的结论**——
+  离线扫 FBX 只扫到一处内嵌，是因为那种扫法按文件名找引用，而内嵌贴图没有文件名；
+  真导进去之后六张全解出来了（`Content/Characters/NPC/*_basecolor.uasset` + 六个 `tripo_mat_*` 材质）。
+  **导入会在 FBX 旁边生成 `<名字>.fbm/` 目录**存放解出来的贴图，那是中间产物、已 `.gitignore`
+  （贴图本身已经是 `Content/` 下的 uasset，提交 `.fbm` 等于把同一份数据存两遍）。
+
+- [ADeliveryPedestrianRoute](Source/Delivery/NPC/DeliveryPedestrianRoute.h) ——
+  关卡里的一条人行路线，自己按配置生成路人并在两端回收。**样条默认两个点就是线段**；
+  留着样条而不用两个裸坐标，是为了以后想让人流绕过花坛时不必换类。
+  生成只在服务器做，路人自己复制移动（和交通车同一套）。
+  配置：`Kinds`（外观 + 权重）、`WalkAnim`、`MaxAlive`、生成间隔、速度区间、
+  `LateralJitter`（横向抖动，免得人流排成一条笔直的线）、`AppearDistance`。
+- [ADeliveryPedestrian](Source/Delivery/NPC/DeliveryPedestrian.h) ——
+  运动学推进、不进物理、不接 AI 与寻路，每帧向下打射线贴地。
+
+踩过和刻意选择的地方：
+
+- **出入场按距离算、不按时间。** 快走的人和慢走的人要在同一个位置完成出场；
+  按时间算的话快的人会在离端点很远的地方就已经是原尺寸了。
+- **缩放不在 `ReplicatedMovement` 里**（它只带位置、旋转和速度），所以 `AppearAlpha`
+  要单独复制。不复制的表现是**客户端一个路人都看不见**——他们在服务器上被缩放成原尺寸，
+  客户端却停在生成时那个接近零的缩放上，而位置一直在正常更新，看着像渲染问题。
+  出入场窗口以外 Alpha 恒为 1、不再发包，所以带宽只花在两端。
+- **只做缩放、没做透明淡入淡出。** 淡出要求材质是 `Translucent`，而角色材质是 Opaque；
+  改过去会丢阴影、出半透明排序问题，还得给六个角色各八个材质槽建 MID。
+- **路人不参与碰撞。** 开了碰撞他会把布娃娃顶翻，而他本身是运动学推进的、撞上也不会让路，
+  表现只会是玩家被一个不动的人卡住。
+- **身体有两个固定槽位**（`Mesh` 和 `PoseableBody`），按路线有没有配 `WalkAnim` 二选一：
+  配了用 SkeletalMesh 单节点播放（播放速率 = 实际速度 / `WalkAnimReferenceSpeed`，不然会滑步），
+  没配用 PoseableMesh 走 **C++ 程序化步态**。做成两个槽位而不是运行时换组件，
+  是因为**换组件类型会丢蓝图 CDO 上那个组件的实例覆盖**（摩托车骑手那次栽过，
+  表现是"车上突然没人"）。
+- **程序化步态全部在组件空间下叠加**，不碰骨骼各自的局部轴向：这几份模型来自 Blender，
+  哪个局部轴是"摆腿轴"并不保证一致，而组件空间的 X 永远是角色正前方。
+  相位按**走过的路程**推进而不是按时间——走得快的人步频自然就高，不用再调频率参数，
+  也不会出现"腿的速度和位移速度不一致"的滑步。
+- **参考姿势只在换上网格那一刻读一次**（`CacheGaitReferencePose`）。每帧现读会读到
+  上一帧自己写进去的值、角度一路累积，和出拳那边"禁止独立积分旋转"是同一个教训。
+- **手臂必须显式垂到体侧**（`ArmRestDownAngle` 78 / `ArmRestOutwardAngle` 8）。
+  六份 FBX 的绑定姿势是 T 字形，而程序化步态只在参考姿势上叠一个前后摆，
+  所以第一版的路人是**平举着双手前后划**的。垂手的增量按**实测的上臂指向**
+  （肘位 − 肩位）求最短旋转，不写死"绕 X 轴转 90°"——那要求绑定姿势正好是标准
+  T 字且左臂正好朝 −Y，换一份 A 字或镜像导出的模型会把手转到背后。
+  外张朝哪一侧也由实测方向的 Y 符号决定。只写上臂：PoseableMesh 改父骨的
+  组件空间旋转时子骨跟着走，前臂只用来量方向。
+- **一根骨头一帧只能写一次**。`AddBoneSwing` 每次都从参考朝向重算再整份写回，
+  所以"先垂手再摆动"的写法后一次会把前一次抹掉，表现是**垂手像没生效**。
+  要叠就先把增量乘起来再写（`SetBoneDelta`）。站立的 `UpdateIdleSway` 原来
+  连写两次 Spine（X 轴 + Y 轴），同一个原因导致**只有后一次生效**，一并修了。
+- **膝盖只往后弯**，所以小腿那一项是单向的（`FMath::Max(0, …)`）；给成双向的话
+  抬腿时小腿会向前反折，一眼就是坏的。
+- **骨骼名对不上时要点名一次**（换了不是 Mixamo 命名的模型）。不点名的话表现只是
+  "人在滑行"，而那和"忘了配动画"长得一模一样。
+- **方向不用 `GetDirectionAtDistanceAlongSpline`**：本项目的样条上它返回过零向量
+  （见「端点切线」一条），方向错了表现是路人原地朝 +X 走。兜底用两个采样点作差，
+  不退回固定轴向——那会把"取不到方向"伪装成"方向朝 +X"。
+- **开局先铺满**（`bPrewarmOnBeginPlay`）：不铺的话玩家一进图看到的是空街，
+  人要等十几秒才从端点陆续冒出来。
+- **身高必须按种类单独写**（`FDeliveryPedestrianKind::HeightScale`）：六份源模型的包围盒高度
+  按**老的 FbxFactory** 路线实测**全是 99.8 cm**（归一化过的），所以同一个导入缩放
+  会把所有人都拉到同一身高——
+  小男孩和中年男一样高。相对高矮不在模型里，只能在配置里表达
+  （当前小孩 0.60 = 84 cm、中年 1.00 = 140 cm、老人 0.80 = 112 cm；
+  **被 Interchange 接走时量到的是 192 cm**（那条路把 `FbxImportUI` 的缩放整份忽略、
+  按自己的单位换算），所以报告里"导入路"那一列要看一眼——拿 192 当源尺寸会算出
+  偏小的缩放。基准 `TARGET_ADULT_HEIGHT = 140` = **主角实测身高**：BP_DeliveryMan 的胶囊半高是
+  **70**、renwu 网格高 139.9，两边对得上。**不是 96**——CLAUDE.md 早先记的那个数是错的，
+  按它反推 192 会让路人整体比主角高出一头，第一版就这么错过一次。
+  **改这个基准要重跑 `setup_npc.py` 整套重导**：共用缩放是烤进资产的，
+  只改系数不重导的话六个人还是按 175 的尺寸进来）。
+  身高写进**出生变换**而不是生成之后再 `SetActorScale3D`：路人在 `BeginPlay` 把当时的缩放
+  记成 `BaseScale`、出入场曲线乘在它上面，生成后再改会被出入场缩放当场覆盖掉。
+  挑"哪一种"和取"它的身高"是同一次决定（`PickKind` 一次输出两个值）——分两次查会在
+  权重随机那一步各挑一次，表现是小孩配着大人的身高。
+- **受击与被车撞**（2026-11-04）。路人走路时是运动学的、没有物理刚体，所以要两样东西：
+  一个**挨打用的查询胶囊**（`HitBox`），和被打中那一刻**切成真布娃娃**吃冲量。
+  - **路人有自己的碰撞通道** `Pedestrian`（`ECC_GameTraceChannel3`，见
+    [DeliveryCollisionChannels.h](Source/Delivery/Combat/DeliveryCollisionChannels.h)），
+    **刻意不复用玩家布娃娃的 `PhysicsBody`**：那个通道被抓取候选搜索、拖人、
+    摩托车贴地探测一堆现有查询盯着，路人挂上去会被它们全部捎上
+    （"能抓起路边的行人"、"摩托车贴地贴到人头上"），而且每一处都要单独去排除。
+    响应配置是照引擎自带的 `Ragdoll` 抄的，只把物体类型换成自己的通道。
+  - **拳头和车各自单开一次扫掠**，不并进已有的那两条。拳头原来是
+    `SweepMultiByChannel(ECC_PhysicsBody)` 之后只认 `ADeliveryCharacter`；
+    往里加通道会改变它的命中集合，而那条查询是调通过的——摩托车受击当初也是
+    因为同一个理由才单开一次 `ECC_Pawn`。
+  - **判据是"实现了 `IDeliveryImpactReceiver`"**，不是 `Cast<ADeliveryPedestrian>`。
+    后者会让 `Combat/` 和 `Traffic/` 反向依赖 `NPC/`，而且同一个判断要在出拳和
+    撞车两处各写一遍。接口只有两个方法：`ReceiveImpact` 和 `IsKnockedDown`。
+    玩家角色**不**实现它——角色走 GAS 扣血那条完整路径（血量、晕倒、起身），
+    路人受击后跌倒、爬起，再继续行走。
+  - **冲量倍率单独给**（`GA_DeliverPunch::PedestrianImpulseScale`，默认 1.6）：
+    普通程序化跌倒取冲量的方向；开启可选物理布娃娃时再使用它的力度。
+  - **撞车只取方向、力度用固定基准**（`PedestrianImpactImpulse`）。
+    `CarVelocity` 不能直接乘：`OnRouteLost` 把车瞬移回出生点那一帧会算出假的巨大速度
+    （实测 3053 cm/s，而 `MaxSpeed` 随机范围只有 600~1500），那一下会把路人抽到天上。
+  - 导入仍生成物理资产（`create_physics_asset=True`），供可选的真实布娃娃使用；
+    普通程序化跌倒不依赖它，自动化测试里的无物理资产临时网格也能完成跌倒和爬起。
+  - 再被打/再被撞**不重置起身计时**；路人始终留在原生成点的在场名单里，
+    避免倒地期间额外补出新人。
+  - 验收：`Delivery.Pedestrian.Knock`（把最近的路人打飞，不用真去揍——
+    手动验收要同时满足"站得到跟前"和"时机对上命中窗口"）。
+- **走走停停 + 路网接驳**（2026-11-04）。
+  - **停下来腿会自动停**，这是现成的：步态相位按**走过的路程**推进
+    （`GaitPhase += |ΔDistance| / StrideLength`），速度为零相位就不动，
+    不会出现"原地踏步"。所以"走走停停"只需要让它停。
+  - **停顿按路程抽，不按时间**（`PauseIntervalMin/Max`，单位 cm）：
+    按时间的话走得快的人显得更频繁地停。
+  - **出入场窗口里不许停**：那两个窗口按距离算缩放，在里面停住会卡成
+    "一个半大小的人站着不动"，看着像渲染坏了。碰上就把下一次停顿推迟到走出窗口，
+    **不是取消**——取消的话每次都正好在端点附近被吃掉一次。
+  - **站住要有小动作**（`IdleSwayAngle` / `IdleSwayPeriod`）：腿停了是对的，
+    但完全不动看着像卡住。另起一个**按时间**走的慢晃动，只晃躯干不碰腿——
+    腿一动就和"脚钉在地上"矛盾，变成原地滑步。停下时朝向还会随机偏开
+    `PauseLookAroundAngle`（像在看橱窗），站得笔直不动最像卡住。
+  - **接驳**：走到端点先找一条相连的路线继续走（`FindContinuation`），接不上才退场。
+    连通判据**只看端点到端点**（`ConnectDistance`，默认 400），中段靠得近的两条路
+    不算连通，否则路人会在路中央凭空拐弯。和交通车"终点有没有同向下家"同一个思路。
+  - **换线那一头不能淡入、还能接下去的那一头不能淡出**。不处理的表现是
+    路人在路口原地缩到看不见再长回来。"还能接下去"要同时满足"接驳次数没用完"
+    和"那一端真的有下家"——只查后者的话，用完次数的人会一路走到端点才突然消失。
+  - **接驳次数必须有上限**（`MaxHandoffs`，默认 6）：不限的话开局那批人一直在
+    路网里转，路线的人数上限永远是满的、再也不生成新人，街上永远是同样几个面孔。
+  - **在场名单先摘后加**：顺序反了的话同一个人同时算在两条路线上，
+    两边的人数上限各被它占一个。目标路线满员就不接（人数上限仍然要守，
+    否则热门路线越挤越多）。
+  - **下家是随机挑的**，不总是第一条——固定挑第一条的话所有人走同一条路线，
+    路网画了也看不出分叉。
+  - 连通表**懒加载**，不在 `BeginPlay` 里建：那时候别的路线的样条点可能还没定型。
+  - `Delivery.Pedestrian.Dump` 会报每条路线两端**有没有下家**。
+    "路人走到路口就消失"最常见的原因就是端点差了一点没判成连通，
+    而那个和"本来就该在这儿退场"长得一模一样。
+- **把没有骨骼的网格交给 `PoseableMesh` 会崩**：`AllocateTransformData` →
+  `FillComponentSpaceTransforms` 按骨骼数索引，数组大小 0 时直接断言。
+  `BeginWalk` 现在先查 `GetRefSkeleton().GetNum()`，没骨骼就退回静态外观并点名一次。
+  自动化测试用的临时网格正好是这种，第一版就崩在那里。
+
+- **路人现在是实心的，而且会让路（2026-11-05）**。这一条**推翻**了上面「路人不参与碰撞」
+  那条结论，但它当初给的两个理由一个都没消失，是被补上的让路逻辑解掉的：
+  - **挨打的胶囊改成 `QueryAndPhysics`，并对 `PhysicsBody`（玩家布娃娃的刚体）Block。**
+    玩家走过去会被挡住，不再穿过去。开关在 `bBlockCharacters`，
+    **在 `BeginPlay` 里应用而不是构造函数**——构造函数读到的永远是 C++ 默认值，
+    蓝图上改的覆盖那时还没套上，表现是"开关调了不生效"。
+  - **刻意不挡 `Pawn`。** 摩托车的碰撞盒是 Pawn 配置、水平推进是带 sweep 的，
+    挡 Pawn 的表现是**路人变成一堵墙把车别停**，而骑车撞人该是把人撞飞。
+    交通车同理（它是运动学的，靠自己那次扫掠撞人）。
+  - **只开碰撞不开让路一定会回到"被一个不动的人卡住"。** 路人是运动学推进的
+    （`SetActorLocationAndRotation`，不带 sweep），所以 Block 对**他自己**的移动
+    毫无作用——他会一路推着玩家走。所以配套加了 `bYieldToObstacles`：
+    每帧往前扫 `YieldProbeDistance`（95 cm），前方有别的路人／玩家／车就停下来等。
+    停下来腿会自动停，因为步态相位是按走过的路程推进的。
+  - **让路必须有超时兜底**（`MaxYieldSeconds` 2.5 秒）。两个人面对面会互相判定
+    "前面有人"、**永久互相礼让**，表现是两个人贴在一起站着不动——交通车那边
+    同一个坑（`MaxBlockedTime`），同一个解法。
+  - **躺着和正在起身的人不用让**：绕不过去，而且他过几秒自己就起来了。
+    不跳过的话一个躺着的人会把整条人行道堵到超时为止。
+  - **出入场窗口里不让路**，和停顿同一个理由：那两个窗口按距离算缩放，
+    在里面停住会卡成一个半大小的人站着不动。
+  - 探测按**物体类型**查（`SweepMultiByObjectType`），不按通道查：这几个通道的
+    默认响应是 `Ignore`，按通道查会被响应筛掉、扫描恒为空。同一个坑在本文件里
+    已经记过三次（避让检测、停车线、这里）。
+  - **把 `PhysicsBody` 的响应改成 Block 不会引出"能抓起路边的行人"**：那条警告说的是
+    改 object **type**；抓取候选搜索那边还有一道 `FindComponentByClass<UDeliveryGrabbableComponent>()`
+    过滤，路人没有那个组件，天然被挡住。改之前查过这个通道上的所有查询。
+  - 验收：`Delivery.Pedestrian.Dump` 现在会报"正在让路，前方有人／已空"；
+    回归测试覆盖"被挡住时停下来""让超时后硬挤过去""躺着的人不用让"。
+
+- **骑车能撞路人了（2026-11-05）**：`ADeliveryMotorbike::ProcessPedestrianImpacts`，
+  服务器每帧沿本帧走过的路径扫一次 `Pedestrian` 物体类型，命中就 `ReceiveImpact`。
+  - **单开一次扫描，不并进已有的那两条**：水平推进那条 sweep 用的是车自己的碰撞响应
+    （而路人刻意不挡 Pawn），贴地那条是竖直射线、只查 WorldStatic/WorldDynamic。
+    往这两条里加通道都会改变它们已经调通的命中集合。
+  - **判据是"实现了 `IDeliveryImpactReceiver`"**，不是 `Cast<ADeliveryPedestrian>`——
+    后者会让 `Vehicle/` 反向依赖 `NPC/`。
+  - **冲量单独给一个数**（`PedestrianImpactImpulse` 48000），不和交通车或拳头共用：
+    质量不是一个量级，共用要么推不动、要么一拳飞上天。
+  - 力度按车速缩放，但有下限（`PedestrianImpactMinScale` 0.3）：慢车蹭一下人是
+    原地瘫软，看着像自己躺下的。低于 `PedestrianImpactMinSpeed`（120 cm/s）不撞人。
+  - **必须挡住瞬移那一帧**：按 R 召唤会把车瞬移过来，那一帧的"路径"极长，
+    会把沿途（其实根本没经过）的路人全部撞飞。所以 `SummonTo` 开头清掉扫描锚点，
+    而且位移超过 `max(车速, MaxSpeed) × dt + 50` 的那一帧整个跳过。
+    交通车那边是同一类问题（`OnRouteLost` 瞬移那一帧算出假的 3053 cm/s）。
+  - **交通车（`BP_car_base`）本来就能撞路人**，`UDeliveryTrafficCarComponent::ProcessPedestrianImpacts`
+    早就接在 `ProcessVehicleImpacts` 上、每帧在跑，这次没有改它。
+
+- **路人被打倒之后会自己站起来（2026-11-05）**。普通模式保留原本可见的身体，
+  按冲量方向在 0.55 秒内倾倒，躺 5 秒后进入 `StandingUp`，1.2 秒程序化起身再继续走。
+  真实布娃娃改成可选的 `bUsePhysicalKnockdown`；没有物理资产也不会消失。
+  程序化步态的手臂下垂角度 78°→84°、外张 8°→5°、前后摆幅 18°→22°；腿部摆幅未改。
+  - **复用主角那套 `Recovering` 不现实**：那是一整套主动布娃娃电机系统，要调好的
+    物理资产和髋部质量修正；路人是 Mixamo 骨架 + 自动生成的物理资产，而且常态走
+    程序化步态（`WalkAnim` 是空的），往 SkeletalMesh 混回去只会混到参考姿势的 T 字形。
+  - **起点取躺着时骨盆的位置，不取 actor 原点**：根骨被物理带着飞，原点可能停在
+    半空或者墙里，从那儿起身会看到人凭空跳一下。
+  - **起始朝向按实测的身体上轴**（骨盆→脊柱连线）构造，不写死"趴着就是 pitch 90"：
+    他可能侧躺也可能仰面，写死一个方向会在一半的情况下先翻到另一边再起来。
+  - **起身的同时走回样条上**：被打飞之后人可能滑出去很远，不重新对齐的话起身结束
+    那一帧会横向瞬移一下。对齐用新加的 `ADeliveryPedestrianRoute::GetDistanceAtLocation`。
+  - **蹲起姿势用钟形曲线**（`sin(alpha × π)`，两端为零）：起点接上躺着的姿势、
+    终点接上正常步态，中间最大读起来才是"撑着地面蹲起来"。给 0 就退化成
+    一块板子立起来，一眼就是假的。
+  - **不另加要复制的状态**：`bKnockedDown` 翻回 `false` 就是"服务器决定起身了"，
+    客户端在 `OnRep` 里自己切过去。再加一个状态就有两份要保持一致，
+    而不一致的表现是客户端那边人躺着不动、服务器上他已经走了。
+  - **跌倒期间不从生成点的在场名单里摘掉**：他几秒后会回来，摘掉会让生成点补出新人。
+    起身后显式恢复 `AppearAlpha=1`，避免缩放状态残留。
+  - **挨打的胶囊要以 `QueryAndPhysics` 还回来**，否则起身后不能再打，也不能挡住玩家——而那和
+    "命中窗口没对上"长得一模一样。
+
+导入与摆点：`Content/Python/setup_npc.py`（`import_npcs()` + `place_route()`，各自幂等）。
+**缩放是量出来的不是填的**：先 1:1 导入，量"中年男"的包围盒高度，按 `TARGET_ADULT_HEIGHT`
+反推一个**六个角色共用的**系数再干净重导。共用一个系数是刻意的——各自拉到同一身高
+会把小孩拉成大人。重导**必须先删再导**，带着已有资产做 `replace_existing` 会被路由到
+Interchange、`FbxImportUI` 的选项（含缩放）被整份忽略。路线只摆在 `testfortraffic`，
+搜 `PedestrianRoute_Test` 可定位。
+
+调试：`Delivery.Pedestrian.Dump`（列线段、在场路人、以及**不出人的原因**：线段长度为 0、
+`Kinds` 为空或权重全为零、骨骼名对不上）、`Delivery.Pedestrian.Spawn`（跳间隔和上限补一个，
+用来区分"节奏问题"和"配置问题"）、`Delivery.Pedestrian.Clear`。
+回归测试 `Delivery.NPC.PedestrianWalk` 覆盖生成上限、沿线段单调前进、出入场缩放端点、
+到端点回收、零长线段与权重全零不生成。
+
+
+### testfortraffic 的测试区布局
+这张图是**手摆的单路口小图**（71 个 actor），用 `BP_TrafficLine*` 手摆样条 + 一个
+`BP_Intersection` + 4 盏灯，**没有 `ClaudeGenLane` 生成车道**（那些在 TestForCharacter 里）。
+摸清这件事花了一轮：按生成图的假设去找 `Lane_*` 会报"找不到车道"然后什么都不摆。
+
+`Content/Python/arrange_test_area.py` 把它重排成"交通在一角、原点一侧留给 NPC/任务测试"：
+
+- 地板 `Floor`（`SM_Template_Map_Floor`）缩放 8 → **20**，半尺寸 4000 → 10000，
+  覆盖 X [-10410, 9590] / Y [-10000, 10000]，**顶面仍是 z=0**。
+  **Z 的缩放不能跟着放大**：这块板中心在 z=-200、厚 400，顶面刚好 z=0；
+  一起放大 Z 会把顶面抬到 z=+1800，所有东西当场悬空。
+- 32 个交通 actor **整体平移** +(5500, 6300) 到 +X+Y 角，现在占 X [3420, 8233] / Y [3310, 8324]。
+  **平移量对所有交通 actor 必须是同一个值**：`BP_Intersection` 靠
+  **自己的 Box 和路段的 Box 重叠**找它管的子节点，各自挪不同的量会让路口找不到灯组，
+  表现是"红绿灯没了"。
+- **幂等靠打标签**（`ClaudeGenTrafficMoved`），不靠判坐标——按"是不是已经在角上"判断不可靠，
+  用户可能自己又拖回来一点，而重跑一次就再平移一遍。
+- 玩家的摩托车**刻意不跟着挪**（留在 (1540, 0)），它属于测试区。
+- 这张图**没有 PlayerStart**，玩家出生在世界原点，正好落在空出来的测试区里。
+
+测试区里现在有：
+
+| | 位置 | 配置 |
+|---|---|---|
+| `Task001_PickupPoint` | (-2000, -1500) | `Location_Restaurant_001`，PackageClass 留空 → 内置测试快递 |
+| `Task001_DropOffPoint` | (2000, 1500) | `Location_OldManHouse_001` + `DA_Task_001` |
+| `PedestrianRoute_Test_*` | (-600/-3200, ±3000) | 四个独立活动点，各在半径 300 cm 内游走，六种外观可出现 |
+
+取货点和收件点相距 5000 cm，交互半径各 200 cm，**地点编号和主地图用同一个**
+（`Tasks.csv` 里 Task_001 写的就是这两个 ID；两张图不会同时加载，不冲突）。
+任务清单在 `BP_DeliveryGameState.TaskDefinitions` 上（已含 DA_Task_001），
+GameMode 是项目全局默认、**这张图没有覆盖**，所以任务系统本来就是通的，只缺这两个点。
+脚本：`place_task_points.py`（落点写死，不去找路）、`setup_npc.py` 的 `place_route()`。
+
+**把车流减到几辆并放慢**：`Content/Python/thin_out_traffic.py`（`KEEP` / `MAX_SPEED`）。
+改的是关卡里已有的车、不重新摆。四件事缺一件都达不到"只有两三辆慢车"：
+
+1. 删到只剩 `KEEP` 辆。
+2. 写低 `MaxSpeed`。**低速不影响接车道**：扫描长度 = `UpdateFrameRate`(60) × 5 × 车速，
+   300 的车速也有 90000 cm，实测所需最低车速只有个位数（`Saved/diag_handoff_reach.txt`）。
+3. 关掉 `bSpawnExtraWaves`。不关的话每辆车在自己出生点再克隆两波（15 秒、再 30 秒），
+   **留 3 辆 45 秒后变 9 辆**，表现是"明明删得只剩几辆，过一会儿又多起来了"。
+4. 关掉 `bPushSlowLeader`，并把 `MinPushedMaxSpeed` 一起压下去。**这条最阴**：
+   两辆车一旦近距离跟车，组件会把**前车的 `MaxSpeed` 直接写成自己的**，并把自己压到
+   `max(自己 − PushSlowLeaderSelfPenalty, MinPushedMaxSpeed)`，而那个下限默认 **600**。
+   只要发生过一次跟车，车速就被顶回 600 并**留在那儿**（写的是配置值本身），
+   表现是"车速改了、跑一会儿又快起来了"。
+
+恢复满车流：`py spawn_test_cars.py`。**所有这些脚本都要存关卡**，
+无界面跑时 `save_current_level()` 必须自己调——commandlet 退出时不会替你问要不要保存。
+
+**无界面跑编辑器 Python**（不用让人在编辑器里点）：
+```
+UnrealEditor-Cmd <工程>.uproject -run=pythonscript -script=<绝对路径> -unattended -nopause -nosplash -NullRHI
+```
+驱动脚本要自己 `LevelEditorSubsystem.load_level()`（否则两个脚本都会按"关卡不对"退出，
+它们刻意不"顺手摆到当前图上"）和 `save_current_level()`。
+**输出只在 `~/Library/Logs/Unreal Engine/DeliveryEditor/Delivery.log` 里**，
+stdout 重定向拿不到 `unreal.log` 的内容——第一次就因为这个以为"脚本一行都没跑"。
+另外 commandlet 里**没有完整物理场景，`line_trace_single` 常常恒不命中**，
+所以靠射线定高度的脚本要有兜底值，不然会把东西摆到 z=0 以下。
+
 ### 地图与交通场景
 - 旧关卡车实例的 `bReplicateMovement=false` 会覆盖蓝图默认值；交通组件在服务端和客户端均调用 `SetReplicateMovement(true)`，否则客户端会丢弃服务器位置更新。
 - 撞击优先走 `DamageEffect` GE；若回复 GE 抵消本次扣血，服务器补正 HP，确保强撞必定触发晕倒。
@@ -461,6 +862,93 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
   - 车辆碰撞盒保持 `Overlap` **没改成 `Block`**：车是运动学的（`bSimulatePhysics=false`，靠 `SetActorLocation` 沿样条走），Block 在不开 sweep 的情况下根本不起作用；而开了 sweep 会和样条跟随打架（样条要它往前、sweep 把它顶回来）导致抖动。"后车停在后方不超车"靠的是修好之后真正生效的前车探测 + 减速，不是物理阻挡。
   - **分波时间与出生净空（2026-10-29）**：默认开局 15 秒出第二波，再过 30 秒出第三波（畅通时为 45 秒）。生成前服务器检查出生点水平 400 cm、上下 200 cm 内的交通车，包含绕回来的原车；占用则每 2 秒重试，空出来才生成。第三波从第二波实际生成时起算，堵车时顺延。只检查交通车，不把物理 Block 加到运动学车辆上。
   - **跟车加速延迟（2026-10-29）**：每次需要减速都立即降低跟车系数并重置 `FollowAccelerationPause`（默认 1 秒）；最后一次减速后至少保持当前系数 1 秒，才允许回升。前车在探测边缘反复出现/消失时不会立刻加速，等待期间再次减速不受阻。只冻结跟车系数，不控制蓝图的红灯/加速；PIE 中可看 `DebugAccelerationPauseRemaining`。
+  - **红灯停车线 + 斑马线：在主路口前留一段固定净空（2026-11-05）**。
+    目的是把车停在路口外面，空出来那段给行人和斑马线。
+    - **蓝图那套做不到"固定"**。停车位置今天是算出来的副产品：
+      `TraceForIntersection` 的前瞻长度 ∝ 车速，`Deceleration` 的刹停行程又约等于
+      `DecelerationDistance`，所以"停在哪"随车速浮动，**没有任何一个变量代表停车线**。
+      调小 `DecelerationDistance` 只会让刹车变生硬，留出的间距仍然跟着车速变。
+    - **所以在 C++ 里按真实剩余距离刹车**（`GetDistanceToStopLine()`），
+      结果取 min 叠到现有的跟车速度系数上。蓝图图表**一个节点都没改**，
+      车道和路口段**一个 actor 都没重建、没挪位、没删加**——走的还是那条已经接通的
+      `GetSpeedMultiplier()` → `RelativeSpeedMult`。关掉 `bUseStopLine` 回到原行为。
+    - **后车逻辑不用变**：它们看到的只是"前面有一辆停着的车"，走原来那条前车避让，
+      天然依次排在停车线后面。
+    - **只有画了斑马线的路口才提前停**（`StopLineRequiredTag`，默认 `Crosswalk`）。
+      tag 最初由旧版 `setup_crosswalks.py` 打到对应的 `Inter_*` 上，新版只重做外观、保留既有 tag——
+      **"这里有斑马线"和"这里要提前停"是同一个事实，只存一处**；分两处记迟早
+      出现"画了斑马线车还是冲进路口"或者反过来。没 tag 的段**完全不进这段逻辑**，
+      所以其余 47 个路口的零回归是结构上保证的。
+      试过改存项目设置（ini 是文本、能合并）来躲开 `.umap` 没法合并的问题，
+      **没有收益**：斑马线本身就必须存在地图里，地图冲突躲不掉。那个
+      `UDeliveryTrafficSettings` 已经删掉，别再加回来。
+    - **探测距离固定**（`RedLightScanDistance` 1600），不跟车速。蓝图那条 ∝ 车速的
+      前瞻在车停住之后缩到接近 0、看不见红灯，这也是当初要"把红灯状态沿车队传递"
+      的原因；这里必须停住之后还能继续看见灯。
+    - **找路口段必须按物体类型查，不能按通道查**（`SweepMultiByObjectType` +
+      `AddObjectTypesToQuery(Traffic_Road)`）。`Traffic_Road` 在 `DefaultEngine.ini` 里的
+      `DefaultResponse` 是 `ECR_Ignore`，而 `SweepMultiByChannel` 按"被击中物体对该通道的
+      响应"筛选，Ignore 直接跳过——结果是扫描恒为空、**整套停车线静默失效**，
+      和「避让检测一直是死的」那条一模一样。蓝图的 `TraceForIntersection` 用的本来
+      就是物体类型查询（`ObjectTypeQuery7`）。
+    - **判路口段靠"身上有 `StopAtInter` 这个布尔"，不 cast 蓝图类**。实测
+      `BP_TrafficLine1`（车道段）没有这个属性，只有 `BP_TrafficLine1_IntersectionChild`
+      有，所以属性本身就是唯一判别。硬编码蓝图路径在本工程栽过：蓝图被挪过目录，
+      旧路径只剩 `ObjectRedirector`，而 `load_asset` 还会"成功"返回它。
+    - **必须校验方向**（`StopLineSameDirectionDot` 0.5）。路口里两条路的盒子是叠着的，
+      而横向那条的灯**正好相反**，不校验的表现是"绿灯不走、红灯硬闯"。
+      方向取**主样条两个采样点作差**：`GetDirectionAtDistanceAlongSpline` 在本工程的
+      端点上返回过零向量，而 actor 的 forward 更糟——生成脚本 spawn 路口段时
+      只给位置不给旋转，全图所有段的 forward 都是世界 +X。
+    - **死锁兜底必须排在红灯之前、再取 min**。那条兜底（卡够 `MaxBlockedTime` 就强行
+      通过）是为了解两车互相礼让的死锁，而红灯是"合法地长时间不动"；混在一起的
+      表现是车等满 `MaxBlockedTimeAtIntersection` 就**直接闯红灯**。
+    - **越线超过 `StopLineCommitDistance`（200）就不再往回拦**：绿灯时刚压过线、
+      灯转红的那辆车要是当场定在路口里，比闯过去糟得多。
+    - **`StopLineSetback`（默认 400）就是给行人留的那段，也就是斑马线宽度**，
+      两个数要对上。**它不能给太小**：车道段和路口段之间本来留着 `TARGET_GAP`
+      （150 cm）的空隙，那段里 `CurrentFollowSpline` 是 `None`、车算"脱离路线"；
+      停车线落进那条缝里的话，车会停在那儿满 `RouteLostTimeout`（3 秒）被瞬移回
+      出生点，表现是"车到路口前就莫名消失、又从别处开出来"。
+    - **tag 必须以斑马线 actor 为准，而且要能随时校验**：`Content/Python/sync_crosswalk_tags.py`。
+      有标线的段加 `Crosswalk` tag、没标线的摘掉，只改 tag、不动位置样条、不删不加 actor。
+      - **漂移是真发生过的**（2026-11-05 实测）：摆标线和打 tag 曾由两个脚本分别负责——
+        `add_crosswalks_30_45.py` 两件都做，而新版 `setup_crosswalks.py` 只重做外观、
+        保留旧 tag。于是 `Intersection_18` 留下 **3 条孤儿 tag**（最近的标线在
+        2019~3257 cm 外），车在那儿白停 400 cm——**这就是"其他路口表现变了"**。
+        已摘掉；现在 35 条 tag 对应 7 个有标线的路口（30/31/36/38/39/44/45），孤儿 0 条。
+      - **判据是几何关系不是单纯距离**：斑马线必须在段入口的**正后方**
+        （沿行驶方向投影为负、后方距离 150~800、横向 ≤1100）。设计值是
+        `BOX_HALF(128) + SETBACK/2(200) = 328`，主路实测 374~387（路更宽）。
+        只比直线距离的话，对向车道和横向那条路的段都会落进 1200 cm 内被误判，
+        后果是车在**已经过了斑马线之后**才提前停、停在路口里。
+      - **图里一个标线都没有时脚本直接退出、不动任何 tag**：那种情况下"以标线为准"
+        等于摘掉全部 tag，而更可能的解释是加载错了关卡或标线还没摆。
+    - **"往前扫一下有没有斑马线"这条路走不通，别再试**：新版标线是显式关掉碰撞的
+      （`set_collision_enabled(NO_COLLISION)` + `set_actor_enable_collision(False)`），
+      扫掠和射线物理上碰不到。要让它可扫就得给路面漆重新开碰撞，那会被玩家布娃娃、
+      摩托车贴地探测、抓取候选搜索一堆现有查询捎上。而且那等于给同一个事实造第二个
+      来源——tag 本身就是"这里有斑马线"的判断。
+    - `bDrawDebugStopLine` 画出停车线和探测线；PIE 里看 `DebugStopLineDistance`
+      （负值表示已越线，-1 表示前方没有红灯）。
+    - **斑马线已完全重做为贴地静态白条（2026-11-05）**：`Content/Python/setup_crosswalks.py`。
+      保留已有 20 个 `Crosswalk_*` 的锚点、方向与路口选择，量两侧真实道路边界，覆盖双向全宽。
+      白条和间隔各约 50 cm，过街带长 400 cm；每 25 cm 采样路面，抬高 0.8 cm 防闪烁。
+      `/Game/materials/M_CrosswalkPaint` 使用不透明 Surface/BaseColor，关闭标线碰撞和投影阴影；
+      不再通过十几米深的贴花体积投影，所以人物、车辆不会沾上白条。
+      旧版同向车道分组只能算出 360/720 cm 半幅；不能拿它当全路宽。
+      脚本在当前 TestForCharacter 中执行，全量测量和资产生成完成才替换旧斑马线；
+      任一处测不到道路就报错，不能猜高度。资产在 `/Game/Environment/RoadMarkings`，打包无需 Python。
+      不重选路口、不改任何交通 actor/tag/样条；运行前后校验交通数据一致，重跑只更新标线。
+      `Content/Python/add_crosswalks_30_45.py` 则专门为 `Intersection_30` 和 `Intersection_45`
+      各加四条同规格的全路宽斑马线（合计 8 条）。从路口 Box 归属的入口交通段读取方向和纵向位置，
+      再按真实路面量双侧边界；仅给这 10 条入口段补 `Crosswalk` 停车 tag，交通线位置/样条不变。
+      已有斑马线不动，固定标签使脚本可重复执行。
+  - **路口中心的红绿灯已删（2026-11-05）**：`Content/Python/remove_center_traffic_lights.py`
+    按 `ClaudeGenTrafficLight` tag + 类名前缀删掉两张图里共 133 盏。灯是给**人**看的、
+    该立在路口两侧，队友会重新摆。**删灯不影响车停红灯**：灯和路口是两个独立定时器，
+    车读的是 `BP_Intersection` 翻的 `StopAtInter`，整条链上没有任何一步问过灯模型。
+    可逆——重跑 `gen_traffic_lights.py` 就回来。
 
 - **红绿灯模型（`Content/trafficlight/trafficlight`）自带完整变色循环，不要从外部驱动它。**
   用 `dump_light_bp.py` 导出过真实图表确认：`BeginPlay → set traffic light color(start color)`，
@@ -1001,6 +1489,7 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 - **美术资产分两层挂：`MeshRoot`（只做侧倾 Roll）→ `MeshAlign`（车头朝向 + 居中偏移）→ 车体/骑手。** 不能合成一层：`FRotator` 的施加顺序是 Roll→Pitch→Yaw，侧倾和朝向修正写在同一个组件上时，Roll 会绕"修正之前"的局部 X 轴转，而那根轴在修正 90 度之后是车的横向——本该压弯，实际变成点头。UE 里正 Roll 是往左倒，所以右转取负值。
 - **骑车时镜头写死在车尾后方**（`bUsePawnControlRotation=false` + 只继承 Yaw），鼠标不参与。之前用"控制旋转 + 延时回正"，上车瞬间镜头还停在人物原来的朝向上、车头却朝别处，玩家按 W 看到车"横着走"，方向感整个是错的。载具阶段"W 永远是往屏幕里开"比自由视角重要。控制旋转仍然每帧同步成车头朝向——镜头自己不用它，但下车后角色的弹簧臂要用，同步着视角才连续。
 - 上车顺序：先 `GrabComponent->ForceRelease()`（手里还抓着东西的话，约束会把货物/别的玩家一路拖在车上）→ `StopRagdoll()`（关刚体模拟并把网格挂回胶囊，不停的话被挂到车上的身体会一路抽搐）→ 隐藏 + 关碰撞 + 挂到车上 → `Controller->Possess(bike)`。下车反过来，先摆好位置再 `StartRagdoll()`（它内部带 `PlaceOnGround`，顺序反了人会掉在原地）。
+- 步行时主角胶囊关闭，身体刚体改为阻挡 `Pawn`；电动车车身仍用 `Pawn`（交通车据此识别）并阻挡 `PhysicsBody`。车身盒扩大到缩放前半尺寸 130×68×70 cm，减少站在车旁时身体穿进模型。骑车时原有的隐藏和关闭碰撞流程保持不变。
 - **车把与骑手独立求解**：SteerPivot 前叉、BarPivot 车把继续沿用原转角；RiderPivot 不再整人旋转。双手目标挂 BarPivot，双脚目标挂 MeshAlign，由骑手动画代理解四肢 IK。转向角仍不乘速度系数，停车打把也有反馈。
 - **被交通车撞**：`UDeliveryTrafficCarComponent` 在原有的逐帧扫掠撞击之外**单开一次 `ECC_Pawn` 查询**（摩托车碰撞盒是 Pawn 配置，而撞人查的是布娃娃刚体 `ECC_PhysicsBody`；并进同一次查询会把角色胶囊也扫进来、扰动那条已经调通的撞人逻辑），命中后调 `ADeliveryMotorbike::NotifyTrafficImpact()`。
   **来车那边有一张冷却表 `LastImpactTimeByActor`（0.75 秒）**，一次碰撞会连着好几帧重叠，不设冷却的话"撞两下才下车"会在同一次碰撞里就被扣完。
@@ -1126,7 +1615,7 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 
 **车体网格的位置（2026-09-24 改过）**：正式位置是 `/Game/model/vehicles/motor`，不再是 `/Game/Vehicle/Motorbike/Parts`。队友在 `673f3cb 调整地图` 里把 9 个网格移了过去，老目录只剩 1.5KB 的 `ObjectRedirector`（真网格 20KB~280KB，看文件大小就能分辨）。脚本因此炸过一次，症状是**报告里前后自相矛盾**：第 1 步"车体资产已存在，跳过导入"、第 3 步"没有车体网格"——因为跳过判据问的是"目录非空"（重定向器和材质都算），而收集判据问的是 `isinstance(asset, unreal.StaticMesh)`（重定向器不是）。现在两处统一走 `_collect_body_meshes()`，并按 `BODY_DIRS`（新位置优先、老位置兜底）搜索，遇到重定向器会在报告里点名。**重定向器跟不过去**：`UObjectRedirector` 是 intrinsic 类，`DestinationObject` 连 `UPROPERTY` 都不是，Python 读不到目标路径——所以靠的是显式目录列表，不是解析重定向。
 
-这份 `摩托车.fbx`（工程根目录）离线解析出来的三个坑，改导入流程前先读：
+这份 `摩托车.fbx`（现在在 `Design/Art/Vehicles/`）离线解析出来的三个坑，改导入流程前先读：
 - **坐姿写在骨骼的当前变换里，不在网格顶点里。** 绑定姿势（Cluster 的 `TransformLink`）是站姿——膝盖在髋正下方；骨骼节点的当前变换才是坐姿——大腿前伸下压 131°、小腿回折 55°、两手落在把手宽度上。所以骑手只能按**骨骼网格**导入；按静态网格导入只有原始顶点 = 站姿，会得到一个站在车里的人。
 - **而且骨骼网格导入必须开 `use_t0_as_ref_pose`**，这是坐姿能不能进来的开关。名字像是给有动画的文件用的，实际含义见 `FbxSkeletalMeshImport.cpp:1291`：**关着时参考骨架取自 BindPose（站姿），开着才用 `GetNodeGlobalTransform(Link, 0)`（节点当前变换 = 坐姿）**。没有动画不影响，t0 取的是节点变换、不需要 AnimStack。第一版按字面意思关掉了，导进来的骑手是站着的。
 - **车体那 9 个网格没有蒙皮、挂在场景根节点下**（不在骨架层级里），骨骼网格导入器会直接跳过。所以一份 FBX 必须导两次：骨骼网格拿骑手，静态网格拿车体。静态那次用 `combine_meshes=False`（不然会和站姿骑手焊成一块、永远分不开）+ `transform_vertex_to_absolute=True`（顶点留在场景绝对坐标里，于是 9 个组件都摆在相对变换零点就能原样拼回整车，不用手工还原每个部件的相对位置）。脚本里有检测：部件原点全挤在 10cm 以内就说明这个选项没生效，会在报告里点名并给手动兜底步骤。
@@ -1256,6 +1745,19 @@ PlayerController 自动累积到 `DeliveryPromptSubsystem` 的屏幕下方字幕
   新增 UPROPERTY / 改类布局这类改动不可靠，结构一变就该用完整编译。
   等人关编辑器时别写 `sleep` 轮询，起个后台任务等 `UnrealEditor` 进程退出再编。
 
+
+- **"编译成功"不等于"编译进去了"。** 实测两次：编辑器开着（或者**我自己起的
+  `UnrealEditor-Cmd` 自动化还在跑**）时编译，UBT **不一定报 Live Coding 那句错**，
+  而是产出带后缀的热重载模块 `libUnrealEditor-Delivery-0001.dylib`，
+  `UnrealEditor.modules` 不更新，于是下次启动的编辑器加载的**还是旧的那份**，
+  报告里却是干干净净的 `Result: Succeeded`。
+  症状极具迷惑性：埋点一条都不打（看着像"代码没跑到"），
+  新加的测试断言在二进制里**搜不到却照样报 Success**（跑的是旧测试）。
+  判别方法：`ls -lat Binaries/Mac/*.dylib` 看有没有 `-000N` 后缀的文件，
+  或者直接在 dylib 里按 **UTF-16** 搜一个新加的字符串字面量
+  （`TEXT("...")` 存的是 UTF-16，用 `strings`/UTF-8 搜恒为 0，会得出"没编进去"的错结论）。
+  链接成功一次 UBT 会自己把 `-000N` 删掉。
+  **所以：跑自动化和编译不能同时进行**，这两件事我自己就踩了两次。
 - **什么改动需要做什么**：
 
   | 改了什么 | 要做什么 |
@@ -1288,9 +1790,10 @@ Source/Delivery/
 ├── Grab/                            双键抓取：抓取组件、可抓取组件、可抓道具
 ├── Interaction/                     走近按 F：可交互组件、探测组件、Slate 浮窗子系统（含左下角常驻提示）
 ├── Inventory/                       五格物品栏、手持道具
+├── NPC/                             街上的路人（人行路线 + 路人，程序化步态）
 ├── Ragdoll/                         主动布娃娃、布娃娃战斗组件
 ├── Traffic/                         交通车辆辅助组件（卡住重置循环、前车避让减速）
-└── Vehicle/                         可骑载具（摩托车，运动学街机式 + 车尾货架）+ 按 R 召唤载具组件
+└── Vehicle/                         可骑载具（摩托车，运动学街机式 + 后备箱装卸货）+ 按 R 召唤载具组件
 ```
 
 `Content/Python/` 是编辑器 Python 工具链（车道/路口/转弯生成、地形压平、裙边、以及一整套只读诊断脚本），
@@ -1341,6 +1844,43 @@ UI/Controllers 提供任务、快捷栏与交互显示数据，现有控件保�
 详细结构见 Document/Architecture.md
 
 输入与界面拆分：`Input/DeliveryInputComponent` 负责步行输入绑定、组合键判断及失去控制权后的取消；Character 仅保留绑定接入点和玩法入口。`UI/DeliveryHUD` 由 GameMode 创建，管理本机快捷栏并在步行/骑车时解析角色背包。输入配置只在 PlayerInput 组件上编辑，快捷栏配置只在 HUD 上编辑，角色不再保留重复字段。车辆驾驶输入、手机蓝图和既有 UI Controller 沿用原实现。
+
+### 上下车之后输入全失效（2026-11-05 修）
+症状是"骑车下来之后前后左右和鼠标全不管用，人有时还一直往前走"。来电只是巧合，
+**真正的复现是两步：上车、下车**。两个独立的缺陷叠在一起，都由 `705bff7 重构`
+拆出 `Input/DeliveryInputComponent` 时引入（拆之前 `SetupPlayerInputComponent`
+每次都无条件重新绑定，没有这两个问题）：
+
+- **`Bind()` 开头那道"已经绑过了"的早退没人清。** `BoundInput` 只在绑定成功时写入，
+  **失去控制权时从来不清**。而引擎在 `APawn::UnPossessed()` 里会
+  `DestroyPlayerInputComponent()`，重新占有时 `PawnClientRestart()` 新建一个
+  **同名的** `PawnInputComponent0`。于是 `Bind()` 判成"绑过了"直接返回，
+  **一个键都不绑**。现在 `ResetInput()` 里 `BoundInput.Reset()`——
+  那条记录在失去控制权那一刻按定义就已经作废了。
+  **这个失败模式从外面完全看不出来**：绑定关系看上去是"对"的
+  （`Delivery.Input.Dump` 当时报的就是"已绑到 PawnInputComponent0"，和身体当前的
+  组件一致），只是那个组件上一条绑定都没有。
+- **清掉的移动意图会被同一帧的 Triggered 写回去。** 日志实证：
+  `4.316 ResetInput` 和 `4.316 Move=(0.00, 1.00)` 是**同一个时间戳**——
+  `UnPossessed → ResetInput` 把意图清成 0 之后，Enhanced Input 当帧还会再派发一次
+  `Triggered`。之后这具身体就被解除占有了，那次松开永远送不到它头上，
+  `(0,1)` 就永久留在那儿。所以上车时按着 W，下车后人一直往前走；
+  上车时没按，就定在原地——**"卡着不动"和"一直往前走"是同一个原因的两种值**。
+  修法是在 `Bind()` 末尾 `Character->DoMove(0, 0)`：刚接手的身体从零开始，
+  玩家真按着键的话下一帧的 `Triggered` 自然会补回来。
+
+回归测试在 `Delivery.Systems.InputLifecycle` 里，**验证过它会红**：
+把 `BoundInput.Reset()` 注释掉重编，报
+`Expected 'Losing control clears the binding record' to be null`。
+原来那个测试覆盖不到，因为它手搓一个 `UEnhancedInputComponent` 再调 `Bind()`，
+**走不到真实的 `PawnClientRestart` 那条路**——自动化世界里 PC 没有 `ULocalPlayer`，
+`IsLocalController()` 恒为 false，引擎那段创建 InputComponent 的代码根本不执行。
+
+诊断命令 `Delivery.Input.Dump`（非 Shipping）一次列全占有关系、按键绑到哪个
+InputComponent、光标和 `IsMoveInputIgnored`、布娃娃控制模式与移动意图、
+以及每辆车的驾驶员和残余车速。这几件事各自都只是一个布尔量，
+但在 PIE 里逐个猜要很久。
+
 
 双人低帧率：物理子步上限为 24，每步最多 0.008333 秒，避免 10 FPS 时每帧只模拟 0.05 秒。详细身体诊断默认关闭，需要时执行 `Delivery.Physics.Trace 1`。拳头释放后开启检测窗口，服务器在物理更新后沿上一帧到当前帧的拳头路径做球体扫掠；结束或取消时关闭。同一技能实例用 HitActors 保证每拳每目标只结算一次。已删除不再参与检测的 HitWindowDelay。
 
@@ -1410,3 +1950,10 @@ PC 保留输入绑定、服务器请求及旧蓝图转发入口，不再保存�
 
 
 手机 MVC 验证：完整编译通过，27 项自动化检查通过，其中原套件有 6 项带警告。双人 PIE 验证了手动手机开关隔离、共享来电展开、客户端接听后两边播放对白、挂断停声并收起，以及召唤、上下车和视角切换。手机状态、处理器查询与鼠标显示一致。四个电话音效引用已迁移并在重启后核对，HTML 已按手机宽度渲染检查。
+
+### model 模型碰撞设置（2026-11-05）
+按用户要求，/Game/model 及所有子目录的 62 个静态网格体统一使用 Use Complex Collision As Simple；本次修改并保存 55 个，7 个原已符合。骨骼网格体、材质、纹理和重定向器不属于该设置范围。原资产备份及逐项结果位于 Saved/CollisionBackups 和 Saved/model_complex_collision_report.json；独立 StaticMeshEditorSubsystem 读取核对 62/62 符合。此变更尚未验证角色持续上升问题是否消失。
+
+
+### 地图生成范围与角色升空修复（2026-11-05）
+TestForCharacter 的 ROAD-CREATE、POLE-CREATE、GRASSBED-CREATE1 的 PCG BrushComponent 原为 QueryOnly，运行时 WorldStatic/WorldDynamic 地面对象查询会在体积内部得到 initial_overlap、distance=0 的命中，把射线起点误当支撑面，导致主动布娃娃持续上升。已将三个 PCG 范围和 NewProceduralFoliageSpawner 的 BrushComponent 统一设为 NoCollision，并保存地图；生成的模型和树石植被实例碰撞保持开启。原地图 PIE 验证：地面命中改为 Landscape，连续采样髋高度约 2010.43 cm 保持稳定，不再持续升空。未改角色移动参数；排查时对 BP_Axe 的试验碰撞调整已恢复 PhysicsActor。

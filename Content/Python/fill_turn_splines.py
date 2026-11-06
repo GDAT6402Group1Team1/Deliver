@@ -42,7 +42,8 @@ import unreal
 MIDDLE_POINTS_CURVE = True
 
 LANE_TAG_PREFIX = "ClaudeGenLane"
-ONLY_INTERSECTION = ""   # 只处理这个路口（填 actor 名，如 "Intersection_04"）；"" = 全部
+ONLY_INTERSECTIONS = ("Intersection_18", "Intersection_31")
+# 留空元组 = 全图；指定时连「先复制直行」也只碰这些路口的段。
 COLLAPSE_ALL_FIRST = True
 # 开工前先把**全图**所有路口段的 SplineLeft/SplineRight 写成直行副本。
 # 不这么做的话，没被处理到的路口上这两条组件一直停在蓝图默认值——
@@ -580,16 +581,15 @@ def run():
     eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
     actors = eas.get_all_level_actors()
 
-    focus = None
-    if ONLY_INTERSECTION:
-        for a in actors:
-            if a.get_actor_label() == ONLY_INTERSECTION:
-                focus = a.get_actor_location()
-                break
-        if focus is None:
-            w("!! 找不到 %s，改为处理全部路口" % ONLY_INTERSECTION)
-        else:
-            w("只处理 %s @ (%.0f, %.0f)" % (ONLY_INTERSECTION, focus.x, focus.y))
+    focuses = []
+    if ONLY_INTERSECTIONS:
+        by_label = {a.get_actor_label(): a for a in actors}
+        missing_focus = [name for name in ONLY_INTERSECTIONS if name not in by_label]
+        if missing_focus:
+            raise RuntimeError("指定路口不存在，拒绝回退到全图: %s" % missing_focus)
+        focuses = [(name, by_label[name].get_actor_location()) for name in ONLY_INTERSECTIONS]
+        for name, center in focuses:
+            w("只处理 %s @ (%.0f, %.0f)" % (name, center.x, center.y))
 
     segs = []
     unparsed = []
@@ -657,7 +657,25 @@ def run():
             "p_in": p_in, "d_in": d_in,
             "p_out": p_out, "d_out": d_out,
         })
-    w("路口段 %d 个" % len(segs))
+    def mid(s_):
+        return unreal.Vector((s_["p_in"].x + s_["p_out"].x) / 2.0,
+                             (s_["p_in"].y + s_["p_out"].y) / 2.0,
+                             (s_["p_in"].z + s_["p_out"].z) / 2.0)
+
+    if focuses:
+        scoped = {name: [] for name, _center in focuses}
+        for seg in segs:
+            name, distance = min(((name, (mid(seg)-center).length())
+                                  for name, center in focuses), key=lambda item:item[1])
+            if distance < CLUSTER_DIST:
+                scoped[name].append(seg)
+        if any(not members for members in scoped.values()):
+            raise RuntimeError("指定路口没有可处理的段: %s" %
+                               [name for name, members in scoped.items() if not members])
+        segs = [seg for members in scoped.values() for seg in members]
+        clusters = [{"center": center, "segs": scoped[name]}
+                    for name, center in focuses]
+    w("本次范围内路口段 %d 个" % len(segs))
     if trashed:
         w("跳过已销毁未回收的 actor %d 个（上一步刚删掉的旧车道，GC 还没跑）"
           % trashed)
@@ -675,7 +693,7 @@ def run():
                 if c is not None:
                     mirror_straight(s_["actor"], c, s_["main"])
                     n += 1
-        w("先把全图 %d 条转弯样条写成直行副本（清掉蓝图默认的 100cm 残桩）" % n)
+        w("先把本次范围内 %d 条转弯样条写成直行副本" % n)
     if unparsed:
         w("!! 有 %d 个 actor 带着车道 tag 但名字对不上 Inter_<路>_<偏移>_<编号> 格式，"
           % len(unparsed))
@@ -694,20 +712,7 @@ def run():
         flush()
         return
 
-    def mid(s_):
-        return unreal.Vector((s_["p_in"].x + s_["p_out"].x) / 2.0,
-                             (s_["p_in"].y + s_["p_out"].y) / 2.0,
-                             (s_["p_in"].z + s_["p_out"].z) / 2.0)
-
-    if focus is not None:
-        # 指定了路口就直接按到它的距离圈一遍，不做贪心聚类。
-        # 贪心 + 中心不更新会把同一个物理路口劈成两簇：实测 Intersection_04
-        # 少了 Inter_形状13_-0225_I04，四车道主路只进来 3 条，
-        # 南向就没有内道可以做右转了。
-        clusters = [{"center": focus,
-                     "segs": [s for s in segs
-                              if (mid(s) - focus).length() < CLUSTER_DIST]}]
-    else:
+    if not focuses:
         clusters = []
         for s in segs:
             c = mid(s)

@@ -100,6 +100,8 @@ class DELIVERY_API UDeliveryInventoryComponent : public UActorComponent
 	UFUNCTION()
 	void OnRep_Slots();
 
+	friend class FDeliveryMotorbikeTrunkTest;
+
 	// 槽位处理与物体显示
 	void PerformSlotAction(int32 SlotIndex);
 	void ApplyPresentation();

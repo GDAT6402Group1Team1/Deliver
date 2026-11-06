@@ -294,6 +294,7 @@ void UDeliveryActiveRagdollComponent::ConfigurePhysics()
 	Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 	Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 	Mesh->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
+	Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 	// 镜头射线要能选中晕倒角色用于抓取；Visibility 只影响查询，不增加物理碰撞
 	Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	Mesh->SetEnableGravity(true);

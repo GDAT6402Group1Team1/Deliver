@@ -26,6 +26,15 @@ class UStaticMeshComponent;
 class UDeliveryVehicleAudioComponent;
 struct FInputActionValue;
 
+/** 后备箱盖的动画阶段；装和卸共用同一条时间线，只是快递走的方向相反 */
+UENUM(BlueprintType)
+enum class EDeliveryTrunkPhase : uint8
+{
+	Idle,
+	Loading,
+	Unloading
+};
+
 /**
  * 可驾驶的摩托车，按 F 键上下车
  * 车辆不进行刚体模拟，由代码计算速度、转向、贴地和碰撞移动
@@ -39,6 +48,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	friend class FDeliveryRiderContactsTest;
 	friend class FDeliveryRiderRuntimeTest;
 	friend class FDeliveryVehicleSummonTest;
+	friend class FDeliveryMotorbikeTrunkTest;
 
   public:
 	ADeliveryMotorbike();
@@ -97,6 +107,35 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	{
 		return GetCargo() != nullptr;
 	}
+
+	// 后备箱装卸
+	/**
+	 * 手上拿着快递时能不能装车：车上没货、没人骑、也不在播装卸动画
+	 *
+	 * 这是"按 F 上车"那道闸的另一半——手上有货就只给装货、不给上车，
+	 * 两边读同一组条件，不会出现"提示说能装、按下去没反应"
+	 */
+	UFUNCTION(BlueprintPure, Category = "Motorbike|后备箱")
+	bool CanLoadTrunk(const ADeliveryCharacter* Character) const;
+
+	/** 空手时能不能从后备箱取货 */
+	UFUNCTION(BlueprintPure, Category = "Motorbike|后备箱")
+	bool CanUnloadTrunk(const ADeliveryCharacter* Character) const;
+
+	/** 正在播开盖/合盖动画；这期间既不能上车也不能再按一次装卸 */
+	UFUNCTION(BlueprintPure, Category = "Motorbike|后备箱")
+	bool IsTrunkBusy() const
+	{
+		return TrunkPhase != EDeliveryTrunkPhase::Idle;
+	}
+
+	/** 服务器：把角色手上的快递装进后备箱，并开始开盖动画 */
+	UFUNCTION(BlueprintCallable, Category = "Motorbike|后备箱")
+	bool BeginTrunkLoad(ADeliveryCharacter* Character);
+
+	/** 服务器：开盖把后备箱里的快递交回角色手上 */
+	UFUNCTION(BlueprintCallable, Category = "Motorbike|后备箱")
+	bool BeginTrunkUnload(ADeliveryCharacter* Character);
 
 	// 撞击和驾驶状态
 	/**
@@ -163,6 +202,16 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	TObjectPtr<USceneComponent> MeshRoot;
 
 	/**
+	 * 整车视觉缩放层，夹在侧倾层和模型校正层之间
+	 *
+	 * **为什么要单独一层**：MeshAlign 的位置和朝向是 setup_motorbike.py 量出来写进
+	 * 蓝图的，缩放写在它身上会和那份配置混在一起；而 MeshRoot 每帧被写 Roll（压弯）。
+	 * 这一层只由 C++ 管，蓝图里没有它的覆盖值，所以改 VisualScale 一定生效。
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<USceneComponent> MeshScale;
+
+	/**
 	 * 校正模型位置和朝向，使车头朝前、车轮位于地面
 	 * 参数可由模型配置工具计算
 	 */
@@ -177,15 +226,118 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	TObjectPtr<USceneComponent> CargoPivot;
 
 	/**
-	 * 货架相对模型校正层的位置，该层局部正纵轴朝车头
-	 * 零向量表示根据车尾模型自动计算，非零值使用手动配置
+	 * 快递在后备箱**里面**的位置，相对模型校正层（该层局部正纵轴朝车头）
+	 * 零向量表示按箱体模型自动量，非零值使用手动配置
+	 *
+	 * 这替掉了原来那个"货架"偏移（`CargoOffset`，量的是车尾顶面 + 12cm，
+	 * 快递就摆在箱盖上）。现在快递是装进箱子里的，装好之后整件隐藏——
+	 * 它在一个关着的箱子里，看不见才是对的，而且快递比箱子内腔大时
+	 * 不隐藏就会穿出箱盖。
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|货物")
-	FVector CargoOffset = FVector::ZeroVector;
+	FVector TrunkInsideOffset = FVector::ZeroVector;
 
-	/** 货架朝向，相对 MeshAlign；让箱子正面朝外、不至于歪着 */
+	/** 快递在箱子里的朝向，相对 MeshAlign */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|货物")
 	FRotator CargoRotation = FRotator::ZeroRotator;
+
+	// 整车尺寸
+	/**
+	 * 整车视觉缩放，1 表示按原始导入尺寸
+	 *
+	 * **默认 0.73 = 140 / 190**：导入时 `IMPORT_SCALE = 1.9` 是按"主角身高 192cm"
+	 * 算的（那个数来自胶囊半高 96，是错的），而主角实测只有 **140cm**
+	 * （胶囊半高 70、renwu 网格高 139.9）。所以这辆车和车上那个骑手是照一个
+	 * 190cm 的人做的，整车 256cm 长、168cm 高，站在 140cm 的主角旁边明显过大，
+	 * 而且一上车视野里那个骑手比刚才操控的人高出一头——"坐上去尺寸变大"就是这个。
+	 *
+	 * 这里不重导资产：重导要人跑脚本，还会冲掉蓝图上手调过的覆盖值；
+	 * 运行时缩一层在打包版里一样有效（和 `AutoConfigureFromMeshes()` 同一个理由）。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|尺寸",
+	          meta = (ClampMin = "0.1", ClampMax = "3.0"))
+	float VisualScale = 0.73f;
+
+	/**
+	 * 碰撞盒半尺寸（缩放前）；实际用的是它乘 VisualScale
+	 *
+	 * 缩了视觉不缩碰撞的话，车会在离墙十几厘米的地方就"撞上"，而画面里还差一截。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|尺寸")
+	FVector BaseCollisionExtent = FVector(130.0f, 68.0f, 70.0f);
+
+	// 后备箱
+	/**
+	 * 后备箱盖的旋转挂点，铰链在箱盖后沿，开盖时前沿抬起
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<USceneComponent> TrunkLidPivot;
+
+	/** 后备箱的交互测量点和提示锚点，大致在箱体中心 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<USceneComponent> TrunkAnchor;
+
+	/** 后备箱的左键交互（装货/取货）；和车身那个按 F 的交互是两个独立组件 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UDeliveryInteractableComponent> TrunkInteractable;
+
+	/** 箱盖所在的模型槽位；-1 表示按几何自动认（车尾最高的那块扁平件） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Motorbike|后备箱")
+	int32 TrunkLidPartIndex = INDEX_NONE;
+
+	/** 箱体所在的模型槽位；-1 表示自动认（紧贴箱盖下方、和它平面重叠的那块） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Motorbike|后备箱")
+	int32 TrunkBoxPartIndex = INDEX_NONE;
+
+	/** 箱盖铰链位置，MeshAlign 局部空间；零向量表示自动量 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Motorbike|后备箱")
+	FVector TrunkLidHinge = FVector::ZeroVector;
+
+	/**
+	 * 箱盖的铰链在前沿（靠骑手那一侧），盖子**向后翻开**
+	 *
+	 * 这一个开关同时决定"铰链落在箱盖哪条边"和"往哪边转"，所以不可能配出
+	 * "铰链在后沿、却往后转"这种把盖子转进车身的组合——那种错只能靠眼睛发现。
+	 * 关掉就变成铰链在后沿、向前翻开。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|后备箱")
+	bool bTrunkLidHingeAtFront = true;
+
+	/** 开盖角度（正数就是"开多少度"，往哪边开由上面那个开关决定） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|后备箱",
+	          meta = (ClampMin = "0.0", ClampMax = "170.0", Units = "deg"))
+	float TrunkLidOpenAngle = 85.0f;
+
+	/** 快递在箱口上方的位置（MeshAlign 局部）；零向量表示自动量 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Motorbike|后备箱")
+	FVector TrunkOpeningOffset = FVector::ZeroVector;
+
+	/** 开盖/合盖各用多久 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|后备箱",
+	          meta = (ClampMin = "0.05", Units = "s"))
+	float TrunkLidDuration = 0.35f;
+
+	/** 快递进出箱子用多久 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|后备箱",
+	          meta = (ClampMin = "0.05", Units = "s"))
+	float TrunkMoveDuration = 0.45f;
+
+	/**
+	 * 站多近才显示"左键装货/取货"
+	 *
+	 * 默认和车身那个 F 交互一样是 300：手上有货时 F 提示被压掉，如果这个半径更小，
+	 * 站在车头就会**什么提示都不出现**，玩家只知道"按 F 没反应"。
+	 * 提示浮窗吊在后备箱上方，所以"该走到车尾"是靠提示的位置告诉玩家的。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|后备箱",
+	          meta = (ClampMin = "0.0", Units = "cm"))
+	float TrunkInteractRadius = 300.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|后备箱")
+	FText TrunkLoadPromptText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motorbike|后备箱")
+	FText TrunkUnloadPromptText;
 
 	/** 前轮、前叉和车把的转向层，随车身校正与侧倾一起运动 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
@@ -501,6 +653,42 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	UPROPERTY(EditAnywhere, Category = "Motorbike|上下车", meta = (ClampMin = "1"))
 	int32 ImpactsToDismount = 2;
 
+	// 撞路人
+	/**
+	 * 骑车撞上路人时给的冲量基准
+	 *
+	 * **单独给一个数，不和交通车或拳头共用**：路人的刚体质量和玩家布娃娃不是一个
+	 * 量级，共用一个值要么推不动、要么一拳飞上天（交通车那边也是单独给的）。
+	 * 给 0 就是关掉"骑车能撞人"。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|撞路人", meta = (ClampMin = "0.0"))
+	float PedestrianImpactImpulse = 48000.0f;
+
+	/** 撞飞路人时往上抬的比例；纯水平的话人会贴着地面滑出去，不像被撞飞 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|撞路人",
+	          meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float PedestrianImpactUpwardFraction = 0.35f;
+
+	/**
+	 * 力度按车速缩放到满的参考速度（cm/s）
+	 *
+	 * 和交通车不一样，这里**可以**按车速缩放：摩托车的 CurrentSpeed 是自己算的真实值，
+	 * 不是交通车那个"每帧位移 ÷ 帧时间"（那个在车被瞬移回出生点的那一帧会算出
+	 * 假的 3053 cm/s）。但按 R 召唤会瞬移这辆车，所以仍然要挡住瞬移那一帧，
+	 * 见 ProcessPedestrianImpacts 里的位移上限检查。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|撞路人", meta = (ClampMin = "1.0"))
+	float PedestrianImpactSpeedReference = 700.0f;
+
+	/** 慢速蹭到人时的最低力度比例；给 0 的话慢慢顶过去人是原地瘫软，看着像自己躺下 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|撞路人",
+	          meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float PedestrianImpactMinScale = 0.3f;
+
+	/** 低于这个车速（cm/s）不撞人，免得停着蹭一下也把人撞飞 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|撞路人", meta = (ClampMin = "0.0"))
+	float PedestrianImpactMinSpeed = 120.0f;
+
 	// ---- 被撞反应 ----
 
 	/** 把来车速度的多少比例变成自己的击退速度 */
@@ -576,9 +764,14 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> MouseLookAction;
 
-	/** 鼠标自由视角灵敏度；固定视角和手柄右摇杆不受影响 */
+	/**
+	 * 鼠标自由视角灵敏度；固定视角和手柄右摇杆不受影响
+	 *
+	 * 和步行那套保持同一个数（见 UDeliveryInputComponent::MouseLookSensitivity），
+	 * 0.4 = 原始输入的 40%。两边不一致的表现是上下车时手感突变。
+	 */
 	UPROPERTY(EditAnywhere, Category = "Input", meta = (ClampMin = "0.1", ClampMax = "2.0"))
-	float MouseLookSensitivity = 0.75f;
+	float MouseLookSensitivity = 0.4f;
 
 	/** 通用交互输入，默认 F 键，在绑定输入时按需加载资源 */
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -626,9 +819,45 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	/** 把 Cargo 焊到货架上（或在它变空时什么都不做）；两端都要跑 */
 	void ApplyCargoPresentation();
 
+	// 后备箱装卸
+	/** 两端各自跑一遍同一条时间线；服务器只负责开头的校验和结尾的交接 */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastTrunkAction(EDeliveryTrunkPhase Phase);
+
+	/** 推进箱盖角度和快递位置；装卸结束时在服务器上做交接 */
+	void UpdateTrunkAnimation(float DeltaSeconds);
+
+	/** 把箱盖角度写进挂点；Alpha 0 = 关好，1 = 开到 TrunkLidOpenAngle */
+	void ApplyTrunkLidAlpha(float Alpha);
+
+	/**
+	 * 箱盖抬起来的那条边朝哪（MeshAlign 局部方向，用于算旋转方向和写测试断言）
+	 *
+	 * 铰链在前沿时抬的是后沿（−Y），反之抬前沿（+Y）；局部 +Y 朝车头。
+	 */
+	FVector GetTrunkLidLiftDirection() const;
+
+	/** 车身那个按 F 的交互要问的条件：有人骑、手上有货、正在播动画都不给上车 */
+	bool CanDriveNow(const ADeliveryCharacter* Character) const;
+
+	/** 左键交互：按当前状态决定这一下是装货还是取货 */
+	bool CanUseTrunk(APawn* Interactor, bool bCheckTaskAvailability);
+	bool UseTrunk(APawn* Interactor);
+
+	/** 按当前状态刷新"左键装货/取货"的文字和开关 */
+	void ApplyTrunkPresentation();
+
 	// 模型与骑手显示
 	/** 把 BodyMeshes 里的网格铺到固定槽位上，多余的槽位清空 */
 	void ApplyBodyMeshes();
+
+	/**
+	 * 把 VisualScale 写进缩放层和碰撞盒，并把视觉整体往下挪，保持轮子还踩在地上
+	 *
+	 * 缩放是绕 MeshRoot 原点做的，而车辆原点在车身中间、离地 HoverHeight；
+	 * 只缩不挪的话车底会跟着抬起来，表现是"车悬空了一截"。
+	 */
+	void ApplyVisualScale();
 
 	/**
 	 * 根据模型包围盒补全轮心、车把和转向轴等几何参数
@@ -708,6 +937,16 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	UPROPERTY(ReplicatedUsing = OnRep_Cargo)
 	TObjectPtr<ADeliveryPackageItem> Cargo;
 
+	// 后备箱运行时状态
+	/** 当前动画阶段；只在本机推进，开始由多播同步，所以不需要复制 */
+	EDeliveryTrunkPhase TrunkPhase = EDeliveryTrunkPhase::Idle;
+
+	/** 本阶段已经播了多久 */
+	float TrunkElapsed = 0.0f;
+
+	/** 装货动画结束时才真正隐藏快递；取货动画结束时才交回手上 */
+	TWeakObjectPtr<ADeliveryCharacter> TrunkPendingReceiver;
+
 	// 本次驾驶输入
 	float ThrottleInput = 0.0f;
 	float SteerInput = 0.0f;
@@ -753,6 +992,21 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	// 撞击状态
 	/** 本次骑行已经被交通车撞了几下；只在服务器上维护，上/下车时归零 */
 	int32 TrafficImpactCount = 0;
+
+	/**
+	 * 服务器：沿这一帧走过的路径扫一次路人，撞到就把人打飞
+	 *
+	 * **单开一次扫描，不并进已有的那两条。** 水平推进那条 sweep 用的是车自己的
+	 * 碰撞响应（车是 Pawn 配置），而路人刻意不挡 Pawn——挡了的表现是路人变成一堵墙
+	 * 把车别停。贴地那条是竖直射线、只查 WorldStatic/WorldDynamic。
+	 * 往这两条里加通道都会改变它们已经调通的命中集合（摩托车受击当初就是因为
+	 * 同一个理由才单开一次 ECC_Pawn 查询）。
+	 */
+	void ProcessPedestrianImpacts(float DeltaSeconds);
+
+	/** 上一帧扫描用的位置，用来沿路径扫而不是只扫当前位置 */
+	FVector PreviousPedestrianSweepLocation = FVector::ZeroVector;
+	bool bHasPedestrianSweepLocation = false;
 
 	/** 被撞之后的残余状态，全部按 KnockDecay 指数衰减回 0 */
 	FVector KnockVelocity = FVector::ZeroVector;

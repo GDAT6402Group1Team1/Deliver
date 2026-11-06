@@ -304,6 +304,32 @@ static FAutoConsoleCommandWithWorld GDeliveryCarryDump(
 	        {
 		        UE_LOG(LogDelivery, Log, TEXT("  >> 任务快递 : 没带"));
 	        }
+
+	        /**
+	         * 车上的货要扫全场的车，不能只看"我正在骑的那辆"
+	         *
+	         * 快递装进后备箱之后下车，GetCarriedTaskPackage() 就是空的——它只在骑车时
+	         * 才去查车上。那时候上面两行会显示"没带"，而货其实在车屁股里，
+	         * 这正是最容易被当成"快递丢了"的状态。
+	         */
+	        for (TActorIterator<ADeliveryMotorbike> It(World); It; ++It)
+	        {
+		        ADeliveryMotorbike* Each = *It;
+		        if (!IsValid(Each))
+			        continue;
+		        UDeliveryInteractableComponent* Trunk = UDeliveryInteractableComponent::FindOn(
+		            Each, EDeliveryInteractionKey::ActionLeft);
+		        const float Gap = Trunk ? Trunk->GetInteractionDistance(Character) : -1.f;
+		        UE_LOG(LogDelivery, Log,
+				       TEXT("  [车] %s 后备箱=%s 驾驶员=%s 你到箱子 %.0fcm/%.0fcm  装货=%s 取货=%s%s"),
+				       *Each->GetName(),
+				       Each->GetCargo() ? *Each->GetCargo()->GetName() : TEXT("<空>"),
+				       Each->GetDriver() ? *Each->GetDriver()->GetName() : TEXT("<无>"), Gap,
+				       Trunk ? Trunk->InteractRadius : 0.f,
+				       Each->CanLoadTrunk(Character) ? TEXT("可以") : TEXT("不行"),
+				       Each->CanUnloadTrunk(Character) ? TEXT("可以") : TEXT("不行"),
+				       Each->IsTrunkBusy() ? TEXT("（正在开合箱盖）") : TEXT(""));
+	        }
 	        UE_LOG(LogDelivery, Log, TEXT("=========================================="));
         }));
 

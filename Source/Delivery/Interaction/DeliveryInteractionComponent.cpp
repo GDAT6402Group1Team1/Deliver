@@ -25,7 +25,8 @@ void UDeliveryInteractionComponent::BeginUse()
         return;
     AActor *Target =
         Character->GetInteractProbe() ? Character->GetInteractProbe()->GetFocusedPickupActor() : nullptr;
-    UDeliveryInteractableComponent *Interactable = UDeliveryInteractableComponent::FindOn(Target);
+    UDeliveryInteractableComponent *Interactable =
+        UDeliveryInteractableComponent::FindOn(Target, EDeliveryInteractionKey::PickupE);
     if (!Target || !Interactable || !CanUse(Target))
         return;
 
@@ -109,13 +110,26 @@ float UDeliveryInteractionComponent::GetProgress(const AActor *Target) const
 // 先检查玩家能否操作，再询问目标是否允许执行
 bool UDeliveryInteractionComponent::CanUse(const AActor *Target, bool bCheckTaskAvailability) const
 {
+    return CanUseTarget(Target, bCheckTaskAvailability, EDeliveryInteractionKey::PickupE);
+}
+
+bool UDeliveryInteractionComponent::CanUseActionLeft(const AActor *Target) const
+{
+    return CanUseTarget(Target, true, EDeliveryInteractionKey::ActionLeft);
+}
+
+// 先检查玩家能否操作，再询问目标是否允许执行
+bool UDeliveryInteractionComponent::CanUseTarget(const AActor *Target, bool bCheckTaskAvailability,
+                                                 EDeliveryInteractionKey Key) const
+{
     ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(GetOwner());
     if (!Character || !IsValid(Target))
         return false;
 
-    const UDeliveryInteractableComponent *Interactable = UDeliveryInteractableComponent::FindOn(Target);
-    if (!Target || !Interactable || Interactable->InteractionKey != EDeliveryInteractionKey::PickupE ||
-        !Interactable->CanInteract(Character))
+    // 按键找组件：摩托车同时挂着 F 和左键两个交互组件
+    const UDeliveryInteractableComponent *Interactable =
+        UDeliveryInteractableComponent::FindOn(Target, Key);
+    if (!Interactable || !Interactable->CanInteract(Character))
         return false;
     if (Character->GetGrabComponent() && Character->GetGrabComponent()->IsGrabbing())
         return false;
@@ -155,9 +169,9 @@ void UDeliveryInteractionComponent::ExecuteInteract(AActor *Target)
     // F 键只处理同一世界中的通用交互
     if (!IsValid(Target) || Target->GetWorld() != GetWorld())
         return;
-    UDeliveryInteractableComponent *Interactable = UDeliveryInteractableComponent::FindOn(Target);
-    if (Interactable && Interactable->InteractionKey == EDeliveryInteractionKey::GeneralF &&
-        Interactable->CanInteract(Character))
+    UDeliveryInteractableComponent *Interactable =
+        UDeliveryInteractableComponent::FindOn(Target, EDeliveryInteractionKey::GeneralF);
+    if (Interactable && Interactable->CanInteract(Character))
     {
         Interactable->Execute(Character);
     }
@@ -166,12 +180,25 @@ void UDeliveryInteractionComponent::ExecuteInteract(AActor *Target)
 void UDeliveryInteractionComponent::ExecuteUse(AActor *Target)
 {
     ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(GetOwner());
-    UDeliveryInteractableComponent *TargetAction = UDeliveryInteractableComponent::FindOn(Target);
+    UDeliveryInteractableComponent *TargetAction =
+        UDeliveryInteractableComponent::FindOn(Target, EDeliveryInteractionKey::PickupE);
     if (!Character || !Character->HasAuthority() || !TargetAction ||
         TargetAction->HoldDuration > KINDA_SMALL_NUMBER || !ValidateTarget(Target))
         return;
     // 任务物品必须长按，错误配置为零时也不能绕过服务器检查
     if (Target->FindComponentByClass<UDeliveryItemComponent>())
+        return;
+    if (TargetAction->Use.IsBound())
+        TargetAction->Use.Execute(Character);
+}
+// 在服务器执行通过检查的左键就地操作
+void UDeliveryInteractionComponent::ExecuteActionLeft(AActor *Target)
+{
+    ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(GetOwner());
+    UDeliveryInteractableComponent *TargetAction =
+        UDeliveryInteractableComponent::FindOn(Target, EDeliveryInteractionKey::ActionLeft);
+    if (!Character || !Character->HasAuthority() || !TargetAction || !IsValid(Target) ||
+        Target->GetWorld() != GetWorld() || !CanUseActionLeft(Target))
         return;
     if (TargetAction->Use.IsBound())
         TargetAction->Use.Execute(Character);
@@ -186,7 +213,8 @@ void UDeliveryInteractionComponent::BeginServerHold(AActor *Target)
     if (!Character || !Character->HasAuthority())
         return;
 
-    UDeliveryInteractableComponent *Interactable = UDeliveryInteractableComponent::FindOn(Target);
+    UDeliveryInteractableComponent *Interactable =
+        UDeliveryInteractableComponent::FindOn(Target, EDeliveryInteractionKey::PickupE);
     if (!Interactable || Interactable->HoldDuration <= KINDA_SMALL_NUMBER || !ValidateTarget(Target))
         return;
     ServerUseHoldTarget = Target;
@@ -199,7 +227,8 @@ void UDeliveryInteractionComponent::CompleteServerHold(AActor *Target)
     if (!Character || !Character->HasAuthority())
         return;
 
-    UDeliveryInteractableComponent *Interactable = UDeliveryInteractableComponent::FindOn(Target);
+    UDeliveryInteractableComponent *Interactable =
+        UDeliveryInteractableComponent::FindOn(Target, EDeliveryInteractionKey::PickupE);
     const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
     // 使用服务器记录的时间检查长按时长，允许少量计时误差
     const bool bHeldLongEnough =
@@ -238,6 +267,18 @@ void UDeliveryInteractionComponent::Interact()
     }
 }
 
+// 把探测器选中的左键目标提交给服务器；没有可用目标就交还给出拳
+bool UDeliveryInteractionComponent::TryActionLeft()
+{
+    const ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(GetOwner());
+    if (!Character || !Character->GetInteractProbe())
+        return false;
+    AActor *Target = Character->GetInteractProbe()->GetFocusedActionActor();
+    if (!Target || !CanUseActionLeft(Target))
+        return false;
+    SendRequest(EDeliveryInteractionRequest::ActionLeft, Target);
+    return true;
+}
 // 请求发送与分发
 
 // 服务器直接处理请求，客户端通过玩家控制器发送
@@ -276,6 +317,9 @@ void UDeliveryInteractionComponent::HandleRequest(EDeliveryInteractionRequest Re
         break;
     case EDeliveryInteractionRequest::Use:
         ExecuteUse(Target);
+        break;
+    case EDeliveryInteractionRequest::ActionLeft:
+        ExecuteActionLeft(Target);
         break;
     case EDeliveryInteractionRequest::BeginHold:
         BeginServerHold(Target);

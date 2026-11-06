@@ -23,6 +23,8 @@
 #include "Phone/DeliveryPhoneCallQueueComponent.h"
 #include "Task/Tracking/DeliveryGroundArrowComponent.h"
 #include "Task/Tracking/DeliveryObjectiveRingComponent.h"
+#include "Task/DeliverySettlementComponent.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 ADeliveryPlayerController::ADeliveryPlayerController()
@@ -30,6 +32,7 @@ ADeliveryPlayerController::ADeliveryPlayerController()
     DialogueVoice = CreateDefaultSubobject<UDeliveryDialogueVoiceComponent>(TEXT("DialogueVoice"));
     GroundArrow = CreateDefaultSubobject<UDeliveryGroundArrowComponent>(TEXT("GroundArrow"));
     ObjectiveRing = CreateDefaultSubobject<UDeliveryObjectiveRingComponent>(TEXT("ObjectiveRing"));
+    Settlement = CreateDefaultSubobject<UDeliverySettlementComponent>(TEXT("Settlement"));
 
     Hints = CreateDefaultSubobject<UDeliveryHintComponent>(TEXT("Hints"));
 

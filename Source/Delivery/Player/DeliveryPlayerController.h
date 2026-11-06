@@ -15,6 +15,7 @@ class UDeliveryDialogueVoiceComponent;
 class UDeliveryMusicComponent;
 class UDeliveryGroundArrowComponent;
 class UDeliveryObjectiveRingComponent;
+class UDeliverySettlementComponent;
 class UUserWidget;
 class UDeliveryHintComponent;
 class UDeliveryPhoneController;
@@ -55,6 +56,10 @@ class ADeliveryPlayerController : public APlayerController
     /** 当前任务目的地的地面圈；和脚边箭头同位置、同一个目的地来源 */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Delivery")
     TObjectPtr<UDeliveryObjectiveRingComponent> ObjectiveRing;
+
+    /** 交付成功后弹出本机结算界面；WBP 类填在 BP_DeliveryManPC 上 */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Delivery")
+    TObjectPtr<UDeliverySettlementComponent> Settlement;
 
     /** 本机人物电子语音生成器；电话/NPC UI 都复用这一份 */
     UFUNCTION(BlueprintPure, Category = "Delivery|Voice")
@@ -117,6 +122,12 @@ class ADeliveryPlayerController : public APlayerController
     UFUNCTION(BlueprintPure, Category = "Phone")
 
     bool IsPhoneUIOpen() const;
+
+    /** 只读当前开着的面板集合，供诊断命令列名字 */
+    const TSet<FName> &GetOpenUIPanelsForDebug() const
+    {
+        return OpenUIPanels;
+    }
 
   protected:
     virtual void BeginPlay() override;

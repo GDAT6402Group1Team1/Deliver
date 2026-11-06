@@ -60,7 +60,11 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 
 	bool IsStoppedAtIntersection() const
 	{
-		return bStoppedAtIntersection;
+		// 自己按停车线拦下来的也算"在等红灯"：这样后车拿到的是更宽松的阻塞/停滞
+		// 时限，不会把合法的排队当成死锁而压上来。
+		// 用“或”而不是直接写 bStoppedAtIntersection，是因为蓝图每帧都会用它自己
+		// 的探测结果覆盖那个值，而我们停得更早、蓝图那条前瞻往往根本探不到路口。
+		return bStoppedAtIntersection || bHoldingForRedLight;
 	}
 
 	/** 连续脱离预设路线超过 RouteLostTimeout 秒时广播；蓝图绑定这个事件，把车放回起始样条起点即可形成循环车流 */
@@ -126,6 +130,18 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	/** 提高前车速度后，本车降低的速度上限 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|跟车", meta = (ClampMin = "0.0"))
 	float PushSlowLeaderSelfPenalty = 100.0f;
+
+	// 撞飞路人
+	/**
+	 * 撞到路人时给的冲量基准
+	 * 路人不扣血、没有晕倒，被撞就是直接打飞，所以只有这一个量
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "0.0"))
+	float PedestrianImpactImpulse = 42000.0f;
+
+	/** 撞飞路人时往上抬的比例，纯水平的话人会贴着地面滑出去，不像被撞飞 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float PedestrianImpactUpwardFraction = 0.35f;
 
 	/** 协调车速时允许本车降低到的最小速度，避免连续调整后速度过低 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|跟车", meta = (ClampMin = "0.0"))
@@ -250,6 +266,109 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	UPROPERTY(EditAnywhere, Category = "Traffic|避让")
 	bool bDrawDebugTrace = false;
 
+	// 红灯停车线
+	/**
+	 * 在路口段前留出一段固定距离停车，空出来的那段给行人和斑马线
+	 *
+	 * **为什么不靠蓝图现有的那套。** 蓝图的停车位置是算出来的副产品：
+	 * `TraceForIntersection` 的前瞻长度和车速成正比，`Deceleration` 的刹停行程
+	 * 又约等于 `DecelerationDistance`，所以"停在哪"随车速浮动、没有任何一个变量
+	 * 代表停车线。要一段**固定**的净空，就只能自己按真实距离刹车。
+	 *
+	 * 关掉这个开关就完全回到原来的行为（整段逻辑只影响速度系数，不碰蓝图）。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|停车线")
+	bool bUseStopLine = true;
+
+	/**
+	 * 往前找路口段的距离，单位厘米，**和车速无关**
+	 *
+	 * 固定长度是刻意的：蓝图那条前瞻∝车速，队伍里第二辆之后的车已经被前车逼停、
+	 * 前瞻缩到接近 0，根本探不到路口盒（红灯状态沿车队传递就是为了绕开这件事）。
+	 * 这里要能在停住之后继续看见红灯，所以不能跟车速走。
+	 * 必须大于 StopLineSetback + StopLineBrakeDistance，否则还没看见就该刹了。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|停车线", meta = (ClampMin = "0.0"))
+	float RedLightScanDistance = 1600.0f;
+
+	/**
+	 * 停车线离路口段还有多远，单位厘米——**这就是给行人留出的那段净空**
+	 *
+	 * 斑马线应该正好画在这一段里，所以改这个数等于改斑马线宽度，两边要对上。
+	 *
+	 * **不能给太小**：车道段和路口段之间本来就留着 TARGET_GAP（150 cm）的空隙，
+	 * 那段里 CurrentFollowSpline 是 None、车算"脱离路线"。停车线落进那条缝里的话，
+	 * 车会停在那儿满 RouteLostTimeout（3 秒）然后被瞬移回出生点——
+	 * 表现是"车到路口前就莫名消失又从别处开出来"。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|停车线", meta = (ClampMin = "0.0"))
+	float StopLineSetback = 400.0f;
+
+	/**
+	 * 从离停车线多远开始减速，单位厘米
+	 * 给小了会"到线前一脚急刹"，给大了老远就开始爬行
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|停车线", meta = (ClampMin = "1.0"))
+	float StopLineBrakeDistance = 700.0f;
+
+	/**
+	 * 已经越过停车线这么多（厘米）就算"冲进去了"，不再往回拦
+	 *
+	 * 不留这个余量的话，绿灯时刚压过线、灯转红的那辆车会当场定在路口里，
+	 * 比闯过去糟得多。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|停车线", meta = (ClampMin = "0.0"))
+	float StopLineCommitDistance = 200.0f;
+
+	/**
+	 * 找路口段用的探测球半径，单位厘米
+	 * 比前车探测的小：大了会扫到横向那条路的路口段，读到相反的灯态
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|停车线", meta = (ClampMin = "1.0"))
+	float StopLineTraceRadius = 40.0f;
+
+	/**
+	 * 只认和车头同向的路口段，两者方向点积的下限
+	 *
+	 * 路口里两条路的盒子是叠着的，而横向那条的灯**正好相反**——
+	 * 不校验方向的话车会读到对面的灯态，表现是"绿灯不走、红灯硬闯"。
+	 * 蓝图里那条 cast 本来就有这个问题，这里不重复它。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|停车线", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+	float StopLineSameDirectionDot = 0.5f;
+
+	/**
+	 * 只有带这个 tag 的路口段才提前停车；留空则所有红灯都提前停
+	 *
+	 * **为什么要按路口分**：提前停车是为了给行人让出位置，而斑马线只画在
+	 * 市中心那几个主路口。其余路口没有斑马线、也没有行人要让，提前停只会
+	 * 让车莫名停在路口外面。
+	 *
+	 * tag 由 `Content/Python/setup_crosswalks.py` 摆斑马线时打到对应的
+	 * `Inter_*` actor 上——**"这里有斑马线"和"这里要提前停"是同一个事实，
+	 * 所以只存一处**。分两处记迟早出现"画了斑马线车还是冲进路口"，
+	 * 或者反过来"车停在没有斑马线的路口外面"。
+	 *
+	 * 试过改存项目设置（`Config/DefaultGame.ini`，文本、能合并），为的是躲开
+	 * `.umap` 二进制没法合并那个问题。**但那没有收益**：斑马线贴花本身就必须
+	 * 存在地图里，地图冲突躲不掉，所以把 tag 也放在地图里一分钱不多花，
+	 * 还省掉坐标匹配半径和"改完要重启编辑器"。那个类已经删掉。
+	 *
+	 * 打 tag 只是**改现有 actor 的标记**，不动它的位置、不删也不加交通样条线。
+	 *
+	 * 没有这个 tag 的路口段**完全不进本节逻辑**，行为和加停车线之前一字不差，
+	 * 所以其余路口的零回归是结构上保证的，不靠测出来。
+	 *
+	 * **重新生成车道会丢掉 tag**（和 `LightNumber` 一样，重建出来的是全新 actor），
+	 * 跟着重跑一次 setup_crosswalks.py 即可。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|停车线")
+	FName StopLineRequiredTag = FName(TEXT("Crosswalk"));
+
+	/** 打开后画出停车线的位置和探测线 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|停车线")
+	bool bDrawDebugStopLine = false;
+
 	// 撞击伤害与击退
 	/** 车不模拟物理，用它和角色有效质量估算相对速度转成的撞击速度变化 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|撞击", meta = (ClampMin = "1.0"))
@@ -328,6 +447,14 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	void ProcessVehicleImpacts(float DeltaTime);
 
 	/** 单独检测玩家摩托车的碰撞，避免与角色身体检测重复 */
+	/**
+	 * 撞飞路人
+	 * 路人在自己的碰撞通道上，而且不走 GAS（没有血量和晕倒），所以单独一次扫描、
+	 * 单独一条结算——并进撞角色那一次会把已经调通的伤害/抛起逻辑搅乱
+	 */
+	void ProcessPedestrianImpacts(const FVector& Start, const FVector& End, const FQuat& Rotation,
+	                              const FVector& CarVelocity, const FCollisionQueryParams& Params);
+
 	void ProcessMotorbikeImpacts(const FVector& Start, const FVector& End, const FQuat& Rotation,
 	                             const FVector& CarVelocity, const FCollisionQueryParams& Params);
 	FTransform PreviousImpactTransform = FTransform::Identity;
@@ -361,6 +488,15 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	/** 上次探测到的前车是否正在等待红灯，供车队逐级传递停车状态 */
 	bool bLeaderStoppedAtIntersection = false;
 
+	/** 本车正被停车线拦着等红灯；和蓝图自己那套探测分开存，见 IsStoppedAtIntersection() */
+	bool bHoldingForRedLight = false;
+
+	/**
+	 * 返回车头到红灯停车线的剩余距离（厘米），前方没有红灯时返回 TNumericLimits<float>::Max()
+	 * 负值表示已经越过停车线
+	 */
+	float GetDistanceToStopLine();
+
 	/**
 	 * 返回前车到探测起点的距离，无目标时返回负一
 	 * 同时更新前车的红灯状态，并按需协调车速
@@ -385,4 +521,8 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	/** 跟车加速还需等待多久（秒）；等待时减速仍可立即生效 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Traffic|调试")
 	float DebugAccelerationPauseRemaining = 0.0f;
+
+	/** 调试用：车头到红灯停车线的剩余距离，负值表示已越过；前方无红灯时为 -1 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Traffic|调试")
+	float DebugStopLineDistance = -1.0f;
 };

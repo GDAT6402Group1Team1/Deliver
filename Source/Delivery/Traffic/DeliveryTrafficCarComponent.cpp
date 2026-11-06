@@ -8,12 +8,15 @@
 #include "GameFramework/Actor.h"
 #include "Character/DeliveryCharacter.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
+#include "Combat/DeliveryCollisionChannels.h"
+#include "Combat/DeliveryImpactReceiver.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "AbilitySystem/DeliverAttributeSet.h"
 #include "AbilitySystem/DeliverGameplayTags.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayEffect.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/SplineComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "TimerManager.h"
 
@@ -62,6 +65,81 @@ static bool WriteCarMaxSpeed(AActor* Car, double Value)
 		}
 	}
 	return false;
+}
+
+/**
+ * 读路口段蓝图上的红灯状态
+ *
+ * **判据是"身上有 StopAtInter 这个布尔"，不是 cast 成某个蓝图类。**
+ * 实测 BP_TrafficLine1（车道段 Lane_*）上没有这个属性，只有
+ * BP_TrafficLine1_IntersectionChild（路口段 Inter_*）才有，所以属性本身就是
+ * 唯一判别。好处是不用在 C++ 里硬编码蓝图路径——那条路在本工程栽过：
+ * 蓝图被挪过目录，旧路径只剩 ObjectRedirector，load_asset 还会"成功"返回它。
+ */
+static const FName StopAtInterPropName(TEXT("StopAtInter"));
+
+static bool ReadIntersectionRedLight(const AActor* Segment, bool& bOutRed)
+{
+	if (!Segment)
+	{
+		return false;
+	}
+	if (const FProperty* Prop = Segment->GetClass()->FindPropertyByName(StopAtInterPropName))
+	{
+		if (const FBoolProperty* B = CastField<FBoolProperty>(Prop))
+		{
+			bOutRed = B->GetPropertyValue_InContainer(Segment);
+			return true;
+		}
+	}
+	return false;
+}
+
+/** 取路口段的主样条；左右转那两条（SplineLeft / SplineRight）不算 */
+static const USplineComponent* GetSegmentMainSpline(const AActor* Segment)
+{
+	if (!Segment)
+	{
+		return nullptr;
+	}
+	TArray<USplineComponent*> Splines;
+	Segment->GetComponents<USplineComponent>(Splines);
+	for (const USplineComponent* Spline : Splines)
+	{
+		if (Spline && Spline->GetFName() == TEXT("Spline"))
+		{
+			return Spline;
+		}
+	}
+	return Splines.Num() > 0 ? Splines[0] : nullptr;
+}
+
+/**
+ * 取路口段主样条起点处的走向
+ *
+ * **不用 GetDirectionAtDistanceAlongSpline、也不用 actor 的 forward**：
+ * 前者在本工程的样条端点上返回过零向量（端点切线被 CURVE_CLAMPED 归零那条），
+ * 后者更糟——生成脚本 spawn 路口段时只给了位置不给旋转，所有段的 forward 都是世界 +X。
+ * 两个采样点作差是唯一靠得住的。
+ */
+static bool GetSegmentForward(const AActor* Segment, FVector& OutForward)
+{
+	const USplineComponent* Main = GetSegmentMainSpline(Segment);
+	if (!Main)
+	{
+		return false;
+	}
+
+	const float Length = Main->GetSplineLength();
+	if (Length <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+	const FVector A = Main->GetLocationAtDistanceAlongSpline(0.0f, ESplineCoordinateSpace::World);
+	const FVector B = Main->GetLocationAtDistanceAlongSpline(FMath::Min(200.0f, Length),
+	                                                         ESplineCoordinateSpace::World);
+	OutForward = (B - A).GetSafeNormal2D();
+	return !OutForward.IsNearlyZero();
 }
 
 UDeliveryTrafficCarComponent::UDeliveryTrafficCarComponent()
@@ -424,6 +502,31 @@ const bool bAnyoneAtLight = bStoppedAtIntersection || bLeaderStoppedAtIntersecti
 		BlockedElapsedTime = 0.0f;
 	}
 
+	// 红灯停车线：按真实剩余距离刹到线前
+	//
+	// **排在死锁兜底之后、取 min**，所以那条兜底永远掀不翻红灯。
+	// 红灯是"合法地长时间不动"，不是两车互相礼让的死锁；混在一起的表现是
+	// 车等满 MaxBlockedTimeAtIntersection 就直接闯过去。
+	//
+	// 后车什么都不用改：它们看到的是"前面有一辆停着的车"，走的还是原来那条
+	// 前车避让减速，所以天然依次排在停车线后面。
+	const float StopLineRemaining = GetDistanceToStopLine();
+	bHoldingForRedLight = false;
+	if (StopLineRemaining < TNumericLimits<float>::Max())
+	{
+		if (StopLineRemaining >= -StopLineCommitDistance)
+		{
+			const float RedTarget =
+			    FMath::Clamp(StopLineRemaining / FMath::Max(StopLineBrakeDistance, 1.0f), 0.0f, 1.0f);
+			Target = FMath::Min(Target, RedTarget);
+			bHoldingForRedLight = (RedTarget <= KINDA_SMALL_NUMBER);
+		}
+		// 已经越线超过 StopLineCommitDistance 的不往回拦：绿灯时刚压过线、
+		// 灯转红的那辆车要是定在路口里，比闯过去糟得多
+	}
+	DebugStopLineDistance =
+	    (StopLineRemaining < TNumericLimits<float>::Max()) ? StopLineRemaining : -1.0f;
+
 	// 减速立即生效，恢复加速需等待，避免前车在探测边缘反复出现时频繁加减速
 	
 	
@@ -501,6 +604,8 @@ void UDeliveryTrafficCarComponent::NotifyResetToStart()
 		bHasPreviousImpactTransform = true;
 		bSkipNextImpactSweep = true;
 	}
+	bHoldingForRedLight = false;
+	DebugStopLineDistance = -1.0f;
 	bIsCurrentlyOnRoute = true;
 	RouteLostElapsedTime = 0.0f;
 	// 清除停滞计时，避免重置后继续使用旧时长而再次重置
@@ -681,11 +786,64 @@ void UDeliveryTrafficCarComponent::ProcessVehicleImpacts(float DeltaTime)
 	}
 
 	ProcessMotorbikeImpacts(Start, End, Current.GetRotation(), CarVelocity, Params);
+	ProcessPedestrianImpacts(Start, End, Current.GetRotation(), CarVelocity, Params);
 
 	PreviousImpactTransform = Current;
 }
 
 // 处理交通车辆与玩家摩托车之间的撞击
+// 撞飞路人：单独一次扫描，结算只有"给一记冲量"
+void UDeliveryTrafficCarComponent::ProcessPedestrianImpacts(const FVector& Start, const FVector& End,
+                                                            const FQuat& Rotation,
+                                                            const FVector& CarVelocity,
+                                                            const FCollisionQueryParams& Params)
+{
+	UWorld* World = GetWorld();
+	if (!World || PedestrianImpactImpulse <= 0.0f)
+	{
+		return;
+	}
+
+	const FVector Direction = CarVelocity.GetSafeNormal2D();
+	if (Direction.IsNearlyZero())
+	{
+		return;
+	}
+
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(DeliveryCollision::Pedestrian);
+	TArray<FHitResult> Hits;
+	World->SweepMultiByObjectType(Hits, Start, End, Rotation, Objects,
+	                              FCollisionShape::MakeBox(ImpactHalfExtent.GetAbs()), Params);
+
+	// 一次扫描可能碰到同一个路人的多个部位（躺下之后更是每根骨头一个刚体）
+	TSet<AActor*> Seen;
+	for (const FHitResult& Hit : Hits)
+	{
+		AActor* HitActor = Hit.GetActor();
+		if (!HitActor || Seen.Contains(HitActor))
+		{
+			continue;
+		}
+		Seen.Add(HitActor);
+
+		IDeliveryImpactReceiver* Receiver = Cast<IDeliveryImpactReceiver>(HitActor);
+		if (!Receiver || Receiver->IsKnockedDown())
+		{
+			continue;
+		}
+
+		// 力度跟着车速走，但**不用那条 CarVelocity 的量级直接乘**：
+		// OnRouteLost 把车瞬移回出生点的那一帧会算出假的巨大速度
+		// （实测 3053 cm/s，而 MaxSpeed 随机范围只有 600~1500），
+		// 那一下会把路人抽到天上去。所以这里只取方向，力度用固定基准
+		const FVector Impulse =
+		    (Direction + FVector::UpVector * PedestrianImpactUpwardFraction).GetSafeNormal() *
+		    PedestrianImpactImpulse;
+		Receiver->ReceiveImpact(Impulse, Hit.ImpactPoint);
+	}
+}
+
 void UDeliveryTrafficCarComponent::ProcessMotorbikeImpacts(const FVector& Start, const FVector& End,
                                                            const FQuat& Rotation, const FVector& CarVelocity,
                                                            const FCollisionQueryParams& Params)
@@ -735,6 +893,94 @@ void UDeliveryTrafficCarComponent::ProcessMotorbikeImpacts(const FVector& Start,
 // 前方车辆距离
 
 // 寻找前方同路线车辆，提供跟车距离
+/**
+ * 找前方同向的红灯路口段，返回车头到停车线的剩余距离
+ *
+ * 返回 TNumericLimits<float>::Max() 表示"前方没有要停的红灯"，不是 -1：
+ * -1 在这个函数里有歧义（刚好压在线上也是负的），用一个绝不会被当成距离的值
+ * 表达"没有"最不容易误用。
+ */
+float UDeliveryTrafficCarComponent::GetDistanceToStopLine()
+{
+	constexpr float NoRedLight = TNumericLimits<float>::Max();
+
+	const AActor* Owner = GetOwner();
+	UWorld* World = GetWorld();
+	if (!bUseStopLine || !Owner || !World)
+	{
+		return NoRedLight;
+	}
+
+	const FVector Forward = Owner->GetActorForwardVector();
+	const FVector Start = Owner->GetActorLocation() + Forward * TraceStartForwardOffset;
+	const FVector End = Start + Forward * RedLightScanDistance;
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DeliveryTrafficStopLineTrace), false, Owner);
+	QueryParams.AddIgnoredActor(Owner);
+
+	TArray<FHitResult> Hits;
+	// **必须按物体类型查，不能按通道查。** 路口段的 Box 的 ObjectType 是 Traffic_Road，
+	// 而那个通道在 DefaultEngine.ini 里的 DefaultResponse 是 ECR_Ignore——
+	// SweepMultiByChannel 按"被击中物体对该通道的响应"筛选，Ignore 直接跳过，
+	// 结果是扫描恒为空、整套停车线静默失效。蓝图的 TraceForIntersection 用的也是
+	// 物体类型查询（ObjectTypeQuery7），这里和它保持一致。
+	// 同一个坑记在 CLAUDE.md「避让检测一直是死的」那条。
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(ECC_GameTraceChannel1);
+	World->SweepMultiByObjectType(Hits, Start, End, FQuat::Identity, ObjectParams,
+	                              FCollisionShape::MakeSphere(StopLineTraceRadius), QueryParams);
+
+	float NearestRed = NoRedLight;
+	for (const FHitResult& Hit : Hits)
+	{
+		const AActor* Segment = Hit.GetActor();
+		bool bRed = false;
+		if (!ReadIntersectionRedLight(Segment, bRed) || !bRed)
+		{
+			// 没有 StopAtInter 的是普通车道段，绿灯的不用拦
+			continue;
+		}
+
+		// 只有画了斑马线的路口才提前停：别的路口没有行人要让，
+		// 提前停只会让车莫名停在路口外面。对不上登记表的段直接跳过，
+		// 那些路口走的还是原来那条蓝图逻辑，行为完全不变。
+		//
+		if (!StopLineRequiredTag.IsNone() && !Segment->ActorHasTag(StopLineRequiredTag))
+		{
+			continue;
+		}
+
+		// 横向那条路的路口段和本路的是叠着的，而它的灯正好相反
+		FVector SegmentForward = FVector::ZeroVector;
+		if (GetSegmentForward(Segment, SegmentForward) &&
+		    FVector::DotProduct(SegmentForward, Forward.GetSafeNormal2D()) < StopLineSameDirectionDot)
+		{
+			continue;
+		}
+
+		const float D = Hit.bStartPenetrating ? 0.0f : Hit.Distance;
+		NearestRed = FMath::Min(NearestRed, D);
+	}
+
+	if (NearestRed >= NoRedLight)
+	{
+		return NoRedLight;
+	}
+
+	const float Remaining = NearestRed - StopLineSetback;
+
+	if (bDrawDebugStopLine)
+	{
+		const FVector LinePoint = Start + Forward * NearestRed - Forward * StopLineSetback;
+		const FVector Right = FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal();
+		DrawDebugLine(World, LinePoint - Right * 250.0f, LinePoint + Right * 250.0f,
+		              Remaining <= 0.0f ? FColor::Red : FColor::Orange, false, -1.0f, 0, 6.0f);
+		DrawDebugLine(World, Start, End, FColor::Silver, false, -1.0f, 0, 1.0f);
+	}
+
+	return Remaining;
+}
+
 float UDeliveryTrafficCarComponent::GetDistanceToCarAhead()
 {
 	const AActor* Owner = GetOwner();
