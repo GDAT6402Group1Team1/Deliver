@@ -1,3 +1,4 @@
+// 车辆负责收集运动和接触点，动画实例负责计算骨骼，二者通过本帧快照传递数据
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Vehicle/DeliveryRiderAnimInstance.h"
 #include "Character/DeliveryCharacter.h"
@@ -44,14 +45,17 @@ void ADeliveryMotorbike::UpdateRiderMotion(float DeltaTime)
 	if (!HasAuthority() && !IsLocallyControlled())
 		return;
 	const float Z = GetActorLocation().Z;
+	// 首帧或长时间卡顿后不计算差分，避免一次位置跳变被误当成巨大颠簸
 	const bool bValid = bRiderSampleValid && DeltaTime > SMALL_NUMBER && DeltaTime <= .1f;
 	const float VerticalSpeed = bValid ? (Z - RiderSampleZ) / DeltaTime : 0.f;
 	LocalRiderMotion.Speed = FMath::Clamp(CurrentSpeed / FMath::Max(MaxSpeed, 1.f), -1.f, 1.f);
 	LocalRiderMotion.Steer = SteerInput;
+	// 速度差除以时间得到加速度，再按车辆加速能力换算到 -1～1
 	LocalRiderMotion.Acceleration = bValid ? FMath::Clamp((CurrentSpeed - RiderSampleSpeed) / DeltaTime /
 	                                                          FMath::Max(ThrottleAcceleration, 1.f),
 	                                                      -1.f, 1.f)
 	                                       : 0.f;
+	// 竖直速度的变化表示上下颠簸，3500 用于把幅度换算到动画输入范围
 	LocalRiderMotion.Bump =
 	    bValid ? FMath::Clamp((VerticalSpeed - RiderSampleVerticalSpeed) / DeltaTime / 3500.f, -1.f, 1.f)
 		       : 0.f;
@@ -64,6 +68,7 @@ void ADeliveryMotorbike::UpdateRiderMotion(float DeltaTime)
 		RiderImpact *= FMath::Exp(-6.f * DeltaTime);
 		LocalRiderMotion.Impact = RiderImpact;
 		RiderNetElapsed += DeltaTime;
+		// 每隔 0.05 秒更新待复制的数据，实际网络到达频率仍受复制调度影响
 		if (RiderNetElapsed >= .05f)
 		{
 			ReplicatedRiderMotion = LocalRiderMotion;
@@ -80,8 +85,10 @@ void ADeliveryMotorbike::BuildRiderAnimationFrame(FDeliveryRiderFrame& Frame) co
 	Frame.bActive = IsValid(Driver) && RiderMesh && RiderMesh->GetSkeletalMeshAsset();
 	if (!Frame.bActive)
 		return;
+	// 本机驾驶用本地数据，其他玩家看到的骑手用服务器复制数据
 	Frame.Motion = HasAuthority() || IsLocallyControlled() ? LocalRiderMotion : ReplicatedRiderMotion;
 	Frame.Settings = RiderAnimationSettings;
+	// 骨骼求解使用相对骑手模型的坐标，车身方向和握把脚踏也必须转到相同坐标
 	const FTransform MeshWorld = RiderMesh->GetComponentTransform();
 	Frame.Forward = MeshWorld.InverseTransformVectorNoScale(MeshRoot->GetForwardVector()).GetSafeNormal();
 	Frame.Right = MeshWorld.InverseTransformVectorNoScale(MeshRoot->GetRightVector()).GetSafeNormal();

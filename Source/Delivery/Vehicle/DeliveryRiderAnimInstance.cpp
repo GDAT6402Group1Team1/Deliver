@@ -7,19 +7,24 @@
 
 namespace
 {
+// 动画代理保存本帧车辆数据和摆动状态，并直接生成最终骨骼姿态
+// PreUpdate 在主线程读取车辆，Evaluate 只用缓存计算，不再访问场景对象
 struct FDeliveryRiderAnimProxy : FAnimInstanceProxy
 {
 	explicit FDeliveryRiderAnimProxy(UAnimInstance* Instance) : FAnimInstanceProxy(Instance) {}
 
 	DeliveryRiderPose::FRig Rig;
+	// 身体前后倾、左右倾、转身、上下起伏分别平滑，头部与手部容差另行保存
 	DeliveryRiderPose::FSpring Pitch, Roll, Yaw, Bounce;
 	DeliveryRiderPose::FSpring HeadRoll, HeadPitch;
 	DeliveryRiderPose::FSpring HandSlack;
 	FDeliveryRiderFrame Frame;
 	TWeakObjectPtr<USkeletalMesh> CachedAsset;
 	TWeakObjectPtr<AActor> LastDriver;
+	// 风摆的累计时间，让匀速行驶时仍有连续变化的动作
 	float FlutterTime = 0;
 
+	// UE 每帧在姿态求值前调用，先取车辆数据，再推进身体摆动
 	virtual void PreUpdate(UAnimInstance* Instance, float Dt) override
 	{
 		FAnimInstanceProxy::PreUpdate(Instance, Dt);
@@ -48,6 +53,8 @@ struct FDeliveryRiderAnimProxy : FAnimInstanceProxy
 			HandSlack = {};
 			LastDriver = Driver;
 		}
+		// 上车后 Driver 有效，车辆才会提供可用快照
+		// 单独打开动画蓝图预览时没有车辆，后续保持参考姿势
 		Frame = {};
 		if (Bike)
 			Bike->BuildRiderAnimationFrame(Frame);
@@ -63,14 +70,17 @@ struct FDeliveryRiderAnimProxy : FAnimInstanceProxy
 		const float Exaggeration = FMath::Clamp(S.WindExaggeration, 0.f, 2.5f);
 		const float BodyWind = S.WindSway * Exaggeration;
 		const float HeadWind = S.HeadWindSway * Exaggeration;
+		// 组合不同频率的正弦，让风摆不只有一种机械重复的节奏
 		const float Flutter =
 		    (FMath::Sin(FlutterTime * 4.8f) + .28f * FMath::Sin(FlutterTime * 8.1f)) * WindWeight;
 		const float ForeAft = FMath::Sin(FlutterTime * 3.7f + .7f) * WindWeight;
 		const float ForwardWind = M.Speed > 0.f ? WindWeight : 0.f;
 		const float TurnWind = FMath::Abs(M.Steer) * WindWeight;
+		// 前后倾叠加车速、加减速、正面撞击和颠簸，Step 让角度平滑追随目标
 		Pitch.Step(-Speed * S.WindLean - M.Acceleration * S.InertiaLean - M.Impact.X * S.ImpactLean +
 		               M.Bump * 4.f - ForwardWind * BodyWind * .2f + ForeAft * BodyWind * .55f,
 		           Dt, S.ResponseFrequency, S.Damping, 26.f);
+		// 侧倾随转向和车速增强，侧面撞击也会推歪身体
 		Roll.Step(-M.Steer * Speed * S.TurnLean * 1.6f - M.Impact.Y * S.ImpactLean +
 		              Flutter * BodyWind * TurnWind * .95f,
 		          Dt, S.ResponseFrequency, S.Damping, 28.f);
@@ -90,12 +100,15 @@ struct FDeliveryRiderAnimProxy : FAnimInstanceProxy
 		HandSlack.Step(WindWeight * 5.f, Dt, S.ResponseFrequency, 1.f, 5.f);
 	}
 
+	// 直接写入最终姿态，因此这套实现不需要在 AnimGraph 中连接动画节点
 	virtual bool Evaluate(FPoseContext& Output) override
 	{
+		// 无驾驶员或缺少必要骨骼时保留参考姿势，不沿用上一帧残留动作
 		Output.ResetToRefPose();
 		if (!Frame.bActive || !Rig.IsReady())
 			return true;
 		TArray<FTransform> Pose;
+		// 输入平滑后的身体偏移，以及模型坐标下的四个手脚接触目标
 		Rig.Solve({Pitch.Value, Roll.Value, Yaw.Value, Bounce.Value, HeadRoll.Value, HeadPitch.Value,
 		           HandSlack.Value},
 		          Frame.Forward, Frame.Right, Frame.Contacts, Pose);
@@ -116,11 +129,13 @@ struct FDeliveryRiderAnimProxy : FAnimInstanceProxy
 };
 }
 
+// UE 初始化动画实例时创建代理，保存这个骑手独立的摆动状态
 FAnimInstanceProxy* UDeliveryRiderAnimInstance::CreateAnimInstanceProxy()
 {
 	return new FDeliveryRiderAnimProxy(this);
 }
 
+// 代理是普通 C++ 对象，动画实例销毁时由这里释放
 void UDeliveryRiderAnimInstance::DestroyAnimInstanceProxy(FAnimInstanceProxy* Proxy)
 {
 	delete Proxy;

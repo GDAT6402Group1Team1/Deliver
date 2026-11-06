@@ -1,5 +1,8 @@
 #include "Vehicle/DeliveryRiderPose.h"
 
+// 根据原始坐姿计算骑手骨骼，不修改车辆或物理刚体
+// 先摆动躯干，再调整手脚贴近握把和脚踏，最后叠加头部动作
+
 // 按时间推进弹簧位置和速度，用于平滑骑手运动
 void DeliveryRiderPose::FSpring::Step(float Target, float DeltaTime, float Frequency, float Damping,
                                       float Limit)
@@ -24,7 +27,7 @@ void DeliveryRiderPose::FSpring::Step(float Target, float DeltaTime, float Frequ
 	}
 }
 
-// 缓存骑手骨骼和四肢长度
+// 缓存骨骼编号、父子关系和原始坐姿
 bool DeliveryRiderPose::FRig::Initialize(const FReferenceSkeleton& Skeleton)
 {
 	const auto Find = [&](const TCHAR* Name)
@@ -40,6 +43,7 @@ bool DeliveryRiderPose::FRig::Initialize(const FReferenceSkeleton& Skeleton)
 	Limbs[1] = {Find(TEXT("RightArm")), Find(TEXT("RightForeArm")), Find(TEXT("RightHand"))};
 	Limbs[2] = {Find(TEXT("LeftUpLeg")), Find(TEXT("LeftLeg")), Find(TEXT("LeftFoot"))};
 	Limbs[3] = {Find(TEXT("RightUpLeg")), Find(TEXT("RightLeg")), Find(TEXT("RightFoot"))};
+	// 资源中的骨骼变换相对父骨骼，这里逐级累乘，转成相对整个骑手模型的坐标
 	Reference = Skeleton.GetRefBonePose();
 	Parents.SetNum(Reference.Num());
 	for (int32 I = 0; I < Reference.Num(); ++I)
@@ -65,6 +69,7 @@ bool DeliveryRiderPose::FRig::IsReady() const
 // 旋转骨骼分支，并同步移动其下级骨骼
 void DeliveryRiderPose::FRig::RotateBranch(TArray<FTransform>& Pose, int32 Bone, const FQuat& Rotation) const
 {
+	// 以这根骨骼的位置为旋转中心，所有后代一起转，保持骨骼之间的连接
 	const FVector Pivot = Pose[Bone].GetLocation();
 	for (int32 I = Bone; I < Pose.Num(); ++I)
 	{
@@ -82,6 +87,7 @@ void DeliveryRiderPose::FRig::RotateBranch(TArray<FTransform>& Pose, int32 Bone,
 void DeliveryRiderPose::FRig::BuildBody(const FPoseOffset& Offset, float Weight, const FVector& Forward,
                                         const FVector& Right, TArray<FTransform>& Pose) const
 {
+	// 每帧从同一份坐姿开始，避免把上一帧的倾斜继续叠加
 	Pose = Reference;
 	const FVector Up = FVector::CrossProduct(Forward, Right).GetSafeNormal();
 	// 座位附近只允许很小的起伏；胸腰承担大部分夸张动作，头稍微反向保持视线
@@ -99,6 +105,7 @@ void DeliveryRiderPose::FRig::BuildBody(const FPoseOffset& Offset, float Weight,
 		       FQuat(Forward, FMath::DegreesToRadians(Offset.Roll * Fraction * Weight)) *
 		       FQuat(Right, FMath::DegreesToRadians(Offset.Pitch * Fraction * Weight));
 	};
+	// 腰先带动整个上身，胸再补一部分倾斜，颈部略向反方向补偿
 	RotateBranch(Pose, Spine, Tilt(.55f));
 	RotateBranch(Pose, Chest, Tilt(.45f));
 	RotateBranch(Pose, Neck,
@@ -115,6 +122,8 @@ bool DeliveryRiderPose::FRig::CanFeetReach(const TArray<FTransform>& Pose, const
 		const float A = FVector::Distance(Pose[L.Root].GetLocation(), Pose[L.Mid].GetLocation());
 		const float B = FVector::Distance(Pose[L.Mid].GetLocation(), Pose[L.End].GetLocation());
 		const float D = FVector::Distance(Pose[L.Root].GetLocation(), Contacts[I].GetLocation());
+		// A、B 是大腿和小腿长度，D 是髋部到脚踏距离
+		// 太远会要求腿伸长，太近则无法用这两段骨骼折到目标处
 		if (D > A + B - .01f || D < FMath::Abs(A - B) + .01f)
 			return false;
 	}
@@ -125,29 +134,39 @@ bool DeliveryRiderPose::FRig::CanFeetReach(const TArray<FTransform>& Pose, const
 void DeliveryRiderPose::FRig::SolveLimb(TArray<FTransform>& Pose, const FLimb& L,
                                         const FTransform& Contact) const
 {
+	// 手臂对应肩、肘、手，腿对应髋、膝、脚，下面以手臂为例
 	const FVector Root = Pose[L.Root].GetLocation();
 	const FVector Mid = Pose[L.Mid].GetLocation();
 	const FVector End = Pose[L.End].GetLocation();
+	// A 是上臂长度，B 是小臂长度，求解只旋转骨骼，不拉长它们
 	const float A = FVector::Distance(Root, Mid), B = FVector::Distance(Mid, End);
 	if (FMath::Min(A, B) < .01f)
 		return;
 	const FVector Direction = (Contact.GetLocation() - Root).GetSafeNormal();
+	// 把肩到握把的距离限制在手臂可达范围，留少量余量避免完全伸直或折叠
+	// 目标超出范围时，手只能尽量靠近，并不保证严格贴住
 	const float Distance = FMath::Clamp(float(FVector::Distance(Root, Contact.GetLocation())),
 	                                    FMath::Abs(A - B) + .001f, A + B - .001f);
-	// 肘/膝向参考坐姿所在的一侧弯，避免直线附近突然翻到反关节方向
+	// 把当前肘部方向投影到垂直于肩到握把方向的平面，保留原来的弯曲侧
+	// 如果肘部恰好在这条直线上，改用向上方向确定弯曲侧
 	FVector Bend = FVector::VectorPlaneProject(Mid - Root, Direction).GetSafeNormal();
 	if (Bend.IsNearlyZero())
 		Bend = FVector::VectorPlaneProject(FVector::UpVector, Direction).GetSafeNormal();
+	// 肩、肘、手组成三角形，用余弦定理求肘部沿目标方向前进的距离 Along
+	// sqrt(A² - Along²) 是肘部偏离肩手连线的距离，两者合起来得到新肘部位置
 	const float Along = (A * A - B * B + Distance * Distance) / (2.f * Distance);
 	const FVector NewMid =
 	    Root + Direction * Along + Bend * FMath::Sqrt(FMath::Max(0.f, A * A - Along * Along));
 	const FVector NewEnd = Root + Direction * Distance;
+	// 先旋转上臂把肘部送到 NewMid，再旋转小臂让手到达 NewEnd
+	// FindBetweenNormals 求从旧方向转到新方向所需的旋转
 	RotateBranch(Pose, L.Root,
 	             FQuat::FindBetweenNormals((Mid - Root).GetSafeNormal(), (NewMid - Root).GetSafeNormal()));
 	RotateBranch(
 	    Pose, L.Mid,
 	    FQuat::FindBetweenNormals((Pose[L.End].GetLocation() - Pose[L.Mid].GetLocation()).GetSafeNormal(),
 		                          (NewEnd - Pose[L.Mid].GetLocation()).GetSafeNormal()));
+	// 位置确定后再对齐手掌朝向，腿部这里对齐的是脚的朝向
 	RotateBranch(Pose, L.End, Contact.GetRotation() * Pose[L.End].GetRotation().Inverse());
 }
 
@@ -160,11 +179,14 @@ void DeliveryRiderPose::FRig::Solve(const FPoseOffset& Offset, const FVector& Fo
 		OutPose = Reference;
 		return;
 	}
+	// 先尝试完整幅度的身体动作，手脚暂时会被上级骨骼带离接触点
 	BuildBody(Offset, 1.f, Forward, Right, OutPose);
 	// 仅用腿部可达性限制起伏；手臂由后面的腰部连续补偿处理
 	// 把手臂也放进全身缩幅判定，会在某侧刚够不到车把时突然将整套摆动归零
 	if (!CanFeetReach(OutPose, Contacts))
 	{
+		// 在零幅度和完整幅度之间二分尝试，保留双脚够得到脚踏的较大幅度
+		// 这依赖原始坐姿本来就能踩到脚踏，无法修复配置得过远的目标
 		float Low = 0, High = 1;
 		for (int32 I = 0; I < 8; ++I)
 		{
@@ -187,6 +209,8 @@ void DeliveryRiderPose::FRig::Solve(const FPoseOffset& Offset, const FVector& Fo
 			const FLimb& L = Limbs[I];
 			const FVector Shoulder = OutPose[L.Root].GetLocation();
 			const FVector Hand = Contacts[I].GetLocation();
+			// Reach 是触发上身补偿的距离，HandSlack 允许手与握把留少量间隙
+			// 这个容差不会增加骨骼长度，后面的四肢求解仍使用真实臂长
 			const float Reach =
 			    FVector::Distance(Shoulder, OutPose[L.Mid].GetLocation()) +
 			    FVector::Distance(OutPose[L.Mid].GetLocation(), OutPose[L.End].GetLocation()) - .1f +
@@ -194,15 +218,19 @@ void DeliveryRiderPose::FRig::Solve(const FPoseOffset& Offset, const FVector& Fo
 			if (FVector::Distance(Shoulder, Hand) <= Reach)
 				continue;
 			const FVector Pivot = OutPose[Spine].GetLocation();
+			// 目标肩部位于握把朝当前肩膀方向的 Reach 距离处
+			// 绕腰旋转使肩膀靠近该位置，左右手会互相影响，因此允许多轮修正
 			const FVector DesiredShoulder = Hand + (Shoulder - Hand).GetSafeNormal() * Reach;
 			const FQuat Correction = FQuat::FindBetweenNormals((Shoulder - Pivot).GetSafeNormal(),
 			                                                   (DesiredShoulder - Pivot).GetSafeNormal());
+			// 每轮只采用八成修正，减少左右手交替调整时的过度摆动
 			RotateBranch(OutPose, Spine, FQuat::Slerp(FQuat::Identity, Correction, .8f));
 			bAdjusted = true;
 		}
 		if (!bAdjusted)
 			break;
 	}
+	// 躯干位置确定后，依次求左手、右手、左脚、右脚的关节姿态
 	for (int32 I = 0; I < 4; ++I)
 		SolveLimb(OutPose, Limbs[I], Contacts[I]);
 	// 颈部位于手臂链之外，最后叠加不会移动握把或脚踏接触点
