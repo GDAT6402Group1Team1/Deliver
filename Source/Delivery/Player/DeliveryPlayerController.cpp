@@ -296,3 +296,12 @@ FText ADeliveryPlayerController::GetPhoneKeyText() const
 {
     return Hints ? Hints->GetKeyText(TogglePhoneAction.LoadSynchronous()) : FText::GetEmpty();
 }
+
+// 面板状态由 HUD 保存，保留诊断命令的查询入口
+const TSet<FName>& ADeliveryPlayerController::GetOpenUIPanelsForDebug() const
+{
+    if (const ADeliveryHUD* HUD = GetHUD<ADeliveryHUD>())
+        return HUD->GetOpenPanelsForDebug();
+    static const TSet<FName> EmptyPanels;
+    return EmptyPanels;
+}

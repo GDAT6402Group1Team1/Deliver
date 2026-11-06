@@ -23,6 +23,8 @@ public:
     UDeliveryPhoneController* GetPhoneController();
     void SetPanelOpen(FName PanelId, bool bOpen);
     bool IsPanelOpen(FName PanelId) const { return OpenPanels.Contains(PanelId); }
+    // 诊断命令只读取面板状态，不修改界面
+    const TSet<FName>& GetOpenPanelsForDebug() const { return OpenPanels; }
     bool IsAnyPanelOpen() const { return !OpenPanels.IsEmpty(); }
 protected:
     virtual void BeginPlay() override;

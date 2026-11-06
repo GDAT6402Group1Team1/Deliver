@@ -101,3 +101,9 @@ PhoneAudio 是 PC 上的独立组件，它自己订阅电话队列，不依赖 W
 
 
 手机 MVC 验证：完整编译通过，27 项自动化检查通过，其中原套件有 6 项带警告。双人 PIE 验证了手动手机开关隔离、共享来电展开、客户端接听后两边播放对白、挂断停声并收起，以及召唤、上下车和视角切换。手机状态、处理器查询与鼠标显示一致。四个电话音效引用已迁移并在重启后核对，HTML 已按手机宽度渲染检查。
+
+## 输入诊断
+
+`Delivery.Input.Dump` 通过 PC 的 `GetOpenUIPanelsForDebug` 查询 HUD 的面板集合，PC 不另存一份状态，HUD 尚未创建时返回空集合
+
+`Delivery.Input.Key` 用于模拟按键，实现在 `Source/Delivery/Input/Debug/DeliveryInputSimulationCommands.cpp`；输入状态快照保留在同目录的 `DeliveryInputDebugCommands.cpp`，两个命令分别维护

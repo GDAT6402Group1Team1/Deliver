@@ -124,10 +124,7 @@ class ADeliveryPlayerController : public APlayerController
     bool IsPhoneUIOpen() const;
 
     /** 只读当前开着的面板集合，供诊断命令列名字 */
-    const TSet<FName> &GetOpenUIPanelsForDebug() const
-    {
-        return OpenUIPanels;
-    }
+    const TSet<FName> &GetOpenUIPanelsForDebug() const;
 
   protected:
     virtual void BeginPlay() override;
