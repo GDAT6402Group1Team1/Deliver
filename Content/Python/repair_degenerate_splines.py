@@ -39,7 +39,13 @@ import traceback
 
 import unreal
 
-DRY_RUN = False
+DRY_RUN = True
+
+# 只修这些路口段（按标签精确匹配）。留空 = 全图。
+# **加这个过滤是刻意的**：这个脚本原来是全图跑的，而"只修某一个路口、
+# 保证其他路口表现一个字节都不变"是个反复出现的要求。全图跑会一次改掉
+# 十几个路口段的转弯走向，那属于设计决定、不该顺手做掉。
+ONLY_LABELS = []
 
 # 判据（用户 2026-10-29 定）：**只剩 1 个点**，或者**还是蓝图默认的那根残桩**。
 # 两种都是"这条路径不可用"的确定形态，不会是有意为之：
@@ -188,6 +194,8 @@ def run():
     fixed, skipped, nodonor = 0, 0, []
     w(u"")
     for a, lbl, comps in sorted(inter_actors, key=lambda t: t[1]):
+        if ONLY_LABELS and lbl not in ONLY_LABELS:
+            continue
         order = []
         for key in ("Spline", "SplineComponent"):
             if key in comps:
