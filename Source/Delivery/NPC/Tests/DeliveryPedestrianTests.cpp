@@ -60,6 +60,7 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	Route->bAllowHandoff = false;
 	Route->MaxAlive = 3;
 	Route->LateralJitter = 0.f;
+	Route->bPauseWhileWalking = false;
 	Route->WalkSpeedMin = 200.f;
 	Route->WalkSpeedMax = 200.f;
 	Route->AppearDistance = 200.f;
@@ -113,9 +114,7 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	ADeliveryPedestrian* Walker = Route->SpawnOnePedestrian(true);
 	if (!TestNotNull(TEXT("spawn one"), Walker))
 		return false;
-	// 停顿会让"走了多远"的断言失效，所以这一段把它关掉（PauseDurationMax = 0）
-	Walker->PauseDurationMax = 0.f;
-	Walker->PauseDurationMin = 0.f;
+	TestEqual(TEXT("单列路线不会随机停步"), Walker->PauseDurationMax, 0.f);
 	TestEqual(TEXT("从端点进场"), Walker->GetDistanceAlongRoute(), 0.f, 1.f);
 	TestTrue(TEXT("单向时正向走"), Walker->IsWalkingForward());
 	// 进场那一刻必须是看不见的，否则生成那一帧会有一个原尺寸的人闪一下
@@ -501,6 +500,7 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	// 普通路人只在各自的小圆内走走停停，不能接驳到另一条长路线。
 	ClearAll();
 	Route->bRoamInArea = true;
+	Route->bPauseWhileWalking = true;
 	Route->RoamRadius = 300.f;
 	Route->RoamPauseDistanceMin = 100.f;
 	Route->RoamPauseDistanceMax = 150.f;

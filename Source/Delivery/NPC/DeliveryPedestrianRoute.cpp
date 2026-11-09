@@ -306,6 +306,11 @@ ADeliveryPedestrian* ADeliveryPedestrianRoute::SpawnOnePedestrian(bool bAtEntran
 		Pedestrian->PauseIntervalMin = RoamPauseDistanceMin;
 		Pedestrian->PauseIntervalMax = RoamPauseDistanceMax;
 	}
+	if (!bPauseWhileWalking)
+	{
+		Pedestrian->PauseDurationMin = 0.f;
+		Pedestrian->PauseDurationMax = 0.f;
+	}
 	Pedestrian->BeginWalk(this, PickedMesh, WalkAnim.LoadSynchronous(), StartDistance, bWalkForward,
 	                      Speed, WalkAnimReferenceSpeed);
 
