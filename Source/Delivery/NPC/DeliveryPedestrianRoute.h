@@ -149,6 +149,10 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	          meta = (ClampMin = "0.0", Units = "cm"))
 	float LateralJitter = 45.f;
 
+	/** 关闭后沿线持续行走，适合单列队伍 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|行走")
+	bool bPauseWhileWalking = true;
+
 	// 路线接驳（走到头换下一条继续走）
 	/**
 	 * 允许路人走到端点后换一条相连的路线继续走，而不是缩掉退场

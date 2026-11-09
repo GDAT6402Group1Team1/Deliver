@@ -496,7 +496,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - **身高必须按种类单独写**（`FDeliveryPedestrianKind::HeightScale`）：六份源模型按老的 FbxFactory 路线、缩放 1.0 的包围盒高度实测**全是 99.8 cm**（归一化过的；被 Interchange 接走时同样的调用量到 192 cm，那条路忽略 FbxImportUI 的缩放，报告里"导入路"那一列要看一眼），所以导入时那个共用缩放把所有人都拉到同一身高——小男孩和中年男一样高。相对高矮不在模型里，只能在配置里表达（当前小孩 0.60 = 84 cm、中年 1.00 = 140 cm、老人 0.80 = 112 cm；基准 `TARGET_ADULT_HEIGHT = 140` = **主角实测身高**，BP_DeliveryMan 的胶囊半高是 **70**、renwu 网格高 139.9；**不是 96**，按 96 反推 192 会让路人比主角高出一头）。身高写进**出生变换**而不是生成后再 `SetActorScale3D`：路人在 `BeginPlay` 把当时的缩放记成 `BaseScale`、出入场曲线乘在它上面，生成后再改会被出入场缩放当场覆盖。挑"哪一种"和取"它的身高"是同一次决定（`PickKind` 一次输出两个值），分两次查会在权重随机那步各挑一次，表现是小孩配着大人的身高。
 - **把没有骨骼的网格交给 `PoseableMesh` 会崩**（`AllocateTransformData` → `FillComponentSpaceTransforms` 按骨骼数索引，数组大小 0 时直接断言）。`BeginWalk` 现在先查 `GetRefSkeleton().GetNum()`，没骨骼就退回静态外观并点名一次；自动化测试用的临时网格正好是这种，第一版就崩在那里。
 - **受击与被车撞**：路人有自己的碰撞通道 `Pedestrian`（`ECC_GameTraceChannel3`），不复用玩家的 `PhysicsBody`。拳头和车辆各自扫掠命中 `IDeliveryImpactReceiver`。普通路人受击后保留原模型，沿冲量方向在 `FallDuration`（0.55 秒）内倾倒，在地上停留 `KnockedLieDuration`（5 秒），再用 1.2 秒程序化屈腿、转身爬起；不再缩小销毁，也不从生成点的在场名单摘掉。`bUsePhysicalKnockdown` 可选真实布娃娃，缺少物理资产时仍退回可见的程序化跌倒。手臂默认下垂角度 84°、外张 5°、前后摆幅 22°。碰撞测试仍需真实关卡目视验收。
-- **走走停停 + 特殊路线接驳**：停下来腿自动停（步态相位按路程推进），所以只需要让它停。停顿按**路程**抽不按时间；普通游走区按出生后的时间放大，不使用样条两端窗口。以下接驳规则只适用于 `bRoamInArea=false`：走到端点找相连路线继续走，连通只看端点到端点；换线那头不淡入、还有下家那头不淡出；接驳次数有上限，目标满员不接，在场名单先摘后加，下家随机挑，连通表懒加载。学校过马路玩法尚待单独接入。
+- **走走停停 + 特殊路线接驳**：停下来腿自动停（步态相位按路程推进），所以只需要让它停。停顿按**路程**抽不按时间；普通游走区按出生后的时间放大，不使用样条两端窗口。以下接驳规则只适用于 `bRoamInArea=false`：走到端点找相连路线继续走，连通只看端点到端点；换线那头不淡入、还有下家那头不淡出；接驳次数有上限，目标满员不接，在场名单先摘后加，下家随机挑，连通表懒加载。单列队伍可关闭 `bPauseWhileWalking`；学校过马路与交通灯联动尚待单独接入。
 - 调试：`Delivery.Pedestrian.Dump` / `.Spawn` / `.Clear`；回归测试 `Delivery.NPC.PedestrianWalk`。
 
 
@@ -509,7 +509,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - 32 个交通 actor **整体平移** +(5500, 6300)，现在占 X [3420, 8233] / Y [3310, 8324]。**平移量必须对所有交通 actor 相同**：`BP_Intersection` 靠自己的 Box 和路段 Box 重叠找子节点，各自挪不同量会让路口找不到灯组，表现是"红绿灯没了"。
 - **幂等靠 `ClaudeGenTrafficMoved` 标签**，不靠判坐标（用户可能自己拖回来一点，而重跑就再平移一遍）。玩家摩托车刻意不跟着挪（留在 (1540, 0)）。这张图没有 PlayerStart，玩家出生在原点、正好在测试区里。
 
-测试区内容：`Task001_PickupPoint` (-2000, -1500) = `Location_Restaurant_001`（PackageClass 留空 → 内置测试快递）、`Task001_DropOffPoint` (2000, 1500) = `Location_OldManHouse_001` + `DA_Task_001`（相距 5000 cm、半径各 200）、四个 `PedestrianRoute_Test_*` 活动点，中心为 (-600/-3200, ±3000)，各自半径 300 cm。地点编号和主地图相同（`Tasks.csv` 里 Task_001 就是这两个；两图不同时加载）。任务清单在 `BP_DeliveryGameState.TaskDefinitions`、GameMode 全局默认且这张图没覆盖，所以任务系统本来就通。
+测试区内容：`Task001_PickupPoint` (-2000, -1500) = `Location_Restaurant_001`（PackageClass 留空 → 内置测试快递）、`Task001_DropOffPoint` (2000, 1500) = `Location_OldManHouse_001` + `DA_Task_001`（相距 5000 cm、半径各 200）、四个 `PedestrianRoute_Test_*` 活动点，中心为 (-600/-3200, ±3000)，各自半径 300 cm；另有 `PedestrianRoute_ChildQueue` 在 (500, -5000) → (4500, -5000)，等权随机小男孩/小女孩、最多 6 人，单向直走且首尾缩放，`place_child_queue.py` 可按标签幂等重摆。地点编号和主地图相同（`Tasks.csv` 里 Task_001 就是这两个；两图不同时加载）。任务清单在 `BP_DeliveryGameState.TaskDefinitions`、GameMode 全局默认且这张图没覆盖，所以任务系统本来就通。
 
 `Content/Python/thin_out_traffic.py`（`KEEP` / `MAX_SPEED`）减车并放慢，四件事缺一不可：①删到剩 KEEP 辆；②写低 `MaxSpeed`（低速不影响接路：扫描长度 = 60 × 5 × 车速）；③关 `bSpawnExtraWaves`，不关的话 3 辆 45 秒后变 9 辆；④**关 `bPushSlowLeader` 并压低 `MinPushedMaxSpeed`**——两车近距离跟车时组件把前车 `MaxSpeed` 写成自己的、并把自己压到不低于 `MinPushedMaxSpeed`（默认 600），所以跟过一次车车速就永久回到 600，表现是"车速改了、跑一会儿又快起来了"。恢复满车流跑 `spawn_test_cars.py`。
 

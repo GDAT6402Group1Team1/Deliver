@@ -519,7 +519,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 这种改动得在编辑器里看着它的引用关系做，不该由脚本顺手搬——先留着，等要用它时再处理。
 
 ### 街上的路人（NPC）
-普通街道路人默认使用 `ADeliveryPedestrianRoute::bRoamInArea`：以生成点为中心在默认 300 cm 半径内随机选短目标，走 120–320 cm 后停一下，再换方向；同点出生位置至少相隔 90 cm。`testfortraffic` 既有四个生成点相距至少 2600 cm，活动圆互不重叠，运行时不接驳长路线。`setup_npc.py` 重摆时也按这四个独立活动区配置。长样条与端点接驳代码保留为 `bRoamInArea=false` 的特殊模式，**以后单独用于学校门口一群小孩过马路**；这次没有实现过街编队和交通灯联动。
+普通街道路人默认使用 `ADeliveryPedestrianRoute::bRoamInArea`：以生成点为中心在默认 300 cm 半径内随机选短目标，走 120–320 cm 后停一下，再换方向；同点出生位置至少相隔 90 cm。`testfortraffic` 既有四个生成点相距至少 2600 cm，活动圆互不重叠，运行时不接驳长路线。`setup_npc.py` 重摆时也按这四个独立活动区配置。小孩单列队伍使用 `bRoamInArea=false` 的直线模式；过街和交通灯联动尚未实现。
 
 `Design/Art/NPC/` 下是六份未导入的 FBX（小男孩、小女孩、中年男、中年女、老爷爷、老奶奶）。
 **源美术文件统一放在 `Design/Art/` 下，不散在工程根目录**（见上面「源美术文件的位置」一节）。
@@ -781,12 +781,13 @@ Interchange、`FbxImportUI` 的选项（含缩放）被整份忽略。路线只�
 | `Task001_PickupPoint` | (-2000, -1500) | `Location_Restaurant_001`，PackageClass 留空 → 内置测试快递 |
 | `Task001_DropOffPoint` | (2000, 1500) | `Location_OldManHouse_001` + `DA_Task_001` |
 | `PedestrianRoute_Test_*` | (-600/-3200, ±3000) | 四个独立活动点，各在半径 300 cm 内游走，六种外观可出现 |
+| `PedestrianRoute_ChildQueue` | (500, -5000) → (4500, -5000) | 小男孩/小女孩随机等权出现，最多 6 人；单向直行、间隔生成、不预铺、不随机停步，首尾各 250 cm 缩放进出场 |
 
 取货点和收件点相距 5000 cm，交互半径各 200 cm，**地点编号和主地图用同一个**
 （`Tasks.csv` 里 Task_001 写的就是这两个 ID；两张图不会同时加载，不冲突）。
 任务清单在 `BP_DeliveryGameState.TaskDefinitions` 上（已含 DA_Task_001），
 GameMode 是项目全局默认、**这张图没有覆盖**，所以任务系统本来就是通的，只缺这两个点。
-脚本：`place_task_points.py`（落点写死，不去找路）、`setup_npc.py` 的 `place_route()`。
+脚本：`place_task_points.py`（落点写死，不去找路）、`setup_npc.py` 的 `place_route()`、`place_child_queue.py`（按标签只替换小孩路线）。
 
 **把车流减到几辆并放慢**：`Content/Python/thin_out_traffic.py`（`KEEP` / `MAX_SPEED`）。
 改的是关卡里已有的车、不重新摆。四件事缺一件都达不到"只有两三辆慢车"：
