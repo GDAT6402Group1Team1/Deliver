@@ -258,6 +258,22 @@ bool IsPunctuation(TCHAR Glyph)
 	       Glyph == TEXT('（') || Glyph == TEXT('）') || Glyph == TEXT('"') || Glyph == TEXT('\'') ||
 	       Glyph == TEXT('“') || Glyph == TEXT('”') || Glyph == TEXT('《') || Glyph == TEXT('》');
 }
+
+// 一个字符是不是"宽字"：汉字、假名、韩文、全角。
+// 这类字一个就是一个音节，按 CharacterInterval 原速念；
+// 拉丁字母这些窄字一个只是音节的一部分，要按 NarrowGlyphScale 提速。
+// 判据按 Unicode 区段而不是"是不是 ASCII"：西里尔、希腊也是拼音文字，该跟拉丁一样快
+bool IsWideGlyph(TCHAR Glyph)
+{
+	const uint32 Code = static_cast<uint32>(Glyph);
+
+	return (Code >= 0x3040 && Code <= 0x30FF)    // 平假名、片假名
+	       || (Code >= 0x3400 && Code <= 0x4DBF) // 扩展 A 区汉字
+	       || (Code >= 0x4E00 && Code <= 0x9FFF) // 常用汉字
+	       || (Code >= 0xAC00 && Code <= 0xD7AF) // 韩文音节
+	       || (Code >= 0xF900 && Code <= 0xFAFF) // 兼容汉字
+	       || (Code >= 0xFF00 && Code <= 0xFF60); // 全角字母数字
+}
 }
 
 UDeliveryDialogueVoiceComponent::UDeliveryDialogueVoiceComponent(const FObjectInitializer& ObjectInitializer)
@@ -446,26 +462,47 @@ ISoundGeneratorPtr UDeliveryDialogueVoiceComponent::CreateSoundGenerator(
 // 显示下一个字符，发声后安排下一个字符的时间
 void UDeliveryDialogueVoiceComponent::RevealNextGlyph()
 {
-	if (!bSpeaking || !ActiveText.IsValidIndex(NextGlyphIndex))
+	UWorld* World = GetWorld();
+
+	// 延时为零的字符必须在**同一次调用里**继续往下念，不能交给计时器：
+	// FTimerManager::SetTimer 收到小于等于 0 的间隔时，会先清掉旧计时器、然后什么都不设
+	// （TimerManager.cpp 里那句 `if (InRate > 0.f)`），于是整条对白停在那儿不动。
+	// 回车换行那一对里的回车符正是零延时的那一个，而它就在第一行末尾，
+	// 所以表现是"念完第一行就愣住"。
+	// 写成循环而不是只特判回车符：以后再加零延时的规则也不会把播放链悄悄掐断
+	for (;;)
 	{
-		bSpeaking = false;
-		OnLineFinished.Broadcast();
+		if (!bSpeaking || !ActiveText.IsValidIndex(NextGlyphIndex))
+		{
+			bSpeaking = false;
+			OnLineFinished.Broadcast();
+			return;
+		}
+
+		const int32 GlyphIndex = NextGlyphIndex;
+		const TCHAR Glyph = ActiveText[NextGlyphIndex++];
+		OnGlyphRevealed.Broadcast(FString::Chr(Glyph), GlyphIndex);
+
+		if (ShouldSoundGlyph(Glyph))
+		{
+			TriggerGlyphSound(Glyph, GlyphIndex);
+		}
+
+		const float Delay = DelayForGlyph();
+		if (Delay <= 0.f)
+		{
+			// 这个字符不占时间，直接接着念下一个。回到循环开头会重查 bSpeaking，
+			// 因为上面那两个广播有可能在回调里把这句话停掉
+			continue;
+		}
+
+		if (World)
+		{
+			World->GetTimerManager().SetTimer(GlyphTimer, this, &UDeliveryDialogueVoiceComponent::RevealNextGlyph,
+			                                  Delay, false);
+		}
+
 		return;
-	}
-
-	const int32 GlyphIndex = NextGlyphIndex;
-	const TCHAR Glyph = ActiveText[NextGlyphIndex++];
-	OnGlyphRevealed.Broadcast(FString::Chr(Glyph), GlyphIndex);
-
-	if (ShouldSoundGlyph(Glyph))
-	{
-		TriggerGlyphSound(Glyph, GlyphIndex);
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(GlyphTimer, this, &UDeliveryDialogueVoiceComponent::RevealNextGlyph,
-		                                  DelayForGlyph(Glyph), false);
 	}
 }
 
@@ -492,29 +529,111 @@ void UDeliveryDialogueVoiceComponent::TriggerGlyphSound(TCHAR Glyph, int32 Glyph
 // 文字间隔与语调
 
 // 根据字符和标点决定停顿时长
-float UDeliveryDialogueVoiceComponent::DelayForGlyph(TCHAR Glyph) const
+// 单个字符念完之后要等多久。**这是全项目唯一一份逐字计时规则**，
+// 真实播放（DelayForGlyph）和时长估算（EstimateSpeechSeconds）都调它——
+// 抄成两份的话会出现"估算说够、实际被截断"，而那种不一致极难想到。
+//
+// 收整串文本 + 下标而不是单个字符：换行要判 \r\n 是不是一对，
+// 只看一个字符做不到（见下面那段注释）
+float UDeliveryDialogueVoiceComponent::GlyphDelaySeconds(const FString& Text, int32 Index,
+                                                         const FDeliveryVoiceSettings& Settings)
 {
+	if (!Text.IsValidIndex(Index))
+	{
+		return 0.f;
+	}
+
+	const TCHAR Glyph = Text[Index];
+
+	// 标点是**替换**整个字符间隔而不是叠加在它上面；空格只算半个
 	if (Glyph == TEXT('\n') || Glyph == TEXT('\r'))
 	{
-		return ActiveSettings.SentencePause;
+		// Windows 上写的文本是 \r\n，两个字符各停一次 SentencePause 的话，
+		// 换行处会停成别处的两倍——而停顿长短不该取决于文本是用什么换行符存的。
+		// 把 \r\n 当成一个换行：\r 不停，停顿记在 \n 上
+		const bool bIsCarriageReturnOfPair =
+		    Glyph == TEXT('\r') && Text.IsValidIndex(Index + 1) && Text[Index + 1] == TEXT('\n');
+
+		return bIsCarriageReturnOfPair ? 0.f : Settings.SentencePause;
 	}
 	if (IsComma(Glyph))
 	{
-		return ActiveSettings.CommaPause;
+		return Settings.CommaPause;
 	}
 	if (IsSentenceEnd(Glyph))
 	{
-		return ActiveSettings.SentencePause;
-	}
-	if (FChar::IsWhitespace(Glyph))
-	{
-		return ActiveSettings.CharacterInterval * 0.5f;
+		return Settings.SentencePause;
 	}
 
-	// 固定文本会得到固定节奏，不用全局随机数，重复播放不会每次都换一种口吃方式
-	const uint32 Hash = HashCombine(GetTypeHash(static_cast<uint32>(Glyph)), GetTypeHash(NextGlyphIndex));
-	const float Jitter = (static_cast<float>(Hash % 2001) / 1000.f - 1.f) * 0.012f;
-	return FMath::Max(ActiveSettings.CharacterInterval + Jitter, 0.02f);
+	// 一个英文字母承载的信息远少于一个汉字，两者用同一个间隔的话，
+	// 中文是风格化的快、英文只有自然朗读速度，听着像卡住。
+	// 窄字（拉丁、西里尔、数字…）按倍率提速，汉字/假名/韩文保持原速
+	const float Interval =
+	    Settings.CharacterInterval * (IsWideGlyph(Glyph) ? 1.f : Settings.NarrowGlyphScale);
+
+	if (FChar::IsWhitespace(Glyph))
+	{
+		return Interval * 0.5f;
+	}
+
+	// 固定文本会得到固定节奏，不用全局随机数，重复播放不会每次都换一种口吃方式。
+	// 抖动幅度跟着间隔缩放，否则英文提速之后 ±12ms 会占到间隔的三分之一
+	const uint32 Hash = HashCombine(GetTypeHash(static_cast<uint32>(Glyph)), GetTypeHash(Index));
+	const float JitterScale = Settings.CharacterInterval > 0.f ? Interval / Settings.CharacterInterval : 1.f;
+	const float Jitter = (static_cast<float>(Hash % 2001) / 1000.f - 1.f) * 0.012f * JitterScale;
+
+	return FMath::Max(Interval + Jitter, 0.02f);
+}
+
+float UDeliveryDialogueVoiceComponent::DelayForGlyph() const
+{
+	// RevealNextGlyph 取字符时已经 NextGlyphIndex++，所以当前字符的下标是 NextGlyphIndex - 1。
+	return GlyphDelaySeconds(ActiveText, NextGlyphIndex - 1, ActiveSettings);
+}
+
+float UDeliveryDialogueVoiceComponent::EstimateSpeechSecondsWithSettings(
+    const FText& Text, const FDeliveryVoiceSettings& Settings)
+{
+	const FString Line = Text.ToString();
+	float Seconds = 0.f;
+	for (int32 Index = 0; Index < Line.Len(); ++Index)
+	{
+		Seconds += GlyphDelaySeconds(Line, Index, Settings);
+	}
+
+	return Seconds;
+}
+
+float UDeliveryDialogueVoiceComponent::EstimateSpeechSeconds(const FText& Text)
+{
+	// 取 CDO 上的 DefaultSettings：电话对白走的是 SpeakText，用的就是这一份。
+	// 蓝图在某个 PlayerController 上改过 DefaultSettings 的话这里看不到——
+	// 这只是编辑器期的估算，不值得为它去加载某张图里的某个实例
+	const UDeliveryDialogueVoiceComponent* Defaults = GetDefault<UDeliveryDialogueVoiceComponent>();
+
+	return EstimateSpeechSecondsWithSettings(
+	    Text, Defaults ? Defaults->DefaultSettings : FDeliveryVoiceSettings());
+}
+
+int32 UDeliveryDialogueVoiceComponent::SpokenGlyphCountWithin(const FText& Text, float Seconds)
+{
+	const UDeliveryDialogueVoiceComponent* Defaults = GetDefault<UDeliveryDialogueVoiceComponent>();
+	const FDeliveryVoiceSettings Settings =
+	    Defaults ? Defaults->DefaultSettings : FDeliveryVoiceSettings();
+
+	const FString Line = Text.ToString();
+	float Elapsed = 0.f;
+	for (int32 Index = 0; Index < Line.Len(); ++Index)
+	{
+		// 和真实播放同序：先念这个字，再等它的延时；延时等完才轮到下一个
+		Elapsed += GlyphDelaySeconds(Line, Index, Settings);
+		if (Elapsed > Seconds)
+		{
+			return Index;
+		}
+	}
+
+	return Line.Len();
 }
 
 bool UDeliveryDialogueVoiceComponent::ShouldSoundGlyph(TCHAR Glyph) const

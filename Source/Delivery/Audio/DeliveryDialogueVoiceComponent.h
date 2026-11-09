@@ -44,9 +44,20 @@ struct FDeliveryVoiceSettings
 	float BlipDuration = 0.06f;
 
 	/** 普通字符之间的间隔 */
+	/** 普通字符之间的间隔；这个值按"一个字 = 一个音节"定，对应汉字 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Delivery|Voice",
 	          meta = (ClampMin = "0.025", ClampMax = "0.4"))
 	float CharacterInterval = 0.075f;
+
+	/**
+	 * 窄字（拉丁字母、数字、西里尔…）的间隔倍率；汉字/假名/韩文不受影响
+	 * 一个英文字母承载的信息远少于一个汉字，两者同速的话中文是风格化的快、
+	 * 英文只有自然朗读速度（实测 2.6 单词/秒），听着像卡住。
+	 * 0.45 让英文到约 5.7 单词/秒，相对自然语速的倍数和中文那边对得上
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Delivery|Voice",
+	          meta = (ClampMin = "0.15", ClampMax = "1"))
+	float NarrowGlyphScale = 0.45f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Delivery|Voice",
 	          meta = (ClampMin = "0.03", ClampMax = "1"))
@@ -170,6 +181,27 @@ class DELIVERY_API UDeliveryDialogueVoiceComponent : public USynthComponent
 	UFUNCTION(BlueprintPure, Category = "Delivery|Voice")
 	static FDeliveryVoiceSettings MakePresetSettings(EDeliveryVoicePreset Preset);
 
+	// 时长估算
+	/**
+	 * 估算整段台词念完要几秒，和真实播放共用同一条逐字计时规则
+	 * 给"通话时长够不够念完"这类校验用：电话到点就挂断、不等念完，
+	 * 配短了的表现是 NPC 话没说完就被切断
+	 */
+	UFUNCTION(BlueprintPure, Category = "Delivery|Voice")
+	static float EstimateSpeechSecondsWithSettings(const FText& Text, const FDeliveryVoiceSettings& Settings);
+
+	/** 同上，用 C++ 默认声线；电话对白走 SpeakText，用的就是这一份 */
+	UFUNCTION(BlueprintPure, Category = "Delivery|Voice")
+	static float EstimateSpeechSeconds(const FText& Text);
+
+	/**
+	 * 给定秒数能念到第几个字符（返回念得出来的前缀长度）
+	 * 校验时用来指出"会在哪儿被挂断"；和估算共用同一条计时规则，
+	 * 所以报出来的位置和实际听到的一致
+	 */
+	UFUNCTION(BlueprintPure, Category = "Delivery|Voice")
+	static int32 SpokenGlyphCountWithin(const FText& Text, float Seconds);
+
 	// 字幕与结束通知
 	/** Widget 绑定它来逐字追加文字；Index 是原始字符串里的 UTF-16 下标 */
 	UPROPERTY(BlueprintAssignable, Category = "Delivery|Voice")
@@ -188,7 +220,9 @@ class DELIVERY_API UDeliveryDialogueVoiceComponent : public USynthComponent
 	// 逐字播放处理
 	void RevealNextGlyph();
 	void TriggerGlyphSound(TCHAR Glyph, int32 GlyphIndex);
-	float DelayForGlyph(TCHAR Glyph) const;
+	/** 唯一一份逐字计时规则；DelayForGlyph 和 EstimateSpeechSeconds* 都走它 */
+	static float GlyphDelaySeconds(const FString& Text, int32 Index, const FDeliveryVoiceSettings& Settings);
+	float DelayForGlyph() const;
 	bool ShouldSoundGlyph(TCHAR Glyph) const;
 	float ProsodySemitoneOffset(int32 GlyphIndex, TCHAR Glyph) const;
 	bool IsOwnedByLocalController() const;

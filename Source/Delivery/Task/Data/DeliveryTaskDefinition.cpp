@@ -5,6 +5,7 @@
 #include "Task/Data/DeliveryTaskUnlockCondition.h"
 
 #if WITH_EDITOR
+#include "Audio/DeliveryDialogueVoiceComponent.h"
 #include "Misc/DataValidation.h"
 #endif
 
@@ -128,6 +129,39 @@ EDataValidationResult UDeliveryTaskDefinition::IsDataValid(FDataValidationContex
 			Result = EDataValidationResult::Invalid;
 		}
 	}
+
+	// 通话时长由服务器计时、到点直接挂断，不等本机念完（见 FDeliveryPhoneCallContent 的注释）。
+	// 所以 DurationSeconds 配得比台词短，玩家听到的就是"NPC 话没说完就被切断"——
+	// 而那看着像对白写短了或者语音坏了，几乎不会让人想到是时长没配。
+	// 只报警告不报错：故意切断一段长台词是合理的做法，这里只是把数摆出来
+	auto ValidateCallDuration = [&Context](const FDeliveryPhoneCallContent& Call, const FText& FieldName) {
+		if (Call.Dialogue.IsEmpty())
+		{
+			return;
+		}
+
+		const float NeedSeconds = UDeliveryDialogueVoiceComponent::EstimateSpeechSeconds(Call.Dialogue);
+		if (Call.DurationSeconds >= NeedSeconds)
+		{
+			return;
+		}
+
+		// 把"念到哪儿被切"也报出来：直接给出截断位置比只报两个数好查得多
+		const int32 SpokenLength =
+		    UDeliveryDialogueVoiceComponent::SpokenGlyphCountWithin(Call.Dialogue, Call.DurationSeconds);
+		const FString Spoken = Call.Dialogue.ToString().Left(SpokenLength);
+
+		Context.AddWarning(FText::Format(
+		    LOCTEXT("CallCutShort",
+		            "{0} 的 DurationSeconds 只有 {1} 秒，而这段台词念完要 {2} 秒，"
+		            "玩家听不到后面的内容（会在「{3}」处被挂断）。"),
+		    FieldName, FText::AsNumber(Call.DurationSeconds),
+		    FText::AsNumber(FMath::CeilToFloat(NeedSeconds * 10.f) / 10.f),
+		    FText::FromString(Spoken.Right(24).ReplaceCharWithEscapedChar())));
+	};
+
+	ValidateCallDuration(UnlockCall, LOCTEXT("UnlockCallField", "UnlockCall"));
+	ValidateCallDuration(OverdueCall, LOCTEXT("OverdueCallField", "OverdueCall"));
 
 	return Result;
 }
