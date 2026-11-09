@@ -7,7 +7,13 @@
 #include "Engine/EngineTypes.h"
 #include "DeliveryTrafficCarComponent.generated.h"
 
+class UDeliveryVehicleAudioComponent;
+class USoundBase;
+class USoundAttenuation;
+class APlayerController;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDeliveryTrafficCarRouteLostSignature);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryTrafficHornSignature, USoundBase*, Sound);
 
 /**
  * 辅助交通车的蓝图移动，处理路线丢失、前车避让和碰撞伤害
@@ -24,8 +30,55 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	UDeliveryTrafficCarComponent();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
 	                           FActorComponentTickFunction* ThisTickFunction) override;
+
+	/** 服务器请求鸣笛，成功发出通知返回 true；冷却、重置或没有有效声音时返回 false */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Traffic|鸣笛")
+	bool TryHonk();
+
+	/** 各客户端收到本次鸣笛后通知，可用于灯光等表现；迟加入的玩家不会重播旧鸣笛 */
+	UPROPERTY(BlueprintAssignable, Category = "Traffic|鸣笛")
+	FDeliveryTrafficHornSignature OnHornPlayed;
+
+	/** 从有效的非循环声音中随机选一个，多种声音时避免连续重复；清空数组可静音 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traffic|鸣笛")
+	TArray<TObjectPtr<USoundBase>> HornSounds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traffic|鸣笛")
+	bool bAutoHonkNearPlayers = true;
+
+	/** 玩家当前控制的角色或载具距交通车中心多近时触发 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traffic|鸣笛", meta = (ClampMin = "0.0", Units = "cm"))
+	float HornTriggerDistance = 800.0f;
+
+	/** 车头左右各覆盖多少度，按水平朝向检测；90 度覆盖前半面，侧面和后方不触发 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traffic|鸣笛", meta = (ClampMin = "1.0", ClampMax = "90.0", Units = "deg"))
+	float HornForwardHalfAngle = 60.0f;
+
+	/** 玩家离开此距离后才允许下次接近触发，运行时至少比触发距离大 1 cm */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traffic|鸣笛", meta = (ClampMin = "0.0", Units = "cm"))
+	float HornRearmDistance = 1100.0f;
+
+	/** 同一辆车的所有玩家和手动请求共用冷却，至少等待本次声音结束 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traffic|鸣笛", meta = (ClampMin = "0.1", Units = "s"))
+	float HornCooldown = 8.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traffic|鸣笛", meta = (ClampMin = "0.0"))
+	float HornVolume = 1.0f;
+
+	/** 每次鸣笛乘到 HornVolume 上的随机倍率，X 为最小值、Y 为最大值；两值相同可关闭随机 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traffic|鸣笛", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	FVector2D HornVolumeRange = FVector2D(0.9f, 1.1f);
+
+	/** 每次鸣笛的随机音调，1 为原音调，X 为最小值、Y 为最大值 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traffic|鸣笛", meta = (ClampMin = "0.5", ClampMax = "2.0"))
+	FVector2D HornPitchRange = FVector2D(0.95f, 1.05f);
+
+	/** 留空时使用默认空间衰减，8 米内全音量，向外 24 米渐弱 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traffic|鸣笛")
+	TObjectPtr<USoundAttenuation> HornAttenuation;
 
 	// 蓝图行驶状态
 	/** 蓝图每帧报告是否仍沿预设样条行驶，成功衔接下一段时也视为跟随路线 */
@@ -408,6 +461,28 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	FVector ImpactCenterOffset = FVector(70.0f, 0.0f, 90.0f);
 
   private:
+	// 距离和冷却只由服务器更新，播放交给现有车辆音效组件
+	void UpdatePlayerProximityHorn(float DeltaTime);
+	void ResetHornProximity();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayHorn(USoundBase* Sound, float Volume, float Pitch, USoundAttenuation* Attenuation);
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastStopHorn();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDeliveryVehicleAudioComponent> TrafficAudio;
+
+	// 记控制器而不是 Pawn，上下车切换控制对象不会被当成新玩家
+	TSet<TWeakObjectPtr<APlayerController>> HonkedPlayers;
+	TWeakObjectPtr<USoundBase> LastHornSound;
+	double NextHornTime = 0.0;
+	float HornCheckElapsed = 0.0f;
+	bool bOwnsTrafficAudio = false;
+
+	friend class FDeliveryTrafficHornTest;
+
 	// 生成与缩放更新
 	/** 到点后在记录下来的出生变换处生成下一波的车 */
 	void SpawnNextWave();

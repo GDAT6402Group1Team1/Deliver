@@ -4,6 +4,8 @@
 #include "Components/AudioComponent.h"
 #include "GameFramework/Actor.h"
 #include "Delivery.h"
+#include "Sound/SoundAttenuation.h"
+#include "Sound/SoundBase.h"
 
 void UDeliveryVehicleAudioComponent::BeginPlay()
 {
@@ -13,7 +15,8 @@ void UDeliveryVehicleAudioComponent::BeginPlay()
     GetOwner()->GetComponents(Components);
     for (UAudioComponent* Component : Components)
     {
-        if (Component->GetFName() == TEXT("EngineAudio"))
+        // 只有接管了发动机配置的车辆才停止旧音源，交通车仅借用鸣笛播放
+        if (Config && Component->GetFName() == TEXT("EngineAudio"))
         {
             EngineAudio = Component;
             EngineAudio->Stop();
@@ -55,8 +58,58 @@ void UDeliveryVehicleAudioComponent::UpdateEngine(bool bDriving, float SpeedRati
     EngineAudio->SetVolumeMultiplier(FMath::Lerp(Settings->IdleVolume, Settings->MaxVolume, Alpha));
 }
 
+void UDeliveryVehicleAudioComponent::PlayHorn(USoundBase* Sound, float Volume, float Pitch, USoundAttenuation* Attenuation)
+{
+    if (!IsValid(Sound) || Sound->IsLooping() || GetNetMode() == NM_DedicatedServer
+        || !GetOwner() || !GetOwner()->GetRootComponent())
+    {
+        return;
+    }
+    if (!IsValid(HornAudio))
+    {
+        HornAudio = NewObject<UAudioComponent>(GetOwner());
+        HornAudio->bAutoActivate = false;
+        HornAudio->bAutoDestroy = false;
+        HornAudio->bStopWhenOwnerDestroyed = true;
+        HornAudio->SetupAttachment(GetOwner()->GetRootComponent());
+        HornAudio->RegisterComponent();
+    }
+    HornAudio->Stop();
+    HornAudio->AttenuationSettings = Attenuation;
+    HornAudio->bOverrideAttenuation = Attenuation == nullptr;
+    if (!Attenuation)
+    {
+        // 原始 SoundWave 未配置衰减时仍按三维位置播放，避免全地图同音量
+        FSoundAttenuationSettings Settings;
+        Settings.bAttenuate = true;
+        Settings.bSpatialize = true;
+        Settings.AttenuationShape = EAttenuationShape::Sphere;
+        Settings.AttenuationShapeExtents = FVector(800.0f, 0.0f, 0.0f);
+        Settings.FalloffDistance = 2400.0f;
+        HornAudio->AdjustAttenuation(Settings);
+    }
+    HornAudio->SetSound(Sound);
+    HornAudio->SetVolumeMultiplier(FMath::Max(0.0f, Volume));
+    HornAudio->SetPitchMultiplier(FMath::Clamp(Pitch, 0.5f, 2.0f));
+    HornAudio->Play();
+}
+
+void UDeliveryVehicleAudioComponent::StopHorn()
+{
+    if (IsValid(HornAudio))
+    {
+        HornAudio->Stop();
+    }
+}
+
 void UDeliveryVehicleAudioComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    StopHorn();
+    if (IsValid(HornAudio))
+    {
+        HornAudio->DestroyComponent();
+    }
+    HornAudio = nullptr;
     if (EngineAudio)
     {
         EngineAudio->Stop();

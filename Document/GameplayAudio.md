@@ -74,6 +74,39 @@ DA_VehicleAudio 还包含发动机设置：循环资源为 Motor_loop，怠速�
 
 ## 增加事件或播放方式
 
+### 交通车靠近玩家鸣笛
+
+`BP_car_base` 已有的 `Delivery Traffic Car` 组件自动接入鸣笛，默认声音为 `/Game/Sound/SFX/beep-beep`，不需要逐辆车加组件或改地图。后续生成的车辆继承同一配置
+
+在车辆蓝图的 `Delivery Traffic Car → Traffic | 鸣笛` 中配置：
+
+| 参数 | 默认与含义 |
+|---|---|
+| Horn Sounds | 默认 beep-beep；可以增加多个 SoundWave / SoundCue，随机选择且尽量避免连续重复；空槽和循环声音忽略，清空数组静音 |
+| Auto Honk Near Players | 开启自动距离检查，关闭后仍可主动调用接口 |
+| Horn Trigger Distance | 800 cm，玩家当前控制的角色或载具到交通车中心的三维距离 |
+| Horn Forward Half Angle | 60°，车头水平朝向左右各 60° 的前方扇区；侧面和后方不自动触发，最大可设为 90° |
+| Horn Rearm Distance | 1100 cm，离开后才允许下一次接近触发，避免在边界来回重复 |
+| Horn Cooldown | 8 秒，同车所有玩家及主动请求共用；至少等本次声音时长结束 |
+| Horn Volume | 1.0，播放音量倍率 |
+| Horn Volume Range | 0.9–1.1，乘到 Horn Volume 上的随机倍率；X 下限、Y 上限，允许范围 0–2 |
+| Horn Pitch Range | 0.95–1.05，每次随机音调；1 是原音调，X 下限、Y 上限，允许范围 0.5–2；上下限相同可固定 |
+| Horn Attenuation | 可填自定义衰减资产；留空时 8 米内全音量，向外 24 米渐弱 |
+
+服务器每 0.2 秒遍历本世界的玩家控制器，按当前 Pawn 的位置和车头水平朝向检测，步行与骑车均可触发，旁观者不触发。玩家必须同时在距离和前方扇区内；排队等待冷却期间走到车后或侧面也不再触发。以控制器记录已鸣笛的玩家，上下车不会被算成第二个人；同时靠近的多人只触发一次。仍在重新触发距离内不会因冷却结束或进出扇区反复鸣笛，新的前方玩家遇到冷却则等冷却结束再触发
+
+`TryHonk()` 是可供蓝图调用的服务器主动鸣笛接口，返回 true 表示发出了本次通知；它共用冷却，但不要求前方有人，前方限制只用于自动触发。客户端直接调用返回 false，不会绕过交通车的权限。服务器选好具体声音、音量和 Pitch 再通过不可靠多播发送，附近客户端在各自车辆上调用现有 `DeliveryVehicleAudioComponent::PlayHorn`，不会各自随机。冷却下限按音效时长除以 Pitch 计算，避免降调后上一声还没结束就开始下一声。`OnHornPlayed(Sound)` 是各接收端的表现通知，不保存历史，迟加入者不补播
+
+鸣笛使用独立的挂接音源，不停止发动机。出现或消失动画期间不触发；重置位置会停止旧鸣笛、清理附近玩家记录，但保留冷却。结束运行或移除交通组件会清理本组件创建的音效组件和音源。纯服务器不创建音源
+
+自动化入口：`Delivery.Traffic.Horn`，覆盖前后与侧面、车头转向、多人去重、上下车换 Pawn、边界重新触发、随机音量与音调、降调冷却、声音选择、重置及清理；实际双人网络与音量仍需在 PIE 中验收
+
+2026-11-10 验证（含前方扇区和随机音量、Pitch）：`Build.bat DeliveryEditor Win64 Development -Project=D:\UnrealProjects\Deliver\Delivery.uproject -WaitMutex -NoHotReloadFromIDE` 完整编译成功；空白地图以 `Automation RunTests Delivery.Traffic.Horn+Delivery.Audio.Events` 运行的两项测试均成功，测试报告为 0 错误、0 警告。报告在 `Saved/Automation/TrafficHorn/index.json`，日志在 `Saved/Logs/TrafficHornTests.log`。只读核对 `/Game/Vehicle/BP_car_base` 及 1–5 五个变体，均继承 beep-beep、800 cm、8 秒、半角 60°、音量倍率 0.9–1.1 和 Pitch 0.95–1.05；结果在 `Saved/traffic_horn_asset_audit.json`。未做实际双人 PIE、丢包或扬声器试听，测试中的两名控制器位于同一独立世界
+
+启动日志仍包含物理材质在 CDO 阶段访问尚未初始化 GEngine 的错误，以及旧编辑器布局警告；本次修改前的 `Saved/Logs/Delivery.log` 已有相同记录，未纳入鸣笛修改。测试报告的 0 错误、0 警告仅指上述两项测试
+
+### 通用事件扩展
+
 增加同类音效时，在 EDeliveryEvent 中添加明确的事件名称，选择合适的业务位置发布，然后在配置表中填写声音。不要为了换一条声音再建立一个播放类
 
 如果播放过程不同，例如需要持续跟随速度或持续合成语音，再使用独立组件。车辆音效展示了这里的继承关系：共用一次性事件播放，只增加发动机行为

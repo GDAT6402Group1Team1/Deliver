@@ -1956,6 +1956,8 @@ DeliveryInteractionRegistry 是世界子系统，每个世界分别保存交互�
 
 ## 对象事件与游戏音效
 
+交通车靠近玩家鸣笛：`DeliveryTrafficCarHorn.cpp` 在服务器按当前 Pawn 距离和车头水平朝向检查，默认车头左右各 60°、8 米内触发，离开 11 米后重新允许，同车冷却 8 秒；控制器记录避免上下车和多人重复。`HornSounds` 默认 `beep-beep`，可增添非循环声音；`HornVolumeRange` 默认 0.9–1.1 倍音量，`HornPitchRange` 默认 0.95–1.05，服务器统一随机后多播，冷却下限计入 Pitch 对时长的影响。现有 `DeliveryVehicleAudioComponent` 管理随车移动与距离衰减的音源。`TryHonk` 留给服务器主动请求，`OnHornPlayed` 留给本机表现；重置/销毁清理声音。配置和验证入口见 `Document/GameplayAudio.md` 的交通车鸣笛部分
+
 `Events/DeliveryEventComponent` 提供对象范围的本地事件，`Audio/DeliveryAudioComponent` 在开始时订阅、结束时解绑，通过 `DeliveryAudioConfig.Sounds` 查找一次性音效。角色取件和交付 RPC 只发布事件；车辆用命名枚举的 `MulticastVehicleEvent` 代替数字音效编号。`DeliveryVehicleAudioComponent` 继承普通音效组件，独立控制原 EngineAudio 的循环播放，车辆只传入驾驶状态和速度比例。配置资源为 `/Game/Sound/Config/DA_PlayerAudio` 与 `DA_VehicleAudio`，原蓝图参数已迁移，地图车辆无单独音效覆盖。背景音乐、电子语音、电话音效保持原流程，未全部纳入新事件。详见 Document/GameplayAudio.md
 
 事件音效验证：完整编译、25 项自动化测试通过；配置重启后保持，双人验证对应玩家事件隔离、下车通知和发动机启停，原始参数审计与验证报告在本次工作目录 work/delivery_audio

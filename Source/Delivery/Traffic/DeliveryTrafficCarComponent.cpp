@@ -19,6 +19,9 @@
 #include "Components/SplineComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "TimerManager.h"
+#include "Audio/DeliveryVehicleAudioComponent.h"
+#include "Sound/SoundBase.h"
+#include "UObject/ConstructorHelpers.h"
 
 /** 通过反射读写蓝图车速，兼容单精度和双精度数值属性 */
 static const FName MaxSpeedPropName(TEXT("MaxSpeed"));
@@ -146,6 +149,12 @@ UDeliveryTrafficCarComponent::UDeliveryTrafficCarComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.TickGroup = TG_PostPhysics;
+	SetIsReplicatedByDefault(true);
+	static ConstructorHelpers::FObjectFinder<USoundBase> DefaultHorn(TEXT("/Game/Sound/SFX/beep-beep.beep-beep"));
+	if (DefaultHorn.Succeeded())
+	{
+		HornSounds.Add(DefaultHorn.Object);
+	}
 }
 
 // 路线初始化
@@ -154,6 +163,18 @@ UDeliveryTrafficCarComponent::UDeliveryTrafficCarComponent()
 void UDeliveryTrafficCarComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	// 旧蓝图组件可能保留了未复制的覆盖值，鸣笛多播需要两端都注册组件复制
+	SetIsReplicated(true);
+	if (GetOwner() && GetNetMode() != NM_DedicatedServer)
+	{
+		TrafficAudio = GetOwner()->FindComponentByClass<UDeliveryVehicleAudioComponent>();
+		if (!TrafficAudio)
+		{
+			TrafficAudio = NewObject<UDeliveryVehicleAudioComponent>(GetOwner());
+			TrafficAudio->RegisterComponent();
+			bOwnsTrafficAudio = true;
+		}
+	}
 	// Camera 弹簧臂仍会避开墙/地形，但车身不再把镜头瞬间推到角色脸前
 	if (AActor* Owner = GetOwner())
 	{
@@ -426,6 +447,7 @@ void UDeliveryTrafficCarComponent::TickComponent(float DeltaTime, ELevelTick Tic
 		return;
 	}
 	ProcessVehicleImpacts(DeltaTime);
+	UpdatePlayerProximityHorn(DeltaTime);
 
 	if (!bIsCurrentlyOnRoute && bHasReachedMaxSpeed)
 	{
@@ -566,6 +588,7 @@ void UDeliveryTrafficCarComponent::UpdateRouteFollowState(bool bIsFollowingRoute
 // 开始将离开路线的车辆恢复到道路
 void UDeliveryTrafficCarComponent::BeginRouteReset()
 {
+	ResetHornProximity();
 	// 先播放缩小效果，再通知蓝图重置；等待期间阻止重复发出重置通知
 
 if (bScaleOutOnRouteLost && ScaleOutDuration > 0.0f && GetOwner())
@@ -598,6 +621,7 @@ void UDeliveryTrafficCarComponent::UpdateStoppedAtIntersection(bool bInStoppedAt
 // 车辆回到路线起点时重置运动和碰撞记录
 void UDeliveryTrafficCarComponent::NotifyResetToStart()
 {
+	ResetHornProximity();
 	if (const AActor* Owner = GetOwner())
 	{
 		PreviousImpactTransform = Owner->GetActorTransform();
