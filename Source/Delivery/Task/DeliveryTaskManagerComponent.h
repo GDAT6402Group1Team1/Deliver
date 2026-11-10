@@ -28,12 +28,17 @@ UCLASS(ClassGroup = (Delivery), meta = (BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryTaskManagerComponent : public UActorComponent
 {
 	GENERATED_BODY()
+	friend class FDeliveryStartupTaskGateTest;
 
   public:
 	UDeliveryTaskManagerComponent();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	// 服务器开局入口，重复调用不重置时间；普通测试地图由 BeginPlay 自动调用
+	void StartGameplay();
 
 	/** 从任意对象拿到全局任务管理器（挂在 GameState 上） */
 	UFUNCTION(BlueprintPure, Category = "Task",
@@ -211,6 +216,9 @@ class DELIVERY_API UDeliveryTaskManagerComponent : public UActorComponent
 	/** 客户端是否已经收到过首次同步；首次同步是"现状"，不是"刚刚发生的变化" */
 	bool bReceivedInitialState = false;
 
-	/** 本组件 BeginPlay 的时刻，作为"关卡开始"的基准 */
+	/** 实际开局时刻，启动菜单的等待时间不计入任务解锁 */
+	UPROPERTY(Replicated)
 	float LevelStartServerTime = 0.f;
+	UPROPERTY(Replicated)
+	bool bGameplayStarted = false;
 };

@@ -382,7 +382,9 @@ Use case: stylized-concept. Asset type: a single small currency icon for the rew
 
 ```
 关卡开始
-  └ TaskManager::BeginPlay → ReevaluateUnlocks()
+  └ TaskManager::BeginPlay → 建立 Locked 状态
+      └ StartGameplay → 记录实际开局时间 → ReevaluateUnlocks()
+         （原地图自动调用；启动关卡等待加载就绪与开始请求）
       └ 条件满足的任务 → AwaitingPickup → PhoneQueue::EnqueueCall(解锁来电)
           └ 玩家接听 → StartTaskTimerFromAcceptedCall，记 StartServerTime，挂超时定时器
               └ InCall → 本机电子语音 + 逐字字幕

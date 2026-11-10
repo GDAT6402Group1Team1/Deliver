@@ -20,6 +20,7 @@ class UUserWidget;
 class UDeliveryHintComponent;
 class UDeliveryPhoneController;
 class UDeliveryPhoneAudioComponent;
+class ADeliveryStartupFlow;
 
 /**
  * 绑定跨步行和驾驶使用的手机输入，转发交互与电话的服务器请求
@@ -33,6 +34,10 @@ class ADeliveryPlayerController : public APlayerController
 
   public:
     ADeliveryPlayerController();
+
+    // 客户端加载完成只通过自己拥有的控制器报告，不直接向世界对象发 RPC
+    UFUNCTION(Server, Reliable)
+    void ServerReportStartupReady(ADeliveryStartupFlow* Flow);
     virtual bool InputKey(const FInputKeyEventArgs& Params) override;
     FText GetPhoneKeyText() const;
     UFUNCTION(BlueprintPure, Category="Phone")

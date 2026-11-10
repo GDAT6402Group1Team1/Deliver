@@ -1,4 +1,5 @@
 #include "UI/DeliveryHUD.h"
+#include "UI/DeliveryStartupWidget.h"
 #include "UI/DeliveryHotbarWidget.h"
 #include "Character/DeliveryCharacter.h"
 #include "Vehicle/DeliveryMotorbike.h"
@@ -6,6 +7,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Player/DeliveryPlayerController.h"
 #include "UI/Controllers/DeliveryPhoneController.h"
+#include "TimerManager.h"
 
 ADeliveryHUD::ADeliveryHUD()
 {
@@ -77,6 +79,11 @@ void ADeliveryHUD::RemoveHotbar()
 
 void ADeliveryHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    GetWorldTimerManager().ClearTimer(StartupCloseTimer);
+    if (StartupFlow.IsValid()) StartupFlow->OnPhaseChanged.RemoveDynamic(this, &ADeliveryHUD::HandleStartupPhase);
+    StartupFlow.Reset();
+    if (StartupWidget) StartupWidget->RemoveFromParent();
+    StartupWidget = nullptr;
     if (PhoneController) PhoneController->Shutdown();
     PhoneController = nullptr;
     OpenPanels.Reset();
@@ -88,7 +95,38 @@ void ADeliveryHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void ADeliveryHUD::BeginPlay()
 {
     Super::BeginPlay();
+    InitializeStartupMenu();
     GetPhoneController();
+}
+
+void ADeliveryHUD::InitializeStartupMenu()
+{
+    APlayerController* Player = GetOwningPlayerController();
+    if (!Player || !Player->IsLocalController()) return;
+    StartupFlow = ADeliveryStartupFlow::GetDeliveryStartupFlow(this);
+    if (!StartupFlow.IsValid() || StartupFlow->GetPhase() == EDeliveryStartupPhase::Playing) return;
+    StartupFlow->OnPhaseChanged.AddUniqueDynamic(this, &ADeliveryHUD::HandleStartupPhase);
+    SetPanelOpen(TEXT("Startup"), true);
+    if (UClass* MenuClass = StartupFlow->MenuWidgetClass.LoadSynchronous())
+    {
+        StartupWidget = CreateWidget<UDeliveryStartupWidget>(Player, MenuClass);
+        if (StartupWidget) StartupWidget->AddToViewport(1000);
+    }
+}
+
+void ADeliveryHUD::HandleStartupPhase(EDeliveryStartupPhase Phase)
+{
+    if (Phase != EDeliveryStartupPhase::Playing) return;
+    // 等本轮通知结束，让菜单先收到 Playing，再解除绑定并移除
+    if (!GetWorldTimerManager().IsTimerActive(StartupCloseTimer))
+        StartupCloseTimer = GetWorldTimerManager().SetTimerForNextTick(this, &ADeliveryHUD::CloseStartupMenu);
+}
+
+void ADeliveryHUD::CloseStartupMenu()
+{
+    if (StartupWidget) StartupWidget->RemoveFromParent();
+    StartupWidget = nullptr;
+    SetPanelOpen(TEXT("Startup"), false);
 }
 
 UDeliveryPhoneController* ADeliveryHUD::GetPhoneController()
@@ -106,10 +144,11 @@ void ADeliveryHUD::SetPanelOpen(FName PanelId, bool bOpen)
 {
     if (PanelId.IsNone()) return;
     const bool bWasOpen = IsAnyPanelOpen();
+    const bool bStartupWasOpen = IsPanelOpen(TEXT("Startup"));
     if (bOpen) OpenPanels.Add(PanelId);
     else OpenPanels.Remove(PanelId);
-    // 只有首个面板打开或最后一个面板关闭时才改变输入模式，避免反复抢焦点
-    if (bWasOpen != IsAnyPanelOpen()) ApplyInputMode();
+    // 启动菜单切换时也要更新 UIOnly；其他面板沿用首开末关规则
+    if (bWasOpen != IsAnyPanelOpen() || bStartupWasOpen != IsPanelOpen(TEXT("Startup"))) ApplyInputMode();
 }
 
 void ADeliveryHUD::ApplyInputMode()
@@ -117,7 +156,13 @@ void ADeliveryHUD::ApplyInputMode()
     APlayerController* Player = GetOwningPlayerController();
     if (!Player || !Player->IsLocalController()) return;
     Player->bShowMouseCursor = IsAnyPanelOpen();
-    if (IsAnyPanelOpen())
+    if (IsPanelOpen(TEXT("Startup")))
+    {
+        FInputModeUIOnly Mode;
+        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        Player->SetInputMode(Mode);
+    }
+    else if (IsAnyPanelOpen())
     {
         FInputModeGameAndUI Mode;
         Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);

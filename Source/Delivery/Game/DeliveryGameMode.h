@@ -16,4 +16,6 @@ class ADeliveryGameMode : public AGameModeBase
   public:
 	// 地图加载时调用
 	ADeliveryGameMode();
+	virtual void HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer) override;
+	virtual bool PlayerCanRestart_Implementation(APlayerController* Player) override;
 };

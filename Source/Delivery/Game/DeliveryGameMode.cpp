@@ -1,6 +1,7 @@
 ﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Game/DeliveryGameMode.h"
+#include "Game/DeliveryStartupFlow.h"
 #include "UI/DeliveryHUD.h"
 #include "Character/DeliveryCharacter.h"
 #include "Game/DeliveryGameState.h"
@@ -33,4 +34,18 @@ ADeliveryGameMode::ADeliveryGameMode()
 	{
 		PlayerControllerClass = ControllerBP.Class;
 	}
+}
+
+void ADeliveryGameMode::HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer)
+{
+	// 启动地图先加载地面，出生统一由启动服务在玩家就绪后执行
+	if (ADeliveryStartupFlow::GetDeliveryStartupFlow(this)) return;
+	Super::HandleStartingNewPlayer_Implementation(NewPlayer);
+}
+
+bool ADeliveryGameMode::PlayerCanRestart_Implementation(APlayerController* Player)
+{
+	if (const auto* Flow = ADeliveryStartupFlow::GetDeliveryStartupFlow(this))
+		if (!Flow->CanSpawnPlayer(Player)) return false;
+	return Super::PlayerCanRestart_Implementation(Player);
 }

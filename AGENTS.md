@@ -1281,3 +1281,11 @@ PC 保留输入绑定、服务器请求及旧蓝图转发入口，不再保存�
 TestForCharacter 的 ROAD-CREATE、POLE-CREATE、GRASSBED-CREATE1 的 PCG BrushComponent 原为 QueryOnly，运行时 WorldStatic/WorldDynamic 地面对象查询会在体积内部得到 initial_overlap、distance=0 的命中，把射线起点误当支撑面，导致主动布娃娃持续上升。已将三个 PCG 范围和 NewProceduralFoliageSpawner 的 BrushComponent 统一设为 NoCollision，并保存地图；生成的模型和树石植被实例碰撞保持开启。原地图 PIE 验证：地面命中改为 Landscape，连续采样髋高度约 2010.43 cm 保持稳定，不再持续升空。未改角色移动参数；排查时对 BP_Axe 的试验碰撞调整已恢复 PhysicsActor。
 
 - `Crosswalk_Intersection_45_02` 的小孩单列过街路线由 `Content/Python/place_child_crosswalk_45_02.py` 摆放，线段比斑马线两端各宽 250 cm（总长约 22.6 m）。`ADeliveryPedestrianRoute` 在服务器生成前读取绑定车道段的 `StopAtInter`（车红即人绿），并检查斑马线范围内是否有速度大于 10 cm/s 的交通车；红灯或车未清空时不生成，已生成 NPC 继续走，条件恢复后继续按间隔生成。其他路线未绑定过街 Actor 时保持原行为。这条路线最多同时 12 人，绿灯生成间隔固定 1.25 秒、基础步速统一 130 cm/s（约 162.5 cm 间距，红灯 195 cm/s）；红灯时已出发的小孩以原速 1.5 倍走完，转绿恢复；这条路线仅在出现和消失窗口使用独立复制的男孩/女孩渐隐材质，通过原有出入场进度控制 FadeOpacity；正常行走时切回原始 Opaque 材质并保持原尺寸。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过路口段后恢复原上限。
+
+## 开始界面与后台加载
+
+- 开始菜单加载条源图：`Content/UI/Image/T_LoadingTrack.png` 和 `T_LoadingFill.png`，透明空槽/满格两层，配合 UMG Progress Bar 的 Mask 填充。仅保存 PNG，导入与样式设置见 `Document/Architecture.md`，生成提示词在同目录 `LoadingBar.generation.json`
+
+- 估算加载条：`DeliveryStartupFlow` 与 `DeliveryStartupWidget` 提供 `GetLoadingProgress` 和 `OnLoadingProgressChanged(float)`，数值 0～1，直接接 UMG `Set Percent`。`EstimatedLoadSeconds` 默认 20 秒，缓动到最多 90%，真实就绪立即到 100%；失败停止、加载重试归零、各端独立，不改变开局门控。原状态事件签名保持不变，Widget 初次同步并在退出时解绑
+
+- 后台加载入口：`/Game/Level/L_MainMenu` 内的 `DeliveryStartupFlow` 异步加载现有 `TestForCharacter` 子关卡，等待关卡可见、出生点阻挡 Pawn 的地面碰撞和各连接玩家就绪。主机的开始请求可提前提交；GameMode 延后生成角色，TaskManager 的 `StartGameplay` 在正式开局才释放任务解锁与关卡时钟。直接打开原测试地图仍自动开始。开始界面继承 `DeliveryStartupWidget`，通过 `RequestStartGame`、`RetryLoading` 与 `OnStartupStateChanged` 接入；HUD 负责创建、移除和 UI 输入。菜单类填在启动关卡 `StartupFlow.MenuWidgetClass`，不另建 UI 框架。接口和接线见 `Document/Architecture.md` 的后台加载入口章节

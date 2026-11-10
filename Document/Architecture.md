@@ -171,3 +171,56 @@ DeliveryInteractionRegistry 是世界子系统，每个世界分别保存交互�
 输入与操作提示的职责、通知来源和按键配置见 [InputHints.md](InputHints.md)
 
 手机处理器、HUD 与 PC 的职责见 [PhoneMVC.md](PhoneMVC.md)
+
+## 开始界面与后台加载入口
+
+`/Game/Level/L_MainMenu` 是轻量持久关卡，原 `TestForCharacter` 以 Blueprint Streaming 子关卡加入，位置与原地图相同。两张地图都沿用正式 `BP_DeliverGameMode`，子关卡自己的 GameMode 不参与切换。原地图保持完整，没有拆 Actor 或转换 World Partition。`Content/Python/setup_startup_map.py` 在入口不存在时创建，再次执行只检查和补齐入口持久层的 StartupFlow，不覆盖已经配置的菜单，也不保存原地图。添加子关卡后必须切回入口持久层再生成控制器，避免控制器被放进尚未加载的游戏子关卡
+
+### UI 接线
+
+1. 创建 Widget Blueprint，父类选 `DeliveryStartupWidget`，布局由美术和蓝图完成
+2. 打开 `L_MainMenu`，选中 `StartupFlow`，把该 Widget 填到 `Menu Widget Class`
+3. Start 按钮调用继承的 `Request Start Game`；返回 true 表示请求已接收，不代表加载已经结束。不要再调用 Open Level 或自行生成角色
+4. 实现 `On Startup State Changed`，根据 Phase 切换按钮、Loading 提示或错误文本。初次创建自动同步当前状态，无须 Tick 轮询；StartRequested 为 true 时可以禁用重复点击
+5. Retry 按钮调用 `Retry Loading`。Playing 时 HUD 自动移除菜单并恢复游戏输入，不在 Widget 里直接写鼠标开关
+6. 从 `L_MainMenu` 开始 PIE 测试。UI 完成后将 Project Settings → Maps & Modes → Game Default Map 设为 `L_MainMenu`，打包地图列表需要包含入口和游戏地图。当前默认启动地图暂保留原地图，避免菜单尚未制作时进入无按钮的界面
+
+| 查询或事件 | 含义 |
+| --- | --- |
+| `Get Delivery Startup Flow(WorldContext)` | 取得当前世界的唯一启动服务；直接运行原地图时为空 |
+| `GetPhase()` / `OnPhaseChanged` | Loading、Ready、WaitingForPlayers、Starting、Playing、Failed |
+| `IsSceneReady()` / `OnSceneReady` | 本端子关卡已加载并可见，找到指定 PlayerStart，向下探测到阻挡 Pawn 的静态地面 |
+| `IsStartRequested()` | 主机已点击开始，可能仍在加载或等待其他连接玩家 |
+| `HasGameStarted()` / `OnGameStarted` | 服务器已释放开局；本端 Playing 还会等待所属 Pawn 到位 |
+| `GetLoadingError()` / `OnLoadingFailed` | 缺少子关卡、加载超时、出生失败等错误说明 |
+| `RequestStartGame(Player)` | 仅单人本机或监听主机可请求，重复调用不重置任务、不重复生成角色 |
+| `RetryLoading()` | 失败后重新检查和请求加载；客户端不能清除服务器的开局错误 |
+| `GetLoadingProgress()` / `OnLoadingProgressChanged(Progress)` | 本机显示用的 0～1 估算进度，未就绪不超过 0.9，真实就绪为 1；Flow 和 Widget 都提供 |
+
+进度条接线：`DeliveryStartupWidget` 子类添加 `Event On Loading Progress Changed`，执行线接 Progress Bar 的 `Set Percent`，把 `Progress` 直接接入 `In Percent`，关闭 `Is Marquee`。事件在 Widget 构建时同步当前值，之后沿 Flow 原有的 0.1 秒检查更新，不需要 Widget Tick 或额外计时器；也可以将 Percent 绑定到 Widget 的 `Get Loading Progress`，两种方式选一种。原 `OnStartupStateChanged` 的签名保持不变，继续处理状态文本与按钮
+
+加载条 PNG 源图在 `Content/UI/Image/T_LoadingTrack.png`（空槽）与 `T_LoadingFill.png`（满格），均为 2172×724 的透明 RGBA 图，匹配开始界面的奶油黄/橙金边框、紫色描边和亮绿色填充。导入为 UI 贴图后分别放入 Progress Bar 的 Background Image / Fill Image，两张 Brush 使用 Image 绘制；Bar Fill Style 选 Mask、方向 Left to Right、Border Padding 设零、Fill Color and Opacity 设纯白，按相同尺寸叠合。图片上下含透明留白，可用外层容器调整布局，不能独立裁剪两张图造成错位。来源与内置图像生成提示词保存在同目录 `LoadingBar.generation.json`；仅生成 PNG，尚未导入或修改用户的 Widget，需在 UMG 中验收实际显示
+
+`StartupFlow.EstimatedLoadSeconds` 默认 20 秒，是估算条从 0 缓动到 90% 的时间，不是加载超时或强制等待。曲线先快后慢，在真实就绪前最多停在 90%；真实就绪立即补到 100%，提前点击开始仍由真实条件释放。失败时停止增长，加载失败后重试从零重新计；场景已就绪但出生失败的重试保留 100%。各端独立估算，不复制主机的进度；同一次加载不倒退，Widget 重建读取已有值，退出时解绑。主线程初始化卡顿时 UMG 也可能暂时无法刷新，这个显示接口不改变场景初始化性能
+
+实现依据：本机 UE 5.8 的 `FAsyncLoadingThread2::GetAsyncLoadPercentage` 直接返回 -1，不能作为当前地图的有效百分比。`FStreamableHandle::GetProgress(Load)` 按该请求已完成资源数/请求总数统计，不代表整张流送地图和碰撞已经可用，且完成计数可能包含加载失败项。当前保留原 Level Streaming 管线，以关卡可见和出生地面检查作为真实完成条件；估算值只用于 UI
+
+估算进度验证（2026-11-10）：关闭编辑器后完整编译 `DeliveryEditor Win64 Development -NoHotReloadFromIDE -MaxParallelActions=2` 通过，`Automation RunTests Delivery.Startup` 四项全部通过，包括新增 `Progress` 的未就绪上限、失败冻结、重试归零、提前开始不能绕过真实门控，以及双人 PIE 中各端就绪时进度为 1。报告在 `Saved/Automation/StartupProgress`，日志在 `Saved/Logs/StartupProgressTests.log`；真实地图 PIE 仍有场景/加载警告，没有测试错误。没有修改开始界面资产，进度条布局与视觉平滑效果需在用户 Widget 接线后验收，打包表现尚未验证
+
+Ready 只表示达到当前可进入游戏的条件，不表示所有贴图最高 mip、着色器或所有异步资源已完成。加载或出生检查默认 180 秒超时，不能用 Delay 几秒替代成功条件。关卡中的环境 Actor 在子关卡可见后可以正常 BeginPlay，交通与行人不做全局暂停；玩家物理角色和任务计时由正式开始门控
+
+### 对象与网络职责
+
+- `Game/DeliveryStartupFlow`：放在入口持久关卡，每个世界独立。各端异步请求同一个已配置子关卡，监听显示事件并以低频检查出生地面；不持有其他 PIE 世界对象。开始请求、开局标记和服务器错误由服务器复制
+- `DeliveryGameMode`：入口存在启动服务时延后正常出生；收到服务器就绪决定后沿原 Pawn / PC / PlayerState 配置出生。直接打开原地图走原逻辑
+- `DeliveryPlayerController`：客户端通过拥有的 `ServerReportStartupReady` 报告本机加载就绪。服务器核对当前世界的启动服务，不接受客户端提供出生位置或任务数据。主机等待已连接玩家就绪，后加入玩家加载完才出生；此流程不包含房间创建、查找和连接 UI
+- `DeliveryTaskManagerComponent`：BeginPlay 只建立 Locked 状态；启动服务存在时不解锁、不来电，`GetTimeSinceLevelStart` 保持零。服务器 `StartGameplay` 幂等地设置时间基准并启动原解锁轮询，基准和开始标记同步给客户端。EndPlay 清除解锁与催单计时器
+- `DeliveryHUD` / `DeliveryStartupWidget`：HUD 管理菜单和输入模式，Widget 仅转发按钮、监听状态并呈现。启动面板优先使用 UIOnly，其他手机或背包面板不能提前释放游戏输入；关闭、重建、切图时解除委托与引用
+
+没有配置 `MenuWidgetClass` 时仍自动加载，便于先接后端，但没有用户按钮。自定义 Widget 也可直接使用启动服务接口，需自行处理事件解绑。入口持久层只应放一个 StartupFlow，`PlayerStartTag` 留空时使用游戏子关卡的出生点，避免误用编辑器视窗位置创建的 PlayerStartPIE。多人共用出生点时检查附近有地面、坡度适中且无阻挡的位置，默认 `SpawnSearchRadius=400 cm`，仍通过正式 GameMode 生成角色，不修改地图出生点或强制重叠出生
+
+回归入口：`Delivery.Startup.Requests`（跨世界拒绝、提前/重复请求、失败状态）、`Delivery.Startup.TaskGate`（菜单时钟和来电、开始幂等、原地图兼容）、`Delivery.Startup.ListenServerFlow`（真实入口双人 PIE、任务清单、等待、双方出生和 HUD 输入恢复）。PIE 检查依赖仅在编辑器目标加入 UnrealEd，不引入运行时编辑器依赖
+
+本次验证（2026-11-10）：`Build.bat DeliveryEditor Win64 Development -Project=Delivery.uproject -WaitMutex -NoHotReloadFromIDE` 完整编译通过。最终 `Automation RunTests Delivery.Startup` 的 3 项全部通过，报告在 `Saved/Automation/StartupFlowSpawnRetest`；此前同轮运行的 4 项 `Delivery.Task` 奖励测试、`Delivery.UI.PhoneController` 和 `Delivery.UI.SettlementReveal` 也全部通过，共 9 项。双人 PIE 确认双方加载完成后仍无角色且任务时钟为零，主机请求开始后双方拥有 Pawn、HUD 退出 Startup 输入模式，重复请求不重新生成或重置时钟。最终 PIE 有 36 条场景/加载警告，包括斧头 ComplexAsSimple、导航空边界、行人未设网格和加载长帧；没有测试失败。原 `TestForCharacter.umap` 和默认启动配置无改动，Python 设置脚本语法检查通过
+
+未覆盖用户尚未制作的菜单视觉、键鼠/手柄焦点体验、打包后的加载表现和中途加入场景。异步流送仍需在游戏线程注册组件与执行场景 BeginPlay，大地图激活可能短暂停顿；Ready 不作为加载过程全程流畅的保证

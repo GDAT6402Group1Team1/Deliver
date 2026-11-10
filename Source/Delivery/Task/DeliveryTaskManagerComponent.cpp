@@ -10,6 +10,7 @@
 #include "Task/DeliveryTaskManagerComponent.h"
 
 #include "Delivery.h"
+#include "Game/DeliveryStartupFlow.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
@@ -32,6 +33,8 @@ void UDeliveryTaskManagerComponent::GetLifetimeReplicatedProps(
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(UDeliveryTaskManagerComponent, Tasks);
+	DOREPLIFETIME(UDeliveryTaskManagerComponent, LevelStartServerTime);
+	DOREPLIFETIME(UDeliveryTaskManagerComponent, bGameplayStarted);
 }
 
 // 初始化任务与电话队列
@@ -40,9 +43,6 @@ void UDeliveryTaskManagerComponent::GetLifetimeReplicatedProps(
 void UDeliveryTaskManagerComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
-	// 两端都记，虽然目前只有服务器上的解锁判断用得到
-	LevelStartServerTime = GetServerTimeSeconds();
 
 	if (!GetOwner() || !GetOwner()->HasAuthority())
 	{
@@ -62,8 +62,25 @@ void UDeliveryTaskManagerComponent::BeginPlay()
 		State.Status = EDeliveryTaskStatus::Locked;
 	}
 
-	// 开局没有前置条件的任务在这里就解锁并打来电
+	if (!ADeliveryStartupFlow::GetDeliveryStartupFlow(this)) StartGameplay();
+}
+
+void UDeliveryTaskManagerComponent::StartGameplay()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || bGameplayStarted) return;
+	bGameplayStarted = true;
+	LevelStartServerTime = GetServerTimeSeconds();
 	ReevaluateUnlocks();
+}
+
+void UDeliveryTaskManagerComponent::EndPlay(const EEndPlayReason::Type Reason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(UnlockPollTimerHandle);
+		World->GetTimerManager().ClearTimer(OverdueTimerHandle);
+	}
+	Super::EndPlay(Reason);
 }
 
 // 从当前世界的游戏状态取得共享任务管理器
@@ -79,7 +96,7 @@ UDeliveryTaskManagerComponent* UDeliveryTaskManagerComponent::Get(const UObject*
 
 float UDeliveryTaskManagerComponent::GetTimeSinceLevelStart() const
 {
-	return FMath::Max(0.f, GetServerTimeSeconds() - LevelStartServerTime);
+	return bGameplayStarted ? FMath::Max(0.f, GetServerTimeSeconds() - LevelStartServerTime) : 0.f;
 }
 
 // 读取任务计时使用的服务器时间
@@ -140,7 +157,7 @@ void UDeliveryTaskManagerComponent::SetTaskStatus(FDeliveryTaskState& State, EDe
 // 检查未解锁任务，满足条件后安排来电
 void UDeliveryTaskManagerComponent::ReevaluateUnlocks()
 {
-	if (!GetOwner() || !GetOwner()->HasAuthority())
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !bGameplayStarted)
 	{
 		return;
 	}

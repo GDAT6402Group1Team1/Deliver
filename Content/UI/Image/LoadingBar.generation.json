@@ -1,0 +1,18 @@
+{
+  "tool": "built-in image_gen",
+  "reference": "User-provided OverDeliver start-menu screenshot, 2026-11-10",
+  "transparent_background": true,
+  "assets": [
+    {
+      "file": "T_LoadingTrack.png",
+      "prompt": "Use case: stylized-concept. Create ONE new production-ready PNG UI asset for the game in the reference image. The reference is STYLE ONLY, do not edit or reproduce its scene. Asset: the EMPTY BACKGROUND TRACK of a horizontal loading/progress bar, no fill yet. Match the OverDeliver START and QUIT buttons: soft chunky toy-like bevels, warm buttercream-yellow and orange-gold edging, strong aubergine-purple ink outline, shallow magenta-purple lower extrusion, cheerful clean cartoon game art. A very wide, slim, symmetrical pill capsule, approximately 9:1 width-to-height, straight-on orthographic front view, perfectly horizontal. Outer rim is butter yellow and orange gold with a thin dark plum outline; inside is one EMPTY recessed muted dark plum trough, with subtle soft depth but no protrusions. The center must be visually empty and ready for a separately layered progress fill. Clean readable at 500px wide and 55px tall. Isolated on genuine transparent alpha, no backdrop, no checkerboard drawn into the image, no large external shadow. Fill most of a wide 1536x256 canvas with minimal transparent padding, entire shape uncropped. No words, no LOADING text, no percentage, no numbers, no icon, no arrows, no characters, no scene. Deliver only this single empty track asset."
+    },
+    {
+      "file": "T_LoadingFill.png",
+      "reference_asset": "T_LoadingTrack.png",
+      "prompt": "Use case: precise-object-edit. This image is the EMPTY TRACK texture of a game's UI progress bar. Create its perfectly matching FULL progress texture. EDIT ONLY the recessed dark plum inner trough: replace that entire inner trough from its left rounded end to its right rounded end with a 100% FULL bright lime-green progress fill, like a friendly toy-plastic capsule with a soft buttery-yellow/lime highlight along its top and a richer leaf-green lower edge. No empty dark trough should remain except a very thin recessed inner boundary shadow. The filled interior should be pleasantly saturated and readable, matching a cheerful cartoon delivery game. Preserve the outer gold/butter-yellow rim, dark aubergine outline, magenta lower extrusion, shape, placement, perspective, scale, and all transparent margins EXACTLY as in the input. Keep the SAME 2172x724 canvas and same bar coordinates, so the full texture can be overlaid directly on the empty one and revealed with a left-to-right mask in UE UMG. Do not crop, zoom, reposition, redraw, or embellish the frame. Transparent alpha background preserved. No text, no percentages, no markers, no sparkles, no separate icons, no scene, no checkerboard. Output only the single full progress bar texture."
+    }
+  ],
+  "output_size": [2172, 724],
+  "note": "PNG source assets only; UE texture import and UMG appearance are not validated"
+}

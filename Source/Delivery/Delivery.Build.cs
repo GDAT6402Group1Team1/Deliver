@@ -31,5 +31,7 @@ public class Delivery : ModuleRules
         });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "PhysicsCore", "Chaos" });
+		// 真实启动地图的 PIE 回归只在编辑器目标中编译
+		if (Target.bBuildEditor) PrivateDependencyModuleNames.Add("UnrealEd");
 	}
 }

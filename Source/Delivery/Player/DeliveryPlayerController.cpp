@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Player/DeliveryPlayerController.h"
+#include "Game/DeliveryStartupFlow.h"
 #include "Character/DeliveryCharacter.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Blueprint/UserWidget.h"
@@ -74,6 +75,12 @@ ADeliveryPlayerController::ADeliveryPlayerController()
     InteractAction =
         TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/Game/Input/Actions/IA_Interact.IA_Interact")));
     InteractKey = EKeys::F;
+}
+
+void ADeliveryPlayerController::ServerReportStartupReady_Implementation(ADeliveryStartupFlow* Flow)
+{
+    if (Flow && Flow == ADeliveryStartupFlow::GetDeliveryStartupFlow(this))
+        Flow->ReportPlayerReady(this);
 }
 
 // 本机启用交互物高亮，界面和电话由各自处理器管理
