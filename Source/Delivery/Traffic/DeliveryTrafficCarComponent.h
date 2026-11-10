@@ -181,7 +181,7 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 
 	/** 出生点附近行人和玩家的水平净空半径 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0", Units = "cm"))
-	float WaveSpawnPersonClearance = 250.0f;
+	float WaveSpawnPersonClearance = 400.0f;
 
 	/** 高架上下层不互相阻挡分波生成 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0"))

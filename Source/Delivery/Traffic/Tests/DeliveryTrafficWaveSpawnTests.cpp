@@ -1,4 +1,4 @@
-#if WITH_DEV_AUTOMATION_TESTS
+﻿#if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Traffic/DeliveryTrafficCarComponent.h"
 #include "NPC/DeliveryPedestrian.h"
@@ -46,7 +46,7 @@ bool FDeliveryTrafficWaveSpawnTest::RunTest(const FString&)
 	Traffic->bScaleInOnSpawn = false;
 	Traffic->RegisterComponent();
 	Traffic->SecondWaveTransform = FTransform::Identity;
-	Traffic->WaveSpawnPersonClearance = 250.f;
+	Traffic->WaveSpawnPersonClearance = 400.f;
 	Traffic->WaveSpawnHeightTolerance = 200.f;
 
 	auto CountWaves = [World]()
@@ -67,13 +67,13 @@ bool FDeliveryTrafficWaveSpawnTest::RunTest(const FString&)
 	Traffic->SpawnNextWave();
 	TestEqual(TEXT("出生点有人时不生成车辆"), CountWaves(), 0);
 
-	Pedestrian->SetActorLocation(FVector(350.f, 0.f, 0.f));
+	Pedestrian->SetActorLocation(FVector(450.f, 0.f, 0.f));
 	ADeliveryCharacter* Player = World->SpawnActor<ADeliveryCharacter>();
 	Player->SetActorLocation(FVector(100.f, 0.f, 0.f));
 	Traffic->SpawnNextWave();
 	TestEqual(TEXT("出生点有玩家时不生成车辆"), CountWaves(), 0);
 
-	Player->SetActorLocation(FVector(350.f, 0.f, 0.f));
+	Player->SetActorLocation(FVector(450.f, 0.f, 0.f));
 	Traffic->SpawnNextWave();
 	TestEqual(TEXT("人离开后可以生成车辆"), CountWaves(), 1);
 	return true;
