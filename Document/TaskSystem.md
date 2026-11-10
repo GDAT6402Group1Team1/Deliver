@@ -260,11 +260,28 @@ UMG 将偏移乘以罗盘条半宽后写入 `Render Translation X`。目标和�
 
 `ApplyReward` 先填写所有文本，任务名立即显示，随后按 `TimeGradeText → ElapsedText → BaseRewardText → TimeMultiplierText → SpecialMultiplierText → FinalRewardText` 依次恢复透明度。固定标签已画在背景图上，因此只有动态文本逐行出现。缺少、隐藏或透明度为零的可选明细不占时间，布局不折叠。`OnSettlementShown` 仍在文本赋值后触发，可留空，不需要额外连接 Delay 或 Play Animation
 
-WBP 的 Class Defaults → `Delivery|Settlement|Reveal` 可关闭 `bRevealRows`，或调整首行延迟 `FirstRowDelay`（0.2 秒）、行间隔 `RowRevealInterval`（0.35 秒）和总收入前停顿 `FinalRowDelay`（0.6 秒）。`Audio` 分类的 `RowRevealSound` / `FinalRevealSound` 默认使用 `/Game/Sound/SFX/pop`，支持替换 Sound Wave、Cue 或 MetaSound，留空则静音；可调整音量、逐行音高增量和总收入音高。声音只在拥有面板的本机播放，不广播给其他玩家，循环音不会用于逐行提示
+WBP 的 Class Defaults → `Delivery|Settlement|Reveal` 可关闭 `bRevealRows`，或调整首行延迟 `FirstRowDelay`（0.2 秒）、行间隔 `RowRevealInterval`（0.35 秒）和总收入前停顿 `FinalRowDelay`（0.6 秒）。`Audio` 分类的 `RowRevealSound` 默认使用 `/Game/Sound/SFX/SFX_Settlement_Tone`：0.34 秒、C4 基音的立体声合成音，叠加低八度与泛音，延长保持段；`FinalRevealSound` 使用独立的 `/Game/Sound/SFX/SFX_Settlement_Finale`：2.1 秒的 C 大调六和弦，低音支撑、展开和声与高音琶音。`RevealVolume` 默认及正式 WBP 均为 1。两处声音支持替换 Sound Wave、Cue 或 MetaSound，留空则静音。`Semitones Per Row` 默认 1，每行按十二平均律上升半音，总收入继续接下一音；设为 2 是全音、0 是同音。`Final Note Pitch Multiplier` 默认 1，只在总收入当前音高上乘额外倍率。声音只在拥有面板的本机播放，不广播给其他玩家，循环音不会用于逐行提示
+
+音高倍率为 `2^(实际显示行序号 × 半音步长 / 12)`，限制在 0.5–2 倍；默认完整六行的根音依次是 C4、C♯4、D4、D♯4、E4、F4，最后播放 F 大调六和弦。UE 的音高倍率也加快播放，最终原始 2.1 秒音效升五个半音后约 1.57 秒。可选行未显示时不占音阶位置，新结算从基音开始。保留原反射字段名 `RowPitchStep` / `FinalRevealPitch`，但前者现在以半音计、后者为最终音的附加倍率；`Content/Python/setup_settlement_assets.py` 会将正式 `WBP_Reward` 配置同步为 1 / 1，替换旧的 0.05 / 1.3
+
+脚本在外部 Python 中生成 `Design/Audio/GeneratedSFX/SFX_Settlement_Tone.wav`、`SFX_Settlement_Finale.wav` 与 `Saved/AudioPreview/SettlementScaleRich.wav` 六行预听；预听超出 PCM 范围时仅对预听整体衰减防止溢出，UE 的配置音量保持不变；在 UE 中执行 `py setup_settlement_assets.py` 会导入两个声音，并仅更新 WBP 的声音、音量与升调参数，不重设布局或显示间隔。`run(include_icon=True)` 可额外导入 `/Game/UI/Image/T_Dollar`。美元图标源图为 `Content/UI/Image/T_Dollar.png`，透明底、金色美元符号、深蓝粗描边，适合结算金额旁使用
+
+<details>
+<summary>美元图标生成说明与提示词</summary>
+
+使用内置图片生成，透明背景；生成结果复制为上述 PNG，保留 alpha 通道，未修改现有布局。最终提示词：
+
+Use case: stylized-concept. Asset type: a single small currency icon for the reward settlement UI of a cheerful cartoon delivery videogame. Create one bold, chunky dollar sign '$', isolated and centered, upright and front-facing, with rounded corners, a thick very dark navy outline (#00183c), warm golden yellow face with cream highlights and subtle orange lower-edge shading. The project UI uses cream, deep royal blue, dark navy outlines and orange accents. Simple friendly 2D game art with very restrained soft dimensional shading, instantly legible at 32 to 64 pixels. Square composition, icon occupies about 80 percent of the canvas, generous clear padding. Exactly one dollar glyph, no banknote, no coin disc, no words, no extra symbols, no sparkle clutter, no rectangular or circular button background, no ground shadow, no watermark. True transparent background and clean alpha edges. Save the final image as a transparent PNG.
+
+</details>
 
 所有明细出现后，Widget 的本机 `OnRevealFinished` 才通知组件开始 `AutoHideSeconds` 倒计时（默认 6 秒，0 表示手动关闭）。关闭、替换订单、NativeDestruct 和组件 EndPlay 都取消剩余计时器并清理音频；重复填入新奖励会重置显示顺序。调试入口仍是 `Delivery.Task.Settlement`，自动化检查为 `Delivery.UI.SettlementReveal`，覆盖顺序、完成后关闭、取消、重复填入和缺少可选行
 
+加厚音色与独立和弦验证（2026-11-10）：`Build.bat DeliveryEditor Win64 Development -Project=Delivery.uproject -WaitMutex -NoHotReloadFromIDE` 成功，耗时 49.02 秒；`Automation RunTests Delivery.UI.SettlementReveal` 成功，0 测试错误、0 测试警告，报告 `Saved/Automation/SettlementRich/index.json`。断言覆盖独立且不循环的最终和弦、延音长度、相邻行半音比例、十二半音为一八度、同音/全音配置和最终音附加倍率。独立重载正式 WBP 后确认普通行与最终声音分别为 Tone / Finale、音量为 1、半音步长和最终倍率均为 1，显示间隔仍为 0.35 / 0.6 秒，结果在 `Saved/settlement_tone_audit.json`。两条 WAV 为 48 kHz 立体声、0.34 / 2.1 秒，峰值分别为 -1.31 / -0.45 dBFS，无削波且首尾归零。导入脚本成功保存资源，进程仍被项目已有 CDO 物理材质启动错误置为退出码 1；自动化启动时另有编辑器布局版本警告。未做实际双人 PIE 或扬声器试听；`Saved/AudioPreview/SettlementScaleRich.wav` 按默认音阶、行间隔与音量生成，不是游戏录音，听感及 BGM 混合仍需实机验收
+
 本次验证（2026-11-10）：`Build.bat DeliveryEditor Win64 Development -Project=Delivery.uproject -WaitMutex -NoHotReloadFromIDE` 通过；`Automation RunTests Delivery.UI.SettlementReveal+Delivery.UI.PhoneController` 两项通过、无测试警告。首次检查发现尚未构建 Slate 时 `IsVisible()` 返回 false，现改读控件的 Visibility 配置，重新构建与测试通过。已只读核对保存的 `WBP_Reward` 父类、PC 的组件引用和两个音效默认值；未运行实际地图听感或双人 PIE，任务入账与网络通知不在本次改动范围
+
+提交前音量恢复（2026-11-10）：正式 WBP、C++ 默认值和导入脚本均恢复为 1。通过当前编辑器接口保存 WBP，读回 `RevealVolume=1` 且无未保存修改；本次未重新编译或运行自动化，前述构建和测试是恢复前已完成的音色版本验证
 
 ### 4.12 取货点与骑车提示
 

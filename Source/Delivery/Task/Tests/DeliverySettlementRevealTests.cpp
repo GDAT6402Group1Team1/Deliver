@@ -10,6 +10,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Misc/AutomationTest.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliverySettlementRevealTest, "Delivery.UI.SettlementReveal",
@@ -53,6 +54,37 @@ bool FDeliverySettlementRevealTest::RunTest(const FString&)
 	Widget->TimeGradeText->SetRenderOpacity(0.8f);
 	TestNotNull(TEXT("普通行默认提示音存在"), Widget->RowRevealSound.Get());
 	TestNotNull(TEXT("总收入默认提示音存在"), Widget->FinalRevealSound.Get());
+	if (Widget->RowRevealSound)
+	{
+		TestEqual(TEXT("默认使用合成音效"), Widget->RowRevealSound->GetName(), FString(TEXT("SFX_Settlement_Tone")));
+		TestFalse(TEXT("合成提示音不循环"), Widget->RowRevealSound->IsLooping());
+	}
+	TestTrue(TEXT("总收入使用独立和弦音效"), Widget->FinalRevealSound != Widget->RowRevealSound);
+	if (Widget->FinalRevealSound)
+	{
+		TestEqual(TEXT("总收入默认和弦资源"), Widget->FinalRevealSound->GetName(), FString(TEXT("SFX_Settlement_Finale")));
+		TestFalse(TEXT("收尾和弦不循环"), Widget->FinalRevealSound->IsLooping());
+		TestTrue(TEXT("总收入音效留足和声延音"), Widget->FinalRevealSound->GetDuration() > 1.5f);
+	}
+	const float SemitoneRatio = 1.059463094f;
+	for (int32 Row = 1; Row < 6; ++Row)
+	{
+		const float Previous = Widget->GetRevealPitch(false, Row - 1);
+		const float Current = Widget->GetRevealPitch(Row == 5, Row);
+		TestTrue(TEXT("含总收入在内的相邻行严格相差半音"),
+			FMath::IsNearlyEqual(Current / Previous, SemitoneRatio, 0.00001f));
+	}
+	TestEqual(TEXT("十二个半音为一个八度"), Widget->GetRevealPitch(false, 12), 2.f);
+	TestEqual(TEXT("只有总额时从原音开始"), Widget->GetRevealPitch(true, 0), 1.f);
+	Widget->RowPitchStep = 0.f;
+	TestEqual(TEXT("可关闭逐行升调"), Widget->GetRevealPitch(false, 4), 1.f);
+	Widget->RowPitchStep = 2.f;
+	TestTrue(TEXT("可改为每行一个全音"), FMath::IsNearlyEqual(Widget->GetRevealPitch(false, 1), 1.122462048f));
+	Widget->RowPitchStep = 1.f;
+	Widget->FinalRevealPitch = 1.1f;
+	TestTrue(TEXT("总收入额外倍率叠在逐行音高上"),
+		FMath::IsNearlyEqual(Widget->GetRevealPitch(true, 5) / Widget->GetRevealPitch(false, 5), 1.1f));
+	Widget->FinalRevealPitch = 1.f;
 	Widget->RowRevealSound = nullptr;
 	Widget->FinalRevealSound = nullptr;
 

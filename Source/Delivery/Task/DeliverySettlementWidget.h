@@ -110,16 +110,17 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Audio",
 		meta=(ClampMin="0", ClampMax="2"))
-	float RevealVolume = 0.6f;
+	float RevealVolume = 1.f;
 
-	/** 每显示一行略微提高音高，0 表示所有明细使用相同音高 */
+	/** 每行上升的半音数，1 为半音，2 为全音，0 为同音 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Audio",
-		meta=(ClampMin="0", ClampMax="0.2"))
-	float RowPitchStep = 0.05f;
+		meta=(ClampMin="0", ClampMax="12", DisplayName="Semitones Per Row"))
+	float RowPitchStep = 1.f;
 
+	/** 总收入在当前音阶上的额外音高倍率，1 表示继续逐行上升，不额外跳音 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Audio",
-		meta=(ClampMin="0.5", ClampMax="2"))
-	float FinalRevealPitch = 1.3f;
+		meta=(ClampMin="0.5", ClampMax="2", DisplayName="Final Note Pitch Multiplier"))
+	float FinalRevealPitch = 1.f;
 
 	// ———— 必须摆的控件 ————
 
@@ -197,6 +198,7 @@ private:
 	void PrepareReveal();
 	void RevealNextRow();
 	void PlayRevealSound(bool bFinal, int32 RowIndex);
+	float GetRevealPitch(bool bFinal, int32 RowIndex) const;
 	void StopRevealSound();
 
 	UPROPERTY(Transient)

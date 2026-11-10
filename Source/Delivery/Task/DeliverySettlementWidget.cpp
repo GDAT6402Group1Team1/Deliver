@@ -27,9 +27,12 @@ namespace
 UDeliverySettlementWidget::UDeliverySettlementWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	static ConstructorHelpers::FObjectFinder<USoundBase> PopSound(TEXT("/Game/Sound/SFX/pop.pop"));
-	RowRevealSound = PopSound.Object;
-	FinalRevealSound = PopSound.Object;
+	static ConstructorHelpers::FObjectFinder<USoundBase> ToneSound(
+		TEXT("/Game/Sound/SFX/SFX_Settlement_Tone.SFX_Settlement_Tone"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> FinaleSound(
+		TEXT("/Game/Sound/SFX/SFX_Settlement_Finale.SFX_Settlement_Finale"));
+	RowRevealSound = ToneSound.Object;
+	FinalRevealSound = FinaleSound.Object;
 }
 
 void UDeliverySettlementWidget::ApplyReward(UDeliveryTaskDefinition* InTask,
@@ -150,9 +153,16 @@ void UDeliverySettlementWidget::PlayRevealSound(bool bFinal, int32 RowIndex)
 	{
 		return;
 	}
-	const float Pitch = bFinal ? FinalRevealPitch : 1.f + RowPitchStep * RowIndex;
 	RevealAudio = UGameplayStatics::SpawnSound2D(this, Sound, RevealVolume,
-		FMath::Clamp(Pitch, 0.5f, 2.f), 0.f, nullptr, false, false);
+		GetRevealPitch(bFinal, RowIndex), 0.f, nullptr, false, false);
+}
+
+float UDeliverySettlementWidget::GetRevealPitch(bool bFinal, int32 RowIndex) const
+{
+	// 十二平均律按倍率递增，总收入接在实际显示的最后一行后，不重置音阶
+	const float Semitones = FMath::Max(0, RowIndex) * FMath::Clamp(RowPitchStep, 0.f, 12.f);
+	const float Pitch = FMath::Pow(2.f, Semitones / 12.f) * (bFinal ? FinalRevealPitch : 1.f);
+	return FMath::Clamp(Pitch, 0.5f, 2.f);
 }
 
 void UDeliverySettlementWidget::StopRevealSound()

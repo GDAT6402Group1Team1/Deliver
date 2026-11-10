@@ -496,7 +496,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - 物品栏、召唤和切换视角统一使用 IA，键盘及手柄映射在 IMC_Default 中配置
 - 调试命令（非 Shipping）：`Delivery.Wallet.Dump` / `Delivery.Wallet.Add <金额>` / `Delivery.Locations.Dump` / `Delivery.Task.LoseItem` / **`Delivery.Task.Validate`**。最后一条是摆取件点/收件点时的主力工具——一次列全所有配置问题（地点 ID 解析不出来、任务没有收件点指向它、收件点忘了填 `ExpectedTask`），不是遇到第一个就停。
 - 奖励结算有单元测试（`Task/DeliveryRewardTests.cpp`，筛 `Delivery.Task` 跑）。`EvaluateReward` 是纯函数，档位顺序、超时边界、特殊事件重复计数这些在 PIE 里只表现为"钱好像不太对"，靠肉眼对不出来。
-- 结算逐行表现：`DeliverySettlementWidget` 立即显示任务名，再按评价、用时、基础奖励、时间倍率、特殊倍率、总收入逐行显示动态文本；默认首行 0.2 秒、间隔 0.35 秒、总收入前 0.6 秒。WBP 默认设置可关闭效果并替换普通行/总收入提示音，默认复用 `/Game/Sound/SFX/pop`，仅本机发声。`DeliverySettlementComponent` 等全部显示后才计算自动关闭时间；关闭或替换面板会取消计时器并销毁音频。`OnSettlementShown` 可留空，背景图内固定标签不会逐行隐藏。接口与配置见 `Document/TaskSystem.md` §4.11，回归入口 `Delivery.UI.SettlementReveal`
+- 结算逐行表现：`DeliverySettlementWidget` 立即显示任务名，再按评价、用时、基础奖励、时间倍率、特殊倍率、总收入逐行显示动态文本；默认首行 0.2 秒、间隔 0.35 秒、总收入前 0.6 秒。普通行使用 `/Game/Sound/SFX/SFX_Settlement_Tone`：0.34 秒、C4 基音叠低八度与泛音；总收入使用独立的 `/Game/Sound/SFX/SFX_Settlement_Finale`：2.1 秒的大调六和弦与高音琶音。两者为立体声、仅本机播放，默认音量 1。实际显示的每行升半音，总收入和弦继续下一音，完整六行的最终音为 F 大调六和弦、升调后约 1.57 秒。WBP 可调 `Semitones Per Row` 与最终音附加倍率，序列化字段仍为 `RowPitchStep` / `FinalRevealPitch`，新单位默认 1 / 1。`setup_settlement_assets.py` 生成并导入两个声音、同步正式 WBP 的声音配置，`include_icon=True` 时额外导入透明美元图标 `/Game/UI/Image/T_Dollar`。`DeliverySettlementComponent` 等全部显示后才计算自动关闭时间；关闭或替换面板会取消计时器并销毁音频。`OnSettlementShown` 可留空，背景图内固定标签不会逐行隐藏。接口与配置见 `Document/TaskSystem.md` §4.11，回归入口 `Delivery.UI.SettlementReveal`
 - 仍没做：手机 UI、存档；`DeliveryItemId` / `SpecialEventId` 的解析。对接点见文档第七、八节。
 
 ### 源美术文件的位置（`Design/Art/`）
