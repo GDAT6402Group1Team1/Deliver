@@ -65,6 +65,17 @@ def main():
     route.set_folder_path(FOLDER)
     route.set_editor_property("tags", [TAG])
     route.set_editor_property("kinds", kinds)
+    leaders = []
+    for name in ("SK_NpcMan", "SK_NpcWoman"):
+        mesh = unreal.load_asset("/Game/Characters/NPC/%s.%s" % (name, name))
+        if not isinstance(mesh, unreal.SkeletalMesh):
+            raise RuntimeError("Missing leader mesh: " + name)
+        kind = unreal.DeliveryPedestrianKind()
+        kind.set_editor_property("mesh", mesh)
+        kind.set_editor_property("weight", 1.0)
+        kind.set_editor_property("height_scale", 1.0)
+        leaders.append(kind)
+    route.set_editor_property("leader_kinds", leaders)
     route.set_editor_property("roam_in_area", False)
     route.set_editor_property("both_directions", False)
     route.set_editor_property("allow_handoff", False)

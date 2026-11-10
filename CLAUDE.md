@@ -718,7 +718,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
     早就接在 `ProcessVehicleImpacts` 上、每帧在跑，这次没有改它。
 
 - **路人被打倒之后会自己站起来（2026-11-05）**。普通模式保留原本可见的身体，
-  按冲量方向在 0.55 秒内倾倒，躺 5 秒后进入 `StandingUp`，1.2 秒程序化起身再继续走。
+  按冲量方向在 0.55 秒内倾倒，躺 2 秒后进入 `StandingUp`，1.2 秒程序化起身再继续走。
   真实布娃娃改成可选的 `bUsePhysicalKnockdown`；没有物理资产也不会消失。
   程序化步态的手臂下垂角度 78°→84°、外张 8°→5°、前后摆幅 18°→22°；腿部摆幅未改。
   - **复用主角那套 `Recovering` 不现实**：那是一整套主动布娃娃电机系统，要调好的
@@ -862,7 +862,7 @@ stdout 重定向拿不到 `unreal.log` 的内容——第一次就因为这个�
   - **红灯期间的避让死锁超时放宽到 8 秒（2026-09-17）**：新增 `MaxBlockedTimeAtIntersection = 8.0f` 和 `UpdateStoppedAtIntersection(bool)`。蓝图在 `TraceForIntersection` 的 `SetStopatInter` 之后、以及 `OnRouteLost` 的 `SetStopatInter(false)` 之后各调一次。红灯时前车是"合法地长时间不动"、不是死锁，还按 `MaxBlockedTime`（3 秒）就放弃避让的话，后车会在红灯没结束时压上去；`LightDuration` 是 3 秒，8 秒足够覆盖一整个红灯。
   - **红灯超时改为沿车队传递、并放宽到 10 秒（2026-09-24）**：原来的判据只看**本车自己**的 `StopatInter`，而 `TraceForIntersection` 的前瞻距离和车速成正比——队伍里第二辆之后的车已经被前车逼停、前瞻缩到接近 0，根本探不到路口盒，自己的 `bStoppedAtIntersection` 恒为 false，于是只有队首享受宽松超时，后面几辆照样 3 秒就放弃避让怼上前车。现在组件公开 `IsStoppedAtIntersection()`，`GetDistanceToCarAhead()` 扫描时顺手记下最近那辆车的红灯状态（`bLeaderStoppedAtIntersection`，扫不到车时清 false，否则前车开走后还会一直以为"前面在等红灯"），超时判据变成 `bStoppedAtIntersection || bLeaderStoppedAtIntersection`，红灯状态就能一辆辆往后传。阈值同时从 8 秒提到 **10 秒**：要盖住的不只是一个 3 秒红灯，还有前面几辆依次起步、拉开距离的时间，排队越长最后一辆等得越久。`GetDistanceToCarAhead()` 因此去掉了 `const`（它本来就会写前车的 `MaxSpeed`，并非纯查询）。
   - 车辆碰撞盒保持 `Overlap` **没改成 `Block`**：车是运动学的（`bSimulatePhysics=false`，靠 `SetActorLocation` 沿样条走），Block 在不开 sweep 的情况下根本不起作用；而开了 sweep 会和样条跟随打架（样条要它往前、sweep 把它顶回来）导致抖动。"后车停在后方不超车"靠的是修好之后真正生效的前车探测 + 减速，不是物理阻挡。
-  - **分波时间与出生净空（2026-10-29）**：默认开局 15 秒出第二波，再过 30 秒出第三波（畅通时为 45 秒）。生成前服务器检查出生点水平 400 cm、上下 200 cm 内的交通车，包含绕回来的原车；占用则每 2 秒重试，空出来才生成。第三波从第二波实际生成时起算，堵车时顺延。只检查交通车，不把物理 Block 加到运动学车辆上。
+  - **分波时间与出生净空（2026-10-29）**：默认开局 15 秒出第二波，再过 30 秒出第三波（畅通时为 45 秒）。生成前服务器检查出生点水平 400 cm 内的交通车（包含原车）、250 cm 内的 NPC 和玩家，均限上下 200 cm；占用则每 2 秒重试，空出来才生成。第三波从第二波实际生成时起算，堵车时顺延。不把物理 Block 加到运动学车辆上。
   - **跟车加速延迟（2026-10-29）**：每次需要减速都立即降低跟车系数并重置 `FollowAccelerationPause`（默认 1 秒）；最后一次减速后至少保持当前系数 1 秒，才允许回升。前车在探测边缘反复出现/消失时不会立刻加速，等待期间再次减速不受阻。只冻结跟车系数，不控制蓝图的红灯/加速；PIE 中可看 `DebugAccelerationPauseRemaining`。
   - **红灯停车线 + 斑马线：在主路口前留一段固定净空（2026-11-05）**。
     目的是把车停在路口外面，空出来那段给行人和斑马线。
@@ -1049,6 +1049,8 @@ stdout 重定向拿不到 `unreal.log` 的内容——第一次就因为这个�
       `trafficlight` 清）。那是预期的清理路径，但别在只想删旧灯时顺手跑它。
   - **`Inter_BranchRoad_R037_-0180_I03` 的主样条只剩 1 个点（2026-11-10 发现，未修）**。
     它带着 `Crosswalk` 停车 tag、离 `Crosswalk_BranchRoad_R037_4` 只有 328 cm，
+    该斑马线后来已删除；`remove_deleted_crosswalk_r037.py` 清除了此段残留的停车 tag 和关联的两处路人活动区，`place_central_pedestrians.py` 不再重建它们。
+    `add_grass_roaming_pedestrians.py` 另在草坪布置 7 处独立游走区，最多 11 名 NPC；半径 250 cm，六种外观等权随机，布点避开道路、房屋和其他游走区。
     但 `Spline` 1 点/0 cm、`SplineLeft` 1 点/0 cm，只有 `SplineRight` 是
     6 点/2775 cm——**2775 和 11/06 那次修复里记的供体长度 2765 对得上**，
     所以看着像那次之后主样条被清掉了、右转那条留着的是它的副本。
@@ -1587,6 +1589,49 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 - 人物和摩托车自由视角的鼠标灵敏度 `MouseLookSensitivity` 默认 0.75（原输入的 75%）；手柄右摇杆不变，摩托车固定车尾视角仍不响应鼠标。
 - 为什么不用 Chaos：美术资产是一整套静态网格 + 一个坐姿骑手，没有轮子骨骼、没有物理资产，Chaos 要的东西一样都没有，硬上等于要先回 Blender 重新绑定；而且关卡里的交通车（`BP_car_base`）本来就是运动学沿样条走的，玩家车用同一套假设，不会出现"玩家车被物理弹飞、AI 车纹丝不动"这种两套世界观打架。
 - 每帧自己算速度/转向。水平位移带 sweep 挡墙（撞上掉速不弹开）；竖直方向打射线贴地，**竖直这一步不能用 sweep**——sweep 会被地面挡住，和"我要贴到地面上"互相打架。转向量乘 `Speed/TurnSpeedReference`，所以停着打把不会原地转圈。
+- **`Delivery.Startup.ListenServerFlow` 在无界面跑自动化时会跳过（2026-11-11）**。
+  它要开真实的双人 PIE，而 PIE 一定要渲染器；`-NullRHI` 下 `RequestPlaySession` 会在
+  `IMetalDynamicRHI.h` 的 `GetInterfaceType() == Metal` 断言上**整个进程崩掉**。
+  **后果不只是这一条红**：它按字母序排在 Traffic/Vehicle 前面，进程一崩后面所有测试
+  都跑不到，而报告里一条 Fail 都没有——实测 `Automation RunTests Delivery` 只跑到 18 项
+  就结束，看着像全过了。现在 `RunTest` 开头查 `FApp::CanEverRender()`，为假就
+  `AddWarning` 跳过（**不静默返回**：跳过的测试悄悄变绿本身就是坑，报告里要能看见
+  "这条没真跑"）。修完整套跑到底 40 项通过、0 崩溃。
+  **这条测试仍然要在编辑器界面里跑**，无界面那次不覆盖启动流程。
+- **撞到路灯、电线杆、花坛会卡很久（2026-11-11 修）**。原来越不过去就沿碰撞面滑一下，
+  滑不动就顶住、保留 `BlockedTurnSpeedFactor`（0.45）的转向。实测还是卡，两个独立原因：
+  1. **速度每帧都扣一次。** 顶住时 `CurrentSpeed *= WallHitSpeedScale`（0.5）写在每帧的路径上，
+     60 fps 下 30 帧（**半秒**）就把 250 cm/s 压到 **0.015 cm/s**，等于归零；玩家绕开之后
+     还要按 `ThrottleAcceleration`（950）从 0 重新加速，顶一下的代价是好几秒。
+     现在**只在刚顶上那一帧扣一次**，之后把速度钳在 `BlockedScrubSpeed`（160）不再衰减——
+     顶着时水平推进那次 sweep 照样挡住车，留余速不会穿进障碍，但绕开的瞬间就能走。
+  2. **细柱子永远滑不开。** 滑动那一步算的是 `VectorPlaneProject(剩余位移, 法线)`，
+     而正面撞上柱子时法线几乎正对车头，这个投影接近零。于是玩家撞到的大多数东西
+     （路灯、电线杆、消防栓）恰好是滑动帮不上忙的那一类。
+     新增 `bDeflectAroundNarrowObstacles`：滑不动时判断"是柱子还是墙"，是柱子就往空的那侧绕。
+  - **"柱子还是墙"的判据不能靠体积或类型**：路灯、电线杆、消防栓各是各的网格，
+    没有共同标记可查，按类名或 tag 判迟早漏。只能问几何。
+  - **也不能直接试"能不能横着挪"——墙根本不挡横向移动。** 第一版就是这么错的：
+    贴着墙面横滑永远成功，于是撞墙也被当成柱子绕开，表现是**撞墙车会沿着墙飘走**
+    （回归测试里"撞一整面墙仍判为顶住"当场抓到）。正确的问法是
+    **偏开一个车宽之后，前面还通不通**（`ObstacleSideProbeAhead` 120 cm）：柱子通，墙不通。
+  - 试探用车身自己的碰撞配置（`SweepTestByProfile` + `CollisionBox` 的 profile），不挑通道——
+    挡得住车的东西才算挡路，挑通道迟早和车身的响应配置对不上（"按通道查恒为空"记过三次）。
+  - 侧移方向优先跟玩家正在打的把；没打把时按撞击点落在车身哪一侧决定，绕更近的那条边。
+    **一帧最多侧移"这一帧本来要走的距离"**，所以绕行不会比正常行驶快，也不会瞬移。
+  - **已经嵌进障碍里要先推出来**（`ObstaclePushOutMax` 20 cm，沿 MTD 法线）：
+    不推的话后面滑动和绕行的 sweep 起点就在障碍内部、怎么挪都是 `bStartPenetrating`，
+    车会一直嵌在花坛里出不来。给上限是不让一次推成瞬移。
+  - 仍保持实体碰撞：绕行只许侧移，不许从柱子里穿过去。关掉 `bDeflectAroundNarrowObstacles`
+    就回到"只沿表面滑、滑不动就顶住"。
+  - 回归 `Delivery.Vehicle.ObstacleEscape`（静态/动态障碍各一遍）：柱子仍挡住前进、
+    正面撞柱子会侧向绕开且保住车速、关掉开关后顶住并只扣一次速度、顶 30 帧不再继续掉速、
+    低速顶住仍能明显打把，外加**对照组"一整面墙仍判为顶住、不会侧向滑走"**。
+    「不再继续掉速」做过变异验证：改回每帧扣速度，它报 `期望 250 实际 0.015`。
+  - **测试世界没有地板**：连续 tick 时重力会把车一路往下掉（实测 30 帧掉 548 cm），
+    掉到障碍下面就不再顶着东西了，blocked 变 false、转向恢复成按真实车速算，
+    看着像"代码没生效"。所以多帧的那一段每帧要把 Z 按回去。
+  - **实机手感没验**：自动化只能证明"会绕、不掉速"，绕得顺不顺、会不会在窄巷里乱绕要在关卡里试。
 - **爬坡越障**（`Motorbike|爬坡越障`）。原来"一点爬坡能力都没有"是三个独立原因叠在一起，缺一条都修不好：
   1. **台阶被 sweep 当成墙**。水平推进是 `AddActorWorldOffset(..., bSweep=true)`，马路牙子和墙一样只会让它掉速。补了和角色移动同款的三步跨越 `TryStepUp()`：**抬 `MaxStepHeight`（45）→ 走完这一帧剩下的位移 → 往下探回地面**，任何一步撞住就整体撤回当撞墙。三个撤回条件都有来由：头顶撞到（桥洞）、抬起来还是几乎走不动（真墙）、落点比 `MaxClimbAngle` 还陡（墙根斜角，不撤的话车会顺着墙往上蹭）。
   2. **贴地高度上坡时一直欠着一截**。`FInterpTo(Location.Z, DesiredZ, GroundSnapSpeed)` 是指数收敛，坡越陡车越快欠得越多，而**下一帧的水平 sweep 是在那个偏低的位置做的**，于是直接撞在坡面上掉速——自己把自己绊住了。加了爬升率下限 `MaxClimbRate`（600 cm/s），上坡时保证至少这个速度往上追。
@@ -1712,6 +1757,9 @@ Grab 是双键按住、用物理约束把东西抓在手上的连续动作；这
 
 ### 屏幕左下角常驻提示
 左下角操作提示由 DeliveryHintComponent 监听事件后调用 SetCornerHint / ClearCornerHint，世界交互浮窗 PushPrompt 保持独立显示位置和原更新规则
+交互浮窗的文字和长按进度由本机 `DeliveryInteractionProbeComponent` 按当前目标更新，显示锚点跟随角色 `Head` 骨骼上方 35 cm；没有头骨时取角色包围盒顶部。目标的交互点、半径和按键判定仍使用原有组件配置。
+任务提示按携货阶段切换：取件后显示“快去交付”；骑车带货接近收件点 500 cm 内显示“按 F 下车取货交货”；下车且当前任务的货仍在附近车厢时显示“到车尾左键取货”，取回后恢复交付提示。交互浮窗在可操作车尾时优先显示“左键装货/取货”，再考虑 E 键取件或交货提示。交货目标拒绝骑车交付和仍归车辆持有的快递，服务器执行也复核。
+摩托车在普通道路下坡时使用独立的 `GroundSnapDownSpeed`（默认 24）追随地面，上坡仍用 `GroundSnapSpeed`（默认 12），减少下坡高度插值滞后造成的浮空感；前方预抬和越障逻辑不变。
 - 步行和骑行提示都由 DeliveryHintComponent 更新，按当前控制对象选择召唤或视角提示
 - 上下车触发 OnPossessedPawnChanged，提示组件取消旧对象的订阅并连接新对象
 - 提示从当前生效的 IA 映射查询键名，映射重建和输入设备切换时重新查询
@@ -2077,8 +2125,30 @@ PC 保留输入绑定、服务器请求及旧蓝图转发入口，不再保存�
 ### 地图生成范围与角色升空修复（2026-11-05）
 TestForCharacter 的 ROAD-CREATE、POLE-CREATE、GRASSBED-CREATE1 的 PCG BrushComponent 原为 QueryOnly，运行时 WorldStatic/WorldDynamic 地面对象查询会在体积内部得到 initial_overlap、distance=0 的命中，把射线起点误当支撑面，导致主动布娃娃持续上升。已将三个 PCG 范围和 NewProceduralFoliageSpawner 的 BrushComponent 统一设为 NoCollision，并保存地图；生成的模型和树石植被实例碰撞保持开启。原地图 PIE 验证：地面命中改为 Landscape，连续采样髋高度约 2010.43 cm 保持稳定，不再持续升空。未改角色移动参数；排查时对 BP_Axe 的试验碰撞调整已恢复 PhysicsActor。
 
-- `Crosswalk_Intersection_45_02` 的小孩单列过街路线由 `Content/Python/place_child_crosswalk_45_02.py` 摆放，线段比斑马线两端各宽 250 cm（总长约 22.6 m）。`ADeliveryPedestrianRoute` 在服务器生成前读取绑定车道段的 `StopAtInter`（车红即人绿），并检查斑马线范围内是否有速度大于 10 cm/s 的交通车；红灯或车未清空时不生成，已生成 NPC 继续走，条件恢复后继续按间隔生成。其他路线未绑定过街 Actor 时保持原行为。这条路线最多同时 12 人，绿灯生成间隔固定 1.25 秒、基础步速统一 130 cm/s（约 162.5 cm 间距，红灯 195 cm/s）；红灯时已出发的小孩以原速 1.5 倍走完，转绿恢复；这条路线仅在出现和消失窗口使用独立复制的男孩/女孩渐隐材质，通过原有出入场进度控制 FadeOpacity；正常行走时切回原始 Opaque 材质并保持原尺寸。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过路口段后恢复原上限。
+## 斑马线行人路线与人行灯
 
+- `Crosswalk_Intersection_45_02` 和 `Crosswalk_MainRoad_R003_9` 由 `Content/Python/place_child_crosswalk_45_02.py` 各摆两条对称过街路线：A 道只随机男孩/女孩，B 道等权随机六种现有 NPC。两道沿车行方向各偏 70 cm，路线比斑马线两端各延长 250 cm；A 道小孩最多同时 16 人、间隔 0.7 秒（约 91 cm），前方探测缩短到 35 cm；B 道仍最多 12 人、间隔 0.9 秒，开局晚 0.45 秒。基础步速 130 cm/s，红灯时已出发者以 1.5 倍走完。两道只在出现和消失期间使用复制的渐隐材质，正常行走恢复原始不透明材质。服务器生成前只检查对应段的 `StopAtInter`（车红即人绿）及本轮人数限制；人行绿灯时不再等斑马线上的车驶离。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过后恢复原上限。
+- `Crosswalk_BranchRoad_R035_Merged_8` 单独由 `Content/Python/place_child_crosswalk_r035_8.py` 布置两条男孩/女孩排队过街路线，两道沿车行方向各偏 70 cm，第二道开局晚 0.45 秒；每道最多同时 16 人、间隔 0.7 秒、步速 130 cm/s，依照 `Inter_BranchRoad_R035_Merged_+0180_I02` 的人行信号出发。该斑马线从普通路线生成脚本中排除。
+- 主地图共四条小孩列（上述两条重点斑马线各一条，加 R035 两条）。每条 `LeaderKinds` 等权配置中年男/女，`Kinds` 只含男孩/女孩；人行灯每次红变绿时重置一次带队标记，本轮第一次成功生成用成人池，后续用小孩池，不因队列暂时走空重复出成人。成人材质由 `LeaderFadeMaterials` 与 `LeaderKinds` 同序配置；无信号灯的 `testfortraffic` 小孩测试队列仅在开局出带队成人。
+- 其余有明确车灯归属的斑马线由 `Content/Python/place_general_crosswalk_routes.py` 布置单道或双道路线，六种 NPC 等权随机，每轮人行绿灯每条斑马线合计出发 2～3 人；双道共享配额，红灯不再生成，已出发者继续走。上述三条重点斑马线不受此配额限制。
+
+- **所有过街路人统一用渐隐出入场（2026-11-10）**：`Content/Python/set_crosswalk_route_fade.py`
+  给 34 条绑了斑马线的路线配上 `bFadeInsteadOfScale` + `FadeMaterials`（本次改 30 条，
+  原有 4 条重点路线本来就对）。原来只有两条重点斑马线是淡出、其余还在缩放，
+  并排看一个淡出一个缩小很突兀。机制是现成的，**没有改 C++**。
+  - **`FadeMaterials` 是按下标和 `Kinds` 对应的**（`GetFadeMaterialForMesh` 比较
+    `Kinds[i].Mesh == 这个人的网格`），所以**不能照抄一份固定顺序的六个材质**——
+    各条路线的 `Kinds` 顺序和条数都不一样（重点路线 A 道只有男孩/女孩两种）。
+    脚本读每条路线自己的 `Kinds`、逐个按网格名查材质、按原顺序生成。
+    顺序错的表现是"男孩淡出时套了老奶奶的材质"，在视口里只看出颜色不对，极难查。
+  - **网格名要从软引用的路径取，不能 `.get()`**：`Kinds[i].Mesh` 是
+    `TSoftObjectPtr`，没加载时 `.get()` 返回空，会把所有外观都判成"没有渐隐材质"。
+  - **某条路线有外观配不上材质时整条跳过、而且不保存关卡**：只配一半比全都缩放更糟，
+    同一条斑马线上会出现有人淡出、有人缩小。
+  - 判据仍是「`CrosswalkActor` 非空」，12 条游走路线一条没动，继续用缩放出入场。
+  - 验证按本项目的标准动作做：写完另起进程重新从盘上加载，34 条全部报
+    "本来就配好了"才算存住。
+- 人行灯高度检查（2026-11-10）：`Crosswalk_*` Actor 原点不一定在网格路面上；旧脚本统一用原点 Z−50 cm 使 48 盏中的 18 盏埋地。`Content/Python/fix_crosswalk_light_heights.py` 读取每条斑马线网格顶点，按每盏灯附近的表面高度只抬升明显埋地（>10 cm）的实例；重载关卡后复查为 0 盏。`align_crosswalk_lights.py` 现在只改平面位置，不再覆盖灯的高度。
 ## 开始界面与后台加载
 
 - 开始菜单加载条源图：`Content/UI/Image/T_LoadingTrack.png` 和 `T_LoadingFill.png`，透明空槽/满格两层，配合 UMG Progress Bar 的 Mask 填充。仅保存 PNG，导入与样式设置见 `Document/Architecture.md`，生成提示词在同目录 `LoadingBar.generation.json`

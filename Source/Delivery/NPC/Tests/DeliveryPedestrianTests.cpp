@@ -4,6 +4,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Components/BoxComponent.h"
 #include "Components/PoseableMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/SplineComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
@@ -65,6 +66,7 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	Route->WalkSpeedMax = 200.f;
 	Route->AppearDistance = 200.f;
 	Route->MinVisibleScale = 0.02f;
+	Route->YieldProbeDistanceOverride = 35.f;
 
 	// 外观用一张临时骨骼网格：测试不依赖导入脚本有没有跑过，
 	// 否则这条断言会在没导入 NPC 的机器上失败，而真正的逻辑并没有坏
@@ -106,6 +108,40 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 		return Count;
 	};
 
+	// 每轮只让第一个人从成人池抽，之后回到小孩池；红变绿才开启下一轮
+	USkeletalMesh* LeaderMesh = NewObject<USkeletalMesh>(World);
+	FDeliveryPedestrianKind LeaderKind;
+	LeaderKind.Mesh = LeaderMesh;
+	LeaderKind.Weight = 1.f;
+	Route->LeaderKinds.Add(LeaderKind);
+	const auto SpawnedMesh = [](ADeliveryPedestrian* Person) -> USkeletalMesh*
+	{
+		const USkeletalMeshComponent* Body = Person
+		    ? Person->FindComponentByClass<USkeletalMeshComponent>() : nullptr;
+		return Body ? Body->GetSkeletalMeshAsset() : nullptr;
+	};
+	Route->UpdateLeaderPhase(true);
+	ADeliveryPedestrian* FirstLeader = Route->SpawnOnePedestrian(true);
+	ADeliveryPedestrian* FollowingChild = Route->SpawnOnePedestrian(true);
+	if (!TestNotNull(TEXT("带队成人生成"), FirstLeader) ||
+	    !TestNotNull(TEXT("跟队小孩生成"), FollowingChild))
+		return false;
+	TestEqual(TEXT("首位为成人"), SpawnedMesh(FirstLeader), LeaderMesh);
+	TestEqual(TEXT("第二位为小孩"), SpawnedMesh(FollowingChild), DummyMesh);
+	Route->UpdateLeaderPhase(true);
+	ADeliveryPedestrian* SamePhaseChild = Route->SpawnOnePedestrian(true);
+	if (!TestNotNull(TEXT("同轮第三位生成"), SamePhaseChild))
+		return false;
+	TestEqual(TEXT("同一绿灯轮次不再生成成人"), SpawnedMesh(SamePhaseChild), DummyMesh);
+	Route->UpdateLeaderPhase(false);
+	Route->UpdateLeaderPhase(true);
+	ADeliveryPedestrian* NextLeader = Route->SpawnOnePedestrian(true);
+	if (!TestNotNull(TEXT("下一轮首位生成"), NextLeader))
+		return false;
+	TestEqual(TEXT("红变绿后首位再次为成人"), SpawnedMesh(NextLeader), LeaderMesh);
+	ClearAll();
+	Route->LeaderKinds.Empty();
+
 	// 空配置必须报不出人而不是崩：权重全零时一个都不该生成
 	Route->Kinds[0].Weight = 0.f;
 	TestNull(TEXT("权重为零时不生成"), Route->SpawnOnePedestrian(true));
@@ -114,6 +150,7 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	ADeliveryPedestrian* Walker = Route->SpawnOnePedestrian(true);
 	if (!TestNotNull(TEXT("spawn one"), Walker))
 		return false;
+	TestEqual(TEXT("路线生成时应用较短的前方探测距离"), Walker->YieldProbeDistance, 35.f);
 	Walker->SetCrosswalkSpeedMultiplier(1.5f);
 	TestEqual(TEXT("红灯时已出发路人加速"), Walker->GetWalkSpeed(), 300.f);
 	Walker->SetCrosswalkSpeedMultiplier(1.f);

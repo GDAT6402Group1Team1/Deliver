@@ -3,6 +3,7 @@
 #include "Interaction/DeliveryInteractionProbeComponent.h"
 #include "UI/Controllers/DeliveryInteractionController.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Interaction/DeliveryInteractionGeometry.h"
@@ -84,17 +85,33 @@ void UDeliveryInteractionProbeComponent::TickComponent(float DeltaTime, ELevelTi
     SetPickupHighlight(Pickup ? Pickup->GetOwner() : nullptr);
 
     // 左键目标比 F 优先：手上有货走到车尾时，该出现的是"左键装货"而不是"按 F 驾驶"
-    UDeliveryInteractableComponent *PromptTarget = Pickup ? Pickup : (Action ? Action : General);
+    UDeliveryInteractableComponent *PromptTarget = Action ? Action : (Pickup ? Pickup : General);
     if (bShowPrompt && PromptTarget)
     {
         if (UDeliveryPromptSubsystem *Prompt = UDeliveryPromptSubsystem::Get(this))
         {
             if (!WidgetController)
                 WidgetController = NewObject<UDeliveryInteractionController>(this);
-            const float Progress =
-                Pickup ? WidgetController->GetProgress(Character, Pickup->GetOwner()) : -1.f;
-            const FText Text = WidgetController->GetPrompt(PromptTarget, Pickup != nullptr, Owner);
-            Prompt->PushPrompt(Text, PromptTarget->GetPromptLocation(), Progress);
+            const float Progress = PromptTarget == Pickup
+                ? WidgetController->GetProgress(Character, Pickup->GetOwner()) : -1.f;
+            const FText Text = WidgetController->GetPrompt(PromptTarget, PromptTarget == Pickup, Owner);
+            FVector PromptLocation = PromptTarget->GetPromptLocation();
+            if (Character)
+            {
+                // 提示跟随本机角色，镜头转开货物或车尾时仍能看见当前可用操作
+                if (const USkeletalMeshComponent* Mesh = Character->GetMesh();
+                    Mesh && Mesh->GetBoneIndex(TEXT("Head")) != INDEX_NONE)
+                {
+                    PromptLocation = Mesh->GetBoneLocation(TEXT("Head")) + FVector(0.f, 0.f, 35.f);
+                }
+                else
+                {
+                    FVector Origin, Extent;
+                    Character->GetActorBounds(false, Origin, Extent);
+                    PromptLocation = Origin + FVector(0.f, 0.f, Extent.Z + 20.f);
+                }
+            }
+            Prompt->PushPrompt(Text, PromptLocation, Progress);
         }
     }
 }

@@ -267,6 +267,10 @@ bool FDeliveryInteractionFlowTest::RunTest(const FString &)
     TestTrue(TEXT("dropoff registers availability"), Action->CanUse.IsBound());
     TestTrue(TEXT("dropoff registers behavior"), Action->Use.IsBound());
     Target->SetActorLocation(WalkingPackage->GetActorLocation());
+    WalkingPackage->SetOwner(Bike);
+    TestFalse(TEXT("vehicle-owned cargo cannot be delivered directly"),
+              DropOff->TryDeliver(WalkingPackage, Character->GetTaskPlayerState()));
+    WalkingPackage->SetOwner(Character);
     TestTrue(TEXT("dropoff accepts correct package"), Action->CanUse.Execute(Character, true));
     TestTrue(TEXT("dropoff completes delivery"), Action->Use.Execute(Character));
     TestEqual(TEXT("task completed"), Tasks->GetTaskStatus(Definition), EDeliveryTaskStatus::Completed);

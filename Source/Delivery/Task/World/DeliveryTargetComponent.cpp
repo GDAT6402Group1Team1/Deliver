@@ -162,7 +162,9 @@ FVector UDeliveryTargetComponent::GetDeliveryPoint(FVector FromLocation) const
 // 完成任务后解除快递携带关系，再销毁已交付物品
 bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Player)
 {
-    if (!GetOwner() || !GetOwner()->HasAuthority() || !CanAcceptDelivery(ItemActor, Player))
+    // 货仍归车辆持有时必须先在车尾取出，不能隔着后备箱直接交付
+    if (!GetOwner() || !GetOwner()->HasAuthority() || !ItemActor ||
+        Cast<ADeliveryMotorbike>(ItemActor->GetOwner()) || !CanAcceptDelivery(ItemActor, Player))
     {
         return false;
     }
@@ -212,7 +214,7 @@ bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Playe
 bool UDeliveryTargetComponent::CanDeliver(APawn *Interactor, bool bCheckTaskAvailability) const
 {
     const ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(Interactor);
-    return Character &&
+    return Character && !Character->IsRidingVehicle() &&
            CanAcceptDelivery(Character->GetCarriedTaskPackage(), Character->GetTaskPlayerState());
 }
 
@@ -220,7 +222,8 @@ bool UDeliveryTargetComponent::CanDeliver(APawn *Interactor, bool bCheckTaskAvai
 bool UDeliveryTargetComponent::Deliver(APawn *Interactor)
 {
     ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(Interactor);
-    if (!Character || !TryDeliver(Character->GetCarriedTaskPackage(), Character->GetTaskPlayerState()))
+    if (!Character || Character->IsRidingVehicle() ||
+        !TryDeliver(Character->GetCarriedTaskPackage(), Character->GetTaskPlayerState()))
     {
         return false;
     }

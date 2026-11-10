@@ -465,7 +465,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - 已导入地图并接入 **PS2DEMImporter**（`Plugins/PS2DEMImporter`，PS2 地形/道路生成插件）用于把地形转换为 landscape spline 道路。
 - 交通路口、红绿灯、道路与门的破碎效果正在搭建：`Content/PS2DEM`（`BP_Intersection`、`BP_TrafficLine*`）、`Content/trafficlight`。车辆沿样条行驶、进路口的 Overlap 检测都写在 `BP_car_base` 事件图里，C++ 侧原本没有对应基类。
 - [Source/Delivery/Traffic/DeliveryTrafficCarComponent.h](Source/Delivery/Traffic/DeliveryTrafficCarComponent.h) —— 挂在 `BP_car_base` 上的辅助组件，不接管移动本身：车辆走完所有预设样条、没接上下一段车道时会脱离路线按最后方向裸奔冲出画面；蓝图每帧用 `UpdateRouteFollowState(bool)` 告诉组件这一帧还在不在跟随预设样条，连续脱离满 5 秒（`RouteLostTimeout`）广播 `OnRouteLost` 让蓝图把车放回起始样条起点、形成循环车流；同时自己在 `TickComponent` 里做前方球形扫描，探测到前方另一辆挂了同组件的车就把 `GetSpeedMultiplier()` 平滑降到 0，蓝图乘到目标速度上即可实现遇前车减速到停、让开后恢复。
-- 分波默认在开局 15 秒生成第二波，再过 30 秒生成第三波（出生点畅通时即 45 秒）。服务器生成前检查出生点周围 400 cm、上下 200 cm 内是否有交通车（包括原车）；被占用时每 2 秒重试，空出来才生成。第三波从第二波实际生成时刻起算，因此堵车时会顺延，不会叠车强行出生。参数在交通组件中可调。
+- 分波默认在开局 15 秒生成第二波，再过 30 秒生成第三波（出生点畅通时即 45 秒）。服务器生成前检查出生点周围 400 cm 内的交通车（包括原车）、250 cm 内的 NPC 和玩家，均限上下 200 cm；被占用时每 2 秒重试，空出来才生成。第三波从第二波实际生成时刻起算，因此堵车时会顺延，不会叠车强行出生。参数在交通组件中可调。
 - 跟车系数在前车探测边缘抖动时不立即回升：每次需要减速都立即响应，并重置 `FollowAccelerationPause`（默认 1 秒）；此后至少保持当前跟车系数 1 秒才允许加速。等待期间再次需要减速仍立即生效；只冻结跟车系数，不覆盖蓝图的红灯/加速逻辑。`DebugAccelerationPauseRemaining` 可在 PIE 中观察等待时间。
 - `BP_car_base` 现为服务器驱动并复制 Actor 移动；`BeginPlay`/`Drive` 仅 Authority 执行。关卡里旧车实例覆盖过 `bReplicates=false`，因此交通组件在服务器 `BeginPlay` 再调用 `SetReplicates(true)`/`SetReplicateMovement(true)`，无需改地图。组件仅在服务器按车轨迹扫 `PhysicsBody`，同车同角色 0.75 秒去重，按相对速度和有效质量算伤害/水平冲量；强撞 HP 归零沿用现有晕倒与 50% 回血起身（`StunRecoverHealthPercent`，原 40%，已放宽）。车组件运行时忽略 `Camera` 通道，墙和地形仍会挡镜头。撞击参数在组件蓝图详情中可调。
 - 测试地图：`Content/Level/TestForCharacter.umap`（角色/互殴）、`Content/Level/testfortraffic.umap`（交通路口）。
@@ -496,7 +496,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - 导入与摆点：`Content/Python/setup_npc.py`。**缩放是量出来的**：1:1 导入后量"中年男"的高度反推一个六人共用的系数再干净重导（共用一个系数才保留相对高矮；各自拉到同一身高会把小孩拉成大人）。重导**先删再导**——带已有资产做 `replace_existing` 会被路由到 Interchange、`FbxImportUI` 选项被整份忽略。路线只摆 `testfortraffic`，搜 `PedestrianRoute_Test` 定位。
 - **身高必须按种类单独写**（`FDeliveryPedestrianKind::HeightScale`）：六份源模型按老的 FbxFactory 路线、缩放 1.0 的包围盒高度实测**全是 99.8 cm**（归一化过的；被 Interchange 接走时同样的调用量到 192 cm，那条路忽略 FbxImportUI 的缩放，报告里"导入路"那一列要看一眼），所以导入时那个共用缩放把所有人都拉到同一身高——小男孩和中年男一样高。相对高矮不在模型里，只能在配置里表达（当前小孩 0.60 = 84 cm、中年 1.00 = 140 cm、老人 0.80 = 112 cm；基准 `TARGET_ADULT_HEIGHT = 140` = **主角实测身高**，BP_DeliveryMan 的胶囊半高是 **70**、renwu 网格高 139.9；**不是 96**，按 96 反推 192 会让路人比主角高出一头）。身高写进**出生变换**而不是生成后再 `SetActorScale3D`：路人在 `BeginPlay` 把当时的缩放记成 `BaseScale`、出入场曲线乘在它上面，生成后再改会被出入场缩放当场覆盖。挑"哪一种"和取"它的身高"是同一次决定（`PickKind` 一次输出两个值），分两次查会在权重随机那步各挑一次，表现是小孩配着大人的身高。
 - **把没有骨骼的网格交给 `PoseableMesh` 会崩**（`AllocateTransformData` → `FillComponentSpaceTransforms` 按骨骼数索引，数组大小 0 时直接断言）。`BeginWalk` 现在先查 `GetRefSkeleton().GetNum()`，没骨骼就退回静态外观并点名一次；自动化测试用的临时网格正好是这种，第一版就崩在那里。
-- **受击与被车撞**：路人有自己的碰撞通道 `Pedestrian`（`ECC_GameTraceChannel3`），不复用玩家的 `PhysicsBody`。拳头和车辆各自扫掠命中 `IDeliveryImpactReceiver`。普通路人受击后保留原模型，沿冲量方向在 `FallDuration`（0.55 秒）内倾倒，在地上停留 `KnockedLieDuration`（5 秒），再用 1.2 秒程序化屈腿、转身爬起；不再缩小销毁，也不从生成点的在场名单摘掉。`bUsePhysicalKnockdown` 可选真实布娃娃，缺少物理资产时仍退回可见的程序化跌倒。手臂默认下垂角度 84°、外张 5°、前后摆幅 22°。碰撞测试仍需真实关卡目视验收。
+- **受击与被车撞**：路人有自己的碰撞通道 `Pedestrian`（`ECC_GameTraceChannel3`），不复用玩家的 `PhysicsBody`。拳头和车辆各自扫掠命中 `IDeliveryImpactReceiver`。普通路人受击后保留原模型，沿冲量方向在 `FallDuration`（0.55 秒）内倾倒，在地上停留 `KnockedLieDuration`（2 秒），再用 1.2 秒程序化屈腿、转身爬起；不再缩小销毁，也不从生成点的在场名单摘掉。`bUsePhysicalKnockdown` 可选真实布娃娃，缺少物理资产时仍退回可见的程序化跌倒。手臂默认下垂角度 84°、外张 5°、前后摆幅 22°。碰撞测试仍需真实关卡目视验收。
 - **走走停停 + 特殊路线接驳**：停下来腿自动停（步态相位按路程推进），所以只需要让它停。停顿按**路程**抽不按时间；普通游走区按出生后的时间放大，不使用样条两端窗口。以下接驳规则只适用于 `bRoamInArea=false`：走到端点找相连路线继续走，连通只看端点到端点；换线那头不淡入、还有下家那头不淡出；接驳次数有上限，目标满员不接，在场名单先摘后加，下家随机挑，连通表懒加载。单列队伍可关闭 `bPauseWhileWalking`；学校过马路与交通灯联动尚待单独接入。
 - 调试：`Delivery.Pedestrian.Dump` / `.Spawn` / `.Clear`；回归测试 `Delivery.NPC.PedestrianWalk`。
 
@@ -768,6 +768,49 @@ GetFuturePostionandRotationAlongSpline:
 - 人物和摩托车自由视角的鼠标灵敏度 `MouseLookSensitivity` 默认 0.75（原输入的 75%）；手柄右摇杆不变，摩托车固定车尾视角仍不响应鼠标。
 - 美术资产是一整套静态网格 + 一个坐姿骑手，**没有轮子骨骼、没有物理资产**，Chaos 需要的东西一样都没有；且关卡里的交通车本来就是运动学沿样条走的，玩家车用同一套假设不会出现"玩家车被物理弹飞、AI 车纹丝不动"。
 - 每帧自己算速度/转向，水平位移带 sweep 挡墙，竖直方向打射线贴地（竖直**不能**用 sweep，会和"贴到地面上"互相打架）。转向量乘 `Speed/TurnSpeedReference`，停着不能原地转圈。
+- **`Delivery.Startup.ListenServerFlow` 在无界面跑自动化时会跳过（2026-11-11）**。
+  它要开真实的双人 PIE，而 PIE 一定要渲染器；`-NullRHI` 下 `RequestPlaySession` 会在
+  `IMetalDynamicRHI.h` 的 `GetInterfaceType() == Metal` 断言上**整个进程崩掉**。
+  **后果不只是这一条红**：它按字母序排在 Traffic/Vehicle 前面，进程一崩后面所有测试
+  都跑不到，而报告里一条 Fail 都没有——实测 `Automation RunTests Delivery` 只跑到 18 项
+  就结束，看着像全过了。现在 `RunTest` 开头查 `FApp::CanEverRender()`，为假就
+  `AddWarning` 跳过（**不静默返回**：跳过的测试悄悄变绿本身就是坑，报告里要能看见
+  "这条没真跑"）。修完整套跑到底 40 项通过、0 崩溃。
+  **这条测试仍然要在编辑器界面里跑**，无界面那次不覆盖启动流程。
+- **撞到路灯、电线杆、花坛会卡很久（2026-11-11 修）**。原来越不过去就沿碰撞面滑一下，
+  滑不动就顶住、保留 `BlockedTurnSpeedFactor`（0.45）的转向。实测还是卡，两个独立原因：
+  1. **速度每帧都扣一次。** 顶住时 `CurrentSpeed *= WallHitSpeedScale`（0.5）写在每帧的路径上，
+     60 fps 下 30 帧（**半秒**）就把 250 cm/s 压到 **0.015 cm/s**，等于归零；玩家绕开之后
+     还要按 `ThrottleAcceleration`（950）从 0 重新加速，顶一下的代价是好几秒。
+     现在**只在刚顶上那一帧扣一次**，之后把速度钳在 `BlockedScrubSpeed`（160）不再衰减——
+     顶着时水平推进那次 sweep 照样挡住车，留余速不会穿进障碍，但绕开的瞬间就能走。
+  2. **细柱子永远滑不开。** 滑动那一步算的是 `VectorPlaneProject(剩余位移, 法线)`，
+     而正面撞上柱子时法线几乎正对车头，这个投影接近零。于是玩家撞到的大多数东西
+     （路灯、电线杆、消防栓）恰好是滑动帮不上忙的那一类。
+     新增 `bDeflectAroundNarrowObstacles`：滑不动时判断"是柱子还是墙"，是柱子就往空的那侧绕。
+  - **"柱子还是墙"的判据不能靠体积或类型**：路灯、电线杆、消防栓各是各的网格，
+    没有共同标记可查，按类名或 tag 判迟早漏。只能问几何。
+  - **也不能直接试"能不能横着挪"——墙根本不挡横向移动。** 第一版就是这么错的：
+    贴着墙面横滑永远成功，于是撞墙也被当成柱子绕开，表现是**撞墙车会沿着墙飘走**
+    （回归测试里"撞一整面墙仍判为顶住"当场抓到）。正确的问法是
+    **偏开一个车宽之后，前面还通不通**（`ObstacleSideProbeAhead` 120 cm）：柱子通，墙不通。
+  - 试探用车身自己的碰撞配置（`SweepTestByProfile` + `CollisionBox` 的 profile），不挑通道——
+    挡得住车的东西才算挡路，挑通道迟早和车身的响应配置对不上（"按通道查恒为空"记过三次）。
+  - 侧移方向优先跟玩家正在打的把；没打把时按撞击点落在车身哪一侧决定，绕更近的那条边。
+    **一帧最多侧移"这一帧本来要走的距离"**，所以绕行不会比正常行驶快，也不会瞬移。
+  - **已经嵌进障碍里要先推出来**（`ObstaclePushOutMax` 20 cm，沿 MTD 法线）：
+    不推的话后面滑动和绕行的 sweep 起点就在障碍内部、怎么挪都是 `bStartPenetrating`，
+    车会一直嵌在花坛里出不来。给上限是不让一次推成瞬移。
+  - 仍保持实体碰撞：绕行只许侧移，不许从柱子里穿过去。关掉 `bDeflectAroundNarrowObstacles`
+    就回到"只沿表面滑、滑不动就顶住"。
+  - 回归 `Delivery.Vehicle.ObstacleEscape`（静态/动态障碍各一遍）：柱子仍挡住前进、
+    正面撞柱子会侧向绕开且保住车速、关掉开关后顶住并只扣一次速度、顶 30 帧不再继续掉速、
+    低速顶住仍能明显打把，外加**对照组"一整面墙仍判为顶住、不会侧向滑走"**。
+    「不再继续掉速」做过变异验证：改回每帧扣速度，它报 `期望 250 实际 0.015`。
+  - **测试世界没有地板**：连续 tick 时重力会把车一路往下掉（实测 30 帧掉 548 cm），
+    掉到障碍下面就不再顶着东西了，blocked 变 false、转向恢复成按真实车速算，
+    看着像"代码没生效"。所以多帧的那一段每帧要把 Z 按回去。
+  - **实机手感没验**：自动化只能证明"会绕、不掉速"，绕得顺不顺、会不会在窄巷里乱绕要在关卡里试。
 - **爬坡越障**（`Motorbike|爬坡越障`）。原来"一点爬坡能力都没有"是三个独立原因叠在一起，缺一条都修不好：
   1. **台阶被 sweep 当成墙**。水平推进是 `AddActorWorldOffset(..., bSweep=true)`，马路牙子和墙一样只会让它掉速。补了和角色移动同款的三步跨越 `TryStepUp()`：**抬 `MaxStepHeight`（45）→ 走完这一帧剩下的位移 → 往下探回地面**，任何一步撞住就整体撤回当撞墙。三个撤回条件都有来由：头顶撞到（桥洞）、抬起来还是几乎走不动（真墙）、落点比 `MaxClimbAngle` 还陡（墙根斜角，不撤的话车会顺着墙往上蹭）。
   2. **贴地高度上坡时一直欠着一截**。`FInterpTo(Location.Z, DesiredZ, GroundSnapSpeed)` 是指数收敛，坡越陡车越快欠得越多，而**下一帧的水平 sweep 是在那个偏低的位置做的**，于是直接撞在坡面上掉速——自己把自己绊住了。加了爬升率下限 `MaxClimbRate`（600 cm/s），上坡时保证至少这个速度往上追。
@@ -856,6 +899,8 @@ GetFuturePostionandRotationAlongSpline:
   车选到主样条会拿零长样条、前向退化成世界 +X；`entry_and_dir` 也取不到方向，
   所以 `sync_crosswalk_tags.py` 和摆灯脚本都会跳过它，表现是
   `Crosswalk_BranchRoad_R037_4`（相距 328 cm）匹配不到段、摆不了人行灯。
+  该斑马线现已删除；`remove_deleted_crosswalk_r037.py` 摘掉本段残留的 `Crosswalk` tag，并删除原先关联该标线的两处路人活动区。`place_central_pedestrians.py` 不再重建它们。
+- `add_grass_roaming_pedestrians.py` 在 `TestForCharacter` 另摆 7 处独立草坪游走区，最多 11 名 NPC，六种外观等权随机。每处半径 250 cm；布点检查中心和周边八点为 Landscape，并让整个活动圈避开道路、建筑与其他游走区。重跑只替换本脚本标记的活动区。
   写样条点属于改交通线，未动；要修用 `repair_degenerate_splines.py` 点名这一条、供体取 `SplineRight`。
   蓝图图表和交通 actor 的位置都没改；
   没 tag 的路口行为完全不变。路口中心的 133 盏红绿灯已由
@@ -863,7 +908,7 @@ GetFuturePostionandRotationAlongSpline:
 - **路人实心 + 让路 + 起身 + 骑车撞人（2026-11-05）**：挨打的胶囊改成 `QueryAndPhysics`
   并对 `PhysicsBody` Block（玩家走过去被挡住），**刻意不挡 `Pawn`**（挡了路人会把摩托车别停）；
   配套 `bYieldToObstacles` 让路人停下来等，带 `MaxYieldSeconds` 超时兜底避免面对面死锁。
-  被打倒后先播 0.55 秒倾倒、躺 5 秒，再播 1.2 秒屈腿起身并继续走；起身恢复 `QueryAndPhysics`，不再缩小消失。
+  被打倒后先播 0.55 秒倾倒、躺 2 秒，再播 1.2 秒屈腿起身并继续走；起身恢复 `QueryAndPhysics`，不再缩小消失。
   `ADeliveryMotorbike::ProcessPedestrianImpacts` 让骑车也能撞人（单开一次扫描、
   判据是 `IDeliveryImpactReceiver`、挡住按 R 召唤的瞬移帧）；交通车本来就能撞，未改动。细节见 CLAUDE.md。
 - **步行角色与电动车碰撞（2026-11-05）**：主动布娃娃运行时角色胶囊关闭，身体刚体现在阻挡 `Pawn`；电动车仍保持 `Pawn` 类型供交通车识别，并阻挡 `PhysicsBody`。车身盒半尺寸调至 130×68×70 cm（再乘 `VisualScale`），覆盖缩小后的车体主体；骑车时角色整体关闭碰撞的既有流程不变。
@@ -946,6 +991,9 @@ GetFuturePostionandRotationAlongSpline:
 
 ### 屏幕左下角常驻提示
 左下角操作提示由 DeliveryHintComponent 监听事件后调用 SetCornerHint / ClearCornerHint，世界交互浮窗 PushPrompt 保持独立显示位置和原更新规则
+交互浮窗的文字和长按进度由本机 `DeliveryInteractionProbeComponent` 按当前目标更新，显示锚点跟随角色 `Head` 骨骼上方 35 cm；没有头骨时取角色包围盒顶部。目标的交互点、半径和按键判定仍使用原有组件配置。
+任务提示按携货阶段切换：取件后显示“快去交付”；骑车带货接近收件点 500 cm 内显示“按 F 下车取货交货”；下车且当前任务的货仍在附近车厢时显示“到车尾左键取货”，取回后恢复交付提示。交互浮窗在可操作车尾时优先显示“左键装货/取货”，再考虑 E 键取件或交货提示。交货目标拒绝骑车交付和仍归车辆持有的快递，服务器执行也复核。
+摩托车在普通道路下坡时使用独立的 `GroundSnapDownSpeed`（默认 24）追随地面，上坡仍用 `GroundSnapSpeed`（默认 12），减少下坡高度插值滞后造成的浮空感；前方预抬和越障逻辑不变。
 - 步行和骑行提示都由 DeliveryHintComponent 更新，按当前控制对象选择召唤或视角提示
 - 上下车触发 OnPossessedPawnChanged，提示组件取消旧对象的订阅并连接新对象
 - 提示从当前生效的 IA 映射查询键名，映射重建和输入设备切换时重新查询
@@ -1280,8 +1328,30 @@ PC 保留输入绑定、服务器请求及旧蓝图转发入口，不再保存�
 ### 地图生成范围与角色升空修复（2026-11-05）
 TestForCharacter 的 ROAD-CREATE、POLE-CREATE、GRASSBED-CREATE1 的 PCG BrushComponent 原为 QueryOnly，运行时 WorldStatic/WorldDynamic 地面对象查询会在体积内部得到 initial_overlap、distance=0 的命中，把射线起点误当支撑面，导致主动布娃娃持续上升。已将三个 PCG 范围和 NewProceduralFoliageSpawner 的 BrushComponent 统一设为 NoCollision，并保存地图；生成的模型和树石植被实例碰撞保持开启。原地图 PIE 验证：地面命中改为 Landscape，连续采样髋高度约 2010.43 cm 保持稳定，不再持续升空。未改角色移动参数；排查时对 BP_Axe 的试验碰撞调整已恢复 PhysicsActor。
 
-- `Crosswalk_Intersection_45_02` 的小孩单列过街路线由 `Content/Python/place_child_crosswalk_45_02.py` 摆放，线段比斑马线两端各宽 250 cm（总长约 22.6 m）。`ADeliveryPedestrianRoute` 在服务器生成前读取绑定车道段的 `StopAtInter`（车红即人绿），并检查斑马线范围内是否有速度大于 10 cm/s 的交通车；红灯或车未清空时不生成，已生成 NPC 继续走，条件恢复后继续按间隔生成。其他路线未绑定过街 Actor 时保持原行为。这条路线最多同时 12 人，绿灯生成间隔固定 1.25 秒、基础步速统一 130 cm/s（约 162.5 cm 间距，红灯 195 cm/s）；红灯时已出发的小孩以原速 1.5 倍走完，转绿恢复；这条路线仅在出现和消失窗口使用独立复制的男孩/女孩渐隐材质，通过原有出入场进度控制 FadeOpacity；正常行走时切回原始 Opaque 材质并保持原尺寸。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过路口段后恢复原上限。
+## 斑马线行人路线与人行灯
 
+- `Crosswalk_Intersection_45_02` 和 `Crosswalk_MainRoad_R003_9` 由 `Content/Python/place_child_crosswalk_45_02.py` 各摆两条对称过街路线：A 道只随机男孩/女孩，B 道等权随机六种现有 NPC。两道沿车行方向各偏 70 cm，路线比斑马线两端各延长 250 cm；A 道小孩最多同时 16 人、间隔 0.7 秒（约 91 cm），前方探测缩短到 35 cm；B 道仍最多 12 人、间隔 0.9 秒，开局晚 0.45 秒。基础步速 130 cm/s，红灯时已出发者以 1.5 倍走完。两道只在出现和消失期间使用复制的渐隐材质，正常行走恢复原始不透明材质。服务器生成前只检查对应段的 `StopAtInter`（车红即人绿）及本轮人数限制；人行绿灯时不再等斑马线上的车驶离。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过后恢复原上限。
+- `Crosswalk_BranchRoad_R035_Merged_8` 单独由 `Content/Python/place_child_crosswalk_r035_8.py` 布置两条男孩/女孩排队过街路线，两道沿车行方向各偏 70 cm，第二道开局晚 0.45 秒；每道最多同时 16 人、间隔 0.7 秒、步速 130 cm/s，依照 `Inter_BranchRoad_R035_Merged_+0180_I02` 的人行信号出发。该斑马线从普通路线生成脚本中排除。
+- 主地图共四条小孩列（上述两条重点斑马线各一条，加 R035 两条）。每条 `LeaderKinds` 等权配置中年男/女，`Kinds` 只含男孩/女孩；人行灯每次红变绿时重置一次带队标记，本轮第一次成功生成用成人池，后续用小孩池，不因队列暂时走空重复出成人。成人材质由 `LeaderFadeMaterials` 与 `LeaderKinds` 同序配置；无信号灯的 `testfortraffic` 小孩测试队列仅在开局出带队成人。
+- 其余有明确车灯归属的斑马线由 `Content/Python/place_general_crosswalk_routes.py` 布置单道或双道路线，六种 NPC 等权随机，每轮人行绿灯每条斑马线合计出发 2～3 人；双道共享配额，红灯不再生成，已出发者继续走。上述三条重点斑马线不受此配额限制。
+
+- **所有过街路人统一用渐隐出入场（2026-11-10）**：`Content/Python/set_crosswalk_route_fade.py`
+  给 34 条绑了斑马线的路线配上 `bFadeInsteadOfScale` + `FadeMaterials`（本次改 30 条，
+  原有 4 条重点路线本来就对）。原来只有两条重点斑马线是淡出、其余还在缩放，
+  并排看一个淡出一个缩小很突兀。机制是现成的，**没有改 C++**。
+  - **`FadeMaterials` 是按下标和 `Kinds` 对应的**（`GetFadeMaterialForMesh` 比较
+    `Kinds[i].Mesh == 这个人的网格`），所以**不能照抄一份固定顺序的六个材质**——
+    各条路线的 `Kinds` 顺序和条数都不一样（重点路线 A 道只有男孩/女孩两种）。
+    脚本读每条路线自己的 `Kinds`、逐个按网格名查材质、按原顺序生成。
+    顺序错的表现是"男孩淡出时套了老奶奶的材质"，在视口里只看出颜色不对，极难查。
+  - **网格名要从软引用的路径取，不能 `.get()`**：`Kinds[i].Mesh` 是
+    `TSoftObjectPtr`，没加载时 `.get()` 返回空，会把所有外观都判成"没有渐隐材质"。
+  - **某条路线有外观配不上材质时整条跳过、而且不保存关卡**：只配一半比全都缩放更糟，
+    同一条斑马线上会出现有人淡出、有人缩小。
+  - 判据仍是「`CrosswalkActor` 非空」，12 条游走路线一条没动，继续用缩放出入场。
+  - 验证按本项目的标准动作做：写完另起进程重新从盘上加载，34 条全部报
+    "本来就配好了"才算存住。
+- 人行灯高度检查（2026-11-10）：`Crosswalk_*` Actor 原点不一定在网格路面上；旧脚本统一用原点 Z−50 cm 使 48 盏中的 18 盏埋地。`Content/Python/fix_crosswalk_light_heights.py` 读取每条斑马线网格顶点，按每盏灯附近的表面高度只抬升明显埋地（>10 cm）的实例；重载关卡后复查为 0 盏。`align_crosswalk_lights.py` 现在只改平面位置，不再覆盖灯的高度。
 ## 开始界面与后台加载
 
 - 开始菜单加载条源图：`Content/UI/Image/T_LoadingTrack.png` 和 `T_LoadingFill.png`，透明空槽/满格两层，配合 UMG Progress Bar 的 Mask 填充。仅保存 PNG，导入与样式设置见 `Document/Architecture.md`，生成提示词在同目录 `LoadingBar.generation.json`

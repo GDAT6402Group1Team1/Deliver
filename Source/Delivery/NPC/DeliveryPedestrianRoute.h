@@ -65,9 +65,17 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|外观")
 	TArray<FDeliveryPedestrianKind> Kinds;
 
+	/** 小孩队伍每轮第一人的外观；留空则沿用普通随机生成 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|外观")
+	TArray<FDeliveryPedestrianKind> LeaderKinds;
+
 	/** 与 Kinds 同序的淡化材质；仅启用渐隐的路线使用 */
 	UPROPERTY(EditAnywhere, Category = "Pedestrian|外观")
 	TArray<TSoftObjectPtr<UMaterialInterface>> FadeMaterials;
+
+	/** 与 LeaderKinds 同序的渐隐材质 */
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|外观")
+	TArray<TSoftObjectPtr<UMaterialInterface>> LeaderFadeMaterials;
 
 	UPROPERTY(EditAnywhere, Category = "Pedestrian|出入场")
 	bool bFadeInsteadOfScale = false;
@@ -102,12 +110,13 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|过街")
 	TObjectPtr<AActor> SignalSegment;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|过街", meta = (ClampMin = "0.0", Units = "cm"))
-	float VehicleClearanceMargin = 100.f;
-
 	/** 红灯后已出发的小孩加速通过，绿灯恢复正常速度 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|过街", meta = (ClampMin = "1.0"))
 	float RedLightWalkSpeedMultiplier = 1.5f;
+
+	/** 仅覆盖本路线生成路人的前方探测距离；负值沿用路人默认值 */
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|过街", meta = (Units = "cm"))
+	float YieldProbeDistanceOverride = -1.f;
 
 	// 生成节奏
 	/** 这条线上同时最多几个人 */
@@ -320,10 +329,12 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	 * 挑"哪一种"和取"它的尺寸"必须是同一次决定——分两次查会在
 	 * 权重随机那一步各挑一次，表现是小孩配着大人的身高
 	 */
-	USkeletalMesh* PickKind(float& OutHeightScale) const;
+	USkeletalMesh* PickKind(const TArray<FDeliveryPedestrianKind>& Options,
+	                     float& OutHeightScale) const;
 
 	bool IsPedestrianGreen() const;
 	bool CanSpawnAtCrosswalk() const;
+	void UpdateLeaderPhase(bool bGreen);
 	void UpdateGreenPhaseBudget(bool bGreen);
 	ADeliveryPedestrianRoute* GetGreenPhaseBudgetOwner();
 	void ResetSpawnTimer();
@@ -333,6 +344,8 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	/** 距下一次生成还有多少秒 */
 	float SpawnCountdown = 0.f;
 	bool bWasPedestrianGreen = false;
+	bool bWasPedestrianGreenForLeader = false;
+	bool bNextSpawnIsLeader = true;
 	int32 GreenPhaseSpawnTarget = 0;
 	int32 GreenPhaseSpawned = 0;
 
@@ -351,6 +364,10 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	 */
 	TArray<FConnection> Connections[2];
 	bool bConnectionsBuilt = false;
+
+#if WITH_DEV_AUTOMATION_TESTS
+	friend class FDeliveryPedestrianWalkTest;
+#endif
 
 	void BuildConnections();
 };

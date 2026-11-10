@@ -6,7 +6,8 @@ import unreal
 
 LEVEL = '/Game/Level/TestForCharacter'
 TAG = 'DeliveryGeneralCrosswalkRouteV1'
-EXCLUDE = {'Crosswalk_Intersection_45_02', 'Crosswalk_MainRoad_R003_9'}
+EXCLUDE = {'Crosswalk_Intersection_45_02', 'Crosswalk_MainRoad_R003_9',
+           'Crosswalk_BranchRoad_R035_Merged_8'}
 WS = unreal.SplineCoordinateSpace.WORLD
 KINDS = (('SK_NpcBoy', .60), ('SK_NpcGirl', .60),
          ('SK_NpcMan', 1.0), ('SK_NpcWoman', 1.0),

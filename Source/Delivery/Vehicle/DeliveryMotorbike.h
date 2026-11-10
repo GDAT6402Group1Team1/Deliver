@@ -480,6 +480,66 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	          meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float BlockedTurnSpeedFactor = 0.45f;
 
+	/**
+	 * 正面顶住细障碍（路灯、电线杆、消防栓）时允许侧向绕过去
+	 *
+	 * **为什么必须单独做"绕"这件事**：沿表面滑开那一步算的是
+	 * `VectorPlaneProject(剩余位移, 法线)`，而细柱子被正面撞上时法线几乎正对车头，
+	 * 这个投影接近零——于是**柱子永远滑不开**，只能原地顶着。而玩家撞到的
+	 * 偏偏大多是这种一步就能绕开的东西。
+	 *
+	 * 关掉就回到"只沿表面滑、滑不动就顶住"的行为。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|爬坡越障")
+	bool bDeflectAroundNarrowObstacles = true;
+
+	/**
+	 * 滑动/绕行要走够这个比例才算脱困，否则判为顶住
+	 *
+	 * 给太小会把"擦了一下几乎没动"也当成绕过去了，车贴着墙一直不掉速；
+	 * 给太大则细柱子也判成墙。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|爬坡越障",
+	          meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float ObstacleSlideMinProgress = 0.25f;
+
+	/**
+	 * 顶住障碍期间保留的余速（cm/s）
+	 *
+	 * **这是"卡住很久"的真正原因所在。** 原来顶住时每帧都乘一次
+	 * `WallHitSpeedScale`（0.5），60 fps 下十来帧就把车速压到千分之一，
+	 * 等于归零；玩家松开障碍后还要从 0 按 ThrottleAcceleration 重新加速，
+	 * 顶一下的代价是好几秒。现在只在**刚顶上那一帧**扣一次速度，
+	 * 之后维持这个余速不再继续衰减，绕开的瞬间就能走。
+	 *
+	 * 顶着的时候车并不会前进（水平推进那次 sweep 照样被挡住），
+	 * 所以留着余速不会穿进障碍里。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|爬坡越障",
+	          meta = (ClampMin = "0.0", Units = "cm/s"))
+	float BlockedScrubSpeed = 160.0f;
+
+	/**
+	 * 已经嵌进障碍时单帧最多往外推多远（cm）
+	 *
+	 * 嵌进去之后所有滑动/绕行的 sweep 起点都在障碍内部、恒为 bStartPenetrating，
+	 * 怎么挪都出不来——所以要先沿 MTD 法线推一下。给上限是为了不让一次推成瞬移：
+	 * 深度异常（比如障碍刚刚被生成在车里）时宁可分几帧推出来。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|爬坡越障",
+	          meta = (ClampMin = "1.0", Units = "cm"))
+	float ObstaclePushOutMax = 20.0f;
+
+	/**
+	 * 判"柱子还是墙"时，偏开一个车宽之后往前试探多远（cm）
+	 *
+	 * 这段距离就是"绕过去之后还能开"的门槛。给太短，贴着墙也会被判成柱子；
+	 * 给太长，窄巷里明明能通过也会被判成墙。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|爬坡越障",
+	          meta = (ClampMin = "0.0", Units = "cm"))
+	float ObstacleSideProbeAhead = 120.0f;
+
 	// ---- 贴地 ----
 
 	/** 车身根点离地高度；要大于碰撞盒半高，否则盒子会插进地面 */
@@ -495,6 +555,10 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	/** 贴地高度的追随速度；太大在碎石路上会抖，太小上坡会陷进去 */
 	UPROPERTY(EditAnywhere, Category = "Motorbike|贴地", meta = (ClampMin = "0.1"))
 	float GroundSnapSpeed = 12.0f;
+
+	/** 下坡时单独加快贴地，减少车身高度落后于路面的浮空感 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|贴地", meta = (ClampMin = "0.1"))
+	float GroundSnapDownSpeed = 24.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Motorbike|贴地")
 	float GravityZ = -2200.0f;
@@ -536,6 +600,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	 */
 	UPROPERTY(EditAnywhere, Category = "Motorbike|爬坡越障", meta = (ClampMin = "0.0", Units = "cm"))
 	float GroundLookAhead = 120.0f;
+
 
 	/** 真撞墙（跨不上去）时车速剩下多少；原来写死 0.3 */
 	UPROPERTY(EditAnywhere, Category = "Motorbike|爬坡越障", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -896,6 +961,12 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	 * 失败会把车放回调用前的位置，调用方按撞墙处理
 	 */
 	bool TryStepUp(const FVector& RemainingDelta, const FHitResult& BlockingHit);
+
+	/**
+	 * 撞上障碍后试着滑开或绕过去，成功返回 true（本帧不算顶住）
+	 * 先沿表面切向滑；滑不动再判断"是柱子还是墙"，是柱子就往空的那一侧绕
+	 */
+	bool TrySlideAroundObstacle(const FVector& RemainingDelta, const FHitResult& BlockingHit);
 	// 车身与骑手表现
 	void UpdateLean(float DeltaSeconds);
 	void UpdateSteerVisual(float DeltaSeconds);

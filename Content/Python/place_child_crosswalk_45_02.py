@@ -12,7 +12,9 @@ MARKS = (
      'PedestrianRoute_FeaturedCrosswalkR0039'),
 )
 LANE_OFFSET = 70.0
-SPAWN_INTERVAL = 0.90
+CHILD_SPAWN_INTERVAL = 0.70
+MIXED_SPAWN_INTERVAL = 0.90
+CHILD_MAX_ALIVE = 16
 SECOND_LANE_DELAY = 0.45
 EXTEND = 250.0
 WS = unreal.SplineCoordinateSpace.WORLD
@@ -112,6 +114,8 @@ def main():
         kind.set_editor_property('height_scale', height)
         kinds.append(kind)
         fades.append(fade)
+    leaders = kinds[2:4]
+    leader_fades = fades[2:4]
     plans = []
     for label, tag, prefix in MARKS:
         mark = by_label.get(label)
@@ -139,15 +143,21 @@ def main():
                 route.tags = [unreal.Name(tag), unreal.Name(tag+lane)]
                 route.set_editor_property('kinds', choices)
                 route.set_editor_property('fade_materials', materials)
+                if lane == 'A':
+                    route.set_editor_property('leader_kinds', leaders)
+                    route.set_editor_property('leader_fade_materials', leader_fades)
                 route.set_editor_property('fade_instead_of_scale', True)
                 route.set_editor_property('roam_in_area', False)
                 route.set_editor_property('both_directions', False)
                 route.set_editor_property('allow_handoff', False)
                 route.set_editor_property('prewarm_on_begin_play', False)
                 route.set_editor_property('pause_while_walking', False)
-                route.set_editor_property('max_alive', 12)
-                route.set_editor_property('spawn_interval_min', SPAWN_INTERVAL)
-                route.set_editor_property('spawn_interval_max', SPAWN_INTERVAL)
+                route.set_editor_property('max_alive', CHILD_MAX_ALIVE if lane == 'A' else 12)
+                interval = CHILD_SPAWN_INTERVAL if lane == 'A' else MIXED_SPAWN_INTERVAL
+                route.set_editor_property('spawn_interval_min', interval)
+                route.set_editor_property('spawn_interval_max', interval)
+                if lane == 'A':
+                    route.set_editor_property('yield_probe_distance_override', 35.)
                 route.set_editor_property('initial_spawn_delay', delay)
                 route.set_editor_property('walk_speed_min', 130.)
                 route.set_editor_property('walk_speed_max', 130.)

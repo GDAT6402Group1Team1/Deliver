@@ -1,4 +1,5 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
+#include "Misc/App.h"
 #include "Misc/AutomationTest.h"
 #include "Game/DeliveryStartupFlow.h"
 #include "Task/DeliveryTaskManagerComponent.h"
@@ -132,6 +133,23 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryStartupPIETest, "Delivery.Startup.List
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FDeliveryStartupPIETest::RunTest(const FString&)
 {
+    // 这条测试要开真实的双人 PIE，而 PIE 一定要渲染器。无界面跑自动化时
+    // （UnrealEditor-Cmd -NullRHI）没有可用的 RHI，RequestPlaySession 会在
+    // IMetalDynamicRHI.h 的 GetInterfaceType() == Metal 断言上**整个进程崩掉**。
+    //
+    // 后果不只是这一条红：它按字母序排在 Traffic/Vehicle 前面，进程一崩
+    // **后面所有测试都跑不到**，而报告里一条 Fail 都没有——看着像全过了。
+    // 所以这里必须主动跳过，不能留给它崩。
+    //
+    // 用 AddWarning 而不是静默返回：跳过的测试悄悄变绿本身就是个坑，
+    // 报告里要能看见"这条没真跑"。在编辑器界面里跑时 CanEverRender() 为真，
+    // 照常执行，覆盖范围不变。
+    if (!FApp::CanEverRender())
+    {
+        AddWarning(TEXT("无渲染器（-NullRHI）时跳过：本测试要开真实双人 PIE，"
+                        "需要在编辑器界面里跑"));
+        return true;
+    }
     ADD_LATENT_AUTOMATION_COMMAND(FDeliveryStartupPIECommand(this));
     return true;
 }

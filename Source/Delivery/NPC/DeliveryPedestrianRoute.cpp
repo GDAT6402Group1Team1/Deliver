@@ -10,7 +10,6 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "NPC/DeliveryPedestrian.h"
-#include "Traffic/DeliveryTrafficCarComponent.h"
 #include "UObject/UnrealType.h"
 
 ADeliveryPedestrianRoute::ADeliveryPedestrianRoute()
@@ -70,6 +69,7 @@ void ADeliveryPedestrianRoute::Tick(float DeltaTime)
 	if (CrosswalkActor)
 	{
 		const bool bGreen = IsPedestrianGreen();
+		UpdateLeaderPhase(bGreen);
 		GetGreenPhaseBudgetOwner()->UpdateGreenPhaseBudget(bGreen);
 		const float Multiplier = bGreen ? 1.f : RedLightWalkSpeedMultiplier;
 		for (const TWeakObjectPtr<ADeliveryPedestrian>& Pedestrian : Alive)
@@ -103,6 +103,15 @@ ADeliveryPedestrianRoute* ADeliveryPedestrianRoute::GetGreenPhaseBudgetOwner()
 	return IsValid(SharedGreenPhaseBudgetOwner) &&
 	       SharedGreenPhaseBudgetOwner->GetWorld() == GetWorld()
 	           ? SharedGreenPhaseBudgetOwner.Get() : this;
+}
+
+void ADeliveryPedestrianRoute::UpdateLeaderPhase(bool bGreen)
+{
+	if (bGreen && !bWasPedestrianGreenForLeader)
+	{
+		bNextSpawnIsLeader = true;
+	}
+	bWasPedestrianGreenForLeader = bGreen;
 }
 
 void ADeliveryPedestrianRoute::UpdateGreenPhaseBudget(bool bGreen)
@@ -146,23 +155,6 @@ bool ADeliveryPedestrianRoute::CanSpawnAtCrosswalk() const
 		return false;
 	}
 
-	// 车灯已红、人行已绿，还要等斑马线上正在行驶的车离开
-	FBox CrosswalkBounds = CrosswalkActor->GetComponentsBoundingBox(true);
-	if (!CrosswalkBounds.IsValid)
-	{
-		return false;
-	}
-	CrosswalkBounds = CrosswalkBounds.ExpandBy(FVector(VehicleClearanceMargin,
-	                                               VehicleClearanceMargin, 200.f));
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
-	{
-		const UDeliveryTrafficCarComponent* Car = It->FindComponentByClass<UDeliveryTrafficCarComponent>();
-		if (Car && FMath::Abs(Car->GetReportedSpeed()) > 10.f &&
-		    It->GetComponentsBoundingBox(true).Intersect(CrosswalkBounds))
-		{
-			return false;
-		}
-	}
 	return true;
 }
 
@@ -243,12 +235,13 @@ int32 ADeliveryPedestrianRoute::CompactAlive()
 	return Alive.Num();
 }
 
-USkeletalMesh* ADeliveryPedestrianRoute::PickKind(float& OutHeightScale) const
+USkeletalMesh* ADeliveryPedestrianRoute::PickKind(
+	const TArray<FDeliveryPedestrianKind>& Options, float& OutHeightScale) const
 {
 	OutHeightScale = 1.f;
 
 	float TotalWeight = 0.f;
-	for (const FDeliveryPedestrianKind& Kind : Kinds)
+	for (const FDeliveryPedestrianKind& Kind : Options)
 	{
 		if (Kind.Weight > 0.f && !Kind.Mesh.IsNull())
 		{
@@ -262,7 +255,7 @@ USkeletalMesh* ADeliveryPedestrianRoute::PickKind(float& OutHeightScale) const
 	}
 
 	float Roll = FMath::FRand() * TotalWeight;
-	for (const FDeliveryPedestrianKind& Kind : Kinds)
+	for (const FDeliveryPedestrianKind& Kind : Options)
 	{
 		if (Kind.Weight <= 0.f || Kind.Mesh.IsNull())
 		{
@@ -295,6 +288,13 @@ UMaterialInterface* ADeliveryPedestrianRoute::GetFadeMaterialForMesh(const USkel
 			return FadeMaterials[Index].LoadSynchronous();
 		}
 	}
+	for (int32 Index = 0; Index < LeaderKinds.Num() && Index < LeaderFadeMaterials.Num(); ++Index)
+	{
+		if (LeaderKinds[Index].Mesh.Get() == Mesh)
+		{
+			return LeaderFadeMaterials[Index].LoadSynchronous();
+		}
+	}
 	return nullptr;
 }
 
@@ -322,7 +322,8 @@ ADeliveryPedestrian* ADeliveryPedestrianRoute::SpawnOnePedestrian(bool bAtEntran
 	}
 
 	float HeightScale = 1.f;
-	USkeletalMesh* PickedMesh = PickKind(HeightScale);
+	const bool bLeaderSpawn = bNextSpawnIsLeader && !LeaderKinds.IsEmpty();
+	USkeletalMesh* PickedMesh = PickKind(bLeaderSpawn ? LeaderKinds : Kinds, HeightScale);
 	if (!PickedMesh)
 	{
 		// 这种空配置最难查：点摆了、脚本跑了，却一个人都不出现而且没有任何报错
@@ -416,10 +417,18 @@ ADeliveryPedestrian* ADeliveryPedestrianRoute::SpawnOnePedestrian(bool bAtEntran
 		Pedestrian->PauseDurationMin = 0.f;
 		Pedestrian->PauseDurationMax = 0.f;
 	}
+	if (YieldProbeDistanceOverride >= 0.f)
+	{
+		Pedestrian->YieldProbeDistance = YieldProbeDistanceOverride;
+	}
 	Pedestrian->BeginWalk(this, PickedMesh, WalkAnim.LoadSynchronous(), StartDistance, bWalkForward,
 	                      Speed, WalkAnimReferenceSpeed);
 
 	Alive.Add(Pedestrian);
+	if (bLeaderSpawn)
+	{
+		bNextSpawnIsLeader = false;
+	}
 	return Pedestrian;
 }
 

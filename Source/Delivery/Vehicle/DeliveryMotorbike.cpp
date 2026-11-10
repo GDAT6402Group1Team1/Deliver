@@ -1800,6 +1800,102 @@ void ADeliveryMotorbike::UpdateSteering(float DeltaSeconds)
 // 地面检测与车辆移动
 
 // 检测地面并执行带碰撞的车辆移动
+bool ADeliveryMotorbike::TrySlideAroundObstacle(const FVector& RemainingDelta,
+                                               const FHitResult& BlockingHit)
+{
+	const float RemainingLength = RemainingDelta.Size2D();
+	if (RemainingLength <= 1.0f)
+	{
+		return false;
+	}
+	const float MinProgress = FMath::Clamp(ObstacleSlideMinProgress, 0.01f, 1.0f);
+
+	// ① 沿表面切向滑：擦到路缘、斜墙、墙角时这一步就够了
+	FVector SlideDelta = FVector::VectorPlaneProject(RemainingDelta, BlockingHit.ImpactNormal);
+	SlideDelta.Z = 0.0f;
+	if (SlideDelta.SizeSquared2D() > FMath::Square(1.0f))
+	{
+		const FVector SlideStart = GetActorLocation();
+		AddActorWorldOffset(SlideDelta, true);
+		if (FVector::Dist2D(SlideStart, GetActorLocation()) >= RemainingLength * MinProgress)
+		{
+			return true;
+		}
+	}
+
+	if (!bDeflectAroundNarrowObstacles)
+	{
+		return false;
+	}
+
+	// ② 正面顶住：分清"柱子"和"墙"
+	//
+	// 法线几乎正对车头时①的切向投影接近零，所以**细柱子永远滑不开**。
+	// 判据不能靠障碍的体积或类型（路灯、电线杆、消防栓各是各的网格，没有共同标记
+	// 可查，按类名或 tag 判迟早漏），只能问几何。
+	//
+	// **但不能直接试"能不能横着挪"——墙根本不挡横向移动**，贴着墙面横滑永远成功，
+	// 于是撞墙也会被当成柱子绕开（第一版就是这么错的，表现是撞墙车会沿墙飘走）。
+	// 要问的是：**偏开一个车宽之后，前面还通不通**。柱子通，墙不通。
+	UWorld* World = GetWorld();
+	if (!World || !CollisionBox)
+	{
+		return false;
+	}
+	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	const FVector Right = FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal();
+	const FVector Extent = CollisionBox->GetScaledBoxExtent();
+	const float HalfWidth = FMath::Max(Extent.Y, 10.0f);
+	// 一帧最多侧移"这一帧本来要走的距离"，所以绕行不会比正常行驶更快，也不会瞬移
+	const float SideStep = FMath::Min(RemainingLength, HalfWidth);
+
+	// 优先往玩家正在打把的那一侧绕；没打把时按撞击点落在车身哪一侧决定——
+	// 撞在左前角就往右绕，绕的是更近的那条边
+	float PreferredSign = 1.0f;
+	if (!FMath::IsNearlyZero(SteerInput))
+	{
+		PreferredSign = SteerInput > 0.0f ? 1.0f : -1.0f;
+	}
+	else
+	{
+		const float ImpactSide =
+		    FVector::DotProduct(BlockingHit.ImpactPoint - GetActorLocation(), Right);
+		PreferredSign = ImpactSide >= 0.0f ? -1.0f : 1.0f;
+	}
+
+	// 用车身自己的碰撞设置试探，而不是挑一个通道：挡得住车的东西才算挡路，
+	// 挑通道迟早和车身的响应配置对不上（本仓库在"按通道查恒为空"上栽过三次）
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(MotorbikeObstacleSide), false, this);
+	Params.AddIgnoredActor(Driver);
+	const FCollisionShape Body = FCollisionShape::MakeBox(Extent);
+	const FQuat Rotation = GetActorQuat();
+
+	for (int32 Attempt = 0; Attempt < 2; ++Attempt)
+	{
+		const float Sign = Attempt == 0 ? PreferredSign : -PreferredSign;
+		const FVector Aside = GetActorLocation() + Right * Sign * HalfWidth * 2.0f;
+		const FVector AheadOfAside = Aside + Forward * (RemainingLength + ObstacleSideProbeAhead);
+		if (World->SweepTestByProfile(Aside, AheadOfAside, Rotation,
+		                              CollisionBox->GetCollisionProfileName(), Body, Params))
+		{
+			// 这一侧偏开了也走不了，是墙（或者墙角），换另一侧
+			continue;
+		}
+
+		const FVector Start = GetActorLocation();
+		AddActorWorldOffset(Right * Sign * SideStep, true);
+		if (FVector::Dist2D(Start, GetActorLocation()) >= SideStep * MinProgress)
+		{
+			return true;
+		}
+		// 侧移本身被挡住（两边都贴着东西），撤回去再试另一侧；
+		// 不撤回会把两次试探叠起来
+		SetActorLocation(Start, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+
+	return false;
+}
+
 void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 {
 	UWorld* World = GetWorld();
@@ -1807,6 +1903,9 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 	{
 		return;
 	}
+	// 上一帧有没有顶着东西：决定这一帧要不要再扣一次撞墙速度惩罚。
+	// 不留这个状态就只能每帧都扣，而每帧乘 0.5 在 60 fps 下十来帧就等于归零
+	const bool bWasBlockedByWall = bBlockedByWall;
 	bBlockedByWall = false;
 
 	// 1) 水平推进；带 sweep，撞墙就掉速而不是穿过去；撞的是矮台阶就先试着跨上去
@@ -1817,27 +1916,32 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 		AddActorWorldOffset(Delta, true, &MoveHit);
 		if (MoveHit.bBlockingHit)
 		{
+			// 已经卡进障碍里就先推出来。不推的话后面滑动和绕行的 sweep 起点就在
+			// 障碍内部，怎么挪都是 bStartPenetrating，车会一直嵌在花坛里出不来
+			if (MoveHit.bStartPenetrating)
+			{
+				const float Push =
+				    FMath::Clamp(MoveHit.PenetrationDepth + 2.0f, 2.0f, ObstaclePushOutMax);
+				AddActorWorldOffset(MoveHit.Normal * Push, false);
+			}
+
 			// 这一帧还没走完的那一段，跨上去之后要接着走完
 			const FVector Remaining = Delta * (1.0f - MoveHit.Time);
 			if (!TryStepUp(Remaining, MoveHit))
 			{
-				// 擦边撞到灯柱时沿表面滑开；正面顶住时保留转向能力供玩家脱困
-				float SlideProgress = 0.0f;
-				if (!MoveHit.bStartPenetrating)
+				bBlockedByWall = !TrySlideAroundObstacle(Remaining, MoveHit);
+				if (bBlockedByWall)
 				{
-					FVector SlideDelta = FVector::VectorPlaneProject(Remaining, MoveHit.ImpactNormal);
-					SlideDelta.Z = 0.0f;
-					if (SlideDelta.SizeSquared2D() > FMath::Square(1.0f))
+					// **只在刚顶上那一帧扣速度**，之后维持余速不再衰减。
+					// 原来每帧都乘，顶一下就把车速压成零、玩家还得从 0 重新加速，
+					// 那正是"撞到路灯要卡很久"的来源；顶着时 sweep 照样挡住车，
+					// 留余速不会穿进去，但绕开的瞬间就能走
+					if (!bWasBlockedByWall)
 					{
-						const FVector SlideStart = GetActorLocation();
-						AddActorWorldOffset(SlideDelta, true);
-						SlideProgress = FVector::Dist2D(SlideStart, GetActorLocation());
+						CurrentSpeed *= WallHitSpeedScale;
 					}
-				}
-				if (SlideProgress < Remaining.Size2D() * 0.25f)
-				{
-					bBlockedByWall = true;
-					CurrentSpeed *= WallHitSpeedScale;
+					CurrentSpeed =
+					    FMath::Clamp(CurrentSpeed, -BlockedScrubSpeed, BlockedScrubSpeed);
 				}
 			}
 		}
@@ -1880,7 +1984,8 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 		
 		if (Location.Z <= DesiredZ + FMath::Max(GroundStickTolerance, MaxStepHeight + 10.0f))
 		{
-			float NewZ = FMath::FInterpTo(Location.Z, DesiredZ, DeltaSeconds, GroundSnapSpeed);
+			const float SnapSpeed = DesiredZ < Location.Z ? GroundSnapDownSpeed : GroundSnapSpeed;
+			float NewZ = FMath::FInterpTo(Location.Z, DesiredZ, DeltaSeconds, SnapSpeed);
 			if (DesiredZ > Location.Z)
 			{
 				// 上坡时保证最低抬升速度，避免车身偏低导致下一帧撞到坡面

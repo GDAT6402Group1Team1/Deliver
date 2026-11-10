@@ -11,6 +11,11 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
+#include "Character/DeliveryCharacter.h"
+#include "Inventory/DeliveryPackageItem.h"
+#include "Vehicle/DeliveryMotorbike.h"
+#include "Task/World/DeliveryItemComponent.h"
+#include "EngineUtils.h"
 #include "TimerManager.h"
 
 #define LOCTEXT_NAMESPACE "DeliveryTaskHud"
@@ -161,13 +166,44 @@ bool UDeliveryTaskController::PushTaskState()
 
     // 等待取件时提示去取件，配送中则提示送达
     const bool bPickup = Status == EDeliveryTaskStatus::AwaitingPickup;
-    const FText TaskTitle = bPickup ? FText::Format(LOCTEXT("GoPickup", "去取件：{0}"), Task->DisplayName)
-                                    : FText::Format(LOCTEXT("GoDeliver", "送达：{0}"), Task->DisplayName);
+    FText TaskTitle = bPickup ? FText::Format(LOCTEXT("GoPickup", "去取件：{0}"), Task->DisplayName)
+                             : FText::Format(LOCTEXT("GoDeliver", "快去交付：{0}"), Task->DisplayName);
 
     // 明细行按有什么拼什么：地点组件还没摆时就只显示计时，不让整条消失
     TArray<FString> Parts;
 
     const FDeliveryGuidance Guidance = UDeliveryGuidanceLibrary::GetTaskGuidance(this, Task);
+    if (!bPickup)
+    {
+        const APlayerController* PC = Cast<APlayerController>(Player.Get());
+        const ADeliveryMotorbike* RidingBike = PC ? Cast<ADeliveryMotorbike>(PC->GetPawn()) : nullptr;
+        const ADeliveryPackageItem* RidingCargo = RidingBike ? RidingBike->GetCargo() : nullptr;
+        const UDeliveryItemComponent* RidingItem = RidingCargo
+            ? RidingCargo->FindComponentByClass<UDeliveryItemComponent>() : nullptr;
+        if (RidingItem && RidingItem->OwningTask == Task &&
+            Guidance.bValid && Guidance.Distance <= 500.f)
+        {
+            TaskTitle = LOCTEXT("DismountUnloadDeliver", "按 F 下车取货交货");
+        }
+        else if (const ADeliveryCharacter* Character = PC ? Cast<ADeliveryCharacter>(PC->GetPawn()) : nullptr;
+                 Character && !Character->GetCarriedTaskPackage())
+        {
+            // 下车后包裹留在后备箱，提示取回；只找角色附近且属于当前任务的车
+            for (TActorIterator<ADeliveryMotorbike> It(World); It; ++It)
+            {
+                const ADeliveryPackageItem* Cargo = It->GetCargo();
+                const UDeliveryItemComponent* Item = Cargo
+                    ? Cargo->FindComponentByClass<UDeliveryItemComponent>() : nullptr;
+                if (Item && Item->OwningTask == Task &&
+                    FVector::DistSquared2D(Character->GetActorLocation(), It->GetActorLocation()) <=
+                        FMath::Square(600.f))
+                {
+                    TaskTitle = LOCTEXT("UnloadBeforeDeliver", "到车尾左键取货");
+                    break;
+                }
+            }
+        }
+    }
     if (Guidance.bValid)
     {
         Parts.Add(FString::Printf(TEXT("%s %s"), ArrowForYaw(Guidance.RelativeYaw),
