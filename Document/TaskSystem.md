@@ -254,6 +254,28 @@ UMG 将偏移乘以罗盘条半宽后写入 `Render Translation X`。目标和�
 
 ---
 
+### 4.11 结算面板逐行显示
+
+`WBP_Reward` 的父类必须是 `DeliverySettlementWidget`，在 `BP_DeliveryManPC` 的 `Settlement` 组件上填写 `SettlementWidgetClass`。必需的 Text Block 为 `TaskNameText` 和 `FinalRewardText`，其余明细可选。组件负责创建、登记面板、移除和注销；Widget 只负责本机表现，不修改奖励或钱包
+
+`ApplyReward` 先填写所有文本，任务名立即显示，随后按 `TimeGradeText → ElapsedText → BaseRewardText → TimeMultiplierText → SpecialMultiplierText → FinalRewardText` 依次恢复透明度。固定标签已画在背景图上，因此只有动态文本逐行出现。缺少、隐藏或透明度为零的可选明细不占时间，布局不折叠。`OnSettlementShown` 仍在文本赋值后触发，可留空，不需要额外连接 Delay 或 Play Animation
+
+WBP 的 Class Defaults → `Delivery|Settlement|Reveal` 可关闭 `bRevealRows`，或调整首行延迟 `FirstRowDelay`（0.2 秒）、行间隔 `RowRevealInterval`（0.35 秒）和总收入前停顿 `FinalRowDelay`（0.6 秒）。`Audio` 分类的 `RowRevealSound` / `FinalRevealSound` 默认使用 `/Game/Sound/SFX/pop`，支持替换 Sound Wave、Cue 或 MetaSound，留空则静音；可调整音量、逐行音高增量和总收入音高。声音只在拥有面板的本机播放，不广播给其他玩家，循环音不会用于逐行提示
+
+所有明细出现后，Widget 的本机 `OnRevealFinished` 才通知组件开始 `AutoHideSeconds` 倒计时（默认 6 秒，0 表示手动关闭）。关闭、替换订单、NativeDestruct 和组件 EndPlay 都取消剩余计时器并清理音频；重复填入新奖励会重置显示顺序。调试入口仍是 `Delivery.Task.Settlement`，自动化检查为 `Delivery.UI.SettlementReveal`，覆盖顺序、完成后关闭、取消、重复填入和缺少可选行
+
+本次验证（2026-11-10）：`Build.bat DeliveryEditor Win64 Development -Project=Delivery.uproject -WaitMutex -NoHotReloadFromIDE` 通过；`Automation RunTests Delivery.UI.SettlementReveal+Delivery.UI.PhoneController` 两项通过、无测试警告。首次检查发现尚未构建 Slate 时 `IsVisible()` 返回 false，现改读控件的 Visibility 配置，重新构建与测试通过。已只读核对保存的 `WBP_Reward` 父类、PC 的组件引用和两个音效默认值；未运行实际地图听感或双人 PIE，任务入账与网络通知不在本次改动范围
+
+### 4.12 取货点与骑车提示
+
+`UDeliveryPickupPointComponent` 按同 Actor 的 `DeliveryLocationComponent.LocationId` 查找待取件任务，接入长按 E 交互。玩家必须下车领取，再通过车尾交互装入后备箱
+
+本机 `InteractionProbe` 查询提示候选时使用 `CanPickup(Interactor, false)`，骑车仍保留取货点。实际执行使用 `true` 检查下车和任务条件；`InteractionController.GetPrompt` 必须把当前交互者传给 `GetBlockedReason`，因此骑车显示「按 F 下车取货」，下车显示该点的 E 取货提示，不读取其他玩家的骑车状态。圆圈只表示导航目标，不能代替这些交互条件
+
+服务器长按完成后调用 `TryDispense`，它再次检查下车和任务条件，生成快递并交给角色携带；领取成功才推进任务，重复完成请求不能再生成一件。`Delivery.Systems.Interaction` 覆盖骑车提示、其他步行玩家的提示隔离、下车后长按领取、重复领取和交付
+
+2026-11-10 本次验证：`Build.bat DeliveryEditor Win64 Development -Project=D:\UnrealProjects\Deliver\Delivery.uproject -WaitMutex -NoHotReloadFromIDE` 编译成功；先运行 `Automation RunTests Delivery.Systems.Interaction+Delivery.Interaction.WorldRegistry+Delivery.Traffic.Horn`，登记与鸣笛通过，交互测试暴露了测试世界没有本机玩家标记的问题。补齐测试控制器标记后单独重跑 `Automation RunTests Delivery.Systems.Interaction` 成功，报告 `Saved/Automation/PickupPromptFix/index.json` 为 0 错误、11 条警告（无模型夹具的手部挂点、空物理控制集、收件点半径对齐）；下车重启无模型布娃娃产生的一条缺物理资产日志明确列为预期。测试不启动身体物理，不代表实际双人 PIE、手柄或地图中的显示位置已验收
+
 ## 五、配置方式
 
 ### 5.1 建一个任务
@@ -263,7 +285,7 @@ UMG 将偏移乘以罗盘条半宽后写入 `Render Translation X`。目标和�
 | 分组 | 字段 | 说明 |
 |---|---|---|
 | Task | `TaskId` | 稳定 ID，上线后不要改 |
-| Task | `DisplayName` | 任务名 |
+| Task | `DisplayName` | 任务名；第一单 `Task_001` 为 `Grandpa's delivery`，与 `Design/Tasks.csv` 的 Task Name 同步 |
 | Task | `SimpleDescription` / `DetailedDescription` | 列表里的一句话 / 详情页的完整描述 |
 | Reference | `DeliveryItemId` / `PickupLocationId` / `DeliveryLocationId` / `ReceiverNpcId` / `SpecialEventId` | 策划表里的外部引用 ID。**目前只存字符串不做解析**，指向的系统还没做（见第八节） |
 | Unlock | `UnlockConditions` | 内联条件数组，全部满足才解锁。**留空 = 开局即解锁** |

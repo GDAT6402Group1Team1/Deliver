@@ -55,7 +55,7 @@ public:
 	TSubclassOf<UDeliverySettlementWidget> SettlementWidgetClass;
 
 	/**
-	 * 自动收起的秒数。0 = 不自动收，必须点关闭。
+	 * 全部明细出现后保留多久再自动收起，0 = 必须手动关闭
 	 *
 	 * 默认自动收是刻意的：这游戏一单接一单，每次都弹个要手动点掉的框，
 	 * 连送几单就很烦。点击仍然可以提前关。
@@ -84,9 +84,11 @@ protected:
 	TObjectPtr<UDeliverySettlementWidget> ActiveWidget;
 
 private:
+	friend class FDeliverySettlementRevealTest;
 
 	/** 订阅钱包。拿不到就定时重试，见实现里的注释。 */
 	void BindToWallet();
+	void HandleRevealFinished(UDeliverySettlementWidget* Widget);
 
 	UFUNCTION()
 	void HandleTaskPaid(UDeliveryTaskDefinition* Task, const FDeliveryRewardBreakdown& Reward);

@@ -66,6 +66,8 @@ HUD 最终仍调用 PlayerController 的 SetInputMode 和 bShowMouseCursor，因
 
 ## 来电、接听和字幕
 
+接听和挂断按钮使用 `/Game/UI/Image/T_PhoneAnswer`（绿色接听）与 `/Game/UI/Image/T_PhoneHangUp`（红色挂断）。透明 PNG 源图与贴图资产同放在 `Content/UI/Image`，已设置 UI 压缩、UI 贴图组、sRGB 和无 Mipmaps，可直接赋给 UMG Image 或按钮 Brush；本次仅新增图标，按钮事件仍由 Widget 接到手机处理器的 Answer、HangUp
+
 PhoneController 初始化后订阅电话队列的 OnPhoneStateChanged。客户端的 GameState 可能尚未复制到位，此时用 0.5 秒的一次性计时器重试；连接成功就清除计时器，并读取当前电话。晚加入的玩家因此也能获得正在进行的通话内容
 
 进入 InCall 后，处理器按 CallId 判断这通对白是否已经开始。同一状态可能分别由队列和状态字段的复制回调通知，不能因此把语音从头播放两遍。确认是新对白后，处理器读取来电者与台词，请求 DialogueVoice 播放

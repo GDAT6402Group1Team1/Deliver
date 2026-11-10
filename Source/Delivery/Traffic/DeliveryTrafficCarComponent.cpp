@@ -155,6 +155,11 @@ UDeliveryTrafficCarComponent::UDeliveryTrafficCarComponent()
 	{
 		HornSounds.Add(DefaultHorn.Object);
 	}
+	static ConstructorHelpers::FObjectFinder<USoundBase> SingleHorn(TEXT("/Game/Sound/SFX/single-beep.single-beep"));
+	if (SingleHorn.Succeeded())
+	{
+		HornSounds.Add(SingleHorn.Object);
+	}
 }
 
 // 路线初始化

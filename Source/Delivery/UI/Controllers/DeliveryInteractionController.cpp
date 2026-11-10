@@ -15,7 +15,7 @@ FText UDeliveryInteractionController::GetPrompt(UDeliveryInteractableComponent *
         FText Reason;
         if (const UDeliveryPickupPointComponent *Point =
                 UDeliveryPickupPointComponent::FindOn(Target->GetOwner()))
-            Reason = Point->GetBlockedReason();
+            Reason = Point->GetBlockedReason(Interactor);
         else if (const UDeliveryItemComponent *Item =
                      Target->GetOwner()->FindComponentByClass<UDeliveryItemComponent>())
             Reason = Item->GetPickupBlockedReason();

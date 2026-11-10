@@ -9,6 +9,11 @@
 
 class UDeliveryTaskDefinition;
 class UTextBlock;
+class UAudioComponent;
+class USoundBase;
+class UDeliverySettlementWidget;
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnDeliverySettlementRevealFinished, UDeliverySettlementWidget*);
 
 /**
  * 任务结算界面的 C++ 父类。**WBP 继承它、按名字摆控件。**
@@ -43,6 +48,14 @@ class DELIVERY_API UDeliverySettlementWidget : public UUserWidget
 
 public:
 
+	UDeliverySettlementWidget(const FObjectInitializer& ObjectInitializer);
+
+	/** 所有明细显示后通知组件，从此时开始计算自动关闭时间 */
+	FOnDeliverySettlementRevealFinished OnRevealFinished;
+
+	/** 关闭或替换面板前取消逐行显示和音效，允许重复调用 */
+	void CancelReveal();
+
 	/**
 	 * 组件填完数据后调一次。蓝图里实现它来播放入场动画、刷新自定义内容。
 	 *
@@ -67,6 +80,46 @@ public:
 	UDeliveryTaskDefinition* GetTask() const { return Task; }
 
 protected:
+
+	virtual void NativeDestruct() override;
+
+	/** 开启后标题立即显示，明细逐行出现，总收入最后显示 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Reveal")
+	bool bRevealRows = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Reveal",
+		meta=(ClampMin="0.01", Units="s"))
+	float FirstRowDelay = 0.2f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Reveal",
+		meta=(ClampMin="0.01", Units="s"))
+	float RowRevealInterval = 0.35f;
+
+	/** 显示总收入之前的停顿，替代普通行间隔 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Reveal",
+		meta=(ClampMin="0.01", Units="s"))
+	float FinalRowDelay = 0.6f;
+
+	/** 每行明细的本机提示音，可替换 Sound Wave / Cue / MetaSound，留空则静音 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Audio")
+	TObjectPtr<USoundBase> RowRevealSound;
+
+	/** 总收入的提示音，可与普通行单独配置 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Audio")
+	TObjectPtr<USoundBase> FinalRevealSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Audio",
+		meta=(ClampMin="0", ClampMax="2"))
+	float RevealVolume = 0.6f;
+
+	/** 每显示一行略微提高音高，0 表示所有明细使用相同音高 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Audio",
+		meta=(ClampMin="0", ClampMax="0.2"))
+	float RowPitchStep = 0.05f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement|Audio",
+		meta=(ClampMin="0.5", ClampMax="2"))
+	float FinalRevealPitch = 1.3f;
 
 	// ———— 必须摆的控件 ————
 
@@ -123,6 +176,28 @@ protected:
 	FText CurrencyFormat = NSLOCTEXT("DeliverySettlement", "CurrencyFormat", "¥{0}");
 
 private:
+
+	friend class FDeliverySettlementRevealTest;
+
+	struct FRevealRow
+	{
+		TWeakObjectPtr<UTextBlock> Text;
+		float Opacity = 1.f;
+	};
+
+	// 弱引用只用于本次显示，控件本身由 WidgetTree 和上面的绑定字段保活
+	TArray<FRevealRow> RevealRows;
+	int32 NextRevealRow = 0;
+	uint32 RevealGeneration = 0;
+	FTimerHandle RevealTimer;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> RevealAudio;
+
+	void PrepareReveal();
+	void RevealNextRow();
+	void PlayRevealSound(bool bFinal, int32 RowIndex);
+	void StopRevealSound();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDeliveryTaskDefinition> Task;

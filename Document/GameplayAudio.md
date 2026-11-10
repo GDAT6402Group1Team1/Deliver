@@ -76,13 +76,13 @@ DA_VehicleAudio 还包含发动机设置：循环资源为 Motor_loop，怠速�
 
 ### 交通车靠近玩家鸣笛
 
-`BP_car_base` 已有的 `Delivery Traffic Car` 组件自动接入鸣笛，默认声音为 `/Game/Sound/SFX/beep-beep`，不需要逐辆车加组件或改地图。后续生成的车辆继承同一配置
+`BP_car_base` 已有的 `Delivery Traffic Car` 组件自动接入鸣笛，默认声音为 `/Game/Sound/SFX/beep-beep` 和 `/Game/Sound/SFX/single-beep`，不需要逐辆车加组件或改地图。后续生成的车辆继承同一配置
 
 在车辆蓝图的 `Delivery Traffic Car → Traffic | 鸣笛` 中配置：
 
 | 参数 | 默认与含义 |
 |---|---|
-| Horn Sounds | 默认 beep-beep；可以增加多个 SoundWave / SoundCue，随机选择且尽量避免连续重复；空槽和循环声音忽略，清空数组静音 |
+| Horn Sounds | 默认 beep-beep 和 single-beep；每辆车首次随机选择，之后排除上一次声音，因此只有两条时交替播放；可增加多个 SoundWave / SoundCue，空槽和循环声音忽略，清空数组静音 |
 | Auto Honk Near Players | 开启自动距离检查，关闭后仍可主动调用接口 |
 | Horn Trigger Distance | 800 cm，玩家当前控制的角色或载具到交通车中心的三维距离 |
 | Horn Forward Half Angle | 60°，车头水平朝向左右各 60° 的前方扇区；侧面和后方不自动触发，最大可设为 90° |
@@ -103,7 +103,9 @@ DA_VehicleAudio 还包含发动机设置：循环资源为 Motor_loop，怠速�
 
 2026-11-10 验证（含前方扇区和随机音量、Pitch）：`Build.bat DeliveryEditor Win64 Development -Project=D:\UnrealProjects\Deliver\Delivery.uproject -WaitMutex -NoHotReloadFromIDE` 完整编译成功；空白地图以 `Automation RunTests Delivery.Traffic.Horn+Delivery.Audio.Events` 运行的两项测试均成功，测试报告为 0 错误、0 警告。报告在 `Saved/Automation/TrafficHorn/index.json`，日志在 `Saved/Logs/TrafficHornTests.log`。只读核对 `/Game/Vehicle/BP_car_base` 及 1–5 五个变体，均继承 beep-beep、800 cm、8 秒、半角 60°、音量倍率 0.9–1.1 和 Pitch 0.95–1.05；结果在 `Saved/traffic_horn_asset_audit.json`。未做实际双人 PIE、丢包或扬声器试听，测试中的两名控制器位于同一独立世界
 
-启动日志仍包含物理材质在 CDO 阶段访问尚未初始化 GEngine 的错误，以及旧编辑器布局警告；本次修改前的 `Saved/Logs/Delivery.log` 已有相同记录，未纳入鸣笛修改。测试报告的 0 错误、0 警告仅指上述两项测试
+2026-11-10 追加 single-beep 验证：完整编译成功，`Automation RunTests Delivery.Systems.Interaction+Delivery.Interaction.WorldRegistry+Delivery.Traffic.Horn` 中鸣笛测试成功、0 错误和警告，报告 `Saved/Automation/PickupHornFix/index.json`。该次交互测试失败后修正测试环境并单独重跑通过，详情见 `TaskSystem.md` 4.12。只读资源核对确认六种交通车均继承 beep-beep 和 single-beep，两段均非循环，前方扇区、冷却及音量/Pitch 范围保持原配置；`Saved/traffic_horn_asset_audit.json` 已更新。未做实际双人 PIE 或扬声器试听
+
+启动日志仍包含物理材质在 CDO 阶段访问尚未初始化 GEngine 的错误，以及旧编辑器布局警告；本次修改前的 `Saved/Logs/Delivery.log` 已有相同记录，未纳入鸣笛修改。只读资源脚本执行和断言成功，但 commandlet 仍因上述启动错误退出码为 1；测试报告的 0 错误、0 警告只针对对应测试
 
 ### 通用事件扩展
 

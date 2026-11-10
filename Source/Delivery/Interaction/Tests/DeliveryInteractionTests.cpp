@@ -9,6 +9,8 @@
 #include "Character/DeliveryCharacter.h"
 #include "Player/DeliveryPlayerController.h"
 #include "Interaction/DeliveryInteractableComponent.h"
+#include "Interaction/DeliveryInteractionProbeComponent.h"
+#include "Interaction/DeliveryInteractionRegistry.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryPackageItem.h"
@@ -16,12 +18,15 @@
 #include "Carry/DeliveryCarryComponent.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "UI/Controllers/DeliveryHotbarController.h"
+#include "UI/Controllers/DeliveryInteractionController.h"
 #include "Components/SceneComponent.h"
 #include "Game/DeliveryGameState.h"
 #include "Task/DeliveryTaskManagerComponent.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "Task/World/DeliveryTargetComponent.h"
+#include "Task/World/DeliveryPickupPointComponent.h"
+#include "World/DeliveryLocationComponent.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryInteractionFlowTest, "Delivery.Systems.Interaction",
                                  EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -51,6 +56,8 @@ bool FDeliveryInteractionFlowTest::RunTest(const FString &)
     ADeliveryPlayerController *Player = World->SpawnActor<ADeliveryPlayerController>(Spawn);
     if (!TestNotNull(TEXT("character"), Character) || !TestNotNull(TEXT("controller"), Player))
         return false;
+    // 独立测试世界没有登录流程，显式标为本机玩家才能运行提示探测
+    Player->SetAsLocalPlayerController();
     Player->Possess(Character);
 
     // 本测试检查交互规则，不启动身体物理模拟
@@ -149,6 +156,7 @@ bool FDeliveryInteractionFlowTest::RunTest(const FString &)
     if (!TestNotNull(TEXT("bike"), Bike))
         return false;
     TestTrue(TEXT("enter vehicle"), Bike->TryEnter(Character));
+    TestTrue(TEXT("bike remains locally controlled"), Bike->IsLocallyControlled());
     Target->SetActorLocation(Character->GetActorLocation());
     Send(EDeliveryInteractionRequest::Use);
     TestEqual(TEXT("driver interaction works after possession changes"), Executions, 3);
@@ -191,10 +199,63 @@ bool FDeliveryInteractionFlowTest::RunTest(const FString &)
     Task.Status = EDeliveryTaskStatus::Offered;
     TestTrue(TEXT("accept task starts timer"), Tasks->StartTaskTimerFromAcceptedCall(Definition));
 
-    ADeliveryPackageItem *WalkingPackage = World->SpawnActor<ADeliveryPackageItem>(Spawn);
-    WalkingPackage->GetDeliveryItemComponent()->OwningTask = Definition;
-    TestTrue(TEXT("walking player receives task package"), Walker->ReceiveTaskPackage(WalkingPackage, false));
-    TestEqual(TEXT("walking package is in carry query"), Walker->GetCarriedTaskPackage(), WalkingPackage);
+    // 骑车到取货点必须保留目标并显示下车提示，不能提前领取或直接塞入车厢
+    Definition->PickupLocationId = TEXT("PickupPromptTest");
+    UDeliveryLocationComponent *Location = NewObject<UDeliveryLocationComponent>(Target);
+    Target->AddInstanceComponent(Location);
+    Location->SetupAttachment(Root);
+    Location->LocationId = Definition->PickupLocationId;
+    Location->RegisterComponent();
+    UDeliveryPickupPointComponent *PickupPoint = NewObject<UDeliveryPickupPointComponent>(Target);
+    Target->AddInstanceComponent(PickupPoint);
+    PickupPoint->InteractRadius = 1000.f;
+    PickupPoint->RegisterComponent();
+    PickupPoint->EnsureInteractableConfigured();
+    // 此测试世界不启动角色 BeginPlay，手动登记目标以验证真实探测与长按路径
+    World->GetSubsystem<UDeliveryInteractionRegistry>()->Register(Action);
+    Target->SetActorLocation(Character->GetActorLocation());
+    UDeliveryInteractionProbeComponent *Probe = Character->FindComponentByClass<UDeliveryInteractionProbeComponent>();
+    UDeliveryInteractionController *Prompts = NewObject<UDeliveryInteractionController>();
+    if (!TestNotNull(TEXT("interaction probe"), Probe))
+        return false;
+    TestTrue(TEXT("riding pickup remains a prompt candidate"), Character->CanUsePickupTarget(Target, false));
+    TestFalse(TEXT("riding pickup cannot execute"), Character->CanUsePickupTarget(Target, true));
+    Probe->TickComponent(0.05f, LEVELTICK_All, nullptr);
+    TestEqual(TEXT("probe keeps pickup target while driving"), Probe->GetFocusedPickupActor(), Target);
+    const FText RidingPrompt = Prompts->GetPrompt(Action, true, Character);
+    TestFalse(TEXT("riding prompt differs from normal pickup prompt"), RidingPrompt.EqualTo(Action->PromptText));
+    TestTrue(TEXT("riding prompt uses this player's blocked reason"),
+             RidingPrompt.EqualTo(PickupPoint->GetBlockedReason(Character)));
+    TestTrue(TEXT("another walking player receives the normal pickup prompt"),
+             Prompts->GetPrompt(Action, true, Walker).EqualTo(Action->PromptText));
+    TestFalse(TEXT("direct dispense cannot bypass dismount rule"), PickupPoint->TryDispense(Character));
+    TestNull(TEXT("rejected pickup leaves vehicle empty"), Bike->GetCargo());
+    TestEqual(TEXT("rejected pickup does not advance task"), Tasks->GetTaskStatus(Definition),
+              EDeliveryTaskStatus::AwaitingPickup);
+
+    // 无模型夹具下车时会尝试重启布娃娃，仅预期这一条缺少物理资产日志
+    AddExpectedError(TEXT("DeliveryCharacter_0: Skeletal mesh has no Physics Asset."),
+                     EAutomationExpectedErrorFlags::Contains, 1);
+    Bike->ExitVehicle();
+    TestFalse(TEXT("character is no longer riding"), Character->IsRidingVehicle());
+    TestTrue(TEXT("controller returns to character"), Player->GetPawn() == Character);
+    Mode->GetUnderlyingProperty()->SetIntPropertyValue(
+        Mode->ContainerPtrToValuePtr<void>(Character->GetActiveRagdoll()),
+        uint64(EDeliveryRagdollControlMode::Active));
+    Target->SetActorLocation(Character->GetActorLocation());
+    Probe->TickComponent(0.05f, LEVELTICK_All, nullptr);
+    TestEqual(TEXT("probe keeps pickup target after dismount"), Probe->GetFocusedPickupActor(), Target);
+    TestTrue(TEXT("normal E prompt returns after dismount"),
+             Prompts->GetPrompt(Action, true, Character).EqualTo(Action->PromptText));
+    TestTrue(TEXT("walking pickup is available"), Character->CanUsePickupTarget(Target, true));
+    Send(EDeliveryInteractionRequest::BeginHold);
+    Advance();
+    Send(EDeliveryInteractionRequest::CompleteHold);
+    ADeliveryPackageItem *WalkingPackage = Character->GetCarriedTaskPackage();
+    if (!TestNotNull(TEXT("holding E after dismount dispenses package"), WalkingPackage))
+        return false;
+    Send(EDeliveryInteractionRequest::CompleteHold);
+    TestFalse(TEXT("pickup point cannot dispense a duplicate package"), PickupPoint->TryDispense(Character));
     TestEqual(TEXT("pickup advances task"), Tasks->GetTaskStatus(Definition),
               EDeliveryTaskStatus::InProgress);
 
@@ -206,10 +267,10 @@ bool FDeliveryInteractionFlowTest::RunTest(const FString &)
     TestTrue(TEXT("dropoff registers availability"), Action->CanUse.IsBound());
     TestTrue(TEXT("dropoff registers behavior"), Action->Use.IsBound());
     Target->SetActorLocation(WalkingPackage->GetActorLocation());
-    TestTrue(TEXT("dropoff accepts correct package"), Action->CanUse.Execute(Walker, true));
-    TestTrue(TEXT("dropoff completes delivery"), Action->Use.Execute(Walker));
+    TestTrue(TEXT("dropoff accepts correct package"), Action->CanUse.Execute(Character, true));
+    TestTrue(TEXT("dropoff completes delivery"), Action->Use.Execute(Character));
     TestEqual(TEXT("task completed"), Tasks->GetTaskStatus(Definition), EDeliveryTaskStatus::Completed);
-    TestNull(TEXT("completed package removed from inventory"), Walker->GetCarriedTaskPackage());
+    TestNull(TEXT("completed package removed from inventory"), Character->GetCarriedTaskPackage());
     TestFalse(TEXT("completed package destroyed"), IsValid(WalkingPackage));
     TestFalse(TEXT("task cannot pay twice"), Tasks->TryCompleteDelivery(Definition, nullptr));
 

@@ -310,7 +310,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
   - 回归测试 `Delivery.Vehicle.Trunk`。「取货成功交回手上」依赖任务管理器，
     自动化世界里没有，所以那一条只验了"交不回去就留在车上"的兜底，成功路径要在真实关卡验收。
 - **骑车时不能在取货点领货（2026-11-05）**：`UDeliveryPickupPointComponent::CanPickup`
-  拦掉 `IsRidingVehicle()`，`GetBlockedReason()` 返回「按 F 下车取货」。
+  执行时拦掉 `IsRidingVehicle()`，探测提示候选时保留目标；`InteractionController` 把当前交互者传给 `GetBlockedReason(Interactor)`，骑车显示「按 F 下车取货」，下车恢复 E 提示。服务器直接调用 `TryDispense` 也复核下车条件，不能绕过后备箱装卸；回归入口 `Delivery.Systems.Interaction`
   不拦的话骑车按 E 会把快递**直接塞进后备箱、没有开盖动画**，和"走到车尾按左键装货"
   两条路并存。原因文字走的是 E 目标那条"不可用也要显示原因"的既有通路，
   所以玩家看到的是该做什么，而不是走过去什么都不出现。
@@ -496,6 +496,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - 物品栏、召唤和切换视角统一使用 IA，键盘及手柄映射在 IMC_Default 中配置
 - 调试命令（非 Shipping）：`Delivery.Wallet.Dump` / `Delivery.Wallet.Add <金额>` / `Delivery.Locations.Dump` / `Delivery.Task.LoseItem` / **`Delivery.Task.Validate`**。最后一条是摆取件点/收件点时的主力工具——一次列全所有配置问题（地点 ID 解析不出来、任务没有收件点指向它、收件点忘了填 `ExpectedTask`），不是遇到第一个就停。
 - 奖励结算有单元测试（`Task/DeliveryRewardTests.cpp`，筛 `Delivery.Task` 跑）。`EvaluateReward` 是纯函数，档位顺序、超时边界、特殊事件重复计数这些在 PIE 里只表现为"钱好像不太对"，靠肉眼对不出来。
+- 结算逐行表现：`DeliverySettlementWidget` 立即显示任务名，再按评价、用时、基础奖励、时间倍率、特殊倍率、总收入逐行显示动态文本；默认首行 0.2 秒、间隔 0.35 秒、总收入前 0.6 秒。WBP 默认设置可关闭效果并替换普通行/总收入提示音，默认复用 `/Game/Sound/SFX/pop`，仅本机发声。`DeliverySettlementComponent` 等全部显示后才计算自动关闭时间；关闭或替换面板会取消计时器并销毁音频。`OnSettlementShown` 可留空，背景图内固定标签不会逐行隐藏。接口与配置见 `Document/TaskSystem.md` §4.11，回归入口 `Delivery.UI.SettlementReveal`
 - 仍没做：手机 UI、存档；`DeliveryItemId` / `SpecialEventId` 的解析。对接点见文档第七、八节。
 
 ### 源美术文件的位置（`Design/Art/`）
@@ -1696,6 +1697,8 @@ PlayerController 自动累积到 `DeliveryPromptSubsystem` 的屏幕下方字幕
 `Content/Python/generate_gameplay_sfx.py` 重生成和重导入，不含第三方采样。当前第二版为 48kHz
 立体声：电话音使用动态 FM，任务提示使用非整数泛音钟体，并带短反射、低通和轻微软削波。
 
+电话时长余量（2026-11-10）：`Content/Python/fix_call_durations.py` 按 C++ 理想播放时长 + UTF-16 字符数 / 10 FPS + 2 秒尾句停留计算，向上取整到 0.5 秒，只延长已有时长。`DA_Task_001` 接单电话 14→37 秒、催单 6→13.5 秒；对白、8 秒响铃和服务器挂断规则不变。已重新加载核对保存值；高帧率下尾部静默更长，实际低帧率播放和双人 PIE 尚未复测，蓝图语速覆盖或持续低于 10 FPS 需另核对。说明见 `Document/AudioSystem.md`
+
 **脚步与出拳音效**（2026-10-22）。`UDeliveryActiveRagdollComponent::OnFootPlanted`
 （`bLeft` + 落点）是落脚的公开委托，脚印、扬尘以后都接这里。
 
@@ -1957,7 +1960,7 @@ DeliveryInteractionRegistry 是世界子系统，每个世界分别保存交互�
 
 ## 对象事件与游戏音效
 
-交通车靠近玩家鸣笛：`DeliveryTrafficCarHorn.cpp` 在服务器按当前 Pawn 距离和车头水平朝向检查，默认车头左右各 60°、8 米内触发，离开 11 米后重新允许，同车冷却 8 秒；控制器记录避免上下车和多人重复。`HornSounds` 默认 `beep-beep`，可增添非循环声音；`HornVolumeRange` 默认 0.9–1.1 倍音量，`HornPitchRange` 默认 0.95–1.05，服务器统一随机后多播，冷却下限计入 Pitch 对时长的影响。现有 `DeliveryVehicleAudioComponent` 管理随车移动与距离衰减的音源。`TryHonk` 留给服务器主动请求，`OnHornPlayed` 留给本机表现；重置/销毁清理声音。配置和验证入口见 `Document/GameplayAudio.md` 的交通车鸣笛部分
+交通车靠近玩家鸣笛：`DeliveryTrafficCarHorn.cpp` 在服务器按当前 Pawn 距离和车头水平朝向检查，默认车头左右各 60°、8 米内触发，离开 11 米后重新允许，同车冷却 8 秒；控制器记录避免上下车和多人重复。`HornSounds` 默认 `beep-beep` 和 `single-beep`，每辆车首次随机、后续避免连续重复，可增添非循环声音；`HornVolumeRange` 默认 0.9–1.1 倍音量，`HornPitchRange` 默认 0.95–1.05，服务器统一随机后多播，冷却下限计入 Pitch 对时长的影响。现有 `DeliveryVehicleAudioComponent` 管理随车移动与距离衰减的音源。`TryHonk` 留给服务器主动请求，`OnHornPlayed` 留给本机表现；重置/销毁清理声音。配置和验证入口见 `Document/GameplayAudio.md` 的交通车鸣笛部分
 
 `Events/DeliveryEventComponent` 提供对象范围的本地事件，`Audio/DeliveryAudioComponent` 在开始时订阅、结束时解绑，通过 `DeliveryAudioConfig.Sounds` 查找一次性音效。角色取件和交付 RPC 只发布事件；车辆用命名枚举的 `MulticastVehicleEvent` 代替数字音效编号。`DeliveryVehicleAudioComponent` 继承普通音效组件，独立控制原 EngineAudio 的循环播放，车辆只传入驾驶状态和速度比例。配置资源为 `/Game/Sound/Config/DA_PlayerAudio` 与 `DA_VehicleAudio`，原蓝图参数已迁移，地图车辆无单独音效覆盖。背景音乐、电子语音、电话音效保持原流程，未全部纳入新事件。详见 Document/GameplayAudio.md
 

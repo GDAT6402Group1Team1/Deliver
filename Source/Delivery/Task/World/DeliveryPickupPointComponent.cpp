@@ -218,7 +218,8 @@ bool UDeliveryPickupPointComponent::TryDispense(ADeliveryCharacter *Receiver)
     }
 
     UDeliveryTaskDefinition *Task = ResolvePendingTask();
-    if (!CanDispense() || !Task)
+    // 蓝图直接调用发货也必须遵守下车取货的规则
+    if (!CanPickup(Receiver, true) || !Task)
     {
         return false;
     }
@@ -270,13 +271,14 @@ bool UDeliveryPickupPointComponent::CanPickup(APawn *Interactor, bool bCheckTask
     {
         return false;
     }
-    /**
-     * 骑着车领不了货：快递必须经后备箱装卸
-     *
-     * 否则骑车按 E 会把快递直接塞进后备箱、没有开盖动画，和"走到车尾按左键装货"
-     * 两条路并存。原因文字由 GetBlockedReason() 给出，所以玩家看到的是
-     * 「下车取货」而不是走过去什么都不出现。
-     */
+    // 探测阶段保留骑车时不可领取的目标，才能显示下车提示
+    // 真正执行时仍要复核骑车状态和任务是否可以领取
+    if (!bCheckTaskAvailability)
+    {
+        return true;
+    }
+
+    // 取货点只向下车玩家发货，后备箱装卸沿用车尾交互
     if (const ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(Interactor))
     {
         if (Character->IsRidingVehicle())
@@ -285,7 +287,7 @@ bool UDeliveryPickupPointComponent::CanPickup(APawn *Interactor, bool bCheckTask
         }
     }
 
-    return !bCheckTaskAvailability || CanDispense();
+    return CanDispense();
 }
 
 bool UDeliveryPickupPointComponent::Pickup(APawn *Interactor)

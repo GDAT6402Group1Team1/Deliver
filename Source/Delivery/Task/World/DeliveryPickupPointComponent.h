@@ -13,7 +13,7 @@ class UDeliveryTaskDefinition;
 /**
  * 根据地点编号查找待领取任务，按需生成对应快递
  * 快递丢失后可重新领取，同一取货点也能先后服务多个任务
- * 生成成功后交给角色接收，由角色决定放在手上还是车上
+ * 玩家必须下车领取，生成成功后通过角色的携带接口接收
  */
 class APawn;
 
@@ -24,7 +24,7 @@ class DELIVERY_API UDeliveryPickupPointComponent : public UActorComponent
     GENERATED_BODY()
 
   public:
-    // 长按交互的目标实现
+    // 长按交互的目标实现，false 只查询提示候选，true 复核领取条件
     bool CanPickup(APawn *Interactor, bool bCheckTaskAvailability) const;
     bool Pickup(APawn *Interactor);
 
@@ -41,7 +41,7 @@ class DELIVERY_API UDeliveryPickupPointComponent : public UActorComponent
     /**
      * 生成位置相对取货点的偏移
      *
-     * 生成出来之后马上就被 `ReceiveTaskPackage` 收走（进手里或上车），
+     * 生成出来之后马上就被 `ReceiveTaskPackage` 收到玩家手中，
      * 所以这个偏移只影响"收走之前那一瞬间它在哪"；抬高一点是为了避免
      * 生成在地面里被物理弹一下——虽然看不见，但 Chaos 会报穿透
      */

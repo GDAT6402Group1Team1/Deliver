@@ -113,7 +113,7 @@ void UDeliverySettlementComponent::ShowSettlement(UDeliveryTaskDefinition* Task,
 {
 	APlayerController* Controller = Cast<APlayerController>(GetOwner());
 	UWorld* World = GetWorld();
-	if (!Controller || !World)
+	if (!Controller || !Controller->IsLocalController() || !World)
 	{
 		return;
 	}
@@ -140,7 +140,6 @@ void UDeliverySettlementComponent::ShowSettlement(UDeliveryTaskDefinition* Task,
 	}
 
 	ActiveWidget->AddToViewport(ZOrder);
-	ActiveWidget->ApplyReward(Task, Reward);
 
 	// 光标归 C++ 统一管：面板集合一变，`SetUIPanelOpen` 自己去设
 	// `bShowMouseCursor` 和输入模式。这里只负责报告"我开了一个面板"。
@@ -149,7 +148,15 @@ void UDeliverySettlementComponent::ShowSettlement(UDeliveryTaskDefinition* Task,
 		DeliveryController->SetUIPanelOpen(SettlementPanelId, true);
 	}
 
-	if (AutoHideSeconds > 0.0f)
+	ActiveWidget->OnRevealFinished.AddUObject(this, &UDeliverySettlementComponent::HandleRevealFinished);
+	ActiveWidget->ApplyReward(Task, Reward);
+}
+
+void UDeliverySettlementComponent::HandleRevealFinished(UDeliverySettlementWidget* Widget)
+{
+	// 只接受当前面板的完成通知，旧面板不能启动新面板的关闭计时器
+	UWorld* World = GetWorld();
+	if (Widget && Widget == ActiveWidget && World && AutoHideSeconds > 0.f)
 	{
 		World->GetTimerManager().SetTimer(AutoHideTimer, this,
 			&UDeliverySettlementComponent::HideSettlement, AutoHideSeconds, false);
@@ -165,6 +172,8 @@ void UDeliverySettlementComponent::HideSettlement()
 
 	if (ActiveWidget)
 	{
+		ActiveWidget->OnRevealFinished.RemoveAll(this);
+		ActiveWidget->CancelReveal();
 		ActiveWidget->RemoveFromParent();
 		ActiveWidget = nullptr;
 	}

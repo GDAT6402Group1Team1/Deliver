@@ -36,13 +36,13 @@ bool FDeliveryTrafficHornTest::RunTest(const FString&)
     Traffic->bSpawnExtraWaves = false;
     Traffic->RegisterComponent();
     Traffic->SetComponentTickEnabled(false);
-    TestEqual(TEXT("新组件自带一条鸣笛资源"), Traffic->HornSounds.Num(), 1);
-    if (Traffic->HornSounds.Num() == 1)
+    TestEqual(TEXT("新组件自带两条鸣笛资源"), Traffic->HornSounds.Num(), 2);
+    for (USoundBase* Sound : Traffic->HornSounds)
     {
-        TestNotNull(TEXT("beep-beep 默认资源可加载"), Traffic->HornSounds[0].Get());
-        if (Traffic->HornSounds[0])
+        TestNotNull(TEXT("默认鸣笛资源可加载"), Sound);
+        if (Sound)
         {
-            TestFalse(TEXT("正式鸣笛不是循环音效"), Traffic->HornSounds[0]->IsLooping());
+            TestFalse(TEXT("正式鸣笛不是循环音效"), Sound->IsLooping());
         }
     }
 
