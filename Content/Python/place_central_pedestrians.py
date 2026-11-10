@@ -16,8 +16,6 @@ FOLDER = "Pedestrians/CrosswalkAreas"
 RADIUS = 500.0
 ROAD_CLEARANCE = 120.0  # keep the whole roaming circle off road meshes
 AREAS = (
-    ("Crosswalk_A", -100.0, -1900.0, 2, "Crosswalk_BranchRoad_R037_4"),
-    ("Crosswalk_B", -400.0, -1900.0, 2, "Crosswalk_BranchRoad_R037_4"),
     ("Crosswalk_C", 1300.0, 5500.0, 2, "Crosswalk_MainRoad_R003_2"),
     ("Crosswalk_D", 900.0, 5500.0, 2, "Crosswalk_BranchRoad_R024_Merged_0"),
     ("Crosswalk_E", 4300.0, 2300.0, 1, "Crosswalk_MainRoad_R003_3"),

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""把人行灯原点放在斑马线下方 50 cm，并按用户确认方向侧移。"""
+"""按用户确认的方向侧移人行灯；高度由 fix_crosswalk_light_heights.py 单独校正。"""
 import math
 import unreal
 
@@ -40,7 +40,7 @@ for light in lights:
     delta_along = desired_along - current_along
     new_loc = unreal.Vector(loc.x + fx*delta_along,
                             loc.y + fy*delta_along,
-                            cross.z - 50.0)
+                            loc.z)
     prepared.append((light, new_loc))
 for light, new_loc in prepared:
     light.set_actor_location(new_loc, False, False)

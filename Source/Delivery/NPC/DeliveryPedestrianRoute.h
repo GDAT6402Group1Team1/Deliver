@@ -124,6 +124,22 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	          meta = (ClampMin = "0.0", Units = "s"))
 	float SpawnIntervalMax = 4.f;
 
+	/** 开局首名路人额外等待的秒数；可让平行路线错开生成节拍 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|生成",
+	          meta = (ClampMin = "0.0", Units = "s"))
+	float InitialSpawnDelay = 0.f;
+
+	/** 每轮人行绿灯新出发人数；0 表示沿用原来的持续生成 */
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|生成", meta = (ClampMin = "0"))
+	int32 GreenPhaseSpawnMin = 0;
+
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|生成", meta = (ClampMin = "0"))
+	int32 GreenPhaseSpawnMax = 0;
+
+	/** 双道路线共用第一条路线的每轮人数 */
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|生成")
+	TObjectPtr<ADeliveryPedestrianRoute> SharedGreenPhaseBudgetOwner;
+
 	/**
 	 * 开局就把线段填到 MaxAlive，位置随机铺开
 	 * 不填的话玩家一进图看到的是空街，再过十几秒人才陆续从端点冒出来
@@ -308,12 +324,17 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 
 	bool IsPedestrianGreen() const;
 	bool CanSpawnAtCrosswalk() const;
+	void UpdateGreenPhaseBudget(bool bGreen);
+	ADeliveryPedestrianRoute* GetGreenPhaseBudgetOwner();
 	void ResetSpawnTimer();
 
 	TArray<TWeakObjectPtr<ADeliveryPedestrian>> Alive;
 
 	/** 距下一次生成还有多少秒 */
 	float SpawnCountdown = 0.f;
+	bool bWasPedestrianGreen = false;
+	int32 GreenPhaseSpawnTarget = 0;
+	int32 GreenPhaseSpawned = 0;
 
 	/** 一条相连的路线：从哪条路、从它的哪一头进去 */
 	struct FConnection

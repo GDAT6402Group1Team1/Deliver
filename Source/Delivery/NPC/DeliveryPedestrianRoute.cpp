@@ -45,6 +45,7 @@ void ADeliveryPedestrianRoute::BeginPlay()
 	}
 
 	ResetSpawnTimer();
+	SpawnCountdown += FMath::Max(InitialSpawnDelay, 0.f);
 
 	if (bPrewarmOnBeginPlay && CanSpawnAtCrosswalk())
 	{
@@ -68,7 +69,9 @@ void ADeliveryPedestrianRoute::Tick(float DeltaTime)
 
 	if (CrosswalkActor)
 	{
-		const float Multiplier = IsPedestrianGreen() ? 1.f : RedLightWalkSpeedMultiplier;
+		const bool bGreen = IsPedestrianGreen();
+		GetGreenPhaseBudgetOwner()->UpdateGreenPhaseBudget(bGreen);
+		const float Multiplier = bGreen ? 1.f : RedLightWalkSpeedMultiplier;
 		for (const TWeakObjectPtr<ADeliveryPedestrian>& Pedestrian : Alive)
 		{
 			if (Pedestrian.IsValid())
@@ -88,8 +91,29 @@ void ADeliveryPedestrianRoute::Tick(float DeltaTime)
 
 	if (CompactAlive() < MaxAlive && CanSpawnAtCrosswalk())
 	{
-		SpawnOnePedestrian(true);
+		if (SpawnOnePedestrian(true))
+		{
+			++GetGreenPhaseBudgetOwner()->GreenPhaseSpawned;
+		}
 	}
+}
+
+ADeliveryPedestrianRoute* ADeliveryPedestrianRoute::GetGreenPhaseBudgetOwner()
+{
+	return IsValid(SharedGreenPhaseBudgetOwner) &&
+	       SharedGreenPhaseBudgetOwner->GetWorld() == GetWorld()
+	           ? SharedGreenPhaseBudgetOwner.Get() : this;
+}
+
+void ADeliveryPedestrianRoute::UpdateGreenPhaseBudget(bool bGreen)
+{
+	if (bGreen && !bWasPedestrianGreen)
+	{
+		GreenPhaseSpawned = 0;
+		GreenPhaseSpawnTarget = FMath::RandRange(FMath::Max(0, GreenPhaseSpawnMin),
+		                                        FMath::Max(GreenPhaseSpawnMin, GreenPhaseSpawnMax));
+	}
+	bWasPedestrianGreen = bGreen;
 }
 
 bool ADeliveryPedestrianRoute::IsPedestrianGreen() const
@@ -110,6 +134,14 @@ bool ADeliveryPedestrianRoute::CanSpawnAtCrosswalk() const
 		return true;
 	}
 	if (!IsPedestrianGreen())
+	{
+		return false;
+	}
+	const ADeliveryPedestrianRoute* BudgetOwner = IsValid(SharedGreenPhaseBudgetOwner) &&
+		SharedGreenPhaseBudgetOwner->GetWorld() == GetWorld()
+		? SharedGreenPhaseBudgetOwner.Get() : this;
+	if (BudgetOwner->GreenPhaseSpawnMax > 0 &&
+	    BudgetOwner->GreenPhaseSpawned >= BudgetOwner->GreenPhaseSpawnTarget)
 	{
 		return false;
 	}

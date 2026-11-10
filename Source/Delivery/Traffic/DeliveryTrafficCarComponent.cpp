@@ -7,6 +7,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "Character/DeliveryCharacter.h"
+#include "NPC/DeliveryPedestrian.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Combat/DeliveryCollisionChannels.h"
 #include "Combat/DeliveryImpactReceiver.h"
@@ -361,31 +362,37 @@ void UDeliveryTrafficCarComponent::SpawnNextWave()
 	}
 
 	// 第一波原车也可能重新绕回出生点，因此包括 Owner 在内检查全部交通车
-	// 只看水平距离和有限高度差，避免高架上下层互相等待
+	// 行人和玩家也可能走到出生点，生成前一起检查；高架上下层不互相等待
 	const FVector SpawnLocation = SecondWaveTransform.GetLocation();
-	AActor* BlockingCar = nullptr;
+	AActor* BlockingActor = nullptr;
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Other = *It;
-		if (!IsValid(Other) || Other->IsActorBeingDestroyed() ||
-		    !Other->FindComponentByClass<UDeliveryTrafficCarComponent>())
+		if (!IsValid(Other) || Other->IsActorBeingDestroyed())
+		{
+			continue;
+		}
+		const bool bCar = Other->FindComponentByClass<UDeliveryTrafficCarComponent>() != nullptr;
+		const bool bPerson = Other->IsA<ADeliveryPedestrian>() || Other->IsA<ADeliveryCharacter>();
+		if (!bCar && !bPerson)
 		{
 			continue;
 		}
 		const FVector OtherLocation = Other->GetActorLocation();
+		const float Clearance = bCar ? WaveSpawnClearance : WaveSpawnPersonClearance;
 		if (FMath::Abs(OtherLocation.Z - SpawnLocation.Z) <= WaveSpawnHeightTolerance &&
-		    FVector::DistSquared2D(OtherLocation, SpawnLocation) < FMath::Square(WaveSpawnClearance))
+		    FVector::DistSquared2D(OtherLocation, SpawnLocation) < FMath::Square(Clearance))
 		{
-			BlockingCar = Other;
+			BlockingActor = Other;
 			break;
 		}
 	}
-	if (BlockingCar)
+	if (BlockingActor)
 	{
 		if (!bWaveSpawnWasBlocked)
 		{
 			UE_LOG(LogDelivery, Log, TEXT("%s: wave=%d 出生点被 %s 占用，每 %.1f 秒重试"),
-			       *GetNameSafe(Owner), GetWaveIndex() + 1, *GetNameSafe(BlockingCar), WaveSpawnRetryDelay);
+			       *GetNameSafe(Owner), GetWaveIndex() + 1, *GetNameSafe(BlockingActor), WaveSpawnRetryDelay);
 			bWaveSpawnWasBlocked = true;
 		}
 		World->GetTimerManager().SetTimer(NextWaveTimer, this, &UDeliveryTrafficCarComponent::SpawnNextWave,

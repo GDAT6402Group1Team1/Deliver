@@ -49,6 +49,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	friend class FDeliveryRiderRuntimeTest;
 	friend class FDeliveryVehicleSummonTest;
 	friend class FDeliveryMotorbikeTrunkTest;
+	friend class FDeliveryMotorbikeObstacleTest;
 
   public:
 	ADeliveryMotorbike();
@@ -473,6 +474,11 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	 */
 	UPROPERTY(EditAnywhere, Category = "Motorbike|行驶", meta = (ClampMin = "1.0", Units = "cm/s"))
 	float TurnSpeedReference = 450.0f;
+
+	/** 撞墙后仍保留的最低转向比例，方便从灯柱等障碍旁脱困 */
+	UPROPERTY(EditAnywhere, Category = "Motorbike|爬坡越障",
+	          meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float BlockedTurnSpeedFactor = 0.45f;
 
 	// ---- 贴地 ----
 
@@ -977,6 +983,8 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	float LastImpactTime = -1000.0f;
 	// 行驶与车身显示状态
 	float CurrentSpeed = 0.0f;
+	/** 上一帧撞墙且没能沿障碍滑动，本帧转向用 */
+	bool bBlockedByWall = false;
 	float VerticalVelocity = 0.0f;
 	float CurrentLean = 0.0f;
 	float CurrentVisualSteer = 0.0f;

@@ -181,7 +181,7 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pedestrian|被打飞",
 	          meta = (ClampMin = "0.0", Units = "s"))
-	float KnockedLieDuration = 5.f;
+	float KnockedLieDuration = 2.f;
 
 	/** 从站姿倾倒到地面的时间。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pedestrian|被打飞",

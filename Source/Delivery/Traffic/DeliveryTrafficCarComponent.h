@@ -172,9 +172,13 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.1"))
 	float WaveSpawnRetryDelay = 2.0f;
 
-	/** 出生点水平净空半径；只检查附近交通车，不影响其他物体 */
+	/** 出生点附近交通车的水平净空半径 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0"))
 	float WaveSpawnClearance = 400.0f;
+
+	/** 出生点附近行人和玩家的水平净空半径 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0", Units = "cm"))
+	float WaveSpawnPersonClearance = 250.0f;
 
 	/** 高架上下层不互相阻挡分波生成 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0"))
@@ -570,6 +574,7 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 
 	friend class FDeliveryTrafficHornTest;
 	friend class FDeliveryTrafficPedestrianYieldTest;
+	friend class FDeliveryTrafficWaveSpawnTest;
 
 	// 生成与缩放更新
 	/** 到点后在记录下来的出生变换处生成下一波的车 */

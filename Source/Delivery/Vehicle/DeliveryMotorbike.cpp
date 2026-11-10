@@ -1790,8 +1790,10 @@ void ADeliveryMotorbike::UpdateSteering(float DeltaSeconds)
 
 	// 摩托车靠前进才能转向，停着打把是原地转圈，很出戏
 	const float SpeedFactor = FMath::Clamp(FMath::Abs(CurrentSpeed) / TurnSpeedReference, 0.0f, 1.0f);
+	const float EffectiveSpeedFactor = bBlockedByWall
+	    ? FMath::Max(SpeedFactor, BlockedTurnSpeedFactor) : SpeedFactor;
 	const float Direction = CurrentSpeed >= 0.0f ? 1.0f : -1.0f;
-	const float YawDelta = SteerInput * MaxTurnRate * SpeedFactor * Direction * DeltaSeconds;
+	const float YawDelta = SteerInput * MaxTurnRate * EffectiveSpeedFactor * Direction * DeltaSeconds;
 	AddActorWorldRotation(FRotator(0.0f, YawDelta, 0.0f));
 }
 
@@ -1805,6 +1807,7 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 	{
 		return;
 	}
+	bBlockedByWall = false;
 
 	// 1) 水平推进；带 sweep，撞墙就掉速而不是穿过去；撞的是矮台阶就先试着跨上去
 	if (!FMath::IsNearlyZero(CurrentSpeed))
@@ -1818,7 +1821,24 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 			const FVector Remaining = Delta * (1.0f - MoveHit.Time);
 			if (!TryStepUp(Remaining, MoveHit))
 			{
-				CurrentSpeed *= WallHitSpeedScale;
+				// 擦边撞到灯柱时沿表面滑开；正面顶住时保留转向能力供玩家脱困
+				float SlideProgress = 0.0f;
+				if (!MoveHit.bStartPenetrating)
+				{
+					FVector SlideDelta = FVector::VectorPlaneProject(Remaining, MoveHit.ImpactNormal);
+					SlideDelta.Z = 0.0f;
+					if (SlideDelta.SizeSquared2D() > FMath::Square(1.0f))
+					{
+						const FVector SlideStart = GetActorLocation();
+						AddActorWorldOffset(SlideDelta, true);
+						SlideProgress = FVector::Dist2D(SlideStart, GetActorLocation());
+					}
+				}
+				if (SlideProgress < Remaining.Size2D() * 0.25f)
+				{
+					bBlockedByWall = true;
+					CurrentSpeed *= WallHitSpeedScale;
+				}
 			}
 		}
 	}
