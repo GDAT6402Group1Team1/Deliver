@@ -14,19 +14,19 @@
 #
 # 改完台词或者改了 NarrowGlyphScale / CharacterInterval 之后重跑一次即可。
 
+import math
+
 import unreal
 
 TASKS = ["/Game/Task/Definitions/DA_Task_001"]
 CALL_FIELDS = ["unlock_call", "overdue_call"]
 
-# 余量主要是给**计时器的帧量化**留的，不是给估算误差留的。
-# 每个字符一次一次性计时器，而一次性计时器只在"到点之后的第一个 tick"才触发，
-# 超出的那一点点余量每次都被丢掉、不会补回来（looping 计时器才累加 ExpireTime）。
-# 于是真实播放比估算慢，而且**慢多少取决于帧率**：一个字符平均多半帧，
-# 60fps 下 243 个字符就多出约 2 秒，30fps 下更多。
-# 想让时长贴着估算走就得改成按"下一个字该在什么时候念"排期（见 RevealNextGlyph 的注释）；
-# 在那之前宁可把通话配长一点——多出来的是结尾一段静音，而配短了是台词被切断。
-MARGIN = 1.35
+# 每个字符用一次性计时器排下一个字，帧尾超出的时间不会补回来
+# 原先只乘 1.35，在低帧率关卡仍可能提前挂断
+# 按最低 10 FPS 给每个 UTF-16 字符预留一整帧，再留 2 秒阅读尾句
+# 这是保守配置预算，不是实际播放时长；持续低于 10 FPS 仍需增大余量
+MIN_PLAYBACK_FPS = 10.0
+TAIL_SECONDS = 2.0
 
 
 def _as_text(text):
@@ -42,6 +42,17 @@ def estimate_seconds(text):
     return float(
         unreal.DeliveryDialogueVoiceComponent.estimate_speech_seconds(_as_text(text))
     )
+
+
+def duration_budget(text):
+    """返回理想播放秒数和含低帧率余量的配置秒数"""
+    need = estimate_seconds(text)
+    # UE 按 UTF-16 下标逐字播放，Python len 对补充平面字符的计数不同
+    # CRLF 等零延时字符也留一帧，只会增加余量，不复制 C++ 的逐字规则
+    glyph_count = len(text.encode("utf-16-le")) // 2
+    required = need + glyph_count / MIN_PLAYBACK_FPS + TAIL_SECONDS
+    # 必须向上取整，普通 round 可能把配置压回所需时长以下
+    return need, math.ceil(required * 2) / 2.0
 
 
 def spoken_prefix(text, seconds):
@@ -109,17 +120,12 @@ def run():
                 lines.append(f"  {field:<14} 没有台词，不动（现 {current:.1f}s）")
                 continue
 
-            need = estimate_seconds(dialogue)
-            # "够不够"和"写多少"必须取同一个数。早先判断比裸估算、写入才乘余量，
-            # 结果是余量只对"低于裸估算"的资产生效，像 11.0s 对 10.2s 这种
-            # 偏紧的值会被判成"已经够"而永远拿不到余量
-            required = need * MARGIN
-            target = round(required * 2) / 2.0  # 取到 0.5 的整数倍，读起来干净
+            need, target = duration_budget(dialogue)
 
-            if current >= required:
+            if current >= target:
                 lines.append(
-                    f"  {field:<14} 现 {current:.1f}s >= 需要 {required:.1f}s"
-                    f"（念完 {need:.1f}s + 余量），已经够，不动"
+                    f"  {field:<14} 现 {current:.1f}s >= 预算 {target:.1f}s"
+                    f"（理想 {need:.1f}s + {MIN_PLAYBACK_FPS:g} FPS 余量 + 尾句停留），不动"
                 )
                 continue
 
@@ -131,13 +137,15 @@ def run():
 
             lines.append(
                 f"  {field:<14} {current:.1f}s -> {target:.1f}s"
-                f"（台词 {len(dialogue)} 字符、需要 {need:.1f}s；"
-                f"原来只念到第 {line_no} 行 ...{cut[-24:]!r}）"
+                f"（台词 {len(dialogue)} 字符、理想 {need:.1f}s；"
+                f"另留 {MIN_PLAYBACK_FPS:g} FPS 余量和尾句停留；"
+                f"原时长按理想节奏可到第 {line_no} 行 ...{cut[-24:]!r}，未计帧等待）"
             )
 
         if asset_changed:
             # 不存盘的话重启编辑器就全没了（本仓库踩过：写完立刻读回是好的，存盘重载变回默认值）
-            unreal.EditorAssetLibrary.save_asset(path)
+            if not unreal.EditorAssetLibrary.save_asset(path):
+                raise RuntimeError(f"[通话时长] 保存失败：{path}")
             changed_assets += 1
             lines.append("  已保存")
         else:
@@ -158,12 +166,11 @@ def run():
             current = float(call.get_editor_property("duration_seconds"))
             if not dialogue.strip():
                 continue
-            need = estimate_seconds(dialogue)
-            required = need * MARGIN
+            need, required = duration_budget(dialogue)
             ok = "够" if current >= required else ">>> 仍然不够"
             lines.append(
                 f"  {field:<14} {current:.1f}s / 需要 {required:.1f}s"
-                f"（念完 {need:.1f}s + 余量）  {ok}"
+                f"（理想 {need:.1f}s + {MIN_PLAYBACK_FPS:g} FPS 余量 + 尾句停留）  {ok}"
             )
 
     lines.append(f"\n改动资产 {changed_assets} 个")
