@@ -117,16 +117,32 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 		// 时限，不会把合法的排队当成死锁而压上来。
 		// 用“或”而不是直接写 bStoppedAtIntersection，是因为蓝图每帧都会用它自己
 		// 的探测结果覆盖那个值，而我们停得更早、蓝图那条前瞻往往根本探不到路口。
-		return bStoppedAtIntersection || bHoldingForRedLight;
+		// 为行人让行同样算"合法地长时间不动"：和红灯一个道理，后车要拿到更宽松的
+		// 阻塞/停滞时限，否则队尾会把前面那辆正在等人过马路的车当成死锁压上去。
+		return bStoppedAtIntersection || bHoldingForRedLight || bHoldingForPedestrian;
+	}
+
+	/**
+	 * 本车此刻是否正停着等行人走开
+	 *
+	 * 和 IsStoppedAtIntersection() 分开暴露：那个是给"该用哪个超时"用的合并状态，
+	 * 这个是给调试命令和蓝图表现（喇叭、刹车灯）用的具体原因。
+	 */
+	UFUNCTION(BlueprintPure, Category = "Traffic|避让")
+	bool IsYieldingToPedestrian() const
+	{
+		return bHoldingForPedestrian;
 	}
 
 	/** 连续脱离预设路线超过 RouteLostTimeout 秒时广播；蓝图绑定这个事件，把车放回起始样条起点即可形成循环车流 */
 	UPROPERTY(BlueprintAssignable, Category = "Traffic|循环")
 	FDeliveryTrafficCarRouteLostSignature OnRouteLost;
 
+	/** 交通车蓝图报告的当前速度，供过街前判断斑马线是否有移动车辆 */
+	float GetReportedSpeed() const { return LastKnownSpeed; }
+
 	/** 蓝图算目标速度时乘上这个系数：1 表示正常速度，0 表示因为前车挡路而完全停住 */
 	UFUNCTION(BlueprintPure, Category = "Traffic|避让")
-
 	float GetSpeedMultiplier() const
 	{
 		return SpeedMultiplier;
@@ -364,6 +380,14 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	UPROPERTY(EditAnywhere, Category = "Traffic|停车线", meta = (ClampMin = "1.0"))
 	float StopLineBrakeDistance = 700.0f;
 
+	/** 有斑马线的路口，即使没有行人，接近后也把目标车速限制到此值（cm/s） */
+	UPROPERTY(EditAnywhere, Category = "Traffic|停车线", meta = (ClampMin = "1.0", Units = "cm/s"))
+	float CrosswalkSpeedLimit = 500.0f;
+
+	/** 进入斑马线前多远开始限速（cm） */
+	UPROPERTY(EditAnywhere, Category = "Traffic|停车线", meta = (ClampMin = "0.0", Units = "cm"))
+	float CrosswalkSlowdownDistance = 1000.0f;
+
 	/**
 	 * 已经越过停车线这么多（厘米）就算"冲进去了"，不再往回拦
 	 *
@@ -421,6 +445,69 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	/** 打开后画出停车线的位置和探测线 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|停车线")
 	bool bDrawDebugStopLine = false;
+
+	// 行人让行
+	/**
+	 * 前方有行人时停下，等人走开再走
+	 *
+	 * **主要是这种情况**：绿灯了，但斑马线上还有人没走完。红灯那条（停车线）只管
+	 * 灯，灯一变绿它就完全放手，所以必须另有一条按"前方有没有人"判断的——
+	 * 两件事的触发条件不一样，合不到一个判断里。
+	 *
+	 * 关掉这个开关就完全回到原来的行为（只影响速度系数，不碰蓝图）。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|行人让行")
+	bool bYieldToPedestrians = true;
+
+	/**
+	 * 往前找行人的距离，单位厘米，**和车速无关**
+	 *
+	 * 和停车线同一个理由：队伍里第二辆之后的车已经被前车逼停，跟车速走的前瞻会
+	 * 缩到接近 0、停住之后就再也看不见人，于是刚起步又要急刹。
+	 * 要大于 PedestrianStopDistance + 一段减速行程，否则来不及停。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|行人让行", meta = (ClampMin = "0.0"))
+	float PedestrianScanDistance = 1400.0f;
+
+	/**
+	 * 找行人用的探测球半径，单位厘米
+	 *
+	 * **这个数定义了"算在我这条车道上"**。给大了会替隔壁车道和路边人行道上的人
+	 * 停车（表现是"车莫名停在空路上"）；给小了斑马线上侧着走的人探不到。
+	 * 默认按车身半宽（约 68）加上行人胶囊半径再留点余量。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|行人让行", meta = (ClampMin = "1.0"))
+	float PedestrianScanRadius = 100.0f;
+
+	/**
+	 * 停在离行人多远的位置，单位厘米（从探测起点算，所以实际车头间距比它小）
+	 *
+	 * 斑马线深 StopLineSetback（400）：这个数给到 450 的话，停的位置大致在
+	 * 行人所在位置往后 4.5 米，也就是人还在斑马线远侧时车停在近侧边缘外。
+	 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|行人让行", meta = (ClampMin = "0.0"))
+	float PedestrianStopDistance = 450.0f;
+
+	/*
+	 * **没有"等够就强行通过"这个旋钮，这是刻意的。**
+	 *
+	 * 车队死锁那条兜底（卡够 MaxBlockedTime 就放弃避让）是为了解两辆车互为前车的
+	 * 死锁；等行人不是死锁，是在等一件一定会结束的事——人走过去就完了。
+	 * 给它配超时的唯一理由是"人也在让车"造成的互相礼让，而行人侧的规则是
+	 * **人不让车**（人只看信号灯：人行红灯不下马路，人行绿灯也要等斑马线上的车走净），
+	 * 所以那个死锁在规则上不存在，不需要兜底。
+	 *
+	 * 代价说清楚：行人要是**永远**站在车道上（比如游走路线摆得压到路面上），
+	 * 这条路就一直堵着。那是摆点问题，用 Delivery.Pedestrian.Dump 查，
+	 * 不靠车自己撞过去遮掉。
+	 *
+	 * 配套地，等人期间**不累计停滞计时**，否则车会先被停滞检测瞬移回出生点，
+	 * 表现是"车等人等到自己消失了"。
+	 */
+
+	/** 打开后画出找行人的探测范围和命中的人 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|行人让行")
+	bool bDrawDebugPedestrianYield = false;
 
 	// 撞击伤害与击退
 	/** 车不模拟物理，用它和角色有效质量估算相对速度转成的撞击速度变化 */
@@ -482,6 +569,7 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	bool bOwnsTrafficAudio = false;
 
 	friend class FDeliveryTrafficHornTest;
+	friend class FDeliveryTrafficPedestrianYieldTest;
 
 	// 生成与缩放更新
 	/** 到点后在记录下来的出生变换处生成下一波的车 */
@@ -546,6 +634,7 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 
 	/** 蓝图上一次通过 UpdateSpeedState 报上来的车速；组件自己不算移动，只能这样拿 */
 	float LastKnownSpeed = 0.0f;
+	float LastKnownMaxSpeed = 0.0f;
 
 	float SpeedMultiplier = 1.0f;
 	/** 减速结束后到允许重新加速的剩余时间 */
@@ -566,11 +655,31 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	/** 本车正被停车线拦着等红灯；和蓝图自己那套探测分开存，见 IsStoppedAtIntersection() */
 	bool bHoldingForRedLight = false;
 
+	/** 本车正停着等前方的行人走开，见 IsYieldingToPedestrian() */
+	bool bHoldingForPedestrian = false;
+
+	/**
+	 * 上次探测到的前车是否正在为行人让行
+	 *
+	 * 和 bLeaderStoppedAtIntersection 分开存：那个只决定用哪个阻塞超时，
+	 * 这个要**整个关掉**死锁兜底。队首在等人过马路时，后面每一辆都不许强行通过，
+	 * 否则兜底会从队尾一辆辆往前把车推进斑马线。
+	 */
+	bool bLeaderYieldingToPedestrian = false;
+
 	/**
 	 * 返回车头到红灯停车线的剩余距离（厘米），前方没有红灯时返回 TNumericLimits<float>::Max()
 	 * 负值表示已经越过停车线
 	 */
-	float GetDistanceToStopLine();
+	float GetDistanceToStopLine(bool bRequireRed = true);
+
+	/**
+	 * 返回前方最近一个行人到探测起点的距离（厘米），没有要让的人时返回负一
+	 *
+	 * 已经倒地的人不算：他起不来、让他也让不开，车会白等到超时；
+	 * 路人自己的让行逻辑对躺着的人也是同样处理（"绕不过去，过几秒自己就起来了"）。
+	 */
+	float GetDistanceToPedestrianAhead();
 
 	/**
 	 * 返回前车到探测起点的距离，无目标时返回负一
@@ -600,4 +709,12 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	/** 调试用：车头到红灯停车线的剩余距离，负值表示已越过；前方无红灯时为 -1 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Traffic|调试")
 	float DebugStopLineDistance = -1.0f;
+
+	/** 调试用：前方最近一个要让的行人的距离，-1 表示没有 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Traffic|调试")
+	float DebugPedestrianDistance = -1.0f;
+
+	/** 调试用：前车是否正在为行人让行（自己因此也不强行通过） */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Traffic|调试")
+	bool bDebugLeaderYieldingToPedestrian = false;
 };

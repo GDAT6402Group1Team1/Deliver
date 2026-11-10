@@ -114,6 +114,10 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	ADeliveryPedestrian* Walker = Route->SpawnOnePedestrian(true);
 	if (!TestNotNull(TEXT("spawn one"), Walker))
 		return false;
+	Walker->SetCrosswalkSpeedMultiplier(1.5f);
+	TestEqual(TEXT("红灯时已出发路人加速"), Walker->GetWalkSpeed(), 300.f);
+	Walker->SetCrosswalkSpeedMultiplier(1.f);
+	TestEqual(TEXT("绿灯时恢复原步速"), Walker->GetWalkSpeed(), 200.f);
 	TestEqual(TEXT("单列路线不会随机停步"), Walker->PauseDurationMax, 0.f);
 	TestEqual(TEXT("从端点进场"), Walker->GetDistanceAlongRoute(), 0.f, 1.f);
 	TestTrue(TEXT("单向时正向走"), Walker->IsWalkingForward());

@@ -475,8 +475,13 @@ void UDeliveryTrafficCarComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	// 单独检查长时间停滞，红灯排队使用较长时限
 	
 	
-	if (FMath::Abs(LastKnownSpeed) <= StallSpeedThreshold)
+	// 等行人期间**完全不累计**停滞计时，不是换一个更长的阈值：
+	// 既然等人不设强行通过的超时，再给停滞留个阈值就等于"等久了车自己消失"，
+	// 那比强行通过还难查（玩家看到的是车凭空不见，又从别处开出来）
+	const bool bWaitingForPedestrian = bHoldingForPedestrian || bLeaderYieldingToPedestrian;
+	if (FMath::Abs(LastKnownSpeed) <= StallSpeedThreshold && !bWaitingForPedestrian)
 	{
+		// 等红灯、等前面那辆在等红灯都算"合法地长时间不动"，用更宽松的时限
 		const bool bWaitingForLight = bStoppedAtIntersection || bLeaderStoppedAtIntersection;
 		const float Limit = bWaitingForLight ? StalledTimeoutAtIntersection : StalledTimeout;
 		StalledElapsedTime += DeltaTime;
@@ -498,6 +503,24 @@ void UDeliveryTrafficCarComponent::TickComponent(float DeltaTime, ELevelTick Tic
 	
 	// 根据上一帧的前车红灯状态选择超时，再刷新本帧探测结果
 
+	// 行人让行：绿灯了但斑马线上还有人，照样得停
+	//
+	// **放在最前面算，因为下面的死锁兜底要读它。** 用上一帧的值也能跑，但"要不要
+	// 强行通过"这种开关跟着差一帧，排查时会看到"明明在等人却通过了"的单帧现象。
+	//
+	// **和红灯那条分开判。** 红灯只管灯，灯一变绿它就完全放手，而人还在路上；
+	// 这条要的正是"绿灯后让已经在走的人走完，车再走"。
+	const float PedestrianAhead = GetDistanceToPedestrianAhead();
+	float PedestrianTarget = 1.0f;
+	if (PedestrianAhead >= 0.0f)
+	{
+		const float Span = FMath::Max(PedestrianScanDistance - PedestrianStopDistance, 1.0f);
+		PedestrianTarget =
+		    FMath::Clamp((PedestrianAhead - PedestrianStopDistance) / Span, 0.0f, 1.0f);
+	}
+	bHoldingForPedestrian = (PedestrianTarget <= KINDA_SMALL_NUMBER);
+	DebugPedestrianDistance = PedestrianAhead;
+
 const bool bAnyoneAtLight = bStoppedAtIntersection || bLeaderStoppedAtIntersection;
 	const float EffectiveMaxBlockedTime = bAnyoneAtLight ? MaxBlockedTimeAtIntersection : MaxBlockedTime;
 
@@ -515,12 +538,19 @@ const bool bAnyoneAtLight = bStoppedAtIntersection || bLeaderStoppedAtIntersecti
 
 	// 只有接近停止才累计阻塞时间，正常缓慢跟车不触发强制放行
 	
+	// bLeaderYieldingToPedestrian 来自本帧的 GetDistanceToCarAhead()，所以这里读到的
+	// 是最新的队列状态
+	const bool bQueueWaitingForPedestrian = bHoldingForPedestrian || bLeaderYieldingToPedestrian;
 	if (Target <= KINDA_SMALL_NUMBER)
 	{
 		BlockedElapsedTime += DeltaTime;
-		if (BlockedElapsedTime >= EffectiveMaxBlockedTime)
+		if (BlockedElapsedTime >= EffectiveMaxBlockedTime && !bQueueWaitingForPedestrian)
 		{
 			// 汇入口两辆车互为"前车"时会一直卡住，卡够久就放弃避让强行通过，打破死锁
+			//
+			// **但自己或前车在等行人时一律不通过。** 那不是死锁，是在等一件一定会结束
+			// 的事；真放手的话兜底会从队尾一辆辆往前把车推进斑马线。整条队都认这件事，
+			// 靠的是 IsYieldingToPedestrian() 沿车队传递。
 			Target = 1.0f;
 		}
 	}
@@ -553,6 +583,20 @@ const bool bAnyoneAtLight = bStoppedAtIntersection || bLeaderStoppedAtIntersecti
 	}
 	DebugStopLineDistance =
 	    (StopLineRemaining < TNumericLimits<float>::Max()) ? StopLineRemaining : -1.0f;
+
+	// 绿灯且没人时也慢速经过斑马线；驶过路口段后查询失去命中，速度自然恢复
+	const float CrosswalkRemaining = GetDistanceToStopLine(false);
+	if (CrosswalkRemaining < TNumericLimits<float>::Max() &&
+	    CrosswalkRemaining <= CrosswalkSlowdownDistance &&
+	    CrosswalkRemaining >= -StopLineSetback - 100.f && LastKnownMaxSpeed > 0.f)
+	{
+		Target = FMath::Min(Target, FMath::Min(1.f, CrosswalkSpeedLimit / LastKnownMaxSpeed));
+	}
+
+	// 行人让行的减速目标在本帧开头就算好了（死锁兜底要用），这里只负责取 min；
+	// 排在死锁兜底之后，那条兜底掀不翻它
+	Target = FMath::Min(Target, PedestrianTarget);
+	bDebugLeaderYieldingToPedestrian = bLeaderYieldingToPedestrian;
 
 	// 减速立即生效，恢复加速需等待，避免前车在探测边缘反复出现时频繁加减速
 	
@@ -616,6 +660,7 @@ void UDeliveryTrafficCarComponent::UpdateSpeedState(float InCurrentSpeed, float 
 	bHasReachedMaxSpeed = (InMaxSpeed > 0.0f) && (InCurrentSpeed >= InMaxSpeed - KINDA_SMALL_NUMBER);
 	// 停滞检测要用绝对车速；组件自己不接管移动，只能靠蓝图每帧报上来
 	LastKnownSpeed = InCurrentSpeed;
+	LastKnownMaxSpeed = InMaxSpeed;
 }
 
 void UDeliveryTrafficCarComponent::UpdateStoppedAtIntersection(bool bInStoppedAtIntersection)
@@ -634,7 +679,11 @@ void UDeliveryTrafficCarComponent::NotifyResetToStart()
 		bSkipNextImpactSweep = true;
 	}
 	bHoldingForRedLight = false;
+	bHoldingForPedestrian = false;
+	bLeaderYieldingToPedestrian = false;
 	DebugStopLineDistance = -1.0f;
+	DebugPedestrianDistance = -1.0f;
+	bDebugLeaderYieldingToPedestrian = false;
 	bIsCurrentlyOnRoute = true;
 	RouteLostElapsedTime = 0.0f;
 	// 清除停滞计时，避免重置后继续使用旧时长而再次重置
@@ -929,7 +978,7 @@ void UDeliveryTrafficCarComponent::ProcessMotorbikeImpacts(const FVector& Start,
  * -1 在这个函数里有歧义（刚好压在线上也是负的），用一个绝不会被当成距离的值
  * 表达"没有"最不容易误用。
  */
-float UDeliveryTrafficCarComponent::GetDistanceToStopLine()
+float UDeliveryTrafficCarComponent::GetDistanceToStopLine(bool bRequireRed)
 {
 	constexpr float NoRedLight = TNumericLimits<float>::Max();
 
@@ -964,7 +1013,7 @@ float UDeliveryTrafficCarComponent::GetDistanceToStopLine()
 	{
 		const AActor* Segment = Hit.GetActor();
 		bool bRed = false;
-		if (!ReadIntersectionRedLight(Segment, bRed) || !bRed)
+		if (!ReadIntersectionRedLight(Segment, bRed) || (bRequireRed && !bRed))
 		{
 			// 没有 StopAtInter 的是普通车道段，绿灯的不用拦
 			continue;
@@ -1008,6 +1057,84 @@ float UDeliveryTrafficCarComponent::GetDistanceToStopLine()
 	}
 
 	return Remaining;
+}
+
+float UDeliveryTrafficCarComponent::GetDistanceToPedestrianAhead()
+{
+	const AActor* Owner = GetOwner();
+	UWorld* World = GetWorld();
+	if (!bYieldToPedestrians || !Owner || !World || PedestrianScanDistance <= 0.0f)
+	{
+		return -1.0f;
+	}
+
+	const FVector Forward = Owner->GetActorForwardVector();
+	const FVector Start = Owner->GetActorLocation() + Forward * TraceStartForwardOffset;
+	const FVector End = Start + Forward * PedestrianScanDistance;
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DeliveryTrafficPedestrianYieldTrace), false,
+	                                  Owner);
+	QueryParams.AddIgnoredActor(Owner);
+
+	TArray<FHitResult> Hits;
+	// **必须按物体类型查，不能按通道查。** 路人通道在 DefaultEngine.ini 里的
+	// DefaultResponse 是 ECR_Ignore，而 SweepMultiByChannel 按"被击中物体对该通道的
+	// 响应"筛选，Ignore 直接跳过，扫描会恒为空、整套让行静默失效。
+	// 同一个坑在本仓库已经记过三次（前车避让、停车线、路人自己的让行探测）。
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(DeliveryCollision::Pedestrian);
+	World->SweepMultiByObjectType(Hits, Start, End, FQuat::Identity, ObjectParams,
+	                              FCollisionShape::MakeSphere(PedestrianScanRadius), QueryParams);
+
+	if (bDrawDebugPedestrianYield)
+	{
+		DrawDebugCapsule(World, (Start + End) * 0.5f, (End - Start).Size() * 0.5f,
+		                 PedestrianScanRadius, FRotationMatrix::MakeFromZ(Forward).ToQuat(),
+		                 FColor::Cyan, false, -1.0f, 0, 1.5f);
+	}
+
+	float Nearest = -1.0f;
+	for (const FHitResult& Hit : Hits)
+	{
+		AActor* HitActor = Hit.GetActor();
+		if (!HitActor || HitActor == Owner)
+		{
+			continue;
+		}
+
+		// 判据是"实现了 IDeliveryImpactReceiver"而不是 Cast<ADeliveryPedestrian>：
+		// 后者会让 Traffic/ 反向依赖 NPC/，撞人那边同一个理由
+		IDeliveryImpactReceiver* Receiver = Cast<IDeliveryImpactReceiver>(HitActor);
+		if (!Receiver)
+		{
+			continue;
+		}
+
+		// 倒地的人不让：他自己走不开，车只会白等到超时再压过去，中间还把后面整条队
+		// 堵住。路人为别人让行时对躺着的人也是同样处理
+		//
+		// 普通跌倒本来就探不到（StartKnockdown 关掉了 HitBox），但开了
+		// bUsePhysicalKnockdown 时布娃娃网格自己在路人通道上、是会被扫到的，
+		// 所以这道判断不是多余的
+		if (Receiver->IsKnockedDown())
+		{
+			continue;
+		}
+
+		const float D = Hit.bStartPenetrating ? 0.0f : Hit.Distance;
+		if (Nearest < 0.0f || D < Nearest)
+		{
+			Nearest = D;
+		}
+
+		if (bDrawDebugPedestrianYield)
+		{
+			DrawDebugSphere(World, HitActor->GetActorLocation(), 60.0f, 12, FColor::Red, false, -1.0f,
+			                0, 2.0f);
+		}
+	}
+
+	return Nearest;
 }
 
 float UDeliveryTrafficCarComponent::GetDistanceToCarAhead()
@@ -1060,6 +1187,9 @@ float UDeliveryTrafficCarComponent::GetDistanceToCarAhead()
 	// 保存前车红灯状态供阻塞判断，未发现前车时清除旧状态
 	
 	bLeaderStoppedAtIntersection = NearestComp && NearestComp->IsStoppedAtIntersection();
+	// 前车在等行人时本车也不许强行通过，否则兜底会把队伍一辆辆推进斑马线；
+	// 探不到前车时要清掉，不然前车开走后还一直以为"前面在等人"
+	bLeaderYieldingToPedestrian = NearestComp && NearestComp->IsYieldingToPedestrian();
 
 	// 前车较慢时提高其速度上限，并适当降低本车上限，使双方速度接近
 

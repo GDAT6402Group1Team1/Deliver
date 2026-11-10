@@ -11,6 +11,7 @@
 #include "Engine/CollisionProfile.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "NPC/DeliveryPedestrianRoute.h"
 #include "Net/UnrealNetwork.h"
 
@@ -90,6 +91,7 @@ void ADeliveryPedestrian::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ADeliveryPedestrian, AppearAlpha);
+	DOREPLIFETIME(ADeliveryPedestrian, bFadeAppearance);
 	DOREPLIFETIME(ADeliveryPedestrian, ReplicatedMinScale);
 	DOREPLIFETIME(ADeliveryPedestrian, bKnockedDown);
 	DOREPLIFETIME(ADeliveryPedestrian, KnockImpulse);
@@ -99,6 +101,34 @@ void ADeliveryPedestrian::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 void ADeliveryPedestrian::OnRep_AppearAlpha()
 {
 	ApplyAppearScale();
+}
+
+void ADeliveryPedestrian::OnRep_FadeAppearance()
+{
+	InstallFadeMaterial();
+	ApplyAppearScale();
+}
+
+void ADeliveryPedestrian::InstallFadeMaterial()
+{
+	if (!bFadeAppearance || FadeMaterialInstance)
+	{
+		return;
+	}
+	const ADeliveryPedestrianRoute* SourceRoute = Route.IsValid() ? Route.Get()
+	    : Cast<ADeliveryPedestrianRoute>(GetOwner());
+	USkeletalMesh* CurrentMesh = ActiveMesh ? ActiveMesh.Get()
+	    : Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+	if (!CurrentMesh && PoseableBody)
+	{
+		CurrentMesh = Cast<USkeletalMesh>(PoseableBody->GetSkinnedAsset());
+	}
+	UMaterialInterface* FadeMaterial = SourceRoute ? SourceRoute->GetFadeMaterialForMesh(CurrentMesh) : nullptr;
+	if (FadeMaterial && CurrentMesh && CurrentMesh->GetMaterials().IsValidIndex(0))
+	{
+		OriginalMaterial = CurrentMesh->GetMaterials()[0].MaterialInterface;
+		FadeMaterialInstance = UMaterialInstanceDynamic::Create(FadeMaterial, this);
+	}
 }
 
 void ADeliveryPedestrian::BeginPlay()
@@ -118,6 +148,25 @@ void ADeliveryPedestrian::BeginPlay()
 	SetActorScale3D(BaseScale * KINDA_SMALL_NUMBER);
 }
 
+void ADeliveryPedestrian::SetCrosswalkSpeedMultiplier(float Multiplier)
+{
+	if (!HasAuthority() || BaseWalkSpeed <= 0.f)
+	{
+		return;
+	}
+	const float NewSpeed = BaseWalkSpeed * FMath::Max(Multiplier, 1.f);
+	if (FMath::IsNearlyEqual(WalkSpeed, NewSpeed))
+	{
+		return;
+	}
+	WalkSpeed = NewSpeed;
+	if (Mesh && ActiveWalkAnim)
+	{
+		const float Rate = (AnimReferenceSpeed > 1.f) ? WalkSpeed / AnimReferenceSpeed : 1.f;
+		Mesh->SetPlayRate(FMath::Clamp(Rate, 0.25f, 3.f));
+	}
+}
+
 void ADeliveryPedestrian::BeginWalk(ADeliveryPedestrianRoute* InRoute, USkeletalMesh* InMesh,
                                     UAnimSequence* InWalkAnim, float InStartDistance, bool bInForward,
                                     float InSpeed, float InAnimReferenceSpeed)
@@ -130,6 +179,7 @@ void ADeliveryPedestrian::BeginWalk(ADeliveryPedestrianRoute* InRoute, USkeletal
 		RoamTarget = InRoute->PickRoamPoint(GetActorLocation(), 100.f);
 	}
 	bForward = bInForward;
+	BaseWalkSpeed = InSpeed;
 	WalkSpeed = InSpeed;
 	AnimReferenceSpeed = InAnimReferenceSpeed;
 	Phase = EDeliveryPedestrianPhase::Appearing;
@@ -149,6 +199,7 @@ void ADeliveryPedestrian::BeginWalk(ADeliveryPedestrianRoute* InRoute, USkeletal
 	ActiveMesh = InMesh;
 	// 起身之后要重新播这段动画；不存的话起完身人是定格的
 	ActiveWalkAnim = InWalkAnim;
+	bFadeAppearance = InRoute && InRoute->bFadeInsteadOfScale;
 	// 同一帧生成的几个人不要迈同一条腿
 	GaitPhase = FMath::FRand();
 
@@ -182,6 +233,7 @@ void ADeliveryPedestrian::BeginWalk(ADeliveryPedestrianRoute* InRoute, USkeletal
 		}
 	}
 
+	InstallFadeMaterial();
 	ScheduleNextPause();
 	if (InRoute && InRoute->bRoamInArea)
 	{
@@ -530,6 +582,32 @@ void ADeliveryPedestrian::UpdateAppearScale(float Distance)
 
 void ADeliveryPedestrian::ApplyAppearScale()
 {
+	if (bFadeAppearance)
+	{
+		InstallFadeMaterial();
+		if (!FadeMaterialInstance || !OriginalMaterial)
+		{
+			SetActorScale3D(BaseScale * FMath::Max(AppearAlpha, KINDA_SMALL_NUMBER));
+			return;
+		}
+		SetActorScale3D(BaseScale);
+		const bool bInFadeWindow = AppearAlpha < 1.f - KINDA_SMALL_NUMBER;
+		UMaterialInterface* DesiredMaterial = bInFadeWindow
+		    ? static_cast<UMaterialInterface*>(FadeMaterialInstance.Get()) : OriginalMaterial.Get();
+		if (Mesh->GetMaterial(0) != DesiredMaterial)
+		{
+			Mesh->SetMaterial(0, DesiredMaterial);
+		}
+		if (PoseableBody->GetMaterial(0) != DesiredMaterial)
+		{
+			PoseableBody->SetMaterial(0, DesiredMaterial);
+		}
+		if (bInFadeWindow)
+		{
+			FadeMaterialInstance->SetScalarParameterValue(TEXT("FadeOpacity"), AppearAlpha);
+		}
+		return;
+	}
 	// 缩放乘在进场时记下的原始缩放上，不直接写 1：
 	// 关卡里手调过路人大小的话，直接写 1 会把那个调整抹掉
 	const float Floor = FMath::Max(ReplicatedMinScale, KINDA_SMALL_NUMBER);

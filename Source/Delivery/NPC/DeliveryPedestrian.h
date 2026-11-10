@@ -10,6 +10,8 @@
 class ADeliveryPedestrianRoute;
 class UCapsuleComponent;
 class UAnimSequence;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 class UPoseableMeshComponent;
 class USkeletalMesh;
 class USkeletalMeshComponent;
@@ -71,6 +73,9 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	 */
 	void BeginWalk(ADeliveryPedestrianRoute* InRoute, USkeletalMesh* InMesh, UAnimSequence* InWalkAnim,
 	               float InStartDistance, bool bInForward, float InSpeed, float InAnimReferenceSpeed);
+
+	/** 只调整本次过街的步速；服务器调用，离开红灯后恢复原速度 */
+	void SetCrosswalkSpeedMultiplier(float Multiplier);
 
 	// 程序化步态
 	/**
@@ -419,6 +424,9 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	 */
 	UFUNCTION()
 	void OnRep_AppearAlpha();
+	UFUNCTION()
+	void OnRep_FadeAppearance();
+	void InstallFadeMaterial();
 
 	/** 开始跌倒；普通路人用程序化动作，可选物理布娃娃。 */
 	void StartKnockdown();
@@ -482,6 +490,7 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	bool bForward = true;
 
 	float WalkSpeed = 0.f;
+	float BaseWalkSpeed = 0.f;
 
 	/** 动画原本对应的行走速度，用来把播放速率对齐实际速度，避免滑步 */
 	float AnimReferenceSpeed = 0.f;
@@ -491,6 +500,13 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	/** 当前缩放系数，0 = 看不见、1 = 原尺寸 */
 	UPROPERTY(ReplicatedUsing = OnRep_AppearAlpha)
 	float AppearAlpha = 0.f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_FadeAppearance)
+	bool bFadeAppearance = false;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> OriginalMaterial;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> FadeMaterialInstance;
 
 	/** 出入场窗口以外 Alpha 恒为 1，不再发包，所以这一项的带宽只花在两端 */
 	UPROPERTY(Replicated)

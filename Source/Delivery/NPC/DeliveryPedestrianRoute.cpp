@@ -6,9 +6,12 @@
 #include "Delivery.h"
 #include "Components/SplineComponent.h"
 #include "Engine/SkeletalMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "NPC/DeliveryPedestrian.h"
+#include "Traffic/DeliveryTrafficCarComponent.h"
+#include "UObject/UnrealType.h"
 
 ADeliveryPedestrianRoute::ADeliveryPedestrianRoute()
 {
@@ -43,7 +46,7 @@ void ADeliveryPedestrianRoute::BeginPlay()
 
 	ResetSpawnTimer();
 
-	if (bPrewarmOnBeginPlay)
+	if (bPrewarmOnBeginPlay && CanSpawnAtCrosswalk())
 	{
 		// 开局就铺满，位置沿线段随机。不铺的话玩家一进图看到的是空街，
 		// 人要等十几秒才从端点陆续冒出来
@@ -63,6 +66,18 @@ void ADeliveryPedestrianRoute::Tick(float DeltaTime)
 		return;
 	}
 
+	if (CrosswalkActor)
+	{
+		const float Multiplier = IsPedestrianGreen() ? 1.f : RedLightWalkSpeedMultiplier;
+		for (const TWeakObjectPtr<ADeliveryPedestrian>& Pedestrian : Alive)
+		{
+			if (Pedestrian.IsValid())
+			{
+				Pedestrian->SetCrosswalkSpeedMultiplier(Multiplier);
+			}
+		}
+	}
+
 	SpawnCountdown -= DeltaTime;
 	if (SpawnCountdown > 0.f)
 	{
@@ -71,10 +86,52 @@ void ADeliveryPedestrianRoute::Tick(float DeltaTime)
 
 	ResetSpawnTimer();
 
-	if (CompactAlive() < MaxAlive)
+	if (CompactAlive() < MaxAlive && CanSpawnAtCrosswalk())
 	{
 		SpawnOnePedestrian(true);
 	}
+}
+
+bool ADeliveryPedestrianRoute::IsPedestrianGreen() const
+{
+	if (!IsValid(SignalSegment))
+	{
+		return false;
+	}
+	const FBoolProperty* StopAtInter = CastField<FBoolProperty>(
+	    SignalSegment->GetClass()->FindPropertyByName(TEXT("StopAtInter")));
+	return StopAtInter && StopAtInter->GetPropertyValue_InContainer(SignalSegment);
+}
+
+bool ADeliveryPedestrianRoute::CanSpawnAtCrosswalk() const
+{
+	if (!CrosswalkActor)
+	{
+		return true;
+	}
+	if (!IsPedestrianGreen())
+	{
+		return false;
+	}
+
+	// 车灯已红、人行已绿，还要等斑马线上正在行驶的车离开
+	FBox CrosswalkBounds = CrosswalkActor->GetComponentsBoundingBox(true);
+	if (!CrosswalkBounds.IsValid)
+	{
+		return false;
+	}
+	CrosswalkBounds = CrosswalkBounds.ExpandBy(FVector(VehicleClearanceMargin,
+	                                               VehicleClearanceMargin, 200.f));
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		const UDeliveryTrafficCarComponent* Car = It->FindComponentByClass<UDeliveryTrafficCarComponent>();
+		if (Car && FMath::Abs(Car->GetReportedSpeed()) > 10.f &&
+		    It->GetComponentsBoundingBox(true).Intersect(CrosswalkBounds))
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 float ADeliveryPedestrianRoute::GetRouteLength() const
@@ -190,6 +247,22 @@ USkeletalMesh* ADeliveryPedestrianRoute::PickKind(float& OutHeightScale) const
 		}
 	}
 
+	return nullptr;
+}
+
+UMaterialInterface* ADeliveryPedestrianRoute::GetFadeMaterialForMesh(const USkeletalMesh* Mesh) const
+{
+	if (!bFadeInsteadOfScale || !Mesh)
+	{
+		return nullptr;
+	}
+	for (int32 Index = 0; Index < Kinds.Num() && Index < FadeMaterials.Num(); ++Index)
+	{
+		if (Kinds[Index].Mesh.Get() == Mesh)
+		{
+			return FadeMaterials[Index].LoadSynchronous();
+		}
+	}
 	return nullptr;
 }
 

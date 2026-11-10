@@ -510,7 +510,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - 32 个交通 actor **整体平移** +(5500, 6300)，现在占 X [3420, 8233] / Y [3310, 8324]。**平移量必须对所有交通 actor 相同**：`BP_Intersection` 靠自己的 Box 和路段 Box 重叠找子节点，各自挪不同量会让路口找不到灯组，表现是"红绿灯没了"。
 - **幂等靠 `ClaudeGenTrafficMoved` 标签**，不靠判坐标（用户可能自己拖回来一点，而重跑就再平移一遍）。玩家摩托车刻意不跟着挪（留在 (1540, 0)）。这张图没有 PlayerStart，玩家出生在原点、正好在测试区里。
 
-测试区内容：`Task001_PickupPoint` (-2000, -1500) = `Location_Restaurant_001`（PackageClass 留空 → 内置测试快递）、`Task001_DropOffPoint` (2000, 1500) = `Location_OldManHouse_001` + `DA_Task_001`（相距 5000 cm、半径各 200）、四个 `PedestrianRoute_Test_*` 活动点，中心为 (-600/-3200, ±3000)，各自半径 300 cm；另有 `PedestrianRoute_ChildQueue` 在 (500, -5000) → (4500, -5000)，等权随机小男孩/小女孩、最多 6 人，单向直走且首尾缩放，`place_child_queue.py` 可按标签幂等重摆。地点编号和主地图相同（`Tasks.csv` 里 Task_001 就是这两个；两图不同时加载）。任务清单在 `BP_DeliveryGameState.TaskDefinitions`、GameMode 全局默认且这张图没覆盖，所以任务系统本来就通。
+测试区内容：`Task001_PickupPoint` (-2000, -1500) = `Location_Restaurant_001`（PackageClass 留空 → 内置测试快递）、`Task001_DropOffPoint` (2000, 1500) = `Location_OldManHouse_001` + `DA_Task_001`（相距 5000 cm、半径各 200）、四个 `PedestrianRoute_Test_*` 活动点，中心为 (-600/-3200, ±3000)，各自半径 300 cm；另有 `PedestrianRoute_ChildQueue` 在 (500, -5000) → (2900, -5000)（线长 2400 cm），等权随机小男孩/小女孩、最多 12 人，生成间隔 1.4~1.6 秒 = 间距 175~216 cm（下限约 135 cm 由让路探测决定），单向直走且首尾各 150 cm 缩放，`place_child_queue.py` 可按标签幂等重摆。地点编号和主地图相同（`Tasks.csv` 里 Task_001 就是这两个；两图不同时加载）。任务清单在 `BP_DeliveryGameState.TaskDefinitions`、GameMode 全局默认且这张图没覆盖，所以任务系统本来就通。
 
 `Content/Python/thin_out_traffic.py`（`KEEP` / `MAX_SPEED`）减车并放慢，四件事缺一不可：①删到剩 KEEP 辆；②写低 `MaxSpeed`（低速不影响接路：扫描长度 = 60 × 5 × 车速）；③关 `bSpawnExtraWaves`，不关的话 3 辆 45 秒后变 9 辆；④**关 `bPushSlowLeader` 并压低 `MinPushedMaxSpeed`**——两车近距离跟车时组件把前车 `MaxSpeed` 写成自己的、并把自己压到不低于 `MinPushedMaxSpeed`（默认 600），所以跟过一次车车速就永久回到 600，表现是"车速改了、跑一会儿又快起来了"。恢复满车流跑 `spawn_test_cars.py`。
 
@@ -786,6 +786,47 @@ GetFuturePostionandRotationAlongSpline:
 - 骑车时镜头写死在车尾后方（`bUsePawnControlRotation=false`，只继承 Yaw），鼠标不参与——用控制旋转 + 延时回正时，上车瞬间镜头还停在人物原朝向上，按 W 看到车"横着走"。控制旋转仍每帧同步成车头朝向，供下车后的角色弹簧臂使用。
 - 上车顺序：`GrabComponent->ForceRelease()`（不松手的话约束会把货物/别的玩家拖在车上）→ `StopRagdoll()`（关刚体并把网格挂回胶囊）→ 隐藏 + 关碰撞 + 挂到车上 → `Controller->Possess(bike)`。下车反过来，先摆好位置再 `StartRagdoll()`（它内部带 `PlaceOnGround`）。
 - **车把与骑手独立求解**：SteerPivot 前叉、BarPivot 车把继续沿用原转角；RiderPivot 不再整人旋转。双手目标挂 BarPivot，双脚目标挂 MeshAlign，由骑手动画代理解四肢 IK。转向角仍不乘速度系数，停车打把也有反馈。
+- **交通车为行人让行（2026-11-10）**：`UDeliveryTrafficCarComponent::GetDistanceToPedestrianAhead()`，
+  服务器每帧往前固定扫 `PedestrianScanDistance`（1400）找行人，按剩余距离把速度系数刹到 0，
+  停在离人 `PedestrianStopDistance`（450）处，人走开再走。关掉 `bYieldToPedestrians` 完全回到原行为。
+  **要的就是这一件事**：绿灯之后，让已经在斑马线上走的人走完，车再走。
+  - **必须和红灯那条分开判、不能合进停车线。** 停车线只管灯，**灯一变绿它就完全放手**，
+    而人还在路上——那正是要解决的情况。两者的触发条件不同，合不到一个判断里。
+  - **等人不设"等够就强行通过"的超时，这是刻意的。** 车队死锁那条兜底
+    （卡够 `MaxBlockedTime` 就放弃避让）是为了解两辆车互为前车；等行人不是死锁，
+    是在等一件一定会结束的事。给它配超时的唯一理由是"人也在让车"造成的互相礼让，
+    而**行人侧的规则是人不让车**（人只看灯：人行红灯不下马路，人行绿灯也要等斑马线上
+    还在动的车走净），所以那个死锁在规则上不存在。
+    代价说清楚：人要是**永远**站在车道上（游走路线摆得压到路面上），这条路就一直堵着。
+    那是摆点问题，用 `Delivery.Pedestrian.Dump` 查，不靠车撞过去遮掉。
+  - **"前车在等人"要沿车队传递**（`bLeaderYieldingToPedestrian`，取自前车的
+    `IsYieldingToPedestrian()`）。只给队首关掉兜底不够：后车被前车挡住、卡满
+    `MaxBlockedTimeAtIntersection` 就会强行通过，表现是**兜底从队尾一辆辆往前把车推进斑马线**。
+    这个标记和 `bLeaderStoppedAtIntersection` 分开存——后者只决定用哪个阻塞超时，
+    这个要**整个关掉**兜底。探不到前车时必须清掉，否则前车开走后还一直以为前面在等人。
+  - **等人期间完全不累计停滞计时**（`StalledElapsedTime`），不是换一个更长的阈值。
+    既然不设强行通过的超时，再给停滞留个阈值就等于"等久了车自己消失"，
+    表现是车凭空不见又从别处开出来，比强行通过还难查。
+  - **行人检测排在 Tick 最前面**，因为死锁兜底要读它的结果；取 min 仍排在兜底之后，
+    所以兜底掀不翻它。用上一帧的值也能跑，但"要不要强行通过"跟着差一帧，
+    排查时会看到"明明在等人却通过了"的单帧现象。
+  - **按物体类型查，不按通道查**（`SweepMultiByObjectType` + `DeliveryCollision::Pedestrian`）。
+    路人通道的 `DefaultResponse` 是 `ECR_Ignore`，按通道查会被响应筛掉、扫描恒为空，
+    而表现和"没写这个功能"一模一样。同一个坑本仓库已经记过三次。
+  - **探测半径就是"算不算在我这条车道上"**（`PedestrianScanRadius` 100 ≈ 车身半宽 68 + 行人胶囊 + 余量）。
+    给大了会替隔壁车道和人行道上的人停车（表现是"车莫名停在空路上"），给小了斑马线上侧着走的人探不到。
+  - **倒地的人不拦车**：他自己走不开，拦着只会把整条队堵死（而且现在没有超时放行）。
+    普通跌倒本来就探不到（`StartKnockdown` 关掉了 `HitBox`），但开 `bUsePhysicalKnockdown`
+    时布娃娃网格自己在路人通道上，所以这道判断不是多余的。
+  - **和摩托车那条撞人不互换**：`ProcessPedestrianImpacts` 是撞击结算，这条是让行减速，各自单开扫描。
+  - `bDrawDebugPedestrianYield` 画出探测范围和命中的人；PIE 里看 `DebugPedestrianDistance`
+    和 `bDebugLeaderYieldingToPedestrian`。回归入口 `Delivery.Traffic.PedestrianYield`
+    （身后/隔壁车道/超距不管、远处减速、近处停住、等到远超所有超时也不通过、
+    等人期间不累计停滞、后车跟着不通过、**对照组：不涉及行人时兜底照旧放行**、倒地不拦、开关关掉）。
+    那条"后车也不通过"做过变异验证：去掉 `!bQueueWaitingForPedestrian` 这道门，测试会红。
+  - **行人侧还没做**：路人目前没有过街路线，也还不看红绿灯（"过街和交通灯联动尚未实现"），
+    所以现在只是"有人走到车前面车就停"。斑马线上真实的过街拦车要等行人侧的灯规则。
+    **自动化不代替实机**：停车位置好不好看、后面那队排得齐不齐只能在关卡里看。
 - **红灯停车线 + 斑马线（2026-11-05）**：`UDeliveryTrafficCarComponent` 自己按固定距离
   （`RedLightScanDistance`）往前找带 `StopAtInter` 的路口段、校验同向、再查
   `StopLineRequiredTag`（默认 `Crosswalk`），对得上就按真实剩余距离把速度系数刹到 0，
@@ -800,6 +841,22 @@ GetFuturePostionandRotationAlongSpline:
   `Content/Python/add_crosswalks_30_45.py` 另给 `Intersection_30`、`Intersection_45` 各四个入口补了同规格的全路宽标线；
   它只读交通样条与路口盒子，实测路面后生成 8 个网格，并仅给对应 10 条入口段补 `Crosswalk` 停车 tag，
   不移动交通线或原有斑马线。重跑时按固定标签跳过已添加的标线。
+- **人行红绿灯只摆在斑马线两端（2026-11-10）**：`Content/Python/place_crosswalk_lights.py`，
+  24 条斑马线 × 2 = 48 盏，标签 `ClaudeGenCrosswalkLight`，面对面、相位和车灯相反。
+  灯位以斑马线网格自己的横向范围为基准、两端各外延 150 cm——路宽这个事实只存在斑马线一处，
+  不再另量路缘；取局部包围盒 8 角投影而不是世界轴对齐的 `get_actor_bounds`，
+  也不能用"锚点 ± 半跨度"（锚点在 ±180 车道上、实测偏心 +173~+372 cm）。
+  相位靠"选哪个类"（`start color` 没开 Instance Editable，实例写不进去），
+  判据就是 `gen_traffic_lights.py` 里 `use_green` 的反面；同一条斑马线那两盏同类同帧生成，
+  天然同色，和车灯之间仍按既有的"已知会漂"慢慢漂。灯组定不出来的跳过并点名，不猜。
+  无界面下探地射线全部不命中，Z 沿用斑马线的路面高度；灯头朝向沿用 `MODEL_YAW_OFFSET=90`，
+  换成互相对着之后需在视口复核。`remove_center_traffic_lights.py` 会连这些一起删。
+- **`Inter_BranchRoad_R037_-0180_I03` 主样条只剩 1 点（2026-11-10 发现，未修）**：
+  `Spline` 和 `SplineLeft` 都是 1 点/0 cm，只有 `SplineRight` 6 点/2775 cm。
+  车选到主样条会拿零长样条、前向退化成世界 +X；`entry_and_dir` 也取不到方向，
+  所以 `sync_crosswalk_tags.py` 和摆灯脚本都会跳过它，表现是
+  `Crosswalk_BranchRoad_R037_4`（相距 328 cm）匹配不到段、摆不了人行灯。
+  写样条点属于改交通线，未动；要修用 `repair_degenerate_splines.py` 点名这一条、供体取 `SplineRight`。
   蓝图图表和交通 actor 的位置都没改；
   没 tag 的路口行为完全不变。路口中心的 133 盏红绿灯已由
   `remove_center_traffic_lights.py` 删除（灯该立在路两侧，删灯不影响车停红灯）。细节见 CLAUDE.md。
@@ -1222,3 +1279,5 @@ PC 保留输入绑定、服务器请求及旧蓝图转发入口，不再保存�
 
 ### 地图生成范围与角色升空修复（2026-11-05）
 TestForCharacter 的 ROAD-CREATE、POLE-CREATE、GRASSBED-CREATE1 的 PCG BrushComponent 原为 QueryOnly，运行时 WorldStatic/WorldDynamic 地面对象查询会在体积内部得到 initial_overlap、distance=0 的命中，把射线起点误当支撑面，导致主动布娃娃持续上升。已将三个 PCG 范围和 NewProceduralFoliageSpawner 的 BrushComponent 统一设为 NoCollision，并保存地图；生成的模型和树石植被实例碰撞保持开启。原地图 PIE 验证：地面命中改为 Landscape，连续采样髋高度约 2010.43 cm 保持稳定，不再持续升空。未改角色移动参数；排查时对 BP_Axe 的试验碰撞调整已恢复 PhysicsActor。
+
+- `Crosswalk_Intersection_45_02` 的小孩单列过街路线由 `Content/Python/place_child_crosswalk_45_02.py` 摆放，线段比斑马线两端各宽 250 cm（总长约 22.6 m）。`ADeliveryPedestrianRoute` 在服务器生成前读取绑定车道段的 `StopAtInter`（车红即人绿），并检查斑马线范围内是否有速度大于 10 cm/s 的交通车；红灯或车未清空时不生成，已生成 NPC 继续走，条件恢复后继续按间隔生成。其他路线未绑定过街 Actor 时保持原行为。这条路线最多同时 12 人，绿灯生成间隔固定 1.25 秒、基础步速统一 130 cm/s（约 162.5 cm 间距，红灯 195 cm/s）；红灯时已出发的小孩以原速 1.5 倍走完，转绿恢复；这条路线仅在出现和消失窗口使用独立复制的男孩/女孩渐隐材质，通过原有出入场进度控制 FadeOpacity；正常行走时切回原始 Opaque 材质并保持原尺寸。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过路口段后恢复原上限。

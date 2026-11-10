@@ -8,6 +8,7 @@
 
 class ADeliveryPedestrian;
 class UAnimSequence;
+class UMaterialInterface;
 class USkeletalMesh;
 class USplineComponent;
 
@@ -64,6 +65,15 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|外观")
 	TArray<FDeliveryPedestrianKind> Kinds;
 
+	/** 与 Kinds 同序的淡化材质；仅启用渐隐的路线使用 */
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|外观")
+	TArray<TSoftObjectPtr<UMaterialInterface>> FadeMaterials;
+
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|出入场")
+	bool bFadeInsteadOfScale = false;
+
+	UMaterialInterface* GetFadeMaterialForMesh(const USkeletalMesh* Mesh) const;
+
 	/**
 	 * 全部路人共用的走路动画
 	 * 六个 NPC 的骨骼命名一致、共用一个 Skeleton，所以一份动画够了
@@ -83,6 +93,21 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	/** 生成的路人类，留空时用内置的 ADeliveryPedestrian */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|外观")
 	TSubclassOf<ADeliveryPedestrian> PedestrianClass;
+
+	// 可选的斑马线过街闸门；只限制新生成，不改变已在路上的 NPC
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|过街")
+	TObjectPtr<AActor> CrosswalkActor;
+
+	/** 对应车道段的 StopAtInter 为 true 时，人行方向为绿 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|过街")
+	TObjectPtr<AActor> SignalSegment;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|过街", meta = (ClampMin = "0.0", Units = "cm"))
+	float VehicleClearanceMargin = 100.f;
+
+	/** 红灯后已出发的小孩加速通过，绿灯恢复正常速度 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|过街", meta = (ClampMin = "1.0"))
+	float RedLightWalkSpeedMultiplier = 1.5f;
 
 	// 生成节奏
 	/** 这条线上同时最多几个人 */
@@ -281,6 +306,8 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	 */
 	USkeletalMesh* PickKind(float& OutHeightScale) const;
 
+	bool IsPedestrianGreen() const;
+	bool CanSpawnAtCrosswalk() const;
 	void ResetSpawnTimer();
 
 	TArray<TWeakObjectPtr<ADeliveryPedestrian>> Alive;
