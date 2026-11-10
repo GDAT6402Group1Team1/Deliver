@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "NPC/DeliveryPedestrianRoute.h"
 
@@ -71,16 +71,10 @@ void ADeliveryPedestrianRoute::Tick(float DeltaTime)
 		const bool bGreen = IsPedestrianGreen();
 		UpdateLeaderPhase(bGreen);
 		GetGreenPhaseBudgetOwner()->UpdateGreenPhaseBudget(bGreen);
-		const float Multiplier = bGreen ? 1.f : RedLightWalkSpeedMultiplier;
-		for (const TWeakObjectPtr<ADeliveryPedestrian>& Pedestrian : Alive)
-		{
-			if (Pedestrian.IsValid())
-			{
-				Pedestrian->SetCrosswalkSpeedMultiplier(Multiplier);
-			}
-		}
+		UpdateCrosswalkSpeed();
 	}
 
+	if (!CrosswalkActor && HornSpeedMultiplier > 1.f) UpdateCrosswalkSpeed();
 	SpawnCountdown -= DeltaTime;
 	if (SpawnCountdown > 0.f)
 	{
@@ -123,6 +117,26 @@ void ADeliveryPedestrianRoute::UpdateGreenPhaseBudget(bool bGreen)
 		                                        FMath::Max(GreenPhaseSpawnMin, GreenPhaseSpawnMax));
 	}
 	bWasPedestrianGreen = bGreen;
+}
+
+void ADeliveryPedestrianRoute::NotifyHorn(float SpeedMultiplier)
+{
+	if (!HasAuthority() || !IsValid(CrosswalkActor) || bRoamInArea || !GetWorld()) return;
+	if (GetWorld()->GetTimeSeconds() >= HornBoostUntil) HornSpeedMultiplier = 1.f;
+	HornSpeedMultiplier = FMath::Max(HornSpeedMultiplier, FMath::Clamp(SpeedMultiplier, 1.f, 3.f));
+	HornBoostUntil = GetWorld()->GetTimeSeconds() + 0.35f;
+	UpdateCrosswalkSpeed();
+}
+
+void ADeliveryPedestrianRoute::UpdateCrosswalkSpeed()
+{
+	if (GetWorld()->GetTimeSeconds() >= HornBoostUntil || !IsValid(CrosswalkActor)) HornSpeedMultiplier = 1.f;
+	const float SignalMultiplier = !IsValid(CrosswalkActor) || IsPedestrianGreen() ? 1.f : RedLightWalkSpeedMultiplier;
+	const float Multiplier = FMath::Max(SignalMultiplier, HornSpeedMultiplier);
+	for (const auto& Person : Alive)
+	{
+		if (Person.IsValid()) Person->SetCrosswalkSpeedMultiplier(Multiplier);
+	}
 }
 
 bool ADeliveryPedestrianRoute::IsPedestrianGreen() const

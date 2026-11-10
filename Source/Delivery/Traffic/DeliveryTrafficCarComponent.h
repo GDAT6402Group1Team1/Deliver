@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -25,6 +25,7 @@ UCLASS(ClassGroup = (Delivery), meta = (BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 {
 	GENERATED_BODY()
+	friend class FDeliveryTrafficHornBoostTest;
 
   public:
 	UDeliveryTrafficCarComponent();
@@ -140,6 +141,8 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 
 	/** 交通车蓝图报告的当前速度，供过街前判断斑马线是否有移动车辆 */
 	float GetReportedSpeed() const { return LastKnownSpeed; }
+	/** 仅正常满速行驶时接收短时鸣笛加速，不修改 MaxSpeed */
+	void RequestHornSpeedBoost(float Multiplier);
 
 	/** 蓝图算目标速度时乘上这个系数：1 表示正常速度，0 表示因为前车挡路而完全停住 */
 	UFUNCTION(BlueprintPure, Category = "Traffic|避让")
@@ -642,6 +645,8 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	float LastKnownMaxSpeed = 0.0f;
 
 	float SpeedMultiplier = 1.0f;
+	float HornBoostUntil = -1.f;
+	float HornBoostMultiplier = 1.f;
 	/** 减速结束后到允许重新加速的剩余时间 */
 	float FollowAccelerationPauseRemaining = 0.0f;
 

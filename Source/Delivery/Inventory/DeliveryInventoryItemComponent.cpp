@@ -1,4 +1,4 @@
-// 保存物品类型、图标与耐久，物体的场景表现由所属 Actor 处理
+﻿// 保存物品类型、图标与耐久，物体的场景表现由所属 Actor 处理
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Inventory/DeliveryInventoryItemComponent.h"
@@ -11,7 +11,7 @@ UDeliveryInventoryItemComponent::UDeliveryInventoryItemComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
-	DisplayName = NSLOCTEXT("DeliveryItems", "UnnamedItem", "道具");
+	DisplayName = NSLOCTEXT("DeliveryItems", "UnnamedItem", "Item");
 }
 
 // 向客户端同步物品耐久

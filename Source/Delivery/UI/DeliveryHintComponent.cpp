@@ -1,4 +1,4 @@
-#include "UI/DeliveryHintComponent.h"
+﻿#include "UI/DeliveryHintComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "Input/DeliveryInputComponent.h"
 #include "Vehicle/DeliveryMotorbike.h"
@@ -13,8 +13,8 @@
 UDeliveryHintComponent::UDeliveryHintComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
-    ReadyText = NSLOCTEXT("Delivery", "SummonReady", "按 {0} 召唤摩托车");
-    CooldownText = NSLOCTEXT("Delivery", "SummonCooling", "召唤冷却 {0}s");
+    ReadyText = NSLOCTEXT("Delivery", "SummonReady", "Press {0} to Summon Bike");
+    CooldownText = NSLOCTEXT("Delivery", "SummonCooling", "Summon Cooldown: {0}s");
 }
 
 void UDeliveryHintComponent::BeginPlay()
@@ -109,8 +109,8 @@ void UDeliveryHintComponent::RefreshHint()
         const FText Key = GetKeyText(Bike->GetCameraToggleAction());
         if (Key.IsEmpty()) { ShowHint(FText::GetEmpty()); return; }
         const FText Format = Bike->IsFreeLookCamera()
-            ? NSLOCTEXT("Delivery", "MotorbikeHintFree", "按 {0} 切换视角（当前：自由）")
-            : NSLOCTEXT("Delivery", "MotorbikeHintFixed", "按 {0} 切换视角（当前：固定）");
+            ? NSLOCTEXT("Delivery", "MotorbikeHintFree", "Press {0} to Switch Camera (Free)")
+            : NSLOCTEXT("Delivery", "MotorbikeHintFixed", "Press {0} to Switch Camera (Fixed)");
         ShowHint(FText::Format(Format, Key));
         return;
     }

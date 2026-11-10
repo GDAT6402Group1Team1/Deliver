@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Task/World/DeliveryItemComponent.h"
@@ -28,7 +28,7 @@ ADeliveryHandheldItem::ADeliveryHandheldItem()
 
     ItemComponent = CreateDefaultSubobject<UDeliveryInventoryItemComponent>(TEXT("Item"));
     InteractableComponent = CreateDefaultSubobject<UDeliveryInteractableComponent>(TEXT("Interactable"));
-    InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "PickupPrompt", "[E] 拾取");
+    InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "PickupPrompt", "[E] Pick Up");
     InteractableComponent->InteractRadius = 100.0f;
     InteractableComponent->PromptOffset = FVector(0.0f, 0.0f, 45.0f);
     InteractableComponent->InteractionKey = EDeliveryInteractionKey::PickupE;

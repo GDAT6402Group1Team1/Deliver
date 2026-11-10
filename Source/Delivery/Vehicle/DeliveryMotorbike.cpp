@@ -1,6 +1,10 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/DeliveryHornReceiver.h"
+#include "Traffic/DeliveryTrafficCarComponent.h"
+#include "Audio/DeliveryAudioConfig.h"
+#include "UI/DeliveryHintComponent.h"
 #include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/AudioComponent.h"
@@ -21,6 +25,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "Engine/OverlapResult.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -40,6 +45,8 @@
 ADeliveryMotorbike::ADeliveryMotorbike()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	static ConstructorHelpers::FObjectFinder<UInputAction> HornInput(TEXT("/Game/Input/Actions/IA_AttackLeft.IA_AttackLeft"));
+	HornAction = HornInput.Object;
 	bReplicates = true;
 	SetReplicateMovement(true);
 	SetNetUpdateFrequency(30.0f);
@@ -167,10 +174,10 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	TrunkInteractable->HoldDuration = 0.0f;
 	TrunkInteractable->PromptOffset = FVector(0.0f, 0.0f, 60.0f);
 
-	DrivePromptText = NSLOCTEXT("Delivery", "MotorbikeDrivePrompt", "按 F 驾驶");
-	ExitPromptText = NSLOCTEXT("Delivery", "MotorbikeExitPrompt", "按 F 下车");
-	TrunkLoadPromptText = NSLOCTEXT("Delivery", "MotorbikeTrunkLoad", "左键装货");
-	TrunkUnloadPromptText = NSLOCTEXT("Delivery", "MotorbikeTrunkUnload", "左键取货");
+	DrivePromptText = NSLOCTEXT("Delivery", "MotorbikeDrivePrompt", "Press F to Ride");
+	ExitPromptText = NSLOCTEXT("Delivery", "MotorbikeExitPrompt", "Press F to Dismount");
+	TrunkLoadPromptText = NSLOCTEXT("Delivery", "MotorbikeTrunkLoad", "Left Click to Load");
+	TrunkUnloadPromptText = NSLOCTEXT("Delivery", "MotorbikeTrunkUnload", "Left Click to Unload");
 
 	static ConstructorHelpers::FObjectFinder<UInputAction> MoveActionFinder(
 	    TEXT("/Game/Input/Actions/IA_Move"));
@@ -206,6 +213,7 @@ void ADeliveryMotorbike::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ADeliveryMotorbike, Driver);
+	DOREPLIFETIME(ADeliveryMotorbike, bHornActive);
 	DOREPLIFETIME(ADeliveryMotorbike, Cargo);
 	DOREPLIFETIME(ADeliveryMotorbike, ReplicatedRiderMotion);
 }
@@ -1138,6 +1146,12 @@ void ADeliveryMotorbike::ProcessPedestrianImpacts(float DeltaSeconds)
 		    (Direction + FVector::UpVector * PedestrianImpactUpwardFraction).GetSafeNormal() *
 		    PedestrianImpactImpulse * SpeedScale;
 		Receiver->ReceiveImpact(Impulse, Hit.ImpactPoint);
+		// 同一帧撞到多人也只播放一次，倒地目标已在上方排除
+		if (World->GetTimeSeconds() >= NextPersonImpactSoundTime)
+		{
+			NextPersonImpactSoundTime = World->GetTimeSeconds() + 0.25f;
+			MulticastVehicleEvent(EDeliveryEvent::VehicleHitPerson);
+		}
 	}
 }
 
@@ -1218,6 +1232,7 @@ void ADeliveryMotorbike::ExitVehicle()
 	PendingExitSideSign = 0.0f;
 
 	ADeliveryCharacter* Leaving = Driver;
+	ServerRequestHorn_Implementation(false);
 	Driver = nullptr;
 	ResetRiderMotion();
 	AController* BikeController = GetController();
@@ -1341,6 +1356,12 @@ void ADeliveryMotorbike::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		return;
 	}
 
+	if (HornAction)
+	{
+		EnhancedInput->BindAction(HornAction, ETriggerEvent::Started, this, &ADeliveryMotorbike::HornPressed);
+		EnhancedInput->BindAction(HornAction, ETriggerEvent::Completed, this, &ADeliveryMotorbike::HornReleased);
+		EnhancedInput->BindAction(HornAction, ETriggerEvent::Canceled, this, &ADeliveryMotorbike::HornReleased);
+	}
 	if (MoveAction)
 	{
 		EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ADeliveryMotorbike::MoveInput);
@@ -1376,6 +1397,84 @@ void ADeliveryMotorbike::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		EnhancedInput->BindAction(Pickup, ETriggerEvent::Completed, this,
 		                          &ADeliveryMotorbike::PickupReleased);
 		EnhancedInput->BindAction(Pickup, ETriggerEvent::Canceled, this, &ADeliveryMotorbike::PickupReleased);
+	}
+}
+
+// 长按状态由服务器复制，松开、取消和失去驾驶员都停止
+void ADeliveryMotorbike::HornPressed(const FInputActionValue& Value)
+{
+	if (IsLocallyControlled() && Driver) ServerRequestHorn(true);
+}
+
+void ADeliveryMotorbike::HornReleased(const FInputActionValue& Value)
+{
+	if (IsLocallyControlled()) ServerRequestHorn(false);
+}
+
+void ADeliveryMotorbike::ServerRequestHorn_Implementation(bool bActive)
+{
+	bActive = bActive && IsValid(Driver) && GetController();
+	if (bHornActive == bActive) return;
+	bHornActive = bActive;
+	HornScanElapsed = 0.2f;
+	OnRep_HornActive();
+	ForceNetUpdate();
+}
+
+void ADeliveryMotorbike::OnRep_HornActive()
+{
+	if (!VehicleAudio) return;
+	if (!bHornActive)
+	{
+		VehicleAudio->StopHorn();
+		return;
+	}
+	if (VehicleAudio->Config)
+	{
+		const FDeliverySoundSettings* Sound = VehicleAudio->Config->Sounds.Find(EDeliveryEvent::VehicleHorn);
+		if (Sound) VehicleAudio->PlayHorn(Sound->Sound, Sound->Volume, Sound->Pitch, nullptr, true);
+	}
+}
+
+void ADeliveryMotorbike::UpdateHorn(float DeltaSeconds)
+{
+	if (!HasAuthority()) return;
+	if (!IsValid(Driver) || !GetController())
+	{
+		ServerRequestHorn_Implementation(false);
+		return;
+	}
+	if (!bHornActive) return;
+	HornScanElapsed += DeltaSeconds;
+	if (HornScanElapsed < 0.2f) return;
+	HornScanElapsed = 0.f;
+	TArray<FOverlapResult> Hits;
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(DeliveryCollision::Pedestrian);
+	Objects.AddObjectTypesToQuery(ECC_Vehicle);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(MotorbikeHorn), false, this);
+	GetWorld()->OverlapMultiByObjectType(Hits, GetActorLocation(), FQuat::Identity, Objects,
+	    FCollisionShape::MakeSphere(FMath::Max(HornRange, 1.f)), Params);
+	TSet<AActor*> Seen;
+	const float MinDot = FMath::Cos(FMath::DegreesToRadians(HornHalfAngle));
+	for (const FOverlapResult& Hit : Hits)
+	{
+		AActor* Actor = Hit.GetActor();
+		if (!Actor || Seen.Contains(Actor)) continue;
+		Seen.Add(Actor);
+		if (FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(),
+		    (Actor->GetActorLocation()-GetActorLocation()).GetSafeNormal2D()) < MinDot) continue;
+		FCollisionQueryParams Sight(SCENE_QUERY_STAT(MotorbikeHornSight), false, this);
+		Sight.AddIgnoredActor(Actor);
+		Sight.AddIgnoredActor(Driver);
+		FHitResult Wall;
+		if (GetWorld()->LineTraceSingleByChannel(Wall, GetActorLocation()+FVector(0,0,70),
+		    Actor->GetActorLocation()+FVector(0,0,70), ECC_Visibility, Sight)) continue;
+		if (auto* Receiver = Cast<IDeliveryHornReceiver>(Actor)) Receiver->ReceiveHorn(HornPedestrianSpeedMultiplier);
+		if (auto* Traffic = Actor->FindComponentByClass<UDeliveryTrafficCarComponent>())
+		{
+			Traffic->RequestHornSpeedBoost(HornTrafficSpeedMultiplier);
+		}
 	}
 }
 
@@ -1595,8 +1694,8 @@ void ADeliveryMotorbike::ToggleCameraMode()
 		}
 	}
 
-	ShowNotice(bFreeLookCamera ? NSLOCTEXT("Delivery", "MotorbikeFreeLook", "自由视角（P 切换）")
-	                           : NSLOCTEXT("Delivery", "MotorbikeFixedLook", "固定视角（P 切换）"),
+	ShowNotice(bFreeLookCamera ? NSLOCTEXT("Delivery", "MotorbikeFreeLook", "Free Camera (P to Switch)")
+	                           : NSLOCTEXT("Delivery", "MotorbikeFixedLook", "Fixed Camera (P to Switch)"),
 	           1.5f);
 }
 
@@ -1684,9 +1783,11 @@ void ADeliveryMotorbike::ServerRequestExit_Implementation()
 void ADeliveryMotorbike::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateHorn(DeltaSeconds);
 
 	if (HasAuthority() && Driver && !IsValid(Driver))
 	{
+		ServerRequestHorn_Implementation(false);
 		Driver = nullptr;
 		ApplyDriverPresentation();
 	}
@@ -1746,17 +1847,31 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 		if (!bHadDriverLastFrame)
 		{
 			ShowNotice(ExitPromptText, ExitPromptDuration);
+			bHornHintPending = true;
+		}
+		// 现有上车或切换视角提示结束后，再显示一次鸣笛操作
+		if (bHornHintPending && NoticeRemaining <= 0.f)
+		{
+			FText Key = NSLOCTEXT("Delivery", "HornMouseFallback", "Left Mouse Button");
+			if (const auto* Hint = GetController()->FindComponentByClass<UDeliveryHintComponent>())
+			{
+				const FText MappedKey = Hint->GetKeyText(HornAction);
+				if (!MappedKey.IsEmpty()) Key = MappedKey;
+			}
+			ShowNotice(FText::Format(NSLOCTEXT("Delivery", "BikeHornHint", "Hold {0} to Honk"), Key), 1.f);
+			bHornHintPending = false;
 		}
 		if (NoticeRemaining > 0.0f)
 		{
-			NoticeRemaining -= DeltaSeconds;
 			PushNotice();
+			NoticeRemaining = FMath::Max(0.f, NoticeRemaining - DeltaSeconds);
 		}
 		bHadDriverLastFrame = true;
 	}
 	else
 	{
 		bHadDriverLastFrame = false;
+		bHornHintPending = false;
 		NoticeRemaining = 0.0f;
 	}
 }

@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Task/Tracking/DeliveryGuidanceLibrary.h"
 
@@ -233,7 +233,7 @@ FText UDeliveryGuidanceLibrary::FormatDistance(float Centimeters)
 
 	if (Meters < 1000.f)
 	{
-		return FText::Format(LOCTEXT("DistanceMeters", "{0} 米"), FText::AsNumber(FMath::RoundToInt(Meters)));
+		return FText::Format(LOCTEXT("DistanceMeters", "{0} m"), FText::AsNumber(FMath::RoundToInt(Meters)));
 	}
 
 	// 一公里以上保留一位小数：整数显示会让"1 公里"覆盖 950~1050 米这么大一段，
@@ -242,7 +242,7 @@ FText UDeliveryGuidanceLibrary::FormatDistance(float Centimeters)
 	Options.MinimumFractionalDigits = 1;
 	Options.MaximumFractionalDigits = 1;
 
-	return FText::Format(LOCTEXT("DistanceKilometers", "{0} 公里"),
+	return FText::Format(LOCTEXT("DistanceKilometers", "{0} km"),
 	                     FText::AsNumber(Meters / 1000.f, &Options));
 }
 

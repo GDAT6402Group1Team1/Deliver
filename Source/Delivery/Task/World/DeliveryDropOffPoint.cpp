@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Task/World/DeliveryDropOffPoint.h"
 
@@ -13,7 +13,7 @@ ADeliveryDropOffPoint::ADeliveryDropOffPoint()
 	Interactable->InteractionKey = EDeliveryInteractionKey::PickupE;
 	Interactable->HoldDuration = 0.5f;
 	// 半径不在这里设：归 Target 组件管，BeginPlay 时统一写入
-	Interactable->PromptText = NSLOCTEXT("DeliveryPickup", "HoldDeliverPackage", "[按住 E] 交付快递");
+	Interactable->PromptText = NSLOCTEXT("DeliveryPickup", "HoldDeliverPackage", "[Hold E] Deliver Package");
 	Interactable->PromptOffset = FVector(0.f, 0.f, 150.f);
 
 	Target = CreateDefaultSubobject<UDeliveryTargetComponent>(TEXT("Target"));

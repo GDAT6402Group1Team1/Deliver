@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -45,6 +45,7 @@ UCLASS()
 class DELIVERY_API ADeliveryMotorbike : public APawn
 {
 	GENERATED_BODY()
+	friend class FDeliveryBikeHornTest;
 	friend class FDeliveryRiderContactsTest;
 	friend class FDeliveryRiderRuntimeTest;
 	friend class FDeliveryVehicleSummonTest;
@@ -874,6 +875,31 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	UFUNCTION(Server, Reliable)
 	void ServerRequestExit();
 
+	void HornPressed(const FInputActionValue& Value);
+	void HornReleased(const FInputActionValue& Value);
+	UFUNCTION(Server, Reliable)
+	void ServerRequestHorn(bool bActive);
+	UFUNCTION()
+	void OnRep_HornActive();
+	void UpdateHorn(float DeltaSeconds);
+	UPROPERTY(ReplicatedUsing=OnRep_HornActive)
+	bool bHornActive = false;
+	float HornScanElapsed = 0.f;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Horn", meta=(ClampMin="0", Units="cm"))
+	float HornRange = 800.f;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Horn", meta=(ClampMin="1", ClampMax="90", Units="deg"))
+	float HornHalfAngle = 40.f;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Horn", meta=(ClampMin="1", ClampMax="3"))
+	float HornPedestrianSpeedMultiplier = 2.0f;
+	UPROPERTY(EditAnywhere, Category="Motorbike|Horn", meta=(ClampMin="1", ClampMax="1.5"))
+	float HornTrafficSpeedMultiplier = 1.3f;
+	// 世界时间冷却由服务器维护，不跨驾驶员转移输入状态
+	float NextPersonImpactSoundTime = 0.f;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> HornAction;
+
+
 	/** 服务器确认上下车、碰撞或召唤后，在各端发布车辆事件 */
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastVehicleEvent(EDeliveryEvent Event);
@@ -1096,6 +1122,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 
 	/** 当前这句提示还剩多少秒；上车那一帧由 ExitPromptDuration 起算，只在本机上用 */
 	float NoticeRemaining = 0.0f;
+	bool bHornHintPending = false;
 	FText NoticeText;
 	bool bHadDriverLastFrame = false;
 

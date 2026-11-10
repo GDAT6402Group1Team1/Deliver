@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -29,7 +29,7 @@ class DELIVERY_API UDeliveryRagdollCombatComponent : public UActorComponent
   public:
     /** 由服务器多播命中音效，仅在确认命中后调用 */
     UFUNCTION(NetMulticast, Unreliable)
-    void MulticastPlayPunchHit(FVector_NetQuantize10 Location);
+    void MulticastPlayPunchHit(FVector_NetQuantize10 Location, bool bNPC = false);
 
     UDeliveryRagdollCombatComponent();
 
@@ -182,6 +182,10 @@ class DELIVERY_API UDeliveryRagdollCombatComponent : public UActorComponent
     /** 服务器确认命中后播放的音效，与本机出拳音效独立配置 */
     UPROPERTY(EditAnywhere, Category = "Punch|Audio")
     TObjectPtr<USoundBase> PunchHitSound;
+
+    /** NPC 命中使用独立卡通音色，未配置时回退普通命中音 */
+    UPROPERTY(EditAnywhere, Category="Combat|Audio")
+    TObjectPtr<USoundBase> PunchNPCHitSound;
 
     // 组件缓存与本次攻击状态
     UPROPERTY(Transient)

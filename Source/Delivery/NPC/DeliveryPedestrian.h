@@ -1,7 +1,8 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
+#include "Vehicle/DeliveryHornReceiver.h"
 #include "CoreMinimal.h"
 #include "Combat/DeliveryImpactReceiver.h"
 #include "GameFramework/Actor.h"
@@ -45,9 +46,10 @@ enum class EDeliveryPedestrianPhase : uint8
  */
 UCLASS()
 
-class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactReceiver
+class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactReceiver, public IDeliveryHornReceiver
 {
 	GENERATED_BODY()
+	friend class FDeliveryBikeHornTest;
 
   public:
 	ADeliveryPedestrian();
@@ -76,6 +78,7 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 
 	/** 只调整本次过街的步速；服务器调用，离开红灯后恢复原速度 */
 	void SetCrosswalkSpeedMultiplier(float Multiplier);
+	virtual void ReceiveHorn(float SpeedMultiplier) override;
 
 	// 程序化步态
 	/**
@@ -208,7 +211,7 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	bool bBlockCharacters = true;
 
 	/**
-	 * 前方有人或有车时停下来等，而不是直接穿过去/把对方顶住
+	 * 前方有人或场景障碍时停下来等，车辆由车方让行，而不是直接穿过去/把对方顶住
 	 *
 	 * **这一条是"实心"的另一半，不能只开碰撞不开让路。** 路人是运动学推进的
 	 * （`SetActorLocationAndRotation`，不带 sweep），所以 Block 对他自己的移动
@@ -320,7 +323,7 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	}
 
 	/**
-	 * 前方近处有别的路人、玩家或车，该让一让
+	 * 前方近处有别的路人、玩家或场景障碍，该让一让；不等待车辆
 	 * 躺在地上的路人不算：绕不过去，而且他过几秒自己就起来了
 	 * 公开是为了调试命令和回归测试能直接问它，它只读、不改状态
 	 */

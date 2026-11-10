@@ -1,6 +1,8 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "NPC/DeliveryPedestrian.h"
+#include "Traffic/DeliveryTrafficCarComponent.h"
+#include "Vehicle/DeliveryMotorbike.h"
 
 #include "Animation/AnimSequence.h"
 #include "Combat/DeliveryCollisionChannels.h"
@@ -164,6 +166,15 @@ void ADeliveryPedestrian::SetCrosswalkSpeedMultiplier(float Multiplier)
 	{
 		const float Rate = (AnimReferenceSpeed > 1.f) ? WalkSpeed / AnimReferenceSpeed : 1.f;
 		Mesh->SetPlayRate(FMath::Clamp(Rate, 0.25f, 3.f));
+	}
+}
+
+// 只有正式过街路线响应鸣笛，路线统一管理整组加速
+void ADeliveryPedestrian::ReceiveHorn(float SpeedMultiplier)
+{
+	if (HasAuthority() && Route.IsValid() && !IsKnockedDown() && !IsStandingUp())
+	{
+		Route->NotifyHorn(SpeedMultiplier);
 	}
 }
 
@@ -1204,7 +1215,6 @@ bool ADeliveryPedestrian::IsBlockedAhead(bool* bFixedObstacle) const
 	Objects.AddObjectTypesToQuery(DeliveryCollision::Pedestrian);  // 别的路人
 	Objects.AddObjectTypesToQuery(ECC_PhysicsBody);                // 玩家的布娃娃
 	Objects.AddObjectTypesToQuery(ECC_Pawn);                       // 玩家胶囊和摩托车
-	Objects.AddObjectTypesToQuery(ECC_Vehicle);                    // 交通车
 	Objects.AddObjectTypesToQuery(ECC_WorldStatic);                // 房屋、围墙、树石
 	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);               // 可移动场景物件
 
@@ -1218,6 +1228,13 @@ bool ADeliveryPedestrian::IsBlockedAhead(bool* bFixedObstacle) const
 	{
 		const AActor* Other = Hit.GetActor();
 		if (!Other || Other == this)
+		{
+			continue;
+		}
+		// 车辆单向让行人，忽略车辆的所有碰撞组件，避免人车互等
+		if (Cast<ADeliveryMotorbike>(Other) ||
+		    Other->FindComponentByClass<UDeliveryTrafficCarComponent>() ||
+		    (Hit.Component.IsValid() && Hit.Component->GetCollisionObjectType() == ECC_Vehicle))
 		{
 			continue;
 		}

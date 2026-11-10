@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -19,7 +19,7 @@ public:
     void UpdateEngine(bool bDriving, float SpeedRatio);
 
     /** 收到服务器确认后在车上播放一次鸣笛，复用本车音源，不与发动机互相停止 */
-    void PlayHorn(USoundBase* Sound, float Volume, float Pitch, USoundAttenuation* Attenuation);
+    void PlayHorn(USoundBase* Sound, float Volume, float Pitch, USoundAttenuation* Attenuation, bool bAllowLoop = false);
     void StopHorn();
 
 protected:

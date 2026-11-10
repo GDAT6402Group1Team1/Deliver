@@ -1,4 +1,4 @@
-// 验证人行路线的生成上限、沿线段推进、出入场缩放与到端点回收
+﻿// 验证人行路线的生成上限、沿线段推进、出入场缩放与到端点回收
 #include "NPC/DeliveryPedestrianRoute.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -361,6 +361,20 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 			}
 			TestTrue(TEXT("让路测试前已走出窗口、恢复原尺寸"),
 			         Back->GetAppearAlpha() > 0.95f && Front->GetAppearAlpha() > 0.95f);
+
+			// 车辆不参与行人等待，使用真实查询碰撞覆盖车辆通道
+			AActor* Vehicle = World->SpawnActor<AActor>();
+			UBoxComponent* VehicleBox = NewObject<UBoxComponent>(Vehicle);
+			Vehicle->SetRootComponent(VehicleBox);
+			VehicleBox->SetBoxExtent(FVector(20.f));
+			VehicleBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+			VehicleBox->SetCollisionObjectType(ECC_Vehicle);
+			VehicleBox->SetCollisionResponseToAllChannels(ECR_Block);
+			VehicleBox->RegisterComponent();
+			Front->SetActorLocation(Back->GetActorLocation() - Back->GetActorForwardVector() * 500.f);
+			Vehicle->SetActorLocation(Back->GetActorLocation() + Back->GetActorForwardVector() * 60.f + FVector(0, 0, Back->YieldProbeHeight));
+			TestFalse(TEXT("行人不等待前方车辆"), Back->IsBlockedAhead());
+			Vehicle->Destroy();
 
 			Back->bYieldToObstacles = true;
 			// 挡在正前方：探测距离 95，放到 60 cm 处一定命中

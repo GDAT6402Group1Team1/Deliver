@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -166,7 +166,7 @@ protected:
 	 * 看着像 UI 出了 bug，而不是"我迟到了"。
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement")
-	FText OverdueGradeText = NSLOCTEXT("DeliverySettlement", "Overdue", "超时送达");
+	FText OverdueGradeText = NSLOCTEXT("DeliverySettlement", "Overdue", "Late Delivery");
 
 	/** 倍率的显示格式。`{0}` 是倍率本身。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement")

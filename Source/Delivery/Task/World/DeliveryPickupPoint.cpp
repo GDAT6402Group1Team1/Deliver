@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Task/World/DeliveryPickupPoint.h"
 
@@ -14,7 +14,7 @@ ADeliveryPickupPoint::ADeliveryPickupPoint()
 	Interactable->HoldDuration = 0.5f;
 	// 半径不在这里设：它归 PickupPoint 组件管（BeginPlay 时统一写入），
 	// 这里再写一份会让人以为改这个数有用
-	Interactable->PromptText = NSLOCTEXT("DeliveryPickup", "HoldTakePackage", "[按住 E] 取快递");
+	Interactable->PromptText = NSLOCTEXT("DeliveryPickup", "HoldTakePackage", "[Hold E] Collect Package");
 	// 提示浮窗吊得比箱子高一点：取货点可能是个柜台或者整栋楼，
 	// 按箱子那个高度会被模型挡住
 	Interactable->PromptOffset = FVector(0.f, 0.f, 150.f);

@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Traffic/DeliveryTrafficCarComponent.h"
 #include "Delivery.h"
@@ -605,6 +605,20 @@ const bool bAnyoneAtLight = bStoppedAtIntersection || bLeaderStoppedAtIntersecti
 	Target = FMath::Min(Target, PedestrianTarget);
 	bDebugLeaderYieldingToPedestrian = bLeaderYieldingToPedestrian;
 
+	// 所有红灯、斑马线、行人和跟车限制处理后，只有完全畅通才允许临时超速
+	const bool bCrosswalkLimited = CrosswalkRemaining < TNumericLimits<float>::Max() &&
+	    CrosswalkRemaining <= CrosswalkSlowdownDistance && CrosswalkRemaining >= -StopLineSetback - 100.f;
+	if (Target >= 0.999f && SpeedMultiplier >= 0.999f && DistanceAhead < 0.f && PedestrianAhead < 0.f &&
+	    !bCrosswalkLimited && !IsStoppedAtIntersection() && !bLeaderStoppedAtIntersection &&
+	    !bLeaderYieldingToPedestrian && bIsCurrentlyOnRoute && !bRouteLostPending &&
+	    LastKnownMaxSpeed > 0.f && LastKnownSpeed >= LastKnownMaxSpeed - KINDA_SMALL_NUMBER &&
+	    GetWorld()->GetTimeSeconds() < HornBoostUntil)
+	{
+		Target = HornBoostMultiplier;
+	}
+	// 一旦出现限制或租约到期，先撤掉额外倍率，再沿原规则刹车
+	if (Target <= 1.f && SpeedMultiplier > 1.f) SpeedMultiplier = 1.f;
+
 	// 减速立即生效，恢复加速需等待，避免前车在探测边缘反复出现时频繁加减速
 	
 	
@@ -631,6 +645,19 @@ const bool bAnyoneAtLight = bStoppedAtIntersection || bLeaderStoppedAtIntersecti
 	DebugAccelerationPauseRemaining = FollowAccelerationPauseRemaining;
 }
 
+// 只接收已达到常规上限的车辆；刷新短租约，多次鸣笛不叠乘
+void UDeliveryTrafficCarComponent::RequestHornSpeedBoost(float Multiplier)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !GetWorld() ||
+	    !bIsCurrentlyOnRoute || bRouteLostPending || IsStoppedAtIntersection() ||
+	    bLeaderStoppedAtIntersection || bLeaderYieldingToPedestrian ||
+	    SpeedMultiplier < 0.999f || LastKnownMaxSpeed <= 0.f ||
+	    LastKnownSpeed < LastKnownMaxSpeed - KINDA_SMALL_NUMBER) return;
+	if (GetWorld()->GetTimeSeconds() >= HornBoostUntil) HornBoostMultiplier = 1.f;
+	HornBoostMultiplier = FMath::Max(HornBoostMultiplier, FMath::Clamp(Multiplier, 1.f, 1.5f));
+	HornBoostUntil = GetWorld()->GetTimeSeconds() + 0.35f;
+}
+
 // 记录车辆是否正在正常跟随道路
 void UDeliveryTrafficCarComponent::UpdateRouteFollowState(bool bIsFollowingRoute)
 {
@@ -644,6 +671,8 @@ void UDeliveryTrafficCarComponent::UpdateRouteFollowState(bool bIsFollowingRoute
 // 开始将离开路线的车辆恢复到道路
 void UDeliveryTrafficCarComponent::BeginRouteReset()
 {
+	HornBoostUntil = -1.f;
+	HornBoostMultiplier = 1.f;
 	ResetHornProximity();
 	// 先播放缩小效果，再通知蓝图重置；等待期间阻止重复发出重置通知
 
@@ -678,6 +707,8 @@ void UDeliveryTrafficCarComponent::UpdateStoppedAtIntersection(bool bInStoppedAt
 // 车辆回到路线起点时重置运动和碰撞记录
 void UDeliveryTrafficCarComponent::NotifyResetToStart()
 {
+	HornBoostUntil = -1.f;
+	HornBoostMultiplier = 1.f;
 	ResetHornProximity();
 	if (const AActor* Owner = GetOwner())
 	{

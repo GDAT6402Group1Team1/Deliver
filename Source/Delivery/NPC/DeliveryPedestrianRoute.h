@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -54,11 +54,14 @@ UCLASS()
 class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 {
 	GENERATED_BODY()
+	friend class FDeliveryBikeHornTest;
 
   public:
 	ADeliveryPedestrianRoute();
 
 	virtual void Tick(float DeltaTime) override;
+	/** 服务器收到车前过街行人的提示后，整条线统一加速 */
+	void NotifyHorn(float SpeedMultiplier);
 
 	// 路人外观
 	/** 这条线上会出现哪些路人，按权重随机 */
@@ -322,6 +325,10 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 
   private:
 	/** 丢掉已经销毁的弱引用，返回剩下的个数 */
+	void UpdateCrosswalkSpeed();
+	// 路线持有短租约，无车辆引用，多车只取最高倍率
+	float HornBoostUntil = -1.f;
+	float HornSpeedMultiplier = 1.f;
 	int32 CompactAlive();
 
 	/**

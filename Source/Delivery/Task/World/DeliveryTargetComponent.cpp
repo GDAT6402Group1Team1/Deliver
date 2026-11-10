@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Task/World/DeliveryTargetComponent.h"
 #include "Inventory/DeliveryPackageItem.h"
@@ -90,7 +90,7 @@ void UDeliveryTargetComponent::EnsureInteractableConfigured()
     }
     if (Interactable->PromptText.IsEmpty())
     {
-        Interactable->PromptText = NSLOCTEXT("DeliveryPickup", "HoldDeliverPackage", "[按住 E] 交付快递");
+        Interactable->PromptText = NSLOCTEXT("DeliveryPickup", "HoldDeliverPackage", "[Hold E] Deliver Package");
     }
 
     // 提示半径和交付半径必须一致，否则"提示出来了但按不动"

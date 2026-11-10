@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -15,7 +15,9 @@ enum class EDeliveryEvent : uint8
     VehicleExited UMETA(DisplayName="下车"),
     VehicleSummoned UMETA(DisplayName="召唤车辆"),
     VehicleImpacted UMETA(DisplayName="车辆受撞"),
-    CameraChanged UMETA(DisplayName="切换视角")
+    CameraChanged UMETA(DisplayName="切换视角"),
+    VehicleHitPerson UMETA(DisplayName="车辆撞人"),
+    VehicleHorn UMETA(DisplayName="车辆鸣笛")
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryEventDelegate, EDeliveryEvent, Event);

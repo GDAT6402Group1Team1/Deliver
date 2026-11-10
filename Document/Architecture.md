@@ -1,4 +1,4 @@
-# Delivery 系统设计
+﻿# Delivery 系统设计
 
 Delivery 按玩法职责组织代码，一个系统可以包含组件、场景对象、接口和数据资产
 目录表示功能归属，运行时的持有对象决定状态由谁管理，两者不必完全一致
@@ -224,3 +224,18 @@ Ready 只表示达到当前可进入游戏的条件，不表示所有贴图最�
 本次验证（2026-11-10）：`Build.bat DeliveryEditor Win64 Development -Project=Delivery.uproject -WaitMutex -NoHotReloadFromIDE` 完整编译通过。最终 `Automation RunTests Delivery.Startup` 的 3 项全部通过，报告在 `Saved/Automation/StartupFlowSpawnRetest`；此前同轮运行的 4 项 `Delivery.Task` 奖励测试、`Delivery.UI.PhoneController` 和 `Delivery.UI.SettlementReveal` 也全部通过，共 9 项。双人 PIE 确认双方加载完成后仍无角色且任务时钟为零，主机请求开始后双方拥有 Pawn、HUD 退出 Startup 输入模式，重复请求不重新生成或重置时钟。最终 PIE 有 36 条场景/加载警告，包括斧头 ComplexAsSimple、导航空边界、行人未设网格和加载长帧；没有测试失败。原 `TestForCharacter.umap` 和默认启动配置无改动，Python 设置脚本语法检查通过
 
 未覆盖用户尚未制作的菜单视觉、键鼠/手柄焦点体验、打包后的加载表现和中途加入场景。异步流送仍需在游戏线程注册组件与执行场景 BeginPlay，大地图激活可能短暂停顿；Ready 不作为加载过程全程流畅的保证
+
+交通与行人采用单向礼让：交通车探测行人并减速停车，所有 DeliveryPedestrian（包含过街路线）不因交通车、车辆通道碰撞体或电瓶车停步，避免人车互等；行人之间、玩家和场景障碍的原有避让保留。
+
+电瓶车音效与鸣笛：骑车复用 IA_AttackLeft（鼠标左键）开始鸣笛，Completed/Canceled 停止；服务器校验驾驶员并复制 bHornActive，换控制对象、下车时清除，音频组件 EndPlay 停止并销毁独立喇叭音源。循环喇叭、撞车和撞人分别配置在 DA_VehicleAudio 的 VehicleHorn、VehicleImpacted、VehicleHitPerson，碰撞沿已有服务器事件多播；撞人音效有 0.25 秒去重。鸣笛每 0.2 秒查询前方默认 800 cm、半角 40°、无遮挡的行人，通过 DeliveryHornReceiver 接口通知所属路线；仅设置有效 CrosswalkActor 且非自由漫游的过街路线响应，普通行人不受影响。路线刷新 0.35 秒加速租约，整条线的在场 NPC 一起加速，默认 2 倍，和过街倍率取最大值，不叠乘。停止、离开范围或车辆销毁后租约自动过期，整条路线恢复各自原速并保留原路线和避障规则，不因喇叭改变红绿灯校验。卡通音色脚本 Content/Python/setup_bike_cartoon_audio.py 生成原创 WAV 并导入、绑定，不修改地图。NPC 拳击命中使用 PunchNPCHitSound，由现有服务器命中窗口及每拳去重控制，未配置时回退 PunchHitSound，挥空不播放命中音。
+
+电瓶车鸣笛也可催促同一前方范围内的交通车：仅当前车速已达其蓝图报告 MaxSpeed、路线正常且无停车/减速限制时，服务器接收 0.35 秒短租约；畅通时临时速度倍率默认 1.3，可在 Motorbike|Horn 调整。所有红灯、过街限速、行人、跟车和路线状态检查优先，出现限制立即撤销额外倍率，随后按原刹车规则运行。只改变临时 SpeedMultiplier，不写 MaxSpeed，重复请求不叠乘，重置路线清租约。
+
+上车短提示依次显示原下车提示、鸣笛操作提示（1 秒）；鸣笛提示从当前输入映射读取按键，键鼠默认左键，下车或失去本机控制时取消待显示提示，不保留旧驾驶员的队列。
+
+本次验证（2026-11-11）：`Build.bat DeliveryEditor Win64 Development -Project=Delivery.uproject -WaitMutex -NoHotReloadFromIDE` 最终编译成功（XGE 未激活许可证，独立模式完成）；`Automation RunTests Delivery.Vehicle.HeldHorn+Delivery.NPC.PedestrianWalk+Delivery.Traffic.PedestrianYield+Delivery.Traffic.Horn+Delivery.Audio.Events+Delivery.Boxing.LowFrameRate+Delivery.UI.PersistentHint` 共 8 项通过，报告 `Saved/Automation/BikeCartoonFinalWithHint`。覆盖普通行人不响应、检测一人整线加速、重复鸣笛不叠乘、范围外与车后不触发、租约恢复、松开/失去控制停止、仅满速交通车响应、红灯/行人优先、路线重置清理及现有音效与提示。音效导入脚本成功执行并完成正式蓝图/配置回读；commandlet 启动仍记录 GEngine 未初始化时物理材质查询和本机 MCP 8000 端口占用错误，导致该导入进程返回 1，未将其视为干净通过。未做真实地图双人 PIE、手柄操作和音色试听验收；上车后提示的实际显示位置与一秒观感仍需场景检查。
+
+玩家提示统一使用英文：交互、上下车、装卸货、召唤/冷却、视角、鸣笛、任务领取与交付、来电/通话及结算提示已更新；本地化键保留，源字符串改为英文。DefaultGame.ini 的 Internationalization.Culture=en 使运行时按键名称使用英文。Content/Python/setup_english_prompts.py 按 prompt_english_translations.json 精确匹配已有文字，同步蓝图覆盖、UMG 模板和正式地图中的同文案实例，保留其他参数；不翻译编辑器标签、开发日志和任务对白。代码编译通过，资源同步更新 26 项，UI/Task UI 图节点文字审计没有剩余中文常量，报告在 Saved/english_prompt_changes.json、Saved/english_graph_audit.json。
+喇叭音色调整：SFX_Bike_HornLoop 改为固定音高 400/500 Hz 双音簧片，移除原来的调频颤音，增加泛音与柔和饱和；DA_VehicleAudio 的鸣笛音量设为 1.6，循环波形仍按 0.4 秒整周期闭合。资源与配置已在编辑器关闭后重新保存并回读通过；未做场景实际试听验收。
+
+英文提示本次回归（2026-11-11）：最终编译成功；`Automation RunTests Delivery.UI+Delivery.Task+Delivery.Systems.InputLifecycle+Delivery.Vehicle.HeldHorn` 共 9 项通过，报告 `Saved/Automation/EnglishPrompts`。未做完整地图逐条提示截图验收，任务对白不在本次提示翻译范围内。

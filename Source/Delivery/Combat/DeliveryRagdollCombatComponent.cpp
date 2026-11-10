@@ -1,4 +1,4 @@
-// 安排出拳时间、释放冲量并发出命中窗口事件
+﻿// 安排出拳时间、释放冲量并发出命中窗口事件
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/DeliveryRagdollCombatComponent.h"
@@ -27,11 +27,12 @@ UDeliveryRagdollCombatComponent::UDeliveryRagdollCombatComponent()
 }
 
 // 在各客户端播放服务器确认的命中音效
-void UDeliveryRagdollCombatComponent::MulticastPlayPunchHit_Implementation(FVector_NetQuantize10 Location)
+void UDeliveryRagdollCombatComponent::MulticastPlayPunchHit_Implementation(FVector_NetQuantize10 Location, bool bNPC)
 {
-    if (PunchHitSound)
+    USoundBase* Sound = bNPC && PunchNPCHitSound ? PunchNPCHitSound : PunchHitSound;
+    if (Sound && GetNetMode() != NM_DedicatedServer)
     {
-        UGameplayStatics::PlaySoundAtLocation(this, PunchHitSound, Location);
+        UGameplayStatics::PlaySoundAtLocation(this, Sound, Location);
     }
 }
 

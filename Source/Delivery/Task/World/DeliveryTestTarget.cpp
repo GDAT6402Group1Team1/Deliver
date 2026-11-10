@@ -1,4 +1,4 @@
-// 提供用于验证快递交付流程的测试目标
+﻿// 提供用于验证快递交付流程的测试目标
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Task/World/DeliveryTestTarget.h"
@@ -22,7 +22,7 @@ ADeliveryTestTarget::ADeliveryTestTarget()
 	}
 
 	InteractableComponent = CreateDefaultSubobject<UDeliveryInteractableComponent>(TEXT("Interactable"));
-	InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "HoldDeliverPackage", "[按住 E] 交付快递");
+	InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "HoldDeliverPackage", "[Hold E] Deliver Package");
 	InteractableComponent->InteractionKey = EDeliveryInteractionKey::PickupE;
 	InteractableComponent->HoldDuration = 0.5f;
 	InteractableComponent->InteractRadius = 100.0f;

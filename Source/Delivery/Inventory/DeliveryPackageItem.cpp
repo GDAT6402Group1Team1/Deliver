@@ -1,4 +1,4 @@
-// 实现带任务身份的手持快递物品
+﻿// 实现带任务身份的手持快递物品
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Inventory/DeliveryPackageItem.h"
@@ -15,7 +15,7 @@ ADeliveryPackageItem::ADeliveryPackageItem()
 {
     DeliveryItemComponent = CreateDefaultSubobject<UDeliveryItemComponent>(TEXT("DeliveryTaskItem"));
     ItemComponent->ItemType = EDeliveryInventoryItemType::DeliveryItem;
-    ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "DeliveryPackage", "快递");
+    ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "DeliveryPackage", "Package");
     static ConstructorHelpers::FObjectFinder<UTexture2D> PackageIcon(
         TEXT("/Game/UI/Inventory/Textures/T_ItemIconPackage.T_ItemIconPackage"));
     if (PackageIcon.Succeeded())
@@ -23,7 +23,7 @@ ADeliveryPackageItem::ADeliveryPackageItem()
     ItemComponent->bUsesDurability = false;
     ItemComponent->MaxDurability = 0.0f;
     ItemComponent->Durability = 0.0f;
-    InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "HoldPickupPackage", "[按住 E] 拾取快递");
+    InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "HoldPickupPackage", "[Hold E] Pick Up Package");
     InteractableComponent->InteractionKey = EDeliveryInteractionKey::PickupE;
     InteractableComponent->HoldDuration = 0.5f;
     InteractableComponent->InteractRadius = 100.0f;

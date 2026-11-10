@@ -1,4 +1,4 @@
-#include "UI/Controllers/DeliveryTaskController.h"
+﻿#include "UI/Controllers/DeliveryTaskController.h"
 
 #include "Task/Tracking/DeliveryGuidanceLibrary.h"
 #include "Phone/DeliveryPhoneCallQueueComponent.h"
@@ -71,7 +71,7 @@ void UDeliveryTaskController::HandleTaskPaid(UDeliveryTaskDefinition *Task,
                                   ? FText::GetEmpty()
                                   : FText::Format(LOCTEXT("GradeSuffix", "（{0}）"), Reward.TimeGradeName);
 
-    CompletionText = FText::Format(LOCTEXT("Delivered", "送达！+{0}{1}"), FText::AsNumber(Reward.FinalReward),
+    CompletionText = FText::Format(LOCTEXT("Delivered", "Delivered! +{0}{1}"), FText::AsNumber(Reward.FinalReward),
                                    GradeSuffix);
     CompletionShownTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 }
@@ -99,9 +99,9 @@ bool UDeliveryTaskController::PushCallState(UDeliveryPhoneCallQueueComponent *Ph
 
         const ADeliveryPlayerController *Owner = Cast<ADeliveryPlayerController>(Player.Get());
         const FText MappedKey = Owner ? Owner->GetPhoneKeyText() : FText::GetEmpty();
-        const FText Key = MappedKey.IsEmpty() ? LOCTEXT("PhoneKeyFallback", "手机键") : MappedKey;
-        SetDisplay(FText::Format(LOCTEXT("Ringing", "来电：{0}"), Content.CallerName),
-                   FText::Format(LOCTEXT("RingingHint", "按 {0} 接听　（{1} 秒后转未接）"), Key,
+        const FText Key = MappedKey.IsEmpty() ? LOCTEXT("PhoneKeyFallback", "Phone Button") : MappedKey;
+        SetDisplay(FText::Format(LOCTEXT("Ringing", "Incoming Call: {0}"), Content.CallerName),
+                   FText::Format(LOCTEXT("RingingHint", "Press {0} to Answer ({1}s Remaining)"), Key,
                                  FText::AsNumber(FMath::CeilToInt(Phone->GetStateRemainingSeconds()))),
                    /* 紧急提示= */ true);
 
@@ -109,7 +109,7 @@ bool UDeliveryTaskController::PushCallState(UDeliveryPhoneCallQueueComponent *Ph
     }
 
     case EDeliveryPhoneCallState::InCall:
-        SetDisplay(FText::Format(LOCTEXT("InCall", "通话中：{0}"), Content.CallerName), FText::GetEmpty(),
+        SetDisplay(FText::Format(LOCTEXT("InCall", "In Call: {0}"), Content.CallerName), FText::GetEmpty(),
                    /* 紧急提示= */ false);
 
         return true;
@@ -166,8 +166,8 @@ bool UDeliveryTaskController::PushTaskState()
 
     // 等待取件时提示去取件，配送中则提示送达
     const bool bPickup = Status == EDeliveryTaskStatus::AwaitingPickup;
-    FText TaskTitle = bPickup ? FText::Format(LOCTEXT("GoPickup", "去取件：{0}"), Task->DisplayName)
-                             : FText::Format(LOCTEXT("GoDeliver", "快去交付：{0}"), Task->DisplayName);
+    FText TaskTitle = bPickup ? FText::Format(LOCTEXT("GoPickup", "Collect: {0}"), Task->DisplayName)
+                             : FText::Format(LOCTEXT("GoDeliver", "Deliver: {0}"), Task->DisplayName);
 
     // 明细行按有什么拼什么：地点组件还没摆时就只显示计时，不让整条消失
     TArray<FString> Parts;
@@ -183,7 +183,7 @@ bool UDeliveryTaskController::PushTaskState()
         if (RidingItem && RidingItem->OwningTask == Task &&
             Guidance.bValid && Guidance.Distance <= 500.f)
         {
-            TaskTitle = LOCTEXT("DismountUnloadDeliver", "按 F 下车取货交货");
+            TaskTitle = LOCTEXT("DismountUnloadDeliver", "Press F to Dismount and Deliver");
         }
         else if (const ADeliveryCharacter* Character = PC ? Cast<ADeliveryCharacter>(PC->GetPawn()) : nullptr;
                  Character && !Character->GetCarriedTaskPackage())
@@ -198,7 +198,7 @@ bool UDeliveryTaskController::PushTaskState()
                     FVector::DistSquared2D(Character->GetActorLocation(), It->GetActorLocation()) <=
                         FMath::Square(600.f))
                 {
-                    TaskTitle = LOCTEXT("UnloadBeforeDeliver", "到车尾左键取货");
+                    TaskTitle = LOCTEXT("UnloadBeforeDeliver", "Left Click at the Rear to Unload");
                     break;
                 }
             }
@@ -215,7 +215,7 @@ bool UDeliveryTaskController::PushTaskState()
     const FDeliveryTaskTimeSnapshot Time = Manager->GetTimeSnapshot(Task);
     if (Time.bRunning)
     {
-        Parts.Add(FString::Printf(TEXT("剩余 %s"), *FormatClock(Time.RemainingSeconds).ToString()));
+        Parts.Add(FString::Printf(TEXT("Time Left: %s"), *FormatClock(Time.RemainingSeconds).ToString()));
         bTaskUrgent = Time.bOverdue || Time.RemainingSeconds < UrgentRemainingSeconds;
     }
 

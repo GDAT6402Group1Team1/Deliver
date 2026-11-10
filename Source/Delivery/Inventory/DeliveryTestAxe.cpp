@@ -1,4 +1,4 @@
-// 创建用于验证拾取和斧头动作的测试物品
+﻿// 创建用于验证拾取和斧头动作的测试物品
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Inventory/DeliveryTestAxe.h"
@@ -23,7 +23,7 @@ ADeliveryTestAxe::ADeliveryTestAxe()
 		AxeHead->SetRelativeScale3D(FVector(1.8f, 4.8f, 0.258f));
 		AxeHead->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
-	ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "TestAxe", "斧头");
+	ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "TestAxe", "Axe");
 	static ConstructorHelpers::FObjectFinder<UTexture2D> AxeIcon(
 	    TEXT("/Game/UI/Inventory/Textures/T_ItemIconAxe.T_ItemIconAxe"));
 	if (AxeIcon.Succeeded())

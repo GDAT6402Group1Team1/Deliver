@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 #include "Audio/DeliveryVehicleAudioComponent.h"
 #include "Audio/DeliveryAudioConfig.h"
 #include "Components/AudioComponent.h"
@@ -58,9 +58,9 @@ void UDeliveryVehicleAudioComponent::UpdateEngine(bool bDriving, float SpeedRati
     EngineAudio->SetVolumeMultiplier(FMath::Lerp(Settings->IdleVolume, Settings->MaxVolume, Alpha));
 }
 
-void UDeliveryVehicleAudioComponent::PlayHorn(USoundBase* Sound, float Volume, float Pitch, USoundAttenuation* Attenuation)
+void UDeliveryVehicleAudioComponent::PlayHorn(USoundBase* Sound, float Volume, float Pitch, USoundAttenuation* Attenuation, bool bAllowLoop)
 {
-    if (!IsValid(Sound) || Sound->IsLooping() || GetNetMode() == NM_DedicatedServer
+    if (!IsValid(Sound) || (Sound->IsLooping() && !bAllowLoop) || GetNetMode() == NM_DedicatedServer
         || !GetOwner() || !GetOwner()->GetRootComponent())
     {
         return;

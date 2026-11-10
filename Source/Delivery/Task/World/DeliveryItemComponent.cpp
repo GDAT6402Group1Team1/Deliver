@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Task/World/DeliveryItemComponent.h"
 
@@ -23,23 +23,23 @@ FText UDeliveryItemComponent::GetPickupBlockedReason() const
 {
 	const UDeliveryTaskManagerComponent* Manager = UDeliveryTaskManagerComponent::Get(this);
 	if (!OwningTask)
-		return NSLOCTEXT("DeliveryPickup", "NoTask", "快递未配置任务");
+		return NSLOCTEXT("DeliveryPickup", "NoTask", "Package Has No Delivery Assigned");
 	if (!Manager)
-		return NSLOCTEXT("DeliveryPickup", "NoManager", "当前关卡未配置任务管理器");
+		return NSLOCTEXT("DeliveryPickup", "NoManager", "Delivery Service Unavailable");
 	if (!Manager->IsTaskRegistered(OwningTask))
-		return NSLOCTEXT("DeliveryPickup", "NotRegistered", "当前关卡未登记这份快递任务");
+		return NSLOCTEXT("DeliveryPickup", "NotRegistered", "Delivery Unavailable in This Area");
 	if (Manager->CanAcquireItem(OwningTask))
 		return FText::GetEmpty();
 	if (Manager->GetTaskStatus(OwningTask) == EDeliveryTaskStatus::Completed)
-		return NSLOCTEXT("DeliveryPickup", "Completed", "这份快递的任务已完成");
+		return NSLOCTEXT("DeliveryPickup", "Completed", "Delivery Already Completed");
 	if (Manager->GetTaskStatus(OwningTask) == EDeliveryTaskStatus::Locked)
-		return NSLOCTEXT("DeliveryPickup", "Locked", "任务尚未解锁，请等待任务来电");
+		return NSLOCTEXT("DeliveryPickup", "Locked", "Wait for the Delivery Call");
 	if (!Manager->IsTaskAccepted(OwningTask))
 	{
-		return NSLOCTEXT("DeliveryPickup", "NotAnswered", "先接电话才能接这一单");
+		return NSLOCTEXT("DeliveryPickup", "NotAnswered", "Answer the Call to Accept This Delivery");
 	}
 
-	return NSLOCTEXT("DeliveryPickup", "OtherTask", "请先完成正在进行的快递任务");
+	return NSLOCTEXT("DeliveryPickup", "OtherTask", "Complete Your Current Delivery First");
 }
 
 // 由服务器通知任务管理器快递已被领取
