@@ -5,6 +5,8 @@
 #include "Animation/AnimSequence.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/BoxComponent.h"
+#include "Engine/StaticMesh.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
@@ -147,24 +149,56 @@ bool FDeliveryAxeInputTest::RunTest(const FString&)
 			TestFalse(TEXT("empty hand cannot swing axe"), Ragdoll->CanStartAxeSwing());
 			TestTrue(TEXT("pickup axe through inventory"), Inventory->TryPickup(Axe));
 			TestTrue(TEXT("equipped axe is ready"), Ragdoll->CanStartAxeSwing());
+            const FVector HandleAxis = FString(AxePath).Contains(TEXT("/Item/BP_Axe")) ? FVector::YAxisVector : FVector::ZAxisVector;
+            TestTrue(TEXT("idle axe stays upright when arms hang down"),
+                Axe->GetItemMesh()->GetComponentTransform().TransformVectorNoScale(HandleAxis).Dot(FVector::UpVector) > .99f);
 			Inventory->UseHeldItem();
 			TestTrue(TEXT("Use starts authoritative swing"), Ragdoll->SwingAxe.Get() == Axe);
 			TestFalse(TEXT("repeated Use cannot restart clip"), Ragdoll->CanStartAxeSwing());
 			// 直接采样动作中段，不依赖测试世界推进物理模拟
 			Ragdoll->AxeSwingStartTime = 0;
 			World->Tick(LEVELTICK_All, .25f);
+			World->Tick(LEVELTICK_All, .25f);
 			TestTrue(TEXT("animation clock advances at 1.8x"),
-			         FMath::IsNearlyEqual(Ragdoll->GetAxeSwingTime(), .45f, .001f));
+			         FMath::IsNearlyEqual(Ragdoll->GetAxeSwingTime(), .9f, .001f));
 			FDeliveryAnimationArmPose Sample;
 			TestTrue(TEXT("held source animation feeds motor pose"), Ragdoll->SampleAxeSwing(Sample));
 			const FVector Hand = Character->GetMesh()->GetBoneLocation(TEXT("RightHand"));
+            if (FString(AxePath).Contains(TEXT("/Item/BP_Axe")))
+            {
+                Axe->Tick(1.f);
+                const FVector Forearm = (Hand - Character->GetMesh()->GetBoneLocation(TEXT("RightForeArm"))).GetSafeNormal();
+                const FVector Forward = Ragdoll->GetBodyForward().GetSafeNormal2D();
+                const FVector Projected = (Forward * Forearm.Dot(Forward) + FVector::UpVector * Forearm.Z).GetSafeNormal();
+                const FTransform Held = Axe->GetItemMesh()->GetComponentTransform();
+                TestTrue(TEXT("axe handle follows forearm in swing plane"), Held.TransformVectorNoScale(FVector::YAxisVector).Dot(Projected) > .97f);
+                const FVector Grip = Held.TransformPosition(FVector(-25.f,45.f,0.f));
+                TestTrue(TEXT("production axe grip stays in hand"), FVector::Dist(Grip, Hand) < 2.f);
+            }
+            else
+            {
+                Axe->Tick(1.f);
+                const FVector Forearm = (Hand - Character->GetMesh()->GetBoneLocation(TEXT("RightForeArm"))).GetSafeNormal();
+                const FVector Forward = Ragdoll->GetBodyForward().GetSafeNormal2D();
+                const FVector Projected = (Forward * Forearm.Dot(Forward) + FVector::UpVector * Forearm.Z).GetSafeNormal();
+                TestTrue(TEXT("test axe uses the same grip frame"), Axe->GetItemMesh()->GetComponentTransform().TransformVectorNoScale(FVector::ZAxisVector).Dot(Projected) > .97f);
+            }
 			ADeliveryBreakableDoor* Door = World->SpawnActor<ADeliveryBreakableDoor>(
 			    Hand + Ragdoll->GetBodyForward() * 115.f, FRotator::ZeroRotator);
 			if (TestNotNull(TEXT("breakable door spawns"), Door))
 			{
 				TestFalse(TEXT("door starts intact"), Door->IsBroken());
 				Ragdoll->TryAxeDoorHit();
-				TestTrue(TEXT("equipped swing breaks a door in reach"), Door->IsBroken());
+				TestEqual(TEXT("first swing damages the door"), Door->GetHitCount(), 1);
+                TestFalse(TEXT("first impact does not break door"), Door->IsBroken());
+                Ragdoll->TryAxeDoorHit();
+                TestEqual(TEXT("one swing cannot damage twice"), Door->GetHitCount(), 1);
+                for (int32 Hit = 1; Hit < Door->HitsToBreak; ++Hit)
+                {
+                    Ragdoll->MulticastStartAxeSwing(Axe, 0.f);
+                    Ragdoll->TryAxeDoorHit();
+                }
+                TestTrue(TEXT("three distinct swings break door"), Door->IsBroken());
 				TestEqual(TEXT("broken door no longer blocks the player"),
 				          Door->GetIntactMesh()->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
 				TestTrue(TEXT("broken pieces become visible"), Door->GetFragments()->IsVisible());
@@ -192,5 +226,70 @@ bool FDeliveryAxeInputTest::RunTest(const FString&)
 		World->EndPlay(EEndPlayReason::Quit); World->DestroyWorld(false);
 	}
 	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryAxeGroundTest, "Delivery.Axe.GroundClearance",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDeliveryAxeGroundTest::RunTest(const FString&)
+{
+    const auto Settings = UWorld::InitializationValues().AllowAudioPlayback(false)
+        .CreatePhysicsScene(true).CreateNavigation(false).CreateAISystem(false);
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false, NAME_None, nullptr, true,
+                                       ERHIFeatureLevel::Num, &Settings);
+    GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
+    AActor* Floor = World->SpawnActor<AActor>();
+    UBoxComponent* Box = NewObject<UBoxComponent>(Floor);
+    Floor->SetRootComponent(Box);
+    Box->SetBoxExtent(FVector(500, 500, 10));
+    Box->SetCollisionProfileName(TEXT("BlockAll"));
+    Box->RegisterComponent();
+    AActor* Hand = World->SpawnActor<AActor>();
+    USceneComponent* Anchor = NewObject<USceneComponent>(Hand);
+    Hand->SetRootComponent(Anchor);
+    Anchor->RegisterComponent();
+    Anchor->SetWorldLocation(FVector(0, 0, 50));
+    UClass* AxeClass = LoadClass<ADeliveryHandheldItem>(nullptr,
+        TEXT("/Game/Blueprint/Item/BP_Axe.BP_Axe_C"));
+    ADeliveryHandheldItem* Axe = AxeClass ? World->SpawnActor<ADeliveryHandheldItem>(AxeClass) : nullptr;
+    if (TestNotNull(TEXT("production axe loads"), Axe))
+    {
+        // 没有地面时先记录原握点，再重现刀头向下穿地的姿态
+        Box->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        Axe->SetInventoryPresentation(true, false, Anchor);
+        const FVector Grip = Anchor->GetComponentLocation();
+        const FTransform Upright = Axe->GetActorTransform();
+        const FVector LocalGrip = Upright.InverseTransformPosition(Grip);
+        const FBox Bounds = Axe->GetItemMesh()->GetStaticMesh()->GetBoundingBox();
+        for (const float Slope : {0.f, 20.f})
+        {
+            const FQuat FloorRotation = FRotator(Slope, 0, 0).Quaternion();
+            const FVector Normal = FloorRotation.RotateVector(FVector::UpVector);
+            Floor->SetActorLocationAndRotation(-Normal * 10, FloorRotation);
+            Box->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+            const FQuat Down(FVector::YAxisVector, PI);
+            Axe->SetActorLocationAndRotation(Grip + Down.RotateVector(Upright.GetLocation() - Grip),
+                Down * Upright.GetRotation());
+            Axe->Tick(0.f);
+            const FTransform Limited = Axe->GetActorTransform();
+            TestTrue(TEXT("ground correction keeps grip in hand"),
+                Limited.TransformPosition(LocalGrip).Equals(Grip, .1f));
+            double Lowest = TNumericLimits<double>::Max();
+            for (int32 Corner = 0; Corner < 8; ++Corner)
+            {
+                const FVector Point((Corner & 1) ? Bounds.Max.X : Bounds.Min.X,
+                    (Corner & 2) ? Bounds.Max.Y : Bounds.Min.Y,
+                    (Corner & 4) ? Bounds.Max.Z : Bounds.Min.Z);
+                Lowest = FMath::Min(Lowest, Limited.TransformPosition(Point).Dot(Normal));
+            }
+            TestTrue(TEXT("entire axe stays above flat or sloped ground"), Lowest >= 1.99);
+            // 低帧率收势后恢复原来的竖握，不留下永久角度偏移
+            for (int32 Frame = 0; Frame < 30; ++Frame)
+                Axe->Tick(1.f / 15.f);
+            TestTrue(TEXT("recovery returns upright"), Axe->GetActorQuat().Equals(Upright.GetRotation(), .001f));
+        }
+    }
+    GEngine->DestroyWorldContext(World);
+    World->DestroyWorld(false);
+    return true;
 }
 #endif

@@ -94,6 +94,7 @@ class DELIVERY_API ADeliveryHandheldItem : public AActor
   private:
     // 本机握持更新
     void UpdateHeldTransform(float DeltaSeconds, bool bSnap);
+    void LimitAxeGroundPenetration(FVector& Location, FQuat& Rotation, const FQuat& UprightGrip) const;
 
     TWeakObjectPtr<USceneComponent> HeldAnchor;
     bool bHeldPresentationActive = false;

@@ -3,7 +3,130 @@
 本文说明共享任务状态及其对外接口，交互与携带负责玩家操作，钱包负责奖励，界面控制器负责显示
 完整系统关系见 [系统设计](Architecture.md)
 
+## 第一单：爷爷、敲门和破门收件
+
+`TestForCharacter` 的 `NPC_OldMan_001` 使用 `/Game/NPC/Grandpa/BP_Grandpa`，模型来自用户提供的
+`爷爷绑完骨骼.fbx`，独立于过街行人的爷爷模型。房屋保留原目的地导航，交付组件只挂在屋内爷爷上
+
+玩家取件后，在 `OldManHouse_FrontDoor` 按住 E 敲门。第一次无回应，第二次回答 “Wait a moment!”。
+**无论等待多久都不开门，必须使用旁边的正式 BP_Axe 破门**。等待、反复敲门和破门均不重置任务计时
+破门后进入屋内，手持第一单包裹靠近爷爷，按住 E 交付。沿用 TaskManager 的共享完成状态与原奖励计算，
+交付成功才清空携带并销毁包裹；距离、遮挡、包裹归属、玩家失能和重复交付由服务器复核
+
+`ADeliveryGrandpa` 维护敲门次数、收件条件、服务器屋内移动和复制的表现状态。输入沿用玩家的
+`DeliveryInteractionComponent → PlayerController RPC → 门/爷爷交互组件`，不对无所有权的 NPC 发客户端 RPC
+门沿用 `ADeliveryBreakableDoor` 的斧击判定和复制，`OnDoorBroken` 通知爷爷更新黑板
+`DeliveryTargetComponent.DeliveryGate` 为收件人提供附加校验，普通收件点未绑定时保持原流程
+
+行为树 `/Game/NPC/Grandpa/AI/BT_Grandpa` 只在服务器 AIController 上运行，黑板为 `BB_Grandpa`：
+
+| 优先级与条件 | 蓝图任务及表现 |
+| --- | --- |
+| `Delivered` | Thanks → 等待 → Finished |
+| `DoorBroken` | Startled → 等待 → Receive |
+| `ReplyPending` | Reply → 等待 → FinishReply，清除回应标记 |
+| 默认 | LookAround → 等待 → StrollOut → 等待 → LookAround → 等待 → StrollHome → 等待 |
+
+每个 `BTT_Grandpa*` 都是可编辑的 BTTask 蓝图，事件图从 `ReceiveExecuteAI` 获取爷爷，调用
+`ApplyBehaviorAction`。一次性任务结束，Receive、Finished 保持运行直到条件中断，不循环重播动作。
+表现枚举复制到各端，各端播放动画和对白，客户端不重复运行 AI
+较高优先级的黑板条件会中断低优先级分支，收件可中断回复或破门反应。退出 PIE、销毁和切图时解绑门、
+任务事件，注销动态敲门交互，清除查找任务管理器的定时器并停止行为树
+
+动画使用 [Quaternius Universal Animation Library Standard](https://quaternius.com/packs/universalanimationlibrary.html)
+以及 [Universal Animation Library 2 Standard](https://quaternius.com/packs/universalanimationlibrary2.html)
+的 CC0 动画。新增抱臂、摇头张望、Walk_Formal_Loop 与 Hit_Knockback；保留目标骨长，无 Root Motion。
+行为树交替张望和屋内往返，默认距离 70 cm、速度 35 cm/s；服务器扫掠移动，遇家具或无地板停止。
+破门播放 0.65 倍速后仰受惊并后退 35 cm，2.5 秒后等待收件。等待仍永远不会开门。
+源模型、动画、许可证和来源在 `Design/Art/NPC/Grandpa`。复建顺序：
+
+1. Blender 5 执行 `Content/Python/retarget_grandpa.py`，生成独立网格和八段动画 FBX
+2. 完整编译 DeliveryEditor，UE Python 执行 `Content/Python/setup_grandpa.py` 导入资源并生成蓝图行为树
+3. UE Python 执行 `Content/Python/place_grandpa.py`，在已测量的房屋门洞放置门与爷爷并移除旧房屋交付组件
+
+资源生成工具在编辑器模块 DeliveryTuning 中。基础生成保留已存在的任务图；`upgrade_expressive_behavior` 会重建默认活动分支及设置受惊等待时长，复建前保留设计师对此分支的修改
+门的 `HitsToBreak` 默认 3，每次服务器确认命中后多播短促回弹与木击声音，最后一次使用碎裂声。
+独立 `ImpactVisual` 只负责显示，碰撞根组件保持稳定；0.32 秒后复位并停 Tick。
+`ClientStartCameraShake` 仅发给挥斧者，0.24 秒短促后坐由 CameraManager 管理。
+音频源在 `Design/Audio/Door`，由 `generate_door_audio.py` 生成；导入到 `/Game/Sound/SFX`。
+斧击在源动画 0.8–1.65 秒内从胸前扫掠，遇到的第一个阻挡物必须是门；一次挥砍最多记一次。
+正式斧头模型手柄为 +Y、刀刃朝 -X，`setup_axe_attack.py` 校准握点；待机竖握，挥砍时旋转沿前臂前后平面更新，收势按动作权重回正。
+
+回归入口：`Delivery.NPC.Grandpa.Assets`、`Delivery.NPC.Grandpa.ListenServerFlow` 和现有 `Delivery.Axe.HeldItemFlow`。
+双人测试使用真实 PIE 与客户端交互 RPC，固定测试玩家位置以排除布娃娃波动，不能代替走路和挥斧的手感检查
+
+2026-11-11 本次验证：完整 DeliveryEditor 构建通过；上述爷爷 2 项、斧头 2 项、
+`Delivery.Systems.Interaction` 共 5 项通过。双人 PIE 实测第一敲无回应、第二敲回复、等待仍关门、
+破门同步、远端长按交付、包裹清理和重复结算拦截。独立重载确认只有爷爷绑定第一单交付点。
+UE 实际画面确认站姿与脚底正常，放置脚本用具名 `pitch/yaw/roll` 避免 Python 位置参数轴顺序错误。
+报告在 `Saved/Automation/Grandpa5`，日志在 `Saved/Logs/GrandpaTests5.log`；现有地图仍有行人无网格、
+斧头 ComplexAsSimple 物理和导航空包围盒等警告。未覆盖人工从餐厅全程步行/骑车到收件的手感验收
+
+2026-11-11 动作与反馈复测：关闭编辑器后执行
+`Build.bat DeliveryEditor Win64 Development D:/Udev/Delivery/Delivery.uproject -WaitMutex -NoHotReloadFromIDE` 成功。
+在有音频的编辑器执行 `Automation RunTests Delivery.NPC.Grandpa+Delivery.Axe+Delivery.Camera+Delivery.Systems.Interaction`，
+6 项通过（其中 4 项伴随已有资源/地图警告），报告 `Saved/Automation/GrandpaFeedback2`，日志 `Saved/Logs/GrandpaFeedbackTests2.log`。
+新增断言覆盖爷爷实际移动超过 25 cm、三次挥斧与单次去重、正式斧柄方向和握点、
+远端挥斧者收到镜头反馈而旁观者不收到。测试斧头也统一 +Z 握持空间，最后完整构建通过，
+再跑 `Delivery.Axe` 两项通过（`Saved/Automation/AxeGripFinal`，`Saved/Logs/AxeGripFinal.log`）。
+待机竖握补修后再次完整构建通过（`Saved/Logs/AxeGripIdleBuild.log`，10.49 秒），
+`Delivery.Axe` 两项再次通过（`Saved/Automation/AxeGripIdle`，1 项带已有资源警告），新增自然垂手时斧柄仍朝上的断言。
+实际地图 PIE 核对待机握点与竖握、挥砍翻转，发现长斧下劈末段可穿过地面。
+后续补修在 `DeliveryHandheldItem::UpdateHeldTransform` 平滑完成后探测握点下方地面，
+按斧头模型包围盒绕握点限制下劈角度，保留 2 cm 间隙，收势后回到原竖握。
+该限制只影响各端持斧表现，不修改手臂电机、服务器破门扫掠或伤害；无地面、陡壁及手本身埋地时不强行移物。
+这是近处地面的切平面限制，不是斧头全物理碰撞，台阶边缘和快速变化地形不在该简化方案的完整覆盖范围。
+2026-11-11 穿地补修验证：关闭编辑器后完整构建通过（`Saved/Logs/AxeGroundBuild.log`，20.02 秒）；
+`Automation RunTests Delivery.Axe` 三项通过，新增 `GroundClearance` 覆盖正式斧头的平地、20° 斜面、握点保持和 15 FPS 收势。
+报告 `Saved/Automation/AxeGround` 为 1 项无警告、2 项带已有资源警告、0 失败。
+在 `TestForCharacter` 实际 PIE 中装备正式斧头，调用正常左攻击入口，在 0.60 秒下劈末段暂停观察，
+确认模型留在地面上方；继续播放后恢复竖握。预览只操作运行时对象，未保存关卡变化；本轮未重跑双人 PIE。
+完整地图仍有行人无网格、ComplexAsSimple 物理等警告。
+
+2026-11-11 全流程再次验证：关闭编辑器完整构建成功（`Saved/Logs/GrandpaFullFlowBuild2.log`，5.88 秒），
+有音频的编辑器执行 `Automation RunTests Delivery.NPC.Grandpa+Delivery.Axe+Delivery.Systems.Interaction`，
+6 项通过，2 项无警告、4 项带资源/地图警告、0 失败；报告 `Saved/Automation/GrandpaFullFlow2`，日志 `Saved/Logs/GrandpaFullFlow2.log`。
+双人流程不再直接给门调用三次受击：远端玩家正常切槽持正式斧头、调用 `DoAttackLeft`，
+由 Server RPC、多播动画时钟和服务器命中窗口扫掠击中门，检查每次只记一次、前两次不破、第三次破门。
+第一敲静默、第二敲回应、等待 12 秒不打开、屋内移动、受惊复制与实际后退、仅挥斧者镜头反馈均通过。
+破门后重新取回外卖、靠近爷爷并从客户端发起长按交付，检查包裹销毁、感谢/结束动作、
+交付者钱包入账 120 且复制到客户端、旁观者钱包不变、重复提交不再加钱。
+首轮夹具停在受惊前的位置，后退后的外卖位置超出交付半径而被拒绝；现于爷爷后退结束后靠近，
+等待手持表现更新并确认 `CanUse`，只有真实客户端交付成功后才检查重复结算，防止测试自身补完任务。
+本轮只调整验证夹具和断言，未放宽正式交付半径或校验。固定站位关闭玩家物理，
+取件/重新拿包由夹具准备；未重新人工跑餐厅到住宅的全路线，也不把流程断言当作自由移动的手感验收。
+
 ---
+
+## 毛毛虫恶作剧与外卖加成
+
+院子中的 `SceneObject_Caterpillar_001` 使用 `/Game/Blueprint/Item/BP_Caterpillar`，按 E 拾取后进入原有五格背包。
+把第一单外卖放在地上，手持毛毛虫对外卖长按 E 0.5 秒，服务器复核后消耗毛毛虫。
+再长按 E 拿起外卖交付。投放提示和“加成已就绪”提示沿用 InteractionController，背包使用独立毛毛虫图标。
+
+`ADeliveryCaterpillarItem` 是普通背包物品；`ADeliveryPackageItem` 是外卖上 `bContainsCaterpillar` 的唯一修改者，
+该状态复制给所有相关客户端，并控制蓝图配置的毛毛虫显示组件。丢弃、换手和装车保留状态，
+不能向他人手里、车后箱里的外卖投放。任务须在配送中，服务器重查距离、遮挡、物品所有权和长按时间。
+同一份外卖只能加入一次；失败不消耗物品，重复请求不叠加。
+
+通过交付校验后，`DeliveryTargetComponent` 才上报原生标签 `Event.Delivery.Caterpillar`，
+由现有 TaskManager 计算并完成任务、钱包给最终交付者发奖。提前丢失或销毁这份外卖不会给补领的新外卖留下加成。
+`DA_Task_001.SpecialEventRules` 默认配置额外 ×1.25，与原时间档位相乘；不是固定加 25 元，也不重置计时。
+
+完整编辑器运行 `Content/Python/setup_caterpillar.py` 可重建蓝图、图标、专用碰撞网格、任务倍率和关卡拾取点。
+专用 `SM_Caterpillar` 复制现有模型后添加简单碰撞，不修改原始美术模型。投放无额外计时器和事件绑定，
+物品消耗沿用 Inventory 清理，外卖显示组件随 Actor 销毁。
+
+2026-11-11 本轮验证：关闭编辑器后完整构建成功（`Saved/Logs/CaterpillarBuild3.log`，6.59 秒）。
+有渲染和音频的编辑器执行
+`Automation RunTests Delivery.NPC.Grandpa+Delivery.Axe+Delivery.Systems.Interaction+Delivery.Task.Reward`，
+11 项全部通过（6 项无警告、5 项带已有地图/资源警告、0 失败），报告 `Saved/Automation/Caterpillar/index.json`，
+日志 `Saved/Logs/CaterpillarTests.log`。`CaterpillarMultiplayer` 在原地图真实监听服务器和远端客户端运行，
+经客户端 RPC 拾取毛毛虫、长按投放、再取外卖和交付；同时检查伪造完成、超距离、隔墙、他人持有、重复投放，
+以及外卖换手、两端模型显示、毛毛虫销毁和背包清理。实际奖励 150（120 ×1.25），仅交付者入账并复制到客户端，
+重复交付不再次结算；原无毛毛虫流程仍入账 120。实际客户端画面确认外卖里出现绿色毛毛虫。
+测试固定玩家站位并关闭玩家物理，部分物品由夹具准备；未覆盖人工从院子完整走到交付、外网延迟/丢包、
+晚加入客户端或独立打包程序。既有行人缺网格、ComplexAsSimple 物理等警告仍在，不能把本轮通过等同于这些问题已修复。
 
 ## 一、设计要点
 

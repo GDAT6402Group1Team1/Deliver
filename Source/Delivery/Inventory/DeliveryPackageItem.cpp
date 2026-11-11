@@ -2,6 +2,13 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Inventory/DeliveryPackageItem.h"
+#include "Inventory/DeliveryCaterpillarItem.h"
+#include "Inventory/DeliveryInventoryComponent.h"
+#include "AbilitySystem/DeliverGameplayTags.h"
+#include "Task/DeliveryTaskManagerComponent.h"
+#include "Net/UnrealNetwork.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "Character/DeliveryCharacter.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Texture2D.h"
@@ -14,6 +21,11 @@
 ADeliveryPackageItem::ADeliveryPackageItem()
 {
     DeliveryItemComponent = CreateDefaultSubobject<UDeliveryItemComponent>(TEXT("DeliveryTaskItem"));
+    CaterpillarVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CaterpillarVisual"));
+    CaterpillarVisual->SetupAttachment(ItemMesh);
+    CaterpillarVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    CaterpillarVisual->SetAbsolute(false, false, true);
+    CaterpillarVisual->SetHiddenInGame(true);
     ItemComponent->ItemType = EDeliveryInventoryItemType::DeliveryItem;
     ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "DeliveryPackage", "Package");
     static ConstructorHelpers::FObjectFinder<UTexture2D> PackageIcon(
@@ -58,6 +70,9 @@ void ADeliveryTestPackage::BeginPlay()
 
 bool ADeliveryPackageItem::CanPickup(APawn *Interactor, bool bCheckTaskAvailability) const
 {
+    const auto* Character = Cast<ADeliveryCharacter>(Interactor);
+    if (Character && Cast<ADeliveryCaterpillarItem>(Character->GetInventoryComponent()->GetHeldItem()))
+        return CanInsertCaterpillar(Interactor);
     return Cast<ADeliveryCharacter>(Interactor) && !GetOwner() &&
            (!bCheckTaskAvailability || (DeliveryItemComponent && DeliveryItemComponent->CanBeAcquired()));
 }
@@ -65,5 +80,83 @@ bool ADeliveryPackageItem::CanPickup(APawn *Interactor, bool bCheckTaskAvailabil
 bool ADeliveryPackageItem::Pickup(APawn *Interactor)
 {
     ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(Interactor);
+    if (Character && Cast<ADeliveryCaterpillarItem>(Character->GetInventoryComponent()->GetHeldItem()))
+        return TryInsertCaterpillar(Interactor);
     return Character && Character->ReceiveTaskPackage(this);
+}
+
+void ADeliveryPackageItem::BeginPlay()
+{
+    Super::BeginPlay();
+    OnRep_Caterpillar();
+}
+
+void ADeliveryPackageItem::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(ADeliveryPackageItem, bContainsCaterpillar);
+}
+
+bool ADeliveryPackageItem::CanInsertCaterpillar(const APawn* Interactor) const
+{
+    const auto* Character = Cast<ADeliveryCharacter>(Interactor);
+    if (!Character || Character->GetWorld() != GetWorld() || GetOwner() || bContainsCaterpillar ||
+        Character->IsIncapacitated() || Character->IsRidingVehicle() || !InteractableComponent->CanInteract(Character)) return false;
+    const auto* Worm = Cast<ADeliveryCaterpillarItem>(Character->GetInventoryComponent()->GetHeldItem());
+    const auto* Task = DeliveryItemComponent->OwningTask.Get();
+    const auto* Manager = UDeliveryTaskManagerComponent::Get(this);
+    if (!IsValid(Worm) || Worm->GetOwner() != Character || !Task || !Manager ||
+        Manager->GetTaskStatus(DeliveryItemComponent->OwningTask) != EDeliveryTaskStatus::InProgress ||
+        !Task->SpecialEventRules.ContainsByPredicate([](const FDeliverySpecialEventRule& Rule)
+            { return Rule.EventTag == TAG_Event_Delivery_Caterpillar; })) return false;
+    // 完成长按时再次校验遮挡；不能隔墙向地面外卖投放，也不能修改别人手里或后箱里的外卖
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(InsertCaterpillar), false, this);
+    Query.AddIgnoredActor(Character);
+    Query.AddIgnoredActor(Worm);
+    FHitResult Hit;
+    return !GetWorld()->LineTraceSingleByChannel(Hit, Character->GetActorLocation() + FVector(0,0,25),
+        GetActorLocation() + FVector(0,0,5), ECC_Visibility, Query);
+}
+
+bool ADeliveryPackageItem::TryInsertCaterpillar(APawn* Interactor)
+{
+    if (!HasAuthority() || !CanInsertCaterpillar(Interactor)) return false;
+    auto* Character = CastChecked<ADeliveryCharacter>(Interactor);
+    auto* Inventory = Character->GetInventoryComponent();
+    auto* Worm = Cast<ADeliveryCaterpillarItem>(Inventory->GetHeldItem());
+    if (!Inventory->ConsumeHeldItem(Worm)) return false;
+    // 同一服务器调用中消耗物品并置位，后续并发请求只能看到已经放入的结果
+    bContainsCaterpillar = true;
+    OnRep_Caterpillar();
+    ForceNetUpdate();
+    Worm->Destroy();
+    Character->ClientPickupSucceeded();
+    return true;
+}
+
+void ADeliveryPackageItem::OnRep_Caterpillar()
+{
+    CaterpillarVisual->SetHiddenInGame(!bContainsCaterpillar);
+    if (ItemMesh->GetStaticMesh() && CaterpillarVisual->GetStaticMesh())
+    {
+        const FBox Bounds = ItemMesh->GetStaticMesh()->GetBoundingBox();
+        const FBox WormBounds = CaterpillarVisual->GetStaticMesh()->GetBoundingBox();
+        const float Scale = 14.f / FMath::Max(WormBounds.GetSize().GetMax(), 1.f);
+        CaterpillarVisual->SetWorldScale3D(FVector(Scale));
+        const FVector ParentScale = ItemMesh->GetComponentScale().GetAbs().ComponentMax(FVector(.001f));
+        CaterpillarVisual->SetRelativeLocation(FVector(Bounds.GetCenter().X, Bounds.GetCenter().Y,
+            Bounds.Max.Z + 1.f / ParentScale.Z) - WormBounds.GetCenter() * Scale / ParentScale);
+    }
+}
+
+FText ADeliveryPackageItem::GetPackagePrompt(const APawn* Interactor) const
+{
+    const auto* Character = Cast<ADeliveryCharacter>(Interactor);
+    if (Character && Cast<ADeliveryCaterpillarItem>(Character->GetInventoryComponent()->GetHeldItem()))
+        return bContainsCaterpillar
+            ? NSLOCTEXT("DeliveryItems", "CaterpillarAlreadyAdded", "Caterpillar already added - put away the caterpillar to pick up food")
+            : NSLOCTEXT("DeliveryItems", "InsertCaterpillar", "[Hold E] Put caterpillar in food (delivery bonus)");
+    return bContainsCaterpillar
+        ? NSLOCTEXT("DeliveryItems", "PickupFoodWithCaterpillar", "[Hold E] Pick up food - caterpillar bonus ready")
+        : InteractableComponent->PromptText;
 }

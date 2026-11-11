@@ -142,24 +142,30 @@ void UDeliveryActiveRagdollComponent::ServerRequestAxeSwing_Implementation()
 	const AGameStateBase* State = GetWorld()->GetGameState();
 	MulticastStartAxeSwing(Character->GetInventoryComponent()->GetHeldItem(),
 	                       State ? State->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds());
-	// 动画在约 1.1 秒到达下劈位置，按播放速度换算破门检测的等待时间
+	// 整段下劈窗口连续采样，低帧率也不依赖恰好一帧碰到门
 	GetWorld()->GetTimerManager().SetTimer(AxeDoorHitTimer, this,
 	                                       &UDeliveryActiveRagdollComponent::TryAxeDoorHit,
-	                                       1.1f / FMath::Max(AxeSwingPlayRate, .1f), false);
+	                                       .025f, true, .8f / FMath::Max(AxeSwingPlayRate, .1f));
 }
 
 // 在服务器执行破门检测，仅处理仍有效的下劈动作
 void UDeliveryActiveRagdollComponent::TryAxeDoorHit()
 {
-	if (!GetOwner() || !GetOwner()->HasAuthority() || GetAxeSwingWeight() <= 0.f)
-		return;
-	const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
+    const float Time = GetAxeSwingTime();
+    if (!GetOwner() || !GetOwner()->HasAuthority() || GetAxeSwingWeight() <= 0.f || bAxeDoorHitConsumed || Time > 1.65f)
+    {
+        if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(AxeDoorHitTimer);
+        return;
+    }
+    if (Time < .8f) return;
+	ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
 	if (!Character || !Character->GetMesh())
 		return;
 
-	// 以右手为起点，沿角色面朝的方向检查，抬头或低头不会改变检测方向
+	// 从胸前沿身体面朝方向检查，抬手或低头不会把扫掠起点带到地板
 	const FVector Forward = GetBodyForward().GetSafeNormal2D();
-	const FVector Start = Character->GetMesh()->GetBoneLocation(TEXT("RightHand"));
+    // 手臂物理在下劈末端可能低于门槛；命中体固定在身体胸前，不从地面向前扫
+    const FVector Start = Character->GetMesh()->GetBoneLocation(TEXT("Hips")) + FVector(0,0,25);
 	if (Forward.IsNearlyZero() || Start.IsNearlyZero())
 		return;
 	// 不检测角色自己和手里的斧头
@@ -167,14 +173,18 @@ void UDeliveryActiveRagdollComponent::TryAxeDoorHit()
 	if (SwingAxe.IsValid())
 		Params.AddIgnoredActor(SwingAxe.Get());
 	FHitResult Hit;
-	// 从右手向前检测，只取遇到的第一个物体
+	// 只取遇到的第一个物体，墙后的门不能被击中
 	if (GetWorld()->SweepSingleByChannel(Hit, Start, Start + Forward * 175.f, FQuat::Identity, ECC_Visibility,
 	                                     FCollisionShape::MakeSphere(65.f), Params))
 	{
 		// 第一个物体是可破坏的门，才执行破门
 		if (ADeliveryBreakableDoor* Door = Cast<ADeliveryBreakableDoor>(Hit.GetActor()))
 		{
-			Door->BreakFromAxe();
+            if (Door->ReceiveAxeHit(Character, Hit.ImpactPoint))
+            {
+                bAxeDoorHitConsumed = true;
+                GetWorld()->GetTimerManager().ClearTimer(AxeDoorHitTimer);
+            }
 		}
 	}
 }
@@ -185,6 +195,7 @@ void UDeliveryActiveRagdollComponent::MulticastStartAxeSwing_Implementation(ADel
 {
 	SwingAxe = Axe;
 	AxeSwingStartTime = ServerStartTime;
+    bAxeDoorHitConsumed = false;
 }
 
 // 采样当前下劈姿态；权重为零或采样失败时返回 假

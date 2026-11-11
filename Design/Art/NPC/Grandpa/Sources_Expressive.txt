@@ -1,0 +1,4 @@
+Animations: Quaternius Universal Animation Library 1 and 2 Standard, CC0
+https://quaternius.com/packs/universalanimationlibrary2.html
+https://opengameart.org/content/universal-animation-library-2
+Clips: Idle_FoldArms_Loop, Hit_Knockback, Walk_Formal_Loop, Idle_No_Loop

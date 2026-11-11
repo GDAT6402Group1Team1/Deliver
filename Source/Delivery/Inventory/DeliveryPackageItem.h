@@ -18,8 +18,15 @@ class DELIVERY_API ADeliveryPackageItem : public ADeliveryHandheldItem
 
   public:
     ADeliveryPackageItem();
+    virtual void BeginPlay() override;
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
     virtual bool CanPickup(APawn *Interactor, bool bCheckTaskAvailability) const override;
     virtual bool Pickup(APawn *Interactor) override;
+
+    UFUNCTION(BlueprintPure, Category = "Delivery|Caterpillar")
+    bool ContainsCaterpillar() const { return bContainsCaterpillar; }
+    bool CanInsertCaterpillar(const APawn* Interactor) const;
+    FText GetPackagePrompt(const APawn* Interactor) const;
 
     // 快递任务信息
     UFUNCTION(BlueprintPure, Category = "Delivery")
@@ -32,6 +39,17 @@ class DELIVERY_API ADeliveryPackageItem : public ADeliveryHandheldItem
   protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UDeliveryItemComponent> DeliveryItemComponent;
+
+    /** 只显示已放入的毛毛虫，不参与物理与交互；模型由蓝图配置 */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UStaticMeshComponent> CaterpillarVisual;
+
+private:
+    // 状态属于这份外卖，丢弃、换手和装车都保留；销毁后不污染下一份外卖
+    UPROPERTY(ReplicatedUsing = OnRep_Caterpillar)
+    bool bContainsCaterpillar = false;
+    UFUNCTION() void OnRep_Caterpillar();
+    bool TryInsertCaterpillar(APawn* Interactor);
 };
 
 /** 由代码创建的测试快递，用于验证完整任务流程 */

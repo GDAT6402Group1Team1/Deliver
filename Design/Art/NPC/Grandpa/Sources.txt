@@ -1,0 +1,6 @@
+Model: user supplied 爷爷绑完骨骼.fbx
+Animations: Quaternius Universal Animation Library Standard, CC0
+https://quaternius.com/packs/universalanimationlibrary.html
+https://opengameart.org/content/universal-animation-library
+Clips: Idle_Loop, Idle_Talking_Loop, Hit_Chest, PickUp_Table
+Retarget: Content/Python/retarget_grandpa.py (Blender 5)

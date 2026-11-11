@@ -31,9 +31,8 @@ ADeliveryTestAxe::ADeliveryTestAxe()
 	ItemComponent->ItemType = EDeliveryInventoryItemType::BackpackItem;
 	ItemComponent->MaxDurability = 100.0f;
 	ItemComponent->Durability = 100.0f;
-	// 将斧柄长轴转到手掌前方，并调整握持偏移
-	// 让拳头握住斧柄下端，而不是斧柄中心
-	HeldRelativeTransform = FTransform(FRotator(-90.0f, 0.0f, 0.0f), FVector(-18.0f, 0.0f, 0.0f));
+	// 测试斧柄原轴为 +Z，与前臂握持空间一致，握点位于柄尾
+	HeldRelativeTransform = FTransform(FRotator::ZeroRotator, FVector(0.0f, 0.0f, 18.0f));
 }
 
 // 准备测试斧头的物理和显示配置
@@ -53,7 +52,7 @@ void ADeliveryTestAxe::BeginPlay()
 			AxeHead->SetRelativeLocation(FVector(0.0f, 0.0f, 65.0f));
 			AxeHead->SetRelativeScale3D(FVector(3.0f, 8.0f, 0.35f));
 		}
-		HeldRelativeTransform = FTransform(FRotator(-90.0f, 0.0f, 0.0f), FVector(-18.0f, 0.0f, 0.0f));
+		HeldRelativeTransform = FTransform(FRotator::ZeroRotator, FVector(0.0f, 0.0f, 18.0f));
 	}
 	ItemMesh->SetMassOverrideInKg(NAME_None, 2.5f, true);
 }

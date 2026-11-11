@@ -11,3 +11,4 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Effect_Type_Damage, "Effect.Type.Damage");
 
 // 晕倒状态；拥有此 Tag 时不能挥拳（后续 GE_Stunned 挂上）
 UE_DEFINE_GAMEPLAY_TAG(TAG_State_Stunned, "State.Stunned");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Event_Delivery_Caterpillar, "Event.Delivery.Caterpillar");

@@ -5,6 +5,8 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "Character/DeliveryCharacter.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Inventory/DeliveryInventoryComponent.h"
@@ -69,37 +71,87 @@ void ADeliveryHandheldItem::UpdateHeldTransform(float DeltaSeconds, bool bSnap)
     if (StableForward.IsNearlyZero())
         StableForward = FVector::ForwardVector;
     FQuat StableRotation = FRotationMatrix::MakeFromXZ(StableForward, FVector::UpVector).ToQuat();
+    const FQuat UprightGrip = StableRotation;
     if (const ADeliveryCharacter *Holder = Cast<ADeliveryCharacter>(HeldAnchor->GetOwner()))
     {
-        const float SwingWeight =
-            Holder->GetActiveRagdoll() ? Holder->GetActiveRagdoll()->GetAxeSwingWeight() : 0.f;
-        if (SwingWeight > 0 && Holder->GetMesh())
+        const float SwingWeight = Holder->GetActiveRagdoll() ? Holder->GetActiveRagdoll()->GetAxeSwingWeight() : 0.f;
+        if (bUsesAxeSwing && SwingWeight > 0.f && Holder->GetMesh())
         {
             // 跟随前臂的前后摆动，忽略沿前臂轴线的细小扭转
             const FVector Forearm = (Holder->GetMesh()->GetBoneLocation(TEXT("RightHand")) -
                                      Holder->GetMesh()->GetBoneLocation(TEXT("RightForeArm")))
                                         .GetSafeNormal();
-            const float Angle = FMath::Atan2(Forearm.Dot(StableForward), -Forearm.Z);
+            // 握持资源把斧柄校准到 +Z；前臂朝上时刀头朝上，下劈经过前方时刀刃朝下
+            const float Angle = FMath::Atan2(Forearm.Dot(StableForward), Forearm.Z);
             const FVector Right = FVector::CrossProduct(FVector::UpVector, StableForward);
-            const FQuat SwingRotation(Right, -Angle);
-            StableRotation =
-                FQuat::Slerp(StableRotation, SwingRotation * StableRotation, SwingWeight).GetNormalized();
+            const FQuat SwingRotation(Right, Angle);
+            // 待机保持竖握，动作淡出时回正，避免自然垂手把斧刃插进地面
+            StableRotation = FQuat::Slerp(StableRotation, SwingRotation * StableRotation, SwingWeight).GetNormalized();
         }
     }
     const FTransform StableGripFrame(StableRotation, HeldAnchor->GetComponentLocation(), FVector::OneVector);
     const FTransform Target = HeldRelativeTransform * StableGripFrame;
-    if (bSnap)
-    {
-        SetActorLocationAndRotation(Target.GetLocation(), Target.GetRotation(), false, nullptr,
-                                    ETeleportType::TeleportPhysics);
-        return;
-    }
-
-    const float PositionAlpha = 1.0f - FMath::Exp(-HeldPositionFollowSpeed * DeltaSeconds);
-    const float RotationAlpha = 1.0f - FMath::Exp(-HeldRotationFollowSpeed * DeltaSeconds);
-    const FVector Location = FMath::Lerp(GetActorLocation(), Target.GetLocation(), PositionAlpha);
-    const FQuat Rotation = FQuat::Slerp(GetActorQuat(), Target.GetRotation(), RotationAlpha).GetNormalized();
+    const float PositionAlpha = bSnap ? 1.f : 1.0f - FMath::Exp(-HeldPositionFollowSpeed * DeltaSeconds);
+    const float RotationAlpha = bSnap ? 1.f : 1.0f - FMath::Exp(-HeldRotationFollowSpeed * DeltaSeconds);
+    FVector Location = FMath::Lerp(GetActorLocation(), Target.GetLocation(), PositionAlpha);
+    FQuat Rotation = FQuat::Slerp(GetActorQuat(), Target.GetRotation(), RotationAlpha).GetNormalized();
+    // 在平滑之后限制最终姿态，低帧率时也不把斧刃插进地面
+    if (bUsesAxeSwing)
+        LimitAxeGroundPenetration(Location, Rotation, UprightGrip);
     SetActorLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::TeleportPhysics);
+}
+
+void ADeliveryHandheldItem::LimitAxeGroundPenetration(FVector& Location, FQuat& Rotation,
+                                                     const FQuat& UprightGrip) const
+{
+    if (!ItemMesh->GetStaticMesh() || !GetWorld())
+        return;
+
+    const FQuat GripRotation = Rotation * HeldRelativeTransform.GetRotation().Inverse();
+    const FVector Grip = Location - GripRotation.RotateVector(HeldRelativeTransform.GetLocation());
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(AxeGround), true, this);
+    Query.AddIgnoredActor(HeldAnchor->GetOwner());
+    FCollisionObjectQueryParams Objects;
+    Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+    Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+    FHitResult Ground;
+    if (!GetWorld()->LineTraceSingleByObjectType(Ground, Grip + FVector(0, 0, 20),
+            Grip - FVector(0, 0, 250), Objects, Query) || Ground.ImpactNormal.Z < .5f)
+        return;
+
+    // 用模型包围盒保守估算刀头和斧柄，绕握点回转，不抬高整把斧头造成脱手
+    const FBox Bounds = ItemMesh->GetStaticMesh()->GetBoundingBox();
+    auto IsAboveGround = [&](const FQuat& CandidateGrip)
+    {
+        FTransform Candidate = HeldRelativeTransform * FTransform(CandidateGrip, Grip);
+        Candidate.SetScale3D(GetActorScale3D());
+        for (int32 Corner = 0; Corner < 8; ++Corner)
+        {
+            const FVector Point((Corner & 1) ? Bounds.Max.X : Bounds.Min.X,
+                                (Corner & 2) ? Bounds.Max.Y : Bounds.Min.Y,
+                                (Corner & 4) ? Bounds.Max.Z : Bounds.Min.Z);
+            if (FVector::DotProduct(Candidate.TransformPosition(Point) - Ground.ImpactPoint,
+                                   Ground.ImpactNormal) < 2.f)
+                return false;
+        }
+        return true;
+    };
+    // 手本身埋在地面时不强行挪动工具，也不把该表现限制写回角色物理
+    if (IsAboveGround(GripRotation) || !IsAboveGround(UprightGrip))
+        return;
+    float Blocked = 0.f, Clear = 1.f;
+    for (int32 Iteration = 0; Iteration < 10; ++Iteration)
+    {
+        const float Mid = (Blocked + Clear) * .5f;
+        if (IsAboveGround(FQuat::Slerp(GripRotation, UprightGrip, Mid).GetNormalized()))
+            Clear = Mid;
+        else
+            Blocked = Mid;
+    }
+    const FQuat LimitedGrip = FQuat::Slerp(GripRotation, UprightGrip, Clear).GetNormalized();
+    const FTransform Limited = HeldRelativeTransform * FTransform(LimitedGrip, Grip);
+    Location = Limited.GetLocation();
+    Rotation = Limited.GetRotation();
 }
 
 void ADeliveryHandheldItem::Use_Implementation(APawn *User) {}

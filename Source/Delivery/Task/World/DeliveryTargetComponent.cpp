@@ -3,6 +3,7 @@
 #include "Task/World/DeliveryTargetComponent.h"
 #include "Inventory/DeliveryPackageItem.h"
 #include "Carry/DeliveryCarryComponent.h"
+#include "AbilitySystem/DeliverGameplayTags.h"
 
 #include "Character/DeliveryCharacter.h"
 #include "Delivery.h"
@@ -112,12 +113,15 @@ void UDeliveryTargetComponent::EnsureInteractableConfigured()
 }
 
 // 检查快递任务身份、配送状态和交付距离
-bool UDeliveryTargetComponent::CanAcceptDelivery(AActor *ItemActor, APlayerState * /* 未使用 */) const
+bool UDeliveryTargetComponent::CanAcceptDelivery(AActor *ItemActor, APlayerState *Player) const
 {
     if (!ExpectedTask || !ItemActor || !GetOwner())
     {
         return false;
     }
+
+    if (DeliveryGate.IsBound() && !DeliveryGate.Execute(ItemActor, Player))
+        return false;
 
     // 必须是这个任务的快递，不能拿别的包裹来交差
     const UDeliveryItemComponent *Item = ItemActor->FindComponentByClass<UDeliveryItemComponent>();
@@ -170,7 +174,11 @@ bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Playe
     }
 
     UDeliveryTaskManagerComponent *Manager = UDeliveryTaskManagerComponent::Get(this);
-    if (!Manager || !Manager->TryCompleteDelivery(ExpectedTask, Player))
+    if (!Manager) return false;
+    // 只在这份外卖确实通过交付校验后计入事件，丢失或销毁的旧外卖不遗留奖励
+    if (const auto* Package = Cast<ADeliveryPackageItem>(ItemActor); Package && Package->ContainsCaterpillar())
+        Manager->ReportSpecialEvent(ExpectedTask, TAG_Event_Delivery_Caterpillar);
+    if (!Manager->TryCompleteDelivery(ExpectedTask, Player))
     {
         return false;
     }

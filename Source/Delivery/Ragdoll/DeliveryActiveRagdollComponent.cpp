@@ -292,6 +292,7 @@ void UDeliveryActiveRagdollComponent::StartRagdoll()
 // 停止身体控制并清理约束和运行状态
 void UDeliveryActiveRagdollComponent::StopRagdoll()
 {
+	if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(AxeDoorHitTimer);
 	SwingAxe.Reset();
 	// 撤销这套物理控制并把角色恢复到非布娃娃状态；不沿用旧的脚步/输入缓存
 	AActor* Owner = GetOwner();

@@ -3,6 +3,7 @@
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Task/World/DeliveryPickupPointComponent.h"
 #include "Task/World/DeliveryItemComponent.h"
+#include "Inventory/DeliveryPackageItem.h"
 
 // 优先显示目标无法操作的原因，否则使用目标配置的提示
 FText UDeliveryInteractionController::GetPrompt(UDeliveryInteractableComponent *Target, bool bPickup,
@@ -21,6 +22,8 @@ FText UDeliveryInteractionController::GetPrompt(UDeliveryInteractableComponent *
             Reason = Item->GetPickupBlockedReason();
         if (!Reason.IsEmpty())
             return Reason;
+        if (const auto* Package = Cast<ADeliveryPackageItem>(Target->GetOwner()))
+            return Package->GetPackagePrompt(Interactor);
     }
     return Target->PromptText;
 }

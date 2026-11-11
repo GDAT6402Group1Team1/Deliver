@@ -189,6 +189,7 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 	/** 服务器起始时间，单位为秒；负值表示尚未开始 */
 	float AxeSwingStartTime = -1.f;
 	FTimerHandle AxeDoorHitTimer;
+    bool bAxeDoorHitConsumed = false;
 
 	/** 释放直拳：标记前送阶段 */
 	void ReleaseBodyDrivenPunch();
@@ -693,6 +694,8 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 	/** 取得物理身体的稳定朝向，供远端角色的手持物显示使用 */
 	UPROPERTY(Replicated)
 	float CurrentFacingYaw = 0.0f;
+	// 双人流程夹具固定朝向，命中仍经过真实服务器挥斧和扫掠
+	friend class FDeliveryGrandpaPIECommand;
 #if !UE_BUILD_SHIPPING
 	// 诊断采样
 	// 只读的恢复过程诊断数据，不参与玩法判断或网络同步

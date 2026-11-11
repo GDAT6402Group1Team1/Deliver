@@ -10,6 +10,8 @@ class APawn;
 class APlayerState;
 class UDeliveryTaskDefinition;
 
+DECLARE_DELEGATE_RetVal_TwoParams(bool, FDeliveryDeliveryGate, AActor*, APlayerState*);
+
 /**
  * 挂在收件人（NPC 或投递点）身上，声明"这里收哪个任务的快递"
  * 交互系统在玩家按下交付键时调 TryDeliver，交付成功由本组件销毁快递 Actor
@@ -26,6 +28,9 @@ class DELIVERY_API UDeliveryTargetComponent : public UActorComponent
     bool Deliver(APawn *Interactor);
 
     UDeliveryTargetComponent();
+
+    /** 收件人额外条件，同样用于提示与服务器最终交付检查 */
+    FDeliveryDeliveryGate DeliveryGate;
 
     // 收件任务与距离
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Task")

@@ -13,6 +13,7 @@ public class Delivery : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"AIModule",
 			"AudioMixer",
 			"InputCore",
 			"EnhancedInput",
