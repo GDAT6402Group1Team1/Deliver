@@ -678,6 +678,18 @@ void UDeliveryTrafficCarComponent::UpdateRouteFollowState(bool bIsFollowingRoute
 	}
 }
 
+FRotator UDeliveryTrafficCarComponent::ResolveDriveRotation(const FVector& DriveLocation,
+                                                           const FRotator& SplineRotation) const
+{
+	const AActor* Owner = GetOwner();
+	// 停车时样条端点可能给出退化方向，忽略不到一毫米的采样误差
+	if (Owner && FVector::DistSquared(DriveLocation, Owner->GetActorLocation()) <= FMath::Square(0.1))
+	{
+		return Owner->GetActorRotation();
+	}
+	return SplineRotation;
+}
+
 // 开始将离开路线的车辆恢复到道路
 void UDeliveryTrafficCarComponent::BeginRouteReset()
 {

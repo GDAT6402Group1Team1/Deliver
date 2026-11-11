@@ -86,6 +86,10 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	UFUNCTION(BlueprintCallable, Category = "Traffic|循环")
 	void UpdateRouteFollowState(bool bIsFollowingRoute);
 
+	/** 行驶蓝图只在车辆有位移时应用样条朝向，停车时沿用当前朝向 */
+	UFUNCTION(BlueprintPure, Category = "Traffic|行驶")
+	FRotator ResolveDriveRotation(const FVector& DriveLocation, const FRotator& SplineRotation) const;
+
 	/** 蓝图把车重置回起始样条之后调用，清空脱离路线的计时，避免刚重置完又立刻重复触发 */
 	UFUNCTION(BlueprintCallable, Category = "Traffic|循环")
 	void NotifyResetToStart();
