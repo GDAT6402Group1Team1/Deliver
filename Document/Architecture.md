@@ -340,3 +340,18 @@ Ready 只表示达到当前可进入游戏的条件，不表示所有贴图最�
 另外通过 UE MCP 启动场景模拟并捕获视口，检查正式学生队伍持续过街和横向分散。
 双人测试由夹具安排车辆、驾驶员与目标位置，不等同于人工完整骑行手感验收；未覆盖外网延迟、
 中途加入或完整身体形状的物理碰撞。日志、截图和自动化报告仅保留在忽略的 `Saved` 目录。
+
+### 斧头动态碰撞修复（2026-11-11）
+
+正式 `BP_Axe.ItemMesh` 引用 `/Game/model/futou`，网格原先使用 `UseComplexAsSimple`，
+与出生和丢弃时开启物理模拟不兼容。通过 UE MCP 改为 `UseSimpleAndComplex`，并重新生成凸包
+（4 个 hull 的生成配置、每 hull 最多 16 顶点、精度 100000），刷新物理数据后保存网格。
+仅切换枚举时实测仍会下穿地面，因此修复同时包含重新生成碰撞，不能只隐藏警告或关闭重力。
+`setup_axe_attack.py` 同步检测模式与简单/凸包数量，发现旧配置或缺少碰撞时重建并保存。
+
+本次 UE MCP 场景模拟中，原地图斧头从 Z=2005 落至约 Z=2001.38 后保持稳定。
+`DeliveryEditor Win64 Development` 构建通过（初次链接被运行中的编辑器占用，关闭后重试成功，
+最终记录 `Saved/Logs/AxeCollisionBuildFinal.log`）。`Automation RunTests Delivery.Axe` 在 NullRHI 下
+3 项全部通过、零警告，覆盖动画目标、拾取/挥动/破门/丢弃和下劈离地距离；
+`Saved/Logs/AxeCollisionTests.log` 无 `ComplexAsSimple`，报告为 `Saved/Automation/AxeCollision/index.json`。
+本次只修改网格碰撞资源和配置脚本，未重新进行双人手动拾取、丢弃手感验收。
