@@ -46,6 +46,15 @@ void ADeliveryPedestrianRoute::BeginPlay()
 	ResetSpawnTimer();
 	SpawnCountdown += FMath::Max(InitialSpawnDelay, 0.f);
 
+	if (CrosswalkActor)
+	{
+		ADeliveryPedestrianRoute* BudgetOwner = GetGreenPhaseBudgetOwner();
+		if (BudgetOwner->bAlternateGreenPhaseLanes)
+		{
+			BudgetOwner->UpdateGreenPhaseBudget(IsPedestrianGreen());
+		}
+	}
+
 	if (bPrewarmOnBeginPlay && CanSpawnAtCrosswalk())
 	{
 		// 开局就铺满，位置沿线段随机。不铺的话玩家一进图看到的是空街，
@@ -112,6 +121,7 @@ void ADeliveryPedestrianRoute::UpdateGreenPhaseBudget(bool bGreen)
 {
 	if (bGreen && !bWasPedestrianGreen)
 	{
+		bOwnerLaneSpawnsThisGreen = !bOwnerLaneSpawnsThisGreen;
 		GreenPhaseSpawned = 0;
 		GreenPhaseSpawnTarget = FMath::RandRange(FMath::Max(0, GreenPhaseSpawnMin),
 		                                        FMath::Max(GreenPhaseSpawnMin, GreenPhaseSpawnMax));
@@ -163,6 +173,11 @@ bool ADeliveryPedestrianRoute::CanSpawnAtCrosswalk() const
 	const ADeliveryPedestrianRoute* BudgetOwner = IsValid(SharedGreenPhaseBudgetOwner) &&
 		SharedGreenPhaseBudgetOwner->GetWorld() == GetWorld()
 		? SharedGreenPhaseBudgetOwner.Get() : this;
+	if (BudgetOwner->bAlternateGreenPhaseLanes &&
+	    BudgetOwner->bOwnerLaneSpawnsThisGreen != (BudgetOwner == this))
+	{
+		return false;
+	}
 	if (BudgetOwner->GreenPhaseSpawnMax > 0 &&
 	    BudgetOwner->GreenPhaseSpawned >= BudgetOwner->GreenPhaseSpawnTarget)
 	{

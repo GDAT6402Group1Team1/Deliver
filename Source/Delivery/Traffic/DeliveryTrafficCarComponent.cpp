@@ -364,6 +364,8 @@ void UDeliveryTrafficCarComponent::SpawnNextWave()
 	// 第一波原车也可能重新绕回出生点，因此包括 Owner 在内检查全部交通车
 	// 行人和玩家也可能走到出生点，生成前一起检查；高架上下层不互相等待
 	const FVector SpawnLocation = SecondWaveTransform.GetLocation();
+	const FVector SpawnForward = SecondWaveTransform.GetUnitAxis(EAxis::X).GetSafeNormal2D();
+	constexpr float ClosePersonClearance = 150.f;
 	AActor* BlockingActor = nullptr;
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
@@ -380,12 +382,20 @@ void UDeliveryTrafficCarComponent::SpawnNextWave()
 		}
 		const FVector OtherLocation = Other->GetActorLocation();
 		const float Clearance = bCar ? WaveSpawnClearance : WaveSpawnPersonClearance;
-		if (FMath::Abs(OtherLocation.Z - SpawnLocation.Z) <= WaveSpawnHeightTolerance &&
-		    FVector::DistSquared2D(OtherLocation, SpawnLocation) < FMath::Square(Clearance))
+		const FVector Offset = OtherLocation - SpawnLocation;
+		const double DistanceSquared = Offset.SizeSquared2D();
+		if (FMath::Abs(Offset.Z) > WaveSpawnHeightTolerance || DistanceSquared >= FMath::Square(Clearance))
 		{
-			BlockingActor = Other;
-			break;
+			continue;
 		}
+		// 人在车后且离出生点有一段距离时可正常发车，贴近车身仍需等候
+		if (!bCar && DistanceSquared >= FMath::Square(ClosePersonClearance) &&
+		    FVector::DotProduct(Offset, SpawnForward) < 0.f)
+		{
+			continue;
+		}
+		BlockingActor = Other;
+		break;
 	}
 	if (BlockingActor)
 	{

@@ -862,7 +862,7 @@ stdout 重定向拿不到 `unreal.log` 的内容——第一次就因为这个�
   - **红灯期间的避让死锁超时放宽到 8 秒（2026-09-17）**：新增 `MaxBlockedTimeAtIntersection = 8.0f` 和 `UpdateStoppedAtIntersection(bool)`。蓝图在 `TraceForIntersection` 的 `SetStopatInter` 之后、以及 `OnRouteLost` 的 `SetStopatInter(false)` 之后各调一次。红灯时前车是"合法地长时间不动"、不是死锁，还按 `MaxBlockedTime`（3 秒）就放弃避让的话，后车会在红灯没结束时压上去；`LightDuration` 是 3 秒，8 秒足够覆盖一整个红灯。
   - **红灯超时改为沿车队传递、并放宽到 10 秒（2026-09-24）**：原来的判据只看**本车自己**的 `StopatInter`，而 `TraceForIntersection` 的前瞻距离和车速成正比——队伍里第二辆之后的车已经被前车逼停、前瞻缩到接近 0，根本探不到路口盒，自己的 `bStoppedAtIntersection` 恒为 false，于是只有队首享受宽松超时，后面几辆照样 3 秒就放弃避让怼上前车。现在组件公开 `IsStoppedAtIntersection()`，`GetDistanceToCarAhead()` 扫描时顺手记下最近那辆车的红灯状态（`bLeaderStoppedAtIntersection`，扫不到车时清 false，否则前车开走后还会一直以为"前面在等红灯"），超时判据变成 `bStoppedAtIntersection || bLeaderStoppedAtIntersection`，红灯状态就能一辆辆往后传。阈值同时从 8 秒提到 **10 秒**：要盖住的不只是一个 3 秒红灯，还有前面几辆依次起步、拉开距离的时间，排队越长最后一辆等得越久。`GetDistanceToCarAhead()` 因此去掉了 `const`（它本来就会写前车的 `MaxSpeed`，并非纯查询）。
   - 车辆碰撞盒保持 `Overlap` **没改成 `Block`**：车是运动学的（`bSimulatePhysics=false`，靠 `SetActorLocation` 沿样条走），Block 在不开 sweep 的情况下根本不起作用；而开了 sweep 会和样条跟随打架（样条要它往前、sweep 把它顶回来）导致抖动。"后车停在后方不超车"靠的是修好之后真正生效的前车探测 + 减速，不是物理阻挡。
-  - **分波时间与出生净空（2026-10-29）**：默认开局 15 秒出第二波，再过 30 秒出第三波（畅通时为 45 秒）。生成前服务器检查出生点水平 400 cm 内的交通车（包含原车）、250 cm 内的 NPC 和玩家，均限上下 200 cm；占用则每 2 秒重试，空出来才生成。第三波从第二波实际生成时起算，堵车时顺延。不把物理 Block 加到运动学车辆上。
+  - **分波时间与出生净空（2026-10-29）**：默认开局 15 秒出第二波，再过 30 秒出第三波（畅通时为 45 秒）。生成前服务器检查出生点水平 400 cm 内的交通车（包含原车）、车头前半圈 600 cm 内的 NPC 和玩家（距出生点 150 cm 内全向检查），均限上下 200 cm；占用则每 2 秒重试，空出来才生成。第三波从第二波实际生成时起算，堵车时顺延。不把物理 Block 加到运动学车辆上。
   - **跟车加速延迟（2026-10-29）**：每次需要减速都立即降低跟车系数并重置 `FollowAccelerationPause`（默认 1 秒）；最后一次减速后至少保持当前系数 1 秒，才允许回升。前车在探测边缘反复出现/消失时不会立刻加速，等待期间再次减速不受阻。只冻结跟车系数，不控制蓝图的红灯/加速；PIE 中可看 `DebugAccelerationPauseRemaining`。
   - **红灯停车线 + 斑马线：在主路口前留一段固定净空（2026-11-05）**。
     目的是把车停在路口外面，空出来那段给行人和斑马线。
@@ -2127,9 +2127,9 @@ TestForCharacter 的 ROAD-CREATE、POLE-CREATE、GRASSBED-CREATE1 的 PCG BrushC
 
 ## 斑马线行人路线与人行灯
 
-- `Crosswalk_Intersection_45_02` 和 `Crosswalk_MainRoad_R003_9` 由 `Content/Python/place_child_crosswalk_45_02.py` 各摆两条对称过街路线：A 道只随机男孩/女孩，B 道等权随机六种现有 NPC。两道沿车行方向各偏 70 cm，路线比斑马线两端各延长 250 cm；A 道小孩最多同时 16 人、间隔 0.7 秒（约 91 cm），前方探测缩短到 35 cm；B 道仍最多 12 人、间隔 0.9 秒，开局晚 0.45 秒。基础步速 130 cm/s，红灯时已出发者以 1.5 倍走完。两道只在出现和消失期间使用复制的渐隐材质，正常行走恢复原始不透明材质。服务器生成前只检查对应段的 `StopAtInter`（车红即人绿）及本轮人数限制；人行绿灯时不再等斑马线上的车驶离。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过后恢复原上限。
+- `Crosswalk_Intersection_45_02` 和 `Crosswalk_MainRoad_R003_9` 由 `Content/Python/place_child_crosswalk_45_02.py` 各摆两条对称过街路线：A 道只随机男孩/女孩，B 道等权随机六种现有 NPC。两道沿车行方向各偏 70 cm，路线比斑马线两端各延长 250 cm；A 道小孩最多同时 16 人、间隔 0.7 秒（约 91 cm），前方探测缩短到 35 cm；B 道仍最多 12 人、间隔 0.9 秒，开局晚 0.45 秒。基础步速 130 cm/s，红灯时已出发者以 2 倍走完。两道只在出现和消失期间使用复制的渐隐材质，正常行走恢复原始不透明材质。服务器生成前只检查对应段的 `StopAtInter`（车红即人绿）及本轮人数限制；人行绿灯时不再等斑马线上的车驶离。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过后恢复原上限。
 - `Crosswalk_BranchRoad_R035_Merged_8` 单独由 `Content/Python/place_child_crosswalk_r035_8.py` 布置两条男孩/女孩排队过街路线，两道沿车行方向各偏 70 cm，第二道开局晚 0.45 秒；每道最多同时 16 人、间隔 0.7 秒、步速 130 cm/s，依照 `Inter_BranchRoad_R035_Merged_+0180_I02` 的人行信号出发。该斑马线从普通路线生成脚本中排除。
-- 主地图共四条小孩列（上述两条重点斑马线各一条，加 R035 两条）。每条 `LeaderKinds` 等权配置中年男/女，`Kinds` 只含男孩/女孩；人行灯每次红变绿时重置一次带队标记，本轮第一次成功生成用成人池，后续用小孩池，不因队列暂时走空重复出成人。成人材质由 `LeaderFadeMaterials` 与 `LeaderKinds` 同序配置；无信号灯的 `testfortraffic` 小孩测试队列仅在开局出带队成人。
+- 主地图共四条小孩列（上述两条重点斑马线各一条，加 R035 两条）。三处双列斑马线的两列相向通行，首轮绿灯只允许左列生成，下一轮换右列，按轮交替。每条 `LeaderKinds` 等权配置中年男/女，`Kinds` 只含男孩/女孩；人行灯每次红变绿时重置一次带队标记，本轮第一次成功生成用成人池，后续用小孩池，不因队列暂时走空重复出成人。成人材质由 `LeaderFadeMaterials` 与 `LeaderKinds` 同序配置；无信号灯的 `testfortraffic` 小孩测试队列仅在开局出带队成人。
 - 其余有明确车灯归属的斑马线由 `Content/Python/place_general_crosswalk_routes.py` 布置单道或双道路线，六种 NPC 等权随机，每轮人行绿灯每条斑马线合计出发 2～3 人；双道共享配额，红灯不再生成，已出发者继续走。上述三条重点斑马线不受此配额限制。
 
 - **所有过街路人统一用渐隐出入场（2026-11-10）**：`Content/Python/set_crosswalk_route_fade.py`

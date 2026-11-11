@@ -179,6 +179,10 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	UPROPERTY(EditAnywhere, Category = "Pedestrian|生成")
 	TObjectPtr<ADeliveryPedestrianRoute> SharedGreenPhaseBudgetOwner;
 
+	// 由共享配额的路线持有，每次绿灯在本路线和另一列之间轮换
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|Crosswalk")
+	bool bAlternateGreenPhaseLanes = false;
+
 	/**
 	 * 开局就把线段填到 MaxAlive，位置随机铺开
 	 * 不填的话玩家一进图看到的是空街，再过十几秒人才陆续从端点冒出来
@@ -378,6 +382,7 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	/** 距下一次生成还有多少秒 */
 	float SpawnCountdown = 0.f;
 	bool bWasPedestrianGreen = false;
+	bool bOwnerLaneSpawnsThisGreen = false;
 	bool bWasPedestrianGreenForLeader = false;
 	bool bNextSpawnIsLeader = true;
 	int32 GreenPhaseSpawnTarget = 0;

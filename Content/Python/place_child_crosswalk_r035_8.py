@@ -7,6 +7,7 @@
 
 import math
 import unreal
+from place_child_crosswalk_45_02 import configure_alternating_lanes
 
 MARK = 'Crosswalk_BranchRoad_R035_Merged_8'
 SIGNAL = 'Inter_BranchRoad_R035_Merged_+0180_I02'
@@ -93,6 +94,9 @@ def main():
             shifted = [unreal.Vector(p.x + side * forward.x * LANE_OFFSET,
                                      p.y + side * forward.y * LANE_OFFSET, p.z)
                        for p in points]
+            # 以斑马线原方向为准，右侧 A 列从另一端出发
+            if lane == 'A':
+                shifted.reverse()
             route = editor.spawn_actor_from_class(route_class, shifted[0])
             if route is None:
                 raise RuntimeError('Cannot spawn child crosswalk route ' + lane)
@@ -119,7 +123,7 @@ def main():
             route.set_editor_property('walk_speed_max', 130.)
             route.set_editor_property('lateral_jitter', 0.)
             route.set_editor_property('appear_distance', 100.)
-            route.set_editor_property('red_light_walk_speed_multiplier', 1.5)
+            route.set_editor_property('red_light_walk_speed_multiplier', 2.0)
             route.set_editor_property('crosswalk_actor', mark)
             route.set_editor_property('signal_segment', signal)
             spline = route.get_component_by_class(unreal.SplineComponent)
@@ -136,6 +140,7 @@ def main():
                     (shifted[0].x, shifted[0].y),
                     (shifted[1].x, shifted[1].y))) > 1.0:
                 raise RuntimeError('New route length is invalid: ' + lane)
+        configure_alternating_lanes(dict(created))
     except Exception:
         for _lane, route in created:
             editor.destroy_actor(route)

@@ -179,9 +179,9 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0"))
 	float WaveSpawnClearance = 400.0f;
 
-	/** 出生点附近行人和玩家的水平净空半径 */
+	/** 出生点前半圈行人和玩家的水平净空半径，近身 150 cm 内全向检查 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0", Units = "cm"))
-	float WaveSpawnPersonClearance = 400.0f;
+	float WaveSpawnPersonClearance = 600.0f;
 
 	/** 高架上下层不互相阻挡分波生成 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0"))
