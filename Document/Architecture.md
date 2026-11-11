@@ -300,3 +300,43 @@ Ready 只表示达到当前可进入游戏的条件，不表示所有贴图最�
 喇叭音色调整：SFX_Bike_HornLoop 改为固定音高 400/500 Hz 双音簧片，移除原来的调频颤音，增加泛音与柔和饱和；DA_VehicleAudio 的鸣笛音量设为 1.6，循环波形仍按 0.4 秒整周期闭合。资源与配置已在编辑器关闭后重新保存并回读通过；未做场景实际试听验收。
 
 英文提示本次回归（2026-11-11）：最终编译成功；`Automation RunTests Delivery.UI+Delivery.Task+Delivery.Systems.InputLifecycle+Delivery.Vehicle.HeldHorn` 共 9 项通过，报告 `Saved/Automation/EnglishPrompts`。未做完整地图逐条提示截图验收，任务对白不在本次提示翻译范围内。
+
+## 行人击退与学校队伍 Boids
+
+车撞仍沿用 `DeliveryMotorbike::ProcessPedestrianImpacts` 的服务器车身扫掠和 `ReceiveImpact` 接口。
+原程序化倒地固定只移动 28 cm，车速虽然改变冲量，却不改变位移。现在水平冲量超过 5000 后渐增击退，
+45000 达到默认最大 250 cm 和 65 cm 离地弧线；这些参数在行人 `Pedestrian|被打飞` 中配置。
+保留低速擦碰不撞飞、召唤瞬移不扫沿途、重复接触不重置倒地计时。每步用场景物体球形扫掠阻止穿墙，
+路面探测防止落进地面；这是运动学受击表现，不等于完整身体形状的物理布娃娃碰撞。
+
+`DeliveryPedestrianRoute.bUseBoids` 为显式开关。主地图四条小孩过街路线已通过 UE MCP 设置并保存，
+对应两个重点路口的 A 道和 R035 两道；成人带队者同属所在队伍，普通区域游走与混合路线保留原模式。
+放置脚本 `place_child_crosswalk_45_02.py`、`place_child_crosswalk_r035_8.py`、`place_child_queue.py`
+同步设置开关，重复生成时不会退回原单列移动。
+
+实现参考 [Craig Reynolds 的 Boids 三规则](https://www.red3d.com/cwr/boids/)，只采用二维局部转向：
+邻居分离避免拥挤，对齐平滑方向与速度，聚合维持小队。保留项目现有样条、红绿灯与路线名单，
+没有引入新的 AIController/NavMesh/CrowdManager 依赖。默认邻域 200 cm、分离距离 65 cm、
+路线中心左右各 65 cm 的走廊；分离/对齐/聚合权重为 1.8/0.35/0.15，最大转向加速度 260 cm/s²。
+参数在路线 `Pedestrian|Boids` 中调整，前进方向和走廊边界优先于群体聚合，遇场景阻挡停止推进。
+同组行人由分离规则避让，不再互相停下来排队；玩家及其他障碍继续走原来的等待判定。
+
+每个行人只在服务器查询所属路线的有效弱引用名单，不跨 World 保存邻居；当前位置、旋转继续走 Actor 移动复制。
+倒地与起身分支提前退出，Boids 不会把受击者拉回队伍；起身和换路线重置横移/速度，恢复后再加入。
+这一版本没有新增计时器或全局登记，路线和 Actor 销毁即释放对应状态。
+
+补齐客户端表现配置：网格、动画、身高基准、路线和播放速度参数复制后重建本机显示；
+客户端不再把初始复制的缩小状态当作基准身高，也不自行推进路线。
+运动学 Actor 的 `GetVelocity()` 不能表示复制位移，远端程序化摆腿改按实际位置变化推进。
+
+2026-11-11 本次验证：UE 5.8 `DeliveryEditor Win64 Development` 完整构建成功
+（`Saved/Logs/BoidsFinalBuild.log`）。有渲染器的自动化命令
+`Automation RunTests Delivery.NPC.Boids+Delivery.Vehicle.PedestrianImpact+Delivery.NPC.PedestrianWalk+Delivery.Traffic.PedestrianYield+Delivery.Vehicle.HeldHorn`
+共执行 6 项，全部通过、均带警告，0 失败；报告在 `Saved/Automation/BoidsFinal/index.json`。
+警告包括隔离测试路线未配置外观、程序化显示的空根网格和场景碰撞配置，不能视为零警告验收。
+双人 PIE 在正式地图通过远端驾驶输入驱动车辆、由真实车身扫掠命中测试学生：命中车速 821.7 cm/s，
+击退 250 cm，两端位置误差 0.5 cm，并验证模型缩放、倾倒、起身和另一名 Boids 成员移动同步。
+隔离测试覆盖低速、召唤瞬移、重复命中、15 FPS 墙体阻挡、重叠分离和倒地暂停群体移动。
+另外通过 UE MCP 启动场景模拟并捕获视口，检查正式学生队伍持续过街和横向分散。
+双人测试由夹具安排车辆、驾驶员与目标位置，不等同于人工完整骑行手感验收；未覆盖外网延迟、
+中途加入或完整身体形状的物理碰撞。日志、截图和自动化报告仅保留在忽略的 `Saved` 目录。

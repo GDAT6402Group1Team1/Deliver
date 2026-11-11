@@ -27,7 +27,7 @@ enum class EDeliveryPedestrianPhase : uint8
 	Walking,
 	/** 接近终点，正在缩回零，缩完销毁 */
 	Disappearing,
-	/** 被打飞或撞飞，整个人交给物理，躺一会儿 */
+	/** 被击退或撞飞，结束后躺一会儿 */
 	KnockedDown,
 	/** 躺够了，正从地上起身；起完回到 Walking 继续走 */
 	StandingUp
@@ -36,7 +36,7 @@ enum class EDeliveryPedestrianPhase : uint8
 /**
  * 由 ADeliveryPedestrianRoute 生成的路人：普通模式在生成点附近游走，特殊模式沿样条行走。
  * 运动学推进、不接 AI 与寻路；每帧向下打射线贴地，服务器权威并复制移动。
- * 受击倒地时才切入物理，恢复后继续原模式。
+ * 默认以程序化击退、倒地和起身回应受击，可选真实布娃娃；恢复后继续原模式。
  *
  * 身体有两个固定槽位，按路线有没有配走路动画二选一，另一个隐藏：
  *   * 配了动画 → 用 SkeletalMesh 单节点播放，播放速率对齐实际速度
@@ -190,6 +190,21 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pedestrian|被打飞",
 	          meta = (ClampMin = "0.1", Units = "s"))
 	float FallDuration = 0.55f;
+
+	/** 超过此水平冲量才增加击退；较轻的拳击沿用短距离倾倒 */
+	UPROPERTY(EditDefaultsOnly, Category = "Pedestrian|被打飞", meta = (ClampMin = "0.0"))
+	float KnockbackImpulseThreshold = 5000.f;
+
+	/** 达到此水平冲量时使用最大击退，单位 kg cm/s */
+	UPROPERTY(EditDefaultsOnly, Category = "Pedestrian|被打飞", meta = (ClampMin = "1.0"))
+	float KnockbackImpulseReference = 45000.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Pedestrian|被打飞", meta = (ClampMin = "28.0", Units = "cm"))
+	float KnockbackMaxDistance = 250.f;
+
+	/** 强撞击的离地弧线高度，不改变玩家或车辆物理 */
+	UPROPERTY(EditDefaultsOnly, Category = "Pedestrian|被打飞", meta = (ClampMin = "0.0", Units = "cm"))
+	float KnockbackMaxArcHeight = 65.f;
 
 	/** 需要真实布娃娃时可开启；普通街道路人使用稳定的程序化跌倒/爬起。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pedestrian|被打飞")
@@ -373,7 +388,12 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 
   private:
 	/** 把行人摆到样条上 Distance 处并贴地，朝向取样条切线 */
-	void UpdateTransform(float Distance);
+	void UpdateTransform(float Distance, float DeltaTime = 0.f);
+	float UpdateBoids(float AllowedStep, float DeltaTime);
+	bool UsesBoids() const;
+	// 只由服务器推进，远端使用 Actor 移动复制；受击、起身与接驳时重置
+	FVector BoidsVelocity = FVector::ZeroVector;
+	float BoidsLateralOffset = 0.f;
 
 	/** 在生成点周围游走时，贴地并平滑转向下一个短距离目标。 */
 	void UpdateRoamTransform(const FVector& DesiredLocation, float DeltaTime);
@@ -428,6 +448,8 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	UFUNCTION()
 	void OnRep_AppearAlpha();
 	UFUNCTION()
+	void OnRep_Appearance();
+	UFUNCTION()
 	void OnRep_FadeAppearance();
 	void InstallFadeMaterial();
 
@@ -477,7 +499,7 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	void CacheArmRestDeltas();
 
 	/** 生成这一趟的路线，持有弱引用：路线被删掉时行人自己退场而不是崩 */
-	UPROPERTY()
+	UPROPERTY(Replicated)
 	TWeakObjectPtr<ADeliveryPedestrianRoute> Route;
 
 	/** 沿样条的行进距离，始终按样条自己的 0→Length 方向记，反向走的只是增量取负 */
@@ -492,10 +514,12 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	/** true 表示沿样条 0→Length 方向走 */
 	bool bForward = true;
 
+	UPROPERTY(Replicated)
 	float WalkSpeed = 0.f;
 	float BaseWalkSpeed = 0.f;
 
 	/** 动画原本对应的行走速度，用来把播放速率对齐实际速度，避免滑步 */
+	UPROPERTY(Replicated)
 	float AnimReferenceSpeed = 0.f;
 
 	EDeliveryPedestrianPhase Phase = EDeliveryPedestrianPhase::Appearing;
@@ -516,6 +540,7 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	float ReplicatedMinScale = 0.02f;
 
 	/** 进场时记下的原始缩放，缩放曲线乘在它上面而不是直接写 1，免得抹掉手调过的大小 */
+	UPROPERTY(ReplicatedUsing = OnRep_AppearAlpha)
 	FVector BaseScale = FVector::OneVector;
 
 	/** 这一趟是否走程序化步态（没有配动画资产时） */
@@ -537,12 +562,19 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	FVector_NetQuantize100 KnockPoint = FVector::ZeroVector;
 
 	/** 这一趟用的网格，被打飞时要换到 SkeletalMesh 槽位上去模拟 */
-	UPROPERTY()
+	UPROPERTY(ReplicatedUsing = OnRep_Appearance)
 	TObjectPtr<USkeletalMesh> ActiveMesh;
+	TWeakObjectPtr<USkeletalMesh> PresentedMesh;
+	TWeakObjectPtr<UAnimSequence> PresentedAnimation;
+	FVector LastClientLocation = FVector::ZeroVector;
+	bool bClientLocationReady = false;
 
 	/** 躺够之前的剩余秒数，归零后起身 */
 	float KnockedRemaining = 0.f;
 	float FallElapsed = 0.f;
+	float FallArcHeight = 0.f;
+	// 服务器遇墙后停止水平击退，后续动画不能重新穿过障碍
+	bool bFallHorizontalBlocked = false;
 	FVector FallStartLocation = FVector::ZeroVector;
 	FVector FallEndLocation = FVector::ZeroVector;
 	FQuat FallStartRotation = FQuat::Identity;
@@ -576,7 +608,7 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	FQuat GetUpTargetRotation = FQuat::Identity;
 
 	/** 这一趟的走路动画，起身之后要重新播；不存的话起完身人是定格的 */
-	UPROPERTY()
+	UPROPERTY(ReplicatedUsing = OnRep_Appearance)
 	TObjectPtr<UAnimSequence> ActiveWalkAnim;
 
 	/** 步态相位，0~1 对应一个完整步幅 */

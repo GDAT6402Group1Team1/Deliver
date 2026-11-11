@@ -148,6 +148,7 @@ def main():
                     route.set_editor_property('leader_fade_materials', leader_fades)
                 route.set_editor_property('fade_instead_of_scale', True)
                 route.set_editor_property('roam_in_area', False)
+                route.set_editor_property('use_boids', lane == 'A')
                 route.set_editor_property('both_directions', False)
                 route.set_editor_property('allow_handoff', False)
                 route.set_editor_property('prewarm_on_begin_play', False)

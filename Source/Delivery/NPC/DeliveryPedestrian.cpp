@@ -98,6 +98,12 @@ void ADeliveryPedestrian::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	DOREPLIFETIME(ADeliveryPedestrian, bKnockedDown);
 	DOREPLIFETIME(ADeliveryPedestrian, KnockImpulse);
 	DOREPLIFETIME(ADeliveryPedestrian, KnockPoint);
+	DOREPLIFETIME(ADeliveryPedestrian, ActiveMesh);
+	DOREPLIFETIME(ADeliveryPedestrian, ActiveWalkAnim);
+	DOREPLIFETIME(ADeliveryPedestrian, BaseScale);
+	DOREPLIFETIME(ADeliveryPedestrian, Route);
+	DOREPLIFETIME(ADeliveryPedestrian, WalkSpeed);
+	DOREPLIFETIME(ADeliveryPedestrian, AnimReferenceSpeed);
 }
 
 void ADeliveryPedestrian::OnRep_AppearAlpha()
@@ -145,9 +151,17 @@ void ADeliveryPedestrian::BeginPlay()
 
 	Super::BeginPlay();
 
-	BaseScale = GetActorScale3D();
-	// 进场前先缩到看不见，否则生成那一帧会有一个原尺寸的人闪一下
-	SetActorScale3D(BaseScale * KINDA_SMALL_NUMBER);
+	if (HasAuthority())
+	{
+		BaseScale = GetActorScale3D();
+		// 进场前先缩到看不见，客户端不能把复制来的当前缩放重新当作基准
+		SetActorScale3D(BaseScale * KINDA_SMALL_NUMBER);
+	}
+	else
+	{
+		OnRep_Appearance();
+		ApplyAppearScale();
+	}
 }
 
 void ADeliveryPedestrian::SetCrosswalkSpeedMultiplier(float Multiplier)
@@ -194,6 +208,38 @@ void ADeliveryPedestrian::BeginWalk(ADeliveryPedestrianRoute* InRoute, USkeletal
 	WalkSpeed = InSpeed;
 	AnimReferenceSpeed = InAnimReferenceSpeed;
 	Phase = EDeliveryPedestrianPhase::Appearing;
+	BoidsVelocity = FVector::ZeroVector;
+	const float InitialSpread = UsesBoids() ? FMath::Clamp(Route->BoidsCorridorHalfWidth, 0.f, 12.f) : 0.f;
+	BoidsLateralOffset = FMath::FRandRange(-InitialSpread, InitialSpread);
+	ActiveMesh = InMesh;
+	ActiveWalkAnim = InWalkAnim;
+	bFadeAppearance = InRoute && InRoute->bFadeInsteadOfScale;
+	OnRep_Appearance();
+	ScheduleNextPause();
+	if (InRoute && InRoute->bRoamInArea)
+	{
+		UpdateRoamTransform(GetActorLocation(), 0.f);
+	}
+	else
+	{
+		UpdateTransform(DistanceAlongRoute);
+	}
+	UpdateAppearScale(DistanceAlongRoute);
+}
+
+// 网格与动画由服务器选择，客户端只重建本机显示，不执行路线初始化
+void ADeliveryPedestrian::OnRep_Appearance()
+{
+	if (!ActiveMesh) return;
+	if (PresentedMesh == ActiveMesh && PresentedAnimation == ActiveWalkAnim)
+	{
+		ApplyAppearScale();
+		return;
+	}
+	PresentedMesh = ActiveMesh;
+	PresentedAnimation = ActiveWalkAnim;
+	USkeletalMesh* InMesh = ActiveMesh;
+	UAnimSequence* InWalkAnim = ActiveWalkAnim;
 	// 没有骨骼的网格不能交给 PoseableMesh：它的 AllocateTransformData →
 	// FillComponentSpaceTransforms 会按骨骼数索引，骨骼数为 0 时直接断言崩溃
 	// （实测崩在 SetSkinnedAssetAndUpdate 里）。配错网格不该让整局崩掉
@@ -206,11 +252,6 @@ void ADeliveryPedestrian::BeginWalk(ADeliveryPedestrianRoute* InRoute, USkeletal
 	}
 
 	bProceduralGait = (InWalkAnim == nullptr) && bMeshHasBones;
-	// 被打飞时要把这张网格换到 SkeletalMesh 槽位上去模拟物理，所以记下来
-	ActiveMesh = InMesh;
-	// 起身之后要重新播这段动画；不存的话起完身人是定格的
-	ActiveWalkAnim = InWalkAnim;
-	bFadeAppearance = InRoute && InRoute->bFadeInsteadOfScale;
 	// 同一帧生成的几个人不要迈同一条腿
 	GaitPhase = FMath::FRand();
 
@@ -245,21 +286,17 @@ void ADeliveryPedestrian::BeginWalk(ADeliveryPedestrianRoute* InRoute, USkeletal
 	}
 
 	InstallFadeMaterial();
-	ScheduleNextPause();
-	if (InRoute && InRoute->bRoamInArea)
-	{
-		UpdateRoamTransform(GetActorLocation(), 0.f);
-	}
-	else
-	{
-		UpdateTransform(DistanceAlongRoute);
-	}
-	UpdateAppearScale(DistanceAlongRoute);
+	ApplyAppearScale();
+	if (!HasAuthority() && bKnockedDown) StartKnockdown();
 }
 
 void ADeliveryPedestrian::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	// 运动学 Actor 的 GetVelocity 不代表复制的位移，客户端按实际位移推进摆腿
+	const float ClientTravel = bClientLocationReady ? FVector::Dist2D(LastClientLocation, GetActorLocation()) : 0.f;
+	LastClientLocation = GetActorLocation();
+	bClientLocationReady = true;
 
 	// 被打飞之后位置完全交给物理，不能再按样条写变换——
 	// 两边同时写的表现是人一边躺着一边被拖回路线上
@@ -286,10 +323,9 @@ void ADeliveryPedestrian::Tick(float DeltaTime)
 		{
 			// 停着的时候速度自然是 0，所以客户端不需要知道"在停顿"这件事——
 			// 按速度分流就够了，省掉一个要复制的状态
-			const float Speed = GetVelocity().Size();
-			if (Speed > 1.f)
+			if (ClientTravel > .01f)
 			{
-				UpdateProceduralGait(Speed * DeltaTime);
+				UpdateProceduralGait(FMath::Min(ClientTravel, 80.f));
 			}
 			else
 			{
@@ -359,7 +395,8 @@ void ADeliveryPedestrian::Tick(float DeltaTime)
 		return;
 	}
 
-	const float Step = UpdateWalkAndPause(DeltaTime, Length);
+	float Step = UpdateWalkAndPause(DeltaTime, Length);
+	if (UsesBoids()) Step = UpdateBoids(Step, DeltaTime);
 	DistanceAlongRoute += (bForward ? 1.f : -1.f) * Step;
 
 	// 走到端点：先试着换一条相连的路线继续走，接不上才退场。
@@ -383,7 +420,7 @@ void ADeliveryPedestrian::Tick(float DeltaTime)
 		Length = RoutePtr->GetRouteLength();
 	}
 
-	UpdateTransform(DistanceAlongRoute);
+	UpdateTransform(DistanceAlongRoute, DeltaTime);
 	UpdateAppearScale(DistanceAlongRoute);
 
 	if (bProceduralGait)
@@ -399,7 +436,7 @@ void ADeliveryPedestrian::Tick(float DeltaTime)
 	}
 }
 
-void ADeliveryPedestrian::UpdateTransform(float Distance)
+void ADeliveryPedestrian::UpdateTransform(float Distance, float DeltaTime)
 {
 	ADeliveryPedestrianRoute* RoutePtr = Route.Get();
 	if (!RoutePtr)
@@ -408,6 +445,11 @@ void ADeliveryPedestrian::UpdateTransform(float Distance)
 	}
 
 	FVector Target = RoutePtr->GetLocationAtDistance(Distance);
+	if (UsesBoids())
+	{
+		const FVector Side = FVector::CrossProduct(FVector::UpVector, RoutePtr->GetDirectionAtDistance(Distance)).GetSafeNormal2D();
+		Target += Side * BoidsLateralOffset;
+	}
 
 	// 样条是人手拉的，端点高度未必正好贴在路面上，所以每帧实测一次
 	float GroundZ = 0.f;
@@ -421,6 +463,7 @@ void ADeliveryPedestrian::UpdateTransform(float Distance)
 	{
 		Forward = -Forward;
 	}
+	if (UsesBoids() && !BoidsVelocity.IsNearlyZero()) Forward = BoidsVelocity;
 	// 只取水平朝向：坡上的路人不该跟着路面俯仰，那会让他像在爬
 	Forward.Z = 0.f;
 	if (Forward.IsNearlyZero())
@@ -430,12 +473,78 @@ void ADeliveryPedestrian::UpdateTransform(float Distance)
 	}
 
 	FRotator Rotation = Forward.IsNearlyZero() ? GetActorRotation() : Forward.GetSafeNormal().Rotation();
+	if (UsesBoids() && DeltaTime > 0.f) Rotation = FMath::RInterpConstantTo(GetActorRotation(), Rotation, DeltaTime, 150.f);
 	// 停着的时候朝向偏开一点，像在看橱窗；站得笔直不动最像卡住
 	if (PauseRemaining > 0.f)
 	{
 		Rotation.Yaw += PauseYawOffset;
 	}
 	SetActorLocationAndRotation(Target, Rotation);
+}
+
+bool ADeliveryPedestrian::UsesBoids() const
+{
+	return Route.IsValid() && Route->bUseBoids && !Route->bRoamInArea;
+}
+
+float ADeliveryPedestrian::UpdateBoids(float AllowedStep, float DeltaTime)
+{
+	if (AllowedStep <= 0.f || DeltaTime <= 0.f)
+	{
+		BoidsVelocity = FVector::ZeroVector;
+		return 0.f;
+	}
+	const auto* Group = Route.Get();
+	const float Dt = FMath::Min(DeltaTime, .1f);
+	const FVector Tangent = Group->GetDirectionAtDistance(DistanceAlongRoute).GetSafeNormal2D();
+	const FVector Forward = bForward ? Tangent : -Tangent;
+	const FVector Side = FVector::CrossProduct(FVector::UpVector, Tangent);
+	const FVector Position = GetActorLocation();
+	FVector Separation = FVector::ZeroVector, Alignment = FVector::ZeroVector, Center = FVector::ZeroVector;
+	int32 Count = 0;
+	// 邻居仅取本路线的弱引用名单，不建跨 World 静态缓存；倒地者不参与群体引导
+	for (const auto& Entry : Group->GetAlivePedestrians())
+	{
+		const auto* Other = Entry.Get();
+		if (!IsValid(Other) || Other == this || Other->GetWorld() != GetWorld() || Other->IsActorBeingDestroyed() ||
+		    Other->IsKnockedDown() || Other->IsStandingUp()) continue;
+		FVector Away = Position - Other->GetActorLocation(); Away.Z = 0.f;
+		const float Distance = Away.Size();
+		if (Distance > Group->BoidsNeighborRadius) continue;
+		++Count; Center += Other->GetActorLocation();
+		Alignment += Other->BoidsVelocity.IsNearlyZero() ? Forward * Other->WalkSpeed : Other->BoidsVelocity;
+		if (Distance < Group->BoidsSeparationDistance)
+		{
+			// 完全共线或重叠时给两人相反的侧向偏好，避免只会互相减速堵成一列
+			if (FMath::Abs(FVector::DotProduct(Away, Side)) < 5.f)
+				Away += Side * (GetUniqueID() < Other->GetUniqueID() ? -20.f : 20.f);
+			Separation += Away.GetSafeNormal() * (1.f - Distance / FMath::Max(Group->BoidsSeparationDistance, 1.f));
+		}
+	}
+	FVector Desired = Forward * WalkSpeed + Separation * WalkSpeed * Group->BoidsSeparationWeight;
+	if (Count > 0)
+	{
+		Desired += (Alignment / Count - Forward * WalkSpeed) * Group->BoidsAlignmentWeight;
+		Desired += (Center / Count - Position).GetClampedToMaxSize2D(WalkSpeed) * Group->BoidsCohesionWeight;
+	}
+	// 轻微回到路线中心，硬边界仍在更新位置时限制；始终保留过街方向
+	Desired -= Side * BoidsLateralOffset * .6f;
+	Desired.Z = 0.f;
+	BoidsVelocity += (Desired - BoidsVelocity).GetClampedToMaxSize(Group->BoidsMaxAcceleration * Dt);
+	const float Along = FMath::Clamp(FVector::DotProduct(BoidsVelocity, Forward), WalkSpeed * .25f, WalkSpeed * 1.15f);
+	const float Across = FMath::Clamp(FVector::DotProduct(BoidsVelocity, Side), -WalkSpeed * .65f, WalkSpeed * .65f);
+	const float Width = FMath::Max(Group->BoidsCorridorHalfWidth, 0.f);
+	const float Offset = FMath::Clamp(BoidsLateralOffset + Across * Dt, -Width, Width);
+	const float Step = FMath::Min(Along * Dt, AllowedStep * 1.15f);
+	const FVector Next = Group->GetLocationAtDistance(DistanceAlongRoute + (bForward ? Step : -Step)) + Side * Offset;
+	if (IsRoamStepBlocked(Position, Next))
+	{
+		BoidsVelocity = FVector::ZeroVector;
+		return 0.f;
+	}
+	BoidsVelocity = Forward * Along + Side * ((Offset - BoidsLateralOffset) / Dt);
+	BoidsLateralOffset = Offset;
+	return Step;
 }
 
 void ADeliveryPedestrian::UpdateRoamTransform(const FVector& DesiredLocation, float DeltaTime)
@@ -832,6 +941,7 @@ void ADeliveryPedestrian::ReceiveImpact(const FVector& Impulse, const FVector& I
 
 	// 服务器自己也要切：OnRep 只在客户端跑
 	StartKnockdown();
+	ForceNetUpdate();
 }
 
 void ADeliveryPedestrian::OnRep_KnockedDown()
@@ -854,8 +964,11 @@ void ADeliveryPedestrian::OnRep_KnockedDown()
 
 void ADeliveryPedestrian::StartKnockdown()
 {
+	BoidsVelocity = FVector::ZeroVector;
 	Phase = EDeliveryPedestrianPhase::KnockedDown;
 	FallElapsed = 0.f;
+	bFallHorizontalBlocked = false;
+	FallArcHeight = 0.f;
 	FallStartLocation = GetActorLocation();
 	FallStartRotation = GetActorQuat();
 	bSimulatingKnockdown = bUsePhysicalKnockdown && ActiveMesh && ActiveMesh->GetPhysicsAsset();
@@ -877,7 +990,12 @@ void ADeliveryPedestrian::StartKnockdown()
 		}
 		const FVector TiltAxis = FVector::CrossProduct(FVector::UpVector, Direction).GetSafeNormal();
 		FallEndRotation = FQuat(TiltAxis, FMath::DegreesToRadians(78.f)) * FallStartRotation;
-		FallEndLocation = FallStartLocation + Direction * 28.f + FVector(0.f, 0.f, 14.f);
+		// 普通倾倒保留原距离，车撞按冲量强度击离车头；位置仍只由服务器复制
+		const float Strength = FMath::Clamp((KnockImpulse.Size2D() - KnockbackImpulseThreshold) /
+		    FMath::Max(KnockbackImpulseReference - KnockbackImpulseThreshold, 1.f), 0.f, 1.f);
+		const float Distance = FMath::Lerp(28.f, FMath::Max(KnockbackMaxDistance, 28.f), Strength);
+		FallArcHeight = FMath::Max(KnockbackMaxArcHeight, 0.f) * Strength;
+		FallEndLocation = FallStartLocation + Direction * Distance + FVector(0.f, 0.f, 14.f);
 		if (Mesh && ActiveWalkAnim)
 		{
 			Mesh->SetPlayRate(0.f);
@@ -956,8 +1074,31 @@ void ADeliveryPedestrian::UpdateFallAnimation(float DeltaTime)
 	if (HasAuthority() && bWasFalling)
 	{
 		const float Smooth = FMath::SmoothStep(0.f, 1.f, Alpha);
-		SetActorLocationAndRotation(FMath::Lerp(FallStartLocation, FallEndLocation, Smooth),
-		                            FQuat::Slerp(FallStartRotation, FallEndRotation, Smooth));
+		// 强撞击快速离开撞点再减速，避免原地缓慢翻倒；弱击仍沿用原节奏
+		const float TravelAlpha = FallArcHeight > 0.f ? 1.f - FMath::Square(1.f - Alpha) : Smooth;
+		FVector Desired = FMath::Lerp(FallStartLocation, FallEndLocation, TravelAlpha);
+		if (bFallHorizontalBlocked)
+		{
+			Desired.X = GetActorLocation().X;
+			Desired.Y = GetActorLocation().Y;
+		}
+		Desired.Z += FallArcHeight * FMath::Sin(PI * Alpha);
+		float GroundZ;
+		if (TraceGroundZ(Desired, GroundZ)) Desired.Z = FMath::Max(Desired.Z, GroundZ + 14.f * Smooth);
+		// 根网格无碰撞且倒地胶囊已关闭，显式扫掠才能阻止击退穿墙；不扫玩家和车辆
+		FCollisionObjectQueryParams Objects;
+		Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+		Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(PedestrianKnockback), false, this);
+		const FVector Offset(0.f, 0.f, 32.f);
+		FHitResult Hit;
+		if (GetWorld()->SweepSingleByObjectType(Hit, GetActorLocation() + Offset, Desired + Offset,
+		    FQuat::Identity, Objects, FCollisionShape::MakeSphere(20.f), Params))
+		{
+			Desired = Hit.bStartPenetrating ? GetActorLocation() : Hit.Location - Offset;
+			bFallHorizontalBlocked = true;
+		}
+		SetActorLocationAndRotation(Desired, FQuat::Slerp(FallStartRotation, FallEndRotation, Smooth));
 	}
 	// 身体倾倒的同时屈膝、前倾、双手向前撑；两端回到参考姿势，
 	// 与原行走姿势和随后爬起姿势衔接时不会留下一帧手脚跳变。
@@ -983,6 +1124,8 @@ float ADeliveryPedestrian::GetGetUpAlpha() const
 
 void ADeliveryPedestrian::StartGetUp()
 {
+	BoidsLateralOffset = 0.f;
+	BoidsVelocity = FVector::ZeroVector;
 	GetUpElapsed = 0.f;
 	const bool bWasSimulating = bSimulatingKnockdown;
 	bSimulatingKnockdown = false;
@@ -1242,6 +1385,7 @@ bool ADeliveryPedestrian::IsBlockedAhead(bool* bFixedObstacle) const
 		// 不跳过的话一个躺着的人会把整条人行道堵死到 MaxYieldSeconds 为止
 		if (const ADeliveryPedestrian* OtherPedestrian = Cast<ADeliveryPedestrian>(Other))
 		{
+			if (UsesBoids() && OtherPedestrian->Route == Route) continue;
 			if (OtherPedestrian->IsKnockedDown() || OtherPedestrian->IsStandingUp())
 			{
 				continue;
@@ -1412,6 +1556,8 @@ bool ADeliveryPedestrian::TryHandoff()
 	NextRoute->AcceptHandoff(this);
 
 	Route = NextRoute;
+	BoidsVelocity = FVector::ZeroVector;
+	BoidsLateralOffset = 0.f;
 	bForward = bEnterAtStart;
 	DistanceAlongRoute = bEnterAtStart ? 0.f : NextRoute->GetRouteLength();
 	++HandoffCount;

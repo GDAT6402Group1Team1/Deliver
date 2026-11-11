@@ -121,6 +121,33 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 	UPROPERTY(EditAnywhere, Category = "Pedestrian|过街", meta = (Units = "cm"))
 	float YieldProbeDistanceOverride = -1.f;
 
+	/** 在样条走廊内使用分离、对齐和聚合；活动圆游走仍沿用原逻辑 */
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|Boids")
+	bool bUseBoids = false;
+
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|Boids", meta = (ClampMin = "50", Units = "cm"))
+	float BoidsNeighborRadius = 200.f;
+
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|Boids", meta = (ClampMin = "20", Units = "cm"))
+	float BoidsSeparationDistance = 65.f;
+
+	/** 相对各自路线中心最多横移多远，不能借群体聚合走到车道外 */
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|Boids", meta = (ClampMin = "0", Units = "cm"))
+	float BoidsCorridorHalfWidth = 65.f;
+
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|Boids", meta = (ClampMin = "0", ClampMax = "3"))
+	float BoidsSeparationWeight = 1.8f;
+
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|Boids", meta = (ClampMin = "0", ClampMax = "1"))
+	float BoidsAlignmentWeight = .35f;
+
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|Boids", meta = (ClampMin = "0", ClampMax = "1"))
+	float BoidsCohesionWeight = .15f;
+
+	/** 限制转向加速度，单位 cm/s²，避免低帧率或邻居变化时横向跳动 */
+	UPROPERTY(EditAnywhere, Category = "Pedestrian|Boids", meta = (ClampMin = "1"))
+	float BoidsMaxAcceleration = 260.f;
+
 	// 生成节奏
 	/** 这条线上同时最多几个人 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|生成", meta = (ClampMin = "0"))

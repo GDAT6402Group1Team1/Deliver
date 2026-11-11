@@ -77,6 +77,7 @@ def main():
         leaders.append(kind)
     route.set_editor_property("leader_kinds", leaders)
     route.set_editor_property("roam_in_area", False)
+    route.set_editor_property("use_boids", True)
     route.set_editor_property("both_directions", False)
     route.set_editor_property("allow_handoff", False)
     route.set_editor_property("prewarm_on_begin_play", False)
