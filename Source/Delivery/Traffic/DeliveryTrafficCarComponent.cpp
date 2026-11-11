@@ -19,6 +19,9 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SplineComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/MeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "TimerManager.h"
 #include "Audio/DeliveryVehicleAudioComponent.h"
 #include "Sound/SoundBase.h"
@@ -221,7 +224,7 @@ if (const AActor* Owner = GetOwner())
 
 	// 保存原始缩放，再从较小尺寸逐渐恢复，各波车辆共用此流程
 	
-	if (bScaleInOnSpawn && ScaleInDuration > 0.0f)
+	if (bScaleInOnSpawn && (bFadeInsteadOfScale ? FadeInDuration : ScaleInDuration) > 0.0f)
 	{
 		if (AActor* Owner = GetOwner())
 		{
@@ -229,7 +232,15 @@ if (const AActor* Owner = GetOwner())
 			ScaleInElapsed = 0.0f;
 			ScaleInTicks = 0;
 			bScaleInRunning = true;
-			Owner->SetActorScale3D(ScaleInTargetScale * ScaleInStartRatio);
+			bMaterialFadeReady = bFadeInsteadOfScale && PrepareFadeMaterials();
+			if (bMaterialFadeReady)
+			{
+				ApplyFadeAlpha(0.f);
+			}
+			else if (GetNetMode() != NM_DedicatedServer || !bFadeInsteadOfScale)
+			{
+				Owner->SetActorScale3D(ScaleInTargetScale * ScaleInStartRatio);
+			}
 		}
 	}
 
@@ -286,7 +297,123 @@ int32 UDeliveryTrafficCarComponent::GetWaveIndex() const
 	return 0;
 }
 
-// 更新车辆出现或离开时的缩放表现
+// 记录每个网格的原材质并创建短暂出入场用的动态材质
+bool UDeliveryTrafficCarComponent::PrepareFadeMaterials()
+{
+	AActor* Owner = GetOwner();
+	if (!Owner || GetNetMode() == NM_DedicatedServer)
+	{
+		return false;
+	}
+	RestoreOriginalMaterials();
+	FadeMeshes.Reset();
+	FadeMaterialSlots.Reset();
+	OriginalFadeMaterials.Reset();
+	FadeMaterialInstances.Reset();
+	TArray<UMeshComponent*> Meshes;
+	Owner->GetComponents(Meshes);
+	for (UMeshComponent* Mesh : Meshes)
+	{
+		for (int32 Slot = 0; Slot < Mesh->GetNumMaterials(); ++Slot)
+		{
+			UMaterialInterface* Original = Mesh->GetMaterial(Slot);
+			if (!Original)
+			{
+				continue;
+			}
+			const FString Name = Original->GetName() + TEXT("_Fade");
+			const FString Path = FString::Printf(TEXT("/Game/Traffic/Fade/%s.%s"), *Name, *Name);
+			UMaterialInterface* Fade = LoadObject<UMaterialInterface>(nullptr, *Path);
+			if (!Fade)
+			{
+				UE_LOG(LogDelivery, Warning, TEXT("%s 缺少渐隐材质 %s，保留原缩放出入场"),
+				       *GetNameSafe(Owner), *Path);
+				FadeMeshes.Reset();
+				FadeMaterialSlots.Reset();
+				OriginalFadeMaterials.Reset();
+				FadeMaterialInstances.Reset();
+				return false;
+			}
+			FadeMeshes.Add(Mesh);
+			FadeMaterialSlots.Add(Slot);
+			OriginalFadeMaterials.Add(Original);
+			FadeMaterialInstances.Add(UMaterialInstanceDynamic::Create(Fade, this));
+		}
+	}
+	return !FadeMeshes.IsEmpty();
+}
+
+void UDeliveryTrafficCarComponent::RestoreOriginalMaterials()
+{
+	for (int32 Index = 0; Index < FadeMeshes.Num(); ++Index)
+	{
+		if (UMeshComponent* Mesh = FadeMeshes[Index].Get();
+		    Mesh && OriginalFadeMaterials.IsValidIndex(Index))
+		{
+			Mesh->SetMaterial(FadeMaterialSlots[Index], OriginalFadeMaterials[Index]);
+		}
+	}
+}
+
+void UDeliveryTrafficCarComponent::ApplyFadeAlpha(float Alpha)
+{
+	if (!bMaterialFadeReady)
+	{
+		return;
+	}
+	const bool bNormal = Alpha >= 1.f - KINDA_SMALL_NUMBER;
+	for (int32 Index = 0; Index < FadeMeshes.Num(); ++Index)
+	{
+		UMeshComponent* Mesh = FadeMeshes[Index].Get();
+		UMaterialInstanceDynamic* Fade = FadeMaterialInstances[Index];
+		if (!Mesh || !Fade)
+		{
+			continue;
+		}
+		UMaterialInterface* Desired = bNormal ? OriginalFadeMaterials[Index].Get() : Fade;
+		if (!bNormal)
+		{
+			// 先把透明度写成 0，再替换材质；否则首帧会按默认值 1 闪出整辆车
+			Fade->SetScalarParameterValue(TEXT("FadeOpacity"), FMath::Clamp(Alpha, 0.f, 1.f));
+		}
+		if (Mesh->GetMaterial(FadeMaterialSlots[Index]) != Desired)
+		{
+			Mesh->SetMaterial(FadeMaterialSlots[Index], Desired);
+		}
+	}
+}
+
+void UDeliveryTrafficCarComponent::MulticastBeginFadeOut_Implementation()
+{
+	if (!bMaterialFadeReady && bFadeInsteadOfScale)
+	{
+		bMaterialFadeReady = PrepareFadeMaterials();
+	}
+	bScaleInRunning = false;
+	bScaleOutRunning = true;
+	ScaleOutElapsed = 0.f;
+}
+
+void UDeliveryTrafficCarComponent::MulticastBeginFadeIn_Implementation(const FTransform& ResetTransform)
+{
+	if (AActor* Owner = GetOwner(); Owner && !Owner->HasAuthority())
+	{
+		Owner->SetActorTransform(ResetTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+	bScaleOutRunning = false;
+	ScaleInElapsed = 0.f;
+	bScaleInRunning = bScaleInOnSpawn && (bFadeInsteadOfScale ? FadeInDuration : ScaleInDuration) > 0.f;
+	if (bMaterialFadeReady && bScaleInRunning)
+	{
+		ApplyFadeAlpha(0.f);
+	}
+	else if (bScaleInRunning && GetNetMode() != NM_DedicatedServer)
+	{
+		GetOwner()->SetActorScale3D(ScaleInTargetScale * ScaleInStartRatio);
+	}
+}
+
+// 更新车辆出现或离开时的出入场表现
 void UDeliveryTrafficCarComponent::UpdateScaleAnim(float RawDeltaTime)
 {
 	AActor* OwnerActor = GetOwner();
@@ -306,17 +433,27 @@ void UDeliveryTrafficCarComponent::UpdateScaleAnim(float RawDeltaTime)
 	if (bScaleOutRunning)
 	{
 		ScaleOutElapsed += DeltaTime;
-		const float A = FMath::Clamp(ScaleOutElapsed / ScaleOutDuration, 0.0f, 1.0f);
+		const float Duration = bMaterialFadeReady ? FadeOutDuration : ScaleOutDuration;
+		const float A = FMath::Clamp(ScaleOutElapsed / FMath::Max(Duration, 0.01f), 0.0f, 1.0f);
 		// 缓入：开头慢、收尾快，和出现时的缓出正好相反，看着像被"吸走"
 		const float Eased = FMath::Square(A);
-		OwnerActor->SetActorScale3D(ScaleInTargetScale * FMath::Lerp(1.0f, ScaleInStartRatio, Eased));
+		if (bMaterialFadeReady)
+		{
+			ApplyFadeAlpha(1.f - Eased);
+		}
+		else if (GetNetMode() != NM_DedicatedServer || !bFadeInsteadOfScale)
+		{
+			OwnerActor->SetActorScale3D(ScaleInTargetScale * FMath::Lerp(1.0f, ScaleInStartRatio, Eased));
+		}
 		if (A >= 1.0f)
 		{
 			bScaleOutRunning = false;
-			bRouteLostPending = false;
-			// 缩小完成后再通知蓝图重置位置，避免在出生点才播放消失效果
-			
-			OnRouteLost.Broadcast();
+			if (OwnerActor->HasAuthority())
+			{
+				bRouteLostPending = false;
+				// 消失完成后再通知蓝图重置位置
+				OnRouteLost.Broadcast();
+			}
 		}
 		return;
 	}
@@ -328,23 +465,39 @@ void UDeliveryTrafficCarComponent::UpdateScaleAnim(float RawDeltaTime)
 	AActor* Owner = OwnerActor;
 
 	ScaleInElapsed += DeltaTime;
-	const float Alpha = FMath::Clamp(ScaleInElapsed / ScaleInDuration, 0.0f, 1.0f);
+	const float Duration = bMaterialFadeReady ? FadeInDuration : ScaleInDuration;
+	const float Alpha = FMath::Clamp(ScaleInElapsed / FMath::Max(Duration, 0.01f), 0.0f, 1.0f);
 	// 放大过程先快后慢，接近目标尺寸时平滑收尾
 	
-	const float Eased = 1.0f - FMath::Square(1.0f - Alpha);
+	const float Eased = bMaterialFadeReady ? FMath::SmoothStep(0.f, 1.f, Alpha)
+	                                       : 1.0f - FMath::Square(1.0f - Alpha);
 	const float Ratio = FMath::Lerp(ScaleInStartRatio, 1.0f, Eased);
-	Owner->SetActorScale3D(ScaleInTargetScale * Ratio);
+	if (bMaterialFadeReady)
+	{
+		ApplyFadeAlpha(Eased);
+	}
+	else if (GetNetMode() != NM_DedicatedServer || !bFadeInsteadOfScale)
+	{
+		Owner->SetActorScale3D(ScaleInTargetScale * Ratio);
+	}
 
 	++ScaleInTicks;
 	if (Alpha >= 1.0f)
 	{
 		// 结束时恢复精确的原始缩放，避免保留插值误差
 		
-		Owner->SetActorScale3D(ScaleInTargetScale);
+		if (bMaterialFadeReady)
+		{
+			ApplyFadeAlpha(1.f);
+		}
+		else if (GetNetMode() != NM_DedicatedServer || !bFadeInsteadOfScale)
+		{
+			Owner->SetActorScale3D(ScaleInTargetScale);
+		}
 		bScaleInRunning = false;
 		// 记录效果经过的帧数，便于检查是否因卡顿而在单帧结束
 		
-		UE_LOG(LogDelivery, Log, TEXT("%s: 缩放淡入完成 wave=%d ticks=%d"), *GetNameSafe(Owner),
+		UE_LOG(LogDelivery, Log, TEXT("%s: 出场淡入完成 wave=%d ticks=%d"), *GetNameSafe(Owner),
 		       GetWaveIndex(), ScaleInTicks);
 	}
 }
@@ -676,12 +829,10 @@ void UDeliveryTrafficCarComponent::BeginRouteReset()
 	ResetHornProximity();
 	// 先播放缩小效果，再通知蓝图重置；等待期间阻止重复发出重置通知
 
-if (bScaleOutOnRouteLost && ScaleOutDuration > 0.0f && GetOwner())
+if (bScaleOutOnRouteLost && (bFadeInsteadOfScale ? FadeOutDuration : ScaleOutDuration) > 0.0f && GetOwner())
 	{
 		bRouteLostPending = true;
-		bScaleOutRunning = true;
-		bScaleInRunning = false;
-		ScaleOutElapsed = 0.0f;
+		MulticastBeginFadeOut();
 	}
 	else
 	{
@@ -743,16 +894,21 @@ void UDeliveryTrafficCarComponent::NotifyResetToStart()
 
 	// 重置后重新播放放大效果，目标始终使用最初保存的完整尺寸
 	
-	if (bScaleInOnSpawn && ScaleInDuration > 0.0f)
+	if (bScaleInOnSpawn && (bFadeInsteadOfScale ? FadeInDuration : ScaleInDuration) > 0.0f)
 	{
 		if (AActor* Owner = GetOwner())
 		{
-			
-			
-			ScaleInElapsed = 0.0f;
 			ScaleInTicks = 0;
-			bScaleInRunning = true;
-			Owner->SetActorScale3D(ScaleInTargetScale * ScaleInStartRatio);
+			if (bFadeInsteadOfScale)
+			{
+				MulticastBeginFadeIn(Owner->GetActorTransform());
+			}
+			else
+			{
+				ScaleInElapsed = 0.0f;
+				bScaleInRunning = true;
+				Owner->SetActorScale3D(ScaleInTargetScale * ScaleInStartRatio);
+			}
 		}
 	}
 

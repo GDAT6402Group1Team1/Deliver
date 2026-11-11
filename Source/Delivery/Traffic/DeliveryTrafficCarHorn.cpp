@@ -160,6 +160,11 @@ void UDeliveryTrafficCarComponent::ResetHornProximity()
 
 void UDeliveryTrafficCarComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    RestoreOriginalMaterials();
+    FadeMeshes.Reset();
+    FadeMaterialSlots.Reset();
+    OriginalFadeMaterials.Reset();
+    FadeMaterialInstances.Reset();
     if (GetWorld())
     {
         GetWorld()->GetTimerManager().ClearTimer(NextWaveTimer);

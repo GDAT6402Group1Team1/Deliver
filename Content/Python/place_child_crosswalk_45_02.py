@@ -163,7 +163,7 @@ def main():
                 route.set_editor_property('walk_speed_max', 130.)
                 route.set_editor_property('lateral_jitter', 0.)
                 route.set_editor_property('appear_distance', 100.)
-                route.set_editor_property('red_light_walk_speed_multiplier', 1.5)
+                route.set_editor_property('red_light_walk_speed_multiplier', 2.0)
                 route.set_editor_property('crosswalk_actor', mark)
                 route.set_editor_property('signal_segment', signal)
                 sp = route.get_component_by_class(unreal.SplineComponent)

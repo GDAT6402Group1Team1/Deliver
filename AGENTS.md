@@ -661,7 +661,7 @@ GetFuturePostionandRotationAlongSpline:
   车必须先被加速计时器（0.1 秒一跳）推动起来，探测才有长度。
 - **能接上路的最远出生距离 = 150（球半径）+ 83（`LANE_BOX_HALF` 沿行驶方向的
   半尺寸）= 233 cm**，Box 挂在车道段的**第一个控制点**上。超出这个距离，
-  车只能沿着出生朝向裸奔瞎撞；撞不到就被 `RouteLostTimeout`（3 秒）缩小消失、
+  车只能沿着出生朝向裸奔瞎撞；撞不到就被 `RouteLostTimeout`（3 秒）淡出消失、
   瞬移回出生点，再撞一次——**表现正是「这辆车永远走不上交通线」**。
   现在 `BEHIND_BOX` 是 **300**（300−83=217 > 150），出生姿势下球还没压着 Box。
   车要先直行约 67 cm 才进入探测范围；弯道上可能错过 Box，必须在实际关卡验证。
@@ -1325,12 +1325,14 @@ PC 保留输入绑定、服务器请求及旧蓝图转发入口，不再保存�
 按用户要求，/Game/model 及所有子目录的 62 个静态网格体统一使用 Use Complex Collision As Simple；本次修改并保存 55 个，7 个原已符合。骨骼网格体、材质、纹理和重定向器不属于该设置范围。原资产备份及逐项结果位于 Saved/CollisionBackups 和 Saved/model_complex_collision_report.json；独立 StaticMeshEditorSubsystem 读取核对 62/62 符合。此变更尚未验证角色持续上升问题是否消失。
 
 
+交通车出入场使用 `Content/Python/create_traffic_fade_materials.py` 生成的独立材质副本：车漆和车灯用 Masked + DitherTemporalAA 的实心遮罩渐显，原本透明的车窗沿原透明度乘 `FadeOpacity`。生成时 0.9 秒淡入（开头用 SmoothStep 缓起），路线丢失时 0.6 秒淡出并在结束后重置。淡化窗口内临时切换材质，正常行驶立即恢复原车漆、车窗和车灯材质；车身缩放保持原尺寸。客户端由车辆组件的多播同步淡出与重生淡入。缺少副本时回退到原缩放效果并记录警告。
+
 ### 地图生成范围与角色升空修复（2026-11-05）
 TestForCharacter 的 ROAD-CREATE、POLE-CREATE、GRASSBED-CREATE1 的 PCG BrushComponent 原为 QueryOnly，运行时 WorldStatic/WorldDynamic 地面对象查询会在体积内部得到 initial_overlap、distance=0 的命中，把射线起点误当支撑面，导致主动布娃娃持续上升。已将三个 PCG 范围和 NewProceduralFoliageSpawner 的 BrushComponent 统一设为 NoCollision，并保存地图；生成的模型和树石植被实例碰撞保持开启。原地图 PIE 验证：地面命中改为 Landscape，连续采样髋高度约 2010.43 cm 保持稳定，不再持续升空。未改角色移动参数；排查时对 BP_Axe 的试验碰撞调整已恢复 PhysicsActor。
 
 ## 斑马线行人路线与人行灯
 
-- `Crosswalk_Intersection_45_02` 和 `Crosswalk_MainRoad_R003_9` 由 `Content/Python/place_child_crosswalk_45_02.py` 各摆两条对称过街路线：A 道只随机男孩/女孩，B 道等权随机六种现有 NPC。两道沿车行方向各偏 70 cm，路线比斑马线两端各延长 250 cm；A 道小孩最多同时 16 人、间隔 0.7 秒（约 91 cm），前方探测缩短到 35 cm；B 道仍最多 12 人、间隔 0.9 秒，开局晚 0.45 秒。基础步速 130 cm/s，红灯时已出发者以 1.5 倍走完。两道只在出现和消失期间使用复制的渐隐材质，正常行走恢复原始不透明材质。服务器生成前只检查对应段的 `StopAtInter`（车红即人绿）及本轮人数限制；人行绿灯时不再等斑马线上的车驶离。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过后恢复原上限。
+- `Crosswalk_Intersection_45_02` 和 `Crosswalk_MainRoad_R003_9` 由 `Content/Python/place_child_crosswalk_45_02.py` 各摆两条对称过街路线：A 道只随机男孩/女孩，B 道等权随机六种现有 NPC。两道沿车行方向各偏 70 cm，路线比斑马线两端各延长 250 cm；A 道小孩最多同时 16 人、间隔 0.7 秒（约 91 cm），前方探测缩短到 35 cm；B 道仍最多 12 人、间隔 0.9 秒，开局晚 0.45 秒。基础步速 130 cm/s，红灯时已出发者以 2 倍走完。两道只在出现和消失期间使用复制的渐隐材质，正常行走恢复原始不透明材质。服务器生成前只检查对应段的 `StopAtInter`（车红即人绿）及本轮人数限制；人行绿灯时不再等斑马线上的车驶离。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过后恢复原上限。
 - `Crosswalk_BranchRoad_R035_Merged_8` 单独由 `Content/Python/place_child_crosswalk_r035_8.py` 布置两条男孩/女孩排队过街路线，两道沿车行方向各偏 70 cm，第二道开局晚 0.45 秒；每道最多同时 16 人、间隔 0.7 秒、步速 130 cm/s，依照 `Inter_BranchRoad_R035_Merged_+0180_I02` 的人行信号出发。该斑马线从普通路线生成脚本中排除。
 - 主地图共四条小孩列（上述两条重点斑马线各一条，加 R035 两条）。每条 `LeaderKinds` 等权配置中年男/女，`Kinds` 只含男孩/女孩；人行灯每次红变绿时重置一次带队标记，本轮第一次成功生成用成人池，后续用小孩池，不因队列暂时走空重复出成人。成人材质由 `LeaderFadeMaterials` 与 `LeaderKinds` 同序配置；无信号灯的 `testfortraffic` 小孩测试队列仅在开局出带队成人。
 - 其余有明确车灯归属的斑马线由 `Content/Python/place_general_crosswalk_routes.py` 布置单道或双道路线，六种 NPC 等权随机，每轮人行绿灯每条斑马线合计出发 2～3 人；双道共享配额，红灯不再生成，已出发者继续走。上述三条重点斑马线不受此配额限制。

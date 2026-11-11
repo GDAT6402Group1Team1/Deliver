@@ -151,8 +151,8 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	if (!TestNotNull(TEXT("spawn one"), Walker))
 		return false;
 	TestEqual(TEXT("路线生成时应用较短的前方探测距离"), Walker->YieldProbeDistance, 35.f);
-	Walker->SetCrosswalkSpeedMultiplier(1.5f);
-	TestEqual(TEXT("红灯时已出发路人加速"), Walker->GetWalkSpeed(), 300.f);
+	Walker->SetCrosswalkSpeedMultiplier(2.f);
+	TestEqual(TEXT("红灯时已出发路人加速"), Walker->GetWalkSpeed(), 400.f);
 	Walker->SetCrosswalkSpeedMultiplier(1.f);
 	TestEqual(TEXT("绿灯时恢复原步速"), Walker->GetWalkSpeed(), 200.f);
 	TestEqual(TEXT("单列路线不会随机停步"), Walker->PauseDurationMax, 0.f);

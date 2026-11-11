@@ -11,6 +11,9 @@ class UDeliveryVehicleAudioComponent;
 class USoundBase;
 class USoundAttenuation;
 class APlayerController;
+class UMeshComponent;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDeliveryTrafficCarRouteLostSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryTrafficHornSignature, USoundBase*, Sound);
@@ -26,6 +29,7 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 {
 	GENERATED_BODY()
 	friend class FDeliveryTrafficHornBoostTest;
+	friend class FDeliveryTrafficFadeTest;
 
   public:
 	UDeliveryTrafficCarComponent();
@@ -224,6 +228,17 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	float MinPushedMaxSpeed = 600.0f;
 
 	// 出现与消失效果
+	/** 仅在出现和消失窗口切换到渐隐材质，正常行驶恢复原材质 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|出现动画")
+	bool bFadeInsteadOfScale = true;
+
+	/** 车身材质从完全不可见到原样显现的时长 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|出现动画", meta = (ClampMin = "0.01", Units = "s"))
+	float FadeInDuration = 0.9f;
+
+	/** 离开路线时车身材质从原样到不可见的时长 */
+	UPROPERTY(EditAnywhere, Category = "Traffic|出现动画", meta = (ClampMin = "0.01", Units = "s"))
+	float FadeOutDuration = 0.6f;
 	/**
 	 * 车辆出现时由小变大，不修改车身材质
 	 * 适用于当前使用不透明材质的车辆模型
@@ -595,6 +610,23 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	 * 消失 = 反过来缩回去，缩完广播 OnRouteLost
 	 */
 	void UpdateScaleAnim(float RawDeltaTime);
+	bool PrepareFadeMaterials();
+	void ApplyFadeAlpha(float Alpha);
+	void RestoreOriginalMaterials();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastBeginFadeOut();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastBeginFadeIn(const FTransform& ResetTransform);
+
+	TArray<TWeakObjectPtr<UMeshComponent>> FadeMeshes;
+	TArray<int32> FadeMaterialSlots;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInterface>> OriginalFadeMaterials;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> FadeMaterialInstances;
+	bool bMaterialFadeReady = false;
 	FVector ScaleInTargetScale = FVector::OneVector;
 	float ScaleInElapsed = 0.0f;
 	/** 本次出现效果经过的帧数，用于检查是否被单帧卡顿跳过 */

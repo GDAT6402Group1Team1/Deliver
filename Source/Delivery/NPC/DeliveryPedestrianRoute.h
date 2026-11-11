@@ -115,7 +115,7 @@ class DELIVERY_API ADeliveryPedestrianRoute : public AActor
 
 	/** 红灯后已出发的小孩加速通过，绿灯恢复正常速度 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestrian|过街", meta = (ClampMin = "1.0"))
-	float RedLightWalkSpeedMultiplier = 1.5f;
+	float RedLightWalkSpeedMultiplier = 2.0f;
 
 	/** 仅覆盖本路线生成路人的前方探测距离；负值沿用路人默认值 */
 	UPROPERTY(EditAnywhere, Category = "Pedestrian|过街", meta = (Units = "cm"))
