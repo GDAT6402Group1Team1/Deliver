@@ -31,7 +31,22 @@ TSharedRef<SWidget> UDeliveryConversationWidget::RebuildWidget()
     return Super::RebuildWidget();
 }
 void UDeliveryConversationWidget::SendText(const FString& Text)
-{ if (Resident.IsValid()) if (auto* C=GetOwningPlayer()->FindComponentByClass<UDeliveryConversationComponent>()) C->Submit(Resident.Get(),Text); }
+{
+    auto* PC=GetOwningPlayer();
+    auto* Conversation=PC?PC->FindComponentByClass<UDeliveryConversationComponent>():nullptr;
+    if (!Resident.IsValid() || !Conversation) return;
+    RefreshReply();
+    const FString Message=Text.TrimStartAndEnd().Left(256);
+    // 同一句正在等回应时不重发，避免每次点快捷按钮都使在途回复过期
+    if (bAwaitingReply && Message==LastSubmittedText) return;
+    if (!Conversation->Submit(Resident.Get(),Message)) return;
+    LastSubmittedText=Message; LastReplyText.Reset();
+    SubmittedEventId=Conversation->GetLastSubmissionId();
+    ReplyWaitUntil=FPlatformTime::Seconds()+30;
+    bAwaitingReply=true;
+    bReplyTimedOut=false;
+    RefreshReply();
+}
 void UDeliveryConversationWidget::Send()
 {
     if (!Input) return;
@@ -43,20 +58,58 @@ void UDeliveryConversationWidget::Send()
 void UDeliveryConversationWidget::Apologize() { SendText(TEXT("对不起，刚才是我太急了，请让我先送货吧")); }
 void UDeliveryConversationWidget::Provoke() { SendText(TEXT("他刚才是不是在说你？你们到底谁有理？")); }
 void UDeliveryConversationWidget::Close()
-{ if (auto* HUD=Cast<ADeliveryHUD>(GetOwningPlayer()->GetHUD())) HUD->CloseResidentConversation(); }
+{
+    if (auto* PC=GetOwningPlayer())
+        if (auto* HUD=Cast<ADeliveryHUD>(PC->GetHUD())) HUD->CloseResidentConversation();
+}
 void UDeliveryConversationWidget::NativeTick(const FGeometry& Geometry,float Dt)
 {
     Super::NativeTick(Geometry,Dt);
-    auto* C=GetOwningPlayer()->FindComponentByClass<UDeliveryConversationComponent>();
-    if (!Resident.IsValid() || !C || !C->CanTalkTo(Resident.Get())) { Close(); return; }
+    auto* PC=GetOwningPlayer();
+    auto* Conversation=PC?PC->FindComponentByClass<UDeliveryConversationComponent>():nullptr;
+    if (!Resident.IsValid() || !Conversation || !Conversation->CanTalkTo(Resident.Get())) { Close(); return; }
+    RefreshReply();
+}
+
+void UDeliveryConversationWidget::RefreshReply()
+{
+    auto* PC=GetOwningPlayer();
+    auto* Conversation=PC?PC->FindComponentByClass<UDeliveryConversationComponent>():nullptr;
+    if (!Reply || !Resident.IsValid() || !Conversation) return;
     const auto Speech=Resident->Presentation->GetSpeech();
-    // 对话框保留最近一句实际台词，后台请求与排队状态不作为角色台词显示
-    FString Text=Resident->DisplayName.ToString();
-    if (!Speech.Text.IsEmpty()) Text+=TEXT("\n")+Speech.Text;
-    if (C->GetLastResult()==TEXT("TooFast")) Text+=TEXT("\n说慢一点");
-    if (C->GetLastResult()==TEXT("Unavailable")) Text+=TEXT("\n请靠近对方，确认中间没有遮挡且对方没有倒地");
-    if (C->GetLastResult()==TEXT("NotHeard")) Text+=TEXT("\n对方没听到，请换个无遮挡的位置再说") ;
+    const FName Result=Conversation->GetLastResult();
+    const bool bNewSpeech=SubmittedEventId.IsValid() && Speech.ReplyToEventId==SubmittedEventId && !Speech.Text.IsEmpty();
+    const bool bRejected=Result==TEXT("TooFast") || Result==TEXT("Unavailable") || Result==TEXT("NotHeard") || Result==TEXT("Empty");
+    if (bNewSpeech) LastReplyText=Speech.Text;
+    if (bNewSpeech || bRejected)
+    {
+        bAwaitingReply=false;
+        bReplyTimedOut=false;
+    }
+    else if (bAwaitingReply && FPlatformTime::Seconds()>=ReplyWaitUntil)
+    {
+        bAwaitingReply=false;
+        bReplyTimedOut=true;
+    }
+
+    FString Text;
+    if (!LastSubmittedText.IsEmpty()) Text=TEXT("你：")+LastSubmittedText+TEXT("\n");
+    Text+=Resident->DisplayName.ToString();
+    if (bAwaitingReply) Text+=TEXT("：…");
+    else if (bReplyTimedOut) Text+=TEXT("\n暂时没有回应，可以再试一次");
+    // 只显示与本次发言编号一致的回复，旧台词和旁人的交谈不会结束本机等待
+    else if (!LastReplyText.IsEmpty()) Text+=TEXT("：")+LastReplyText;
+    else if (LastSubmittedText.IsEmpty() && !Speech.Text.IsEmpty()) Text+=TEXT("：")+Speech.Text;
+    if (Result==TEXT("TooFast")) Text+=TEXT("\n说慢一点");
+    if (Result==TEXT("Unavailable")) Text+=TEXT("\n请靠近对方，确认中间没有遮挡且对方没有倒地");
+    if (Result==TEXT("NotHeard")) Text+=TEXT("\n对方没听到，请换个无遮挡的位置再说");
     Reply->SetText(FText::FromString(Text));
 }
 
-void UDeliveryConversationWidget::SetResident(ADeliveryResidentCharacter* Value) { Resident=Value; }
+void UDeliveryConversationWidget::SetResident(ADeliveryResidentCharacter* Value)
+{
+    Resident=Value;
+    LastSubmittedText.Reset(); LastReplyText.Reset(); SubmittedEventId.Invalidate();
+    ReplyWaitUntil=0; bAwaitingReply=false; bReplyTimedOut=false;
+    RefreshReply();
+}

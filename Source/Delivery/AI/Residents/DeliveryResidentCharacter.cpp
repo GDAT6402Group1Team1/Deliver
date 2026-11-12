@@ -44,6 +44,7 @@ void ADeliveryResidentCharacter::BeginPlay()
     GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera,ECR_Ignore);
     ImpactSensor->SetCapsuleSize(GetCapsuleComponent()->GetUnscaledCapsuleRadius(),GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight());
     ConversationInteractable->bPromptAtTarget=true;
+    ConversationInteractable->bUseConversationIcon=true;
     ConversationInteractable->PromptOffset=FVector(0,0,GetCapsuleComponent()->GetScaledCapsuleHalfHeight()+20);
     ConversationInteractable->CanUse.BindUObject(this,&ADeliveryResidentCharacter::CanTalk);
     ConversationInteractable->Use.BindUObject(this,&ADeliveryResidentCharacter::OpenConversation);
@@ -106,7 +107,12 @@ bool ADeliveryResidentCharacter::BeginApprovedAction(const FDeliveryNpcPublicSta
     else if (State.Action==EDeliveryNpcAction::ReleaseVehicle) { if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("VoluntaryRelease")); }
     else if (State.Action==EDeliveryNpcAction::LieDown) bStarted=Combat->SetDeliberateProne(true);
     else if (State.Action==EDeliveryNpcAction::GetUp) bStarted=Combat->SetDeliberateProne(false);
-    if (bStarted && !State.Speech.IsEmpty()) Presentation->PublishSpeech(State.Speech,State.Emotion,ConversationDepth);
+    if (bStarted && !State.Speech.IsEmpty() &&
+        !Presentation->PublishSpeech(State.Speech,State.Emotion,ConversationDepth,State.ReplyToEventId))
+    {
+        UE_LOG(LogTemp,Warning,TEXT("ResidentSpeech rejected: npc=%s action=%s"),*GetName(),*State.ActionId.ToString());
+        return false;
+    }
     return bStarted;
 }
 void ADeliveryResidentCharacter::EndApprovedAction(FGuid Id)
@@ -136,13 +142,16 @@ void ADeliveryResidentCharacter::ReceiveHornFrom(float Multiplier,AActor* Vehicl
 }
 void ADeliveryResidentCharacter::Tick(float Dt)
 {
-    Super::Tick(Dt); if (!HasAuthority()) return;
+    Super::Tick(Dt);
+    // 对话字幕和思考省略号优先，隐藏交互图标但不禁用交谈操作
+    ConversationInteractable->bShowPrompt=!Presentation->GetSpeech().bActive && !Agent->IsDecisionPending();
+    if (!HasAuthority()) return;
     if (auto* AI=Cast<ADeliveryResidentAIController>(GetController())) AI->RefreshBlackboard();
     const auto State=Agent->GetPublicState();
     if (DeliveryNpc::IsTerminal(State.Status) && State.ActionId!=LastFinishedAction)
     {
         LastFinishedAction=State.ActionId;
-        if (State.Action!=EDeliveryNpcAction::Wait && State.Action!=EDeliveryNpcAction::LookAt) bDecisionNeeded=true;
+        if (State.Status!=EDeliveryNpcActionStatus::Succeeded || (State.Action!=EDeliveryNpcAction::Wait && State.Action!=EDeliveryNpcAction::LookAt)) bDecisionNeeded=true;
     }
     if (bDecisionNeeded && !Presentation->GetSpeech().bActive && !IsKnockedDown() && !Agent->HasActiveAction() && !Agent->IsDecisionPending() && GetWorld()->GetTimeSeconds()>=NextDecision)
     { NextDecision=GetWorld()->GetTimeSeconds()+4; if (Agent->RequestDecision()) bDecisionNeeded=false; }
@@ -165,7 +174,7 @@ void ADeliveryResidentCharacter::OnDecisionFinished(FName Reason)
     if (!HasAuthority()) return;
     if (Reason.IsNone()) { bDecisionNeeded=false; DecisionRetryCount=0; return; }
     // 忙碌、超时和过期回复最多补两次，失败不静默吞掉玩家已经说出的消息
-    if ((Reason==TEXT("TransportFailure") || Reason==TEXT("RequestTimeout") || Reason==TEXT("StaleProposal")) && DecisionRetryCount<2)
+    if ((Reason==TEXT("TransportFailure") || Reason==TEXT("RequestTimeout") || Reason==TEXT("StaleProposal") || Reason==TEXT("MissingPlayerReply")) && DecisionRetryCount<2)
     {
         ++DecisionRetryCount; bDecisionNeeded=true;
         NextDecision=GetWorld()->GetTimeSeconds()+2*DecisionRetryCount;

@@ -7,12 +7,43 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Styling/CoreStyle.h"
+#include "Rendering/DrawElements.h"
+#include "Widgets/SLeafWidget.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Notifications/SProgressBar.h"
 #include "Widgets/Text/STextBlock.h"
+
+namespace
+{
+// 小气泡直接绘制，避免依赖 emoji 字体或编辑器专用图标资源
+class SDeliveryConversationPromptIcon : public SLeafWidget
+{
+public:
+    SLATE_BEGIN_ARGS(SDeliveryConversationPromptIcon) {} SLATE_END_ARGS()
+    void Construct(const FArguments&) {}
+    virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(24.f,24.f); }
+    virtual int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FSlateRect&,
+        FSlateWindowElementList& Elements, int32 Layer, const FWidgetStyle& Style, bool) const override
+    {
+        const TArray<FVector2D> Outline={{5,3},{19,3},{21,5},{21,15},{19,17},{11,17},{6,21},{6,17},{5,17},{3,15},{3,5},{5,3}};
+        const FLinearColor Tint=Style.GetColorAndOpacityTint();
+        FSlateDrawElement::MakeLines(Elements,Layer,Geometry.ToPaintGeometry(),Outline,
+            ESlateDrawEffect::None,FLinearColor(0,0,0,.85f)*Tint,true,4.f);
+        FSlateDrawElement::MakeLines(Elements,Layer+1,Geometry.ToPaintGeometry(),Outline,
+            ESlateDrawEffect::None,FLinearColor::White*Tint,true,2.f);
+        for (float X : {7.f,12.f,17.f})
+        {
+            const TArray<FVector2D> Dot={{X,10},{X+.25f,10}};
+            FSlateDrawElement::MakeLines(Elements,Layer+2,Geometry.ToPaintGeometry(),Dot,
+                ESlateDrawEffect::None,FLinearColor::White*Tint,true,2.5f);
+        }
+        return Layer+2;
+    }
+};
+}
 
 // 只在需要游戏界面的世界中创建提示系统
 bool UDeliveryPromptSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -45,9 +76,10 @@ UDeliveryPromptSubsystem* UDeliveryPromptSubsystem::Get(const UObject* WorldCont
 // 交互提示与固定提示
 
 // 更新交互提示的文字、世界位置和长按进度
-void UDeliveryPromptSubsystem::PushPrompt(const FText& Text, const FVector& WorldAnchor, float HoldProgress)
+void UDeliveryPromptSubsystem::PushPrompt(const FText& Text, const FVector& WorldAnchor, float HoldProgress, bool bConversationIcon)
 {
 	PromptText = Text;
+	bPromptConversationIcon = bConversationIcon;
 	PromptAnchor = WorldAnchor;
 	PromptHoldProgress = HoldProgress < 0.0f ? -1.0f : FMath::Clamp(HoldProgress, 0.0f, 1.0f);
 	LastPushTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
@@ -164,9 +196,21 @@ void UDeliveryPromptSubsystem::EnsureWidget()
 		    if (Self)
 		    {
 			    Self->ComputeScreenPosition(Position);
+			    if (Self->bPromptConversationIcon) Position += FVector2D(24.f,18.f);
 		    }
 		    return FMargin(Position.X, Position.Y, 0.0f, 0.0f);
 	    });
+
+    const auto TextPromptVisibility = TAttribute<EVisibility>::CreateLambda([WeakThis,VisibilityAttr]()
+    {
+        const auto* Self=WeakThis.Get();
+        return Self && !Self->bPromptConversationIcon ? VisibilityAttr.Get() : EVisibility::Collapsed;
+    });
+    const auto IconPromptVisibility = TAttribute<EVisibility>::CreateLambda([WeakThis,VisibilityAttr]()
+    {
+        const auto* Self=WeakThis.Get();
+        return Self && Self->bPromptConversationIcon ? VisibilityAttr.Get() : EVisibility::Collapsed;
+    });
 
 	const auto TextAttr = TAttribute<FText>::CreateLambda(
 	    [WeakThis]()
@@ -197,7 +241,7 @@ void UDeliveryPromptSubsystem::EnsureWidget()
 	        .Alignment(FVector2D(0.5f, 1.0f))
 	        .Offset(OffsetAttr)
 	            [SNew(SBorder)
-				     .Visibility(VisibilityAttr)
+				     .Visibility(TextPromptVisibility)
 				     .BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
 				     .BorderBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f))
 				     .Padding(FMargin(
@@ -216,6 +260,10 @@ void UDeliveryPromptSubsystem::EnsureWidget()
 										                        .Percent(ProgressAttr)
 										                        .FillColorAndOpacity(FLinearColor(
 	                                                                0.25f, 0.85f, 1.0f, 1.0f))]]]];
+
+    StaticCastSharedPtr<SConstraintCanvas>(PromptWidget)->AddSlot()
+        .Anchors(FAnchors(0.f,0.f)).AutoSize(true).Alignment(FVector2D(.5f,1.f)).Offset(OffsetAttr)
+        [SNew(SDeliveryConversationPromptIcon).Visibility(IconPromptVisibility)];
 
 	// 左下角那一条；和上面的世界浮窗共用一个 Canvas，但锚点/时间戳完全独立
 	const auto CornerVisibility = TAttribute<EVisibility>::CreateLambda(

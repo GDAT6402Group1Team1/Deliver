@@ -78,6 +78,14 @@ class DELIVERY_API UDeliveryInteractableComponent : public UActorComponent
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
     bool bPromptAtTarget = false;
 
+    // 仅改变提示外观，不改变交互按键与服务器校验
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    bool bUseConversationIcon = false;
+
+    // 临时隐藏提示时仍允许交互，例如为正在播放的对白字幕让位
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    bool bShowPrompt = true;
+
     /**
      * 关掉之后既不提示也不能交互
      * 摩托车在有人骑的时候把它关掉——不然别人站旁边还能"上车"

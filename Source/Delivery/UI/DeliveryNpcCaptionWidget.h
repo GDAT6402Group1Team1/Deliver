@@ -12,7 +12,7 @@ class DELIVERY_API UDeliveryNpcCaptionWidget : public UUserWidget
 public:
     void SetCaption(const FText& Text);
 protected:
-    virtual void NativeConstruct() override;
+    virtual TSharedRef<SWidget> RebuildWidget() override;
 private:
     UPROPERTY() TObjectPtr<UTextBlock> Caption;
 };

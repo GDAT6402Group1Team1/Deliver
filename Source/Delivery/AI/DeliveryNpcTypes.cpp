@@ -59,6 +59,7 @@ FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
     {
         auto Item = MakeShared<FJsonObject>();
         Item->SetStringField(TEXT("event_id"), Id(Entry.EventId));
+        Item->SetStringField(TEXT("reply_to_event_id"), Entry.ReplyToEventId.IsValid()?Id(Entry.ReplyToEventId):TEXT(""));
         Item->SetStringField(TEXT("subject_id"), Entry.SubjectId.IsValid() ? Id(Entry.SubjectId) : TEXT(""));
         Item->SetStringField(TEXT("kind"), Entry.Kind.ToString());
         Item->SetStringField(TEXT("source"), StaticEnum<EDeliveryNpcEvidenceSource>()->GetNameStringByValue(static_cast<int64>(Entry.Source)));

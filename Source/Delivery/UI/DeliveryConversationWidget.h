@@ -22,6 +22,14 @@ private:
     UFUNCTION() void Provoke();
     UFUNCTION() void Close();
     void SendText(const FString& Text);
+    void RefreshReply();
+    // 只记录当前面板的本机回显，关闭或换居民后不沿用上一轮等待
+    FString LastSubmittedText;
+    FString LastReplyText;
+    FGuid SubmittedEventId;
+    double ReplyWaitUntil=0;
+    bool bAwaitingReply=false;
+    bool bReplyTimedOut=false;
     TWeakObjectPtr<ADeliveryResidentCharacter> Resident;
     UPROPERTY() TObjectPtr<UEditableTextBox> Input;
     UPROPERTY() TObjectPtr<UTextBlock> Reply;

@@ -12,6 +12,7 @@ struct FDeliveryNpcSpeechState
 {
     GENERATED_BODY()
     UPROPERTY(BlueprintReadOnly) FGuid TurnId;
+    UPROPERTY(BlueprintReadOnly) FGuid ReplyToEventId;
     UPROPERTY(BlueprintReadOnly) FString Text;
     UPROPERTY(BlueprintReadOnly) FName Emotion;
     UPROPERTY(BlueprintReadOnly) double StartTime=0;
@@ -26,7 +27,7 @@ class DELIVERY_API UDeliveryNpcPresentationComponent : public UActorComponent
     GENERATED_BODY()
 public:
     UDeliveryNpcPresentationComponent();
-    bool PublishSpeech(const FString& Text,FName Emotion,int32 Depth);
+    bool PublishSpeech(const FString& Text,FName Emotion,int32 Depth,FGuid ReplyToEventId=FGuid());
     void CancelSpeech();
     UFUNCTION(BlueprintPure) FDeliveryNpcSpeechState GetSpeech() const { return Speech; }
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> IdleAnimation;

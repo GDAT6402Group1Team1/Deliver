@@ -26,7 +26,7 @@ class DELIVERY_API UDeliveryPromptSubsystem : public UWorldSubsystem
 
 	// 提示内容更新
 	/** 每帧调用一次；WorldAnchor 是浮窗要贴住的世界坐标 */
-	void PushPrompt(const FText& Text, const FVector& WorldAnchor, float HoldProgress = -1.0f);
+	void PushPrompt(const FText& Text, const FVector& WorldAnchor, float HoldProgress = -1.0f, bool bConversationIcon = false);
 
     /** 保存左下角提示，直到同一个来源主动清除 */
     void SetCornerHint(UObject* Source, const FText& Text, bool bDimmed = false);
@@ -74,6 +74,7 @@ class DELIVERY_API UDeliveryPromptSubsystem : public UWorldSubsystem
 	FText PromptText;
 	FVector PromptAnchor = FVector::ZeroVector;
 	float PromptHoldProgress = -1.0f;
+	bool bPromptConversationIcon = false;
 	double LastPushTime = -1000.0;
 
 	/** 超过这么久没人推送就隐藏；取两三帧的量级，够盖住偶尔掉帧，又不会拖出残留 */

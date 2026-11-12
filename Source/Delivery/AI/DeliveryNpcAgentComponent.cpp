@@ -56,6 +56,7 @@ bool UDeliveryNpcAgentComponent::ObserveEvent(const FDeliveryNpcObservation& Obs
     PruneEvidence();
     FDeliveryNpcEvidence Item;
     Item.EventId = EventId;
+    Item.ReplyToEventId = Observation.ReplyToEventId;
     Item.Kind = Observation.Kind;
     Item.Source = Observation.Source;
     Item.Description = Observation.Description.Left(512);
@@ -195,7 +196,19 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
     }
     Reason = TEXT("InvalidDuration");
     if (!FMath::IsFinite(Proposal.Duration) || Proposal.Duration < .1f || Proposal.Duration > 5.f) return false;
+    FGuid PlayerMessage;
+    if (bResident)
+    {
+        for (const auto& Item : ActiveRequest.Evidence)
+            if (Item.Kind==TEXT("PlayerSpeech")) PlayerMessage=Item.EventId;
+        if (ActiveRequest.Evidence.ContainsByPredicate([&PlayerMessage](const auto& Item)
+            { return Item.Kind==TEXT("SelfSpeech") && Item.ReplyToEventId==PlayerMessage; })) PlayerMessage.Invalidate();
+        // 未回答的直接交谈不能用空台词静默结算，允许限次重新决策
+        if (PlayerMessage.IsValid() && Proposal.Speech.TrimStartAndEnd().IsEmpty())
+        { Reason=TEXT("MissingPlayerReply"); return false; }
+    }
     PublicState = {};
+    PublicState.ReplyToEventId=PlayerMessage;
     PublicState.ActionId = FGuid::NewGuid();
     PublicState.PlanRevision = Proposal.PlanRevision;
     PublicState.Action = Proposal.Action;

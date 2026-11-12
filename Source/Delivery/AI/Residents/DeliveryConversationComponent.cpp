@@ -49,34 +49,43 @@ void UDeliveryConversationComponent::ClientOpenConversation_Implementation(ADeli
     LastResult=NAME_None;
     if (auto* HUD=Cast<ADeliveryHUD>(PC->GetHUD())) HUD->OpenResidentConversation(Resident);
 }
-void UDeliveryConversationComponent::Submit(ADeliveryResidentCharacter* Resident,const FString& Text)
+bool UDeliveryConversationComponent::Submit(ADeliveryResidentCharacter* Resident,const FString& Text)
 {
-    auto* PC=Cast<APlayerController>(GetOwner()); if (!PC || !PC->IsLocalController()) return;
+    auto* PC=Cast<APlayerController>(GetOwner());
+    if (!PC || !PC->IsLocalController() || !IsValid(Resident) || Resident->GetWorld()!=GetWorld()) return false;
     const FString Message=Text.TrimStartAndEnd().Left(256);
     // 空输入不发送，也不覆盖上一条真实提交结果
-    if (Message.IsEmpty()) return;
+    if (Message.IsEmpty()) return false;
     const double Now=FPlatformTime::Seconds();
-    if (Now<NextLocalSendAt) return;
+    if (Now<NextLocalSendAt) return false;
     NextLocalSendAt=Now+1.1;
-    LastResult=TEXT("Sending"); ServerSubmit(Resident,Message);
+    LastSubmissionId=FGuid::NewGuid();
+    LastResult=TEXT("Sending"); ServerSubmit(Resident,Message,LastSubmissionId);
+    return true;
 }
-void UDeliveryConversationComponent::ServerSubmit_Implementation(ADeliveryResidentCharacter* Resident,const FString& Text)
+void UDeliveryConversationComponent::ServerSubmit_Implementation(ADeliveryResidentCharacter* Resident,const FString& Text,FGuid SpeechId)
 {
+    if (!SpeechId.IsValid()) { ClientResult(TEXT("Unavailable"),SpeechId); return; }
     const double Now=FPlatformTime::Seconds();
-    if (Now<NextSendAt) { ClientResult(TEXT("TooFast")); return; }
+    if (Now<NextSendAt) { ClientResult(TEXT("TooFast"),SpeechId); return; }
     const FString Message=Text.TrimStartAndEnd();
-    if (Message.IsEmpty() || Text.Len()>256) { ClientResult(TEXT("Empty")); return; }
+    if (Message.IsEmpty() || Text.Len()>256) { ClientResult(TEXT("Empty"),SpeechId); return; }
     if (!CanTalkTo(Resident))
     {
         UE_LOG(LogTemp,Log,TEXT("ResidentConversation rejected: player=%s resident=%s reason=Unavailable"),*GetNameSafe(GetOwner()),*GetNameSafe(Resident));
-        ClientResult(TEXT("Unavailable")); return;
+        ClientResult(TEXT("Unavailable"),SpeechId); return;
     }
     // 只有有效提交消耗冷却，失败重试不延长等待
     NextSendAt=Now+1;
     auto* PC=CastChecked<APlayerController>(GetOwner());
-    if (!Resident->HearSpeech(PC->GetPawn(),Message,FGuid::NewGuid(),0)) { ClientResult(TEXT("NotHeard")); return; }
-    UE_LOG(LogTemp,Log,TEXT("ResidentConversation accepted: player=%s resident=%s pending=%d activeAction=%d"),
-        *GetNameSafe(GetOwner()),*GetNameSafe(Resident),Resident->Agent->IsDecisionPending(),Resident->Agent->HasActiveAction());
-    ClientResult(TEXT("Heard"));
+    if (!Resident->HearSpeech(PC->GetPawn(),Message,SpeechId,0)) { ClientResult(TEXT("NotHeard"),SpeechId); return; }
+    UE_LOG(LogTemp,Log,TEXT("ResidentConversation accepted: player=%s resident=%s speech=%s pending=%d activeAction=%d"),
+        *GetNameSafe(GetOwner()),*GetNameSafe(Resident),*SpeechId.ToString(),Resident->Agent->IsDecisionPending(),Resident->Agent->HasActiveAction());
+    ClientResult(TEXT("Heard"),SpeechId);
 }
-void UDeliveryConversationComponent::ClientResult_Implementation(FName Result) { LastResult=Result; ResultExpiresAt=FPlatformTime::Seconds()+2.5; }
+void UDeliveryConversationComponent::ClientResult_Implementation(FName Result,FGuid SpeechId)
+{
+    // 迟到的上一次拒绝不能清掉玩家随后发出的新问题
+    if (SpeechId!=LastSubmissionId) return;
+    LastResult=Result; ResultExpiresAt=FPlatformTime::Seconds()+2.5;
+}

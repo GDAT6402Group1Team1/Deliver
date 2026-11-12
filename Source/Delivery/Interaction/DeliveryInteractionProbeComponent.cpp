@@ -86,7 +86,7 @@ void UDeliveryInteractionProbeComponent::TickComponent(float DeltaTime, ELevelTi
 
     // 左键目标比 F 优先：手上有货走到车尾时，该出现的是"左键装货"而不是"按 F 驾驶"
     UDeliveryInteractableComponent *PromptTarget = Action ? Action : (Pickup ? Pickup : General);
-    if (bShowPrompt && PromptTarget)
+    if (bShowPrompt && PromptTarget && PromptTarget->bShowPrompt)
     {
         if (UDeliveryPromptSubsystem *Prompt = UDeliveryPromptSubsystem::Get(this))
         {
@@ -111,7 +111,7 @@ void UDeliveryInteractionProbeComponent::TickComponent(float DeltaTime, ELevelTi
                     PromptLocation = Origin + FVector(0.f, 0.f, Extent.Z + 20.f);
                 }
             }
-            Prompt->PushPrompt(Text, PromptLocation, Progress);
+            Prompt->PushPrompt(Text, PromptLocation, Progress, PromptTarget->bUseConversationIcon);
         }
     }
 }

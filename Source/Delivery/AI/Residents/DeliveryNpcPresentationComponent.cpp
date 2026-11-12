@@ -37,16 +37,21 @@ void UDeliveryNpcPresentationComponent::BeginPlay()
     }
     OnRep_Speech();
 }
-bool UDeliveryNpcPresentationComponent::PublishSpeech(const FString& Text,FName Emotion,int32 Depth)
+bool UDeliveryNpcPresentationComponent::PublishSpeech(const FString& Text,FName Emotion,int32 Depth,FGuid ReplyToEventId)
 {
     if (!GetOwner()->HasAuthority() || Text.IsEmpty() || Text.Len()>120 || Depth>3 || Speech.bActive) return false;
-    Speech={}; Speech.TurnId=FGuid::NewGuid(); Speech.Text=Text; Speech.Emotion=Emotion;
+    Speech={}; Speech.TurnId=FGuid::NewGuid(); Speech.Text=Text; Speech.Emotion=Emotion; Speech.ReplyToEventId=ReplyToEventId;
     Speech.StartTime=ServerTime(); Speech.Duration=FMath::Clamp(Text.Len()*.075f+.5f,1.f,10.f); Speech.bActive=true;
-    SpeechDepth=Depth; GetOwner()->ForceNetUpdate(); OnRep_Speech(); return true;
+    SpeechDepth=Depth; GetOwner()->ForceNetUpdate(); OnRep_Speech();
+    UE_LOG(LogTemp,Log,TEXT("ResidentSpeech started: npc=%s turn=%s replyTo=%s length=%d"),
+        *GetNameSafe(GetOwner()),*Speech.TurnId.ToString(),*Speech.ReplyToEventId.ToString(),Speech.Text.Len());
+    return true;
 }
 void UDeliveryNpcPresentationComponent::CancelSpeech()
 {
     if (!GetOwner()->HasAuthority() || !Speech.bActive) return;
+    UE_LOG(LogTemp,Log,TEXT("ResidentSpeech cancelled: npc=%s turn=%s replyTo=%s"),
+        *GetNameSafe(GetOwner()),*Speech.TurnId.ToString(),*Speech.ReplyToEventId.ToString());
     Speech.bActive=false; GetOwner()->ForceNetUpdate(); OnRep_Speech();
 }
 void UDeliveryNpcPresentationComponent::OnRep_Speech()
@@ -73,6 +78,9 @@ void UDeliveryNpcPresentationComponent::TickComponent(float Dt,ELevelTick Type,F
         // 只记住完整说出的台词，模型可据此区分已回应和未回应的玩家发言
         FDeliveryNpcObservation Said; Said.Kind=TEXT("SelfSpeech");
         Said.Source=EDeliveryNpcEvidenceSource::ActionResult; Said.Description=Speech.Text; Said.Lifetime=60;
+        Said.ReplyToEventId=Speech.ReplyToEventId;
+        UE_LOG(LogTemp,Log,TEXT("ResidentSpeech completed: npc=%s turn=%s replyTo=%s"),
+            *GetNameSafe(GetOwner()),*Speech.TurnId.ToString(),*Speech.ReplyToEventId.ToString());
         Resident->Agent->ObserveEvent(Said);
         if (SpeechDepth<3)
             for (TActorIterator<ADeliveryResidentCharacter> It(GetWorld());It;++It)
@@ -96,8 +104,11 @@ void UDeliveryNpcPresentationComponent::TickComponent(float Dt,ELevelTick Type,F
         if (auto* Widget=Cast<UDeliveryNpcCaptionWidget>(Caption->GetUserWidgetObject()))
         {
             const int32 Count=FMath::Clamp(int32((ServerTime()-Speech.StartTime)/.075)+1,0,Speech.Text.Len());
-            // 头顶只在真正说话时显示字幕，不用省略号暴露后台等待状态
-            const FString Line=Speech.bActive?Resident->DisplayName.ToString()+TEXT("：")+Speech.Text.Left(Count):FString();
+            // 真正说话优先；等待模型时只用省略号反馈，不暴露后台状态文案
+            FString Line;
+            if (Speech.bActive) Line=Resident->DisplayName.ToString()+TEXT("：")+Speech.Text.Left(Count);
+            else if (!Resident->IsKnockedDown() && Resident->Agent->IsDecisionPending())
+                Line=Resident->DisplayName.ToString()+TEXT("：…");
             Widget->SetCaption(FText::FromString(Line));
         }
 }

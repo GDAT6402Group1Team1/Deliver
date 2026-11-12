@@ -20,6 +20,8 @@ struct DELIVERY_API FDeliveryNpcObservation
     GENERATED_BODY()
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FGuid EventId;
+    // 完整对白明确回答了哪条玩家发言，不能靠播放结束时间推断
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FGuid ReplyToEventId;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FName Kind;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) EDeliveryNpcEvidenceSource Source = EDeliveryNpcEvidenceSource::Seen;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TObjectPtr<AActor> Subject = nullptr;
@@ -47,6 +49,7 @@ struct DELIVERY_API FDeliveryNpcPublicState
     UPROPERTY(BlueprintReadOnly) float Duration = 0;
     UPROPERTY(BlueprintReadOnly) FName Reason;
     UPROPERTY(BlueprintReadOnly) FString Speech;
+    UPROPERTY(BlueprintReadOnly) FGuid ReplyToEventId;
     UPROPERTY(BlueprintReadOnly) FName Emotion;
 };
 
@@ -55,6 +58,7 @@ struct DELIVERY_API FDeliveryNpcEvidence
 {
     FGuid EventId;
     FGuid SubjectId;
+    FGuid ReplyToEventId;
     FName Kind;
     EDeliveryNpcEvidenceSource Source = EDeliveryNpcEvidenceSource::Seen;
     FString Description;
