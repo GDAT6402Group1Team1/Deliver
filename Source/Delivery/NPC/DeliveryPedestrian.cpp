@@ -35,6 +35,26 @@ const FName LeftForeArm(TEXT("LeftForeArm"));
 const FName RightForeArm(TEXT("RightForeArm"));
 }  // namespace DeliveryPedestrianBones
 
+namespace
+{
+constexpr float CrosswalkUnblockSeconds = 3.f;
+
+bool IsTrafficLight(const AActor* Actor)
+{
+	if (!Actor)
+	{
+		return false;
+	}
+	static const FName PedestrianLightTag(TEXT("ClaudeGenCrosswalkLight"));
+	static const FName TrafficLightTag(TEXT("ClaudeGenTrafficLight"));
+	static const FName TrafficLightClass(TEXT("trafficlight_C"));
+	static const FName GreenLightClass(TEXT("trafficlight_green_start_C"));
+	const FName ClassName = Actor->GetClass()->GetFName();
+	return Actor->ActorHasTag(PedestrianLightTag) || Actor->ActorHasTag(TrafficLightTag) ||
+	       ClassName == TrafficLightClass || ClassName == GreenLightClass;
+}
+}
+
 ADeliveryPedestrian::ADeliveryPedestrian()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -197,6 +217,7 @@ void ADeliveryPedestrian::BeginWalk(ADeliveryPedestrianRoute* InRoute, USkeletal
                                     float InSpeed, float InAnimReferenceSpeed)
 {
 	Route = InRoute;
+	CrosswalkBlockedElapsed = 0.f;
 	DistanceAlongRoute = InStartDistance;
 	RoamAppearElapsed = 0.f;
 	if (InRoute && InRoute->bRoamInArea)
@@ -395,8 +416,18 @@ void ADeliveryPedestrian::Tick(float DeltaTime)
 		return;
 	}
 
-	float Step = UpdateWalkAndPause(DeltaTime, Length);
-	if (UsesBoids()) Step = UpdateBoids(Step, DeltaTime);
+	bool bCrosswalkBlocked = false;
+	bool* CrosswalkBlocked = IsOnCrosswalk() ? &bCrosswalkBlocked : nullptr;
+	float Step = UpdateWalkAndPause(DeltaTime, Length, CrosswalkBlocked);
+	if (UsesBoids()) Step = UpdateBoids(Step, DeltaTime, CrosswalkBlocked);
+	if (!bCrosswalkBlocked)
+	{
+		CrosswalkBlockedElapsed = 0.f;
+	}
+	else if (Step <= KINDA_SMALL_NUMBER && WalkSpeed > KINDA_SMALL_NUMBER)
+	{
+		CrosswalkBlockedElapsed += DeltaTime;
+	}
 	DistanceAlongRoute += (bForward ? 1.f : -1.f) * Step;
 
 	// 走到端点：先试着换一条相连的路线继续走，接不上才退场。
@@ -487,7 +518,13 @@ bool ADeliveryPedestrian::UsesBoids() const
 	return Route.IsValid() && Route->bUseBoids && !Route->bRoamInArea;
 }
 
-float ADeliveryPedestrian::UpdateBoids(float AllowedStep, float DeltaTime)
+bool ADeliveryPedestrian::IsOnCrosswalk() const
+{
+	const ADeliveryPedestrianRoute* ActiveRoute = Route.Get();
+	return ActiveRoute && !ActiveRoute->bRoamInArea && IsValid(ActiveRoute->CrosswalkActor);
+}
+
+float ADeliveryPedestrian::UpdateBoids(float AllowedStep, float DeltaTime, bool* bCrosswalkBlocked)
 {
 	if (AllowedStep <= 0.f || DeltaTime <= 0.f)
 	{
@@ -539,8 +576,12 @@ float ADeliveryPedestrian::UpdateBoids(float AllowedStep, float DeltaTime)
 	const FVector Next = Group->GetLocationAtDistance(DistanceAlongRoute + (bForward ? Step : -Step)) + Side * Offset;
 	if (IsRoamStepBlocked(Position, Next))
 	{
-		BoidsVelocity = FVector::ZeroVector;
-		return 0.f;
+		if (bCrosswalkBlocked) *bCrosswalkBlocked = true;
+		if (!bCrosswalkBlocked || CrosswalkBlockedElapsed < CrosswalkUnblockSeconds)
+		{
+			BoidsVelocity = FVector::ZeroVector;
+			return 0.f;
+		}
 	}
 	BoidsVelocity = Forward * Along + Side * ((Offset - BoidsLateralOffset) / Dt);
 	BoidsLateralOffset = Offset;
@@ -579,11 +620,17 @@ bool ADeliveryPedestrian::IsRoamStepBlocked(const FVector& From, const FVector& 
 	Objects.AddObjectTypesToQuery(ECC_WorldStatic);
 	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(DeliveryPedestrianRoamStep), false, this);
-	FHitResult Hit;
 	const FVector Waist(0.f, 0.f, YieldProbeHeight);
+	const FCollisionShape Probe = FCollisionShape::MakeSphere(FMath::Max(YieldProbeRadius, 1.f));
+	if (IsOnCrosswalk())
+	{
+		TArray<FHitResult> Hits;
+		World->SweepMultiByObjectType(Hits, From + Waist, To + Waist, FQuat::Identity, Objects, Probe, Params);
+		return Hits.ContainsByPredicate([](const FHitResult& Hit) { return !IsTrafficLight(Hit.GetActor()); });
+	}
+	FHitResult Hit;
 	return World->SweepSingleByObjectType(
-	    Hit, From + Waist, To + Waist, FQuat::Identity, Objects,
-	    FCollisionShape::MakeSphere(FMath::Max(YieldProbeRadius, 1.f)), Params);
+	    Hit, From + Waist, To + Waist, FQuat::Identity, Objects, Probe, Params);
 }
 
 void ADeliveryPedestrian::ReverseRoamTarget()
@@ -636,6 +683,21 @@ bool ADeliveryPedestrian::TraceGroundZ(const FVector& Probe, float& OutZ) const
 	ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(DeliveryPedestrianGround), false, this);
+
+	if (IsOnCrosswalk())
+	{
+		TArray<FHitResult> Hits;
+		World->LineTraceMultiByObjectType(Hits, Start, End, ObjectParams, Params);
+		for (const FHitResult& Hit : Hits)
+		{
+			if (!IsTrafficLight(Hit.GetActor()))
+			{
+				OutZ = Hit.ImpactPoint.Z;
+				return true;
+			}
+		}
+		return false;
+	}
 
 	FHitResult Hit;
 	if (World->LineTraceSingleByObjectType(Hit, Start, End, ObjectParams, Params))
@@ -965,6 +1027,7 @@ void ADeliveryPedestrian::OnRep_KnockedDown()
 void ADeliveryPedestrian::StartKnockdown()
 {
 	BoidsVelocity = FVector::ZeroVector;
+	CrosswalkBlockedElapsed = 0.f;
 	Phase = EDeliveryPedestrianPhase::KnockedDown;
 	FallElapsed = 0.f;
 	bFallHorizontalBlocked = false;
@@ -1367,10 +1430,15 @@ bool ADeliveryPedestrian::IsBlockedAhead(bool* bFixedObstacle) const
 	                              Params);
 
 	bool bBlocked = false;
+	const bool bCrosswalk = IsOnCrosswalk();
 	for (const FHitResult& Hit : Hits)
 	{
 		const AActor* Other = Hit.GetActor();
 		if (!Other || Other == this)
+		{
+			continue;
+		}
+		if (bCrosswalk && IsTrafficLight(Other))
 		{
 			continue;
 		}
@@ -1408,7 +1476,7 @@ void ADeliveryPedestrian::ScheduleNextPause()
 	DistanceUntilPause = (Max <= 0.f) ? TNumericLimits<float>::Max() : FMath::FRandRange(Min, Max);
 }
 
-float ADeliveryPedestrian::UpdateWalkAndPause(float DeltaTime, float Length)
+float ADeliveryPedestrian::UpdateWalkAndPause(float DeltaTime, float Length, bool* bCrosswalkBlocked)
 {
 	// 正停着：倒计时走完就继续
 	if (PauseRemaining > 0.f)
@@ -1439,8 +1507,12 @@ float ADeliveryPedestrian::UpdateWalkAndPause(float DeltaTime, float Length)
 			ReverseRoamTarget();
 			return 0.f;
 		}
-		// 固定场景物件不会像对向路人那样自行让开，不能超时硬挤穿墙。
-		if (bFixedObstacle || YieldElapsed < FMath::Max(MaxYieldSeconds, 0.f))
+		// 过街按连续停步时间解锁；普通路线仍等待固定障碍移开
+		if (bCrosswalkBlocked) *bCrosswalkBlocked = true;
+		const bool bKeepWaiting = bCrosswalkBlocked
+		    ? CrosswalkBlockedElapsed < CrosswalkUnblockSeconds
+		    : bFixedObstacle || YieldElapsed < FMath::Max(MaxYieldSeconds, 0.f);
+		if (bKeepWaiting)
 		{
 			// 返回 0 就够了：步态相位是按走过的路程推进的，速度为零腿自己就停，
 			// 不会出现原地踏步
@@ -1556,6 +1628,7 @@ bool ADeliveryPedestrian::TryHandoff()
 	NextRoute->AcceptHandoff(this);
 
 	Route = NextRoute;
+	CrosswalkBlockedElapsed = 0.f;
 	BoidsVelocity = FVector::ZeroVector;
 	BoidsLateralOffset = 0.f;
 	bForward = bEnterAtStart;

@@ -60,6 +60,43 @@ bool FDeliveryPedestrianBoidsTest::RunTest(const FString&)
     for (int Frame=0; Frame<10; ++Frame) { A->Tick(.06f); B->Tick(.06f); }
     TestTrue(TEXT("受击时脱离走廊，不被 Boids 拉回"), A->GetActorLocation().Y > HitOrigin.Y + 100.f);
     TestTrue(TEXT("受击时保持倒地"), A->IsKnockedDown());
+
+    auto* Crosswalk = World->SpawnActor<ADeliveryPedestrianRoute>();
+    Crosswalk->SetActorTickEnabled(false);
+    Crosswalk->bRoamInArea = false;
+    Crosswalk->bPauseWhileWalking = false;
+    Crosswalk->bAllowHandoff = false;
+    Crosswalk->bBothDirections = false;
+    Crosswalk->CrosswalkActor = World->SpawnActor<AActor>();
+    Crosswalk->Kinds.Add(Kind);
+    Crosswalk->GetSpline()->SetLocationAtSplinePoint(0, FVector(0, 2000, 0), ESplineCoordinateSpace::World);
+    Crosswalk->GetSpline()->SetLocationAtSplinePoint(1, FVector(850, 2000, 0), ESplineCoordinateSpace::World);
+    const FName LightTag(TEXT("ClaudeGenCrosswalkLight"));
+    Wall->SetActorLocation(FVector(535, 2000, 70));
+    for (const bool bBoids : {false, true})
+    {
+        Crosswalk->bUseBoids = bBoids;
+        auto* Child = Crosswalk->SpawnOnePedestrian(true);
+        if (!TestNotNull(TEXT("过街测试行人"), Child)) return false;
+        Child->BeginWalk(Crosswalk, Mesh, nullptr, 500.f, true, 130.f, 150.f);
+        Child->bYieldToObstacles = !bBoids;
+        Wall->Tags.AddUnique(LightTag);
+        TestFalse(TEXT("过街行人前向探测跳过红绿灯"), Child->IsBlockedAhead());
+        Child->Tick(.1f);
+        TestTrue(TEXT("红绿灯不会挡住过街推进"), Child->GetDistanceAlongRoute() > 500.f);
+
+        Wall->Tags.Remove(LightTag);
+        Child->BeginWalk(Crosswalk, Mesh, nullptr, 500.f, true, 130.f, 150.f);
+        for (int Frame = 0; Frame < 29; ++Frame) Child->Tick(.1f);
+        TestEqual(TEXT("过街行人阻挡未满三秒时等待"), Child->GetDistanceAlongRoute(), 500.f, .1f);
+        for (int Frame = 0; Frame < 4; ++Frame) Child->Tick(.1f);
+        TestTrue(TEXT("过街行人连续卡住三秒后恢复前进"), Child->GetDistanceAlongRoute() > 500.f);
+        for (int Frame = 0; Frame < 60 && IsValid(Child) && !Child->IsActorBeingDestroyed(); ++Frame)
+        {
+            Child->Tick(.1f);
+        }
+        TestTrue(TEXT("恢复前进后能抵达终点退场"), !IsValid(Child) || Child->IsActorBeingDestroyed());
+    }
     return true;
 }
 #endif

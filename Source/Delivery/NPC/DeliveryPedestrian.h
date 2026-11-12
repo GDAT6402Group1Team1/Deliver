@@ -389,8 +389,9 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
   private:
 	/** 把行人摆到样条上 Distance 处并贴地，朝向取样条切线 */
 	void UpdateTransform(float Distance, float DeltaTime = 0.f);
-	float UpdateBoids(float AllowedStep, float DeltaTime);
+	float UpdateBoids(float AllowedStep, float DeltaTime, bool* bCrosswalkBlocked);
 	bool UsesBoids() const;
+	bool IsOnCrosswalk() const;
 	// 只由服务器推进，远端使用 Actor 移动复制；受击、起身与接驳时重置
 	FVector BoidsVelocity = FVector::ZeroVector;
 	float BoidsLateralOffset = 0.f;
@@ -405,7 +406,7 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	 * 停顿**不允许发生在出入场窗口里**：那两个窗口按距离算缩放，
 	 * 在里面停住会卡成一个半大小的人站着不动
 	 */
-	float UpdateWalkAndPause(float DeltaTime, float Length);
+	float UpdateWalkAndPause(float DeltaTime, float Length, bool* bCrosswalkBlocked = nullptr);
 
 	/** 重新抽下一次停顿还有多远 */
 	void ScheduleNextPause();
@@ -583,6 +584,8 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 
 	/** 已经为前方的障碍让了多久（秒），超过 MaxYieldSeconds 就硬挤过去 */
 	float YieldElapsed = 0.f;
+	// 过街推进被障碍连续挡住的时间，障碍消失后清零
+	float CrosswalkBlockedElapsed = 0.f;
 
 	/** 起身已经进行了多久（秒） */
 	float GetUpElapsed = 0.f;

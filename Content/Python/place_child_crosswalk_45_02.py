@@ -2,6 +2,7 @@
 """两条重点斑马线各摆一条小孩路线和一条六种 NPC 混合路线"""
 import math
 import re
+import sys
 import unreal
 
 LEVEL = '/Game/Level/TestForCharacter'
@@ -128,16 +129,21 @@ def main():
     created = []
     try:
         for mark, signal, points, forward, tag, prefix in plans:
+            routes = {}
             for lane, side, delay, choices, materials in (
                     ('A', -1, 0., kinds[:2], fades[:2]),
                     ('B', 1, SECOND_LANE_DELAY, kinds, fades)):
                 lane_points = [unreal.Vector(p.x+side*forward.x*LANE_OFFSET,
                                              p.y+side*forward.y*LANE_OFFSET, p.z)
                                for p in points]
+                # 以斑马线原方向为准，右侧 A 列从另一端出发
+                if lane == 'A':
+                    lane_points.reverse()
                 route = editor.spawn_actor_from_class(route_class, lane_points[0])
                 if route is None:
                     raise RuntimeError('Cannot spawn ' + prefix + lane)
                 created.append(route)
+                routes[lane] = route
                 route.set_actor_label(prefix + '_' + lane)
                 route.set_folder_path('Pedestrians/Crosswalk')
                 route.tags = [unreal.Name(tag), unreal.Name(tag+lane)]
@@ -164,7 +170,7 @@ def main():
                 route.set_editor_property('walk_speed_max', 130.)
                 route.set_editor_property('lateral_jitter', 0.)
                 route.set_editor_property('appear_distance', 100.)
-                route.set_editor_property('red_light_walk_speed_multiplier', 1.5)
+                route.set_editor_property('red_light_walk_speed_multiplier', 2.0)
                 route.set_editor_property('crosswalk_actor', mark)
                 route.set_editor_property('signal_segment', signal)
                 sp = route.get_component_by_class(unreal.SplineComponent)
@@ -175,6 +181,7 @@ def main():
                     sp.set_spline_point_type(index, unreal.SplinePointType.LINEAR, False)
                 sp.set_closed_loop(False, False)
                 sp.update_spline()
+            configure_alternating_lanes(routes)
             unreal.log('[FeaturedCrosswalk] %s: child lane + six-kind lane; signal=%s' %
                        (mark.get_actor_label(), signal.get_actor_label()))
     except Exception:
@@ -189,4 +196,68 @@ def main():
                (len(old), len(created)))
 
 
-main()
+def configure_alternating_lanes(routes):
+    left, right = routes['B'], routes['A']
+    changed = False
+    for route, prop, value in (
+            (left, 'alternate_green_phase_lanes', True),
+            (right, 'shared_green_phase_budget_owner', left)):
+        if route.get_editor_property(prop) != value:
+            route.modify()
+            route.set_editor_property(prop, value)
+            changed = True
+    return changed
+
+
+def update_existing_directions():
+    """更新现有双列的方向和放行顺序，保留人物和信号灯配置"""
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    if world is None or world.get_name() != 'TestForCharacter':
+        raise RuntimeError('Open TestForCharacter before updating directions')
+    editor = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    actors = editor.get_all_level_actors()
+    by_label = {a.get_actor_label(): a for a in actors}
+    marks = MARKS + (('Crosswalk_BranchRoad_R035_Merged_8',
+                      'DeliveryChildCrosswalkR0358',
+                      'PedestrianRoute_ChildCrosswalkR0358'),)
+    changes = []
+    pairs = []
+    for label, tag, _prefix in marks:
+        mark = by_label[label]
+        forward = mark.get_actor_forward_vector()
+        routes = {}
+        for lane in ('A', 'B'):
+            matches = [a for a in actors if unreal.Name(tag + lane) in a.tags]
+            if len(matches) != 1:
+                raise RuntimeError('Expected one route for ' + tag + lane)
+            routes[lane] = matches[0]
+            spline = matches[0].get_component_by_class(unreal.SplineComponent)
+            if not spline or spline.get_number_of_spline_points() != 2:
+                raise RuntimeError('Expected a two-point route for ' + tag + lane)
+            start = spline.get_location_at_spline_point(0, WS)
+            end = spline.get_location_at_spline_point(1, WS)
+            direction = (end.y - start.y) * forward.x - (end.x - start.x) * forward.y
+            if abs(direction) < 1.0:
+                raise RuntimeError('Invalid route direction for ' + tag + lane)
+            if (direction > 0.0) != (lane == 'B'):
+                changes.append((spline, start, end))
+        if routes['A'].get_editor_property('signal_segment') != routes['B'].get_editor_property('signal_segment'):
+            raise RuntimeError('Paired routes must share a signal: ' + tag)
+        pairs.append(routes)
+    with unreal.ScopedEditorTransaction('Set alternating crosswalk lanes'):
+        configured = sum(configure_alternating_lanes(routes) for routes in pairs)
+        for spline, start, end in changes:
+            spline.modify()
+            spline.set_location_at_spline_point(0, end, WS, False)
+            spline.set_location_at_spline_point(1, start, WS, True)
+    unreal.log('[FeaturedCrosswalk] Verified six route directions, reversed %d, configured %d pairs' %
+               (len(changes), configured))
+    if (changes or configured) and not unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level():
+        raise RuntimeError('Could not save crosswalk directions')
+
+
+if __name__ == '__main__':
+    if '--update-directions' in sys.argv:
+        update_existing_directions()
+    else:
+        main()

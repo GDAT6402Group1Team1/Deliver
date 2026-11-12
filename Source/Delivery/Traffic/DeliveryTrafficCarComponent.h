@@ -86,6 +86,10 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	UFUNCTION(BlueprintCallable, Category = "Traffic|循环")
 	void UpdateRouteFollowState(bool bIsFollowingRoute);
 
+	/** 行驶蓝图只在车辆有位移时应用样条朝向，停车时沿用当前朝向 */
+	UFUNCTION(BlueprintPure, Category = "Traffic|行驶")
+	FRotator ResolveDriveRotation(const FVector& DriveLocation, const FRotator& SplineRotation) const;
+
 	/** 蓝图把车重置回起始样条之后调用，清空脱离路线的计时，避免刚重置完又立刻重复触发 */
 	UFUNCTION(BlueprintCallable, Category = "Traffic|循环")
 	void NotifyResetToStart();
@@ -179,9 +183,9 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0"))
 	float WaveSpawnClearance = 400.0f;
 
-	/** 出生点附近行人和玩家的水平净空半径 */
+	/** 出生点前半圈行人和玩家的水平净空半径，近身 150 cm 内全向检查 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0", Units = "cm"))
-	float WaveSpawnPersonClearance = 400.0f;
+	float WaveSpawnPersonClearance = 600.0f;
 
 	/** 高架上下层不互相阻挡分波生成 */
 	UPROPERTY(EditAnywhere, Category = "Traffic|分波生成", meta = (ClampMin = "0.0"))

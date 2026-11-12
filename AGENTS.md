@@ -465,7 +465,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - 已导入地图并接入 **PS2DEMImporter**（`Plugins/PS2DEMImporter`，PS2 地形/道路生成插件）用于把地形转换为 landscape spline 道路。
 - 交通路口、红绿灯、道路与门的破碎效果正在搭建：`Content/PS2DEM`（`BP_Intersection`、`BP_TrafficLine*`）、`Content/trafficlight`。车辆沿样条行驶、进路口的 Overlap 检测都写在 `BP_car_base` 事件图里，C++ 侧原本没有对应基类。
 - [Source/Delivery/Traffic/DeliveryTrafficCarComponent.h](Source/Delivery/Traffic/DeliveryTrafficCarComponent.h) —— 挂在 `BP_car_base` 上的辅助组件，不接管移动本身：车辆走完所有预设样条、没接上下一段车道时会脱离路线按最后方向裸奔冲出画面；蓝图每帧用 `UpdateRouteFollowState(bool)` 告诉组件这一帧还在不在跟随预设样条，连续脱离满 5 秒（`RouteLostTimeout`）广播 `OnRouteLost` 让蓝图把车放回起始样条起点、形成循环车流；同时自己在 `TickComponent` 里做前方球形扫描，探测到前方另一辆挂了同组件的车就把 `GetSpeedMultiplier()` 平滑降到 0，蓝图乘到目标速度上即可实现遇前车减速到停、让开后恢复。
-- 分波默认在开局 15 秒生成第二波，再过 30 秒生成第三波（出生点畅通时即 45 秒）。服务器生成前检查出生点周围 400 cm 内的交通车（包括原车）、250 cm 内的 NPC 和玩家，均限上下 200 cm；被占用时每 2 秒重试，空出来才生成。第三波从第二波实际生成时刻起算，因此堵车时会顺延，不会叠车强行出生。参数在交通组件中可调。
+- 分波默认在开局 15 秒生成第二波，再过 30 秒生成第三波（出生点畅通时即 45 秒）。服务器生成前检查出生点周围 400 cm 内的交通车（包括原车）、车头前半圈 600 cm 内的 NPC 和玩家（距出生点 150 cm 内全向检查），均限上下 200 cm；被占用时每 2 秒重试，空出来才生成。第三波从第二波实际生成时刻起算，因此堵车时会顺延，不会叠车强行出生。参数在交通组件中可调。
 - 跟车系数在前车探测边缘抖动时不立即回升：每次需要减速都立即响应，并重置 `FollowAccelerationPause`（默认 1 秒）；此后至少保持当前跟车系数 1 秒才允许加速。等待期间再次需要减速仍立即生效；只冻结跟车系数，不覆盖蓝图的红灯/加速逻辑。`DebugAccelerationPauseRemaining` 可在 PIE 中观察等待时间。
 - `BP_car_base` 现为服务器驱动并复制 Actor 移动；`BeginPlay`/`Drive` 仅 Authority 执行。关卡里旧车实例覆盖过 `bReplicates=false`，因此交通组件在服务器 `BeginPlay` 再调用 `SetReplicates(true)`/`SetReplicateMovement(true)`，无需改地图。组件仅在服务器按车轨迹扫 `PhysicsBody`，同车同角色 0.75 秒去重，按相对速度和有效质量算伤害/水平冲量；强撞 HP 归零沿用现有晕倒与 50% 回血起身（`StunRecoverHealthPercent`，原 40%，已放宽）。车组件运行时忽略 `Camera` 通道，墙和地形仍会挡镜头。撞击参数在组件蓝图详情中可调。
 - 测试地图：`Content/Level/TestForCharacter.umap`（角色/互殴）、`Content/Level/testfortraffic.umap`（交通路口）。
@@ -1330,9 +1330,9 @@ TestForCharacter 的 ROAD-CREATE、POLE-CREATE、GRASSBED-CREATE1 的 PCG BrushC
 
 ## 斑马线行人路线与人行灯
 
-- `Crosswalk_Intersection_45_02` 和 `Crosswalk_MainRoad_R003_9` 由 `Content/Python/place_child_crosswalk_45_02.py` 各摆两条对称过街路线：A 道只随机男孩/女孩，B 道等权随机六种现有 NPC。两道沿车行方向各偏 70 cm，路线比斑马线两端各延长 250 cm；A 道小孩最多同时 16 人、间隔 0.7 秒（约 91 cm），前方探测缩短到 35 cm；B 道仍最多 12 人、间隔 0.9 秒，开局晚 0.45 秒。基础步速 130 cm/s，红灯时已出发者以 1.5 倍走完。两道只在出现和消失期间使用复制的渐隐材质，正常行走恢复原始不透明材质。服务器生成前只检查对应段的 `StopAtInter`（车红即人绿）及本轮人数限制；人行绿灯时不再等斑马线上的车驶离。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过后恢复原上限。
+- `Crosswalk_Intersection_45_02` 和 `Crosswalk_MainRoad_R003_9` 由 `Content/Python/place_child_crosswalk_45_02.py` 各摆两条对称过街路线：A 道只随机男孩/女孩，B 道等权随机六种现有 NPC。两道沿车行方向各偏 70 cm，路线比斑马线两端各延长 250 cm；A 道小孩最多同时 16 人、间隔 0.7 秒（约 91 cm），前方探测缩短到 35 cm；B 道仍最多 12 人、间隔 0.9 秒，开局晚 0.45 秒。基础步速 130 cm/s，红灯时已出发者以 2 倍走完。两道只在出现和消失期间使用复制的渐隐材质，正常行走恢复原始不透明材质。服务器生成前只检查对应段的 `StopAtInter`（车红即人绿）及本轮人数限制；人行绿灯时不再等斑马线上的车驶离。交通车在带 Crosswalk tag 的路口前 1000 cm 进入 500 cm/s 限速，驶过后恢复原上限。
 - `Crosswalk_BranchRoad_R035_Merged_8` 单独由 `Content/Python/place_child_crosswalk_r035_8.py` 布置两条男孩/女孩排队过街路线，两道沿车行方向各偏 70 cm，第二道开局晚 0.45 秒；每道最多同时 16 人、间隔 0.7 秒、步速 130 cm/s，依照 `Inter_BranchRoad_R035_Merged_+0180_I02` 的人行信号出发。该斑马线从普通路线生成脚本中排除。
-- 主地图共四条小孩列（上述两条重点斑马线各一条，加 R035 两条）。每条 `LeaderKinds` 等权配置中年男/女，`Kinds` 只含男孩/女孩；人行灯每次红变绿时重置一次带队标记，本轮第一次成功生成用成人池，后续用小孩池，不因队列暂时走空重复出成人。成人材质由 `LeaderFadeMaterials` 与 `LeaderKinds` 同序配置；无信号灯的 `testfortraffic` 小孩测试队列仅在开局出带队成人。
+- 主地图共四条小孩列（上述两条重点斑马线各一条，加 R035 两条）。三处双列斑马线的两列相向通行，首轮绿灯只允许左列生成，下一轮换右列，按轮交替。每条 `LeaderKinds` 等权配置中年男/女，`Kinds` 只含男孩/女孩；人行灯每次红变绿时重置一次带队标记，本轮第一次成功生成用成人池，后续用小孩池，不因队列暂时走空重复出成人。成人材质由 `LeaderFadeMaterials` 与 `LeaderKinds` 同序配置；无信号灯的 `testfortraffic` 小孩测试队列仅在开局出带队成人。
 - 其余有明确车灯归属的斑马线由 `Content/Python/place_general_crosswalk_routes.py` 布置单道或双道路线，六种 NPC 等权随机，每轮人行绿灯每条斑马线合计出发 2～3 人；双道共享配额，红灯不再生成，已出发者继续走。上述三条重点斑马线不受此配额限制。
 
 - **所有过街路人统一用渐隐出入场（2026-11-10）**：`Content/Python/set_crosswalk_route_fade.py`

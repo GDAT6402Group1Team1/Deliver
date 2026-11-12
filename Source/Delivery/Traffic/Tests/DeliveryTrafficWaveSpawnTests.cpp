@@ -45,8 +45,7 @@ bool FDeliveryTrafficWaveSpawnTest::RunTest(const FString&)
 	Traffic->bSpawnExtraWaves = false;
 	Traffic->bScaleInOnSpawn = false;
 	Traffic->RegisterComponent();
-	Traffic->SecondWaveTransform = FTransform::Identity;
-	Traffic->WaveSpawnPersonClearance = 400.f;
+	Traffic->SecondWaveTransform = FTransform(FRotator(0.f, 90.f, 0.f));
 	Traffic->WaveSpawnHeightTolerance = 200.f;
 
 	auto CountWaves = [World]()
@@ -63,19 +62,23 @@ bool FDeliveryTrafficWaveSpawnTest::RunTest(const FString&)
 	};
 
 	ADeliveryPedestrian* Pedestrian = World->SpawnActor<ADeliveryPedestrian>();
-	Pedestrian->SetActorLocation(FVector(100.f, 0.f, 0.f));
+	Pedestrian->SetActorLocation(FVector(0.f, 550.f, 0.f));
 	Traffic->SpawnNextWave();
-	TestEqual(TEXT("出生点有人时不生成车辆"), CountWaves(), 0);
+	TestEqual(TEXT("出生车头转向后仍检查前方 5.5 米的行人"), CountWaves(), 0);
 
-	Pedestrian->SetActorLocation(FVector(450.f, 0.f, 0.f));
+	Pedestrian->SetActorLocation(FVector(0.f, -300.f, 0.f));
 	ADeliveryCharacter* Player = World->SpawnActor<ADeliveryCharacter>();
-	Player->SetActorLocation(FVector(100.f, 0.f, 0.f));
+	Player->SetActorLocation(FVector(0.f, 300.f, 0.f));
 	Traffic->SpawnNextWave();
 	TestEqual(TEXT("出生点有玩家时不生成车辆"), CountWaves(), 0);
 
-	Player->SetActorLocation(FVector(450.f, 0.f, 0.f));
+	Player->SetActorLocation(FVector(0.f, -100.f, 0.f));
 	Traffic->SpawnNextWave();
-	TestEqual(TEXT("人离开后可以生成车辆"), CountWaves(), 1);
+	TestEqual(TEXT("车后贴近出生点的玩家仍阻挡生成"), CountWaves(), 0);
+
+	Player->SetActorLocation(FVector(0.f, -300.f, 0.f));
+	Traffic->SpawnNextWave();
+	TestEqual(TEXT("车后较远的人不阻挡生成"), CountWaves(), 1);
 	return true;
 }
 #endif
