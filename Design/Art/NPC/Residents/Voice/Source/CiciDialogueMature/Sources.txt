@@ -1,0 +1,13 @@
+Free Voice Clips Pack (Mature Female)
+作者：Cici Fyre
+作者页面：https://cicifyre.itch.io/free-voice-clips-pack-mature-female
+作者上传页：https://opengameart.org/content/voice-clip-packs-for-visual-novels-and-rpgs
+许可：CC0 1.0 Universal；全文见 LICENSE.txt
+作者将其描述为为视觉小说录制的成熟或中性女声，页面明确标注没有使用生成式 AI
+商业和非商业使用均允许，署名受到欢迎但没有强制要求
+
+本轮只选择 noises 目录中的 annoyed_grumble、small_single_laugh、sigh1/2、anime_eh/uh、gasp1
+这些名称分别用于不满、轻笑、叹气、疑问和惊讶的试听筛选；实际情绪需要结合听感确认
+没有将英文问句、寒暄或完整对话加入导入候选
+保留完整原 ZIP，下载地址、大小与校验值见 DownloadRecord.json
+Extracted 中没有改变原始音频；声音风格仍待试听确认

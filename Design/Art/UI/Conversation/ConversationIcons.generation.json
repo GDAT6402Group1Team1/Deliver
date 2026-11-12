@@ -1,0 +1,11 @@
+{
+  "tool": "image_gen",
+  "purpose": "对话界面的道歉与拱火图标",
+  "reference": "ConversationConcept-v1.png 的奶油色、深蓝描边与圆润卡通形状",
+  "images": {
+    "T_Apology.png": "奶油色张开的手掌，蓝色袖口，深蓝描边，透明背景",
+    "T_Provoke.png": "珊瑚色与黄色火焰，深蓝描边，透明背景"
+  },
+  "usage": "导入为 UI 纹理，保存在 WBP_Conversation 的按钮控件中",
+  "import_script": "Content/Python/import_conversation_art.py"
+}

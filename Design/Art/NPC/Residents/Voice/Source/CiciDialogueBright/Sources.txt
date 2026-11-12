@@ -1,0 +1,13 @@
+Free Voice Clips Pack (Bright Female)
+作者：Cici Fyre
+作者页面：https://cicifyre.itch.io/free-voice-clips-pack-bright-female
+作者上传页：https://opengameart.org/content/voice-clip-packs-for-visual-novels-and-rpgs
+许可：CC0 1.0 Universal；全文见 LICENSE.txt
+作者说明为测试新麦克风录制，供视觉小说和约会模拟游戏使用；页面明确标注没有使用生成式 AI
+商业和非商业使用均允许，署名受到欢迎但没有强制要求
+
+原包有 72 条 WAV 和作者 readme，其中大部分是英文句子
+本轮只解压 01/02-laughter.wav 和 01-anime gasp.wav，用于试听笑声与惊讶反应
+包内没有文件名为 Hmm 或 Sigh 的片段；没有将其他英文短句冒充这些反应
+保留完整原 ZIP，下载地址、大小与校验值见 DownloadRecord.json
+Extracted 中没有改变原始音频；声音风格仍待试听确认

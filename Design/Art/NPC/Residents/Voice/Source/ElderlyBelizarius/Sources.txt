@@ -1,0 +1,9 @@
+Grumbling.wav
+作者：Belizarius
+原始页面：https://freesound.org/people/Belizarius/sounds/680092/
+许可：CC0 1.0 Universal，全文见 LICENSE.txt
+作者明确说明这是老人的不满嘟囔声
+本轮保留网页公开的 HQ MP3 试听文件；没有请求需要登录的原始 WAV
+声音年龄风格依据作者描述，没有核实表演者的真实年龄
+为短反应候选截取 0.23–3.06 秒，边界位于检测到的安静区间
+未变调、未施加老化效果；是否自然、是否符合人物需要实际试听

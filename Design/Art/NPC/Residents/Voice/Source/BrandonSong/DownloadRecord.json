@@ -1,0 +1,27 @@
+{
+  "checked_at_utc": "2026-11-12T18:34:42.114620+00:00",
+  "documents": [
+    {
+      "author": "BrandonSong",
+      "file": "SourcePage.oga.html",
+      "url": "https://opengameart.org/content/voice-clip-pack-male-adventurer-rpg",
+      "bytes": 24807,
+      "sha256": "9eaf0929d5046ac0ba48f78b01fdeee271f7d696625cefc7676533524270d730",
+      "ok": true
+    },
+    {
+      "author": "",
+      "file": "CC0-1.0.txt",
+      "url": "https://creativecommons.org/publicdomain/zero/1.0/legalcode.txt",
+      "error": "HTTP Error 403: Forbidden",
+      "ok": false
+    },
+    {
+      "file": "LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/CC0-1.0.txt",
+      "bytes": 7048,
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "ok": true
+    }
+  ]
+}

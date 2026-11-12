@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "note": "老人风格依据作者说明，听感仍需试听。未找到合适录音的类别保持空白，中文台词朗读仍单独配置。",
+  "voices": [
+    {
+      "asset": "/Game/NPC/Residents/Audio/DA_Voice_OldMan",
+      "volume": 0.65,
+      "max_duration": 3.0,
+      "sounds": {
+        "displeased": "/Game/NPC/Residents/Audio/Voices/OldMan/SW_NpcOldMan_Belizarius_Displeased_01",
+        "laugh": "/Game/NPC/Residents/Audio/Voices/OldMan/SW_NpcOldMan_Elenalostale_Laugh_01"
+      }
+    },
+    {
+      "asset": "/Game/NPC/Residents/Audio/DA_Voice_OldWoman",
+      "volume": 0.6,
+      "max_duration": 2.0,
+      "sounds": {
+        "laugh": "/Game/NPC/Residents/Audio/Voices/OldWoman/SW_NpcOldWoman_ivanmilic_Laugh_01"
+      }
+    }
+  ]
+}

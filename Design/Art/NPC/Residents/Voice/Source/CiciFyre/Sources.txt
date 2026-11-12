@@ -1,0 +1,28 @@
+RPG Voice Starter Pack
+作者：Cici Fyre（OpenGameArt 用户名 cicifyre）
+
+作者页面：https://cicifyre.itch.io/rpg-voice-starter-pack
+作者上传页：https://opengameart.org/content/female-rpg-voice-starter-pack
+下载地址：https://opengameart.org/sites/default/files/RPG%20Voice%20Starter%20Pack.zip
+许可：CC0 1.0 Universal
+许可说明：https://creativecommons.org/publicdomain/zero/1.0/
+许可全文：同目录 LICENSE.txt；来自 SPDX 官方许可证文本库
+许可全文来源：https://raw.githubusercontent.com/spdx/license-list-data/main/text/CC0-1.0.txt
+
+作者 itch 页面在 Asset license 栏明确标注 Creative Commons Zero v1.0 Universal
+同一页面标注 No generative AI was used
+OpenGameArt 页面标注 CC0，并说明署名受到欢迎，但没有强制要求
+建议游戏鸣谢保留 Cici Fyre 和作者页面链接
+
+原压缩包只附 readme.txt，内容为作者致谢及个人主页，没有单独的许可文件
+本目录另外保存了下载当天的网页副本；DownloadRecord.json 记录下载地址、时间和 SHA-256
+直接访问 Creative Commons 的 legalcode.txt 返回 403，许可全文因此采用 SPDX 官方文本副本
+
+原包 90 条 WAV，三种女声各 30 条；每条均为 44100 Hz、单声道、32 位 IEEE float
+作者将三种声音描述为可爱、中音、成熟或中性的演绎；正式选择仍需试听
+Extracted 保留原文件名、声音数据与目录结构，没有调音或裁剪
+ReactionCandidates.csv 列出 attack、damaged、jump、healed 四组共 36 条短反应候选
+候选根据作者的文件分类整理，尚未试听确认是否含单词，也未确认与具体情绪的对应关系
+fire、heal、water 等明确英语词不在反应候选清单中
+导入前检查引擎对 IEEE float WAV 的支持；需要转换时另存 PCM16，保留这里的原文件
+未运行下载内容，未安装依赖，未修改 UE 资源

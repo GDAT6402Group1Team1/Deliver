@@ -1,0 +1,24 @@
+Voice Clip Pack - Male Adventurer RPG
+作者：Brandon Song（OpenGameArt 用户名 wolfwoot）
+
+作者上传页：https://opengameart.org/content/voice-clip-pack-male-adventurer-rpg
+下载地址：https://opengameart.org/sites/default/files/RPG%20Male%20Adventurer.zip
+许可：CC0 1.0 Universal
+许可说明：https://creativecommons.org/publicdomain/zero/1.0/
+许可全文：同目录 LICENSE.txt；来自 SPDX 官方许可证文本库
+许可全文来源：https://raw.githubusercontent.com/spdx/license-list-data/main/text/CC0-1.0.txt
+
+作者上传页在 License(s) 栏明确标注 CC0
+作者表示素材可用于各类项目，并希望以 Brandon Song 署名
+CC0 没有强制署名要求，建议游戏鸣谢保留 Brandon Song 和来源链接
+
+原压缩包没有 readme 或许可文件
+本目录另外保存了下载当天的网页副本；DownloadRecord.json 记录下载地址、时间和 SHA-256
+直接访问 Creative Commons 的 legalcode.txt 返回 403，许可全文因此采用 SPDX 官方文本副本
+
+原包 37 条 WAV；每条均为 44100 Hz、双声道、16 位 PCM
+Extracted 保留原文件名、声音数据与目录结构，没有调音或裁剪
+ReactionCandidates.csv 列出 attack、attackbig、hurt、jump 四组共 27 条短反应候选
+候选根据作者的文件分类整理，尚未试听确认是否含单词，也未确认与具体情绪的对应关系
+yes、no、victory、greet、gameover、death 不在首批候选清单中
+未运行下载内容，未安装依赖，未修改 UE 资源

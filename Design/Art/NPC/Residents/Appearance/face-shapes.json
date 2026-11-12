@@ -1,0 +1,60 @@
+[
+  {
+    "mesh": "SK_NpcManFace",
+    "skin_color": [
+      0.9568628072738647,
+      0.8784314393997192,
+      0.7843137979507446,
+      1.0
+    ],
+    "eyes": [
+      99,
+      99
+    ],
+    "separate_brows": 2,
+    "morphs": [
+      "Basis",
+      "EyesBlink",
+      "EyesLookLeft",
+      "EyesLookRight",
+      "EyesLookUp",
+      "EyesLookDown",
+      "EyesAngry",
+      "FaceAngry",
+      "BrowsAngry",
+      "FaceSurprised",
+      "FaceListening",
+      "FaceThinking"
+    ],
+    "vertex_count": 3898
+  },
+  {
+    "mesh": "SK_NpcWomanFace",
+    "skin_color": [
+      0.9686275124549866,
+      0.8823530077934265,
+      0.7882353663444519,
+      1.0
+    ],
+    "eyes": [
+      41,
+      41
+    ],
+    "separate_brows": 1,
+    "morphs": [
+      "Basis",
+      "EyesBlink",
+      "EyesLookLeft",
+      "EyesLookRight",
+      "EyesLookUp",
+      "EyesLookDown",
+      "EyesAngry",
+      "FaceAngry",
+      "BrowsAngry",
+      "FaceSurprised",
+      "FaceListening",
+      "FaceThinking"
+    ],
+    "vertex_count": 4276
+  }
+]

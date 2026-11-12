@@ -1,0 +1,8 @@
+{
+  "purpose": "Delivery 对话界面视觉参考，随后制作可编辑 UMG",
+  "tool": "image_gen",
+  "reference": "项目中黄色头盔、青绿色制服、圆润角色与深蓝描边界面",
+  "layout": "紧凑面板，NPC 名字、回复、输入与发送、道歉和拱火、结束交谈",
+  "status": "效果图已生成，UMG 实现中",
+  "image": "ConversationConcept-v1.png"
+}

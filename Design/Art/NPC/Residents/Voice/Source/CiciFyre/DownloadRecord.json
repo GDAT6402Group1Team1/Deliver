@@ -1,0 +1,35 @@
+{
+  "checked_at_utc": "2026-11-12T18:34:42.114334+00:00",
+  "documents": [
+    {
+      "author": "CiciFyre",
+      "file": "SourcePage.itch.html",
+      "url": "https://cicifyre.itch.io/rpg-voice-starter-pack",
+      "bytes": 67971,
+      "sha256": "7df19a6bc9d77c8288dd41c26e2e7dcaed81d6d7376db7e2719d10c108903fb2",
+      "ok": true
+    },
+    {
+      "author": "CiciFyre",
+      "file": "SourcePage.oga.html",
+      "url": "https://opengameart.org/content/female-rpg-voice-starter-pack",
+      "bytes": 44482,
+      "sha256": "9601ba63c822fb81e3889029d28a8647ca4ddf1375c36b027a017766465e0201",
+      "ok": true
+    },
+    {
+      "author": "",
+      "file": "CC0-1.0.txt",
+      "url": "https://creativecommons.org/publicdomain/zero/1.0/legalcode.txt",
+      "error": "HTTP Error 403: Forbidden",
+      "ok": false
+    },
+    {
+      "file": "LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/CC0-1.0.txt",
+      "bytes": 7048,
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "ok": true
+    }
+  ]
+}

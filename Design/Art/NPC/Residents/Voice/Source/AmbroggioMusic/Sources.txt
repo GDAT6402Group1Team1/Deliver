@@ -1,0 +1,10 @@
+Dialogue Sfx
+作者：AmbroggioMusic
+原始页面：https://ambroggiomusic.itch.io/dialogue-scribble-scrabble-noises-sfx
+许可：作者说明所有声音可用于项目，需要署名 AmbroggioMusic
+页面标注 No generative AI was used
+
+包内包含 Ah、Huh、Meh、Garble 等声音，也有 Retro 与 Honk 类音效
+作者页面没有说明哪些声音来自真人录音，哪些采用其他制作方式
+没有将没有生成式 AI 等同于真人录音，当前不放入正式交谈音候选
+本轮仅下载 88700 字节原 ZIP 并保存来源，没有运行内容或接入游戏
