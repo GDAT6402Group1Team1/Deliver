@@ -1,0 +1,355 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Delivery AI · 研究与迭代记录</title><style>
+    :root{color-scheme:light;--line:#d8dfe8;--ink:#202b38;--blue:#2463a8}*{box-sizing:border-box}
+    html{scroll-behavior:smooth;scroll-padding-top:22px}body{margin:0;background:#fff;color:var(--ink);font:16px/1.8 "Segoe UI","Microsoft YaHei",sans-serif}
+    .layout{display:grid;grid-template-columns:235px minmax(0,1fr);gap:44px;max-width:1570px;margin:auto;padding:38px 38px 70px}
+    aside{position:sticky;top:28px;align-self:start;max-height:92vh;overflow:auto}aside strong{font-size:18px}nav{display:grid;gap:4px;margin-top:18px}
+    nav a{font-size:14px;padding:6px 10px;border-left:2px solid var(--line);text-decoration:none}nav a:hover{background:#edf3fb;border-color:var(--blue)}
+    a{color:var(--blue);overflow-wrap:anywhere}main{min-width:0}header{border-bottom:2px solid #426f9d;padding:0 0 26px}h1{font-size:34px;line-height:1.3;margin:10px 0 20px}h2{font-size:25px;line-height:1.4;margin:0 0 22px}h3,h4{line-height:1.5}
+    .meta{color:#5a6979;font-size:14px}.notice{background:#fff6df;border-left:4px solid #c39340;padding:14px 18px;margin:20px 0;font-size:14px}.actions{display:flex;gap:16px;flex-wrap:wrap}
+    section{padding:34px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}p{margin:14px 0}li{margin:7px 0}code{font:14px Consolas,"Microsoft YaHei",monospace;background:#eef2f6;padding:2px 4px;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow:auto;padding:16px;background:#eef2f6}
+    .table-scroll{overflow-x:auto;margin:20px 0;max-width:100%}table{border-collapse:collapse;min-width:690px;width:100%;font-size:14px}th,td{padding:12px 14px;border:1px solid var(--line);text-align:left;vertical-align:top}th{background:#eef3fa}
+    figure.uml{margin:24px 0;border:1px solid var(--line);background:#fff}figcaption{padding:12px 16px;background:#f4f7fb;font-weight:600}.diagram-tools{display:flex;align-items:center;gap:12px;padding:10px 16px;flex-wrap:wrap;font-size:13px}.diagram-viewport{overflow:auto;width:100%;padding:8px}.diagram-viewport svg{display:block;max-width:none;width:100%;height:auto}
+    button{font:inherit;color:var(--blue);background:#fff;border:1px solid #aebed1;border-radius:3px;padding:5px 12px;cursor:pointer}button:hover{background:#eef3fa}:focus-visible{outline:3px solid #d38c25;outline-offset:3px}summary{cursor:pointer;color:var(--blue);padding:12px;background:#f4f7fb}footer{font-size:13px;color:#596879;margin-top:30px}
+    @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
+    @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
+    .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
+<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#iteration-3">验证记录</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
+<header><div class="meta">AI / 交谈、语音与表情 / 2026-11-13</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
+<div class="notice">本页保留试验中的失败与后续修复。大军的 B 音色已接入常驻 Qwen，小芳保留 SAPI；后台检查通过，新的游戏听感、等待和多人效果仍待试玩确认。</div>
+<div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
+<section id="iteration-1"><h2>交谈延迟：初步测量与改进</h2>
+<p>玩家点按钮后，旧流程会等待完整模型输出，再把结果交给游戏。即使第一句话已经生成，玩家也要等后面的内容生成完才看到回复。此外，NPC 闲聊与玩家交谈共用处理能力，排队会继续增加等待。</p>
+<p>目前把等待拆成五段测量：请求排队、模型产生首句、合成该句声音、发送给客户端、实际开始播放。服务器接收消息时立即让 NPC 停下并看向玩家，但这个动作不能算作模型已经回答。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table><tr><th>尝试</th><th>观察到的结果</th><th>接下来怎样判断</th></tr>
+<tr><td>通过常驻 Codex App Server 接收模型输出</td><td>一次简单 JSON 测试约 3.64 秒出现首个文字片段，3.91 秒得到完整短句。包括初始化、网络与模型时间，尚未分别测出。</td><td>只能确认接口可用，不能据此承诺游戏回复速度。需要相同场景、多次冷启动与常驻调用对比，并记录中位数和较慢请求。</td></tr>
+<tr><td>Windows 自带中文语音</td><td>一条中文短句的首次初始化与合成共约 726 毫秒，得到 16 kHz 单声道 PCM。</td><td>尚未在游戏中听音验收。还需比较后续调用、不同句长与双 NPC 同时说话。</td></tr>
+<tr><td>按完整句子分别合成</td><td>首次试验时正在实现；目前已接入首句合成与后句生成并行，后续验证见下文。</td><td>检查首句是否确实在全部生成结束前播放，乱序完成时是否仍按台词顺序播放。</td></tr>
+<tr><td>玩家交谈优先</td><td>首次试验时正在实现；目前玩家请求优先，同一 NPC 收到新发言时取消旧回复。</td><td>取消后要确认模型任务已经结束，不能只把游戏里的请求删除就认为服务空闲。</td></tr></table></div>
+<p>当前判断：如果模型生成首句本身需要数秒，逐句播放只能省去后续句子的等待。因此仍需比较更快的模型或游戏专用小模型，并减少每次请求中不相关的内容；表情不能代替这项工作。</p>
+<h3>参考资料及使用范围</h3><ul>
+<li><a href="https://learn.chatgpt.com/docs/app-server">OpenAI App Server 文档</a>：已阅读初始化、消息增量、回合结束与中断接口，用于常驻连接和确认取消完成。</li>
+<li><a href="https://developer.nvidia.com/blog/how-krafton-built-pubg-ally-a-co-playable-character-powered-by-nvidia-ace/">KRAFTON / NVIDIA 的 PUBG Ally 技术访谈</a>：参考小模型、领域适配和固定提示内容的做法；他们的硬件及模型结果不直接当作 Delivery 的性能。</li>
+<li><a href="https://krafton-ai.github.io/blog/pubg_ally_nemotron/">KRAFTON 开发团队说明</a>：参考将即时行动、记忆与长期分析分开调用，避免每句交谈都带上全部工作。</li>
+<li><a href="https://arxiv.org/html/2511.13112v2">F.A.C.U.L. 论文</a>：学习如何区分明确指令和复杂理解任务。论文中的训练模型不能用几个关键词判断代替，其平均延迟也不是语音交谈的完整耗时。</li>
+<li><a href="https://arxiv.org/html/2512.17250v1">输入预测与误差修正研究</a>：实验任务与开放式语言 NPC 不同，仅作为提前准备后续行动的参考，不套用其性能数字。</li></ul>
+<div id="model-comparison"><h3>模型对照：先保留理解和决策能力，再比较速度</h3><p>使用同一组拱火、道歉和甩锅对话，对两个模型分别测量 15 次。每次约 1,000 个提示字符，采用持续运行的本机模型连接。表中的首句时间从发起调用计算到首个完整句子产生；语音合成另行测量。</p><div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table><tr><th>模型</th><th>有效回复数</th><th>首句中位数</th><th>最慢首句</th><th>语音合成中位数</th></tr><tr><td>gpt-6-astra</td><td>15</td><td>4079 ms</td><td>5801 ms</td><td>20 ms</td></tr><tr><td>gpt-6-luna</td><td>15</td><td>2403 ms</td><td>3012 ms</td><td>13 ms</td></tr></table></div><p>这组测试中，Luna 的首句中位数比 Astra 低约 41%。因此新启动的后端默认选择 Luna，仍可通过配置切换模型。已有后台进程需要重新启动才会采用新配置。模型生成仍占主要等待时间，不能把约 2.4 秒描述为玩家感觉不到延迟。</p><p>本次候选动作只有等待和看向目标，检查了简短回复是否使用给定事实；尚不足以比较互殴、拽车等复杂决策的质量。模型按顺序测试，服务负载和缓存也可能影响结果。后续用性格、关系和目击事件发生变化的场景，检查更快的模型是否仍能作出合理、有趣的选择。</p><p class="evidence">原始记录：Saved/AIResearch/dialogue-comparison.json。语音合成在该对照脚本中单独运行，表中数据不能用来证明生成与播放并行后的完整耗时。</p></div><div id="live-model-progress"><h3>实际等待与人物表现分别改进</h3><p>实际等待按排队、模型生成、语音合成和传输分别测量。人物表现检查收到发言后的转头、眼神和倾听动作，以及开口后的字幕和声音。两部分同时推进：当前虽然能较快表现倾听，实际开口仍有数秒等待。</p><h3>真实模型进入三人游戏后的发现</h3><p>客户端通过正式界面的道歉、拱火按钮发送消息，后台调用真实模型，主机和两个客户端播放合成语音。首次检查发现两个问题：拱火后模型仍在回答之前的道歉；第二轮客户端播放比主机晚约两秒。测试虽然执行完成，这两项体验仍需修正。</p><p>现在向模型单独提供本次玩家发言，并保留历史对话。第二轮重测中，NPC 回答了“他刚才说什么、谁有理”这个问题。模型继续选择态度和动作，代码负责让它明确当前正在回答哪条消息。</p><p>传输语音前，服务器先按顺序发送台词和播放时间。第二轮重测中，三端在约 3.09 秒开始播放，客户端相对服务器约定播放时间的延迟为 0–15 毫秒。此前的问题在这次测试中没有重现；较差网络与多名 NPC 同时说话仍需检查。</p><h3>提前准备语音服务</h3><p>首次合成原本包含启动 PowerShell 和加载 Windows 声音的时间。现在后台启动时，由两个语音线程分别完成初始化；HTTP 服务同时开始接收请求。第一句台词到达后，使用已经准备好的进程合成声音。</p><div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table><tr><th>同一句台词，3 轮对照</th><th>首次合成中位数</th></tr><tr><td>收到台词后启动语音服务</td><td>442 ms</td></tr><tr><td>后台启动时提前准备</td><td>62 ms</td></tr></table></div><p>两种方式生成的 PCM 逐字节一致，语音长度均为 4.275 秒。准备工作只初始化已有 Windows 语音服务，没有生成预设台词或调用外部 TTS API。随后真实游戏中首次合成为 79 毫秒，第二次为 89 毫秒。</p><p>这次游戏中，从按钮提交到首声约为 3.75 秒和 2.94 秒；模型首句分别用了 3.31 秒和 2.26 秒，仍是主要等待来源。这里是少量同机试验，不能据此保证所有请求都达到相同速度。当时 Windows PowerShell 的声音列表有限，男女配置都回退为同一中文声音。后续已改用本机安装的 PowerShell 7 获取男女声音，结果见下一节。</p><h3>保留模型能选择的动作</h3><p>原先后端只把前 32 个动作选项发给模型。选项按人物容器顺序排列，较晚加入的车辆可能被排除。用 35 个选项复现后，确认末尾的拽车动作会丢失。现在保留协议允许的全部选项，上限仍为 129 项。后续精简输入时，将先确认人物、目标和动作信息都得到保留。</p><p class="evidence">记录：Saved/Automation/NpcLiveModel2/index.json、NpcLiveModel3/index.json；Saved/Logs/NpcLiveBackend2.log、NpcLiveBackend3.log；Saved/AIResearch/tts-prepare-comparison.json；后端 26 项检查通过，见 backend-stream-review-tests.log。全部游戏测试使用单机三人 PIE，未测量扬声器实际出声时间。</p><div id="context-comparison-result"><h3>早期试验：短编号未改善这组延迟</h3><p>使用从真实测试请求保存的信息，将人物和事件的 UUID 替换为 p1、e1 等短编号。内容、引用关系、当前发言和全部动作选项均保持一致，并检查可以还原为原始内容。</p><p>同一个 Luna 连接交替运行两种输入，各测 3 次。上下文从 2318 字符降到 1502 字符，首句中位数却从 2355 毫秒变为 2363 毫秒。这组试验没有观察到等待缩短，当时没有采用这项修改。后续使用人物设定和更多候选重新测试，结果见本页“性能测试与当前限制”。六次回复都通过原请求校验，并回应了当前道歉。样本较少，结果只用于本轮选择。</p><h3>玩家发言与 NPC 闲聊</h3><p>之前即使玩家请求排在最前面，两轮已经开始的闲聊仍会占用全部并发位置。现在 UE 和后端都同时处理最多一轮闲聊，另一个位置供玩家发言使用。正在进行的闲聊继续完成；新的闲聊按顺序等待。</p><p>新增检查保持一轮闲聊持续运行，同时提交另一轮闲聊和玩家消息，确认玩家消息能够开始处理。后端 27 项检查通过。此项尚需在多人连续交谈中比较排队耗时；它减少同时进行的背景闲聊数量，这个取舍也要通过试玩确认。</p><p class="evidence">记录：Saved/AIResearch/context-alias-comparison.json、backend-priority-tests.log。以上是当时的实验状态；新一轮采用短编号的结果和限制见本页“性能测试与当前限制”。</p></div></div><div id="sentence-and-voice-update">
+<h3>完整句子与不同人物声音</h3>
+<p>模型有时会把两三句话写在同一个回复字段里。原先整段文字只合成一次，玩家仍要等整段声音准备好。现在先检查完整 JSON，再按句末标点拆分；每句话分别合成并按顺序播放。拆分保留原文，超过协议的三句话或总字数限制会明确报告错误。</p>
+<p>后端检查覆盖了首句先合成、后句继续生成、语音合成乱序完成，以及取消后忽略晚到音频。加入人物声音检查后，共 38 项通过。游戏里的完整播放另行检查，不能用后端结果代替。</p>
+<p>本机已安装的 PowerShell 7 能访问更多 Windows 中文声音。现在优先使用它，未安装时继续使用 Windows PowerShell；也可通过 DELIVERY_TTS_SHELL 指定路径。本机男声实际选中 Microsoft Kangkang，女声选中 Microsoft Huihui。准备后首次合成分别约 51 和 27 毫秒；准备过程约 757 毫秒，在后台完成。</p>
+<p>这次改变了声音和时长，属于人物声音效果的调整。之前“PCM 完全一致”的预热对照只适用于当时同一个声音，不能套用到这次男女声音比较。其他电脑的可用声音可能不同，日志会记录实际选择。</p>
+<p class="evidence">Saved/AIResearch/backend-voice-tests.log、sentence-pipeline-review.json、tts-voice-comparison.json、tts-prepare-cancel.json。试听文件 npc-voice-automatic-male.wav 与 npc-voice-automatic-female.wav 保存在同一目录。</p>
+<h3>低帧率下句尾被截断</h3>
+<p>原先每帧最多发送 4096 字节语音。24 kHz 单声道声音每秒需要约 48 KB，10 FPS 时发送速度已经不足；客户端还会根据服务器时间跳过句首。改为按经过的时间计算发送量，并让客户端从收到的句首开始播放。字幕根据音频队列实际读取的内容推进，服务器结束一句时，本机继续播放剩余声音。</p>
+<p>当时检查还发现跨轮插话、服务器换句后的补发，以及语音合成失败的处理有缺口。相关修改随后加入：正常说完与玩家打断分别处理，避免把自然句末当作强制停止。最新完整播放、中断与实际地图检查结果见“语音压缩与异步编码”，本段保留最初的问题记录。</p>
+</div></section><section id="iteration-2"><h2>人物表情：模型检查与制作方案</h2>
+<p>先检查两个 NPC 的源模型与正式资源：眼睛是独立网格、贴图，还是与脸部连在一起；是否已有面部骨骼或形态键。确认这些信息后再选择实现，不能假设模型一定能单独移动眼睛。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table><tr><th>资料</th><th>阅读范围与结论</th><th>准备怎样使用</th></tr>
+<tr><td><a href="https://www.realtimerendering.com/">Real-Time Rendering，第四版</a></td><td>已查官方资源页、目录及公开资料入口，没有声称已阅读未取得的完整章节。</td><td>用于核对变换、变形和材质动画的基础方法；人物表演另查专门研究。</td></tr>
+<tr><td><a href="https://la.disneyresearch.com/publication/modeling-and-animating-eye-blinks/">Modeling and Animating Eye Blinks</a></td><td>已阅读摘要、引言及眼睑运动分析。闭眼较快、睁眼较慢；研究包含卡通人物。这里尚未完成全文精读。</td><td>把闭合与睁开的时间分开配置，避免等速周期缩放。豆豆眼简化后是否更自然，仍要看实际画面。</td></tr>
+<tr><td><a href="https://github.com/NVIDIA/Audio2Face-3D-SDK/blob/main/docs/README.md">NVIDIA Audio2Face SDK</a></td><td>已查看音频到表情与时间窗口的说明；尚未运行 SDK。</td><td>借鉴声音与表情使用同一播放时间的方式。当前没有引入该依赖；是否需要它取决于模型结构、成本和实测效果。</td></tr></table></div>
+<p>预期配置包括：平静、倾听、思考、说话、生气和惊讶。眼神方向、眨眼曲线、表情强度分别控制。口型跟随实际播放的声音；等待合成时不凭计时器假装正在说话。LLM 选择适合情境的情绪，本机负责平滑播放，避免让模型逐帧计算眼睛位置。</p>
+<h3>模型检查结果</h3><p>已在 Blender 中读取并渲染两份源 FBX。两个角色均为单张蒙皮网格，使用身体骨架，没有现成面部骨骼或形态键。但两个眼睛各自是一块不与脸部连接的几何体，可以为这些顶点制作独立形态键。这样能保留现有外观，通过眼睛压缩、偏转和小幅位移表现眨眼、注视与情绪。</p><p>男角色两侧眉毛也是独立几何体；女角色只有一侧眉毛独立，另一侧与头部网格连接。因此不能直接用相同顶点选择规则批量修改眉毛。先做眼部形态键，再单独检查眉毛变化，避免拉动头发和脸部。</p><p class="evidence">检查文件：Saved/AIResearch/npc-face-source.json、face-islands.json；源模型预览：man-face.png、woman-face.png。这是源模型检查，正式 UE 资源与最终游戏画面仍需核对。</p><div id="expression-shapes-update"><h3>表情增强：让交谈中的变化更明显</h3><p>原来的表情权重已经设为 1，但眼睛本身变化较小：惊讶时高度只增加 12%，倾听时一只眼睛只上移 3 毫米。因此这次调整了表情模型，并保留原始 FBX。正式表情仍通过数据资产选择，强度可以在编辑器中调整。</p><div class="table-scroll"><table><tr><th>表情</th><th>本次调整</th><th>表现意图</th></tr><tr><td>生气</td><td>眼睛高度缩至原来的 35%，向内倾斜 28°；男角色眉毛向内压低</td><td>眼睛明显眯起，配合眉毛表现不满</td></tr><tr><td>惊讶</td><td>眼睛宽度和高度增加至原来的 135%</td><td>双眼明显睁大</td></tr><tr><td>倾听</td><td>一侧眼睛上移并稍微睁大，另一侧略微眯起</td><td>让注视玩家时的表情有变化</td></tr><tr><td>思考</td><td>两只眼睛分别缩至原来高度的 35% 和 80%</td><td>用双眼的不对称表现疑惑</td></tr><tr><td>视线</td><td>源模型中眼睛的移动幅度由 4.5–5 毫米增加至 10 毫米</td><td>让左右和上下看向目标的变化更容易辨认</td></tr></table></div><p>上述比例描述表情强度为 1 时的模型变化。预览包含脸部近景，以及约相当于游戏内 3.1 米距离、74°水平视角的画面。距离预览中，生气、惊讶和思考仍有可辨认的区别；倾听相对温和，实际交谈时还需要结合转头和身体姿态检查。</p><h3>修复：眨眼时眼睛发生翻转</h3><p>形态键记录的是顶点相对原始位置的变化。当“生气”和“眨眼”同时缩小眼睛时，这两次变化会相加。旧写法会把眼睛的上下方向翻转，惊讶时也可能闭不严。</p><p>现在闭眼的同时逐渐减小其他眼部变化，完全闭眼时使用闭眼形状，睁眼后恢复当前情绪。原有的表情过渡继续计算，眼睛重新睁开时能接上正在表现的情绪。</p><h3>眉毛与眼睛分别控制</h3><p>男角色原来的生气表情同时修改眼睛和眉毛。若把整个表情随眨眼一起减弱，眉毛也会在每次眨眼时来回移动。现已拆成 <code>EyesAngry</code> 和 <code>BrowsAngry</code>：眨眼只影响眼睛，眉毛保持生气时的位置。旧的 <code>FaceAngry</code> 继续保留，两个新形态键组合后与它的顶点位置一致。</p><p>女角色一侧眉毛与头部网格连接，本轮保留原眉毛，通过眼睛表达生气。她的 <code>BrowsAngry</code> 没有顶点变化，UE 导入时可能略过该形态键；没有将这一点写成女角色眉毛动画已经完成。</p><p>生成过程中还发现，Blender 新建形态键时可能带入前一个表情的变化，第一次拆出的眉毛表情因此也改动了眼睛。生成脚本现已明确从原始脸型开始，再修改对应的眼睛或眉毛。</p><h3>本轮检查与预览</h3><p>已在两份 Blender 模型上检查生气、思考、惊讶和倾听与眨眼的组合。每组检查 101 个眨眼进度，修复后眼睛的上下方向保持一致，完全闭眼时与单独的闭眼形状一致。另行检查了眉毛：眨眼全过程中，男角色眉毛的位置保持不变。</p><p>已查看新生成的近景、距离预览，以及“生气时闭眼”的画面。这些结果验证了模型变化和形态键组合，尚不能说明 UE 中的材质、动画衔接、视线方向和多人表现已经完成验收。游戏画面的检查结果由后续记录补充。</p><ul><li>模型生成：<code>Content/Python/generate_npc_face_shapes.py</code>；独立 FBX 位于 <code>Design/Art/NPC/Residents/Appearance</code></li><li>眨眼检查：<code>Saved/AIResearch/eye-blink-overlap-check.json</code>；眉毛拆分检查：<code>Saved/AIResearch/eye-brow-split-check.json</code></li><li>本机预览：<a href="../Saved/AIResearch/Man-FaceAngry.png">男角色生气</a>、<a href="../Saved/AIResearch/Woman-FaceSurprised.png">女角色惊讶</a>、<a href="../Saved/AIResearch/Man-AngryBlink.png">生气时闭眼</a>、<a href="../Saved/AIResearch/Man-FaceAngry-distance.png">距离预览</a></li></ul><p class="evidence">预览文件保存在本机 Saved 目录，未作为正式游戏资源提交。这里记录的是 Blender 检查结果，UE 导入和实际交谈仍需分别验证。</p></div><div id="ue-face-visual-check"><h3>UE 画面检查</h3><p>已重新导入独立表情网格，并将生气表情的眼睛和眉毛分别写入配置。材质补上形态键用途后重新保存，后续游戏日志中未再出现使用默认材质代替表情材质的警告。</p><p>首次面部截图的镜头太近，脸部裁切且光照不足，未用于验收。调整测试镜头和补光后，已查看 UE 中的男女表情画面：生气的压眼与倾斜眉形、惊讶时放大的眼睛都能分辨。预设检查使用正式网格、材质和表情配置；它验证表现，不验证模型是否在合适时机选择该情绪。</p><p>目前还要检查正常游戏距离、不同朝向和连续交谈中的过渡。倾听的身体动作及语音驱动细节也需要继续完善。</p><p class="evidence">UE 画面：Saved/Automation/ResidentViews/LiveModel/Faces/Loud-Angry-view1.png、Shrewd-Surprised-view1.png；日志：Saved/Logs/NpcUiAndFace.log。</p></div><div id="conversation-animation">
+<h3>用动画蓝图补充倾听姿态</h3>
+<p>已有站立动作是抱臂待机，单靠改变眼睛仍不容易看出 NPC 已经听见玩家。新增的 ABP_NpcConversation 在原动作上叠加轻微前倾、侧头和看向说话者的动作。节点使用 UE 的 Look At 与 Modify Bone，图可以在编辑器中继续调整；参数保存在表情数据资产中。</p>
+<p>代码只准备当前说话者、视线目标和混合权重。攻击、倒地、起身、拽车与行走时逐渐退出交谈姿态，主角的物理布娃娃保持原有实现。正式 ABP_NpcConversation 和两份 Face 网格已保存；三人 PIE 中确认三个动画实例存在，倾听时的姿态和注视权重生效。表情与姿态仍需结合连续交谈检查自然程度，实例存在和参数生效不能代替观感验收。</p>
+</div><div id="nov13-face-images">
+<h3>本轮游戏画面</h3>
+<p>下面是 UE 中的实际截图。表情预览主动选择配置中的生气和惊讶，用于检查模型形态与材质；它们不是模型在该场景自主选择情绪的证据。交谈时，表现组件会采用模型返回的情绪，并与倾听、思考、眨眼和注视叠加。</p>
+<div style="display:flex;gap:16px;flex-wrap:wrap"><figure style="margin:0;flex:1;min-width:220px"><img alt="UE 中男 NPC 的生气表情" src="Images/AI/npc-angry.png" style="width:100%;max-width:520px"/><figcaption>生气：眉毛和眼睛分别调整</figcaption></figure><figure style="margin:0;flex:1;min-width:220px"><img alt="UE 中女 NPC 的惊讶表情" src="Images/AI/npc-surprised.png" style="width:100%;max-width:520px"/><figcaption>惊讶：眼睛扩大并抬高</figcaption></figure></div>
+</div></section><section id="iteration-3"><h2>验证记录</h2><p>本轮仍在验证。以下记录编译、专项测试及多人测试的实际结果；自动化通过不代替游戏中的听感与观感检查。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table><tr><th>检查</th><th>结果与处理</th></tr><tr><td>DeliveryEditor 构建</td><td>第一轮新增逐句语音代码编译通过。后续修改还要重新构建，不沿用这次结果。</td></tr><tr><td>命令行更新行为树</td><td>首次 Python 调用找不到没有公开给蓝图的工具方法，改为反射调用。第二次发现旧图形布局函数假设所有分支都是 Sequence，新增直接 Task 后出现空指针；增加分支类型检查后重新执行成功，倾听分支已保存到行为树。</td></tr><tr><td>迭代文档排版</td><td>1440、390、320 像素宽度均无页面横向溢出，目录锚点与打印样式通过检查，并查看了桌面与手机截图。</td></tr></table></div><div id="voice-multiplayer-progress"><h3>逐句语音与多人检查</h3><p>本轮 DeliveryEditor 完整构建通过；后端 15 项测试和 UE 逐句播放专项测试通过。新增 C++ 文件最初未被旧构建缓存发现，强制重新收集源文件后才编译并运行了新增测试，因此不把前一次构建当作该测试已经通过。</p><p>首次三人 PIE 检查失败：主机播放了真实合成语音，但检查时两个客户端还没有收到对应对白状态，也没有开始播放；紧接着的倒地同步检查同样失败。当时先记录现象，再检查语音传输对其他状态同步的影响。后续修改与重测结果见下文。离屏视口截图为黑色，不能用作人物表情的画面验收。</p><p class="evidence">结果：Saved/Logs/NpcLatencyBuild.log；Saved/AIResearch/backend-tests.log；Saved/Automation/NpcSentence/index.json；Saved/Automation/NpcVoiceMultiplayer/index.json。此处记录失败，后续修复后追加对照结果。</p><div id="paced-audio-result"><h3>修复：按播放进度发送语音</h3><p>原实现每帧最多发送 8 KB 的声音，并在客户端收齐整句话后开始播放。发送量随帧率增长，测试连接的带宽为每秒 100 KB。一次性传输声音时，两个客户端的对白状态和受击状态都未及时更新。</p><p>现在按播放进度发送声音，提前准备约 0.4 秒；16 kHz 单声道语音每秒约 32 KB。客户端收到约 0.12 秒的声音后开始播放，后续语音按顺序接着播放。</p><p>同一三人 PIE 场景重测通过，包括两名客户端播放真实语音、受击停止对白和倒地同步。主机及两个客户端的播放调用分别比服务器约定时间晚 1、3、3 毫秒。这是同机测试中的代码调用时间，尚未测量扬声器实际出声时间；也没有覆盖较差网络、多名 NPC 同时说话或远程多人。</p><p>测试带警告通过，离屏截图仍为黑色，实际听感和人物表情尚未完成验收。此次结果支持继续采用按播放进度传输的方式，后续仍需检查带宽、卡顿和打断时的表现。</p><p class="evidence">结果：Saved/Automation/NpcVoiceMultiplayerPaced/index.json；Saved/Logs/NpcVoiceMultiplayerPaced.log。测试使用真实合成语音和正式角色蓝图，台词与动作由测试指定；该测试未调用大模型。</p></div></div><div id="nov13-validation">
+<h3>11 月 13 日：完整播放与真实模型</h3>
+<p>DeliveryEditor 完整编译通过。六项检查通过：服务器权限与退出处理、行为树、NPC 组件协作、分句状态、发送预算，以及完整声音播放。其中两项带现有资源警告。新动画蓝图和两个 Face 网格已保存，真实三人游戏中确认三个动画实例存在，倾听时的姿态和注视权重也已生效。</p>
+<p>三人 PIE 限制到 10 FPS，使用实际合成的 16 kHz PCM 连续播放两句。主机和两个客户端均按顺序播完，日志记录已读取字节数等于总长度；第二轮播放中打断，字幕与声音停止。24 kHz、10 FPS 的发送预算另外由逻辑检查覆盖，本轮游戏使用的是 16 kHz 样本。</p>
+<p>正式道歉和拱火按钮调用真实模型，三端均收到并播放回应。道歉首声为 3.51–3.62 秒，拱火约 4.05 秒；对应模型首句为 3.11 和 3.41 秒，语音合成为 33–60 毫秒。两轮都没有排队等待，说明本次主要时间花在模型生成，而不是后端排队或 TTS。</p>
+<p>倾听状态在第一轮约 36 毫秒被三个视角观察到；第二轮主机约 280 毫秒、客户端约 415 毫秒。测试包含截图和场景负载，不能将这组数字当作所有电脑的保证。这一版仍未达到“感觉不到等待”的目标。</p>
+<p>这轮真实地图回归首次在受击后的半秒检查失败：远端仍报告未倒地、对白安排仍为活动状态。当时其余互殴、恢复、拽车和驾驶检查通过。后来确认原始 PCM 传输影响状态同步，改用压缩语音并将编码移到后台；最新对照见下一节。这份旧失败报告继续保留。</p>
+<p>资源创建时遇到新 UMG 图标控件没有登记变量编号的引擎检查错误，已在编辑器工具中为新增控件登记编号，重新创建未再出现该错误。启动阶段仍有项目原生 CDO 的物理材质错误；资源脚本已执行并保存，但命令行因此返回 1。自动化报告分别记录，未把整个启动日志描述为无警告。</p>
+<p class="evidence">构建：Saved/Logs/NpcConversationFinalBuild3.log；资源：NpcConversationAssets2.log；测试报告：Saved/Automation/NpcConversationFinalUnit、NpcCompleteSpeech10fps、NpcLiveConversationFinal、NpcConversationMapRegression；模型与声音：Saved/Logs/NpcLiveBackend4.log。</p>
+</div><div id="voice-async-validation">
+<h3>11 月 13 日：语音压缩与异步编码</h3>
+<p>真实地图的旧 PCM 检查中，受击后 62.7 毫秒客户端已经停止声音，但仍显示未倒地；到 909.6 毫秒才收到倒地状态。本轮在约 65 毫秒同时观察到倒地与停音，改善的是普通状态同步能及时跟上停音。语音与人物状态共用网络连接，原始音频量较大，会延后其他状态的发送。当前使用 UE 自带的 Opus 编码器，以 24 kbps 压缩声音，并将编码放到线程池；人物决定说什么、台词顺序和攻击规则保持原有处理。</p>
+<div class="table-scroll"><table><tr><th>同一句语音的记录</th><th>本轮结果</th><th>说明</th></tr>
+<tr><td>传输数据量</td><td>117,420 → 11,928 字节</td><td>比原 PCM 少约 90%；Opus 是有损压缩，声音质量还需实际听取</td></tr>
+<tr><td>后台编码</td><td>25.83 毫秒</td><td>由工作线程处理独立声音数据</td></tr>
+<tr><td>游戏线程提交任务</td><td>0.054 毫秒</td><td>仅指提交步骤，不包含后台编码或完整一帧耗时</td></tr>
+<tr><td>客户端观察到倒地与停音</td><td>65.4 毫秒</td><td>主机地图回归中的对应观察为 65.3 毫秒</td></tr></table></div>
+<p>这次对照同时包含压缩与异步编码，不能把全部改善归因于多线程。数据来自同机实际地图的少量样本，尚未测出外网、丢包、多名 NPC 同时说话时的表现，也没有据此宣称整体帧率提升。</p>
+<h3>后台完成后，先确认这句还需要播放</h3>
+<p>游戏线程先加载语音模块，再把 PCM 副本、采样率、动作编号、玩家发言编号和句子序号交给后台。后台只生成压缩数据，不读取角色或修改字幕。完成后回到游戏线程，检查组件仍存在、本次动作和发言编号仍一致、句子仍在队列中，才把结果交给播放部分。插话、倒地或结束关卡后，旧结果不会重新启动对白。</p>
+<p>服务器保存原声音用于主机播放，网络传输压缩数据。每句在客户端使用独立解码器，完整包到达后逐步解码；短包解码目前仍在接收处理过程中完成。编码格式保存原长度与实际播放长度，末尾增加 40 毫秒，让编码延后的尾音完整输出。语音结束按本机读取进度判断，取消时清除字幕、声音、未播句子和解码状态。</p>
+<h3>当前检查结果</h3>
+<div class="table-scroll"><table><tr><th>检查</th><th>结果</th><th>仍需处理</th></tr>
+<tr><td>NpcVoiceAsyncMap：早期 8 项检查</td><td>7 项成功，其中 2 项带警告；1 项失败，历史报告保留</td><td>客户端实际地图、3 项编解码和 3 项语音检查成功；主机拽车提前以 HoldObstructed 结束，后续调整测试站位并复测</td></tr>
+<tr><td>NpcOpusComplete10fps：三人完整播放与中断</td><td>通过，带警告</td><td>两句在主机与两个客户端均读完 118,700 / 118,700 字节，包含 40 毫秒补尾；下一轮中断停止声音与字幕。尚未测量扬声器实际出声</td></tr>
+<tr><td>NpcOpusLiveModel：正式 UI 与真实模型</td><td>两轮通过，带警告</td><td>正式道歉和拱火按钮均得到对应回应；这只是两轮，不作为 P95 或稳定性结论</td></tr>
+<tr><td>NpcOpusMapFinal：最终主客地图回归</td><td>主机与客户端均成功，带警告</td><td>两端拽车均以持续油门挣脱 DriverEscaped 结束；报告无测试 Error，命令退出码 0。仅修改测试布局，生产玩法保持原有逻辑</td></tr></table></div>
+<h3>最终地图回归：统一测试站位</h3>
+<p>旧测试的旁观者位于车辆与 NPC 的前方，前进路径也没有预先检查。日志没有记录具体是哪一个碰撞对象触发 HoldObstructed，因此不能断言就是撞到了旁观者。这次把主机和客户端驾驶场景都放到同一个起点：X=11820、Y=12342，旁观者移到后方 X=11500、Y=12342；同时检查地面，以及车辆和 NPC 前方 1200 厘米的移动空间。</p>
+<p>只调整测试布局后重新构建，结果 Succeeded，耗时 16.75 秒。最终主机和客户端回归均成功，两端均记录 DriverEscaped。旧失败继续作为测试场景问题的记录，不能删除；这次没有通过修改游戏规则强行改变拽车结束原因。构建日志为 Saved/Logs/NpcDriveLayoutBuild.log。</p>
+<h3>真实模型仍占主要等待</h3>
+<div class="table-scroll"><table><tr><th>正式按钮</th><th>倾听被观察到</th><th>首次播放</th><th>模型首句 / 首句语音合成</th></tr>
+<tr><td>道歉</td><td>三端约 45 毫秒</td><td>三端约 2,968 毫秒</td><td>2,547 / 27 毫秒</td></tr>
+<tr><td>拱火</td><td>三端约 380 毫秒</td><td>客户端约 3,289 毫秒，主机约 3,319 毫秒</td><td>2,604 / 15 毫秒；后续句合成约 34 毫秒</td></tr></table></div>
+<p>道歉得到“行，听你道歉，这回先送货吧。”，拱火得到“他刚才是在说我。”。两次都回答了当前消息；模型继续决定人物态度和行动。首句生成仍约 2.6 秒，所以当前不能描述为完全没有等待。这里记录的是程序观察到倾听和开始播放的时间，包含场景与采样影响，也不等同于扬声器出声延迟。</p>
+<h3 id="try-current-npc">试玩步骤</h3>
+<ol><li>后端在本次检查时运行于本机 127.0.0.1:8769，项目已配置这个地址。打开 TestForCharacter，进入游戏。</li><li>靠近“大军”或“小芳”，按 T 打开交谈。分别尝试道歉、拱火和自由输入。</li><li>观察先转头倾听，再按句子顺序播放声音与字幕，以及情绪、眨眼和头部姿态的变化。当时版本的正式回答首声约 3 秒，新的模型配置仍需游戏内复测。</li><li>在 NPC 说话时使其受击，检查字幕与声音停止；多人试玩时一起观察主机和客户端。远程弱网和较长时间连续交谈尚未覆盖。</li></ol>
+<p class="evidence">报告：Saved/Automation/NpcVoiceAsyncMap/index.json、NpcOpusComplete10fps/index.json、NpcOpusLiveModel/index.json、NpcOpusMapFinal/index.json；日志为 Saved/Logs 下同名 .log。旧 PCM 对照：Saved/Logs/NpcImpactProbe.log。正式按钮画面保存在 Saved/Automation/ResidentViews/LiveModel。</p>
+<p>当前检查已完成到可试玩阶段。新的资料精读、后端职责设计和 UI MVC 拆分都安排在用户检查当前延迟、语音、表情和多人效果之后；本轮没有开展这些新任务。</p>
+</div></section><section id="iteration-4"><h2>AI 方案选择：按玩法分工</h2><div class="finding" id="llm-course-direction"><strong>作业方向：以大模型 NPC 为核心。</strong><p>玩家说“他刚才是不是在说你”，NPC 需要结合自己听到的话、对同伴的态度和说话者的可信度作出判断。是否反驳、追问、相信挑拨或动手，交给模型选择。行为树执行转头、走近、攻击等动作，服务器检查动作是否符合游戏规则。</p><p>优化等待时，优先缩短上下文、提高玩家请求的优先级、分句生成和播放，并比较不同模型。人物理解和行动选择继续由大模型完成。等待期间先转头倾听，模型回复后再决定是否相信玩家。模型不可用时，记录临时采用的处理方式及其效果。</p><p>验证同时看速度与效果：在相同对话下改变人物性格、此前的争执、目击事件或玩家的说法，检查 NPC 是否给出有依据的不同回应。使用相同场景比较速度，通过实际试玩检查回应是否自然、有趣，以及选择是否符合当时的情况。</p></div><p>不同方法解决的问题并不相同。Delivery 的对话角色需要理解玩家的话，街上的普通行人需要稳定移动，职业角色可能需要安排多步工作，物理角色则需要连续控制。选择方法时先明确具体问题，再比较开发成本、运行开销和调试难度。</p><div class="finding"><strong>当前决定：</strong>保留现有行为树执行交谈角色的动作，继续完成延迟与语音测试。新的方法比较安排在用户检查当前主要效果之后，本轮不重写其他 NPC 系统。后续通过同一场景的效果与性能决定是否替换。</div><div class="table-scroll"><table><tr><th>方法</th><th>适合 Delivery 的情况</th><th>采用条件与限制</th></tr>
+<tr><td>状态机 / StateTree</td><td>交谈、受击、倒地、恢复等有明确进入和结束条件的流程；商贩开摊、收摊与日常活动。</td><td>少量状态先用现有状态代码。状态变复杂且需要策划编辑时评估 StateTree；同一份状态由一个系统修改，避免它与行为树同时指挥同一角色。</td></tr>
+<tr><td>行为树</td><td>检查 NPC 能否行动，再执行靠近、看向玩家、攻击或松手等步骤；随时响应倒地和打断。</td><td>当前交谈角色已有正式蓝图行为树，继续复用。行为树负责把动作做完，不要求它理解任意自然语言。</td></tr>
+<tr><td>Utility：比较当前选择</td><td>按危险、距离、愤怒和职业责任，比较继续工作、避让、围观或求助的合适程度。</td><td>本机 UE 5.8 StateTree 已有最高评分选择和按评分随机选择，可优先评估，无须先引入另一套框架。加入保持时间和切换差值，防止相近分数导致反复换动作。玩家挑拨是否可信仍可交给模型。</td></tr>
+<tr><td>GOAP：安排多步行动</td><td>未来职业 NPC 为了恢复营业，需要寻找散落货物、取得工具、返回摊位等，有多种完成途径的任务。</td><td>只有任务存在有意义的组合变化时再引入。先描述动作前提、结果和代价，环境变化后重新检查计划；固定三步流程直接用行为树更容易维护。尚未选择或验证 GOAP 插件。</td></tr>
+<tr><td>群集移动 / Boids / 避障</td><td>小学生和普通行人在路线范围内保持间距、调整方向。现有项目已经包含 Boids 实现。</td><td>解决怎样移动，不决定是否相信玩家、是否吵架。遇到墙壁仍需要导航或碰撞检查，受击时退出普通群集控制。规模增大后再比较 Mass、ZoneGraph 或现有方案。</td></tr>
+<tr><td>强化学习 / 模仿学习</td><td>候选实验：骑车绕桩、连续平衡控制，或只训练一个难手调的局部技能。</td><td>先建立可重复的场景、观察数据、动作限制和评价标准。训练完成后才比较推理效果；不直接替换现有布娃娃手感，也不用于权威伤害、奖励或任务校验。</td></tr>
+<tr><td>LLM</td><td>理解拱火、道歉和甩锅，生成角色台词，结合经历提出行为建议。</td><td>保留自然语言和情境推理价值。无需语言理解的移动、碰撞、眨眼和命中检查不等待模型；模型建议仍由服务器检查后执行。</td></tr></table></div>
+<h3>UE 5.8 本机核查</h3><p>已找到并阅读 LearningAgents.uplugin：插件由 Epic 提供，版本标记 0.2，属于 Experimental，默认关闭。声明依赖 LearningCore、PythonMLPackages 和 NNERuntimeBasicCpu，并包含训练与运行模块。当前只核查文件，没有启用插件、安装依赖或开始训练。</p><p>已查看本机 StateTreeTypes.h，其中包含 TrySelectChildrenWithHighestUtility 和 TrySelectChildrenAtRandomWeightedByUtility。说明 StateTree 与 Utility 可以结合，并非只能二选一。网上文档默认版本已跳到 5.9，本项目具体接口以本机 5.8 源码为准。</p>
+<h3>新增资料与阅读进度</h3><ul><li><a href="https://dev.epicgames.com/documentation/en-us/unreal-engine/overview-of-state-tree-in-unreal-engine?application_version=5.8">Epic：StateTree 概览</a>：已阅读状态选择、任务和转换说明，并核对本机 Utility 选项。</li><li><a href="https://dev.epicgames.com/documentation/unreal-engine/API/Plugins/LearningAgents?application_version=5.8">Epic：Learning Agents API</a>：已核对本机插件和主要头文件位置；训练接口尚需继续阅读与试验。</li><li><a href="https://media.gdcvault.com/gdc10/slides/MarkDill_ImprovingAIUtilityTheory.pdf">GDC 2010：Improving AI Decision Modeling Through Utility Theory</a>：已读取前半部分关于评分、归一化和响应曲线的材料，尚未看完整视频。</li><li><a href="https://arxiv.org/html/2510.14154v1">AMD：Combining Reinforcement Learning and Behavior Trees</a>：已阅读摘要与引言，准备继续看训练和评价方法。Schola 是 AMD 的 UE 插件，不是 Epic 自带的 Learning Agents；不混为同一个系统。</li></ul>
+<p>当前主要效果由用户检查后，下一阶段再按具体场景比较：先记录现有方案的耗时、稳定性和表现，再做小范围替代实验。不会因为某种方法更复杂，就认为它一定更适合这个游戏。</p><div id="backend-followup"><h3>后端分工：安排在当前功能验收之后</h3>
+<p>用户要求先完成当前的回复延迟、逐句语音、表情和多人同步，提供试玩验收，再研究和实现后端分层。UI 的完整 MVC 调整也放在当前效果检查之后。</p>
+<p>后续先阅读相关 GitHub 项目的实际代码、论文和 GDC 资料，记录模块、版本、采用原因和适用限制。再围绕请求接收、玩家优先处理、对话内容准备、模型调用、语音合成和耗时记录整理职责。类的数量不作为改进依据，修改前后要比较首句耗时、取消速度、并发处理和声音完整性。</p>
+<p>资料范围包括网易《逆水寒》的 AI NPC、腾讯相关项目，以及其他游戏团队的实现。知乎、个人技术博客、团队专栏和视频笔记均可用于寻找方案；优先阅读作者自己的实现、代码分析与问题记录。具体技术结论结合原始论文、公开源码和开发团队说明核对，记录版本及测试条件。以上是下一轮阅读目标，尚未把找到标题或产品宣传视为已经精读。</p>
+<p>此前 NpcLiveConversationFinal 样本的模型首句约 3.1–3.4 秒，语音合成约 33–60 毫秒；最新 NpcOpusLiveModel 两轮的模型首句约 2.55–2.60 秒，语音合成约 15–34 毫秒。两组都是少量实际样本，不作为 P95 或稳定性结论。后端分工有助于独立优化这些步骤；UE 到客户端的语音带宽问题仍由游戏网络实现解决。此项目前是后续安排，尚未开展新一轮资料精读或后端职责重构。</p></div></section><section id="iteration-5"><h2>动画与代码设计：选择依据</h2><p>NPC 决定做什么，与角色如何把动作表现出来，是两件需要衔接的工作。LLM 可以建议生气地回应，但不直接生成每一帧骨骼变换。动画系统结合现有姿态、移动方向、动作资源和情绪配置，决定具体播放方式。</p><div class="table-scroll"><table><tr><th>方案</th><th>适用情况</th><th>本项目考虑</th></tr><tr><td>状态机、Blend Space、Montage</td><td>站立和行走混合，明确的受击、攻击与交互动作。</td><td>先检查现有动画能否覆盖目标动作，避免用单个剪辑硬切来承担所有过渡。Montage 的播放与游戏判定仍需对应服务器动作编号。</td></tr><tr><td>Motion Matching / Pose Search</td><td>从动画数据库中选择匹配当前姿态和预期移动的片段，改善启停、转向和衔接。</td><td>确认动作素材覆盖、搜索特征、重定向和轨迹输入后再测试。它根据当前姿态和移动目标选择已有动作，攻击意图由决策系统提供。</td></tr><tr><td>Chooser</td><td>按角色、情绪和当前动作选择合适动画或数据库。</td><td>资源选择条件复杂时评估；只有几个稳定配置时，数据资产或数据表已经足够。</td></tr><tr><td>Motion Warping、IK、Control Rig</td><td>把交互动作对准实际目标，调整手脚和视线。</td><td>拽车要先确定接触位置、位移控制与碰撞规则。Motion Warping 修改 Root Motion，不能直接叠到主角持续物理移动上。</td></tr><tr><td>PhysicsControl</td><td>当前主角主动布娃娃，以及需要保持物理响应的姿势控制。</td><td>保留现有物理更新顺序与手感，不因为 NPC 动画选型就一起替换主角移动。</td></tr></table></div><p>已核对本机存在 PoseSearch、Chooser、MotionWarping 和 ControlRig 插件文件。存在文件不等于工程已启用，也不等于资产足够；本轮没有因此新增依赖。</p><h3>代码结构的选择</h3><p>角色之间共享“能否交谈”“能否受击”等能力时用接口；音效、UI 接收已经发生的结果时用委托。确实需要替换模型服务时用适配器，确实需要比较不同算法时再使用策略接口。没有独立状态和生命周期的计算留在普通函数或结构中，不把每个小功能都拆成 Component。</p><p>这些原则已经同步写入 AGENTS.md 与 CLAUDE.md 第 8a 节。后续设计要说明选择原因、替代方案、资源需求和验证方式，而不是固定套用某一种模式。</p><h3>参考资料</h3><ul><li><a href="https://dev.epicgames.com/documentation/en-us/unreal-engine/motion-matching-in-unreal-engine?application_version=5.8">Epic：Motion Matching</a>：用于核对姿态搜索、数据库和 Chooser 的分工，尚未在本项目制作 Motion Matching 对照场景。</li><li><a href="https://dev.epicgames.com/documentation/en-us/unreal-engine/motion-warping-in-unreal-engine?application_version=5.8">Epic：Motion Warping</a>：用于核对 Root Motion 调整窗口与目标位置，不将其误作物理约束。</li></ul></section><section id="iteration-6"><h2>对话界面：视觉方案与 UMG 实现</h2><p>用户要求先参考项目美术风格生成效果图，再用 UMG 搭建正式界面。这条已同步写入 AGENTS.md 与 CLAUDE.md。布局、字体、间距和按钮状态保存在可编辑的界面资产中，发送消息继续使用原有交谈逻辑。</p><p>当前方案沿用圆润卡通造型、深蓝描边、奶油色面板和明亮按钮。蓝色表示发送，黄色表示道歉，珊瑚色表示拱火。面板为 NPC 和头顶对白留出空间，输入框和文字使用真实 UMG 控件。</p><figure><img alt="对话界面视觉方案，展示面板、按钮状态和游戏内布局" src="../Design/Art/UI/Conversation/ConversationConcept-v1.png" style="width:100%;height:auto"/><figcaption>imagegen 生成的视觉参考；此图是设计方案；正式 UMG 的实现和检查记录见下文。</figcaption></figure><p>接下来检查控件绑定、快捷按钮、长台词、Esc 关闭、不同分辨率，以及交谈与来电界面同时出现时的布局。</p><h3>第一版 UMG 的检查结果</h3><p>正式资产已保存到 /Game/UI/Conversation/WBP_Conversation，控件通过名称绑定原有发送函数，手机打开时交谈面板移到左侧。第一版实际游戏发现部分中文缺字、小窗口下字号偏小。后续已修改字体资源与整体缩放，结果见下一节；效果图与程序截图分别保留，第一版的问题记录不代表当前仍在使用旧字体。</p><h3>字体、缩放和按钮回归</h3><p>已创建 F_Conversation 字体资产，引用引擎中的 DroidSansFallback 字体面，修复保存界面后中文缺字的问题。UMG 使用 ScaleBox 调整整个面板；640 像素宽窗口下，面板约为 320×240 像素。来电手机打开时，交谈面板移到左侧，电话状态保持原样。</p><p>真实三人 PIE 通过正式 WBP 的道歉和拱火按钮发送消息，三端播放了模型返回的语音。测试还检查了关闭按钮、旧按钮解除绑定、重新打开后一次点击只发送一条消息。已查看实际游戏截图，中文和按钮均可辨认。随后去掉了中文文字的额外描边，改善小字号笔画拥挤；该字体样式调整已重新构建。</p><p>这轮 NpcUiFinal 历史样本从提交到首声约为 2.84 秒和 3.23 秒，三端在相同测试采样时刻开始播放。最新压缩语音版的正式按钮结果见“语音压缩与异步编码”一节。这是本机少量样本，等待仍主要来自模型。完整键盘和手柄操作、Esc 实际按键、更多分辨率、插图细节和多人远程网络还需继续验证。</p><p class="evidence">UE 构建：Saved/Logs/NpcLatencyBuild.log；资源创建：Saved/Logs/ConversationAsset2.log；真实按钮回归：Saved/Automation/NpcUiFinal/index.json。测试带音频采样率转换和 GameplayCue 搜索配置等警告通过。</p><div id="ui-next-step">
+<h3>图标与后续 MVC 调整</h3>
+<p>按同一视觉方案生成了道歉手势和拱火图标，源图保存于 Design/Art/UI/Conversation，导入后作为 UMG 图片使用。正式布局保存在 WBP_Conversation。</p>
+<p>用户进一步要求正式界面采用蓝图布局，并接入项目已有 MVC 分工。这项已记入 AGENTS.md 与 CLAUDE.md：Widget 显示内容和接收输入，UI Controller 处理交谈界面的操作，现有交谈组件负责服务器请求。按用户最新安排，先完成延迟、语音和人物表现供检查，再拆分界面逻辑并移除运行时备用布局；当前尚未完成这项拆分。</p>
+</div><div id="nov13-ui-image">
+<h3>当前试玩界面</h3><p>这是实际客户端截图，已使用中文字体和生成的按钮图标。完整 MVC 调整按用户要求留到主要功能检查之后。</p>
+<figure><img alt="真实模型回复显示在客户端的交谈面板中" src="Images/AI/conversation-client.png" style="width:100%;max-width:800px"/><figcaption>实际客户端界面，与前面的生成效果图分别记录</figcaption></figure>
+</div></section><section id="iteration-7"><h2>交谈、动作与人物声音</h2>
+<p>本轮根据试玩反馈继续修改：人物的台词仍有明显模板感，两人会反复接话，Windows 的 Kangkang / Huihui 声音也过于机械。此前网络与播放测试通过，只说明声音能够传到客户端并播放完整；听感和人物性格尚未通过用户验收。</p>
+<h3>重复接话的原因</h3>
+<p>日志中每轮都有新的请求和发言编号，说明问题发生在对话生成与接话过程。逐句回复通知邻居时总使用第 1 轮，使原来的轮数限制失效。此外，已经回答的玩家原话仍被放在当前消息中；一段回复中途停止时，之前说完的句子也会被丢掉。</p>
+<p>本轮分别修复这些问题：一次闲聊逐次计数；新话与已经回答的历史分开提供给模型；被打断时只记住已经完整播放的句子。模型可以用动作结束交流，无台词动作成功后单独记录回应，失败或取消不算已经回答玩家。</p>
+<p>接话次数从 0 递增到 3，到上限后停止继续唤醒邻居。玩家新发言或擦身、鸣笛等新事件会重新开始计数，自己的动作结束不会重置。此前一组日志的 24 次请求、21 次开始播放都有各自编号，未发现同一条回复重复播放；问题在于旧话反复触发了新的模型请求。</p>
+<p>播放记录也做了区分：说完整段回复后，只保存一条 SelfSpeech，并关联玩家消息；第二句被打断时，只保存已经说完的第一句，不把半句记成说过，也不把玩家标为已得到完整回答。被打断时保存的内容不再次通知邻居，正常完成也不会同时堆积逐句和整段两份历史。房主有音频设备时检查本机实际播放；专用服务器、关闭音频或设备不可用时使用安排的播放时间，异常播放有超时退出。这不表示每个远端玩家都已经听完。</p>
+<h3>让人物通过动作回应</h3>
+<p>玩家经过时，行人可以短暂看一眼；轻微擦碰时多看一会儿。这样的身体反应直接由游戏执行，不给每个路过的玩家都发送模型请求。反复擦碰、挑衅或争执则作为新的事件，交给具备 AI 对话能力的角色判断是否抱怨、靠近、动手或拽车。</p>
+<p>现有 MoveTo 只能靠近目标，不能当成走开或巡逻。主动躺下已有自动起身过程，模型 GetUp 尚未完整接通。实现时保留这些区别，避免台词说做了某件事，游戏里却没有相应动作。普通行人的程序化步态与两名 AI 角色的动画蓝图也分别处理，不为了转头更换整套行走方式。</p>
+<p>无台词动作成功后使用独立的 ActionReply 记录对应玩家发言，动作失败或取消不算回应。逐句接口同时检查动作成功与模型明确返回零句台词，处理两种先后顺序并避免重复记录。玩家尚在等回答时，空 Wait 会被拒绝。MoveTo 的候选检查与行为树使用相同的 UE 导航到达条件，考虑双方碰撞范围，已经到达的目标不再反复入选。主动躺下可以继续当前台词，真实击倒仍停止交谈；起身时长保持原值。</p>
+<h3>人物设定与原创台词</h3>
+<p>大军要面子，容易把话说满；小芳嘴快，爱追问和逗他，两人也会临时帮腔或认怂。修车和面店只作背景，尚未新增职业经营或支线任务。原稿中的“身体当尺、判半步路”等具体例子容易被模型当成正在发生的事情，本轮通过单独对照后采用更简短的性格描述。正式游戏读取 DT_NpcProfiles，不会在每次启动时覆盖编辑器中的设置。</p>
+<p>人物可以说“你倒挺忙，两头传话”，也可以反过来追问玩家站哪边。这些是原创写作示例，不作为固定触发台词。正式回复应回应新内容；人物名字、职业和某个笑话不需要每轮出现。</p>
+<div id="prompt-persona-review"><h3>两次真实对照：提示词与人物设定分开修改</h3>
+<p>先固定原人物设定，使用普通催促、追问玩笑、扫路纠正和松车道歉四个场景。两个人物分别使用 Sol 与 Luna，再比较当前和精简提示词，共 32 次真实调用。相邻场景交换提示词与模型顺序，推理设置均为 low。每条保存完整台词、动作、首段文字、首个完整句子、总耗时与真实 token 用量；没有连接正式后台、语音服务或游戏。</p>
+<div class="table-scroll"><table><thead><tr><th>模型</th><th>当前提示词：首句中位数</th><th>精简提示词：首句中位数</th><th>同场景比较</th></tr></thead><tbody>
+<tr><td>Sol，各 8 次</td><td>2985.5 ms</td><td>6262 ms</td><td>精简版 1 次更快，7 次更慢</td></tr>
+<tr><td>Luna，各 8 次</td><td>2168 ms</td><td>2179.5 ms</td><td>精简版 5 次更快，3 次更慢；其中一次为 10651 ms</td></tr>
+</tbody></table></div>
+<p>精简提示词每个模型的 8 次输入合计少了 3320 token，但 Sol 精简版有 6 次产生推理输出，合计 517 token，当前版为 0；缓存命中也不同。此次没有观察到稳定提速，因此没有采用精简提示词。每种条件只有一次样本，时间差不能全部归因于字数，也不足以估计长期失败率或较慢请求的分布。</p>
+<p>更关键的是内容。面对“我说归我扫，你耳朵落家了？”，Sol 四条都把之前的“管”解释为误听，再承认、找台阶或嫌对方语气差；Luna 四条仍将“归他管”当成对方原话，并弄错谁说了扫路。允许角色嘴硬和不讲理，但把事件关系弄反不等于鲜明性格。32 条都通过了 JSON 和动作候选检查，这只能说明接口有效。</p>
+<p>第二批保持正式提示词与 low 设置，只换简化人物设定，两个角色、四个场景和两个模型共 16 次。核对模型输入后，除 persona 外的字段完全相同；结果与第一批的 current 条目并列评阅。以下例子展示实际变化：</p>
+<div class="table-scroll"><table><thead><tr><th>人物与模型</th><th>原人物设定</th><th>简化设定</th><th>评阅</th></tr></thead><tbody>
+<tr><td>小芳 · Luna<br/>追问为何站着</td><td>看你们吵得挺热闹，我来判半步路。</td><td>看热闹啊，顺便瞧瞧你问得这么急干嘛。</td><td>不再凭空加半步路争执，接话更直接</td></tr>
+<tr><td>大军 · Luna<br/>玩家赶时间</td><td>行，路口堵着呢，你帮我看下哪边能过。</td><td>行，别催，我就问你一句。</td><td>不再编造堵路，但说要问一句后没有真问，仍不够完整</td></tr>
+<tr><td>小芳 · Luna<br/>玩家赶时间</td><td>那你评评理：我和大军谁先占了这半步？</td><td>行，我就问一句：大军刚才那半句话到底想说啥？</td><td>问题仍在：现场没有大军刚才的发言</td></tr>
+<tr><td>小芳 · Sol<br/>扫路纠正</td><td>听岔了，他说路归他扫，不是归他管。可扫就扫，干吗还损我耳朵？</td><td>吵岔了，我把归他扫听成归他管了。可他纠正就纠正，还非得损我一句。</td><td>两版都接住纠正，继续生气也符合当时的对话</td></tr>
+</tbody></table></div>
+<p>简化设定有助于减少具体笑话例子对现场的干扰，因此已写入正式人物表和两份蓝图。Saved/AIResearch/NpcPersonaUpdate/latest.json 记录 status=saved、unchanged_other_fields=true；姓名、声音、表情、动画及其他设置保持原值。导入命令仍因已有三条 GEngine 初始化前物理材质访问错误返回 1，不能写成干净的 UE 启动检查。</p>
+<p>人物设定替换没有解决全部理解问题：Luna 两条扫路纠正仍失败，大军两模型也仍会借修车职业解释此刻站立。四条松车均选择 ReleaseVehicle，未冒称动作已完成。玩家交谈继续使用 Sol，正式提示词保留当前版。第二批首句中位数为 Sol 3408.5、Luna 2054.5 毫秒；两批发生时间和缓存条件不同，不作为提速收益。</p>
+<p>评语由助手结合场景逐条阅读后填写，没有按关键词判定，也没有要求固定态度；评阅者知道模型和版本，不是盲评。尚未用这些新设定完成游戏内听感与人物表现验收。</p>
+<p class="evidence">复现工具：Tools/DeliveryAI/benchmark_prompt.py，--persona-only 只运行第二种比较，--check-only 不调用模型。完整记录：<a href="../Saved/AIResearch/dialogue-prompt-first-comparison.json">32 次提示词对照</a>、<a href="../Saved/AIResearch/dialogue-persona-only-comparison.json">16 次人物设定对照</a>。文件保留输入、输出、动作、用量、计时与逐条评语，正式模型默认未随实验切换。</p></div>
+<h3>玩家交谈与 NPC 闲聊使用不同模型</h3>
+<p>两组各 16 条和另外 4 条针对性样例中，Luna 在加强提示词后仍会重说此前台词，或弄错谁应该行动。随后用 8 个场景比较 gpt-6.1-sol，观察到它更能接住玩家纠正，并在松车要求下选择对应动作。样本很少，仍需人工检查和游戏试玩，不能据此声称所有场景都更好。</p>
+<div class="table-scroll"><table><thead><tr><th>使用场景</th><th>当前默认模型</th><th>这组样本的代价</th></tr></thead><tbody><tr><td>玩家直接交谈</td><td>gpt-6.1-sol</td><td>模型首句约 2.57–5.15 秒，更慢但接话与动作选择较准确</td></tr><tr><td>NPC 闲聊</td><td>gpt-6-luna</td><td>对应样例约 2.0–2.7 秒，仍需观察重复与人物一致性</td></tr></tbody></table></div>
+<p>run_job 读取游戏发来的 request_source，在同一个常驻 AppServer 中选择模型；每轮仍建立独立会话，没有增加分类模型调用。DELIVERY_CODEX_PLAYER_MODEL 和启动参数 -PlayerModel 可以覆盖玩家模型，DELIVERY_CODEX_MODEL 保留为闲聊模型配置。外部 llm 接口不变。日志的 model_selected 记录实际选择，便于对照质量与耗时。这些是模型首句时间，尚未测量新配置下点击到声音开始的完整等待。</p>
+<h3>语料与游戏设计参考</h3>
+<div class="table-scroll"><table><thead><tr><th>资料</th><th>阅读后用于本项目的部分</th><th>使用范围</th></tr></thead><tbody>
+<tr><td><a href="https://arxiv.org/html/2103.02548v2">NaturalConv 论文</a>与<a href="https://github.com/naturalconv/NaturalConvDataSet">作者仓库</a></td><td>围绕上一句话接话，话题转变有上下文，允许多轮讨论</td><td>官方数据限非商业研究，本轮参考方法，不复制原始台词</td></tr>
+<tr><td><a href="https://github.com/scutcyr/CPED/blob/main/README-zh.md">CPED 作者说明</a></td><td>分开考虑性格、当前情绪与说话目的，避免角色永远只有一种态度</td><td>资料源自影视对白；仓库许可不等于获得原剧配音素材授权，本轮没有将其作为音频资源</td></tr>
+<tr><td><a href="https://github.com/thu-coai/CDial-GPT">LCCC / CDial-GPT</a></td><td>中文短句的省略与接话，检查相关性和低质量回复</td><td>未将整库导入工程，也未微调模型</td></tr>
+<tr><td><a href="https://www.nintendo.com/my/interview/aqmx/02.html">任天堂《超级马力欧兄弟 惊奇》开发者访谈，第 2 部分</a></td><td>动作细节让人物状态更清楚，声音时机跟随动画；采用表情与小动作共同表达情绪</td><td>已阅读访谈，将其用于本项目的表现设计，不据此声称实现了原作技术</td></tr>
+<tr><td><a href="https://www.nintendo.com/en-gb/Iwata-Asks/Iwata-Asks-Animal-Crossing-Let-s-Go-to-the-City/A-Day-in-the-Life-of-Animal-Crossing/5-Visiting-Your-Friends-with-the-DS-Suitcase/5-Visiting-Your-Friends-with-the-DS-Suitcase-233645.html">任天堂《动物森友会》开发者访谈</a></td><td>反复交流时出现细微变化和意外反应，减少不自然的话题跳转</td><td>作为原创人物写作依据，没有搬用原作台词与角色</td></tr>
+</tbody></table></div>
+<h3>真人声音素材</h3>
+<p>先下载了 Cici Fyre 与 Brandon Song 的 CC0 战斗反应录音，并准备了 20 条 PCM16 文件。用户进一步要求老爷爷和老奶奶的声音，因此没有把这些成年角色录音直接替换到人物身上。原文件、作者页面、许可和转换记录保留在 Design/Art/NPC/Residents/Voice。</p>
+<p>随后按作者的老年角色描述选出三条 CC0 短录音，已导入为 Sound Wave 并绑定 VoiceSet。素材来自公开 MP3 预览，转换为单声道 PCM16，没有变速或通过降调制造年龄感。这里的“老年”指作者标注的角色风格，未核实录音者年龄；目前尚未试听，不能把导入成功称为听感通过。</p>
+<div class="table-scroll"><table><thead><tr><th>角色与类别</th><th>来源</th><th>时长与目前限制</th></tr></thead><tbody><tr><td>大军：不满</td><td><a href="https://freesound.org/people/Belizarius/sounds/680092/">Belizarius，680092</a></td><td>2.83 秒，作者描述为老人不满的嘟囔</td></tr><tr><td>大军：笑</td><td><a href="https://freesound.org/people/Elenalostale/sounds/545479/">Elenalostale，545479</a></td><td>2.95 秒，与上一条来自不同作者，声线是否一致待试听</td></tr><tr><td>小芳：笑</td><td><a href="https://freesound.org/people/ivanmilic/sounds/557528/">ivanmilic，557528</a></td><td>约 1.65 秒，偏夸张的女巫／老奶奶笑声，适配效果待试听</td></tr></tbody></table></div>
+<p>VoiceSet 提供听见玩家、疑问、不满、笑、惊讶和受击六个字段，当前只有上表三条资源。听见玩家和受击的自动播放入口已经实现，但字段为空，所以游戏还不会在这些时刻发出新短音。不满和笑声也尚未增加自动选择规则。表现组件复用 UE AudioComponent，按事件编号防止重复和迟到重播，正式台词开始、打断及退出关卡时停止对应短音。</p>
+<p>真人短音可以改善人物反应，但无法朗读模型临时生成的中文台词。用户尚未选择取消全文朗读，本轮不会将短呼声冒充逐句中文语音。机械的全文朗读仍需要继续改善。</p>
+<p>另整理了 Volvion 同一老年角色录音的四段候选，时长为 1.3、1.5、1.8 和 1.2 秒。文件与切分记录在 Voice/ElderlyReviewCandidates/Volvion，未试听、未分配反应类别，也未导入 UE。它们可用于后续比较同一声线的连续感，当前不代替已绑定素材。</p>
+<h3>在 UE 中修改人物和声音</h3>
+<p>打开 /Game/NPC/Residents/Config/DT_NpcProfiles，每行对应一名 NPC，可以修改姓名、性格、中文台词音色和短音配置。chunlai 对应大军，xiumei 对应小芳。角色蓝图选择对应行，开始游戏时由 ApplyProfile() 读取并应用。代码中的 FDeliveryNpcProfileRow 定义这些字段，FDataTableRowHandle 保存所选数据表和行名。中文全文朗读目前只接受 male / female，留空保留原值，其他值会警告并保留整份原配置。短音在 /Game/NPC/Residents/Audio/DA_Voice_OldMan 和 DA_Voice_OldWoman 中编辑，可选择 Sound Wave 或 Sound Cue。</p>
+<div id="dialogue-volume-review"><h3>能交谈却听不清：相机距离与声音衰减不匹配</h3>
+<p>用户试玩反馈声音太小。日志中能够看到 audio_play 和 audio_finished，最近一段没有音频超时或纯文字回退；播放结束的样本读完了预期 PCM。这些记录说明音频在播放，不能代替实际听感。</p>
+<p>代码存在明确的不匹配：玩家距 NPC 6 米以内可以交谈，声音却按相机位置计算距离，1.5 米开始变小、9.5 米外完全静音。主角相机臂默认 4 米；假定玩家正对 NPC、相机在身后，玩家站在 2.5 米处，相机可能已距 NPC 6.5 米，音量只剩 37.5%，约降低 8.52 dB。玩家站得更远时，即使仍能交谈，也可能听不到声音。这是假定站位的计算，本轮没有采集实际相机坐标。</p>
+<p>现已在两份 VoiceSet 中增加完整台词的 DialogueVolume 和 DialogueAttenuation。正式资产 /Game/NPC/Residents/Audio/SA_NpcDialogue 保持三维声音，6 米内原音量，之后用 12 米逐渐变小；相机在 10 米处仍有约 66.7% 音量。DialogueVolume 当前为 1，没有调高系统音量，也没有改变全局听者位置。短反应音的 Volume、Pitch 和素材保持原样。</p>
+<div class="table-scroll"><table><thead><tr><th>同一句已有样本</th><th>SAPI 原声音</th><th>Opus 解码后</th><th>解释</th></tr></thead><tbody>
+<tr><td>男声：有效声音段 RMS</td><td>−20.24 dBFS</td><td>−20.17 dBFS</td><td>未见明显变小</td></tr>
+<tr><td>女声：有效声音段 RMS</td><td>−23.67 dBFS</td><td>−23.94 dBFS</td><td>约差 0.27 dB，远小于上述距离衰减</td></tr>
+</tbody></table></div>
+<p>这里把音频分成 20 毫秒小段，保留 RMS 高于 −45 dBFS 的段，再计算平均能量；这不是 LUFS，也不是玩家感受到的最终响度。原男、女声峰值约为 −2.93、−3.47 dBFS，直接放大两倍可能产生削波，因此先修距离设置。换成更自然的 TTS 和调整音量是两个任务。</p>
+<p>最新完整构建 NpcDialogueFinalBuild.log 成功，耗时 35.97 秒。声音资产已创建保存，报告 NpcDialogueAudio/latest.json 记录人物表与原短音未改变。两项逻辑测试通过，其中 NpcProfiles 包含无效音色和缺音频两个预期警告；Saved/Automation/NpcDialogueAudio/index.json 为 1 项通过、1 项带警告通过、0 项失败。仍需进游戏听近处、交谈边缘和转动相机时的变化。</p>
+<p class="evidence">计算与样本：Saved/AIResearch/npc-voice-volume-review.json；资产报告：Saved/AIResearch/NpcDialogueAudio/latest.json。以上没有调整系统音量，也不能证明中文声音的机械感已经解决。</p></div>
+<p>大军、小芳的名字已经实际写入并保存。导入后重新导出数据表，并在两份蓝图编译后检查默认角色设置，确认显示名字与人物设定中的互称都已更新；chunlai / xiumei 行名、male / female 音色标识及两份 VoiceSet 路径保留原值，其他字段未变，保存操作返回成功。Saved/AIResearch/NpcProfileRename/latest.json 记录 status=saved、unchanged_other_fields=true，并链接改名前后的完整比较。</p>
+<p>首次核对失败，是因为 FText 导出含有 NSLOCTEXT 的命名空间、键和显示文本，直接与纯名字比较不会相等。那次检查失败后没有保存资产。脚本现只替换显示文本，保留命名空间和键，并严格检查其他字段。最终脚本执行成功，见 Saved/Logs/NpcProfileNamesImport-final.log；但 commandlet 返回 1，原因是已有三条在 GEngine 初始化前读取物理材质的错误。此次运行过资源编辑 commandlet，没有另行重启加载或进入游戏核对名字，不能写成全部 UE 检查通过。</p>
+<p>Content/Python/update_npc_profiles.py 创建缺少的数据表和声音资产，并绑定现有蓝图；已有表格和声音字段保留编辑器修改。Content/Python/import_npc_voice_sets.py 按 ElderlyCandidates/Manifest.json 与 Design/AI/NpcVoices.json 导入和绑定选定录音。模型、表情、动画和地图位置不随此脚本修改。源码入口为 Characters/DeliveryNpcProfile.h、Character 的 ApplyProfile、Presentation/DeliveryNpcVoiceSet 与 DeliveryNpcReactions.cpp。</p>
+<h3>《燕云十六声》的参考范围</h3>
+<p>2026-11-13 核对的公开资料可以支持“让交谈参与现场事件”的设计方向，但没有公开足够的技术细节来照搬其模型或语音架构。</p>
+<ul><li><a href="https://store.steampowered.com/app/3564740/Where_Winds_Meet/">Steam 官方页面的 AI 披露</a>确认 AI 驱动的 NPC 文字和语音交谈；没有给出模型、首声延迟或逐句播放方案。</li><li><a href="https://ailab.netease.com/about">网易 AI Lab 介绍</a>列出“江湖故人”AI NPC 攻略玩法。<a href="https://ailab.netease.com/product/chatbot">智能 NPC 产品页</a>介绍多轮上下文、指代与省略处理、游戏风格定制；这些是产品能力说明，不能直接当作《燕云》的内部设计。</li><li><a href="https://www.yysls.cn/news/official/20230413/37780_1082845.html">2023 年官方开发介绍</a>描述人物生活轨迹、话术争论、偷物后求助或报官，以及玩家通过话术阻止。当时文章明确讨论过 GPT，但采用自写行为 AI，因此不能将这些行为案例全部归为 LLM 决策。</li><li><a href="https://attend.gdcevents.gdconf.com/event/gdc-festival-of-gaming-2026/planning/UGxhbm5pbmdfNDMyNzIzNg==">GDC 2026 官方议程</a>明确该分享不覆盖技术实现。本轮阅读了简介，没有观看录像。</li></ul>
+<p>Delivery 先让模型根据眼前争执，在游戏已有的看人、靠近、挥拳、拽车和松手中选择，使台词与动作相互对应。长期人物关系和新支线留待后续。没有证据表明上述项目首声低于一秒，也没有取得其逐句 TTS 或打断实现，不能拿它们作为本项目的性能结果。</p>
+<h3>检查记录</h3>
+<p id="dialogue-feedback-validation">本轮完整构建成功，日志为 Saved/Logs/NpcConversationAndLookBuild-final.log。后端命令 python -m unittest discover -s Tools/DeliveryAI -p test_*.py 共 48 项通过，最新复跑耗时 5.825 秒。测试检查模型选择、上下文、协议、取消和逐句处理；不调用真实模型。</p>
+<p>UE 实际执行的 SentencePlayback、CompleteSpeech、ResidentIntegration、PlayerGlance、NpcProfiles、NpcNaming 共 6 项通过，其中 4 项带警告，包含文字回退、无效音色、无网格测试对象和音频超时等边界用例。记录见 Saved/Logs/NpcConversationProfiles.log。误匹配到的 PlayerGlanceMultiplayer 因未提供显式参数而跳过，不能作为第 7 项多人验证。</p>
+<p>资源脚本实际创建并保存了 DT_NpcProfiles、两份 VoiceSet 和三份 Sound Wave，绑定了两份 NPC 蓝图，日志为 Saved/Logs/NpcProfilesAndVoicesImport.log。Python 脚本执行成功，但 commandlet 因已有的三条 GEngine 初始化前物理访问错误返回 1；首次创建资产时的“未找到资源”警告也保留，不能将整个导入进程写成无错误结束。</p>
+<p>本轮新的三人 PIE 启动被自动审批拒绝，返回原因为 blocked by policy；没有绕过或重复尝试。因此经过注视、短音同步、更新后的完整交谈和声音听感尚未完成本轮实际游戏验收。此前的多人结果保留为历史记录，不用于替代这次检查。该轮结束时后端在 127.0.0.1:8769 监听，服务日志为 NpcConversationBackend5；最新服务检查见后文“性能测试与当前限制”。</p>
+<p>复查入口：Tools/DeliveryAI/review_dialogue.py；原始台词、动作与耗时保存在 Saved/AIResearch/dialogue-style-*.json。后续保留首次问题样例与修改后的样例，人工检查是否接话正确、是否反复讲同一意思、台词和动作是否一致，再结合实际画面与听感评估。</p>
+</section><section id="iteration-8">
+<h2 id="tts-evaluation-plan">中文人物语音：独立对照与试听</h2>
+<p>玩家反馈完整台词听起来机械。现有 Windows 男声 Kangkang 和女声 Huihui 都是系统标注的成年音色，调快或调慢语速不能解决人物年龄与说话方式的问题。已收集的真人短音用于轻笑、不满等反应；NPC 临时生成的完整中文台词仍需要语音合成。</p>
+<div class="notice">2026-11-13：正式后台已准备好大军选定的 B 音色，即 Qwen Uncle_Fu；小芳保留 SAPI。模型仍由 Sol 处理玩家交谈、Luna 处理闲聊。音频按完整句子生成后发送，尚未实现一句之内边生成边播放；新声音的游戏听感和等待仍待试玩确认。以下保留独立试验、接入问题和实际结果。</div>
+<h3>先比较两种方案</h3>
+<div aria-label="中文语音试验方案" class="table-scroll" role="region" tabindex="0"><table>
+<thead><tr><th>方案</th><th>本轮比较内容</th><th>一次下载预算</th><th>磁盘预留</th><th>需要注意</th></tr></thead>
+<tbody><tr><td>Qwen3-TTS 0.6B</td><td>先试听 Uncle_Fu 的完整中文台词，再比较相同人物连续说话时的自然程度</td><td>7 GB</td><td>20 GB，包含安装、缓存与临时解压</td><td>官方描述为成熟、低沉男声，尚不能保证爷爷效果；没有已经核实的奶奶预设。GPU 推理会与 UE 争用显存和算力</td></tr>
+<tr><td>Kokoro v1.1 中文 ONNX</td><td>从中文男声和女声中试听候选，并与 Qwen 比较等待与游戏帧时间</td><td>0.6 GB</td><td>2 GB</td><td>使用 CPU，不占用模型显存；官方没有标明哪些中文声音属于老人。仍需检查 CPU 占用是否影响游戏</td></tr></tbody>
+</table></div>
+<p>预算高于已知文件大小，用于容纳依赖和安装过程。Qwen 模型约 2.498 GB，Windows CUDA 版 PyTorch 约 3.273 GB，torchaudio 约 4.65 MB；三项合计约 5.78 GB，其他依赖另计。Kokoro 的 FP32 ONNX 文件约 325.51 MB，声音文件约 53.82 MB，合计约 379.32 MB。磁盘预留是估算，运行显存不能用模型文件大小代替。</p>
+<h3>复用已有 Python，保留正式环境</h3>
+<p>本机已有 Python 3.10.12，位置为 <code>C:/Users/26349/miniconda3/envs/mlagents/python.exe</code>，已确认包含 venv 和 ensurepip。脚本使用它创建新的独立环境，不向 mlagents 安装包，也不切换当前命令行的 Python。已检查的安装位置没有 Python 3.11 或 3.12。</p>
+<p>Qwen 固定使用 <code>qwen-tts 0.1.1</code>、<code>torch / torchaudio 2.7.1+cu128</code>、<code>transformers 4.57.3</code> 和 <code>accelerate 1.12.0</code>。官方索引提供对应的 Python 3.10 Windows 安装包及 SHA-256；PyTorch 2.7 已加入 Blackwell 支持。本轮采用普通 CUDA 推理，不安装 FlashAttention、vLLM 或 torchvision，不更新显卡驱动和系统 CUDA。</p>
+<p>Kokoro 可以直接使用 ONNX Runtime，不需要 sherpa。维护者的中文 v1.1 示例使用 <code>kokoro-onnx</code> 与 <code>misaki-fork[zh]</code>：前者运行模型，后者将中文转换成模型使用的读音。本轮固定为 0.6.1 和 0.9.6，并采用 <code>onnxruntime 1.23.2</code>、<code>numpy 2.2.6</code>、<code>soundfile 0.13.1</code>。现有 Python 3.14 中的 ONNX Runtime 不能直接供这个独立环境使用；重新安装对应的 CPU 安装包约需 13.5 MB。只选择中文扩展，避免英文扩展额外安装 PyTorch。</p>
+<p>本机显卡是 RTX 5070 Ti Laptop，显存总量 12227 MiB。只读检查时占用 2870 MiB，当时未检测到 UE 进程；这项读数不能说明 PIE 开启后的余量。GPU 方案先测试一项合成任务，再与同一地图的帧时间和显存峰值比较。</p>
+<h3>模型版本与文件校验</h3>
+<p>下载清单保存在 <a href="../Tools/DeliveryAI/tts_evaluation/models.json">models.json</a>。Qwen 模型固定提交为 <code>85e237c12c027371202489a0ec509ded67b5e4b5</code>；Kokoro 原始模型固定提交为 <code>01e7505bd6a7a2ac4975463114c3a7650a9f7218</code>，ONNX 使用维护者的 <code>model-files-v1.1</code> 导出文件。</p>
+<p>Qwen 权重按发布方提供的 SHA-256 校验，配置文件按固定提交中的 Git 文件校验值检查。Kokoro ONNX 文件已有发布方 SHA-256；声音文件暂未提供发布方校验值，首次下载后记录本机 SHA-256，供后续检查文件是否变化。这个本机记录不能冒充发布方的校验值。三个模型与导出来源均保留在清单中，后续更新需要重新核对。</p>
+<h3>安装脚本的执行范围</h3>
+<p><a href="../Tools/DeliveryAI/tts_evaluation/setup_evaluation.ps1">setup_evaluation.ps1</a> 默认只显示路径、版本和预算。以下命令查看计划，不创建环境或下载文件：</p>
+<pre><code>powershell -NoProfile -File Tools/DeliveryAI/tts_evaluation/setup_evaluation.ps1 -Candidate qwen
+powershell -NoProfile -File Tools/DeliveryAI/tts_evaluation/setup_evaluation.ps1 -Candidate kokoro</code></pre>
+<p>实际安装时，为选定方案添加 <code>-Execute</code>。脚本只写入 <code>Saved/AIResearch/TtsEvaluation/qwen</code> 或 <code>kokoro</code>，先检查完整路径并拒绝目录联接。模型、安装缓存和临时文件都留在对应目录；不启动语音服务，不修改后端端口或游戏配置，也不删除已有目录。已有试验环境时停止，保留上次结果供检查。</p>
+<p>核心依赖分别列在 <a href="../Tools/DeliveryAI/tts_evaluation/requirements-qwen.txt">requirements-qwen.txt</a> 和 <a href="../Tools/DeliveryAI/tts_evaluation/requirements-kokoro.txt">requirements-kokoro.txt</a>。它们固定核心版本；其余传递依赖在安装后写入 <code>installed-packages.txt</code>，不是已经完成解析的完整依赖锁定文件。安装完成还会记录所用清单与模型文件校验结果。</p>
+<p>移除试验时，先结束对应的独立试听进程，核对路径后删除该方案的试验子目录。现有 AI 后端、mlagents、Windows 声音和游戏资源保持原样。安装脚本本身不执行删除。</p>
+<div id="tts-evaluation-results"><h3>安装与评测记录</h3>
+<p>Qwen 与 Kokoro 的安装脚本均已完成，两套环境分别执行 pip check，依赖检查通过。各自目录中的 installation.json 记录 Python 路径、依赖文件校验值、模型版本和完成时间；installed-packages.txt 保存实际安装的完整包列表。环境位于 Saved/AIResearch/TtsEvaluation/qwen 和 kokoro，没有向现有 mlagents 或正式 AI 后端环境安装包。</p>
+<p>两种方案均已完成两种声音、两句台词、各两遍，每种方案共 8 条样本。结果保存到各自的 results 子目录。环境安装和文件生成通过，不代表声音已经自然，也不代表与 UE 同时运行时性能达标。</p>
+<p>Kokoro 使用 CPU、4 个计算线程。进程中首次合成约 1.240 秒，其余 7 条为 0.715–0.756 秒，音频约 4.05–4.37 秒；整个进程的内存峰值约 953 MiB。模型首次加载另需约 2.644 秒，不包含在单句合成时间里。没有同时运行游戏，不能据此推断实际帧率影响。</p>
+<p>Qwen 使用 RTX 5070 Ti Laptop、CUDA、SDPA 和 bfloat16。首次合成约 12.307 秒，其余 7 条为 7.082–10.687 秒。相同台词第二遍仍需 7.082–10.687 秒；生成耗时是音频时长的约 2.17–2.52 倍，因此当前整句返回的实现不适合直接接入实时交谈。模型首次加载约 2.318 秒，导入 Python 模块约 6.296 秒，均与单句生成时间分开记录。</p>
+<div class="table-scroll"><table><thead><tr><th>相同的 8 条样本</th><th>Kokoro · CPU 4 线程</th><th>Qwen · GPU SDPA</th></tr></thead><tbody><tr><td>本进程首次合成</td><td>1.240 秒</td><td>12.307 秒</td></tr><tr><td>其余 7 条合成</td><td>0.715–0.756 秒</td><td>7.082–10.687 秒</td></tr><tr><td>输出音频长度</td><td>约 4.05–4.37 秒</td><td>3.20–4.88 秒</td></tr><tr><td>进程内存峰值 RSS</td><td>约 953 MiB</td><td>约 2.396 GiB</td></tr></tbody></table></div>
+<p>Qwen 的 Torch 统计显示，峰值已分配显存约 2.16 GiB、保留显存约 2.22 GiB；整张显卡的采样峰值为 6132 MiB，包含其他进程，不能全算成这个模型的占用。当前未安装 FlashAttention。日志中的 SoX 缺失警告未阻止这次预置音色生成，8 个 WAV 已保存，但不能据此认为所有功能都兼容。</p>
+<p>两种实现都测整句返回，未测游戏中的第一声，也没有与游戏同跑的 FPS 结果。上游展示的约 97 毫秒延迟不能套用到这条本地实现。Qwen 设置了 256 的生成长度上限，接口没有返回结束原因，是否漏字或截尾仍需试听；文件生成成功不能代替完整性检查。</p>
+<p class="evidence">Kokoro 记录：Saved/AIResearch/TtsEvaluation/kokoro/results/20261112T194500231048Z/evaluation.json。Qwen 记录：Saved/AIResearch/TtsEvaluation/qwen/results/20261112T194524839396Z/evaluation.json。</p>
+<h3>线程数量与静音处理分别比较</h3>
+<p>Kokoro 另测 CPU 2 线程：首次 1.453 秒，其余 7 条为 1.102–1.184 秒。随后一轮 4 线程、启用静音裁剪的结果变慢，首次 1.580 秒，其余为 1.108–1.159 秒。重新测 4 线程原始输出，首次为 1.034 秒，其余回到 0.682–0.745 秒。两轮 4 线程原始输出的后续调用合计为 0.682–0.756 秒，但尚未与游戏同时运行，不能据此决定最终线程数。</p>
+<p>为检查那次变慢是否来自裁剪，又在同一进程预热后依次关闭、开启、开启、关闭裁剪，并用 cProfile 查看耗时。四次分别为 0.709、0.707、0.718、0.704 秒，主要耗时在模型推理，没有复现“裁剪多花约 400 毫秒”。这些带分析器的数值只用于定位问题，不混入标准对照；此前那一轮变慢的原因仍未确定。</p>
+<p>为单独检查裁剪成本，另对第一轮已保存的男女声音各处理一次，没有重新合成。两段开头各去掉约 234.67 毫秒，结尾分别去掉 636.67 和 640.33 毫秒，处理耗时分别为 0.833 和 0.687 毫秒。保留部分的 PCM 逐字节一致，没有变调、变速或重新生成声音。这里按音量检测首尾静音，是否误剪轻声仍需对照试听。</p>
+<p>保留同样的声音并去掉这段开头静音，可以让开始播放后的可听声音提前约 235 毫秒，前提是没有剪掉有效轻声。它没有让语言模型或 TTS 更快。当前更大的等待仍来自语言模型本身的数秒生成，以及 Qwen 这条路径约 7–12 秒的整句合成。</p>
+<p>第一轮 Kokoro 记录中的 seed 是脚本请求值，实际没有固定 ONNX 随机状态。新脚本已将 seed 记为 null，并明确相同台词再次生成可能得到不同音频和时长。原始记录保留用于追溯，不能用它声称重复生成应当逐字节相同。</p>
+<p class="evidence">2 线程：kokoro/results/20261112T194723112432Z/evaluation.json；4 线程裁剪：kokoro/results/20261112T194833009780Z/evaluation.json；4 线程原始复测：kokoro/results/20261112T194927626528Z/evaluation.json；分析器记录：kokoro/trim-profile.json；同一音频裁剪对照：第一轮目录下 silence-review/comparison.json。以上均位于 Saved/AIResearch/TtsEvaluation。</p>
+<h3>同一句台词的试听</h3>
+<p>以下四段统一朗读“小芳，你别急，先听我把话说完。”，便于比较音色与停顿。用户已选择 Qwen 男声 B，其他三段仍作候选比较。后续接入使用经用户认可的 Graph1 版本，原样本继续保留。新声音尚未完成游戏听感检查，也没有与游戏同跑的帧时间结果。</p>
+<div class="voice-samples" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:16px">
+<figure><figcaption>Kokoro 男声 · zm_010 · 原始</figcaption><audio aria-label="Kokoro 男声原始试听" controls="" preload="metadata" style="width:100%"><source src="../Saved/AIResearch/TtsEvaluation/kokoro/results/20261112T194500231048Z/zm_010_listen_r1.wav" type="audio/wav"/></audio><a href="../Saved/AIResearch/TtsEvaluation/kokoro/results/20261112T194500231048Z/zm_010_listen_r1.wav">打开原始男声</a><p>同一份音频，裁掉检测到的首尾静音</p><audio aria-label="Kokoro 男声静音裁剪试听" controls="" preload="metadata" style="width:100%"><source src="../Saved/AIResearch/TtsEvaluation/kokoro/results/20261112T194500231048Z/silence-review/zm_010_listen_r1.wav" type="audio/wav"/></audio><a href="../Saved/AIResearch/TtsEvaluation/kokoro/results/20261112T194500231048Z/silence-review/zm_010_listen_r1.wav">打开裁剪版男声</a></figure>
+<figure><figcaption>Kokoro 女声 · zf_001 · 原始</figcaption><audio aria-label="Kokoro 女声原始试听" controls="" preload="metadata" style="width:100%"><source src="../Saved/AIResearch/TtsEvaluation/kokoro/results/20261112T194500231048Z/zf_001_listen_r1.wav" type="audio/wav"/></audio><a href="../Saved/AIResearch/TtsEvaluation/kokoro/results/20261112T194500231048Z/zf_001_listen_r1.wav">打开原始女声</a><p>同一份音频，裁掉检测到的首尾静音</p><audio aria-label="Kokoro 女声静音裁剪试听" controls="" preload="metadata" style="width:100%"><source src="../Saved/AIResearch/TtsEvaluation/kokoro/results/20261112T194500231048Z/silence-review/zf_001_listen_r1.wav" type="audio/wav"/></audio><a href="../Saved/AIResearch/TtsEvaluation/kokoro/results/20261112T194500231048Z/silence-review/zf_001_listen_r1.wav">打开裁剪版女声</a></figure>
+<figure><figcaption>Qwen 男声 · Uncle_Fu · 用户选定 B</figcaption><audio aria-label="Qwen 男声试听" controls="" preload="metadata" style="width:100%"><source src="../Saved/AIResearch/TtsEvaluation/qwen/results/20261112T194524839396Z/uncle_fu_listen_r1.wav" type="audio/wav"/></audio><a href="../Saved/AIResearch/TtsEvaluation/qwen/results/20261112T194524839396Z/uncle_fu_listen_r1.wav">打开男声样本</a></figure>
+<figure><figcaption>Qwen 女声 · Serena</figcaption><audio aria-label="Qwen 女声试听" controls="" preload="metadata" style="width:100%"><source src="../Saved/AIResearch/TtsEvaluation/qwen/results/20261112T194524839396Z/serena_listen_r1.wav" type="audio/wav"/></audio><a href="../Saved/AIResearch/TtsEvaluation/qwen/results/20261112T194524839396Z/serena_listen_r1.wav">打开女声样本</a></figure>
+</div><p>播放器读取项目 Saved 目录中的本地文件。转发文档时需要一并保留这些 WAV；若阅读器不支持内嵌音频，可以使用每段下方的文件链接。</p></div>
+<div id="qwen-generation-profile"><h3>大军选择 B 后：先找出 Qwen 慢在哪一步</h3>
+<p>用户选择保留 Qwen Uncle_Fu 的声音，因此继续降低这个声音的生成等待，没有将更快的另一种音色替换给大军。以下是接入前的测量；最新常驻接入结果见后文。小芳尚未选择新声音，保留 SAPI。</p>
+<p>对同一句台词预热后测一次，总合成 13.685 秒，其中生成过程 13.647 秒，最后把声音编码转成波形约 37 毫秒。内部 code_predictor 函数调用 61 次，累计约 9.956 秒，包含在 13.647 秒之内，不能再相加。该内部数字是 CPU 侧调用时间，没有在每次调用前后等待 GPU 完成，因此也不能写成独立 GPU 耗时。此次只有一个正式样本，分段测量本身可能改变耗时。</p>
+<p class="evidence">记录：Saved/AIResearch/TtsEvaluation/qwen/profiles/20261112T201751530800Z/profile.json。生成与最终解码前后都等待 CUDA 完成，内部函数的计时方式另行注明。</p>
+<h3>CUDA Graph 试验：速度改善，输出也发生了变化</h3>
+<p>随后只在独立试验中使用 CUDA Graph，预先记录一部分反复执行的 GPU 操作，再重复提交。相同台词、同一音色按“原实现、Graph、Graph、原实现”顺序各测两次：</p>
+<div class="table-scroll"><table><thead><tr><th>方式</th><th>两次总合成时间</th><th>音频长度</th><th>模型生成的声音编码帧</th></tr></thead><tbody>
+<tr><td>原实现</td><td>14.810 / 13.807 秒</td><td>4.88 秒</td><td>61 帧</td></tr>
+<tr><td>Graph 试验</td><td>6.040 / 7.013 秒</td><td>6.72 秒</td><td>84 帧</td></tr>
+</tbody></table></div>
+<p>同一种方式的两次 WAV 校验值一致，两种方式之间的声音和长度不同，因此不能宣称效果完全不变。内部预测函数的 CPU 调用时间降到约 0.208 / 0.213 秒，同样不等于 GPU 只用了这些时间。此次还有只编辑资源、未渲染游戏的 UE 命令行进程并行运行，CPU 负载可能影响结果；样本也只有每种两次，不作为严格隔离的稳定性能结论。</p>
+<p>用户试听 Graph1 后确认声音自然，允许继续采用。这只表示这个短样本的主观试听通过；长句、不同情绪、逐句连续播放和游戏帧率仍未验证。大军后续按这个版本接入常驻服务，原版 B 文件保留作对照。6–7 秒仍是整句合成时间，不能说成游戏首声已足够快。</p>
+<figure><figcaption>Uncle_Fu · Graph1 · 用户已确认这段声音自然</figcaption><audio aria-label="大军 Graph1 声音样本" controls="" preload="metadata" style="width:100%"><source src="../Saved/AIResearch/TtsEvaluation/qwen/graph-comparisons/20261112T202452462720Z/Uncle_Fu_graph_1.wav" type="audio/wav"/></audio><a href="../Saved/AIResearch/TtsEvaluation/qwen/graph-comparisons/20261112T202452462720Z/Uncle_Fu_graph_1.wav">打开 Graph1 样本，与上方原版 B 比较</a></figure>
+<p>试验仅缓存了固定提交的一份约 12 KB、MIT 许可的源码，没有新增整套第三方库，也没有修改已安装的 site-packages。更早开始传出首段音频仍在评估，当前不记录为已经实现。</p>
+<p class="evidence">对照与音频：Saved/AIResearch/TtsEvaluation/qwen/graph-comparisons/20261112T202452462720Z/comparison.json；用户试听文件为同目录 Uncle_Fu_graph_1.wav。</p></div>
+<div id="qwen-talker-review"><h3>下一步研究：保留生成规则，只加快重复计算</h3>
+<p>已阅读本机 Qwen 0.1.1、Transformers 4.57.3，以及固定版本的 TalkerGraph 源码。下一轮可以尝试只替换 Talker 每次生成一个声音编码时的计算，继续使用原有的采样和结束判断。这样更容易核对速度变化是否影响已经选定的声音；目前只完成源码分析，没有实现或运行这项试验。</p>
+<p>接入时有三个地方需要特别检查：Qwen 后续还会读取每一步的隐藏层结果，Graph 必须保留这些结果，避免下一步覆盖前一步；Graph 和原生成过程必须使用同一份缓存；切换缓存后，输入遮罩的形状会改变，位置与遮罩都要沿用原实现计算出的值。首版应限制为一次生成一句，开始前检查长度，结束或取消后还原临时替换的函数。</p>
+<p>没有直接采用第三方完整生成循环。它同时接管采样、结束判断和配置传递，达到固定缓存长度时会结束生成，需要更广的声音与兼容性比较。当前约 0.2 秒的内部函数调用记录也不能说明剩余 GPU 工作都发生在 Talker；下一轮应结合 GPU 计时与整句耗时验证，不提前承诺提速幅度。本轮先交付音量和人物设定供试玩。</p>
+<p class="evidence">本机源码：qwen_tts/core/models/modeling_qwen3_tts.py（单步返回与最终读取）、transformers/generation/utils.py（缓存、遮罩与采样）。第三方源码固定到 a70afc0f81f7f5f8801c3227968f1102f43f211c：<a href="https://raw.githubusercontent.com/andimarafioti/faster-qwen3-tts/a70afc0f81f7f5f8801c3227968f1102f43f211c/faster_qwen3_tts/talker_graph.py">TalkerGraph</a>、<a href="https://raw.githubusercontent.com/andimarafioti/faster-qwen3-tts/a70afc0f81f7f5f8801c3227968f1102f43f211c/faster_qwen3_tts/generate.py">生成循环</a>。</p></div>
+<div id="qwen-backend-startup"><h3>B 音色常驻接入：修正启动顺序后通过检查</h3>
+<p>新后端的 95 项测试在 6.908 秒内通过，音量相关的两项 UE 逻辑测试此前也已通过。第一次准备常驻 Qwen 服务时，等待 60 秒仍未完成初始化，当时保留旧服务继续处理游戏请求。</p>
+<p>在不使用 GPU 的启动诊断中，主线程停在 torch 导入过程中的 NumPy 扩展加载位置，另一个线程正在读取标准输入。现在先完成初始化，再启动读取请求的线程。原顺序在 16 秒诊断窗口内仍卡住，新顺序在 11.047 秒完成；没有靠增加超时时间处理这个问题。</p>
+<p>随后真实常驻检查完成：初始化约 14.032 秒；用户选定台词合成约 8.183 秒，生成 6.72 秒音频，PCM 与获认可的 Graph1 样本逐字节相同。取消后约 30.05 毫秒确认合成已退出，接着生成“行，那你先忙。”成功，用时约 6.843 秒，音频长 6.24 秒；关闭约 1.573 秒，重复关闭也通过检查。此时用户正在运行 UE，负载没有隔离，这些数字不作为稳定性能承诺，也不是游戏开始出声的时间。</p>
+<p>正式后台已使用 <code>-SpeechProvider qwen</code> 启动，检查当时进程为 58540，监听 127.0.0.1:8769。日志确认 Qwen 在约 10.979 秒准备完成，原 SAPI 女性语音线程也已准备好。大军的男声配置使用常驻 Qwen Uncle_Fu，小芳继续使用 SAPI；Sol 玩家交谈、Luna 闲聊的选择保持不变。</p>
+<p>Qwen 使用一个 GPU 实例和独立语音队列，玩家交谈的句子优先；正在合成的句子取消后，确认退出才开始下一条。每句完整音频生成后再发送，后面的文字可以继续生成。当前上限为 24 kHz、16 位单声道的 384000 字节，即 8 秒；音频过长时明确失败并保留文字，不截掉尾音。新声音的游戏听感、多人效果和等待体验仍未验收。</p>
+<p class="evidence">后端检查：<a href="../Saved/Logs/NpcNeuralBackendTests.log">NpcNeuralBackendTests.log</a>；首次诊断：<a href="../Saved/Logs/QwenStartupCpuDiagnostic.log">QwenStartupCpuDiagnostic.log</a>；真实接入：<a href="../Saved/AIResearch/NeuralVoiceIntegration/latest.json">NeuralVoiceIntegration/latest.json</a>；正式服务准备状态：<a href="../Saved/Logs/AIResidentBackend.log">AIResidentBackend.log</a>。</p></div>
+<h3>试听与测量</h3>
+<p>使用同一组中文台词比较平静回应、疑问、不满和和解：先听是否自然、像不像人物、是否漏字或读错；再测首次与准备后的合成耗时、完整音频长度、内存和显存峰值。两名 NPC 连续交谈时检查声线是否稳定，打断后声音是否停止。只有试听符合人物，才继续接入游戏。</p>
+<p>当前项目按完整句子合成，API 接口收完该句音频后才返回。Qwen 的官方 Python 包也返回完整音频；源码明确说明 <code>non_streaming_mode=False</code> 只模拟流式文本输入。论文中的 97 ms 来自内部优化的 vLLM 流程，不能作为本次安装的性能预期。逐句合成可以与后续台词生成重叠，但一句之内边合成边播放仍需单独实现和验证。</p>
+<p class="evidence">资料：<a href="https://github.com/QwenLM/Qwen3-TTS">Qwen3-TTS 官方仓库</a>、<a href="https://raw.githubusercontent.com/QwenLM/Qwen3-TTS/main/qwen_tts/inference/qwen3_tts_model.py">Qwen Python 接口源码</a>、<a href="https://pytorch.org/blog/pytorch-2-7/">PyTorch 2.7 与 Blackwell</a>、<a href="https://pytorch.org/get-started/previous-versions/#v271">PyTorch 固定版本安装说明</a>、<a href="https://raw.githubusercontent.com/thewh1teagle/kokoro-onnx/main/examples/chinese.py">Kokoro 中文 v1.1 示例</a>、<a href="https://huggingface.co/hexgrad/Kokoro-82M-v1.1-zh">Kokoro 模型卡</a>。以上用于核对方案和安装条件，本机实际效果以评测记录为准。</p>
+</section><section id="iteration-9"><h2>性能测试与当前限制</h2><div id="performance-boundaries">
+<p>这一轮先测量再修改，分别检查排队、模型输入大小、打断后的进程复用，以及模型和语音分别结束后的处理。真实 HTTP 交谈另行记录。这些性能检查只涉及后端，没有进入 UE 游戏。以下区分模拟工作与真实模型，模型产生文字、音频传到 HTTP 客户端、游戏实际播放也分别记录。</p><p>人物显示名字现按用户要求改为男角色“大军”、女角色“小芳”。早期对照采样时仍使用此前的名字邵春来、陶秀梅，Saved 中的原始记录保留当时内容；最后两次 HTTP 检查已使用新名字。数据表行名 chunlai / xiumei 继续沿用，避免更名破坏资源引用。</p>
+<h3>排队满额：玩家优先排序仍可能来不及生效</h3>
+<p>原调度器有两个工作线程，最多同时保存 8 项工作，并限制同时只运行一轮闲聊。玩家请求虽然排在前面，但 1 项运行中的闲聊加 7 项排队闲聊就能填满容量，新玩家消息会先被拒绝。另外，玩家正在交谈时仍可能开始新闲聊；取消未开始的请求，也要等工作线程有空才能真正移除。</p>
+<p>现在队满时，玩家可以替换最早排队、还没开始的闲聊；玩家运行或排队期间暂停新闲聊；未开始的取消请求立即移除。运行中的调用仍要实际返回后才结束，不能通过修改计数假装取消成功。持续的玩家交谈会减少背景闲聊，这是选择玩家优先的代价。</p>
+<p>对照使用真实 Scheduler，保留改动前的完整 Python 文件，再与 FIFO 和完成排队修复的实现运行相同场景。每种规则测 3 次，模拟模型每次 15 毫秒，工作线程的占用观察窗口人为设为 75 毫秒。它们是为了稳定复现排队情况，不能解释为真实大模型只需 15 毫秒。下表保留当时基线，此时尚未修改模型与语音分别结束的处理。</p>
+<div class="table-scroll"><table><thead><tr><th>检查项目</th><th>FIFO 对照</th><th>原实现</th><th>修改后</th></tr></thead><tbody>
+<tr><td>容量被闲聊填满后，玩家被拒绝</td><td>3/3 次</td><td>3/3 次</td><td>0/3 次</td></tr>
+<tr><td>玩家运行期间开始新闲聊</td><td>3/3 次</td><td>3/3 次</td><td>0/3 次</td></tr>
+<tr><td>排队取消立即从容量中移除</td><td>0/3 次</td><td>0/3 次</td><td>3/3 次</td></tr>
+<tr><td>排队取消完成的中位时间</td><td>77.409 ms</td><td>76.379 ms</td><td>0.015 ms</td></tr>
+<tr><td>两线程等语音尾部时，第三名玩家开始调用</td><td>0/3 次</td><td>0/3 次</td><td>0/3 次</td></tr>
+</tbody></table></div>
+<p>原取消时间包含人为等待的 75 毫秒，表中差值用于证明取消不再依赖空闲工作线程，不是实际交谈速度提升了这些毫秒。四项回归另外检查了只替换排队闲聊、玩家顺序、重复请求不误取消其他人、容量限制，以及运行取消不能提前开始下一项。</p>
+<p>UE Gateway 的默认容量是 32 项，满额时也会先拒绝玩家；这一处本轮只读检查，没有改 C++。它已经会在玩家交谈期间暂停新闲聊，取消队列项也会立即移除。每名 NPC 同时只有一项请求，目前两名 NPC 的演示通常不会碰到 32 项上限，因此不能用满队列问题解释当前大部分数秒等待。</p>
+<h3>模型已经生成完，下一名玩家仍被语音合成挡住</h3>
+<p>上表最后一项暴露了另一处等待：两轮模型已经生成完文字，只剩声音还在合成，原工作线程仍不能接下一名玩家。现在 run_job() 在模型结束后返回，后端允许下一条请求调用模型；原来的 Job 继续记录语音工作，全部语音结束后才发送一次 done。HTTP 回复也保持到这时结束，不会在文字生成完时漏掉后面的声音。</p>
+<p>等待语音的请求仍计入 8 项容量，玩家交谈期间继续暂停新的闲聊。取消会通知正在合成的声音，实际合成退出后才移除该请求；模型失败也会取消已开始的语音。语音合成失败时，保留明确的无音频文字结果。此次没有调整语音线程池的排队顺序，也没有改变外部 HTTP 模型接口的取消方式。</p>
+<p>新增 6 项检查，其中一项人为暂停两轮语音合成，确认第三名玩家仍能开始调用模型、闲聊继续等待，前两轮在语音恢复后各自只发送一次完成消息。其余检查覆盖取消、模型失败、语音失败、HTTP 连接完成和服务退出。这里验证的是实际调度代码在受控条件下的行为，不是神经语音或真实模型的响应时间。</p>
+<p class="evidence">工具：Tools/DeliveryAI/benchmark_scheduler.py。原始基线：Saved/AIResearch/scheduler-baseline.json；未改动的代码：scheduler-before-player-admission.py；最终对照：scheduler-player-admission-final.json 及同名 .log。输出包含两版源码 SHA-256、参数、开始顺序和每项等待时间。</p>
+<h3>再次比较短编号：输入确定变小，首句仍有波动</h3>
+<p>此前 Luna 的 3 对实验没有观察到速度改善，当时没有采用。此次使用实际人物设定和 gpt-6.1-sol 重新比较，增加已回答后保持安静、中断后接话、松车，以及有 40 个动作选项的场景。两种输入交替运行，减少固定测试顺序带来的影响。</p>
+<p>model_context() 只把模型输入里的长对象编号改成 e0、p0 等短编号。原请求不变，人物和事件描述不变，候选顺序与所有选项保留。模型返回候选序号后，解析器从原请求取出目标和事件编号，再执行原有检查。没有删掉排在第 32 项之后的车辆选项，也没有减少模型能选择的动作。</p>
+<div class="table-scroll"><table><thead><tr><th>场景与样本</th><th>原编号输入</th><th>短编号输入</th><th>首句结果</th></tr></thead><tbody>
+<tr><td>2 名人物 × 4 个普通场景，各模式 8 次</td><td>上下文 2170–2929 字节</td><td>1728–2181 字节；各场景减少约 19.5%–25.7%</td><td>生成台词的 6 对：中位数 3483 → 3115.5 ms；4 对更快、2 对更慢</td></tr>
+<tr><td>40 个候选动作，2 名人物各 2 轮，各模式 4 次</td><td>上下文 9461–9464 字节</td><td>5510–5513 字节；减少约 41.8%</td><td>中位数 4430 → 3511.5 ms；3 对更快、1 对更慢</td></tr>
+</tbody></table></div>
+<p>字节数只统计传给模型的上下文 JSON，采用 UTF-8，不含固定指令，也不等同于计费 token。普通场景各有两次选择无台词等待，没有首句时间，没有把它们记作 0 毫秒。24 次输出均通过原请求的动作与目标检查；这不保证每句台词都自然，也没有验证游戏动作实际完成。</p>
+<p>这轮采用短编号的确定收益是输入更小。延迟只有参考价值：普通场景中有一对从 2924 变为 5533 毫秒；拥挤场景的原编号范围是 2668–9750 毫秒，短编号为 3160–3939 毫秒，仍有反例。模型和服务负载有波动，样本不足以推断稳定的百分比提速、P95 或临界对象数量。测试没有合成语音，所以首句时间不能当成玩家听到声音的时间。</p>
+<p class="evidence">工具：Tools/DeliveryAI/benchmark_context.py。普通场景：Saved/AIResearch/context-identifiers-comparison.json；40 候选场景：context-crowded-comparison.json。两项新增测试检查原数据不被改写、编号对应一致，以及保留超过 32 项后的目标选择。</p>
+<h3>更快的模型仍可能重说旧话</h3>
+<p>另用短编号输入复查 Luna 的 8 个场景，全部通过格式与动作检查，生成台词的 6 项首句中位数为 2134 毫秒。速度较快，但两名角色在 interrupted_reply 场景都重新说出“他非说这路归他管”，没有妥善接住对方“归我扫”的纠正，也重复了已经说过的开头。大军的拱火回应还把说车理解成说人，需要继续人工判断是否符合现场。</p>
+<p>人物暴躁、嘴硬或不相信玩家可以是合理表演；这里明确不符合要求的是忘记已经说过的话、接续时再次重复。格式合法和首句更快都不能代替这项检查。因此玩家交谈继续使用 Sol 的 low 推理配置，闲聊保留 Luna，没有为了约一秒的差距直接换回更快的玩家模型。</p>
+<p class="evidence">记录：Saved/AIResearch/dialogue-luna-short-context.json。两次无台词等待没有计入首句中位数，也没有被当成失败。</p>
+<h3>打断后保留已确认停止的模型进程</h3>
+<p>原来取消本轮调用后会关闭 AppServer，下一轮重新启动。现在只有收到本轮明确的 interrupted 结束通知，才保留进程并解除旧会话订阅；下一轮仍建立独立会话。确认超时或连接异常继续关闭进程，旧会话和旧轮次的消息不能混入新回复。</p>
+<p>真实对照先准备好进程，再调用 gpt-6.1-sol，收到第一段文字时取消。保留进程与取消后重启各测两次，顺序交替。四次都收到 interrupted，日志记录本机发出取消到 AppServer 终态约 1 毫秒；这个数字不能证明云端计算资源也在 1 毫秒内完全释放。</p>
+<div class="table-scroll"><table><thead><tr><th>取消后的处理</th><th>下一轮进程启动</th><th>下一轮建立会话的累计时间</th><th>下一轮完整首句</th></tr></thead><tbody>
+<tr><td>保留已确认停止的进程，2 次</td><td>0 / 0 ms</td><td>49 / 48 ms</td><td>2988 / 3220 ms</td></tr>
+<tr><td>确认停止后关闭并重启，2 次</td><td>173 / 192 ms</td><td>219 / 247 ms</td><td>3973 / 3864 ms</td></tr>
+</tbody></table></div>
+<p>可以直接确认的是，保留进程省去了约 0.17–0.19 秒启动工作。建立会话列是从本次调用开始累计的时间，已经包含启动，不应再次相加。两组首句相差约 0.8 秒，但还包含模型生成波动，不能把全部差值归到进程复用。每组仅两次，也没有测外网抖动下的取消。</p>
+<p class="evidence">工具：Tools/DeliveryAI/benchmark_model_cancel.py；记录：Saved/AIResearch/model-cancel-reuse-comparison.json。</p>
+<h3>把等待发生在哪一步记录清楚</h3>
+<div class="table-scroll"><table><thead><tr><th>日志</th><th>表示什么</th></tr></thead><tbody>
+<tr><td>worker_started / scheduler_queue_ms</td><td>调度线程开始工作，以及此前排队多久；此时尚不一定开始调用模型</td></tr>
+<tr><td>model_slot_acquired / slot_wait_ms</td><td>已经允许开始后端调用，以及等待其他请求结束的时间</td></tr>
+<tr><td>model_connection_startup / thread_start / turn_start / first_delta / model_terminal</td><td>进程准备、建立会话、开始本轮、首段文字、本轮结束；connection_ms 为本次模型调用的累计时间</td></tr>
+<tr><td>first_sentence</td><td>第一个完整、经过解析的句子，和首段文字分开</td></tr>
+<tr><td>audio_ready / tts_queue_ms / tts_ms</td><td>一句语音准备好；分别记录等待语音线程和实际合成的时间</td></tr>
+<tr><td>model_completed / reply_finished</td><td>模型结果处理完，以及这轮语音工作全部结束；两者之间可能还在等 TTS</td></tr>
+<tr><td>model_token_usage / last_* / thread_total_*</td><td>分别记录最近一次生成与会话累计的输入、缓存输入、输出及推理 token；两组不相加，也不当作毫秒</td></tr>
+</tbody></table></div>
+<p>游戏端仍需单独记录本机倾听、字幕和实际播放开始。各阶段可能并行，累计时间不能相加；不同机器也不直接相减各自时钟。</p>
+<p>用量通知必须同时对应当前 threadId 和 turnId，只保存协议允许的非负整数。每次调用先清空旧值；其他会话、旧轮次、浮点数、负数和缺字段的统计被忽略，不影响台词。新增 5 项检查后，后端 72 项测试在 6.494 秒内通过，日志 Saved/Logs/NpcTokenUsageTests.log。上述两批真实模型试验共 48 次均收到了用量信息；没有为测用量额外调用模型，也没有记录登录凭据。</p>
+<h3>本轮真实后端检查与未完成项</h3>
+<p>排队和短编号修改后，后端曾以进程 60512 启动。启动时发现 Get-Command python.exe 返回多个 Application，Start-Process 收到了对象数组而失败；启动脚本现在只选择第一个匹配程序，随后启动成功。服务日志为 AIResidentBackend.log；进程号只记录检查当时的状态。</p>
+<p>随后通过真实 HTTP 接口完成一轮拱火：模型提出 LookAt，返回“他说车呢！”与“我又没长俩轮子。”，两句分别合成真实 PCM 并通过 NDJSON 收到。HTTP 客户端在 3932 毫秒收到动作建议，3963 和 3972 毫秒收到两句音频，3996 毫秒收到完成消息。这个检查没有连接 UE，不是客户端首声测量。</p>
+<p>对应后端日志中，调度排队与等待调用均为 0 毫秒，进程启动约 293 毫秒，首段文字约 3345 毫秒；两句 TTS 等待均为 0，合成为 27 和 36 毫秒。模型结束与全部语音结束落在同一毫秒，说明这一条样本的 TTS 没有延长模型后的等待。它不能覆盖换用较慢语音模型后的情况。</p>
+<p>该阶段的 61 项后端测试在 5.907 秒内通过，日志为 Saved/Logs/NpcQueueContextTests.log，真实 HTTP 记录为 Saved/AIResearch/queue-context-live-http.json。模型与语音分别结束的修改完成后，当时的 67 项测试在 6.493 秒内全部通过，日志为 Saved/Logs/NpcSpeechSchedulingTests.log。之后补充用量记录时为 72 项；本轮 B 音色接入后最新为 95 项通过，真实常驻服务也已完成准备，详见前文。上述排队和模型调用修改只涉及后端，音量相关 C++ 与资产修改另见声音衰减一节。</p>
+<p>此前使用全 SAPI 语音的后台进程为 54164，玩家交谈使用 Sol，闲聊使用 Luna。下面两次真实 HTTP 请求均收到非空 PCM、连续的句子序号和唯一的完成消息。它们是切换大军声音前的历史样本：</p>
+<div class="table-scroll"><table><thead><tr><th>人物与操作</th><th>首句音频到达</th><th>第二句音频到达</th><th>本轮 HTTP 完成消息</th></tr></thead><tbody>
+<tr><td>大军：拱火</td><td>5502 ms</td><td>5526 ms</td><td>5541 ms</td></tr>
+<tr><td>小芳：道歉</td><td>4057 ms</td><td>4816 ms</td><td>4841 ms</td></tr>
+</tbody></table></div>
+<p>记录为 Saved/AIResearch/speech-completion-live-http.json。这里测的是模型、SAPI 和 HTTP 接口，没有连接 UE，也不是客户端开始出声的时间。首句仍需约 4–5.5 秒，低延迟目标尚未达成。两次 SAPI 合成都较快，不能把这组耗时解释成模型与语音分开处理带来的提速；该修改的明确收益是较慢语音不会继续占用已经结束的模型调用位置。</p>
+<p>本轮没有重试此前被自动审批拒绝的 PIE，也没有用后端测试代替游戏内反馈、多人同步和听感验收。大军的常驻 Qwen 服务已准备完成，小芳保留 SAPI；用户可以试玩。已认可的 Graph1 短样本和真实服务输出一致，但新声音在游戏中的自然程度、等待和帧率影响仍需检查，不能把后台接通视为体验已完成。</p>
+<p>TTS 安装脚本先执行了两种不带 -Execute 的计划分支，均返回 0，当时没有创建环境、安装依赖或下载权重。获得同意后才实际安装，现在两套环境均已完成。计划检查、安装完成、合成成功和游戏效果分别记录，避免把前一步通过当作整套语音已经完成。</p>
+<h3>复查命令</h3>
+<pre><code>python -X utf8 Tools/DeliveryAI/benchmark_scheduler.py --repeats 3 --baseline-snapshot Saved/AIResearch/scheduler-before-player-admission.py --output scheduler-player-admission-final.json
+python -X utf8 Tools/DeliveryAI/benchmark_context.py --rounds 1 --output context-identifiers-comparison.json
+python -X utf8 Tools/DeliveryAI/benchmark_context.py --rounds 2 --cases crowded_horn --output context-crowded-comparison.json
+python -X utf8 Tools/DeliveryAI/benchmark_model_cancel.py --rounds 2 --output model-cancel-reuse-comparison.json
+python -m unittest discover -s Tools/DeliveryAI -p 'test_*.py'</code></pre>
+<p>第一条使用模拟调用，两条 benchmark_context 和一条 benchmark_model_cancel 命令会实际调用模型。原始对照已保留，复查时应换输出文件名，避免覆盖这轮记录。</p>
+</div></section><footer>与方案文档使用相同版式，支持离线阅读。持续记录本项目的实际结果，不把外部演示指标当作本项目性能。</footer></main></div><script>document.getElementById('print').addEventListener('click',()=>window.print());</script></body></html>
