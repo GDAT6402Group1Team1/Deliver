@@ -26,6 +26,7 @@ class DELIVERY_API UDeliverAttributeSet : public UAttributeSet
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// 当属性将要被更改成新值时调用
+	virtual bool PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data) override;
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 
 	// 生命值属性

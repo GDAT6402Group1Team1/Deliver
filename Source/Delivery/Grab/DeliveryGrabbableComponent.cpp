@@ -4,6 +4,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "Grab/DeliveryGrabComponent.h"
+#include "Vehicle/DeliveryTrunkPassengerComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 
@@ -132,7 +133,7 @@ bool UDeliveryGrabbableComponent::CanGrab(const ADeliveryCharacter* Requester) c
 		return false;
 	if (const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner()))
 	{
-		return Character->GetActiveRagdoll() &&
+		return (!Character->TrunkPassenger || !Character->TrunkPassenger->IsPassenger()) && Character->GetActiveRagdoll() &&
 		       Character->GetActiveRagdoll()->GetControlMode() == EDeliveryRagdollControlMode::Limp;
 	}
 	return true;

@@ -1,4 +1,7 @@
 #include "UI/DeliveryHUD.h"
+#include "UI/DeliveryConversationWidget.h"
+#include "UI/DeliveryTrunkStatusWidget.h"
+#include "Vehicle/DeliveryTrunkPassengerComponent.h"
 #include "UI/DeliveryStartupWidget.h"
 #include "UI/DeliveryHotbarWidget.h"
 #include "Character/DeliveryCharacter.h"
@@ -27,6 +30,7 @@ void ADeliveryHUD::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     RefreshHotbar();
+    RefreshTrunkStatus();
 }
 
 void ADeliveryHUD::RefreshHotbar()
@@ -79,6 +83,8 @@ void ADeliveryHUD::RemoveHotbar()
 
 void ADeliveryHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    CloseResidentConversation();
+    if (TrunkStatus) { TrunkStatus->RemoveFromParent(); TrunkStatus=nullptr; }
     GetWorldTimerManager().ClearTimer(StartupCloseTimer);
     if (StartupFlow.IsValid()) StartupFlow->OnPhaseChanged.RemoveDynamic(this, &ADeliveryHUD::HandleStartupPhase);
     StartupFlow.Reset();
@@ -170,4 +176,45 @@ void ADeliveryHUD::ApplyInputMode()
         Player->SetInputMode(Mode);
     }
     else Player->SetInputMode(FInputModeGameOnly());
+}
+
+void ADeliveryHUD::RefreshTrunkStatus()
+{
+    auto* PC=GetOwningPlayerController();
+    auto* Character=PC ? ResolveCharacter(PC->GetPawn()):nullptr;
+    auto* Passenger=Character ? Character->TrunkPassenger.Get():nullptr;
+    if (!Passenger || !Passenger->IsPassenger())
+    {
+        if (TrunkStatus) TrunkStatus->SetVisibility(ESlateVisibility::Collapsed);
+        return;
+    }
+    if (!TrunkStatus)
+    {
+        TrunkStatus=CreateWidget<UDeliveryTrunkStatusWidget>(PC);
+        if (!TrunkStatus) return;
+        TrunkStatus->AddToViewport(20);
+    }
+    TrunkStatus->SetVisibility(ESlateVisibility::HitTestInvisible);
+    const bool bTransition=Passenger->GetPhase()==EDeliveryPassengerPhase::Loading ||
+        Passenger->GetPhase()==EDeliveryPassengerPhase::Unloading;
+    TrunkStatus->SetStatus(Passenger->GetStatusText(),bTransition ? Passenger->GetPhaseProgress():Passenger->GetRecoveryProgress());
+}
+
+void ADeliveryHUD::OpenResidentConversation(ADeliveryResidentCharacter* Resident)
+{
+    CloseResidentConversation();
+    ConversationWidget=CreateWidget<UDeliveryConversationWidget>(GetOwningPlayerController(),UDeliveryConversationWidget::StaticClass());
+    if (!ConversationWidget) return;
+    ConversationWidget->SetResident(Resident);
+    ConversationWidget->AddToViewport(40);
+    ConversationWidget->SetDesiredSizeInViewport(FVector2D(560,280));
+    ConversationWidget->SetAlignmentInViewport(FVector2D(.5,1));
+    int32 X=0,Y=0; GetOwningPlayerController()->GetViewportSize(X,Y);
+    ConversationWidget->SetPositionInViewport(FVector2D(X*.5,Y-40));
+    SetPanelOpen(TEXT("ResidentConversation"),true);
+}
+void ADeliveryHUD::CloseResidentConversation()
+{
+    if (ConversationWidget) { ConversationWidget->RemoveFromParent(); ConversationWidget=nullptr; }
+    SetPanelOpen(TEXT("ResidentConversation"),false);
 }

@@ -9,6 +9,9 @@
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "PhysicsEngine/SkeletalBodySetup.h"
 #include "PhysicsControlComponent.h"
+#include "Character/DeliveryCharacter.h"
+#include "Vehicle/DeliveryTrunkPassengerComponent.h"
+#include "Vehicle/DeliveryMotorbike.h"
 
 // 角色根位置与控制状态
 
@@ -91,6 +94,14 @@ void UDeliveryActiveRagdollComponent::CaptureNetworkSnapshot()
 	}
 
 	++ReplicatedSnapshot.Sequence;
+    const auto* Character=Cast<ADeliveryCharacter>(GetOwner());
+    const auto* Passenger=Character ? Character->TrunkPassenger.Get():nullptr;
+    ReplicatedSnapshot.Carrier=Passenger && Passenger->IsPassenger() ? Passenger->GetVehicle():nullptr;
+    if (IsValid(ReplicatedSnapshot.Carrier))
+    {
+        ReplicatedSnapshot.CarrierFrame=ReplicatedSnapshot.Carrier->GetPassengerFrame();
+        ReplicatedSnapshot.CarrierVelocity=Passenger->GetCarrierVelocity();
+    }
 	// 时间戳与服务器时间同源，客户端可估计快照已经过去多久
 	if (const AGameStateBase* GameState = GetWorld()->GetGameState())
 	{
@@ -184,7 +195,9 @@ void UDeliveryActiveRagdollComponent::ApplyNetworkSnapshot(float DeltaTime)
 	}
 
 	const bool bAutonomous = GetOwner()->GetLocalRole() == ROLE_AutonomousProxy;
-	const bool bRecoveryPlayback =
+	const auto* PassengerOwner = Cast<ADeliveryCharacter>(GetOwner());
+    const bool bPassenger = PassengerOwner && PassengerOwner->TrunkPassenger && PassengerOwner->TrunkPassenger->IsPassenger();
+	const bool bRecoveryPlayback = bPassenger ||
 	    Network.IsPlayingRecovery() || ReplicatedControlMode == EDeliveryRagdollControlMode::Recovering;
 	// 仅正常行动的本机角色使用预测校正；倒地和恢复阶段进入快照姿态处理
 	const bool bOwnerPrediction = bAutonomous && !bIsLimp && !bRecoveryPlayback;
@@ -265,6 +278,9 @@ void UDeliveryActiveRagdollComponent::ApplyNetworkSnapshot(float DeltaTime)
 	const int32 BodyCount = FMath::Min(Network.GetPrevious().Bodies.Num(), Network.GetTarget().Bodies.Num());
 	const float CorrectionAlpha =
 	    bAutonomous && !bRecoveryPlayback ? 1.0f - FMath::Exp(-OwnerCorrectionSpeed * DeltaTime) : 1.0f;
+    auto* Carrier=bPassenger ? PassengerOwner->TrunkPassenger->GetVehicle():nullptr;
+    const bool bCarrierSpace=IsValid(Carrier) && Network.GetTarget().Carrier==Carrier;
+    const FTransform CurrentCarrier=bCarrierSpace ? Carrier->GetPassengerFrame():FTransform::Identity;
 
 	for (int32 Index = 0; Index < BodyCount; ++Index)
 	{
@@ -281,8 +297,26 @@ void UDeliveryActiveRagdollComponent::ApplyNetworkSnapshot(float DeltaTime)
 		FVector TargetPosition =
 		    FMath::Lerp(FVector(Previous.Position), FVector(Target.Position), InterpolationAlpha);
 		TargetPosition += FVector(Target.LinearVelocity) * ExtrapolationTime;
-		const FQuat TargetRotation =
+		FQuat TargetRotation =
 		    FQuat::Slerp(Previous.Rotation.Quaternion(), Target.Rotation.Quaternion(), InterpolationAlpha);
+        FVector TargetLinearVelocity=FMath::Lerp(FVector(Previous.LinearVelocity),FVector(Target.LinearVelocity),InterpolationAlpha);
+        if (bCarrierSpace)
+        {
+            // 分别还原两包的车体局部姿态，再放到本机车辆当前参考中
+            const auto& Snapshot=Network.GetTarget();
+            const FTransform LocalTarget=FTransform(Target.Rotation,FVector(Target.Position)).GetRelativeTransform(Snapshot.CarrierFrame);
+            FTransform Local=LocalTarget;
+            if (Network.GetPrevious().Carrier==Carrier)
+            {
+                const FTransform LocalPrevious=FTransform(Previous.Rotation,FVector(Previous.Position)).GetRelativeTransform(Network.GetPrevious().CarrierFrame);
+                Local.Blend(LocalPrevious,LocalTarget,InterpolationAlpha);
+            }
+            const FVector RelativeVelocity=Snapshot.CarrierFrame.InverseTransformVectorNoScale(FVector(Target.LinearVelocity)-FVector(Snapshot.CarrierVelocity));
+            Local.AddToTranslation(RelativeVelocity*ExtrapolationTime);
+            const FTransform WorldPose=Local*CurrentCarrier;
+            TargetPosition=WorldPose.GetLocation(); TargetRotation=WorldPose.GetRotation();
+            TargetLinearVelocity=CurrentCarrier.TransformVectorNoScale(RelativeVelocity)+PassengerOwner->TrunkPassenger->GetCarrierVelocity();
+        }
 
 		const FTransform Current = Body->GetUnrealWorldTransform();
 		const FVector CorrectedPosition = FMath::Lerp(Current.GetLocation(), TargetPosition, CorrectionAlpha);
@@ -291,8 +325,6 @@ void UDeliveryActiveRagdollComponent::ApplyNetworkSnapshot(float DeltaTime)
 		Body->SetBodyTransform(FTransform(CorrectedRotation, CorrectedPosition),
 		                       ETeleportType::TeleportPhysics);
 
-		const FVector TargetLinearVelocity =
-		    FMath::Lerp(FVector(Previous.LinearVelocity), FVector(Target.LinearVelocity), InterpolationAlpha);
 		const FVector TargetAngularVelocity = FMath::Lerp(
 		    FVector(Previous.AngularVelocity), FVector(Target.AngularVelocity), InterpolationAlpha);
 		const FVector LinearVelocity =

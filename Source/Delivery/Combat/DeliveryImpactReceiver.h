@@ -39,4 +39,6 @@ class DELIVERY_API IDeliveryImpactReceiver
 
 	/** 已经被打飞的目标不再重复结算（音效、命中计数都看这个） */
 	virtual bool IsKnockedDown() const = 0;
+	// 来源在命中时采集，旧接收者继续走原接口
+	virtual void ReceiveImpactFrom(const FVector& Impulse, const FVector& Point, AActor* Source) { ReceiveImpact(Impulse, Point); }
 };

@@ -7,6 +7,7 @@
 
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Character/DeliveryCharacter.h"
+#include "Vehicle/DeliveryTrunkPassengerComponent.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -163,6 +164,13 @@ void UDeliveryActiveRagdollComponent::UpdateActionState()
 // 先处理网络姿态和身体状态，再计算本帧控制目标
 void UDeliveryActiveRagdollComponent::UpdateBeforePhysics(float DeltaTime)
 {
+    const auto* Character = Cast<ADeliveryCharacter>(GetOwner());
+    if (Character && Character->TrunkPassenger && Character->TrunkPassenger->IsPassenger())
+    {
+        if (GetOwner()->HasAuthority()) Character->TrunkPassenger->UpdatePhysics(DeltaTime);
+        else ApplyNetworkSnapshot(DeltaTime);
+        return;
+    }
 	// 其他玩家的身体姿态使用服务器发来的结果
 	if (GetOwner()->GetLocalRole() == ROLE_SimulatedProxy || Network.IsPlayingRecovery())
 	{
@@ -292,6 +300,7 @@ void UDeliveryActiveRagdollComponent::StartRagdoll()
 // 停止身体控制并清理约束和运行状态
 void UDeliveryActiveRagdollComponent::StopRagdoll()
 {
+    EndTrunkPose();
 	if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(AxeDoorHitTimer);
 	SwingAxe.Reset();
 	// 撤销这套物理控制并把角色恢复到非布娃娃状态；不沿用旧的脚步/输入缓存

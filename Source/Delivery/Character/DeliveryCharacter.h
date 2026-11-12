@@ -25,6 +25,7 @@ class UDeliveryInteractionProbeComponent;
 // 物品与车辆组件
 class UDeliveryInventoryComponent;
 class UDeliveryVehicleSummonComponent;
+class UDeliveryTrunkPassengerComponent;
 class ADeliveryMotorbike;
 class ADeliveryPackageItem;
 class APlayerState;
@@ -123,6 +124,11 @@ class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components",
               meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UDeliveryVehicleSummonComponent> VehicleSummon;
+
+public:
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+    TObjectPtr<UDeliveryTrunkPassengerComponent> TrunkPassenger;
+private:
 
     /** 手持物品的右手挂点，可在角色蓝图中调整位置和朝向 */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components",

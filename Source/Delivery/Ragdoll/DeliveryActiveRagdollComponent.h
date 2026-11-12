@@ -10,6 +10,7 @@
 #include "Ragdoll/Combat/DeliveryRagdollPunch.h"
 #include "TimerManager.h"
 #include "Combat/DeliveryBoxingPose.h"
+#include "Ragdoll/DeliveryTrunkPose.h"
 #include "DeliveryActiveRagdollComponent.generated.h"
 
 struct FDeliveryPoseDebug;
@@ -100,6 +101,14 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 #endif
 
 	UDeliveryActiveRagdollComponent();
+    bool BeginTrunkPose();
+    void EndTrunkPose();
+    void UpdateTrunkPose(const FTransform& Frame, float Blend, float Unfold, const FVector& CarrierVelocity, float Dt);
+    float GetTrunkPoseError() const;
+    FVector GetPhysicalPelvisLocation() const;
+    void ReleaseTrunkVelocity(float MaxSpeed);
+    void EmergencyMoveTrunkBody(const FVector& HipsLocation);
+    TArray<FDeliveryTrunkBodyControl> TrunkControls;
 
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,

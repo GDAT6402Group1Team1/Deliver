@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -9,6 +9,7 @@
 #include "DeliveryMotorbike.generated.h"
 
 class ADeliveryCharacter;
+class UDeliveryVehicleHoldComponent;
 class ADeliveryPackageItem;
 class UBoxComponent;
 class UCameraComponent;
@@ -45,20 +46,41 @@ UCLASS()
 class DELIVERY_API ADeliveryMotorbike : public APawn
 {
 	GENERATED_BODY()
+	friend class UDeliveryTrunkPassengerComponent;
 	friend class FDeliveryBikeHornTest;
 	friend class FDeliveryBikePedestrianImpactTest;
 	friend class FDeliveryBikeImpactPIECommand;
+	friend class FDeliveryTrunkPassengerPIECommand;
 	friend class FDeliveryRiderContactsTest;
 	friend class FDeliveryRiderRuntimeTest;
 	friend class FDeliveryVehicleSummonTest;
+	friend class FDeliveryResidentIntegrationTest;
+	friend class FDeliveryResidentPIECommand;
 	friend class FDeliveryMotorbikeTrunkTest;
 	friend class FDeliveryMotorbikeObstacleTest;
 
   public:
 	ADeliveryMotorbike();
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Motorbike|Resident") TObjectPtr<UDeliveryVehicleHoldComponent> ResidentHold;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+	UFUNCTION(BlueprintPure, Category="Motorbike|Passenger") bool HasTrunkPassenger() const;
+	UFUNCTION(BlueprintPure, Category="Motorbike|Passenger") ADeliveryCharacter* GetTrunkPassenger() const { return TrunkPassenger; }
+	bool CanUsePassengerTrunk(APawn* Interactor, bool bCheckAvailability);
+	bool UsePassengerTrunk(APawn* Interactor);
+	void ClearTrunkPassenger(ADeliveryCharacter* Passenger);
+	FTransform GetPassengerFrame() const;
+	bool FindPassengerExit(ADeliveryCharacter* Passenger, FVector& OutLocation) const;
+	bool IsPassengerTransitioning() const;
+	void RefreshPassengerPresentation(float DeltaSeconds = 0.f);
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Motorbike|Passenger") TObjectPtr<UDeliveryInteractableComponent> PassengerInteractable;
+	// 相对后箱挂点的位置，不随模型导入缩放改变人体大小
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Motorbike|Passenger") FVector PassengerOffset = FVector(0, 0, 30);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Motorbike|Passenger") FRotator PassengerRotation = FRotator(-20, 90, 0);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Motorbike|Passenger", meta=(ClampMin="0", ClampMax="90")) float PassengerLidAngle = 35.f;
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
+	virtual void Destroyed() override;
 	virtual void Tick(float DeltaSeconds) override;
 
 	// 驾驶输入绑定
@@ -130,7 +152,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	UFUNCTION(BlueprintPure, Category = "Motorbike|后备箱")
 	bool IsTrunkBusy() const
 	{
-		return TrunkPhase != EDeliveryTrunkPhase::Idle;
+		return TrunkPhase != EDeliveryTrunkPhase::Idle || IsPassengerTransitioning();
 	}
 
 	/** 服务器：把角色手上的快递装进后备箱，并开始开盖动画 */
@@ -966,6 +988,9 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 
 	/** 按有没有驾驶员刷新骑手网格和可交互状态；服务器和客户端都会走到 */
 	void ApplyDriverPresentation();
+	// 客户端按 Driver 复制结果隐藏原角色碰撞，退出和销毁时恢复步行碰撞
+	void RestorePresentedDriverCollision();
+	TWeakObjectPtr<ADeliveryCharacter> PresentedDriver;
 
 	/** 把驾驶员身上的材质映射到骑手网格的槽位上；没人骑就还原成资产自带的 */
 	void ApplyRiderMaterials();
@@ -1048,6 +1073,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 
 	/** 本阶段已经播了多久 */
 	float TrunkElapsed = 0.0f;
+	float CurrentTrunkLidAlpha = 0.f;
 
 	/** 装货动画结束时才真正隐藏快递；取货动画结束时才交回手上 */
 	TWeakObjectPtr<ADeliveryCharacter> TrunkPendingReceiver;
@@ -1135,4 +1161,8 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	FVector2D RiderImpact = FVector2D::ZeroVector;
 	float RiderSampleSpeed = 0, RiderSampleZ = 0, RiderSampleVerticalSpeed = 0, RiderNetElapsed = 0;
 	bool bRiderSampleValid = false;
+private:
+    UPROPERTY(ReplicatedUsing=OnRep_TrunkPassenger) TObjectPtr<ADeliveryCharacter> TrunkPassenger;
+    UFUNCTION() void OnRep_TrunkPassenger();
+
 };

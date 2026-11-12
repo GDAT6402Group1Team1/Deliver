@@ -17,6 +17,7 @@ UCLASS(ClassGroup = (Delivery), meta = (BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryGrabComponent : public UActorComponent
 {
 	GENERATED_BODY()
+	friend class FDeliveryTrunkPassengerTest;
 
   public:
 	UDeliveryGrabComponent();

@@ -67,7 +67,8 @@ void ADeliveryMotorbike::ApplyVisualScale()
 // 现在能不能上车：有人骑、晕倒、手上拿着快递、正在装卸都不行
 bool ADeliveryMotorbike::CanDriveNow(const ADeliveryCharacter* Character) const
 {
-	if (!IsValid(Character) || Driver || IsTrunkBusy())
+	// 只有处于正常碰撞状态的角色能上车，客户端退出时可确定地恢复步行碰撞
+	if (!IsValid(Character) || !Character->GetActorEnableCollision() || Driver || IsTrunkBusy())
 	{
 		return false;
 	}
@@ -94,7 +95,7 @@ bool ADeliveryMotorbike::CanDriveNow(const ADeliveryCharacter* Character) const
 
 bool ADeliveryMotorbike::CanLoadTrunk(const ADeliveryCharacter* Character) const
 {
-	if (!IsValid(Character) || Driver || IsTrunkBusy() || HasCargo() || Character->IsIncapacitated())
+	if (!IsValid(Character) || Driver || IsTrunkBusy() || HasCargo() || HasTrunkPassenger() || Character->IsIncapacitated())
 	{
 		return false;
 	}
@@ -224,6 +225,7 @@ FVector ADeliveryMotorbike::GetTrunkLidLiftDirection() const
  */
 void ADeliveryMotorbike::ApplyTrunkLidAlpha(float Alpha)
 {
+	CurrentTrunkLidAlpha = FMath::Clamp(Alpha, 0.f, 1.f);
 	if (TrunkLidPivot)
 	{
 		// 抬 −Y 那条边要反向转：正角把 +Y 抬向 +Z

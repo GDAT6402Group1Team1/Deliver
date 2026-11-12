@@ -212,6 +212,8 @@ class DELIVERY_API UDeliveryDialogueVoiceComponent : public USynthComponent
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Delivery|Voice")
 	FDeliveryVoiceSettings DefaultSettings;
+	// 居民表现显式启用空间声源，电话仍限定本机控制器
+	UPROPERTY(EditAnywhere, Category="Delivery|Voice") bool bAllowWorldSpeaker = false;
 
   protected:
 	virtual ISoundGeneratorPtr CreateSoundGenerator(const FSoundGeneratorInitParams& InParams) override;

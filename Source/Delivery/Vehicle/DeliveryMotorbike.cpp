@@ -1,6 +1,8 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Vehicle/DeliveryMotorbike.h"
+#include "AI/Residents/DeliveryVehicleHoldComponent.h"
+#include "Vehicle/DeliveryTrunkPassengerComponent.h"
 #include "Vehicle/DeliveryHornReceiver.h"
 #include "Traffic/DeliveryTrafficCarComponent.h"
 #include "Audio/DeliveryAudioConfig.h"
@@ -11,6 +13,7 @@
 #include "Audio/DeliveryVehicleAudioComponent.h"
 #include "Components/BoxComponent.h"
 #include "Combat/DeliveryImpactReceiver.h"
+#include "AI/Residents/DeliveryResidentCharacter.h"
 #include "Combat/DeliveryCollisionChannels.h"
 #include "Vehicle/DeliveryRiderAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -44,6 +47,7 @@
 
 ADeliveryMotorbike::ADeliveryMotorbike()
 {
+	ResidentHold=CreateDefaultSubobject<UDeliveryVehicleHoldComponent>(TEXT("ResidentHold"));
 	PrimaryActorTick.bCanEverTick = true;
 	static ConstructorHelpers::FObjectFinder<UInputAction> HornInput(TEXT("/Game/Input/Actions/IA_AttackLeft.IA_AttackLeft"));
 	HornAction = HornInput.Object;
@@ -169,6 +173,11 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	// 后备箱是第二个交互组件，按键是左键；两个组件在同一个 Actor 上，
 	// 所以服务器复核目标时必须按"键"去找组件，不能拿第一个（见 FindOn 的键重载）
 	TrunkInteractable = CreateDefaultSubobject<UDeliveryInteractableComponent>(TEXT("TrunkInteractable"));
+    PassengerInteractable = CreateDefaultSubobject<UDeliveryInteractableComponent>(TEXT("PassengerInteractable"));
+    PassengerInteractable->InteractionKey = EDeliveryInteractionKey::PickupE;
+    PassengerInteractable->HoldDuration = 0.f;
+    PassengerInteractable->bAllowWhileGrabbing = true;
+    PassengerInteractable->InteractRadius = TrunkInteractRadius;
 	TrunkInteractable->InteractionKey = EDeliveryInteractionKey::ActionLeft;
 	TrunkInteractable->InteractRadius = TrunkInteractRadius;
 	TrunkInteractable->HoldDuration = 0.0f;
@@ -215,6 +224,7 @@ void ADeliveryMotorbike::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(ADeliveryMotorbike, Driver);
 	DOREPLIFETIME(ADeliveryMotorbike, bHornActive);
 	DOREPLIFETIME(ADeliveryMotorbike, Cargo);
+    DOREPLIFETIME(ADeliveryMotorbike, TrunkPassenger);
 	DOREPLIFETIME(ADeliveryMotorbike, ReplicatedRiderMotion);
 }
 
@@ -258,6 +268,10 @@ void ADeliveryMotorbike::BeginPlay()
 		TrunkInteractable->Use.BindUObject(this, &ADeliveryMotorbike::UseTrunk);
 	}
 
+    PassengerInteractable->CanUse.BindUObject(this, &ADeliveryMotorbike::CanUsePassengerTrunk);
+    PassengerInteractable->Use.BindUObject(this, &ADeliveryMotorbike::UsePassengerTrunk);
+    PassengerInteractable->InteractAnchor = TrunkAnchor;
+    RefreshPassengerPresentation();
 	ApplyTrunkPresentation();
 	ApplyDriverPresentation();
 	ApplyCameraMode();
@@ -648,6 +662,16 @@ void ADeliveryMotorbike::ApplyBodyMeshes()
 // 根据是否有驾驶员更新角色隐藏和骑手显示
 void ADeliveryMotorbike::ApplyDriverPresentation()
 {
+	// Actor 的碰撞开关不复制，不能只在服务器 TryEnter 中关闭隐藏驾驶员
+	if (!HasAuthority() && PresentedDriver.Get() != Driver)
+	{
+		RestorePresentedDriverCollision();
+		PresentedDriver = Driver;
+		if (Driver)
+		{
+			Driver->SetActorEnableCollision(false);
+		}
+	}
 	const bool bHasDriver = Driver != nullptr;
 	if (RiderMesh)
 	{
@@ -660,6 +684,24 @@ void ADeliveryMotorbike::ApplyDriverPresentation()
 	}
 	ApplyTrunkPresentation();
 	ApplyRiderMaterials();
+}
+
+void ADeliveryMotorbike::RestorePresentedDriverCollision()
+{
+	if (ADeliveryCharacter* Previous = PresentedDriver.Get())
+	{
+		// 旧车辆的迟到清理不能覆盖角色已经进入另一辆车后的碰撞状态
+		if (!Previous->GetAttachParentActor() || Previous->GetAttachParentActor() == this)
+			Previous->SetActorEnableCollision(true);
+	}
+	PresentedDriver.Reset();
+}
+
+void ADeliveryMotorbike::Destroyed()
+{
+	// APawn::Destroyed 会先解绑控制器，必须在它执行前把驾驶权交回原角色
+	if (HasAuthority() && IsValid(Driver)) ExitVehicle();
+	Super::Destroyed();
 }
 
 // 将驾驶员材质应用到车辆上的骑手模型
@@ -750,7 +792,7 @@ ADeliveryPackageItem* ADeliveryMotorbike::GetCargo() const
 // 在服务器登记货物归属并固定到货架
 bool ADeliveryMotorbike::AttachCargo(ADeliveryPackageItem* Package)
 {
-	if (!HasAuthority() || HasCargo() || !IsValid(Package) || !CargoPivot)
+	if (!HasAuthority() || HasCargo() || HasTrunkPassenger() || !IsValid(Package) || !CargoPivot)
 	{
 		return false;
 	}
@@ -869,7 +911,7 @@ bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredY
 	// 不清的话那一帧会算出一段巨大的"路径"，把沿途的路人全部撞飞
 	bHasPedestrianSweepLocation = false;
 	UWorld* World = GetWorld();
-	if (!HasAuthority() || !World || Driver)
+	if (!HasAuthority() || !World || Driver || HasTrunkPassenger() || (ResidentHold && ResidentHold->IsHeld()))
 	{
 		return false;
 	}
@@ -1108,6 +1150,7 @@ void ADeliveryMotorbike::ProcessPedestrianImpacts(float DeltaSeconds)
 	Params.AddIgnoredActor(this);
 	// 驾驶员那具身体被挂在车上，扫到它没有意义
 	Params.AddIgnoredActor(Driver);
+    Params.AddIgnoredActor(TrunkPassenger);
 
 	// 按**物体类型**查：路人通道的默认响应是 Ignore，按通道查会被响应筛掉、
 	// 扫描恒为空（避让检测当年就是这么死的）
@@ -1124,7 +1167,7 @@ void ADeliveryMotorbike::ProcessPedestrianImpacts(float DeltaSeconds)
 	for (const FHitResult& Hit : Hits)
 	{
 		AActor* HitActor = Hit.GetActor();
-		if (!HitActor || Seen.Contains(HitActor))
+        if (!HitActor || Seen.Contains(HitActor) || (ResidentHold && ResidentHold->GetHolder()==HitActor))
 		{
 			continue;
 		}
@@ -1145,7 +1188,7 @@ void ADeliveryMotorbike::ProcessPedestrianImpacts(float DeltaSeconds)
 		const FVector Impulse =
 		    (Direction + FVector::UpVector * PedestrianImpactUpwardFraction).GetSafeNormal() *
 		    PedestrianImpactImpulse * SpeedScale;
-		Receiver->ReceiveImpact(Impulse, Hit.ImpactPoint);
+		Receiver->ReceiveImpactFrom(Impulse, Hit.ImpactPoint, Driver);
 		// 同一帧撞到多人也只播放一次，倒地目标已在上方排除
 		if (World->GetTimeSeconds() >= NextPersonImpactSoundTime)
 		{
@@ -1299,6 +1342,7 @@ FVector ADeliveryMotorbike::FindExitLocation(float PreferredSideSign) const
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(MotorbikeExit), false, this);
 	Params.AddIgnoredActor(Driver);
+    Params.AddIgnoredActor(TrunkPassenger);
 
 	// 横向至少要让开"车身半宽 + 角色胶囊半径 + 余量"，否则人落下来还压在车上
 	// 直接用碰撞盒的实际尺寸，车模型换了也不用回来改这个数
@@ -1467,10 +1511,11 @@ void ADeliveryMotorbike::UpdateHorn(float DeltaSeconds)
 		FCollisionQueryParams Sight(SCENE_QUERY_STAT(MotorbikeHornSight), false, this);
 		Sight.AddIgnoredActor(Actor);
 		Sight.AddIgnoredActor(Driver);
+        Sight.AddIgnoredActor(TrunkPassenger);
 		FHitResult Wall;
 		if (GetWorld()->LineTraceSingleByChannel(Wall, GetActorLocation()+FVector(0,0,70),
 		    Actor->GetActorLocation()+FVector(0,0,70), ECC_Visibility, Sight)) continue;
-		if (auto* Receiver = Cast<IDeliveryHornReceiver>(Actor)) Receiver->ReceiveHorn(HornPedestrianSpeedMultiplier);
+		if (auto* Receiver = Cast<IDeliveryHornReceiver>(Actor)) Receiver->ReceiveHornFrom(HornPedestrianSpeedMultiplier,this,Driver);
 		if (auto* Traffic = Actor->FindComponentByClass<UDeliveryTrafficCarComponent>())
 		{
 			Traffic->RequestHornSpeedBoost(HornTrafficSpeedMultiplier);
@@ -1824,6 +1869,7 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 	}
 
 	UpdateTrunkAnimation(DeltaSeconds);
+    RefreshPassengerPresentation(DeltaSeconds);
 	UpdateImpactReaction(DeltaSeconds);
 	UpdateRiderMotion(DeltaSeconds);
 	UpdateLean(DeltaSeconds);
@@ -1882,6 +1928,7 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 void ADeliveryMotorbike::UpdateSpeed(float DeltaSeconds)
 {
 	const float Throttle = FMath::Clamp(ThrottleInput, -1.0f, 1.0f);
+	if (ResidentHold) ResidentHold->UpdateThrottle(Throttle,DeltaSeconds);
 	if (FMath::IsNearlyZero(Throttle))
 	{
 		CurrentSpeed = FMath::FInterpConstantTo(CurrentSpeed, 0.0f, DeltaSeconds, CoastDeceleration);
@@ -1891,7 +1938,7 @@ void ADeliveryMotorbike::UpdateSpeed(float DeltaSeconds)
 	// 油门方向和当前车速反着来 = 刹车，用大得多的减速度，手感上按一下就明显慢下来
 	const bool bOpposing = (Throttle * CurrentSpeed) < -UE_KINDA_SMALL_NUMBER;
 	const float Rate = bOpposing ? BrakeDeceleration : ThrottleAcceleration;
-	const float Target = Throttle > 0.0f ? MaxSpeed * Throttle : MaxReverseSpeed * Throttle;
+	const float Target = (Throttle > 0.0f ? MaxSpeed * Throttle : MaxReverseSpeed * Throttle) * (ResidentHold ? ResidentHold->GetSpeedScale() : 1.f);
 	CurrentSpeed = FMath::FInterpConstantTo(CurrentSpeed, Target, DeltaSeconds, Rate);
 }
 
@@ -1982,6 +2029,7 @@ bool ADeliveryMotorbike::TrySlideAroundObstacle(const FVector& RemainingDelta,
 	// 挑通道迟早和车身的响应配置对不上（本仓库在"按通道查恒为空"上栽过三次）
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(MotorbikeObstacleSide), false, this);
 	Params.AddIgnoredActor(Driver);
+    Params.AddIgnoredActor(TrunkPassenger);
 	const FCollisionShape Body = FCollisionShape::MakeBox(Extent);
 	const FQuat Rotation = GetActorQuat();
 
@@ -2066,6 +2114,7 @@ void ADeliveryMotorbike::UpdateGroundAndMove(float DeltaSeconds)
 	FVector Location = GetActorLocation();
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(MotorbikeGround), false, this);
 	Params.AddIgnoredActor(Driver);
+    Params.AddIgnoredActor(TrunkPassenger);
 
 	FHitResult GroundHit;
 	const bool bHitGround = World->LineTraceSingleByChannel(

@@ -11,6 +11,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "Abilities/GA_DeliverPunch.h"
 #include "GameplayEffect.h"
+#include "Vehicle/DeliveryTrunkPassengerComponent.h"
 
 UDeliverAbilitySystemComponent::UDeliverAbilitySystemComponent()
 {
@@ -77,7 +78,13 @@ void UDeliverAbilitySystemComponent::OnHealthChanged(const FOnAttributeChangeDat
 	else
 	{
 		const float RecoverHealth = MaxHealth * FMath::Clamp(StunRecoverHealthPercent, 1.f, 100.f) * 0.01f;
-		if (Data.NewValue >= RecoverHealth)
+		const auto* PassengerCharacter = Cast<ADeliveryCharacter>(GetAvatarActor());
+        auto* Passenger = PassengerCharacter ? PassengerCharacter->TrunkPassenger.Get() : nullptr;
+        if (Passenger && Passenger->IsPassenger())
+        {
+            if (Data.NewValue >= MaxHealth * .4f) Passenger->RequestExit(true);
+        }
+        else if (Data.NewValue >= RecoverHealth)
 		{
 			SetStunned(false);
 		}
@@ -142,4 +149,14 @@ void UDeliverAbilitySystemComponent::SetStunned(bool bNewStunned)
 			Ragdoll->SetLimp(bNewStunned);
 		}
 	}
+}
+
+void UDeliverAbilitySystemComponent::CompleteTrunkRecovery(bool bWakeAtFortyPercent)
+{
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return;
+    const auto* Character = Cast<ADeliveryCharacter>(GetAvatarActor());
+    if (Character && Character->TrunkPassenger && Character->TrunkPassenger->IsPassenger()) return;
+    const float Threshold = bWakeAtFortyPercent ? .4f : StunRecoverHealthPercent * .01f;
+    if (bStunned && GetNumericAttribute(UDeliverAttributeSet::GetHealthAttribute()) >=
+        GetNumericAttribute(UDeliverAttributeSet::GetMaxHealthAttribute()) * Threshold) SetStunned(false);
 }

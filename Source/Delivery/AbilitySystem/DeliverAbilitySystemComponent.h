@@ -29,6 +29,9 @@ class DELIVERY_API UDeliverAbilitySystemComponent : public UAbilitySystemCompone
 
 	// 近战冷却
 	/** 左右拳共用冷却，由 GA 读写 */
+	// 出箱完成后由服务器重检 HP，不能在箱内提前启用起身电机
+	void CompleteTrunkRecovery(bool bWakeAtFortyPercent);
+
 	float LastMeleeAttackTime = -1000.f;
 
 	/** 要比整段出拳（收拳到收回）稍长，否则下一拳会在上一拳还没收完时被拒掉 */

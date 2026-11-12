@@ -1,0 +1,6 @@
+Animations: Quaternius Universal Animation Library 1 and 2 Standard, CC0
+Source files and license: ../Grandpa/Quaternius*_License.txt
+https://quaternius.com/packs/universalanimationlibrary.html
+https://quaternius.com/packs/universalanimationlibrary2.html
+Clips: Idle_FoldArms_Loop, Idle_Talking_Loop, Walk_Formal_Loop, Punch_Jab, Death01, Push_Loop, Hit_Knockback, LayToIdle
+Retarget target: existing Design/Art/NPC/中年男.fbx shared NPC skeleton

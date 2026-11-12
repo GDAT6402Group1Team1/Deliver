@@ -37,6 +37,7 @@
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Vehicle/DeliveryVehicleSummonComponent.h"
+#include "Vehicle/DeliveryTrunkPassengerComponent.h"
 #include "Inventory/DeliveryInventoryItemComponent.h"
 #include "Inventory/DeliveryPackageItem.h"
 #include "Task/World/DeliveryItemComponent.h"
@@ -112,6 +113,7 @@ ADeliveryCharacter::ADeliveryCharacter()
     GrabbableComponent = CreateDefaultSubobject<UDeliveryGrabbableComponent>(TEXT("Grabbable"));
     InteractProbe = CreateDefaultSubobject<UDeliveryInteractionProbeComponent>(TEXT("InteractProbe"));
     InventoryComponent = CreateDefaultSubobject<UDeliveryInventoryComponent>(TEXT("Inventory"));
+    TrunkPassenger = CreateDefaultSubobject<UDeliveryTrunkPassengerComponent>(TEXT("TrunkPassenger"));
     VehicleSummon = CreateDefaultSubobject<UDeliveryVehicleSummonComponent>(TEXT("VehicleSummon"));
     InteractionComponent = CreateDefaultSubobject<UDeliveryInteractionComponent>(TEXT("Interaction"));
     CarryComponent = CreateDefaultSubobject<UDeliveryCarryComponent>(TEXT("Carry"));
@@ -132,6 +134,7 @@ ADeliveryCharacter::ADeliveryCharacter()
 // 结合眩晕标记和生命值判断角色能否行动
 bool ADeliveryCharacter::IsIncapacitated() const
 {
+    if (TrunkPassenger && TrunkPassenger->IsPassenger()) return true;
     const UAbilitySystemComponent *ASC = GetAbilitySystemComponent();
     if (!ASC)
     {
@@ -207,6 +210,11 @@ void ADeliveryCharacter::DoLook(float Yaw, float Pitch)
 // 把移动意图交给身体组件，并发送给服务器
 void ADeliveryCharacter::DoMove(float Right, float Forward)
 {
+    if (TrunkPassenger && TrunkPassenger->IsPassenger())
+    {
+        if (ActiveRagdoll) ActiveRagdoll->SetMoveInput(FVector2D::ZeroVector);
+        return;
+    }
     if (ActiveRagdoll)
     {
         const FVector2D Input(Right, Forward);
@@ -222,6 +230,7 @@ void ADeliveryCharacter::DoMove(float Right, float Forward)
 // 本机先响应跳跃，再向服务器提交请求
 void ADeliveryCharacter::DoJumpStart()
 {
+    if (TrunkPassenger && TrunkPassenger->IsPassenger()) return;
     if (!ActiveRagdoll)
     {
         return;
@@ -244,6 +253,7 @@ void ADeliveryCharacter::DoJumpEnd() {}
 // 持有物品时使用物品，否则请求左拳技能
 void ADeliveryCharacter::DoAttackLeft()
 {
+    if (TrunkPassenger && TrunkPassenger->IsPassenger()) return;
     if (GrabComponent && GrabComponent->IsGrabbing())
         return;
     /**
@@ -269,6 +279,7 @@ void ADeliveryCharacter::DoAttackLeft()
 // 允许空手攻击时请求右拳技能
 void ADeliveryCharacter::DoAttackRight()
 {
+    if (TrunkPassenger && TrunkPassenger->IsPassenger()) return;
     if (GrabComponent && GrabComponent->IsGrabbing())
         return;
     if (InventoryComponent && InventoryComponent->HasHeldItem())
@@ -401,6 +412,11 @@ bool ADeliveryCharacter::IsMeleeAttacking() const
 // 过滤无效输入，再更新服务器上的朝向和移动意图
 void ADeliveryCharacter::ServerSetMoveInput_Implementation(FVector2D Input, float AimYaw)
 {
+    if (TrunkPassenger && TrunkPassenger->IsPassenger())
+    {
+        if (ActiveRagdoll) ActiveRagdoll->SetMoveInput(FVector2D::ZeroVector);
+        return;
+    }
     if (Controller && FMath::IsFinite(AimYaw))
     {
         FRotator ControlRotation = Controller->GetControlRotation();
@@ -420,6 +436,7 @@ void ADeliveryCharacter::ServerSetMoveInput_Implementation(FVector2D Input, floa
 // 限制连续起跳请求，只记录实际成功的起跳
 void ADeliveryCharacter::ServerJump_Implementation()
 {
+    if (TrunkPassenger && TrunkPassenger->IsPassenger()) return;
     UWorld *World = GetWorld();
     if (!ActiveRagdoll || !World)
     {

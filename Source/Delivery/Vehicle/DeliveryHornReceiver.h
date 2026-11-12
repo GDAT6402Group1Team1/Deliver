@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
 #include "DeliveryHornReceiver.generated.h"
@@ -15,4 +15,5 @@ class DELIVERY_API IDeliveryHornReceiver
     GENERATED_BODY()
 public:
     virtual void ReceiveHorn(float SpeedMultiplier) = 0;
+    virtual void ReceiveHornFrom(float Multiplier,AActor* Vehicle,AActor* Driver) { ReceiveHorn(Multiplier); }
 };

@@ -682,6 +682,7 @@ float UDeliveryDialogueVoiceComponent::ProsodySemitoneOffset(int32 GlyphIndex, T
 
 bool UDeliveryDialogueVoiceComponent::IsOwnedByLocalController() const
 {
+	if (bAllowWorldSpeaker) return GetWorld() && GetWorld()->GetNetMode() != NM_DedicatedServer;
 	const APlayerController* Controller = Cast<APlayerController>(GetOwner());
 	return Controller && Controller->IsLocalController();
 }

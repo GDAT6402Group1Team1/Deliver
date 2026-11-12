@@ -1,4 +1,4 @@
-﻿// 连接出拳动作和伤害结算，本技能不直接计算手臂姿态
+// 连接出拳动作和伤害结算，本技能不直接计算手臂姿态
 // ActivateAbility 发起动作并订阅战斗组件，OnHitWindow 查询目标并施加效果
 // OnPunchEnded 结束技能，EndAbility 解绑通知；被打断时同时取消出拳
 // Copyright Epic Games, Inc. All Rights Reserved.
@@ -152,8 +152,8 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 				    (PunchDirection + FVector::UpVector * HitReactionUpwardFraction).GetSafeNormal();
 				// 冲量乘一个倍率：路人的刚体质量和玩家布娃娃不是一个量级，
 				// 用同一个数值的话要么推不动要么飞上天，所以单独给
-				Receiver->ReceiveImpact(ReactionDirection * HitReactionImpulse * PedestrianImpulseScale,
-				                        ImpactPoint);
+				Receiver->ReceiveImpactFrom(ReactionDirection * HitReactionImpulse * PedestrianImpulseScale,
+				                        ImpactPoint, GetAvatarActorFromActorInfo());
 			}
 			bHitNPC = true;
 			HitActors.Add(HitActor);

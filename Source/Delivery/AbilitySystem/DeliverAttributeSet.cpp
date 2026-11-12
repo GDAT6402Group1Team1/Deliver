@@ -2,6 +2,9 @@
 
 #include "AbilitySystem/DeliverAttributeSet.h"
 #include "Net/UnrealNetwork.h"
+#include "GameplayEffectExtension.h"
+#include "Character/DeliveryCharacter.h"
+#include "Vehicle/DeliveryTrunkPassengerComponent.h"
 
 UDeliverAttributeSet::UDeliverAttributeSet()
 {
@@ -45,4 +48,13 @@ void UDeliverAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxH
 void UDeliverAttributeSet::OnRep_HealthRegenRate(const FGameplayAttributeData& OldHealthRegenRate)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDeliverAttributeSet, HealthRegenRate, OldHealthRegenRate);
+}
+
+// 只屏蔽伤害，回血仍通过同一套 GE；复制的当前血量供本机恢复提示使用
+bool UDeliverAttributeSet::PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data)
+{
+    const auto* Character = Cast<ADeliveryCharacter>(Data.Target.GetAvatarActor());
+    if (Data.EvaluatedData.Attribute == GetHealthAttribute() && Data.EvaluatedData.Magnitude < 0.f &&
+        Character && Character->TrunkPassenger && Character->TrunkPassenger->IsDamageProtected()) return false;
+    return Super::PreGameplayEffectExecute(Data);
 }

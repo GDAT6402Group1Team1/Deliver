@@ -8,7 +8,7 @@ public class DeliveryTuning : ModuleRules
         PrivateDependencyModuleNames.AddRange(new[] {
             "Core", "CoreUObject", "Engine", "Slate", "SlateCore", "UnrealEd",
             "PropertyEditor", "ToolMenus", "Delivery", "Json", "InputCore",
-            "AIModule", "AIGraph", "BehaviorTreeEditor", "BlueprintGraph", "KismetCompiler", "AssetRegistry"
+            "NavigationSystem", "AssetTools", "ToolsetRegistry", "EnhancedInput", "AIModule", "AIGraph", "BehaviorTreeEditor", "BlueprintGraph", "KismetCompiler", "AssetRegistry"
         });
     }
 }

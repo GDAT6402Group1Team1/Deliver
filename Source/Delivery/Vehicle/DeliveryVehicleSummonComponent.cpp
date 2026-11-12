@@ -9,6 +9,7 @@
 #include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/DeliveryTrunkPassengerComponent.h"
 
 UDeliveryVehicleSummonComponent::UDeliveryVehicleSummonComponent()
 {
@@ -85,7 +86,7 @@ ADeliveryMotorbike* UDeliveryVehicleSummonComponent::FindSummonTarget() const
 	{
 		ADeliveryMotorbike* Bike = *It;
 		// 别人正骑着的车不能抽走
-		if (!IsValid(Bike) || Bike->GetDriver() != nullptr)
+		if (!IsValid(Bike) || Bike->GetDriver() != nullptr || Bike->HasTrunkPassenger())
 		{
 			continue;
 		}
@@ -106,6 +107,8 @@ ADeliveryMotorbike* UDeliveryVehicleSummonComponent::FindSummonTarget() const
 // 由服务器检查冷却和位置，再创建或移动车辆
 void UDeliveryVehicleSummonComponent::ServerSummon_Implementation()
 {
+    const auto* PassengerOwner = Cast<ADeliveryCharacter>(GetOwner());
+    if (PassengerOwner && PassengerOwner->TrunkPassenger && PassengerOwner->TrunkPassenger->IsPassenger()) return;
 	UWorld* World = GetWorld();
 	AActor* Owner = GetOwner();
 	if (!World || !Owner)

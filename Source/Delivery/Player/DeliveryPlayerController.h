@@ -8,6 +8,7 @@
 #include "DeliveryPlayerController.generated.h"
 
 class ADeliveryCharacter;
+class UDeliveryConversationComponent;
 class UInputAction;
 class UInputMappingContext;
 class UPostProcessComponent;
@@ -168,6 +169,7 @@ class ADeliveryPlayerController : public APlayerController
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Delivery|Voice",
               meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UDeliveryDialogueVoiceComponent> DialogueVoice;
+    UPROPERTY(VisibleAnywhere, Category="Delivery|居民") TObjectPtr<UDeliveryConversationComponent> ResidentConversation;
 
     /** 背景音乐；轨道插槽填在 BP_DeliveryManPC 上，电话期间自动闪避 */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Audio")

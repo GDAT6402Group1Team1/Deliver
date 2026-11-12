@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
@@ -6,10 +6,13 @@
 #include "DeliveryHUD.generated.h"
 
 class ADeliveryCharacter;
+class ADeliveryResidentCharacter;
+class UDeliveryConversationWidget;
 class UDeliveryHotbarWidget;
 class UDeliveryInventoryComponent;
 class UDeliveryPhoneController;
 class UDeliveryStartupWidget;
+class UDeliveryTrunkStatusWidget;
 
 // 管理本机界面处理器、面板开关和鼠标模式，控件负责布局和显示
 UCLASS()
@@ -18,6 +21,8 @@ class DELIVERY_API ADeliveryHUD : public AHUD
     GENERATED_BODY()
 public:
     ADeliveryHUD();
+    void OpenResidentConversation(ADeliveryResidentCharacter* Resident);
+    void CloseResidentConversation();
     virtual void Tick(float DeltaSeconds) override;
     // 骑车时读取驾驶员的背包，步行时读取当前角色的背包
     static ADeliveryCharacter* ResolveCharacter(APawn* Pawn);
@@ -34,6 +39,7 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="UI|Hotbar")
     TSoftClassPtr<UDeliveryHotbarWidget> HotbarWidgetClass;
 private:
+    UPROPERTY(Transient) TObjectPtr<UDeliveryConversationWidget> ConversationWidget;
     void InitializeStartupMenu();
     UFUNCTION()
     void HandleStartupPhase(EDeliveryStartupPhase Phase);
@@ -48,6 +54,8 @@ private:
     UPROPERTY(Transient)
     TObjectPtr<UDeliveryPhoneController> PhoneController;
     void RefreshHotbar();
+    void RefreshTrunkStatus();
+    UPROPERTY(Transient) TObjectPtr<UDeliveryTrunkStatusWidget> TrunkStatus;
     void RemoveHotbar();
     UPROPERTY(Transient)
     TObjectPtr<UDeliveryHotbarWidget> HotbarWidget;

@@ -96,7 +96,7 @@ void UDeliveryInteractionProbeComponent::TickComponent(float DeltaTime, ELevelTi
                 ? WidgetController->GetProgress(Character, Pickup->GetOwner()) : -1.f;
             const FText Text = WidgetController->GetPrompt(PromptTarget, PromptTarget == Pickup, Owner);
             FVector PromptLocation = PromptTarget->GetPromptLocation();
-            if (Character)
+            if (Character && !PromptTarget->bPromptAtTarget)
             {
                 // 提示跟随本机角色，镜头转开货物或车尾时仍能看见当前可用操作
                 if (const USkeletalMeshComponent* Mesh = Character->GetMesh();

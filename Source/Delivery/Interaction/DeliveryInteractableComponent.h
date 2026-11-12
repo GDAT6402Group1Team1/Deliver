@@ -74,12 +74,20 @@ class DELIVERY_API UDeliveryInteractableComponent : public UActorComponent
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
     FVector PromptOffset = FVector(0.0f, 0.0f, 180.0f);
 
+    // 开启后提示跟随交互目标，默认保留主角头顶提示
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    bool bPromptAtTarget = false;
+
     /**
      * 关掉之后既不提示也不能交互
      * 摩托车在有人骑的时候把它关掉——不然别人站旁边还能"上车"
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
     bool bInteractEnabled = true;
+
+    // 仅显式支持拖拽交接的目标开启，服务器仍执行目标自己的校验
+    UPROPERTY(EditDefaultsOnly, Category="Interaction")
+    bool bAllowWhileGrabbing = false;
 
     /** 区分 E 键物品操作和 F 键通用交互，默认使用 F 键 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")

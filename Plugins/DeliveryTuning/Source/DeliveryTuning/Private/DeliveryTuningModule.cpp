@@ -1,3 +1,5 @@
+#include "DeliveryResidentToolset.h"
+#include "ToolsetRegistry/UToolsetRegistry.h"
 #include "SDeliveryPoseDebug.h"
 #include "Modules/ModuleManager.h"
 #include "Combat/DeliveryRagdollCombatComponent.h"
@@ -193,6 +195,7 @@ public:
     // 注册调参窗口，并在编辑器菜单就绪后添加入口
     void StartupModule() override
     {
+        UToolsetRegistry::RegisterToolsetClass(UDeliveryResidentToolset::StaticClass());
         FGlobalTabmanager::Get()->RegisterNomadTabSpawner(DeliveryTuning::TabId,
             FOnSpawnTab::CreateLambda([](const FSpawnTabArgs&) {
                 return SNew(SDockTab).TabRole(ETabRole::NomadTab)[SNew(DeliveryTuning::SPanel)];
@@ -203,6 +206,7 @@ public:
     // 卸载模块时移除窗口和菜单回调
     void ShutdownModule() override
     {
+        UToolsetRegistry::UnregisterToolsetClass(UDeliveryResidentToolset::StaticClass());
         UToolMenus::UnRegisterStartupCallback(this);
         UToolMenus::UnregisterOwner(this);
         FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(DeliveryTuning::TabId);

@@ -18,4 +18,6 @@ class ADeliveryGameMode : public AGameModeBase
 	ADeliveryGameMode();
 	virtual void HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer) override;
 	virtual bool PlayerCanRestart_Implementation(APlayerController* Player) override;
+	// 出生点被先加入的玩家占用时，在附近有地面且无阻挡的位置生成，不强行重叠
+	virtual APawn* SpawnDefaultPawnAtTransform_Implementation(AController* NewPlayer, const FTransform& SpawnTransform) override;
 };

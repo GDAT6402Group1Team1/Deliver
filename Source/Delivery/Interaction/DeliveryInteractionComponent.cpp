@@ -131,7 +131,7 @@ bool UDeliveryInteractionComponent::CanUseTarget(const AActor *Target, bool bChe
         UDeliveryInteractableComponent::FindOn(Target, Key);
     if (!Interactable || !Interactable->CanInteract(Character))
         return false;
-    if (Character->GetGrabComponent() && Character->GetGrabComponent()->IsGrabbing())
+    if (Character->GetGrabComponent() && Character->GetGrabComponent()->IsGrabbing() && !Interactable->bAllowWhileGrabbing)
         return false;
     if (const UAbilitySystemComponent *ASC = Character->GetAbilitySystemComponent();
         ASC && ASC->HasMatchingGameplayTag(TAG_State_Stunned))

@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Player/DeliveryPlayerController.h"
+#include "AI/Residents/DeliveryConversationComponent.h"
 #include "Game/DeliveryStartupFlow.h"
 #include "Character/DeliveryCharacter.h"
 #include "Vehicle/DeliveryMotorbike.h"
@@ -30,6 +31,7 @@
 
 ADeliveryPlayerController::ADeliveryPlayerController()
 {
+    ResidentConversation=CreateDefaultSubobject<UDeliveryConversationComponent>(TEXT("ResidentConversation"));
     DialogueVoice = CreateDefaultSubobject<UDeliveryDialogueVoiceComponent>(TEXT("DialogueVoice"));
     GroundArrow = CreateDefaultSubobject<UDeliveryGroundArrowComponent>(TEXT("GroundArrow"));
     ObjectiveRing = CreateDefaultSubobject<UDeliveryObjectiveRingComponent>(TEXT("ObjectiveRing"));
@@ -183,6 +185,7 @@ void ADeliveryPlayerController::SetupInputComponent()
         }
     }
     Hints->BindInput();
+    ResidentConversation->BindInput();
 }
 
 // 手机界面操作转发

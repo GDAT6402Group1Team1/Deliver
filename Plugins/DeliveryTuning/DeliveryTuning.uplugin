@@ -7,5 +7,21 @@
   "Category": "Editor",
   "EnabledByDefault": true,
   "CanContainContent": false,
-  "Modules": [{"Name": "DeliveryTuning", "Type": "Editor", "LoadingPhase": "PostEngineInit"}]
+  "Modules": [
+    {
+      "Name": "DeliveryTuning",
+      "Type": "Editor",
+      "LoadingPhase": "PostEngineInit"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "ToolsetRegistry",
+      "Enabled": true
+    },
+    {
+      "Name": "EnhancedInput",
+      "Enabled": true
+    }
+  ]
 }
