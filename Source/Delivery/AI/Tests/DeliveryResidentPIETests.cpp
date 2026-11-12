@@ -324,7 +324,7 @@ private:
             IFileManager::Get().MakeDirectory(*Folder,true);
             Test->TestTrue(TEXT("保存游戏视口证据"),FFileHelper::SaveArrayToFile(Png,*(Folder/FString::Printf(TEXT("%s-%s%d.png"),Phase,Index==0?TEXT("host"):TEXT("client"),Index))));
             // Scene 读回不包含 Slate/UMG，窗口截图另外保存交谈面板和字幕
-            auto Window=Local->ViewportClient->GetWindow(); FIntVector WindowSize;
+            auto Window=Local->ViewportClient->GetWindow(); FIntVector WindowSize=FIntVector::ZeroValue;
             if (Window.IsValid() && FSlateApplication::Get().TakeScreenshot(Window.ToSharedRef(),Pixels,WindowSize))
             {
                 FImageUtils::PNGCompressImageArray(WindowSize.X,WindowSize.Y,Pixels,Png);

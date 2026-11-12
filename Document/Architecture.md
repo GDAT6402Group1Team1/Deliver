@@ -383,6 +383,10 @@ Ready 只表示达到当前可进入游戏的条件，不表示所有贴图最�
 
 ### 居民玩法接入与本机模型（2026-11-12）
 
+玩家回包过期修复：20:59 用户实测日志显示后端已收到 PlayerSpeech 并返回带台词的 200，UE 却连续以 StaleProposal 拒绝。居民回包现在核对发送时的请求快照版本，普通感知更新和无关证据过期不再作废整份建议；引用证据、目标可见性及实际动作条件仍逐项复核。若请求发出后又有新 PlayerSpeech，则合并后重答；受击继续通过 CancelPlan 作废请求。非居民基础 Agent 保留原严格版本契约。
+
+远端同步交付：合入 `ed390c0` 与 `1b44dff` 的交通／行人更新，TestForCharacter 以远端地图为底恢复两个居民及导航体，保留 3002 个远端现有 Actor 的位置、旋转、缩放和存在性；本地旧图另备份于 Saved/GitMerge。修复提交后 Unity 合编暴露的工具函数重名（居民 RebuildResidentGraph 与 ResidentFolder 独立命名），截图辅助变量显式初始化。最终 UE 5.8 DeliveryEditor 构建 Succeeded，日志 `Saved/Logs/ResidentRemoteMergeBuild.log`。后端已重启载入排队及玩家回复提示词；未启动 PIE 或执行游戏自动化，本轮新交谈行为仍待用户试玩。
+
 玩家交谈接续修复：20:50 日志证实 UI 消息进入服务器，但新请求遭遇后端 429；每次 HearSpeech 取消 HTTP 并不能终止已启动的模型计算，因而会占着两个执行槽。现改为保留在途请求，新发言合并到下一次决策；旧回复仍受上下文版本校验。传输失败、超时及过期结果最多延迟补两次。后端保持两个模型并发，最多两个请求等待空位、最多等待四秒。已校验玩家发言使用 PlayerSpeech；居民完整说完后记录 SelfSpeech，提示词据此优先回应尚未回答的玩家原话。新日志记录请求编号、玩家发言数、等位耗时和是否有台词，不记录原文或凭据。用户要求不进入游戏验证，本轮以源码检查及构建交付，模型选词和实际交互仍由用户试玩确认。
 
 构建诊断修复：将日志报告的 7 个 `.cpp` 的对应头文件移为首个 include，并在 `DeliveryTuning.uplugin` 声明 EnhancedInput 插件依赖。UE 5.8 DeliveryEditor Win64 Development 构建执行 12 个编译／链接步骤，结果 Succeeded，耗时 11.89 秒，本次输出未再出现首头文件错误或插件依赖警告。日志 `Saved/Logs/ResidentIncludeOrderBuild.log`；按用户要求未进入游戏验证。

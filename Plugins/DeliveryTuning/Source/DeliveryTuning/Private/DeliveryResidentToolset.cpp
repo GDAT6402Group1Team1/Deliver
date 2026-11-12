@@ -89,7 +89,7 @@ UAnimSequence* ImportResidentAnimation(const FString& Name,USkeletalMesh* Mesh)
     return Animation;
 }
 
-void RebuildGraph(UBehaviorTree* Tree)
+void RebuildResidentGraph(UBehaviorTree* Tree)
 {
     auto* Root = Tree->RootNode.Get();
     auto* Blackboard = Tree->BlackboardAsset.Get();
@@ -135,8 +135,8 @@ void RebuildGraph(UBehaviorTree* Tree)
 
 FString UDeliveryResidentToolset::CreateResidentAssets()
 {
-    const FString Folder=TEXT("/Game/NPC/Residents/");
-    auto* BB=ResidentAsset<UBlackboardData>(Folder+TEXT("AI/BB_Resident"));
+    const FString ResidentFolder=TEXT("/Game/NPC/Residents/");
+    auto* BB=ResidentAsset<UBlackboardData>(ResidentFolder+TEXT("AI/BB_Resident"));
     // UE 自动添加 SelfActor，所以不能用 Keys.IsEmpty 判断业务黑板是否初始化
     {
         for (const TCHAR* Name : {TEXT("Unavailable"),TEXT("HasApprovedAction")})
@@ -148,9 +148,9 @@ FString UDeliveryResidentToolset::CreateResidentAssets()
         { FBlackboardEntry Revision; Revision.EntryName=TEXT("PlanRevision"); Revision.KeyType=NewObject<UBlackboardKeyType_Int>(BB); BB->Keys.Add(Revision); }
         if (!SaveResidentAsset(BB)) return TEXT("Failed blackboard save");
     }
-    auto* TaskBP=ResidentBlueprint(UBTTask_DeliveryExecuteApprovedAction::StaticClass(),Folder+TEXT("AI/BTT_ResidentExecute"));
+    auto* TaskBP=ResidentBlueprint(UBTTask_DeliveryExecuteApprovedAction::StaticClass(),ResidentFolder+TEXT("AI/BTT_ResidentExecute"));
     FKismetEditorUtilities::CompileBlueprint(TaskBP); if (TaskBP->Status==BS_Error || !SaveResidentAsset(TaskBP)) return TEXT("Failed task blueprint");
-    auto* Tree=ResidentAsset<UBehaviorTree>(Folder+TEXT("AI/BT_Resident"));
+    auto* Tree=ResidentAsset<UBehaviorTree>(ResidentFolder+TEXT("AI/BT_Resident"));
     Tree->BlackboardAsset=BB;
     if (!Tree->RootNode)
     {
@@ -176,7 +176,7 @@ FString UDeliveryResidentToolset::CreateResidentAssets()
             Seq->Children.Add(Task);
         };
         Branch(TEXT("Unavailable"),false); Branch(TEXT("HasApprovedAction"),true); Branch(nullptr,false);
-        RebuildGraph(Tree); if (!SaveResidentAsset(Tree)) return TEXT("Failed tree save");
+        RebuildResidentGraph(Tree); if (!SaveResidentAsset(Tree)) return TEXT("Failed tree save");
     }
     if (auto* Graph=Cast<UBehaviorTreeGraph>(Tree->BTGraph))
     {
@@ -199,7 +199,7 @@ FString UDeliveryResidentToolset::CreateResidentAssets()
     }
     for (int Index=0;Index<2;++Index)
     {
-        auto* BP=ResidentBlueprint(ADeliveryResidentCharacter::StaticClass(),Folder+(Index==0?TEXT("BP_ResidentLoud"):TEXT("BP_ResidentShrewd")));
+        auto* BP=ResidentBlueprint(ADeliveryResidentCharacter::StaticClass(),ResidentFolder+(Index==0?TEXT("BP_ResidentLoud"):TEXT("BP_ResidentShrewd")));
         auto* CDO=CastChecked<ADeliveryResidentCharacter>(BP->GeneratedClass->GetDefaultObject());
         CDO->BehaviorTree=Tree;
         CDO->DisplayName=FText::FromString(Index==0?TEXT("大嗓门"):TEXT("小算盘"));
@@ -221,8 +221,8 @@ FString UDeliveryResidentToolset::CreateResidentAssets()
         FBlueprintEditorUtils::MarkBlueprintAsModified(BP); FKismetEditorUtilities::CompileBlueprint(BP);
         if (BP->Status==BS_Error || !SaveResidentAsset(BP)) return TEXT("Failed resident blueprint");
     }
-    auto* Action=ResidentAsset<UInputAction>(Folder+TEXT("Input/IA_Talk")); Action->ValueType=EInputActionValueType::Boolean;
-    auto* Mapping=ResidentAsset<UInputMappingContext>(Folder+TEXT("Input/IMC_ResidentConversation"));
+    auto* Action=ResidentAsset<UInputAction>(ResidentFolder+TEXT("Input/IA_Talk")); Action->ValueType=EInputActionValueType::Boolean;
+    auto* Mapping=ResidentAsset<UInputMappingContext>(ResidentFolder+TEXT("Input/IMC_ResidentConversation"));
     if (Mapping->GetMappings().IsEmpty()) { Mapping->MapKey(Action,EKeys::T); Mapping->MapKey(Action,EKeys::Gamepad_DPad_Right); }
     if (!SaveResidentAsset(Action) || !SaveResidentAsset(Mapping)) return TEXT("Failed input assets");
     return TEXT("Saved BB_Resident, BT_Resident, BTT_ResidentExecute, resident pair and conversation input");

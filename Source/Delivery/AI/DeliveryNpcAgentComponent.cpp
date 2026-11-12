@@ -157,9 +157,19 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
 {
     PruneEvidence();
     Reason = TEXT("StaleProposal");
+    const bool bResident=GetOwner()->IsA<ADeliveryResidentCharacter>();
+    // 回包必须对应发出时的快照，普通感知更新和无关证据过期不能吞掉已经生成的台词
+    // 非居民仍沿用基础 Agent 的严格版本契约；受击等硬中断通过 CancelPlan 作废请求编号
     if (Proposal.RequestId != ActiveRequest.RequestId || Proposal.WorldEpoch != ActiveRequest.WorldEpoch ||
-        Proposal.NpcId != NpcId || Proposal.ContextRevision != ContextRevision ||
+        Proposal.NpcId != NpcId || Proposal.ContextRevision != ActiveRequest.ContextRevision ||
+        (!bResident && Proposal.ContextRevision != ContextRevision) ||
         Proposal.PlanRevision != ActiveRequest.PlanRevision || HasActiveAction()) return false;
+    // 新的玩家话题需要合并后重答，不能让旧回应误标记后来的玩家消息已回答
+    if (bResident && Evidence.ContainsByPredicate([this](const auto& Item)
+        {
+            return Item.Kind==TEXT("PlayerSpeech") && !ActiveRequest.Evidence.ContainsByPredicate(
+                [&Item](const auto& Sent){ return Sent.EventId==Item.EventId; });
+        })) return false;
     Reason = TEXT("UnsupportedAction");
     if (!ActiveRequest.AllowedActions.Contains(Proposal.Action)) return false;
     Reason = TEXT("InvalidEvidence");
