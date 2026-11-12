@@ -342,9 +342,11 @@ details{background:var(--paper);border:1px solid var(--line);border-radius:7px;m
 <li><code>hybrid</code>：根据最新事件路由，交谈和初次感知送 LLM，其他反应送 Jev；不是固定串行等待两个模型</li>
 <li><code>codex-local</code>：本轮根据用户“就是目前聊天的 GPT”接入的<strong>本机 Demo 适配</strong>，官方 CLI 复用自身登录；不读取、复制或转发登录令牌，不读取当前聊天记录。本轮验证的 CLI 版本为 <code>0.167.0-alpha.3.2</code>；默认沿用此次用户环境的 <code>gpt-6-astra</code>，可以用 <code>DELIVERY_CODEX_MODEL</code> 显式指定。每次独立临时目录、结构化输出、只读沙箱，关闭命令工具、插件、应用、浏览器和子代理</li>
 </ul>
-<pre><code class="language-powershell">python -X utf8 Tools/DeliveryAI/server.py --provider codex-local --port 8765
+<p>在项目根目录启动本机后台服务（重复执行会报告已有进程，不重复占用端口）：</p>
+<pre><code class="language-powershell">.\Tools\DeliveryAI\start_backend.ps1
 </code></pre>
-<p>在 Project Settings → Delivery AI 开启 <code>bEnabled</code>，地址保留 <code>http://127.0.0.1:8765/v1/decisions</code>。本机 Codex Demo 将 <code>RequestTimeout</code> 设为 30 秒；后端子进程最多 24 秒，失败明确返回错误。默认项目配置保持关闭，不自动消耗模型额度。普通 API 路径仍使用较短截止时间；不把 30 秒作为交互目标。首次实测约 5.4 秒，随后游戏请求有 4–6 秒的成功结果，也遇到过 24 秒超时；尚无代表性 p95 数据。</p>
+<p>脚本隐藏启动进程并归档旧日志到 Saved/Logs；电脑重启或服务退出后需要重新运行，不设置开机自启。若要在终端前台查看日志，仍可运行 <code>python -X utf8 Tools/DeliveryAI/server.py --provider codex-local --port 8765</code>，并保持终端开启。游戏日志出现 <code>Connection refused / 127.0.0.1:8765</code> 时先确认后端进程与监听端口；它不等于模型正在思考。2026-11-12 22:37 的省略号问题已确认是后端停止、端口无监听，已恢复服务并确认 HTTP 可响应，未操作用户游戏。</p>
+<p>在 Project Settings → Delivery AI 开启 <code>bEnabled</code>，地址保留 <code>http://127.0.0.1:8765/v1/decisions</code>。本机 Codex Demo 将 <code>RequestTimeout</code> 设为 30 秒；后端子进程最多 24 秒，失败明确返回错误。当前试玩配置已持久开启，运行 AI 居民会调用本机后端；无需每次使用命令行临时开启。普通 API 路径仍使用较短截止时间；不把 30 秒作为交互目标。首次实测约 5.4 秒，随后游戏请求有 4–6 秒的成功结果，也遇到过 24 秒超时；尚无代表性 p95 数据。</p>
 <p><a href="https://learn.chatgpt.com/docs/non-interactive-mode">官方 Codex 非交互调用说明</a>说明 CLI 可复用本机登录并约束 JSON 输出；<a href="https://learn.chatgpt.com/docs/app-server">官方 App Server 说明</a>说明本地集成与商业／托管服务的认证边界。这里是本机演示接法，发布时使用独立模型 API 或获准的登录集成，不将开发者个人 Codex 登录随游戏分发。Jev 尚无真实密钥，本轮只完成适配及响应边界测试。</p>
 <h4>蓝图与测试入口</h4>
 <p>资产集中在 <code>/Game/NPC/Residents</code>：<code>BP_ResidentLoud</code>、<code>BP_ResidentShrewd</code>、<code>AI/BB_Resident</code>、<code>AI/BT_Resident</code>、<code>AI/BTT_ResidentExecute</code>、<code>Input/IA_Talk</code>、<code>Input/IMC_ResidentConversation</code> 和 <code>Animation/</code>。UE MCP 的 <code>DeliveryTuning.DeliveryResidentToolset</code> 负责创建／修复这些资源、放置居民、配置 PIE、发布测试台词、查询各世界状态和启动固定回归组。只在编辑器模块注册，打包游戏不依赖 MCP。</p>

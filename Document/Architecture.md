@@ -429,11 +429,15 @@ Ready 只表示达到当前可进入游戏的条件，不表示所有贴图最�
 - `hybrid`：根据最新事件路由，交谈和初次感知送 LLM，其他反应送 Jev；不是固定串行等待两个模型
 - `codex-local`：本轮根据用户“就是目前聊天的 GPT”接入的**本机 Demo 适配**，官方 CLI 复用自身登录；不读取、复制或转发登录令牌，不读取当前聊天记录。本轮验证的 CLI 版本为 `0.167.0-alpha.3.2`；默认沿用此次用户环境的 `gpt-6-astra`，可以用 `DELIVERY_CODEX_MODEL` 显式指定。每次独立临时目录、结构化输出、只读沙箱，关闭命令工具、插件、应用、浏览器和子代理
 
+在项目根目录启动本机后台服务（重复执行会报告已有进程，不重复占用端口）：
+
 ```powershell
-python -X utf8 Tools/DeliveryAI/server.py --provider codex-local --port 8765
+.\Tools\DeliveryAI\start_backend.ps1
 ```
 
-在 Project Settings → Delivery AI 开启 `bEnabled`，地址保留 `http://127.0.0.1:8765/v1/decisions`。本机 Codex Demo 将 `RequestTimeout` 设为 30 秒；后端子进程最多 24 秒，失败明确返回错误。默认项目配置保持关闭，不自动消耗模型额度。普通 API 路径仍使用较短截止时间；不把 30 秒作为交互目标。首次实测约 5.4 秒，随后游戏请求有 4–6 秒的成功结果，也遇到过 24 秒超时；尚无代表性 p95 数据。
+脚本隐藏启动进程并归档旧日志到 Saved/Logs；电脑重启或服务退出后需要重新运行，不设置开机自启。若要在终端前台查看日志，仍可运行 `python -X utf8 Tools/DeliveryAI/server.py --provider codex-local --port 8765`，并保持终端开启。游戏日志出现 `Connection refused / 127.0.0.1:8765` 时先确认后端进程与监听端口；它不等于模型正在思考。2026-11-12 22:37 的省略号问题已确认是后端停止、端口无监听，已恢复服务并确认 HTTP 可响应，未操作用户游戏。
+
+在 Project Settings → Delivery AI 开启 `bEnabled`，地址保留 `http://127.0.0.1:8765/v1/decisions`。本机 Codex Demo 将 `RequestTimeout` 设为 30 秒；后端子进程最多 24 秒，失败明确返回错误。当前试玩配置已持久开启，运行 AI 居民会调用本机后端；无需每次使用命令行临时开启。普通 API 路径仍使用较短截止时间；不把 30 秒作为交互目标。首次实测约 5.4 秒，随后游戏请求有 4–6 秒的成功结果，也遇到过 24 秒超时；尚无代表性 p95 数据。
 
 [官方 Codex 非交互调用说明](https://learn.chatgpt.com/docs/non-interactive-mode)说明 CLI 可复用本机登录并约束 JSON 输出；[官方 App Server 说明](https://learn.chatgpt.com/docs/app-server)说明本地集成与商业／托管服务的认证边界。这里是本机演示接法，发布时使用独立模型 API 或获准的登录集成，不将开发者个人 Codex 登录随游戏分发。Jev 尚无真实密钥，本轮只完成适配及响应边界测试。
 
