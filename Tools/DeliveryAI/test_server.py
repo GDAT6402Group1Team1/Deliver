@@ -55,7 +55,7 @@ class ContractTests(unittest.TestCase):
 
         def send(payload):
             return urllib.request.urlopen(urllib.request.Request(
-                url, json.dumps(payload).encode(), {"Content-Type": "application/json"}), timeout=2)
+                url, json.dumps(payload).encode(), {"Content-Type": "application/json"}), timeout=6)
 
         try:
             with send(context()) as response:

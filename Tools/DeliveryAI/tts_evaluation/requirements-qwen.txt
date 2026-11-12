@@ -1,0 +1,16 @@
+# 仅用于独立试听环境，不修改正式 AI 后端
+# CUDA 12.8 的 Windows / Python 3.10 轮子与官方 SHA-256
+torch @ https://download-r2.pytorch.org/whl/cu128/torch-2.7.1%2Bcu128-cp310-cp310-win_amd64.whl#sha256=5174f02de8ca14df87c8e333c4c39cf3ce93a323c9d470d690301d110a053b3c
+torchaudio @ https://download-r2.pytorch.org/whl/cu128/torchaudio-2.7.1%2Bcu128-cp310-cp310-win_amd64.whl#sha256=b1e56a999a06a5deaebfb991dc676aaa60d98139907d99badbc6dca6456637ee
+qwen-tts==0.1.1
+transformers==4.57.3
+accelerate==1.12.0
+huggingface-hub==0.36.0
+gradio==5.49.1
+librosa==0.11.0
+soundfile==0.13.1
+sox==1.5.0
+onnxruntime==1.23.2
+einops==0.8.1
+numpy==2.2.6
+# 其余传递依赖在安装后写入独立目录的 installed-packages.txt

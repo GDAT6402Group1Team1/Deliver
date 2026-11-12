@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-11-13",
+  "qwen": {
+    "model_id": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+    "revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+    "license": "Apache-2.0",
+    "download_budget_gb": 7,
+    "disk_budget_gb": 20,
+    "files": [
+      {
+        "path": "README.md",
+        "bytes": 3263,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/README.md",
+        "git_blob_sha1": "ed613da23a5e133a506b13b79055854938b9e67c"
+      },
+      {
+        "path": "config.json",
+        "bytes": 4908,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/config.json",
+        "git_blob_sha1": "5e8d5fc100536984e3a89bd87ef08e59e322b29b"
+      },
+      {
+        "path": "generation_config.json",
+        "bytes": 245,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/generation_config.json",
+        "git_blob_sha1": "1872b16d4535564abf2db5d6debe6cddd82b7f2e"
+      },
+      {
+        "path": "merges.txt",
+        "bytes": 1671839,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/merges.txt",
+        "git_blob_sha1": "20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0"
+      },
+      {
+        "path": "model.safetensors",
+        "bytes": 1811626576,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/model.safetensors",
+        "sha256": "bc3c7e785eb961179c25450d1acff03f839e0002f2f3a5aeb67b5735c0fa2adb"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "bytes": 127,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/preprocessor_config.json",
+        "git_blob_sha1": "0525dd953bb9241912f7147666f0d535165d5d4f"
+      },
+      {
+        "path": "speech_tokenizer/config.json",
+        "bytes": 2336,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/speech_tokenizer/config.json",
+        "git_blob_sha1": "06cc8dc4c5ec8a1929086b71b98c313020d9268b"
+      },
+      {
+        "path": "speech_tokenizer/configuration.json",
+        "bytes": 76,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/speech_tokenizer/configuration.json",
+        "git_blob_sha1": "ab58e2eaf53cd14a1a2a7527d9261ceea93a24cd"
+      },
+      {
+        "path": "speech_tokenizer/model.safetensors",
+        "bytes": 682293092,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/speech_tokenizer/model.safetensors",
+        "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258"
+      },
+      {
+        "path": "speech_tokenizer/preprocessor_config.json",
+        "bytes": 234,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/speech_tokenizer/preprocessor_config.json",
+        "git_blob_sha1": "ba40914f4f49ab98a8ca545d4892ef7291a39592"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "bytes": 7344,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/tokenizer_config.json",
+        "git_blob_sha1": "6ff9fd60cc623bb54bbd603cbd418c97a11528d7"
+      },
+      {
+        "path": "vocab.json",
+        "bytes": 2776833,
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/resolve/85e237c12c027371202489a0ec509ded67b5e4b5/vocab.json",
+        "git_blob_sha1": "4783fe10ac3adce15ac8f358ef5462739852c569"
+      }
+    ]
+  },
+  "kokoro": {
+    "model_id": "hexgrad/Kokoro-82M-v1.1-zh",
+    "revision": "01e7505bd6a7a2ac4975463114c3a7650a9f7218",
+    "export_source": "thewh1teagle/kokoro-onnx",
+    "export_tag": "model-files-v1.1",
+    "export_revision": "b85309f90fd2660ea3309cf0f2581360e4327555",
+    "license": "Apache-2.0",
+    "download_budget_gb": 0.6,
+    "disk_budget_gb": 2,
+    "files": [
+      {
+        "path": "kokoro-v1.1-zh.onnx",
+        "bytes": 325506167,
+        "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.1-zh.onnx",
+        "github_asset_id": 520133709,
+        "sha256": "859f9ded9f53be16c24857cdab3254a45da53c3afd5ba6ef134c7de3f822e326"
+      },
+      {
+        "path": "voices-v1.1-zh.bin",
+        "bytes": 53815880,
+        "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.1-zh.bin",
+        "github_asset_id": 233656906,
+        "verification_note": "发布方未提供 SHA-256，首次下载后记录本机 SHA-256；它用于后续一致性检查，不作为发布方校验值"
+      },
+      {
+        "path": "config.json",
+        "url": "https://huggingface.co/hexgrad/Kokoro-82M-v1.1-zh/resolve/01e7505bd6a7a2ac4975463114c3a7650a9f7218/config.json",
+        "bytes": 3228,
+        "git_blob_sha1": "ca3cdb357c0dc8a6b67692ea96d9130cfacc25b6"
+      }
+    ]
+  }
+}

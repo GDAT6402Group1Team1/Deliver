@@ -10,7 +10,7 @@ def choose(context):
     if not candidates:
         candidates = [{"action": "Wait", "target_id": "", "duration": 1,
                        "evidence_ids": []}]
-    # 选项键由本地生成，动作、目标和证据不可拆开独立采样
+    # 由后端生成选项编号，每个选项同时包含动作、目标和相关事件，模型选择一整项
     choices = {f"option_{i}": c for i, c in enumerate(candidates)}
     payload = {"model": os.environ.get("DELIVERY_JEV_MODEL", "jev-latest"),
                "state": {"persona": context["persona"], "evidence": context["evidence"]},
@@ -28,5 +28,5 @@ def choose(context):
     confidence = answer.get("confidence")
     if answer.get("type") != "choice" or answer.get("choice") not in choices or type(confidence) not in (int, float) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
         raise ValueError("invalid Jev choice")
-    # confidence 描述分布集中程度，不作为合法性或正确率证明
+    # confidence 表示模型有多倾向这个选项，不能代替游戏规则检查
     return dict(choices[answer["choice"]])

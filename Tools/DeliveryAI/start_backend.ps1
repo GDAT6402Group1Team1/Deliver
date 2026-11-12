@@ -1,6 +1,10 @@
 param(
     [ValidateSet('codex-local', 'fixture', 'llm', 'jev', 'hybrid')]
     [string]$Provider = 'codex-local',
+    [string]$Model = 'gpt-6-luna',
+    [string]$PlayerModel = 'gpt-6.1-sol',
+    [ValidateSet('qwen', 'windows')]
+    [string]$SpeechProvider = 'qwen',
     [ValidateRange(1024, 65535)]
     [int]$Port = 8765,
     [string]$PythonExecutable = 'python.exe'
@@ -13,6 +17,33 @@ $logsPath = Join-Path $projectRoot 'Saved/Logs'
 $stdoutPath = Join-Path $logsPath 'AIResidentBackend.log'
 $stderrPath = Join-Path $logsPath 'AIResidentBackend.stderr.log'
 
+function Get-ConfiguredBackendPort([string]$ConfigPath) {
+    if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) { return 8765 }
+    $inAiSection = $false
+    foreach ($line in [IO.File]::ReadLines($ConfigPath)) {
+        if ($line -match '^\s*\[([^\]]+)\]') {
+            if ($inAiSection) { break }
+            $inAiSection = $Matches[1] -eq '/Script/Delivery.DeliveryAiSettings'
+            continue
+        }
+        if ($inAiSection -and $line -match '^\s*DecisionEndpoint\s*=\s*"?([^"\s]+)"?\s*(?:[;#].*)?$') {
+            $endpoint = $null
+            if ([Uri]::TryCreate($Matches[1], [UriKind]::Absolute, [ref]$endpoint) -and
+                $endpoint.Scheme -in @('http', 'https') -and
+                $endpoint.Host -in @('localhost', '127.0.0.1') -and
+                $endpoint.Port -ge 1024 -and $endpoint.Port -le 65535) {
+                return $endpoint.Port
+            }
+        }
+    }
+    return 8765
+}
+
+# 未指定端口时，使用工程配置中的本机后端端口
+if (-not $PSBoundParameters.ContainsKey('Port')) {
+    $Port = Get-ConfiguredBackendPort (Join-Path $projectRoot 'Config/DefaultGame.ini')
+}
+
 function Get-BackendListeners {
     @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
 }
@@ -22,7 +53,7 @@ function Test-ProjectBackend([int]$BackendProcessId) {
     if (-not $processInfo -or $processInfo.Name -notmatch '^python(?:w|[0-9.]*)?\.exe$') {
         return $false
     }
-    # 比较完整脚本参数，不能只凭端口或 server.py 文件名认领其他服务
+    # 核对完整脚本路径和参数，避免把其他工程的服务当成本工程后端
     $normalizedCommand = ([string]$processInfo.CommandLine).Replace('\', '/')
     $normalizedScript = $serverPath.Replace('\', '/')
     $scriptArgument = '(?i)(?:^|[\s"])' + [regex]::Escape($normalizedScript) + '(?:[\s"]|$)'
@@ -39,10 +70,25 @@ if ($listeners.Count -gt 0) {
     throw "端口 $Port 已被其他进程占用，未启动或停止任何服务"
 }
 
-$pythonCommand = Get-Command $PythonExecutable -CommandType Application -ErrorAction Stop
+# 同名 Python 可能出现在多个 PATH 目录，使用系统查找顺序中的第一个
+$pythonCommand = Get-Command $PythonExecutable -CommandType Application -ErrorAction Stop | Select-Object -First 1
+$env:DELIVERY_CODEX_MODEL = $Model
+if (-not $PSBoundParameters.ContainsKey('PlayerModel') -and $env:DELIVERY_CODEX_PLAYER_MODEL) {
+    $PlayerModel = $env:DELIVERY_CODEX_PLAYER_MODEL
+}
+$env:DELIVERY_CODEX_PLAYER_MODEL = $PlayerModel
+$env:DELIVERY_TTS_PROVIDER = $SpeechProvider
+if ($SpeechProvider -eq 'qwen') {
+    $voicePython = Join-Path $projectRoot 'Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe'
+    $voiceModel = Join-Path $projectRoot 'Saved/AIResearch/TtsEvaluation/qwen/model/config.json'
+    if (-not (Test-Path -LiteralPath $voicePython -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $voiceModel -PathType Leaf)) {
+        throw '缺少已安装的 Qwen 语音环境。请先完成独立语音环境安装；需要原声音时显式使用 -SpeechProvider windows'
+    }
+}
 New-Item -ItemType Directory -Path $logsPath -Force | Out-Null
 
-# 保留旧日志，避免重启后丢失此前失败请求的证据
+# 保留旧日志，方便重启后检查之前的失败原因
 $archiveSuffix = (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
 foreach ($logPath in @($stdoutPath, $stderrPath)) {
     if (Test-Path -LiteralPath $logPath) {

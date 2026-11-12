@@ -1,0 +1,10 @@
+# 中文 ONNX 试听，使用 CPU，不安装 PyTorch 或 sherpa
+kokoro-onnx==0.6.1
+misaki-fork[zh]==0.9.6
+onnxruntime==1.23.2
+numpy==2.2.6
+soundfile==0.13.1
+espeakng-loader==0.2.4
+phonemizer==3.6.0
+# 仅选择中文扩展，英文扩展会额外引入 PyTorch
+# 其余传递依赖在安装后写入独立目录的 installed-packages.txt

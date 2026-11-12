@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "python_path": "Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe",
+  "model_path": "Saved/AIResearch/TtsEvaluation/qwen/model",
+  "installation_path": "Saved/AIResearch/TtsEvaluation/qwen/installation.json",
+  "model_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+  "voices": {
+    "male": {"provider": "qwen", "speaker": "Uncle_Fu"},
+    "female": {"provider": "windows"}
+  },
+  "packages": {"torch": "2.7.1+cu128", "qwen-tts": "0.1.1", "transformers": "4.57.3"},
+  "sample_rate": 24000,
+  "max_pcm_bytes": 384000,
+  "max_text_chars": 120,
+  "max_new_tokens": 256,
+  "cpu_threads": 4,
+  "seed": 20261113,
+  "startup_timeout_seconds": 60,
+  "synthesis_timeout_seconds": 20,
+  "cancel_grace_seconds": 2,
+  "process_exit_timeout_seconds": 5
+}

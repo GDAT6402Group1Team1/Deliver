@@ -1,0 +1,43 @@
+{
+  "repository": "https://github.com/andimarafioti/faster-qwen3-tts",
+  "commit": "a70afc0f81f7f5f8801c3227968f1102f43f211c",
+  "tag": "v0.3.2",
+  "license": "MIT",
+  "author": "Andres Marafioti",
+  "files": [
+    {
+      "path": "predictor_graph.py",
+      "source_path": "faster_qwen3_tts/predictor_graph.py",
+      "url": "https://raw.githubusercontent.com/andimarafioti/faster-qwen3-tts/a70afc0f81f7f5f8801c3227968f1102f43f211c/faster_qwen3_tts/predictor_graph.py",
+      "bytes": 8664,
+      "sha256": "9f74155040fb6ac2381375331f76fb4efcd5b3c0761ebfc4977717223145cb76",
+      "git_blob_sha1": "38a52ca2b861096c8eacc09a47c87c806c18b35e"
+    },
+    {
+      "path": "sampling.py",
+      "source_path": "faster_qwen3_tts/sampling.py",
+      "url": "https://raw.githubusercontent.com/andimarafioti/faster-qwen3-tts/a70afc0f81f7f5f8801c3227968f1102f43f211c/faster_qwen3_tts/sampling.py",
+      "bytes": 2358,
+      "sha256": "d52f136cb5d985f532239cb3f74ce5e8b9bfd269080e99295f09ce5f87bac988",
+      "git_blob_sha1": "464cd52d06ea7f5e1458e90416bdad09b6f5d587"
+    },
+    {
+      "path": "LICENSE",
+      "source_path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/andimarafioti/faster-qwen3-tts/a70afc0f81f7f5f8801c3227968f1102f43f211c/LICENSE",
+      "bytes": 1073,
+      "sha256": "442472a518bf71e371f2581aa0fcaf6ee2ef6854f78c340fdbe87c099950ea82",
+      "git_blob_sha1": "763b0decc696101b6daa07ac4ba48266a84d2449"
+    },
+    {
+      "path": "__init__.py",
+      "source_path": null,
+      "url": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "origin": "Empty local package initializer"
+    }
+  ],
+  "download_bytes": 12095,
+  "scope": "Delivery Qwen worker; fixed source, original MIT license retained; FP32 sampling is applied by a runtime wrapper"
+}
