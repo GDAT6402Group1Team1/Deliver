@@ -174,7 +174,8 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
     if (!ActiveRequest.AllowedActions.Contains(Proposal.Action)) return false;
     Reason = TEXT("InvalidEvidence");
     for (const auto& Id : Proposal.EvidenceIds)
-        if (!Evidence.ContainsByPredicate([&Id](const auto& Item) { return Item.EventId == Id; })) return false;
+        if (!ActiveRequest.Evidence.ContainsByPredicate([&Id](const auto& Item) { return Item.EventId == Id; }) ||
+            !Evidence.ContainsByPredicate([&Id](const auto& Item) { return Item.EventId == Id; })) return false;
     AActor* Target = nullptr;
     Reason = TEXT("InvalidTarget");
     if (Proposal.Action == EDeliveryNpcAction::LookAt || Proposal.Action == EDeliveryNpcAction::MoveTo ||
