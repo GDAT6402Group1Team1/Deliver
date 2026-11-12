@@ -106,6 +106,10 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
     void UpdateTrunkPose(const FTransform& Frame, float Blend, float Unfold, const FVector& CarrierVelocity, float Dt);
     float GetTrunkPoseError() const;
     FVector GetPhysicalPelvisLocation() const;
+    // 身体速度取髋部刚体，供擦身与撞击检测读取
+    FVector GetPhysicalPelvisVelocity() const;
+    // 视线跟随实际头部，骨骼尚未准备好时使用角色视点
+    FVector GetHeadLocation() const;
     void ReleaseTrunkVelocity(float MaxSpeed);
     void EmergencyMoveTrunkBody(const FVector& HipsLocation);
     TArray<FDeliveryTrunkBodyControl> TrunkControls;

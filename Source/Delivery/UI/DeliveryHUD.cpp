@@ -11,12 +11,14 @@
 #include "Player/DeliveryPlayerController.h"
 #include "UI/Controllers/DeliveryPhoneController.h"
 #include "TimerManager.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 
 ADeliveryHUD::ADeliveryHUD()
 {
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.TickInterval = 0.1f;
     HotbarWidgetClass = FSoftClassPath(TEXT("/Game/UI/Inventory/WBP_DeliveryHotbar.WBP_DeliveryHotbar_C"));
+    ConversationWidgetClass = FSoftClassPath(TEXT("/Game/UI/Conversation/WBP_Conversation.WBP_Conversation_C"));
 }
 
 ADeliveryCharacter* ADeliveryHUD::ResolveCharacter(APawn* Pawn)
@@ -31,6 +33,7 @@ void ADeliveryHUD::Tick(float DeltaSeconds)
     Super::Tick(DeltaSeconds);
     RefreshHotbar();
     RefreshTrunkStatus();
+    RefreshConversationLayout();
 }
 
 void ADeliveryHUD::RefreshHotbar()
@@ -200,18 +203,36 @@ void ADeliveryHUD::RefreshTrunkStatus()
     TrunkStatus->SetStatus(Passenger->GetStatusText(),bTransition ? Passenger->GetPhaseProgress():Passenger->GetRecoveryProgress());
 }
 
-void ADeliveryHUD::OpenResidentConversation(ADeliveryResidentCharacter* Resident)
+void ADeliveryHUD::OpenResidentConversation(ADeliveryNpcCharacter* Resident)
 {
     CloseResidentConversation();
-    ConversationWidget=CreateWidget<UDeliveryConversationWidget>(GetOwningPlayerController(),UDeliveryConversationWidget::StaticClass());
+    UClass* WidgetClass=ConversationWidgetClass.LoadSynchronous();
+    if (!WidgetClass) WidgetClass=UDeliveryConversationWidget::StaticClass();
+    ConversationWidget=CreateWidget<UDeliveryConversationWidget>(GetOwningPlayerController(),WidgetClass);
     if (!ConversationWidget) return;
     ConversationWidget->SetResident(Resident);
     ConversationWidget->AddToViewport(40);
-    ConversationWidget->SetDesiredSizeInViewport(FVector2D(560,280));
-    ConversationWidget->SetAlignmentInViewport(FVector2D(.5,1));
-    int32 X=0,Y=0; GetOwningPlayerController()->GetViewportSize(X,Y);
-    ConversationWidget->SetPositionInViewport(FVector2D(X*.5,Y-40));
+    RefreshConversationLayout();
     SetPanelOpen(TEXT("ResidentConversation"),true);
+    ConversationWidget->SetKeyboardFocus();
+}
+void ADeliveryHUD::RefreshConversationLayout()
+{
+    if (!ConversationWidget || !GetOwningPlayerController()) return;
+    int32 Width=0,Height=0;
+    GetOwningPlayerController()->GetViewportSize(Width,Height);
+    if (Width<=0 || Height<=0) return;
+    const float Scale=FMath::Max(.1f,UWidgetLayoutLibrary::GetViewportScale(this));
+    // 按屏幕像素确定面板大小，UMG 的 ScaleBox 同时缩放文字、布局和点击区域
+    float PanelWidth=FMath::Clamp(Width*.36f,320.f,440.f);
+    PanelWidth=FMath::Min(PanelWidth,FMath::Max(1.f,Width-32.f));
+    const float PanelHeight=FMath::Min(PanelWidth*.75f,FMath::Max(1.f,Height-32.f));
+    PanelWidth=PanelHeight/.75f;
+    ConversationWidget->SetDesiredSizeInViewport(FVector2D(PanelWidth/Scale,PanelHeight/Scale));
+    // 手机打开时将交谈移到左下角，两边的操作和来电状态继续保持
+    const bool bPhoneOpen=IsPanelOpen(UDeliveryPhoneController::PanelId);
+    ConversationWidget->SetAlignmentInViewport(FVector2D(bPhoneOpen?0.f:1.f,1.f));
+    ConversationWidget->SetPositionInViewport(FVector2D(bPhoneOpen?16.f:Width-16.f,Height-16.f));
 }
 void ADeliveryHUD::CloseResidentConversation()
 {

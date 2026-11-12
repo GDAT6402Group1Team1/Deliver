@@ -1,10 +1,10 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
-#include "AI/DeliveryAiGatewaySubsystem.h"
-#include "AI/DeliveryAiSettings.h"
-#include "AI/DeliveryNpcAgentComponent.h"
-#include "AI/BTTask_DeliveryExecuteApprovedAction.h"
+#include "AI/Network/DeliveryAiGatewaySubsystem.h"
+#include "AI/Network/DeliveryAiSettings.h"
+#include "AI/Decision/DeliveryNpcAgentComponent.h"
+#include "AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.h"
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
@@ -145,8 +145,8 @@ bool FDeliveryAiInfrastructureTest::RunTest(const FString&)
     TestEqual(TEXT("通过校验只进入 Accepted"), Agent->GetPublicState().Status, EDeliveryNpcActionStatus::Accepted);
     auto State = Agent->GetPublicState();
     TestFalse(TEXT("未开始不能直接成功"), Agent->TryFinishAction(State.ActionId, EDeliveryNpcActionStatus::Succeeded, NAME_None));
-    TestTrue(TEXT("行为树能领取已批准动作"), Agent->StartApprovedAction(State));
-    TestFalse(TEXT("动作不能重复领取"), Agent->StartApprovedAction(State));
+    TestTrue(TEXT("行为树能领取已批准动作"), Agent->StartAction(State));
+    TestFalse(TEXT("动作不能重复领取"), Agent->StartAction(State));
     TestFalse(TEXT("错误动作 ID 不能完成"), Agent->TryFinishAction(FGuid::NewGuid(), EDeliveryNpcActionStatus::Succeeded, NAME_None));
     TestTrue(TEXT("执行结果只确认一次"), Agent->TryFinishAction(State.ActionId, EDeliveryNpcActionStatus::Succeeded, NAME_None));
     TestFalse(TEXT("迟到取消不能覆盖成功"), Agent->TryFinishAction(State.ActionId, EDeliveryNpcActionStatus::Cancelled, TEXT("Late")));
@@ -257,7 +257,7 @@ bool FDeliveryAiBehaviorTreeTest::RunTest(const FString&)
     auto* Tree = NewObject<UBehaviorTree>();
     Tree->RootNode = NewObject<UBTComposite_Sequence>(Tree);
     FBTCompositeChild Child;
-    Child.ChildTask = NewObject<UBTTask_DeliveryExecuteApprovedAction>(Tree);
+    Child.ChildTask = NewObject<UBTTask_DeliveryExecuteNpcAction>(Tree);
     Tree->RootNode->Children.Add(Child);
     if (!TestTrue(TEXT("原生行为树启动"), Controller->RunBehaviorTree(Tree))) return false;
     ++GFrameCounter;
@@ -286,7 +286,7 @@ bool FDeliveryAiBehaviorTreeTest::RunTest(const FString&)
     Gateway->Complete(Request.RequestId, Reply(Request, TEXT("LookAt"), Item.SubjectId, Item.EventId), NAME_None);
     Target->SetActorLocation(FVector(5000, 0, 0));
     FDeliveryNpcPublicState State;
-    TestFalse(TEXT("领取时再次检查目标距离"), Agent->StartApprovedAction(State));
+    TestFalse(TEXT("领取时再次检查目标距离"), Agent->StartAction(State));
     TestEqual(TEXT("前置条件变化记为失败"), Agent->GetPublicState().Status, EDeliveryNpcActionStatus::Failed);
     return true;
 }

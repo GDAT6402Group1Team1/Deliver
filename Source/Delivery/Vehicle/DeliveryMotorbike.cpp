@@ -1,7 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Vehicle/DeliveryMotorbike.h"
-#include "AI/Residents/DeliveryVehicleHoldComponent.h"
+#include "AI/Actions/DeliveryVehicleHoldComponent.h"
 #include "Vehicle/DeliveryTrunkPassengerComponent.h"
 #include "Vehicle/DeliveryHornReceiver.h"
 #include "Traffic/DeliveryTrafficCarComponent.h"
@@ -13,7 +13,7 @@
 #include "Audio/DeliveryVehicleAudioComponent.h"
 #include "Components/BoxComponent.h"
 #include "Combat/DeliveryImpactReceiver.h"
-#include "AI/Residents/DeliveryResidentCharacter.h"
+#include "AI/Characters/DeliveryNpcCharacter.h"
 #include "Combat/DeliveryCollisionChannels.h"
 #include "Vehicle/DeliveryRiderAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"

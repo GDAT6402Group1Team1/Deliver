@@ -16,6 +16,7 @@ class UMaterialInstanceDynamic;
 class UPoseableMeshComponent;
 class USkeletalMesh;
 class USkeletalMeshComponent;
+class UDeliveryNpcLookComponent;
 
 /** 行人在一次行程里的三个阶段，出现和消失各占线段的一小段，不额外计时 */
 UENUM()
@@ -68,6 +69,9 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 
 	virtual void Tick(float DeltaTime) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UDeliveryNpcLookComponent> Look;
 
 	/**
 	 * 由路线在生成后立刻调用，注入这一趟的全部参数
@@ -420,6 +424,9 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 
 	/** 站住时的小动作：躯干轻微晃动，别的骨骼保持参考姿势 */
 	void UpdateIdleSway(float DeltaTime);
+	// 在原来的走路或站立姿势上转头，不改变路线和身体位置
+	void UpdateHeadLook(float DeltaTime);
+	FRotator HeadLookRotation = FRotator::ZeroRotator;
 
 	/**
 	 * 走到端点：能接上下一条就换过去继续走，接不上返回 false 由调用方退场

@@ -48,6 +48,22 @@ UDeliveryActiveRagdollComponent::UDeliveryActiveRagdollComponent()
 	AxeSwingAnimation = AxeAnimation.Object;
 }
 
+FVector UDeliveryActiveRagdollComponent::GetPhysicalPelvisVelocity() const
+{
+    if (const FBodyInstance* Body = Mesh ? Mesh->GetBodyInstance(Bones.Hips) : nullptr;
+        Body && Body->IsInstanceSimulatingPhysics())
+        return Body->GetUnrealWorldVelocity();
+    return GetOwner() ? GetOwner()->GetVelocity() : FVector::ZeroVector;
+}
+
+FVector UDeliveryActiveRagdollComponent::GetHeadLocation() const
+{
+    if (Mesh && Mesh->GetBoneIndex(Bones.Head) != INDEX_NONE)
+        return Mesh->GetSocketLocation(Bones.Head);
+    if (const APawn* Pawn = Cast<APawn>(GetOwner())) return Pawn->GetPawnViewLocation();
+    return GetOwner() ? GetOwner()->GetActorLocation() : FVector::ZeroVector;
+}
+
 // 登记身体控制模式和物理快照的同步字段
 void UDeliveryActiveRagdollComponent::GetLifetimeReplicatedProps(
     TArray<FLifetimeProperty>& OutLifetimeProps) const

@@ -1,16 +1,17 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
-#include "AI/Residents/DeliveryResidentCharacter.h"
-#include "AI/Residents/DeliveryResidentCombatComponent.h"
-#include "AI/Residents/DeliveryNpcPresentationComponent.h"
-#include "AI/Residents/DeliveryVehicleHoldComponent.h"
-#include "AI/DeliveryNpcAgentComponent.h"
-#include "AI/DeliveryAiGatewaySubsystem.h"
-#include "AI/DeliveryAiSettings.h"
+#include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Actions/DeliveryNpcCombatComponent.h"
+#include "AI/Presentation/DeliveryNpcPresentationComponent.h"
+#include "AI/Actions/DeliveryVehicleHoldComponent.h"
+#include "AI/Decision/DeliveryNpcAgentComponent.h"
+#include "AI/Network/DeliveryAiGatewaySubsystem.h"
+#include "AI/Network/DeliveryAiSettings.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Character/DeliveryCharacter.h"
 #include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -32,10 +33,99 @@ bool FDeliveryResidentIntegrationTest::RunTest(const FString&)
     Box->SetCollisionResponseToChannel(ECC_GameTraceChannel3,ECR_Ignore);
     Box->RegisterComponent(); Floor->SetActorLocation(FVector(0,0,-20));
     FActorSpawnParameters Spawn; Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    auto* A=World->SpawnActor<ADeliveryResidentCharacter>(FVector(0,0,90),FRotator::ZeroRotator,Spawn);
-    auto* B=World->SpawnActor<ADeliveryResidentCharacter>(FVector(120,0,90),FRotator::ZeroRotator,Spawn);
+    auto* A=World->SpawnActor<ADeliveryNpcCharacter>(FVector(0,0,90),FRotator::ZeroRotator,Spawn);
+    auto* B=World->SpawnActor<ADeliveryNpcCharacter>(FVector(120,0,90),FRotator::ZeroRotator,Spawn);
     auto Tick=[&](float Seconds)
     { for (int i=0;i<FMath::CeilToInt(Seconds/.02f);++i) { ++GFrameCounter; World->Tick(LEVELTICK_All,.02f); } };
+    TestTrue(TEXT("导航已将近处目标判定为到达"),A->HasReachedMoveTarget(B));
+    TestFalse(TEXT("已到达的目标不再提供移动动作"),A->CanExecute(EDeliveryNpcAction::MoveTo,B));
+    B->SetActorLocation(FVector(250,0,90));
+    TestTrue(TEXT("尚未到达的目标仍可选择移动"),A->CanExecute(EDeliveryNpcAction::MoveTo,B));
+    B->GetCapsuleComponent()->SetCapsuleSize(100,110);
+    TestTrue(TEXT("较大目标的到达判断包含目标碰撞半径"),A->HasReachedMoveTarget(B));
+    TestFalse(TEXT("站在较大目标旁边也不再重复移动"),A->CanExecute(EDeliveryNpcAction::MoveTo,B));
+    B->GetCapsuleComponent()->SetCapsuleSize(34,88);B->SetActorLocation(FVector(120,0,90));
+    FDeliveryNpcDecisionRequest SilentRequest;
+    FGuid SilentMessage;
+    auto StartSilentReply=[&](bool bStream)
+    {
+        A->Agent->CancelPlan(TEXT("NextReplyTest"));
+        SilentMessage=FGuid::NewGuid();
+        FDeliveryNpcObservation Message;Message.EventId=SilentMessage;Message.Kind=TEXT("PlayerSpeech");
+        Message.Subject=B;Message.Source=EDeliveryNpcEvidenceSource::Heard;Message.Description=TEXT("你看一下他");
+        A->Agent->ObserveEvent(Message);
+        Settings->bEnabled=true;
+        const bool Queued=A->Agent->RequestDecision();Settings->bEnabled=false;
+        if (!Queued) return false;
+        SilentRequest=A->Agent->ActiveRequest;
+        World->GetSubsystem<UDeliveryAiGatewaySubsystem>()->Cancel(A->Agent);
+        TestFalse(TEXT("给模型的候选中不包含已到达目标的移动"),SilentRequest.Candidates.ContainsByPredicate([](const auto& C){return C.Action==EDeliveryNpcAction::MoveTo;}));
+        const auto* Candidate=SilentRequest.Candidates.FindByPredicate([](const auto& C){return C.Action==EDeliveryNpcAction::LookAt;});
+        if (!Candidate) return false;
+        FDeliveryNpcDecisionProposal Proposal;Proposal.WorldEpoch=SilentRequest.WorldEpoch;Proposal.NpcId=SilentRequest.NpcId;
+        Proposal.RequestId=SilentRequest.RequestId;Proposal.ContextRevision=SilentRequest.ContextRevision;Proposal.PlanRevision=SilentRequest.PlanRevision;
+        Proposal.Duration=1;Proposal.Action=EDeliveryNpcAction::Wait;
+        FName Reason;
+        TestFalse(TEXT("玩家尚未获得回应时拒绝无台词等待"),A->Agent->TryAcceptProposal(Proposal,Reason));
+        TestEqual(TEXT("空等被拒绝的原因明确"),Reason,FName(TEXT("MissingPlayerReply")));
+        Proposal.Action=Candidate->Action;Proposal.TargetId=Candidate->TargetId;Proposal.EvidenceIds=Candidate->EvidenceIds;
+        if (bStream)
+        {
+            if (!A->Agent->ReceiveStreamDecision(Proposal.RequestId,Proposal)) return false;
+        }
+        else A->Agent->ReceiveDecision(Proposal.RequestId,&Proposal,NAME_None);
+        FDeliveryNpcPublicState Action;
+        return A->Agent->StartAction(Action) && A->ExecuteAction(Action);
+    };
+    auto ReplyCount=[&]()
+    {
+        return A->Agent->Evidence.FilterByPredicate([&](const auto& Item)
+            {return Item.Kind==TEXT("ActionReply") && Item.ReplyToEventId==SilentMessage;}).Num();
+    };
+    if (!TestTrue(TEXT("无台词动作可以作为非流式建议开始"),StartSilentReply(false))) return false;
+    TestEqual(TEXT("动作开始不等于回应完成"),ReplyCount(),0);
+    const FGuid FirstSilentAction=A->Agent->GetPublicState().ActionId;
+    A->Agent->TryFinishAction(FirstSilentAction,EDeliveryNpcActionStatus::Succeeded,NAME_None);
+    TestEqual(TEXT("非流式动作成功后记录回应"),ReplyCount(),1);
+    A->Agent->TryFinishAction(FirstSilentAction,EDeliveryNpcActionStatus::Succeeded,NAME_None);
+    TestEqual(TEXT("同一动作结束通知不会重复记录回应"),ReplyCount(),1);
+    Settings->bEnabled=true;
+    const bool FollowupQueued=A->Agent->RequestDecision();Settings->bEnabled=false;
+    if (!TestTrue(TEXT("动作回应完成后可以继续请求"),FollowupQueued)) return false;
+    const auto Followup=A->Agent->ActiveRequest;
+    World->GetSubsystem<UDeliveryAiGatewaySubsystem>()->Cancel(A->Agent);
+    FDeliveryNpcDecisionProposal QuietWait;QuietWait.WorldEpoch=Followup.WorldEpoch;QuietWait.NpcId=Followup.NpcId;
+    QuietWait.RequestId=Followup.RequestId;QuietWait.ContextRevision=Followup.ContextRevision;QuietWait.PlanRevision=Followup.PlanRevision;
+    QuietWait.Action=EDeliveryNpcAction::Wait;QuietWait.Duration=1;
+    FName QuietWaitReason;
+    TestTrue(TEXT("已经用动作回应过的问题允许安静等待"),A->Agent->TryAcceptProposal(QuietWait,QuietWaitReason));
+    TestFalse(TEXT("安静等待不重复关联已回应的玩家消息"),A->Agent->GetPublicState().ReplyToEventId.IsValid());
+    if (!TestTrue(TEXT("准备动作失败的无台词回应"),StartSilentReply(false))) return false;
+    A->Agent->TryFinishAction(A->Agent->GetPublicState().ActionId,EDeliveryNpcActionStatus::Failed,TEXT("TestFailure"));
+    TestEqual(TEXT("失败动作不能算已回应"),ReplyCount(),0);
+    if (!TestTrue(TEXT("准备流式先结束的无台词回应"),StartSilentReply(true))) return false;
+    A->Agent->FinishReply(SilentRequest.RequestId,true,0);
+    TestEqual(TEXT("收到零句回复时仍要等待动作完成"),ReplyCount(),0);
+    TestTrue(TEXT("零句回复保留当前动作直到执行结束"),A->Presentation->IsReplyWithoutSpeech(A->Agent->GetPublicState().ActionId));
+    A->Agent->TryFinishAction(A->Agent->GetPublicState().ActionId,EDeliveryNpcActionStatus::Succeeded,NAME_None);
+    TestEqual(TEXT("流先结束、动作后成功时记录一次回应"),ReplyCount(),1);
+    if (!TestTrue(TEXT("准备动作先结束的无台词回应"),StartSilentReply(true))) return false;
+    A->Agent->TryFinishAction(A->Agent->GetPublicState().ActionId,EDeliveryNpcActionStatus::Succeeded,NAME_None);
+    TestEqual(TEXT("动作先成功时不能猜测模型是否还会发来台词"),ReplyCount(),0);
+    A->Agent->FinishReply(SilentRequest.RequestId,true,0);
+    TestEqual(TEXT("动作先结束、流后确认零句时记录一次回应"),ReplyCount(),1);
+    if (!TestTrue(TEXT("准备后端失败的无台词回应"),StartSilentReply(true))) return false;
+    A->Agent->TryFinishAction(A->Agent->GetPublicState().ActionId,EDeliveryNpcActionStatus::Succeeded,NAME_None);
+    A->Agent->FinishReply(SilentRequest.RequestId,false,0);
+    TestEqual(TEXT("后端失败没有确认零句，不能假定回应完成"),ReplyCount(),0);
+    if (!TestTrue(TEXT("准备包含台词的流式回应"),StartSilentReply(true))) return false;
+    FDeliveryNpcSentence Spoken;Spoken.Sequence=0;Spoken.Text=TEXT("我看着呢");
+    A->Agent->ReceiveSentence(SilentRequest.RequestId,Spoken);
+    A->Agent->FinishReply(SilentRequest.RequestId,true,1);
+    A->Agent->TryFinishAction(A->Agent->GetPublicState().ActionId,EDeliveryNpcActionStatus::Succeeded,NAME_None);
+    TestEqual(TEXT("有台词的回复等待台词播放结束，不提前记作无声回应"),ReplyCount(),0);
+    TestFalse(TEXT("无台词动作没有伪造说话记录"),A->Agent->Evidence.ContainsByPredicate([](const auto& Item){return Item.Kind==TEXT("SelfSpeech");}));
+    A->Agent->CancelPlan(TEXT("ReplyTestsFinished"));
     TestTrue(TEXT("近距离居民可以挥拳"),A->Combat->CanStrike(B));
     const FGuid Attack=FGuid::NewGuid();
     TestTrue(TEXT("第一拳接受"),A->Combat->StartStrike(B,Attack));
@@ -69,7 +159,7 @@ bool FDeliveryResidentIntegrationTest::RunTest(const FString&)
         P.TargetId=Candidate->TargetId; P.EvidenceIds=Candidate->EvidenceIds; P.Duration=4;
         A->Agent->ReceiveDecision(P.RequestId,&P,NAME_None);
         FDeliveryNpcPublicState Action;
-        return A->Agent->StartApprovedAction(Action) && A->BeginApprovedAction(Action);
+        return A->Agent->StartAction(Action) && A->ExecuteAction(Action);
     };
     TestTrue(TEXT("审批后执行拽车"),ApproveHold());
     TestTrue(TEXT("车辆占用存在"),Bike->ResidentHold->IsHeld());

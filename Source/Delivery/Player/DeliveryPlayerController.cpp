@@ -1,7 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Player/DeliveryPlayerController.h"
-#include "AI/Residents/DeliveryConversationComponent.h"
+#include "AI/Conversation/DeliveryConversationComponent.h"
 #include "Game/DeliveryStartupFlow.h"
 #include "Character/DeliveryCharacter.h"
 #include "Vehicle/DeliveryMotorbike.h"

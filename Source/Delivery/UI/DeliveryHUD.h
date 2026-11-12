@@ -6,7 +6,7 @@
 #include "DeliveryHUD.generated.h"
 
 class ADeliveryCharacter;
-class ADeliveryResidentCharacter;
+class ADeliveryNpcCharacter;
 class UDeliveryConversationWidget;
 class UDeliveryHotbarWidget;
 class UDeliveryInventoryComponent;
@@ -21,7 +21,7 @@ class DELIVERY_API ADeliveryHUD : public AHUD
     GENERATED_BODY()
 public:
     ADeliveryHUD();
-    void OpenResidentConversation(ADeliveryResidentCharacter* Resident);
+    void OpenResidentConversation(ADeliveryNpcCharacter* Resident);
     void CloseResidentConversation();
     virtual void Tick(float DeltaSeconds) override;
     // 骑车时读取驾驶员的背包，步行时读取当前角色的背包
@@ -38,7 +38,10 @@ protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     UPROPERTY(EditDefaultsOnly, Category="UI|Hotbar")
     TSoftClassPtr<UDeliveryHotbarWidget> HotbarWidgetClass;
+    UPROPERTY(EditDefaultsOnly, Category="UI|Conversation")
+    TSoftClassPtr<UDeliveryConversationWidget> ConversationWidgetClass;
 private:
+    void RefreshConversationLayout();
     UPROPERTY(Transient) TObjectPtr<UDeliveryConversationWidget> ConversationWidget;
     void InitializeStartupMenu();
     UFUNCTION()

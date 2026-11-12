@@ -1,6 +1,7 @@
 ﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "NPC/DeliveryPedestrian.h"
+#include "AI/Presentation/DeliveryNpcLookComponent.h"
 #include "Traffic/DeliveryTrafficCarComponent.h"
 #include "Vehicle/DeliveryMotorbike.h"
 
@@ -59,6 +60,7 @@ ADeliveryPedestrian::ADeliveryPedestrian()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
+	Look = CreateDefaultSubobject<UDeliveryNpcLookComponent>(TEXT("Look"));
 
 	Mesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh"));
 	SetRootComponent(Mesh);
@@ -323,6 +325,7 @@ void ADeliveryPedestrian::Tick(float DeltaTime)
 	// 两边同时写的表现是人一边躺着一边被拖回路线上
 	if (bKnockedDown)
 	{
+		HeadLookRotation = FRotator::ZeroRotator;
 		UpdateKnockdown(DeltaTime);
 		return;
 	}
@@ -331,6 +334,7 @@ void ADeliveryPedestrian::Tick(float DeltaTime)
 	// 两边同时写的表现是人一边往上立一边被拖着往前走
 	if (Phase == EDeliveryPedestrianPhase::StandingUp)
 	{
+		HeadLookRotation = FRotator::ZeroRotator;
 		UpdateGetUp(DeltaTime);
 		return;
 	}
@@ -353,6 +357,7 @@ void ADeliveryPedestrian::Tick(float DeltaTime)
 				UpdateIdleSway(DeltaTime);
 			}
 		}
+		UpdateHeadLook(DeltaTime);
 		return;
 	}
 
@@ -405,6 +410,7 @@ void ADeliveryPedestrian::Tick(float DeltaTime)
 				UpdateIdleSway(DeltaTime);
 			}
 		}
+		UpdateHeadLook(DeltaTime);
 		return;
 	}
 
@@ -465,6 +471,31 @@ void ADeliveryPedestrian::Tick(float DeltaTime)
 			UpdateIdleSway(DeltaTime);
 		}
 	}
+	UpdateHeadLook(DeltaTime);
+}
+
+void ADeliveryPedestrian::UpdateHeadLook(float DeltaTime)
+{
+	if (!bProceduralGait || !PoseableBody || !ActiveMesh || !Look || GetNetMode() == NM_DedicatedServer) return;
+	const auto& Skeleton = ActiveMesh->GetRefSkeleton();
+	const int32 Head = Skeleton.FindBoneIndex(TEXT("Head"));
+	if (Head == INDEX_NONE) return;
+	const int32 Parent = Skeleton.GetParentIndex(Head);
+	if (Parent == INDEX_NONE) return;
+	FRotator Desired = FRotator::ZeroRotator;
+	if (const AActor* Target = Look->GetLookTarget())
+	{
+		const FVector Origin = PoseableBody->GetBoneLocationByName(TEXT("Head"), EBoneSpaces::WorldSpace);
+		const FVector Direction = PoseableBody->GetComponentTransform().InverseTransformVectorNoScale(UDeliveryNpcLookComponent::GetLookPoint(Target) - Origin);
+		const FRotator Aim = Direction.Rotation();
+		Desired = FRotator(FMath::Clamp(Aim.Pitch, -Look->HeadPitchLimit, Look->HeadPitchLimit),
+		                  FMath::Clamp(Aim.Yaw, -Look->HeadYawLimit, Look->HeadYawLimit), 0);
+	}
+	HeadLookRotation = FMath::RInterpTo(HeadLookRotation, Desired, DeltaTime, Look->HeadFollowSpeed);
+	// 每次从当前颈部和参考头部姿势计算，避免把上一帧的转头再叠一遍
+	const FQuat ParentRotation = PoseableBody->GetBoneRotationByName(Skeleton.GetBoneName(Parent), EBoneSpaces::ComponentSpace).Quaternion();
+	const FQuat Neutral = ParentRotation * Skeleton.GetRefBonePose()[Head].GetRotation();
+	PoseableBody->SetBoneRotationByName(TEXT("Head"), (HeadLookRotation.Quaternion() * Neutral).Rotator(), EBoneSpaces::ComponentSpace);
 }
 
 void ADeliveryPedestrian::UpdateTransform(float Distance, float DeltaTime)
@@ -1026,6 +1057,8 @@ void ADeliveryPedestrian::OnRep_KnockedDown()
 
 void ADeliveryPedestrian::StartKnockdown()
 {
+	UpdateHeadLook(1.f);
+	HeadLookRotation = FRotator::ZeroRotator;
 	BoidsVelocity = FVector::ZeroVector;
 	CrosswalkBlockedElapsed = 0.f;
 	Phase = EDeliveryPedestrianPhase::KnockedDown;

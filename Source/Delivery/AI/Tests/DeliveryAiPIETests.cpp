@@ -3,10 +3,10 @@
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
-#include "AI/DeliveryAiGatewaySubsystem.h"
-#include "AI/DeliveryAiSettings.h"
-#include "AI/DeliveryNpcAgentComponent.h"
-#include "AI/BTTask_DeliveryExecuteApprovedAction.h"
+#include "AI/Network/DeliveryAiGatewaySubsystem.h"
+#include "AI/Network/DeliveryAiSettings.h"
+#include "AI/Decision/DeliveryNpcAgentComponent.h"
+#include "AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.h"
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/Composites/BTComposite_Sequence.h"
@@ -114,7 +114,7 @@ public:
             auto* Tree = NewObject<UBehaviorTree>(ServerController.Get());
             Tree->RootNode = NewObject<UBTComposite_Sequence>(Tree);
             FBTCompositeChild Child;
-            Child.ChildTask = NewObject<UBTTask_DeliveryExecuteApprovedAction>(Tree);
+            Child.ChildTask = NewObject<UBTTask_DeliveryExecuteNpcAction>(Tree);
             Tree->RootNode->Children.Add(Child);
             if (!Test->TestTrue(TEXT("服务器行为树开始执行 HTTP 建议"), ServerController->RunBehaviorTree(Tree))) return End();
             Stage = 2;
