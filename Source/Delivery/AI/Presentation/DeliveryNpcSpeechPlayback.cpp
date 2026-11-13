@@ -385,7 +385,25 @@ void UDeliveryNpcPresentationComponent::ReceiveAudio_Implementation(FGuid TurnId
     if (!bValid)
     {
         UE_LOG(LogTemp,Warning,TEXT("NpcSpeech decode_failed turn=%s detail=%s"),*TurnId.ToString(),*Error);
-        StopStreamSpeech_Implementation(Local->State.ActionId,false);
+        const bool bDisplayed=DisplayedSpeech.bActive && DisplayedSpeech.TurnId==TurnId;
+        const float DisplayedProgress=bDisplayed?GetDisplayedSpeechProgress():0.f;
+        // 台词已经由服务器确认，单句声音损坏时保留文字，后面的句子仍可播放
+        Local->State.bRecordedVoice=false;
+        Local->State.Duration=FMath::Clamp(Local->State.Text.Len()*.075f+.5f,1.f,10.f);
+        Local->Pcm.Reset();Local->Encoded.Reset();Local->Decoder.Reset();
+        Local->DecodeOffset=Local->TotalBytes=Local->QueuedBytes=0;
+        Local->FrontSince=Local->DrainedAt=Local->TextStartedAt=0;
+        Local->LastDataAt=FPlatformTime::Seconds();
+        // 排队中的坏句子不能停止前一句；正在播放的坏句子则立即停音并继续显示台词
+        if (bDisplayed)
+        {
+            if (RecordedVoice) RecordedVoice->Stop();
+            if (RecordedWave) RecordedWave->ResetAudio();
+            RecordedWave=nullptr;
+            // 保留已经显示的字数，剩下的台词按文字阅读时间继续出现
+            Local->TextStartedAt=Local->LastDataAt-DisplayedProgress*Local->State.Duration;
+            DisplayedSpeech=Local->State;
+        }
         return;
     }
     Local->Pcm.Append(Decoded);

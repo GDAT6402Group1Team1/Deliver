@@ -500,6 +500,38 @@ bool FDeliveryNpcCompleteSpeechTest::RunTest(const FString&)
     P->LocalVoices[0].DrainedAt=FPlatformTime::Seconds()-.2;P->PlayRecordedVoice();
     TestFalse(TEXT("两句话说完后停止字幕"),P->GetDisplayedSpeech().bActive);
     TestTrue(TEXT("正常完成后没有待播句子"),P->LocalVoices.IsEmpty());
+    // 在已经开始播放的语音末尾加入无效数据，检查声音损坏不会取消整轮回复
+    TArray<uint8> DamagedAudio=FirstEncoded;DamagedAudio.Add(0);
+    FDeliveryNpcSpeechState Damaged=First;Damaged.ActionId=FGuid::NewGuid();Damaged.TurnId=FGuid::NewGuid();
+    Damaged.EncodedBytes=DamagedAudio.Num();
+    FDeliveryNpcSpeechState AfterDamaged=Second;AfterDamaged.ActionId=Damaged.ActionId;AfterDamaged.TurnId=FGuid::NewGuid();
+    P->StartStreamSpeech_Implementation(Damaged);Receive(Damaged.TurnId,DamagedAudio,0,FirstPrefix);P->PlayRecordedVoice();
+    if (!TestNotNull(TEXT("坏包到达前这句话已经开始播放"),P->RecordedWave.Get())) return false;
+    Heard.Reset();ReadAudio();
+    const float ProgressBeforeDamage=P->GetDisplayedSpeechProgress();
+    P->StartStreamSpeech_Implementation(AfterDamaged);
+    for (int32 Offset=0;Offset<SecondEncoded.Num();Offset+=257) Receive(AfterDamaged.TurnId,SecondEncoded,Offset,257);
+    AddExpectedError(TEXT("NpcSpeech decode_failed"),EAutomationExpectedErrorFlags::Contains,1);
+    for (int32 Offset=FirstPrefix;Offset<DamagedAudio.Num();Offset+=257) Receive(Damaged.TurnId,DamagedAudio,Offset,257);
+    TestTrue(TEXT("坏包只停止当前句的声音，完整台词仍显示"),P->GetDisplayedSpeech().bActive &&
+        P->GetDisplayedSpeech().TurnId==Damaged.TurnId && P->GetDisplayedSpeech().Text==Damaged.Text && !P->GetDisplayedSpeech().bRecordedVoice);
+    TestNull(TEXT("坏句子的音频队列已释放"),P->RecordedWave.Get());
+    TestTrue(TEXT("音频回退不会让已经显示的字消失"),P->GetDisplayedSpeechProgress()>=ProgressBeforeDamage);
+    TestFalse(TEXT("单句音频损坏不取消服务器确认的整轮回复"),P->CancelledVoiceActions.Contains(Damaged.ActionId));
+    if (!TestEqual(TEXT("坏句子和下一句都保留在本机队列"),P->LocalVoices.Num(),2)) return false;
+    Receive(Damaged.TurnId,DamagedAudio,0,FirstPrefix);
+    TestTrue(TEXT("坏句子的晚到补发不会重新创建声音"),!P->LocalVoices[0].Decoder && P->LocalVoices[0].Pcm.IsEmpty());
+    P->LocalVoices[0].TextStartedAt=FPlatformTime::Seconds()-P->LocalVoices[0].State.Duration-.1;
+    P->PlayRecordedVoice();P->PlayRecordedVoice();
+    TestEqual(TEXT("文字显示结束后继续下一句"),P->GetDisplayedSpeech().TurnId,AfterDamaged.TurnId);
+    Heard.Reset();ReadAudio();
+    TestTrue(TEXT("后一句完整声音仍进入实际 PCM 队列"),Heard==SecondDecoded);
+    P->StopStreamSpeech_Implementation(Damaged.ActionId,false);
+    TestTrue(TEXT("发生过音频回退后，主动打断仍停止整轮文字和声音"),P->LocalVoices.IsEmpty() &&
+        !P->GetDisplayedSpeech().bActive && P->RecordedWave==nullptr);
+    P->StartStreamSpeech_Implementation(Damaged);P->StartStreamSpeech_Implementation(AfterDamaged);
+    Receive(AfterDamaged.TurnId,SecondEncoded,0,SecondEncoded.Num());
+    TestTrue(TEXT("主动打断后旧句子和晚到声音仍不能恢复播放"),P->LocalVoices.IsEmpty());
     FDeliveryNpcSpeechState Interrupted=First;Interrupted.ActionId=FGuid::NewGuid();Interrupted.TurnId=FGuid::NewGuid();
     P->StartStreamSpeech_Implementation(Interrupted);Receive(Interrupted.TurnId,FirstEncoded,0,FirstPrefix);P->PlayRecordedVoice();
     P->StopStreamSpeech_Implementation(Interrupted.ActionId,false);
