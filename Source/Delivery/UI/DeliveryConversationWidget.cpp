@@ -134,6 +134,7 @@ void UDeliveryConversationWidget::RefreshReply()
     const FName Result=SubmissionResult;
     const bool bNewSpeech=SubmittedEventId.IsValid() && Speech.ReplyToEventId==SubmittedEventId && !Speech.Text.IsEmpty();
     const bool bRejected=Result==TEXT("TooFast") || Result==TEXT("Unavailable") || Result==TEXT("NotHeard") || Result==TEXT("Empty");
+    const bool bReplyFailed=Result==TEXT("ReplyFailed");
     if (bNewSpeech && DisplayedTurnId!=Speech.TurnId)
     {
         if (Speech.Sequence==0) LastReplyText.Reset();
@@ -142,7 +143,7 @@ void UDeliveryConversationWidget::RefreshReply()
         UE_LOG(LogTemp,Log,TEXT("NpcLatency speech=%s turn=%s stage=text_display sequence=%d"),
             *SubmittedEventId.ToString(),*Speech.TurnId.ToString(),Speech.Sequence);
     }
-    if (bNewSpeech || bRejected)
+    if (bNewSpeech || bRejected || bReplyFailed)
     {
         bAwaitingReply=false;
         bReplyTimedOut=false;
@@ -175,6 +176,7 @@ void UDeliveryConversationWidget::RefreshReply()
     if (Result==TEXT("Unavailable")) Text+=TEXT("请靠近对方，确认中间没有遮挡且对方没有倒地");
     if (Result==TEXT("NotHeard")) Text+=TEXT("对方没听到，请换个无遮挡的位置再说");
     if (Result==TEXT("Empty")) Text+=TEXT("没有发送文字，请重新输入");
+    if (bReplyFailed) Text+=TEXT("\n这次没能回复，可以再试一次");
     if (FPlatformTime::Seconds()<InputNoticeUntil) Text+=TEXT("\n")+InputNotice;
     if (Reply->GetText().ToString()!=Text)
     {

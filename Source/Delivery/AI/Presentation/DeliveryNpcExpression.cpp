@@ -9,6 +9,16 @@
 #include "Curves/CurveFloat.h"
 #include "GameFramework/Pawn.h"
 
+bool UDeliveryNpcPresentationComponent::IsShowingListeningReaction() const
+{
+    const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    if (!Npc || !Npc->Agent || !Expressions || !Npc->Agent->IsListening() || Npc->IsKnockedDown() ||
+        Npc->Combat->IsRecovering() || Npc->Combat->IsStriking() || Npc->Combat->IsReactingToHit() || Npc->GetHeldVehicle()) return false;
+    const double Started=Npc->Agent->GetListeningStartTime();
+    return FMath::IsFinite(Started) && Started>=0 &&
+        ServerTime()-Started<FMath::Clamp(Expressions->ListeningReactionDuration,.1f,2.f);
+}
+
 bool UDeliveryNpcPresentationComponent::IsWaitingForMoreAudio() const
 {
     if (!DisplayedSpeech.bActive || !DisplayedSpeech.bRecordedVoice || LocalVoices.IsEmpty()) return false;
@@ -42,10 +52,10 @@ void UDeliveryNpcPresentationComponent::TickExpression(float DeltaTime)
     if (Npc->IsKnockedDown()) Pose=TEXT("Down");
     else if (Npc->Combat->IsReactingToHit()) Pose=TEXT("Surprised");
     else if (Display.bActive) Pose=Display.Emotion;
+    else if (IsShowingListeningReaction()) Pose=TEXT("Listening");
     // 快步上前或踱步时也保留这次决定的表情，不能等声音开始才看出生气
-    else if (!ActionEmotion.IsNone()) Pose=ActionEmotion;
-    else if (Npc->Agent->IsListening()) Pose=TEXT("Listening");
-    else if (Npc->Agent->IsDecisionPending() || IsWaitingForSpeechPlayback()) Pose=TEXT("Thinking");
+    else if (!ActionEmotion.IsNone() && ActionEmotion!=TEXT("Calm")) Pose=ActionEmotion;
+    else if (Npc->Agent->IsListening() || Npc->Agent->IsDecisionPending() || IsWaitingForSpeechPlayback()) Pose=TEXT("Thinking");
     else if (Npc->Look && Npc->Look->IsAfterBrush()) Pose=TEXT("Angry");
     TMap<FName,float> Targets;
     if (const auto* Settings=Expressions->Poses.Find(Pose)) Targets=Settings->MorphWeights;

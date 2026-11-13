@@ -1,5 +1,6 @@
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Conversation/DeliveryNpcConversationTrace.h"
+#include "AI/Conversation/DeliveryConversationComponent.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
@@ -10,6 +11,7 @@
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Net/UnrealNetwork.h"
@@ -200,6 +202,10 @@ void UDeliveryNpcAgentComponent::BeginListening(AActor* Speaker, FGuid MessageId
     }
     ListeningSpeaker = Speaker;
     ListeningMessage = MessageId;
+    PlayerReplyMessage = MessageId;
+    const auto* PlayerPawn=Cast<APawn>(Speaker);
+    PlayerReplyController=PlayerPawn?Cast<APlayerController>(PlayerPawn->GetController()):nullptr;
+    ListeningStartedAt = ServerTime();
     ListeningUntil = FPlatformTime::Seconds() + 30;
     bPlayerRequest = true;
     if (auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner()))
@@ -275,6 +281,9 @@ void UDeliveryNpcAgentComponent::FinishReply(FGuid RequestId, bool bSucceeded, i
 {
     if (!IsAuthority() || RequestId != ActiveRequest.RequestId) return;
     if (!ReplyRequest.IsValid()) { ReceiveDecision(RequestId, nullptr, TEXT("TransportFailure")); return; }
+    FGuid FailedMessage;
+    AActor* FailedSpeaker=nullptr;
+    if (!bSucceeded) GetRequestedPlayerMessage(FailedMessage,FailedSpeaker);
     if (auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner()))
     {
         if (bSucceeded) Npc->Presentation->FinishSentences(ReplyAction, SentenceCount);
@@ -283,12 +292,23 @@ void UDeliveryNpcAgentComponent::FinishReply(FGuid RequestId, bool bSucceeded, i
     if (bSucceeded) RecordActionReply();
     const bool bContinueConversation = bDecisionQueued;
     ActiveRequest = {}; ReplyRequest.Invalidate(); ReplyAction.Invalidate();
-    bDecisionPending = false; bDecisionQueued = false; bPlayerRequest = false;
-    EndListening();
+    bDecisionPending = false; bDecisionQueued = false;
+    if (bSucceeded)
+    {
+        bPlayerRequest = false;
+        PlayerReplyMessage.Invalidate();
+        PlayerReplyController.Reset();
+        EndListening();
+    }
     OnDecisionFinished.Broadcast(bSucceeded ? NAME_None : FName(TEXT("TransportFailure")));
     // 播放上一句期间有人接话，等这句结束后继续处理，不让完成通知清掉新话
-    if (bContinueConversation)
+    if (bContinueConversation && bSucceeded)
         if (auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->WakeDecision();
+    if (!bSucceeded)
+    {
+        const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+        FinishFailedPlayerReply(FailedMessage,FailedSpeaker,Npc && Npc->IsDecisionRetryScheduled());
+    }
     GetOwner()->ForceNetUpdate();
 }
 
@@ -419,15 +439,63 @@ void UDeliveryNpcAgentComponent::ReceiveDecision(FGuid RequestId, const FDeliver
     if (!IsAuthority() || RequestId != ActiveRequest.RequestId) return;
     const bool bAccepted = Error.IsNone() && Proposal && TryAcceptProposal(*Proposal, Error);
     const bool bRetry = bDecisionQueued && !bAccepted;
+    FGuid FailedMessage;
+    AActor* FailedSpeaker=nullptr;
+    if (!bAccepted) GetRequestedPlayerMessage(FailedMessage,FailedSpeaker);
     ActiveRequest = {};
     bDecisionPending=false;
     bDecisionQueued = false;
     UE_LOG(LogDeliveryNpcAgent, Display, TEXT("Decision npc=%s request=%s accepted=%d reason=%s"),
         *NpcId.ToString(), *RequestId.ToString(), bAccepted, *Error.ToString());
     if (bAccepted) PublishState();
-    if (bAccepted) { bPlayerRequest = false; EndListening(); }
+    if (bAccepted) { bPlayerRequest = false; PlayerReplyMessage.Invalidate(); PlayerReplyController.Reset(); EndListening(); }
     OnDecisionFinished.Broadcast(Error);
-    if (bRetry && !IsDecisionPending() && !HasActiveAction()) RequestDecision();
+    const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    const bool bRetryAllowed=!FailedMessage.IsValid() || FailedMessage!=PlayerReplyMessage || (Npc && Npc->IsDecisionRetryScheduled());
+    const bool bRetryStarted=bRetry && bRetryAllowed && !IsDecisionPending() && !HasActiveAction() && RequestDecision();
+    if (!bAccepted)
+    {
+        FinishFailedPlayerReply(FailedMessage,FailedSpeaker,bRetryStarted || (Npc && Npc->IsDecisionRetryScheduled()));
+    }
+    GetOwner()->ForceNetUpdate();
+}
+
+void UDeliveryNpcAgentComponent::GetRequestedPlayerMessage(FGuid& OutMessage, AActor*& OutSpeaker) const
+{
+    OutMessage.Invalidate();
+    OutSpeaker=nullptr;
+    if (!bPlayerRequest || !ActiveRequest.bPlayerRequest || !PlayerReplyMessage.IsValid()) return;
+    const auto* Message=ActiveRequest.Evidence.FindByPredicate([this](const auto& Item)
+        { return Item.Kind==TEXT("PlayerSpeech") && Item.EventId==PlayerReplyMessage; });
+    if (!Message) return;
+    OutMessage=Message->EventId;
+    OutSpeaker=KnownSubjects.FindRef(Message->SubjectId).Get();
+}
+
+void UDeliveryNpcAgentComponent::FinishFailedPlayerReply(FGuid MessageId, AActor* Speaker, bool bWillRetry)
+{
+    // 失败通知只处理原来那句玩家发言，新的插话和新请求继续按自己的状态执行
+    if (!MessageId.IsValid() || !bPlayerRequest || PlayerReplyMessage!=MessageId || ActiveRequest.RequestId.IsValid() ||
+        (ListeningMessage.IsValid() && ListeningMessage!=MessageId)) return;
+    if (bWillRetry)
+    {
+        // 模型已选动作后若连接中断，重试期间继续看着原来的玩家，不重播短呼声
+        if (!IsListening() && IsValid(Speaker) && Speaker->GetWorld()==GetWorld())
+        {
+            ListeningSpeaker=Speaker;
+            ListeningMessage=MessageId;
+            GetOwner()->ForceNetUpdate();
+        }
+        return;
+    }
+    bPlayerRequest=false;
+    PlayerReplyMessage.Invalidate();
+    auto* Controller=PlayerReplyController.Get();
+    PlayerReplyController.Reset();
+    EndListening();
+    // 玩家换 Pawn 后仍通知原来的控制器，不把消息发给后来占有该 Pawn 的人
+    if (auto* Conversation=Controller && Controller->GetWorld()==GetWorld()?Controller->FindComponentByClass<UDeliveryConversationComponent>():nullptr)
+        Conversation->ClientResult(TEXT("ReplyFailed"),MessageId);
 }
 
 bool UDeliveryNpcAgentComponent::HasActiveAction() const
@@ -518,6 +586,8 @@ void UDeliveryNpcAgentComponent::CancelPlan(FName Reason)
     TryFinishAction(PublicState.ActionId, EDeliveryNpcActionStatus::Cancelled, Reason);
     EndListening();
     bPlayerRequest = false;
+    PlayerReplyMessage.Invalidate();
+    PlayerReplyController.Reset();
     if (auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->Presentation->CancelSpeech();
 }
 
@@ -548,12 +618,18 @@ void UDeliveryNpcAgentComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProp
     DOREPLIFETIME(UDeliveryNpcAgentComponent, PublicState);
     DOREPLIFETIME(UDeliveryNpcAgentComponent,bDecisionPending);
     DOREPLIFETIME(UDeliveryNpcAgentComponent,ListeningSpeaker);
+    DOREPLIFETIME(UDeliveryNpcAgentComponent,ListeningStartedAt);
 }
 
 void UDeliveryNpcAgentComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     // 退出时先禁止新请求，再取消剩余操作，不再通知即将销毁的表现组件
     bEndingPlay = true;
+    ListeningSpeaker=nullptr;
+    ListeningMessage.Invalidate();
+    PlayerReplyMessage.Invalidate();
+    PlayerReplyController.Reset();
+    bPlayerRequest=false;
     if (GetWorld())
         if (auto* Gateway = GetWorld()->GetSubsystem<UDeliveryAiGatewaySubsystem>()) Gateway->Cancel(this);
     ActiveRequest = {};

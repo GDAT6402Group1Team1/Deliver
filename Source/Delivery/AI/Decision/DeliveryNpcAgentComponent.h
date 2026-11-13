@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "AI/Decision/DeliveryNpcTypes.h"
 #include "DeliveryNpcAgentComponent.generated.h"
+class APlayerController;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryNpcStateChanged, const FDeliveryNpcPublicState&, State);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeliveryNpcDecisionFinished, FName, Reason);
@@ -15,6 +16,7 @@ class DELIVERY_API UDeliveryNpcAgentComponent : public UActorComponent
 {
     GENERATED_BODY()
     friend class FDeliveryNpcConversationContextTest;
+    friend class FDeliveryConversationFeedbackTest;
     friend class FDeliveryNpcConversationOcclusionTest;
     friend class FDeliveryNpcStrikeApproachTest;
     friend class FDeliveryNpcStrikeNavigationTest;
@@ -49,6 +51,7 @@ public:
     UFUNCTION(BlueprintPure, Category="Delivery|AI") FDeliveryNpcPublicState GetPublicState() const { return PublicState; }
     UFUNCTION(BlueprintPure, Category="Delivery|AI") bool HasActiveAction() const;
     UFUNCTION(BlueprintPure, Category="Delivery|AI") bool IsDecisionPending() const { return bDecisionPending; }
+    bool IsWaitingToReplyToPlayer() const { return bPlayerRequest; }
     // 当前模型请求是否已经包含这个人的攻击，避免每次轻拳都重新开始思考
     bool IsRespondingToAttackFrom(const AActor* Attacker) const;
     // 玩家插话时停止旧交谈，记下说话者并开始倾听
@@ -56,6 +59,7 @@ public:
     void EndListening();
     UFUNCTION(BlueprintPure) AActor* GetListeningSpeaker() const { return ListeningSpeaker; }
     UFUNCTION(BlueprintPure) bool IsListening() const { return IsValid(ListeningSpeaker); }
+    double GetListeningStartTime() const { return ListeningStartedAt; }
     bool ReceiveStreamDecision(FGuid RequestId, const FDeliveryNpcDecisionProposal& Proposal);
     void ReceiveSentence(FGuid RequestId, const FDeliveryNpcSentence& Sentence);
     // 返回 true 表示内容属于当前回复且表现组件已接收，不表示音频已经播放
@@ -94,6 +98,8 @@ private:
     bool TryAcceptProposal(const FDeliveryNpcDecisionProposal& Proposal, FName& Reason);
     void RecordActionReply();
     void PublishState();
+    void GetRequestedPlayerMessage(FGuid& OutMessage, AActor*& OutSpeaker) const;
+    void FinishFailedPlayerReply(FGuid MessageId, AActor* Speaker, bool bWillRetry);
     double ServerTime() const;
 
     UPROPERTY(Replicated) bool bDecisionPending=false;
@@ -111,7 +117,11 @@ private:
     bool bEndingPlay = false;
     double ActionDeadline = 0;
     UPROPERTY(Replicated) TObjectPtr<AActor> ListeningSpeaker;
+    UPROPERTY(Replicated) double ListeningStartedAt = -1;
     FGuid ListeningMessage;
+    // 模型选好动作后会结束倾听，这个编号保留到整轮回复结束
+    FGuid PlayerReplyMessage;
+    TWeakObjectPtr<APlayerController> PlayerReplyController;
     double ListeningUntil = 0;
     FGuid ReplyRequest;
     FGuid ReplyAction;

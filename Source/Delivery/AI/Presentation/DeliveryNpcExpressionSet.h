@@ -32,6 +32,8 @@ public:
     UPROPERTY(EditAnywhere,Category="注视",meta=(ClampMin="1",ClampMax="60",Units="deg")) float MaxEyeYaw=25;
     UPROPERTY(EditAnywhere,Category="注视",meta=(ClampMin="1",ClampMax="45",Units="deg")) float MaxEyePitch=20;
     UPROPERTY(EditAnywhere,Category="交谈姿态") bool bConversationPose=true;
+    // 刚听见玩家时先探身，之后保持注视并转为思考姿态
+    UPROPERTY(EditAnywhere,Category="交谈姿态",meta=(ClampMin="0.1",ClampMax="2",Units="s")) float ListeningReactionDuration=.7f;
     UPROPERTY(EditAnywhere,Category="交谈姿态",meta=(ClampMin="0",ClampMax="12",Units="deg")) float ListeningLean=4;
     UPROPERTY(EditAnywhere,Category="交谈姿态",meta=(ClampMin="-12",ClampMax="12",Units="deg")) float ListeningHeadTilt=5;
     UPROPERTY(EditAnywhere,Category="交谈姿态",meta=(ClampMin="-12",ClampMax="12",Units="deg")) float ThinkingHeadTilt=8;

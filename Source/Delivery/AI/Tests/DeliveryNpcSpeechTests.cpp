@@ -44,6 +44,7 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
         return Presentation->PendingEncodeTasks==0;
     };
     Npc->SetActorTickEnabled(false);
+    World->Tick(LEVELTICK_TimeOnly,1.f);
     FDeliveryNpcObservation Message; Message.Kind=TEXT("PlayerSpeech");Message.Description=TEXT("别挡路");Message.Subject=Player;Message.EventId=FGuid::NewGuid();
     TestTrue(TEXT("记录玩家发言"),Agent->ObserveEvent(Message));
     Agent->BeginListening(Player,Message.EventId);
@@ -72,6 +73,7 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     ViewNpc->Presentation->Expressions=NewObject<UDeliveryNpcExpressionSet>(ViewNpc);
     auto* ViewPresentation=ViewNpc->Presentation.Get();
     ViewPresentation->Expressions->Poses.FindOrAdd(TEXT("Thinking")).MorphWeights.Add(TEXT("FaceThinking"),1.f);
+    ViewPresentation->Expressions->Poses.FindOrAdd(TEXT("Listening")).MorphWeights.Add(TEXT("FaceListening"),1.f);
     ViewPresentation->Expressions->Poses.FindOrAdd(TEXT("Angry")).MorphWeights.Add(TEXT("EyesAngry"),1.f);
     ViewPresentation->Expressions->Poses.FindOrAdd(TEXT("Down")).MorphWeights.Add(TEXT("EyesBlink"),1.f);
     ViewPresentation->NextBlink=ViewPresentation->ServerTime()+100;
@@ -80,10 +82,29 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     ViewNpc->GetMesh()->SetSkeletalMeshAsset(FaceMesh);
     auto* ConversationPose=NewObject<UDeliveryNpcConversationAnimInstance>(ViewNpc->GetMesh());
     ConversationPose->NativeInitializeAnimation();
+    // 远端只用复制的说话者和服务器开始时间，短倾听结束后继续看着玩家
+    const auto BeforeListeningState=ViewNpc->Agent->PublicState;
+    ViewNpc->Agent->PublicState={};
+    ViewNpc->Agent->ListeningSpeaker=Player;
+    ViewNpc->Agent->ListeningStartedAt=Agent->GetListeningStartTime();
     ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestTrue(TEXT("远端刚听见玩家时显示倾听眼神和前倾"),ViewPresentation->IsShowingListeningReaction() &&
+        ViewNpc->GetMesh()->GetMorphTarget(TEXT("FaceListening"))>.9f && !ConversationPose->ChestRotation.IsNearlyZero());
+    ViewNpc->Agent->ListeningStartedAt=ViewPresentation->ServerTime()-ViewPresentation->Expressions->ListeningReactionDuration-.1;
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestTrue(TEXT("短倾听结束后目光保留，眼神和头姿一同转为思考"),!ViewPresentation->IsShowingListeningReaction() &&
+        ViewNpc->Agent->IsListening() && ConversationPose->LookWeight>.9f && ConversationPose->ChestRotation.IsNearlyZero() &&
+        !ConversationPose->HeadRotation.IsNearlyZero() && ViewNpc->GetMesh()->GetMorphTarget(TEXT("FaceThinking"))>.9f);
+    ViewNpc->Agent->ListeningSpeaker=nullptr;
+    ViewNpc->Agent->PublicState=BeforeListeningState;
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
     TestFalse(TEXT("显示对象没有服务器正在处理的回复"),ViewNpc->Agent->ReplyAction.IsValid());
     TestTrue(TEXT("Wait 回复等待首句时仍看向收话人"),ConversationPose->LookWeight>.9f);
     TestFalse(TEXT("等待语音时保留思考姿态"),ConversationPose->HeadRotation.IsNearlyZero());
+    TestTrue(TEXT("平静动作等待首句时眼神与思考头姿一致"),ViewNpc->GetMesh()->GetMorphTarget(TEXT("FaceThinking"))>.9f);
 
     // 客户端只收到本轮编号时，后台仍在合成声音，本机还没有可排队的音频
     const auto BeforeVoiceState=ViewNpc->Agent->PublicState;

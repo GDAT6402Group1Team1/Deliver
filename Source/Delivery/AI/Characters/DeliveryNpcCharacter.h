@@ -22,6 +22,7 @@ class DELIVERY_API ADeliveryNpcCharacter : public ACharacter, public IDeliveryIm
 {
     GENERATED_BODY()
     friend class FDeliveryNpcConversationContextTest;
+    friend class FDeliveryConversationFeedbackTest;
 public:
     ADeliveryNpcCharacter();
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|居民") TObjectPtr<UCapsuleComponent> ImpactSensor;
@@ -67,6 +68,7 @@ public:
     // 玩家开口从第 0 轮开始，NPC 接话时逐轮增加
     int32 GetConversationDepth() const { return ConversationDepth; }
     void WakeDecision();
+    bool IsDecisionRetryScheduled() const { return bDecisionRetryScheduled; }
     void ObserveFact(FName Kind,AActor* Subject,const FString& Text,EDeliveryNpcEvidenceSource Source);
 protected:
     virtual void BeginPlay() override;
@@ -77,6 +79,7 @@ private:
     float PreviousActionWalkSpeed=-1;
     UFUNCTION() void OnDecisionFinished(FName Reason);
     int32 DecisionRetryCount=0;
+    bool bDecisionRetryScheduled=false;
     bool CanTalk(APawn* Interactor,bool bCheckAvailability);
     bool OpenConversation(APawn* Interactor);
     TWeakObjectPtr<UDeliveryVehicleHoldComponent> HeldVehicle;

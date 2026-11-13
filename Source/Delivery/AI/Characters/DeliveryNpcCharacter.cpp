@@ -134,6 +134,8 @@ bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid
     if (bPlayerSpeaking && Addressee!=this) return true;
     if (Event.Kind==TEXT("PlayerSpeech"))
     {
+        DecisionRetryCount=0;
+        bDecisionRetryScheduled=false;
         Agent->BeginListening(Speaker,TurnId);
         ConversationDepth=0;
         bDecisionNeeded=!Agent->RequestDecision();
@@ -331,7 +333,10 @@ void ADeliveryNpcCharacter::Tick(float Dt)
         if (State.Status!=EDeliveryNpcActionStatus::Succeeded || (State.Action!=EDeliveryNpcAction::Wait && State.Action!=EDeliveryNpcAction::LookAt)) bDecisionNeeded=true;
     }
     if (bDecisionNeeded && !Presentation->HasPendingSpeech() && !IsKnockedDown() && !Combat->IsReactingToHit() && !Agent->HasActiveAction() && !Agent->IsDecisionPending() && GetWorld()->GetTimeSeconds()>=NextDecision)
-    { NextDecision=GetWorld()->GetTimeSeconds()+4; if (Agent->RequestDecision()) bDecisionNeeded=false; }
+    {
+        NextDecision=GetWorld()->GetTimeSeconds()+4;
+        if (Agent->RequestDecision()) { bDecisionNeeded=false; bDecisionRetryScheduled=false; }
+    }
 }
 void ADeliveryNpcCharacter::EndPlay(const EEndPlayReason::Type Reason)
 {
@@ -343,18 +348,23 @@ void ADeliveryNpcCharacter::EndPlay(const EEndPlayReason::Type Reason)
 
 void ADeliveryNpcCharacter::WakeDecision()
 {
-    bDecisionNeeded=true; DecisionRetryCount=0;
+    if (Agent->IsWaitingToReplyToPlayer() && bDecisionRetryScheduled) return;
+    bDecisionNeeded=true;
+    // 旁人插话会补充下一次请求，同一句玩家消息仍沿用已有的重试次数
+    if (!Agent->IsWaitingToReplyToPlayer()) { DecisionRetryCount=0; bDecisionRetryScheduled=false; }
     NextDecision=FMath::Min(NextDecision,GetWorld()->GetTimeSeconds()+.25);
 }
 
 void ADeliveryNpcCharacter::OnDecisionFinished(FName Reason)
 {
     if (!HasAuthority()) return;
-    if (Reason.IsNone()) { bDecisionNeeded=false; DecisionRetryCount=0; return; }
+    bDecisionRetryScheduled=false;
+    bDecisionNeeded=false;
+    if (Reason.IsNone()) { DecisionRetryCount=0; return; }
     // 请求忙碌、超时或回复失效时，最多重新请求两次
     if ((Reason==TEXT("TransportFailure") || Reason==TEXT("RequestTimeout") || Reason==TEXT("StaleProposal") || Reason==TEXT("MissingPlayerReply")) && DecisionRetryCount<2)
     {
-        ++DecisionRetryCount; bDecisionNeeded=true;
+        ++DecisionRetryCount; bDecisionNeeded=true; bDecisionRetryScheduled=true;
         NextDecision=GetWorld()->GetTimeSeconds()+2*DecisionRetryCount;
     }
 }
