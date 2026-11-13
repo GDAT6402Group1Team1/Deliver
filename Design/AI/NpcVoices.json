@@ -1,6 +1,17 @@
 {
   "version": 1,
   "note": "老人风格依据作者说明，听感仍需试听。未找到合适录音的类别保持空白，中文台词朗读仍单独配置。",
+  "dialogue": {
+    "config": "Tools/DeliveryAI/neural_voice_config.json",
+    "model": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+    "revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+    "license": "Apache-2.0",
+    "source": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/tree/85e237c12c027371202489a0ec509ded67b5e4b5",
+    "speaker_descriptions": "https://github.com/QwenLM/Qwen3-TTS#custom-voice-generate",
+    "male": {"speaker": "Uncle_Fu", "review": "保留用户认可的 B 音色与生成参数"},
+    "female": {"speaker": "Serena", "review": "自然女声候选，官方描述为温和的年轻女声，尚未验收为翠花正式声音"},
+    "limits": "本地 0.6B 不支持声音设计或情绪指令，不能靠提示词改成老人声音；不做变调或真人声音复刻；与短反应录音分别配置"
+  },
   "voices": [
     {
       "asset": "/Game/NPC/Residents/Audio/DA_Voice_OldMan",

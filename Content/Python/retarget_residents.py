@@ -1,10 +1,13 @@
 """Blender 5: 将已有 Quaternius CC0 动画重定向到共用 Mixamo 骨架的居民
 
 保留目标骨长和静止位移，不复用源人物的身高，不写入现有玩家骨架
-运行 blender --background --python Content/Python/retarget_grandpa.py
+运行 blender --background --python Content/Python/retarget_residents.py
+追加 -- --locomotion-only 时只创建新的走路和慢跑 FBX，保留原有动画
 """
 import bpy
 import math
+import json
+import sys
 from pathlib import Path
 from mathutils import Matrix, Quaternion
 
@@ -67,9 +70,17 @@ def export(name, animated, include_mesh):
 select_target(True)
 # 保持现有居民网格与骨架不变，只输出独立动画
 bpy.context.scene.render.fps = 30
-for source_name, output in [('Idle_FoldArms_Loop','A_ResidentIdle'), ('Idle_Talking_Loop','A_ResidentTalk'),
+locomotion_only = '--locomotion-only' in sys.argv
+clips = [('Walk_Loop','A_NpcWalk'), ('Jog_Fwd_Loop','A_NpcJog')] if locomotion_only else [
+    ('Idle_FoldArms_Loop','A_ResidentIdle'), ('Idle_Talking_Loop','A_ResidentTalk'),
     ('Walk_Formal_Loop','A_ResidentWalk'), ('Punch_Jab','A_ResidentPunch'), ('Death01','A_ResidentDown'),
-    ('Push_Loop','A_ResidentHold'), ('Hit_Knockback','A_ResidentHit'), ('LayToIdle','A_ResidentGetUp')]:
+    ('Push_Loop','A_ResidentHold'), ('Hit_Knockback','A_ResidentHit'), ('LayToIdle','A_ResidentGetUp')]
+reports = []
+for source_name, output in clips:
+    # 增量制作保留已经生成的文件，避免重做时覆盖后来人工调整的动作
+    if locomotion_only and (OUT / (output+'.fbx')).exists():
+        reports.append({'source':source_name,'output':output,'status':'existing'})
+        continue
     source, action = actions[source_name]
     current_mapping = mapping2 if source == source2 else mapping
     rest_source = {b.name:b.matrix_local.to_quaternion() for b in source.data.bones}
@@ -115,6 +126,22 @@ for source_name, output in [('Idle_FoldArms_Loop','A_ResidentIdle'), ('Idle_Talk
     source.animation_data.action = None
     bpy.context.scene.frame_set(0)
     export(output, True, False)
+    reports.append({'source':source_name,'output':output,'status':'created',
+        'duration_seconds':duration,'sample_rate':30,'last_frame':count,'bone_count':len(ordered)})
     print('RETARGET_EXPORTED', output, duration, count)
 
-(OUT / 'Sources.txt').write_text('Animations: Quaternius Universal Animation Library 1 and 2 Standard, CC0\nSource files and license: ../Grandpa/Quaternius*_License.txt\nhttps://quaternius.com/packs/universalanimationlibrary.html\nhttps://quaternius.com/packs/universalanimationlibrary2.html\nClips: Idle_FoldArms_Loop, Idle_Talking_Loop, Walk_Formal_Loop, Punch_Jab, Death01, Push_Loop, Hit_Knockback, LayToIdle\nRetarget target: existing Design/Art/NPC/中年男.fbx shared NPC skeleton\n', encoding='utf-8')
+if locomotion_only:
+    (OUT / 'LocomotionSources.txt').write_text(
+        'Author: Quaternius\nLicense: CC0 1.0 Universal\n'
+        'Source: https://quaternius.com/packs/universalanimationlibrary.html\n'
+        'Local original: ../Grandpa/Quaternius_AnimationLibrary_Standard.glb\n'
+        'License copy: ../Grandpa/Quaternius_License.txt\n'
+        'Walk_Loop -> A_NpcWalk.fbx; Jog_Fwd_Loop -> A_NpcJog.fbx\n'
+        'Target: existing 中年男.fbx / SK_NpcMan_Skeleton; same mapping as retarget_residents.py\n'
+        '30 fps; original bone lengths; horizontal root movement removed\n'
+        'Original A_ResidentWalk (Walk_Formal_Loop) is unchanged\n', encoding='utf-8')
+    report_path = ROOT / 'Saved/AIResearch/NpcLocomotionRetarget/latest.json'
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(reports,ensure_ascii=False,indent=2),encoding='utf-8')
+else:
+    (OUT / 'Sources.txt').write_text('Animations: Quaternius Universal Animation Library 1 and 2 Standard, CC0\nSource files and license: ../Grandpa/Quaternius*_License.txt\nhttps://quaternius.com/packs/universalanimationlibrary.html\nhttps://quaternius.com/packs/universalanimationlibrary2.html\nClips: Idle_FoldArms_Loop, Idle_Talking_Loop, Walk_Formal_Loop, Punch_Jab, Death01, Push_Loop, Hit_Knockback, LayToIdle\nRetarget target: existing Design/Art/NPC/中年男.fbx shared NPC skeleton\n', encoding='utf-8')

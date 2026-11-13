@@ -1,0 +1,9 @@
+Author: Quaternius
+License: CC0 1.0 Universal
+Source: https://quaternius.com/packs/universalanimationlibrary.html
+Local original: ../Grandpa/Quaternius_AnimationLibrary_Standard.glb
+License copy: ../Grandpa/Quaternius_License.txt
+Walk_Loop -> A_NpcWalk.fbx; Jog_Fwd_Loop -> A_NpcJog.fbx
+Target: existing 中年男.fbx / SK_NpcMan_Skeleton; same mapping as retarget_residents.py
+30 fps; original bone lengths; horizontal root movement removed
+Original A_ResidentWalk (Walk_Formal_Loop) is unchanged
