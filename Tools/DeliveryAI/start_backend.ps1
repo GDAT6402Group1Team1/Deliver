@@ -9,7 +9,9 @@ param(
     [int]$Port = 8765,
     [string]$PythonExecutable = 'python.exe',
     # 把每轮候选、现场事件、选中的动作和台词写入 Saved/Logs/NpcDialogue.ndjson，排查对话问题时打开
-    [switch]$DialogueLog
+    [switch]$DialogueLog,
+    # 启用后端句内音频分段，游戏端还需单独打开对应设置
+    [switch]$StreamAudio
 )
 
 $ErrorActionPreference = 'Stop'
@@ -67,6 +69,9 @@ if ($listeners.Count -gt 0) {
     $ownerIds = @($listeners | Select-Object -ExpandProperty OwningProcess -Unique)
     if ($ownerIds.Count -eq 1 -and (Test-ProjectBackend $ownerIds[0])) {
         Write-Host "AI 后端已运行，PID=$($ownerIds[0])，端口=$Port"
+        if ($PSBoundParameters.ContainsKey('StreamAudio')) {
+            Write-Host '本次未改变运行中的音频分段设置。请先按项目流程确认并停止本工程后端，再带此开关启动；脚本不会自动重启服务'
+        }
         return
     }
     throw "端口 $Port 已被其他进程占用，未启动或停止任何服务"
@@ -97,6 +102,11 @@ foreach ($logPath in @($stdoutPath, $stderrPath)) {
     if (Test-Path -LiteralPath $logPath) {
         Copy-Item -LiteralPath $logPath -Destination "$logPath.$archiveSuffix.bak"
     }
+}
+
+# 未传开关时沿用环境变量，显式传入 false 时关闭分段
+if ($PSBoundParameters.ContainsKey('StreamAudio')) {
+    $env:DELIVERY_AI_STREAM_AUDIO = if ($StreamAudio) { '1' } else { '0' }
 }
 
 # 单独后台进程，不设置开机启动，不依赖当前 PowerShell 窗口继续存在

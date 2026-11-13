@@ -48,6 +48,20 @@ git push
 
 用 Unreal Engine 5.8 打开 `Delivery.uproject`。需要 Visual Studio 工程时，右键 `.uproject` → **Generate Visual Studio project files**，在本地生成 `.sln`，不要提交。
 
+### 启动 AI 后端
+
+已有模型和语音环境配置好后，在项目目录运行：
+
+```powershell
+Tools/DeliveryAI/start_backend.ps1 -DialogueLog -StreamAudio
+```
+
+需要试用句内音频分段时，显式添加 `-StreamAudio`；使用 `-StreamAudio:$false` 可以关闭。不传此开关时保留当前环境变量，`DELIVERY_AI_STREAM_AUDIO=1` 表示已明确启用，未设置时仍按整句返回。
+
+这个开关只启用后端能力。UE 还需启用 `bStreamSentenceAudio`，且使用逐句回复；当前工程已在 `Config/DefaultGame.ini` 开启分段试玩。人物默认先准备 1.28 秒声音，后续边生成边播放。需要回到整句模式时，将此设置改为 `False` 后重新启动游戏；后端未开启分段能力时也会沿用整句返回。游戏内音量、空间声音与多人效果仍待试玩，检查范围见 [AI 方案](Document/DeliveryAIPlan.html) 和 [迭代记录](Document/AIIteration.html)。
+
+已有本工程后端运行时，脚本只报告现有进程；传入开关也不会更改或重启服务。需要更换设置时，先按项目流程确认进程归属、保留日志并停止该后端，再用所需参数启动。
+
 ### 许可
 
 见 [LICENSE](LICENSE)（MIT）。

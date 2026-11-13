@@ -549,8 +549,9 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
         else Local.DrainedAt=0;
         return;
     }
-    const float ConfiguredStart=VoiceSet?VoiceSet->StreamingStartBufferSeconds:.64f;
-    const float StartSeconds=bGenerating?(FMath::IsFinite(ConfiguredStart)?FMath::Clamp(ConfiguredStart,.16f,2.f):.64f):.12f;
+    const float DefaultStart=GetDefault<UDeliveryNpcVoiceSet>()->StreamingStartBufferSeconds;
+    const float ConfiguredStart=VoiceSet?VoiceSet->StreamingStartBufferSeconds:DefaultStart;
+    const float StartSeconds=bGenerating?(FMath::IsFinite(ConfiguredStart)?FMath::Clamp(ConfiguredStart,.16f,2.f):DefaultStart):.12f;
     int32 InitialBuffer=int32(Local.State.SampleRate*StartSeconds)*2;
     if (Local.TotalBytes>0) InitialBuffer=FMath::Min(InitialBuffer,Local.TotalBytes);
     if ((!bGenerating && Local.TotalBytes<=0) || Local.Pcm.Num()<InitialBuffer || ServerTime()<Local.State.StartTime) return;
