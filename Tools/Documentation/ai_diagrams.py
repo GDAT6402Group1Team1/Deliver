@@ -40,9 +40,9 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'BTT_NpcListen': ('倾听任务蓝图', ['父类 BTTask_DeliveryListen', '暂时停下移动并看向说话者'], [('ExecuteTask()', '设置本次倾听的朝向'), ('OnTaskFinished()', '解除本任务设置的朝向')]),
         'AppServer': ('本机模型连接', ['取消获确认后保留已有进程', '每轮建立独立会话并选择模型'], [('stream(model=...)', '指定本次模型并逐步接收文字'), ('close()', '超时或连接异常时关闭进程')]),
         'SentenceParser': ('完整句子检查', ['首条结果确定候选动作', '后续结果只补充台词'], [('feed()', '收集文字并解析完整 JSON'), ('line()', '检查动作与句子后通知后端')]),
-        'SpeechSynthesizer': ('小芳的 Windows 语音', ['female 保留原 SAPI 声音', '两个合成线程复用各自语音进程'], [('prepare()', '提前准备 Windows 中文声音'), ('synthesize()', '返回一句完整 PCM 音频')]),
-        'SpeechQueue': ('大军的语音队列', ['玩家交谈优先于未开始的闲聊', '一个 GPU 实例依次合成句子'], [('submit()', '按来源安排完整句子'), ('close()', '取消排队项并通知当前合成停止')]),
-        'QwenSpeechSynthesizer': ('大军的 B 音色', ['male 使用常驻 Qwen Uncle_Fu', '取消获确认后才开始下一句'], [('prepare()', '提前加载模型并准备 Graph'), ('synthesize()', '生成完整音频，超过 8 秒报错')]),
+        'SpeechSynthesizer': ('可选 Windows 语音', ['显式选择 windows 时使用 SAPI', '两个合成线程复用各自语音进程'], [('prepare()', '提前准备 Windows 中文声音'), ('synthesize()', '返回一句完整 PCM 音频')]),
+        'SpeechQueue': ('NPC 共用的语音队列', ['玩家交谈优先于未开始的闲聊', '一个 GPU 实例依次合成句子'], [('submit()', '按来源安排完整句子'), ('close()', '取消排队项并通知当前合成停止')]),
+        'QwenSpeechSynthesizer': ('NPC 台词语音', ['Uncle_Fu / Serena 按配置选择', '取消获确认后才开始下一句'], [('prepare()', '提前加载模型并准备 Graph'), ('synthesize()', '生成完整音频，超过 8 秒报错')]),
         'FDeliveryNpcSentence': ('一句台词及语音', ['保存句子序号、文字和情绪', '保存 PCM 音频及采样率'], [('Sequence / Text / Emotion', '按序播放同一次回复'), ('Pcm / SampleRate', '交给客户端声音播放')]),
         'FDeliveryNpcLocalVoice': ('本机待播语音', ['保存收到的 Opus 和解码后的声音', '记录播放进度和本句解码器'], [('State / Pcm', '文字和声音对应同一句话'), ('QueuedBytes / TotalBytes', '判断这句是否已经播放结束')]),
         'UDeliveryNpcExpressionSet': ('表情与交谈姿态配置', ['保存眼睛、眉毛和眨眼曲线', '保存倾听前倾和头部过渡参数'], [('Poses / BlinkCurve', '按情绪选择形态键权重'), ('ListeningLean / HeadTurnLimit', '调整姿态幅度与转头范围')]),
@@ -54,7 +54,7 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'UDeliveryNpcCombatComponent': ('NPC 战斗', ['保存攻击目标和命中时间', '记录倒地和恢复状态'], [('StartStrike()', '检查条件后开始挥拳'), ('ReceiveImpact()', '处理受击、倒地和恢复')]),
         'UDeliveryVehicleHoldComponent': ('车辆拽车处理', ['记录拽住车辆的 NPC', '记录拽车和持续油门时间'], [('TryHold()', '检查条件后建立拽车关系'), ('Release()', '松手并恢复正常速度倍率')]),
         'ADeliveryMotorbike': ('电瓶车', ['处理驾驶与车辆移动', '持有拽车处理组件'], [('读取 GetSpeedScale()', '根据拽车状态调整速度'), ('调用 UpdateThrottle()', '累计油门时间以便挣脱')]),
-        'FDeliveryNpcProfileRow': ('NPC 人物配置', ['DisplayName / Persona：名字与性格', 'TtsVoice / VoiceSet：两类声音配置'], [('继承 FTableRowBase', 'DT_NpcProfiles 每行对应一名角色'), ('chunlai / xiumei', '分别配置大军与小芳')]),
+        'FDeliveryNpcProfileRow': ('NPC 人物配置', ['DisplayName / Persona：名字与性格', 'TtsVoice / VoiceSet：两类声音配置'], [('继承 FTableRowBase', 'DT_NpcProfiles 每行对应一名角色'), ('chunlai / xiumei', '分别配置大壮与翠花')]),
         'UDeliveryNpcVoiceSet': ('台词音量与短音配置', ['DialogueVolume：完整台词音量', 'DialogueAttenuation：台词距离衰减'], [('GetSound(Reaction)', '查找对应 Sound Wave 或 Sound Cue'), ('Volume / Pitch / MaxDuration', '分别调整短反应音的播放效果')]),
         'UDeliveryAiSettings': ('AI 项目设置', ['保存后端地址和启用开关', '保存请求数量上限和超时'], [('在项目设置中修改', '配置写入 DefaultGame.ini'), ('由网络子系统读取', '不再建立重复的数据表')]),
         'FDeliveryConversationOptionRow': ('快捷发言配置', ['保存按钮文字和实际台词', '保存意图、排序和启用开关'], [('界面按配置生成按钮', '显示文字使用 FText'), ('服务器按行名读取台词', '仍需检查是否允许交谈')]),
@@ -121,6 +121,9 @@ def class_diagram(title, nodes, edges):
             points=[(x1+w1/2,y1),(x1+w1/2,710),(x2+w2/2,710),(x2+w2/2,y2)]
         elif overview and (a,b)==(5,4):
             points=[(x1,y1+h1/2),(817,y1+h1/2),(817,735),(x2+w2/2,735),(x2+w2/2,y2)]
+        elif len(nodes)==11 and (a,b)==(10,5):
+            # 语音结果沿右侧返回，避开中间的播放状态和连线编号
+            points=[(x1+w1,y1+h1/2),(1218,y1+h1/2),(1218,y2+h2/2),(x2+w2,y2+h2/2)]
         elif len(nodes)==11 and (a,b)==(5,9):
             # 跨过中间一行的组件关系沿外侧走，避免穿过动画类的文字
             points=[(x1+w1,y1+h1/2),(1218,y1+h1/2),(1218,y2-28),(x2+w2/2,y2-28),(x2+w2/2,y2)]
@@ -226,8 +229,8 @@ def diagrams():
         n('FDeliveryNpcLocalVoice','各客户端：待播句子',[],[],kind='struct'),
         n('FDeliveryNpcSpeechState','实际播放的对白状态',[],[],kind='struct'),
         n('SpeechQueue','Qwen 语音队列',[],[],kind='Python classes'),
-        n('QwenSpeechSynthesizer','大军常驻 B 音色',[],[],kind='Python classes')
-    ],[(0,1,'模型文字逐步到达','dependency'),(1,2,'小芳的完整句子交给 SAPI','dependency'),(2,5,'返回文本、情绪、PCM 与句子序号','dependency'),(5,4,'整句音频生成后通过 HTTP 发送','dependency'),(4,3,'在游戏线程检查本次请求','dependency'),(3,6,'通过检查后按序安排句子','dependency'),(6,7,'后台压缩 Opus，客户端收到后解码','dependency'),(7,8,'开始播放时更新本机字幕与情绪','dependency'),(1,9,'大军的完整句子按优先级排队','dependency'),(9,10,'前一句结束或确认取消后调用','dependency'),(10,5,'返回完整 PCM，过长则明确失败','dependency')])
+        n('QwenSpeechSynthesizer','常驻 NPC 语音',[],[],kind='Python classes')
+    ],[(0,1,'模型文字逐步到达','dependency'),(1,2,'选择 windows 时合成完整句子','dependency'),(2,5,'返回文本、情绪、PCM 与句子序号','dependency'),(5,4,'整句音频生成后通过 HTTP 发送','dependency'),(4,3,'在游戏线程检查本次请求','dependency'),(3,6,'通过检查后按序安排句子','dependency'),(6,7,'后台压缩 Opus，客户端收到后解码','dependency'),(7,8,'开始播放时更新本机字幕与情绪','dependency'),(1,9,'Qwen 句子按玩家优先顺序排队','dependency'),(9,10,'前一句结束或确认取消后调用','dependency'),(10,5,'返回完整 PCM，过长则明确失败','dependency')])
     d['combat']=class_diagram('战斗与拽车类图 · 当前实现',[
         task,resident,n('UDeliveryNpcCombatComponent','服务器：攻击与倒地状态',['AttackId / HitAt','bDown / bRecovering'],['StartStrike() / CancelStrike()','ReceiveImpact()','SetDeliberateProne()']),
         agent,n('UDeliveryVehicleHoldComponent','车辆组件：独占拽持事务',['Holder / HoldActionId','ExpiresAt / ThrottleSeconds'],['CanHold() / TryHold()','Release() / UpdateThrottle()','GetSpeedScale()']),
@@ -264,4 +267,38 @@ def diagrams():
         (0,5,'UpdateThrottle：持续油门挣脱','call'),(1,5,'Release：受击 / 结束 / 超时等路径','call'),
         (5,0,'清除占用并恢复速度倍率','return'),(4,2,'TryFinishAction：记录动作结束；对白另行记录','return'),
         (1,5,'当前未实现单独预约车辆或双手精确贴合车身','note')])
+    # 跟班图单独描述计划中的扩展，避免把现有类画成已经支持新玩法
+    def companion_node(name, title, fields, methods, kind='类', status='计划复用'):
+        return dict(name=name, title=title, role=title, fields=fields, methods=methods,
+                    status=status, kind=kind)
+    d['companion']=class_diagram('二狗类图 · 后续设计，尚未实现',[
+        companion_node('UDeliveryConversationComponent', '玩家交代任务',
+                       ['沿用玩家控制器上的交谈入口', '跑腿指令需检查是否来自主人'],
+                       [('Submit() / ServerSubmit()', '发送原话，服务器检查后交给 NPC')]),
+        companion_node('ADeliveryCompanionCharacter', '二狗角色',
+                       ['继承 ADeliveryNpcCharacter', '沿用 NPC 的战斗、声音和表情'],
+                       [('拟重写 CanExecute() / ExecuteAction()', '检查并执行跟随、等候和跑腿动作'),
+                        ('拟重写 StopAction()', '停下已经取消的动作')], status='计划增加'),
+        companion_node('UDeliveryCompanionComponent', '主人关系与跑腿记录',
+                       ['主人 PlayerState、亲密度、跟随状态', '当前跑腿与手上的快递由服务器保存'],
+                       [('计划提供归属与跑腿接口', '具体函数在实现时确定'),
+                        ('复制主人和当前状态', '上下车仍属于同一位主人')], status='计划增加'),
+        companion_node('UDeliveryNpcAgentComponent', '模型上下文与动作记录',
+                       ['记录 NPC 听见的话和现场事件', '读取跟班组件提供的任务与关系'],
+                       [('RequestDecision()', '请模型从当前可用动作中选择'),
+                        ('TryFinishAction()', '记录游戏确认的动作结果')]),
+        companion_node('UDeliveryAiGatewaySubsystem', '请求模型判断',
+                       ['发送相关事件、关系和可用动作', '复用已有后端和取消处理'],
+                       [('Enqueue() / Cancel()', '安排请求或取消旧请求')]),
+        companion_node('BT_Companion', '二狗行为树蓝图',
+                       ['从 BT_Resident 扩展跟随与跑腿', '倒地、取消和目标变化时停止动作'],
+                       [('复用 BTTask_DeliveryExecuteNpcAction', '调用角色接口执行模型选定的动作'),
+                        ('新增跟随与跑腿分支', '蓝图节点与参数在实现时配置')], '蓝图资产', '计划增加')
+    ],[(0,1,'通过检查的玩家原话交给 NPC','dependency'),
+       (1,2,'角色持有跟班组件，由组件保存主人与跑腿状态','composition'),
+       (1,3,'角色沿用 NPC Agent 处理现场信息与模型建议','composition'),
+       (2,3,'将当前任务和主人关系提供给模型上下文','dependency'),
+       (3,4,'请求模型判断，接收台词和动作建议','dependency'),
+       (3,5,'将游戏检查通过的动作交给行为树','dependency'),
+       (5,1,'行为树调用角色的动作接口，结果交回 Agent','dependency')])
     return d

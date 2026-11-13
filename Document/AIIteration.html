@@ -13,9 +13,9 @@
     @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
     @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
     .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
-<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#iteration-3">验证记录</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
+<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
 <header><div class="meta">AI / 交谈、语音与表情 / 2026-11-13</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
-<div class="notice">本页保留试验中的失败与后续修复。大军的 B 音色已接入常驻 Qwen，小芳保留 SAPI；后台检查通过，新的游戏听感、等待和多人效果仍待试玩确认。</div>
+<div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。接下来优先做出能试玩的争吵、互殴与追赶，再根据反馈完善表演；声音与多人画面仍需实际验收。</div>
 <div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
 <section id="iteration-1"><h2>交谈延迟：初步测量与改进</h2>
 <p>玩家点按钮后，旧流程会等待完整模型输出，再把结果交给游戏。即使第一句话已经生成，玩家也要等后面的内容生成完才看到回复。此外，NPC 闲聊与玩家交谈共用处理能力，排队会继续增加等待。</p>
@@ -119,6 +119,28 @@
 <h3>当前试玩界面</h3><p>这是实际客户端截图，已使用中文字体和生成的按钮图标。完整 MVC 调整按用户要求留到主要功能检查之后。</p>
 <figure><img alt="真实模型回复显示在客户端的交谈面板中" src="Images/AI/conversation-client.png" style="width:100%;max-width:800px"/><figcaption>实际客户端界面，与前面的生成效果图分别记录</figcaption></figure>
 </div></section><section id="iteration-7"><h2>交谈、动作与人物声音</h2>
+<div id="village-dialogue-conflict"><h3>2026-11-13：先修交谈内容和拱火后的行动</h3>
+<p>玩家反馈“拱火没用，两个人打不起来，聊天也接不上”。本轮停止继续追查语音耗时，先处理能否听懂当前对话、是否作出符合人物性格的选择，以及选了动作后能否执行。</p>
+<h4>为什么之前走近了仍不出拳</h4>
+<p>普通移动的停止判定是 140 厘米，再加双方各 34 厘米的碰撞半径，合计约 208 厘米。出拳要求 160 厘米以内，且只有达到这个距离才向模型提供攻击选项。两条规则没有接好：角色可以被判定为已经走到对方旁边，却仍然不能出拳。</p>
+<p>这次把靠近和出拳接在同一个 <code>StrikeOnce</code> 动作中。模型决定是否攻击，行为树负责先走过去；战斗组件只在真正到达攻击距离后启动出拳，并在命中时刻再次检查。当前候选范围为 600 厘米，动作最多持续 5 秒，实际命中范围仍是 160 厘米。走不到、目标离开、倒地或中途取消都会结束动作；挥空不再报告成功。没有用固定词语判断代替模型的选择。</p>
+<h4>先让两人分清谁在对谁说话</h4>
+<p>旧请求主要提供人物编号和原话，姓名有时只出现在感知描述中，也没有明确的收话人。玩家向大军说话时，小芳直到听见大军回答才收到一段内容，很容易漏掉前面的意思。现在请求直接附上人物编号、姓名、类型和每句话的收话人，旁听者也保存能够听到的玩家原话。</p>
+<p>台词的收话人由模型填写 <code>speech_target_id</code>，服务器检查这个对象是否已提供给模型。动作目标和说话对象可以不同，例如看向小芳时仍然回答玩家。完整发言结束后，说话者自己的记录与旁人听到的记录使用同一编号，并附上它回答的发言编号，后端可以把问题和回应一起提供给下一轮。</p>
+<p>另一个问题发生在请求结束时：同伴的新话已经保存，但旧请求的完成处理会清掉“还需要回答”的标记。现在新的直接发言会让尚未开始的旧建议重新考虑；如果本轮动作和回复已经开始，就保存接话需求，在当前回复结束后继续处理。旁听消息仍可加入记忆，但不会立即打断正在回答的内容。</p>
+<h4>人物改成村口的大爷大妈</h4>
+<p>大军不再以修车为背景，小芳也移除了面店设定。大军急性子、爱面子，尤其不愿意在熟人面前认怂；小芳嘴快、主意正，喜欢拆他的台，也可能先动手。两人可以被挑拨，也可能看出玩家在传瞎话；人物关系只说明他们熟悉，今天发生了什么仍以现场记录为准。</p>
+<p>新设定写入 <code>Design/AI/NpcProfiles.json</code> 和现有导入脚本。姓名、稳定表行和已选择的声音保留。正式数据表与蓝图是否保存成功，需要查看导入结果；人物说话是否自然、有趣，还需要实际交谈，不能由提示词或测试数量代替判断。</p>
+<h4>界面直接显示玩家说过的话</h4>
+<p>原先点击快捷按钮后，很难确认它实际发送了什么。现在现有 UMG 的 Reply 文本区域先显示“你 → 大军：实际原话”，再另起一段显示 NPC 姓名和回复。快捷按钮悬停时预览台词，实际发送时根据当前附近人物确定名字。此次没有运行时创建新的控件，也没有把界面布局搬进 C++。</p>
+<h4>已经检查的内容与仍待确认的部分</h4>
+<ul><li>102 项后端检查通过，记录为 <code>Saved/Logs/NpcDialogueBackendTests.log</code>。</li><li>真实文本案例中，模型已根据新人物与对话信息选择 <code>StrikeOnce</code>，记录为 <code>Saved/AIResearch/village-dialogue-review.json</code>。这是模型输出检查，没有执行游戏里的移动和拳击。</li><li>完整构建已通过。此前统一编译发现动画资产工具的 <code>Folder</code> 名称冲突，已改为 <code>AnimationFolder</code>。</li><li>最终 8 项 UE 逻辑检查全部通过，其中 4 项带预期或测试角色缺少模型、音频的警告，报告为 <code>Saved/Automation/NpcConflictFinal/index.json</code>。交谈检查覆盖说话人与收话人、旁听、旧回复过期和流式接话。独立测试世界中，NPC 从 400 厘米外走近并实际命中，目标进入倒地；踱步往返、让开、取消、路径被挡和倒地后速度处理也通过检查。</li><li>本轮尚未完成正式地图互殴、主客双方画面和自由交谈的验收。独立世界中已观察到移动和命中，仍需在实际地图检查滑步、动画衔接、交谈连贯性和界面效果。</li></ul>
+<h4>新增步态资源与首次绑定失败</h4>
+<p>本次复用本地 Quaternius CC0 动画库，新增 <code>A_NpcWalk</code> 和 <code>A_NpcJog</code>，原 <code>A_ResidentWalk</code> 保留作踱步。两条新动画已按原映射重定向到共用 NPC 骨架，长度分别为 1.333 秒和 0.933 秒，没有更换骨架或下载新的依赖。来源记录在 <code>Design/Art/NPC/Residents/LocomotionSources.txt</code>。</p>
+<p>第一次 UE 导入已保存两条新动画，但蓝图保存前的检查失败，脚本随即停止。检查代码把 <code>Transform</code> 转为字符串比较；本机 UE 5.8 的 <code>PyWrapperStruct.cpp</code> 会在这个字符串中加入临时对象的内存地址，因此数值相同也可能被误判为变化。现已逐项比较位置、四元数旋转和缩放，并在检查失败前写出具体差异，保留蓝图编译及原资产保护检查。修正后重跑已成功保存两份蓝图，<code>Saved/AIResearch/NpcLocomotionImport/latest.json</code> 记录 <code>status=saved</code>，原骨架、两个表情网格、原踱步动画及 NPC 其他配置都保持不变。三种动画的参考速度分别为踱步 80、普通走路 180、急走 240 厘米每秒；资源绑定已完成，实际脚步与位移是否贴合仍需游戏检查。</p>
+</div>
+<h3>此前交谈与声音问题的记录</h3>
+
 <p>本轮根据试玩反馈继续修改：人物的台词仍有明显模板感，两人会反复接话，Windows 的 Kangkang / Huihui 声音也过于机械。此前网络与播放测试通过，只说明声音能够传到客户端并播放完整；听感和人物性格尚未通过用户验收。</p>
 <h3>重复接话的原因</h3>
 <p>日志中每轮都有新的请求和发言编号，说明问题发生在对话生成与接话过程。逐句回复通知邻居时总使用第 1 轮，使原来的轮数限制失效。此外，已经回答的玩家原话仍被放在当前消息中；一段回复中途停止时，之前说完的句子也会被丢掉。</p>
@@ -199,7 +221,7 @@
 </section><section id="iteration-8">
 <h2 id="tts-evaluation-plan">中文人物语音：独立对照与试听</h2>
 <p>玩家反馈完整台词听起来机械。现有 Windows 男声 Kangkang 和女声 Huihui 都是系统标注的成年音色，调快或调慢语速不能解决人物年龄与说话方式的问题。已收集的真人短音用于轻笑、不满等反应；NPC 临时生成的完整中文台词仍需要语音合成。</p>
-<div class="notice">2026-11-13：正式后台已准备好大军选定的 B 音色，即 Qwen Uncle_Fu；小芳保留 SAPI。模型仍由 Sol 处理玩家交谈、Luna 处理闲聊。音频按完整句子生成后发送，尚未实现一句之内边生成边播放；新声音的游戏听感和等待仍待试玩确认。以下保留独立试验、接入问题和实际结果。</div>
+<div class="notice">2026-11-13：正式后台已准备好大军选定的 B 音色，即 Qwen Uncle_Fu；当时小芳使用 SAPI，Sol 处理玩家交谈、Luna 处理闲聊。最新后台已改用 Serena 候选，模型默认均为 Sol。音频按完整句子生成后发送，尚未实现一句之内边生成边播放；新声音的游戏听感和等待仍待试玩确认。以下保留独立试验、接入问题和实际结果。</div>
 <h3>先比较两种方案</h3>
 <div aria-label="中文语音试验方案" class="table-scroll" role="region" tabindex="0"><table>
 <thead><tr><th>方案</th><th>本轮比较内容</th><th>一次下载预算</th><th>磁盘预留</th><th>需要注意</th></tr></thead>
@@ -343,7 +365,7 @@ powershell -NoProfile -File Tools/DeliveryAI/tts_evaluation/setup_evaluation.ps1
 <tr><td>小芳：道歉</td><td>4057 ms</td><td>4816 ms</td><td>4841 ms</td></tr>
 </tbody></table></div>
 <p>记录为 Saved/AIResearch/speech-completion-live-http.json。这里测的是模型、SAPI 和 HTTP 接口，没有连接 UE，也不是客户端开始出声的时间。首句仍需约 4–5.5 秒，低延迟目标尚未达成。两次 SAPI 合成都较快，不能把这组耗时解释成模型与语音分开处理带来的提速；该修改的明确收益是较慢语音不会继续占用已经结束的模型调用位置。</p>
-<p>本轮没有重试此前被自动审批拒绝的 PIE，也没有用后端测试代替游戏内反馈、多人同步和听感验收。大军的常驻 Qwen 服务已准备完成，小芳保留 SAPI；用户可以试玩。已认可的 Graph1 短样本和真实服务输出一致，但新声音在游戏中的自然程度、等待和帧率影响仍需检查，不能把后台接通视为体验已完成。</p>
+<p>本轮没有重试此前被自动审批拒绝的 PIE，也没有用后端测试代替游戏内反馈、多人同步和听感验收。大军的常驻 Qwen 服务已准备完成，当时小芳使用 SAPI；最新女声检查见本轮记录。已认可的 Graph1 短样本和真实服务输出一致，但新声音在游戏中的自然程度、等待和帧率影响仍需检查，不能把后台接通视为体验已完成。</p>
 <p>TTS 安装脚本先执行了两种不带 -Execute 的计划分支，均返回 0，当时没有创建环境、安装依赖或下载权重。获得同意后才实际安装，现在两套环境均已完成。计划检查、安装完成、合成成功和游戏效果分别记录，避免把前一步通过当作整套语音已经完成。</p>
 <h3>复查命令</h3>
 <pre><code>python -X utf8 Tools/DeliveryAI/benchmark_scheduler.py --repeats 3 --baseline-snapshot Saved/AIResearch/scheduler-before-player-admission.py --output scheduler-player-admission-final.json
@@ -352,4 +374,321 @@ python -X utf8 Tools/DeliveryAI/benchmark_context.py --rounds 2 --cases crowded_
 python -X utf8 Tools/DeliveryAI/benchmark_model_cancel.py --rounds 2 --output model-cancel-reuse-comparison.json
 python -m unittest discover -s Tools/DeliveryAI -p 'test_*.py'</code></pre>
 <p>第一条使用模拟调用，两条 benchmark_context 和一条 benchmark_model_cancel 命令会实际调用模型。原始对照已保留，复查时应换输出文件名，避免覆盖这轮记录。</p>
-</div></section><footer>与方案文档使用相同版式，支持离线阅读。持续记录本项目的实际结果，不把外部演示指标当作本项目性能。</footer></main></div><script>document.getElementById('print').addEventListener('click',()=>window.print());</script></body></html>
+</div></section><section id="npc-background-voice"><h2>人物背景与小芳的声音</h2>
+<p class="meta">2026-11-13 · 已实现并完成独立检查，游戏听感与多人画面待试玩</p>
+<h3>为什么只写性格还不够</h3>
+<p>原来给模型的主要是一段性格和最近发生的事。大军知道自己脾气急，却没有一份明确的背景资料；要求模型“自然一点”也没有告诉它两个人平时怎么说话。这次把共同背景、个人经历和说话示例加入人物配置，和当前对话一起交给模型。</p>
+<p>背景记录两人是已经退休的街坊、玩家在附近送货等设定。今天谁骂了谁、谁被打倒、哪一单已经送到，仍然来自游戏实际记录。玩家转述一句“小芳说你……”，只表示玩家这么说过。模型可以相信，也可以怀疑，游戏不会把它改成小芳真的说过。</p>
+<h3>研究依据与采用范围</h3>
+<div class="table-scroll" tabindex="0"><table><thead><tr><th>资料与已读部分</th><th>这次采用的做法</th><th>限制</th></tr></thead><tbody>
+<tr><td><a href="https://arxiv.org/html/2304.03442v2">Generative Agents</a>，4.1、4.3.2、7.2</td><td>让人物关系、相关经历和当前对话共同影响回应</td><td>作者也发现了过于正式、迎合和编造细节的问题；加入记忆并不能保证自然</td></tr>
+<tr><td><a href="https://arxiv.org/html/2310.00746v1">RoleLLM</a>，3.2、5.3</td><td>分别提供人物知道的事和少量对话示例</td><td>不把大量无关语料直接加入请求；论文的小模型也受到嘈杂检索内容干扰</td></tr>
+<tr><td><a href="https://arxiv.org/html/2310.17976v4">InCharacter</a>，5.2、附录 F.4</td><td>检查人物在澄清、挑拨、告别和身份诱导下是否保持自己的态度</td><td>只用人物描述的结果已接近描述加记忆，不能声称记忆必然带来大幅提升</td></tr>
+<tr><td><a href="https://arxiv.org/html/2502.11387v1">RoleMRC</a>，3.1、4.2—4.3</td><td>同时检查人物能回答什么，以及缺少信息时是否乱编</td><td>这是训练与评估研究，本项目采用检查方法，没有训练新的角色模型</td></tr>
+</tbody></table></div>
+<h3>配置与代码怎样配合</h3>
+<p><code>Design/AI/NpcProfiles.json</code> 新增 <code>world_background</code>，每个人物新增 <code>background</code> 和 <code>dialogue_examples</code>。共同背景由作者编写，个人资料只发给对应人物。示例只供口气参考，不会写进已发生事件，也不能作为攻击依据。</p>
+<p>游戏通过人物表行名提供 <code>profile_id</code>，例如 <code>chunlai</code> 对应大军。<code>dialogue_background.py</code> 按这个编号读取配置，不依赖显示名。修改姓名不会换错人物，旧请求没有编号时继续原来的交谈方式。配置在后端启动后首次使用时读取一次，修改后需要重启后端。</p>
+<p>这些资料随原来的一次模型调用发送，没有再增加一轮润色或审核模型。流式回复与普通回复都使用同一份背景。模型继续决定台词和行动，游戏继续检查动作是否可执行。</p>
+<h3>实际回答与本轮发现</h3>
+<p>先用同一模型 <code>gpt-6.1-sol</code> 测两个人、六种场景，共 12 次。内容包括邻居关系、未知订单、强行更换身份、未目睹的传闻、澄清和告别。12 次都返回有效动作；这些样本没有编造订单或改成修车老板，告别时两人都选择让路。首句文字耗时为 2.65–4.63 秒，不包含语音和游戏播放。</p>
+<div class="table-scroll" tabindex="0"><table><tr><th>场景</th><th>模型原话</th><th>观察</th></tr>
+<tr><td>玩家要求大军改当修车老板</td><td>“我哪有什么修车铺，你的车修了哪儿我可不知道。”</td><td>保留了角色身份</td></tr>
+<tr><td>玩家声称小芳在屋内偷钱，要求大军作证</td><td>“我没看见，别拉我给你作证！”</td><td>没有把转述当成亲眼所见</td></tr>
+<tr><td>邻居澄清没有骂小芳</td><td>“哦，那是我听岔了，你倒说清楚呀。”</td><td>接住澄清，没有重复原来的指责</td></tr>
+<tr><td>玩家问送货地址和钱数</td><td>“地址和报酬看你自己的订单，我可不知道。”</td><td>没有乱编，但用词仍偏像说明书</td></tr></table></div>
+<p>随后补充了日常用词和背景数字的要求，再检查四次。小芳改为“送哪儿、拿多少钱，你得看自己的单子，我可不知道。”两人面对未设定的退休前职业都选择不展开，没有编一份工作。此前一次真实 HTTP 回复把“多年邻居”扩写成“几十年”，这也是本轮发现的问题；补充要求后的两次相关检查只说“多年”，小样本不能保证以后不再发生。</p>
+<p>两个人有时仍使用相近的句式，性格差异和有趣程度还需要连续交谈检查。本轮没有加载外部人物台词库，也没有用固定台词替换模型回答。完整输入和回答保存在 <code>Saved/AIResearch/village-background-review.json</code> 与 <code>village-background-refinement.json</code>。</p>
+<h3>小芳的完整台词声音</h3>
+<p>小芳从 Windows Huihui 切换到 Qwen <code>Serena</code>，大军保留用户认可的 <code>Uncle_Fu</code>。两人共用一个常驻模型，按请求选择声音；取消旧合成后才继续处理下一句。配置在 <code>Tools/DeliveryAI/neural_voice_config.json</code>，资源来源与选用说明在 <code>Design/AI/NpcVoices.json</code>。</p>
+<p><strong>这仍是女声候选，年龄感尚未达标。</strong><a href="https://github.com/QwenLM/Qwen3-TTS#custom-voice-generate">官方说明</a>将 Serena 定位为温和的年轻女声。当前 0.6B 模型会忽略音色描述，加入“老奶奶”提示不能把它变成老人声音。本次没有变调，也没有复刻下载的真人录音。女声是否自然、是否适合小芳，需要用户试听。</p>
+<audio style="width:420px;max-width:100%" controls preload="none" src="../Saved/AIResearch/FemaleVoiceIntegration/xiaofang_greeting.wav" aria-label="小芳候选声音试听">浏览器不支持音频播放</audio>
+<p>试听台词：“哎，你找我什么事？”实际合成约 1.45 秒，声音长 1.76 秒。另一次正式后端 HTTP 请求，模型先回答“是啊，几十年的老邻居了，他那脾气我熟。”，首句文字约 4.18 秒到达，完整音频约 8.34 秒到达，其中声音合成约 4.15 秒。这两个样本句长不同，不能据此声称所有对话都能在 1.45 秒内发声。</p>
+<p>男声 B 样本与此前认可版本的 PCM 完全一致；女声合成中取消约 46.6 毫秒退出，随后男声正常生成。记录在 <code>Saved/AIResearch/FemaleVoiceIntegration/latest.json</code>、<code>http_review.json</code>。两个音色仍采用整句声音返回，一句内部边生成声音边播放尚未实现。</p>
+<h3>下一步：制作小芳的老年声音</h3><p>用户已确认沿用大军 B 的试听流程。先下载固定版本的 Qwen 1.7B VoiceDesign，设计两种虚构的成熟女声，用相同台词比较；选定后再用 0.6B Base 固定参考声音。当前正式 Serena 和大军 B 保持可用，试听通过后才考虑替换。</p><p>复用已校验的编解码器和词表后，两阶段新增下载上限约 5.66 GB，两个独立模型目录约占 7.04 GB。VoiceDesign 只用于离线制作声音；长期接入 Base 后将多一份模型，必须另测显存和游戏帧率，不能沿用当前男女共用一份 CustomVoice 的结论。来源与流程见 <a href="https://github.com/QwenLM/Qwen3-TTS#voice-design-then-clone">Qwen 官方说明</a>。</p><h4>老年女声 A/B 已生成，用户选择 B</h4><p>第一阶段已完成固定版本下载和发布方校验。两组均使用“哎，你找我什么事？”和“大军，你少在这儿瞎嚷嚷。”，保留原音高与完整停顿。A 按沉稳、嘴快设计；B 按略沙哑、爱顶嘴设计。上述是声音描述的目标，实际年龄感、自然程度与漏字情况需要用户试听。</p><p>A 两句分别合成 4.82、7.26 秒，声音长 1.60、2.96 秒；B 分别为 4.68、9.82 秒，声音长 1.84、3.84 秒。Torch 分配峰值约 4.01 GiB，整卡采样峰值 6428 MiB（含其他程序）。这是离线制作声音，不能直接当成未来 Base 固定音色后的游戏速度。</p><p>A · 顶嘴</p><audio controls preload="none" style="width:420px;max-width:100%" src="../Saved/AIResearch/TtsEvaluation/qwen_voice_design/results/20261113T032449990411Z/Xiaofang_A_retort.wav"></audio><p>B · 顶嘴</p><audio controls preload="none" style="width:420px;max-width:100%" src="../Saved/AIResearch/TtsEvaluation/qwen_voice_design/results/20261113T032449990411Z/Xiaofang_B_retort.wav"></audio><p>完整结果位于 <code>Saved/AIResearch/TtsEvaluation/qwen_voice_design/results/20261113T032449990411Z/evaluation.json</code>。四段均正常生成结束、没有超幅样本；环境提示缺少 SoX 和 FlashAttention，本轮沿用 SDPA，未安装新依赖。0.6B Base 已下载并校验，用户选定的 B 参考已保存到 Design/Art/NPC/Residents/Voice/Generated。正式交谈暂时继续使用 Serena 和原大军 B，固定音色检查见下文。</p><h3 id="xiaofang-fixed-b">小芳 B：固定参考与新台词检查</h3>
+<p>固定参考来自用户选中的完整 B 音频，未变调或剪辑。Base 模型一次建立参考，用同一份数据朗读新句子；它没有训练新的模型权重。独立检查生成“哎，你找我什么事？”用了 4.413 秒，“你别听他瞎说，我刚才说的是车。”用了 7.881 秒，音频分别长 1.68 和 3.44 秒。</p>
+<p>参考准备约 13.761 秒，只在这次启动时进行。合成中取消在约 62 毫秒后确认，没有输出取消的音频；随后重复第一句与首次 WAV 完全一致。生成阶段 Torch 分配峰值约 2.27 GiB，整卡采样峰值 4952 MiB，包含其他程序。这个结果未包含大军模型同时驻留和游戏渲染。</p>
+<p>新台词 · 问候</p><audio controls preload="none" style="width:420px;max-width:100%" src="../Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T034110864144Z/Xiaofang_B_greeting.wav"></audio>
+<p>新台词 · 澄清</p><audio controls preload="none" style="width:420px;max-width:100%" src="../Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T034110864144Z/Xiaofang_B_clarification.wav"></audio>
+<p>生产接入代码保留大军原 CustomVoice 模型，另加载小芳 Base；两个模型沿用同一个语音队列，不在每句话之间重新加载。最初 121 项后端测试通过，日志为 Saved/Logs/NpcVoiceCloneBackendTests.log。正式配置暂未切换，仍为大军 B 与 Serena。用户关闭编辑器后已完成下方 Graph 对照；加速候选尚未采用。</p>
+<p class="evidence">原始结果：<a href="../Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T034110864144Z/evaluation.json">固定 B 检查</a>。新句子的年龄感、自然程度、两模型显存和游戏效果仍待检查。</p>
+<h4>加速对照与本轮取舍</h4>
+<p>使用同一参考、台词、种子和生成参数，对比官方生成与 PredictorGraph。两句原版复测分别为 4.068、7.646 秒，Graph 为 1.474、2.692 秒。原版复测音频与历史基线完全一致；Graph 的两句声音与编码均不同，时长分别从 1.68、3.44 秒变为 1.52、3.12 秒。取消分别为 78、63 毫秒，两种方式取消后都能重复生成各自相同的声音。</p>
+<p>同进程诊断发现，声音编码的前两帧相同，第三帧的第七个子组首先不同。生成参数没有漏传；具体数值差异尚未确定。Graph 是速度更快的候选，需要重新比较听感，不能直接记为保持输出一致的优化。整卡采样峰值约 5116 MiB，包含其他程序；没有测游戏同时运行。</p>
+<p>从这两句看，原版生成时间超过声音本身长度，逐句处理仍可能出现停顿。Graph 已接近或快于播放速度，但这只反映单独合成，不能据此承诺两人交谈或游戏中没有等待。用户随后明确要求优先互动与表现，本轮停止继续追查数值算子，恢复原后台。<a href="../Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T040218056401Z/comparison-with-repeat.json">对照数据</a>与<a href="../Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T040557990915Z/evaluation.json">编码诊断</a>保留供后续参考。</p>
+<h3>等待期间的注视修复</h3>
+<p>模型给出动作后，原来的倾听对象会清空，而声音还没准备好。NPC 因此可能提前把视线移开，让玩家觉得它又不理人了。现在等待首句语音期间继续看着这次的说话对象，真正开口时再停止思考歪头。判断只使用客户端能收到的状态；攻击、倒地、拽车、距离过远或取消交谈时，仍按原规则解除注视。</p>
+<p>后续又确认了一处空档：后台已经完成，但本机声音还在排队或缓冲时，原判断会提前结束等待姿态。现增加 <code>IsWaitingForSpeechPlayback()</code>，使用本机队首与当前回复编号保持注视和眼部表情；播放开始、取消、轮次替换或超时后结束。它不新增字幕，也不读取客户端没有的服务器请求记录。</p>
+<p>本轮用单编译任务构建 DeliveryEditor，136.78 秒成功。<code>Delivery.AI.SentencePlayback</code> 在无渲染、无音频输出的独立测试世界通过，覆盖后台完成、音频待播、开始显示，以及攻击、倒地、目标失效、取消和超时；其中一次音频超时警告来自原有故障场景。125 项后端检查通过，含新增的 4 项真实 Windows venv 退出检查。当前 venv 启动器本身会结束实际解释器，未复现残留模型进程，因此没有额外添加进程管理层。</p>
+<p class="evidence">本轮记录：Saved/Logs/NpcWaitingPlaybackBuild.log、Saved/Automation/NpcWaitingPlayback/index.json、Saved/Logs/NpcWaitingPlaybackBackendTests.log。上述检查没有进入多人 PIE，也没有证明真实画面与语音已经验收。</p>
+<h3 id="player-feedback-nov13">11 月 13 日试玩：等待、挑衅和操作提示</h3>
+<p>这次试玩提出了四个问题：回答仍然慢；两名街坊很快站到一起反驳玩家；点击拱火后看不清自己说了什么；右键转视角会误出拳。随后又确认了人物头顶的 T 交谈提示不容易出现。这一轮先处理这些直接影响试玩的问题，二狗的出生点剧情和随从功能安排在本轮检查之后。</p>
+<p>四次玩家交谈从服务器接收发言到本机开始播放，分别用了 8.18、4.94、8.83 和 9.76 秒。模型首句约 2.57–3.27 秒，后面主要在合成声音。最慢一次还排了 2.20 秒的语音队列：玩家的台词尚未生成时，另一名 NPC 的闲聊先开始合成。因此这次没有继续增加线程，而是让玩家生成台词期间尚未开始的闲聊先等待，正在合成的声音照常完成。</p>
+<p>第一句改为尽量在 12 个中文字内表达完整意思，生成后立即合成，必要的解释再接下一句。真实后台的两次小检查中，大壮和翠花的第一句音频分别在 6.45 和 5.94 秒到达，语音排队均为 1 毫秒，合成分别为 2.11 和 1.91 秒。这两次没有连接游戏，场景和台词也与此前试玩不同，只能证明新流程成功返回声音，不能据此声称游戏整体加快了固定比例，更不能称为没有延迟。</p>
+<p>拱火按钮原来假借另一人的口说坏话。两人都听见后，会互相否认并认定玩家在撒谎。现在改成玩家当面点名挑战，例如“翠花，你敢不敢跟大壮比划两下？我看你只敢动嘴。”聊天框保留这句原话和服务器的发送结果。人物设定也改成各自好胜、彼此不服的老邻居，删去默认维护对方的背景。模型可以质问邻居、对玩家发火、动手或消气，按钮本身不决定攻击。</p>
+<p>真实模型的六个直接挑衅场景中，五次选择向玩家挥拳，一次选择走近玩家；另有邻居连续嘲讽和受击后恢复的检查，出现了对邻居挥拳的建议。这些检查提供了合法候选，但没有在关卡里执行，不能代替实际互殴验收。</p>
+<p>右键改为短按松开出拳，按住或拖动时只转视角。双键抓取和手柄保留原操作，取消输入、换角色和迟到的松开也要清除这次鼠标手势。交谈提示统一使用 600 厘米范围，人物说话和等待回复期间仍保留 T 提示；遮挡和倒地仍会阻止交谈。</p>
+<p>导航检查找到了正式关卡中的一个实际问题：居民附近虽然放着导航范围体积，它的几何面数却为 0，范围缩成一个点。大壮、翠花脚下都没有导航，两人之间也没有完整路径，因此模型即使选择靠近挥拳，游戏也会拒绝执行。放置工具原来直接对空体积调用建造器；UE 5.8 的这条路径会返回成功，却没有生成所需几何。现已改用引擎的 ActorFactory 创建体积。</p>
+<p>修复前先备份正式地图，再重建居民附近的导航范围。体积现在有 6 个几何面，两名 NPC 的站立点都落在导航上，双向完整路径检查通过。地图已保存；比较保存前后的记录，其他 Actor 的位置、旋转和缩放数值全部保持不变。随后另开进程重新加载已保存地图，仍得到相同的有效范围和双向路径。这里的 6 个面指范围体积的几何，不是整张导航网格只有 6 个多边形。</p>
+<p>另一处问题来自独立寻路测试：测试创建了导航对象，却没有完成游戏世界的导航初始化，因此拆掉墙后没有正确处理导航几何的移除。补齐初始化后，测试确认拆墙前存在墙体几何、拆墙后已经移除，再检查完整路径恢复以及角色实际靠近挥拳。之前保留的失败记录已由这次复跑解决。</p>
+<p>表情也补上了动作结束到声音到达之间的空档。模型选定生气后，服务器同步这轮回复的编号；即使本机还没有收到首句声音，也会继续保留生气表情。播放结束、取消、失败、倒地或收话人失效时解除，新的回复不会沿用旧编号。已有的逐句播放测试同时检查了后台合成和本机待播两种情况。</p>
+<p class="evidence">本轮后台 134 项测试通过。语音排队采用可控任务做了对照：6 组新闲聊在生成期间到达的场景，排队中位数从 61.78 降到 0.13 毫秒；4 组闲聊已经开始的场景约为 62 毫秒，基本没有变化。这是缩短模拟任务后的队列实验，不是游戏端延迟。记录：Saved/AIResearch/SpeechReservationComparison/results.json；PlayerFeedback_20261113/backend-probe.json；ConflictBefore_20261113.json、ConflictAfter_20261113.json、ConflictPlayer_20261113.json。</p>
+<p>独立声音试验脚本另外完成了 7 项检查：在 Tools/DeliveryAI/tts_evaluation 执行 <code>python -B -X utf8 -m unittest test_voice_clone test_voice_design -q</code>，耗时 0.012 秒。它们只检查脚本与配置，没有加载模型或运行 CUDA，也不包含在上述 134 项正式后端测试中。</p>
+<p id="player-feedback-validation">DeliveryEditor 构建成功：本轮最终构建 44.96 秒，导航工具和测试补充后的两次增量构建分别为 8.39、6.14 秒。第一份专项报告中 8 项通过、1 项失败；修复上述测试初始化后，失败的 StrikeNavigation 单独复跑通过。合计 9 个不同测试均已通过，其中 3 项带警告。检查覆盖交谈对象选择、上下文、玩家发言反馈、人物穿行遮挡、逐句播放、靠近挥拳、导航、输入生命周期与右键手势。</p>
+<p>正式地图的保存与独立读回均生成了有效报告，但命令行编辑器日志仍汇总了 4 条错误和 15 条警告，包括项目原有的 CDO 构造期间读取物理材质错误、MCP 端口 8000 占用，以及部分道路组件的空导航范围提示。脚本完成和导航结果有效，不代表这些错误已经修复。本轮没有进行真实双人 PIE 或画面、声音、右键手感和持续互殴验收，仍需用当前版本试玩确认。</p>
+<p class="evidence">构建日志：<a href="../Saved/Logs/NpcPlayerFeedbackBuildFinal.log">最终构建</a>、<a href="../Saved/Logs/NpcNavigationRepairBuild.log">导航工具增量</a>、<a href="../Saved/Logs/NpcNavigationFixtureBuild.log">寻路测试增量</a>。自动化：<a href="../Saved/Automation/NpcPlayerFeedback/index.json">首轮 8 项通过与 1 项失败</a>、<a href="../Saved/Automation/NpcNavigationFixtureFinal/index.json">StrikeNavigation 最终通过</a>。正式地图：<a href="../Saved/AIResearch/NpcNavigationRepair/20261113T064718342987Z/after.json">修复前后导航</a>、<a href="../Saved/AIResearch/NpcNavigationRepair/20261113T064718342987Z/result.json">保存及其他 Actor 比较</a>、<a href="../Saved/AIResearch/NpcNavigationRepair/20261113T064851217370Z/before.json">独立重新加载检查</a>、<a href="../Saved/Logs/NpcPlayerFeedbackReadback.log">完整读回日志</a>。</p>
+<h3 id="npc-conversation-interruption">翠花生成了台词，却没有说出来</h3>
+<p>用户在 2026 年 11 月 13 日 12:29–12:30 的试玩中发现两名 NPC 没有相互接话。核对同一局的游戏与后台日志：7 次闲聊请求中，5 次模型正常完成，另两次分别因受击和退出游戏取消。没有 TTS 失败，也没有玩家从交谈界面提交的请求。</p>
+<p>翠花第一句是“大壮，今儿怎么这么安静？”。12:29:19 游戏接收了回复，但 12:29:21 将“看向大壮”判为目标失效，随后清掉尚未播放的台词。声音后来合成成功，也没有进入游戏播放，因此大壮收不到这句话。另一轮翠花选择靠近攻击，因找不到路径而失败，台词再次被取消。</p>
+<p>原来的交谈视线使用普通 Visibility 查询，第三个人站到中间也会挡住它。本局日志没有记录具体遮挡对象，不能断言当时一定是玩家挡住；新增回归会用实际胶囊碰撞复现这条路径。修复后，NPC 看向和听取对方时忽略中间经过的人物，墙壁、门和其他场景物件继续阻挡；出拳和玩家提交消息的检查沿用各自规则。</p>
+<p>需要走过去的候选现在先查询 UE 的完整导航路径。近身挥拳不需要寻路，远处没有路时不再把“靠近攻击”交给模型。行为树执行前仍重新检查，接近过程中由路径跟随处理移动，不在每帧重复同步寻路。新增能力与更激烈表演继续分步完成，本轮优先恢复现有交谈。</p>
+<p>本轮 DeliveryEditor 构建通过。ConversationAim、ConversationContext、ConversationOcclusion、SentencePlayback、StrikeApproach 五项检查通过；其中无合成音频的字幕回归与音频超时注入各有预期警告。新增遮挡检查确实让原始 Visibility 先撞到第三个人，再验证两句台词完成播放流程、写入自身记录，并由邻居收到完整 Speech；它使用无音频世界，不能替代游戏听感与双人画面。</p>
+<p>这一轮的 StrikeNavigation 曾有一项未解决：初始完整导航可达、墙体切断后拒绝都通过，但删除墙并重建后未恢复可达，后续靠近攻击检查也因此没有执行。第一次补齐测试墙的导航注销后仍失败，当时保留失败记录并先提供试玩。后续已查明缺少游戏世界的导航初始化，补齐后整项复跑通过，见上方<a href="#player-feedback-validation">11 月 13 日最终检查</a>。</p>
+<p class="evidence">原局日志：Saved/AIResearch/ConversationInterrupted_20261113；构建：Saved/Logs/NpcConversationOcclusionBuild.log（141.51 秒）和 NpcConversationOcclusionBuildFinal.log（39.98 秒）；首轮报告：Saved/Automation/NpcConversationOcclusion/index.json；寻路重跑：Saved/Automation/NpcConversationNavigationFinal/index.json。后台 8769 端口保持运行；没有进入用户游戏。</p>
+<h3 id="conversation-aim">人物改名与交谈对象选择</h3>
+<p>两名街坊改名为大壮、翠花。人物 JSON、正式数据表和两份蓝图已同步，另开一个命令行进程重新加载后，姓名与人物介绍一致；原有声音、模型、动画和移动配置未变。历史试听里的旧姓名保留，声音参考文本仍对应原始录音。</p>
+<p>玩家反映交谈应该选择自己对准的人。检查发现，原来的 T 键直接寻找最近的 NPC，头顶提示也按距离选择，容易在两人并排时选错。现已将选择方法改为读取本机镜头：准星落在 NPC 的身体或头部时选中他，边缘保留少量容差，并检查距离与遮挡。前后重叠时选择前面的人，没有对准任何人时不自动改选邻居。</p>
+<p>交谈提示使用相同选择方法。界面打开后继续和界面上显示的人交谈，打字期间不会因为镜头移动而换人。服务器仍检查客户端指定对象的距离、遮挡与状态；远端玩家的镜头不会由主机重新计算。</p>
+<p>DeliveryEditor 完整构建通过，17 项构建任务耗时 78.25 秒。Delivery.AI.ConversationAim 与 Delivery.AI.ConversationContext 两项自动化均通过，没有测试警告。专项检查使用实际角色、交谈组件和碰撞查询，覆盖对准较远人物、换方向、前后重叠、头部与身体、两种遮挡、距离、倒地及两位玩家分别选择；测试提供镜头位置，没有打开正式关卡。真实相机、界面和双人网络画面仍需试玩确认。</p>
+<p>后端已重新启动并完成语音预热，使用大壮、翠花的最新人物资料。名字相关的 10 项后端检查通过，旧改名脚本也已转到当前更新入口，避免以后重新生成资源时恢复旧名字。</p>
+<p class="evidence">构建日志：Saved/Logs/NpcConversationAimBuild.log；自动化报告：Saved/Automation/NpcConversationAim/index.json；后台重启日志：Saved/Logs/BackendRestart/20261113T042601180Z。</p>
+<p class="evidence">资产读回：Saved/AIResearch/NpcPersonaUpdate/20261113T042006261163Z/report.json。命令行启动仍有三条物理材质 CDO 错误；人物脚本写入与读回成功，不代表引擎启动没有错误。</p>
+<h3 id="conflict-priority">调整重点：先完成争吵、互殴和人物表演</h3>
+<p>翠花的生气眉毛另有一个资源问题：正式 FBX 中 BrowsAngry 的位移为零。已在独立候选中明确选择左右眉毛的 153 个顶点，并固定与头部相连的顶点 3057；眉毛之外所有顶点的位移为零。配置保存在 Design/Art/NPC/Residents/Appearance/WomanBrowSelection.json，候选在 Saved/AIResearch/NpcWomanBrowsCandidate。正式模型尚未替换，正面、侧面和原贴图眉影检查留待试玩版交付后继续。</p>
+<p>用户要求停止过度深入延迟研究，优先看到挑拨之后的实际互动。读码确认：现有攻击会靠近后出一拳，总时限 5 秒；NPC 挨一次有效攻击就倒地，默认恢复过程约 5.6 秒；当前神经语音未使用情绪参数控制语调。这三处限制不能靠更强硬的提示词解决。</p>
+<p>下一轮先补轻击与击倒的区别、有限交战和追赶，再加入配置表中的表演强度。模型仍决定相信谁、向谁发难、继续还是收手；游戏执行追赶、命中与停止条件。头顶冒气、扬尘、夸张动作和声音分别由 UE 资产配置，命中特效只在真实命中后出现。完整的拟采用字段、职责与验收场景见<a href="DeliveryAIPlan.html#npc-conflict-next">争吵、互殴与追赶设计</a>，这些新增玩法尚未实现。</p>
+<h3>检查结果与尚未覆盖的部分</h3>
+<p>UE 5.8 <code>DeliveryEditor</code> 完整构建成功，耗时 37.36 秒。<code>Delivery.AI.Protocol</code>、<code>NpcProfiles</code>、<code>SentencePlayback</code>、<code>ConversationContext</code> 四项检查通过；其中两项带预期的无语音、音频超时或非法音色警告。后端 111 项检查通过，包含人物资料隔离、旧协议兼容、男女声切换和取消。</p>
+<p>本轮没有进入游戏，也没有操作用户窗口。正式地图里的嘴型、声音大小、女声年龄感、连续争吵和多人显示尚未验收。已有动作直接切动画的问题、女性眉形变化不明显的问题也仍保留，不能用这次逻辑检查证明表现已经完成。</p>
+</section>
+<section id="npc-role-training"><h2>角色对话研究与小模型试验</h2><p class="meta">2026-11-13 · 已阅读资料；小模型训练尚未实施</p>
+<p>用户希望采用短时间内能看到效果的办法，也接受积累数据后做一次 GPU 训练。当前先使用已接入的背景、人物关系、现场记录和少量口语示例；小模型作为下一项独立对照，效果确认后才用于正式交谈。</p>
+<h3>游戏团队与论文做了什么</h3><div class="table-scroll" tabindex="0"><table><thead><tr><th>资料</th><th>已核对的做法</th><th>对 Delivery 的用途</th></tr></thead><tbody>
+<tr><td><a href="https://news.ubisoft.com/en-us/article/5qXdxhshJBXoanFZApdG3L/how-ubisofts-new-generative-ai-prototype-changes-the-narrative-for-npcs">Ubisoft NEO NPC，GDC 2024 官方介绍</a></td><td>编剧定义背景、目标、说话方式，再与技术人员反复交谈，检查回答是否符合这个人物。发布时仍为原型。</td><td>把好台词和不合适台词成对保存，按人物逐轮修改。公开介绍没有足够训练细节，不能声称它已经彻底解决 OOC。</td></tr>
+<tr><td><a href="https://www.ubisoft.com/en-us/studio/laforge/news/7CCHPeIseXSW1P49L4XZ7l/generating-video-game-scripts-with-style">Ubisoft La Forge：Generating Video Game Scripts with Style</a>；<a href="https://aclanthology.org/2023.nlp4convai-1.11.pdf">SASS 论文</a></td><td>用人物历史台词检索和训练得到的风格混合器，帮助生成符合人物口气的初稿。</td><td>参考少量人物示例和人工修改的流程。该工作面向编剧辅助，不能当作已上线实时 NPC 的效果证明。</td></tr>
+<tr><td><a href="https://arxiv.org/html/2510.13586v1">Deflanderization for Game Dialogue</a>，方法、结果与讨论</td><td>减少过度扮演单一性格，再配合短对话示例；另比较了 SFT 和 LoRA。API 与训练实验是不同路线。</td><td>大军可以暴躁，但普通问题也要正常接话；小芳可以损人，但不能每句都重复同一个指责。论文的比赛评分不等于玩家觉得有趣。</td></tr>
+<tr><td><a href="https://arxiv.org/html/2511.10277v1">Fixed-Persona SLMs with Modular Memory</a></td><td>用少量合成问答做 LoRA，人物类型写入模型，具体经历保存在可替换的记忆里。</td><td>可参考有限数据试验。它仍是 CLI 原型，实验只用商人人设；小模型更快的同时也出现较多事实错误，不能直接复制成多人物游戏系统。</td></tr>
+<tr><td><a href="https://arxiv.org/html/2609.29837v1">PUBG Ally 正式技术论文</a>，4.2、6、7.3</td><td>中文版使用 Qwen3-8B 教师和 Qwen3-1.7B 学生；实际游戏记录、教师纠错与训练配合。实时状态继续来自游戏工具。</td><td>候选小模型可以学习街坊口气和游戏能力，今天谁被撞、当前订单是什么仍由 UE 提供。论文是较大规模的工程，不能把它的延迟当成本项目预期值。</td></tr>
+</tbody></table></div>
+<p><a href="https://developer.nvidia.com/blog/how-krafton-built-pubg-ally-a-co-playable-character-powered-by-nvidia-ace/">KRAFTON 与 NVIDIA 技术访谈</a>内包含 GDC 2026 回放链接。已阅读访谈和上述论文相关章节；回放链接访问受限，本轮没有观看完整视频。<a href="https://www.gdcvault.com/play/1029225/Machine-Learning-Summit-Natural-Language">GDC 2023 Natural Language Generation for Games Writing</a>与写作辅助有关，也不能标记为本轮已观看。</p>
+<h3>短期试验怎样安排</h3>
+<p>先沿用当前大模型，检查两人连续接话、被打断、被澄清、告别和重复挑衅的表现。保存完整输入、实际回答、说话对象和游戏结果；重复、答非所问、把传闻当目击或人物串台的回答单独标出，不能直接当作正确训练答案。</p>
+<p>训练准备从少量人工确认的多轮样例开始，再由大模型生成变化并检查。第一轮可以把规模限制在约 200–400 条训练样例，另留独立场景作检查。这是拟定的试验范围，不代表达到这个数量就能保证质量；同一段对话及其近似改写只放在同一组，避免把练过的内容当成新场景成绩。</p>
+<p>候选采用一个中文小模型共同处理大军、小芳，通过人物资料区分角色。LoRA 的意思是在原模型上训练少量附加参数，减少训练成本。先比较未训练的小模型，再做一次有限训练，与当前大模型用相同场景对照；还要检查动作是否合法、文字是否重复、两个人是否像不同的人，以及首句等待和显存占用。</p>
+<p>当前电脑为 12 GB 显存的 RTX 5070 Ti Laptop。训练、语音试做与 UE 试玩分开安排；正式使用时再测模型、TTS 和游戏同时运行。下载、环境准备和训练分别计时，尚无本项目训练时间实测，因此不承诺“训练几分钟就能达到正式效果”。</p>
+<p>无论使用哪种模型，游戏服务器继续确认攻击、抓车和任务结果。人物可以吹牛或误会，系统不能把吹牛当成实际命中，也不能把熟人玩笑一律变成客服式拒绝。是否采用训练版，以新的对话和实际试玩结果决定。</p>
+</section>
+<section id="pubg-ally-companion">
+<h2>PUBG Ally：算法、训练与 Delivery 应用</h2>
+<p class="meta">2026-11-13 · 论文阅读与 Delivery 设计记录 · 跟班玩法尚未实现</p>
+<p>资料：<a href="https://arxiv.org/html/2609.29837v1">PUBG Ally: A Conversational Embodied Agent as an AI Teammate</a>，PUBG Ally Team，2026-09-24，v1。已核对第 3、4、6、7 节相关文字、公式与表格，以及附录 B、C、E、F、G、H、I、J。训练与评价部分另跟读 GEPA 和 DAgger，语音与部署部分核对原始论文和官方文档。未审查 Ally 私有源码，未复现其训练或观看完整分享视频。</p>
+<div class="notice">阅读顺序：<a href="#ally-adoption">Delivery 的采用顺序</a> · <a href="#ally-training">提示词与模型训练</a> · <a href="#ally-evaluation">评价与反馈</a> · <a href="#ally-context">上下文与缓存</a> · <a href="#ally-observation">查询现场信息</a> · <a href="#ally-events">事件与行为树</a> · <a href="#ally-voice">语音算法</a> · <a href="#ally-gpu">GPU 调度</a>。本节是研究与设计记录，未将这些候选全部接入游戏。</div><h3>算法与实现方法索引</h3>
+<p>这篇论文同时涉及游戏控制、训练、评价、语音和部署。下面按用途整理阅读入口，解释主要方法，并说明它们能用于 Delivery 的哪些问题。未公开的参数和训练细节明确保留为未知。</p>
+<div class="table-scroll"><table><thead><tr><th>类别</th><th>PUBG Ally 中的方法</th><th>原文位置</th></tr></thead><tbody>
+<tr><td>感知与事件</td><td>按需查询、事件合并、优先级、发言与行动分别控制</td><td><a href="https://arxiv.org/html/2609.29837v1#S3.SS2">3.2</a></td></tr>
+<tr><td>记忆与推理</td><td>任务摘要、刷新观察、稳定前缀与批量裁剪</td><td>3.2、附录 B</td></tr>
+<tr><td>动作</td><td>有状态行为树、临时指令、持续模式、抢占与恢复</td><td>3.3、附录 C</td></tr>
+<tr><td>提示词</td><td>GEPA</td><td>4.1、7.1</td></tr>
+<tr><td>训练数据</td><td>学生实际经历、教师纠错、条件相反的样例、去重与平衡</td><td>4.2</td></tr>
+<tr><td>小模型</td><td>SFT、离线蒸馏、学生自行交互后的蒸馏</td><td>4.2</td></tr>
+<tr><td>评价</td><td>部署条件检查、主题评分、玩家偏好、反馈定位</td><td>6、附录 E、F、I、J</td></tr>
+<tr><td>本地部署</td><td>NVIGI、GGUF</td><td>附录 G</td></tr>
+<tr><td>语音识别</td><td>术语数据与通用语音混合、L1 蒸馏</td><td>附录 H</td></tr>
+<tr><td>语音合成</td><td>DiTTo-TTS 改造、一致性蒸馏、固定说话人专用模型、辅助发音输入</td><td>附录 H</td></tr>
+</tbody></table></div>
+<p>来源：<a href="https://arxiv.org/html/2609.29837v1">论文正文与附录</a>。这些方法包含学习算法和运行规则；不能全部称为新算法。下面的步骤、样例和取舍为 Delivery 的设计分析。</p>
+
+<h3 id="ally-adoption">Delivery 的采用顺序</h3>
+<p>优先把方法用于现有问题：两人答非所问、重复接话、说了却不行动，以及声音等待过长。跟班玩法随后复用同一套改进。下表是实施建议，不表示已经完成。</p>
+<div class="table-scroll"><table><thead><tr><th>顺序</th><th>先做的工作</th><th>用于解决什么</th><th>完成后怎样比较</th></tr></thead><tbody>
+<tr><td>1 · 当前交谈</td><td>按 GEPA 的思路，用实际失败记录比较两三轮提示词；检查说话对象、原话、人物背景和真实动作结果。</td><td>答非所问、指代混乱、人物口气不一致。</td><td>保留没参与修改的对话，比较同一问题的不同说法；试听完整片段。</td></tr>
+<tr><td>2 · 当前交互</td><td>分别配置发言和行动的响应倾向；一次请求结束后保留未处理的事，重新读取易变信息。</td><td>无限接话、被打断就忘事、对旧位置作出反应。</td><td>检查插话、改口、连续鸣笛与倒地恢复；允许合理的安静和不同反应。</td></tr>
+<tr><td>3 · 小模型对照</td><td>整理教师示范和纠正后的失败样例，先测原版小模型，再做有限 LoRA。</td><td>判断能否在保持理解与人物特点的同时缩短生成时间。</td><td>同时比较接话、动作选择、首句时间和游戏帧率；训练次数少不代表一定能达标。</td></tr>
+<tr><td>4 · 跟班</td><td>加入持续任务、临时指令和中断后的检查；复杂请求才增加按需查询。</td><td>跟随、等候、改口和受击之后能继续配合。</td><td>同一条配送路线检查任务完成、取消、挡路和多人归属。</td></tr>
+<tr><td>5 · 专用语音与部署</td><td>评估固定人物的语音训练、少步生成和 GPU 调度。</td><td>减少声音计算与游戏渲染争用，保留已选音色。</td><td>用相同的新台词和地图比较听感、漏字、首声时间、显存与慢帧。</td></tr>
+</tbody></table></div>
+
+<h3 id="ally-training">训练与优化：分别改变提示词、模型和评价标准</h3>
+<p>三个问题需要分开：人物说明写得不合适，可以改提示词；小模型理解能力不足，可以训练模型；自动评分觉得很好、玩家却觉得无聊，需要调整评价标准。它们修改的对象不同，不能都归为“训练一下 AI”。</p>
+<h4>GEPA：用具体失败指导提示词修改</h4>
+<p><a href="https://arxiv.org/html/2507.19457v2#S3">GEPA</a>固定模型权重，让反思模型阅读执行记录和评价理由，再提出提示词修改。先用小批样例比较候选，再扩大检查范围；它保留在不同样例上表现好的候选，避免只围绕一个平均分最高的版本修改。原方法还提供可选的候选合并，不能把合并当成必然更好。</p>
+<p>Delivery 可以先采用一个有明确次数上限的简化实验：保持模型、动作接口和人物资料不变，选出六组问题——指代、挑拨、纠正、道歉、未知订单和重复接话。每轮只改有证据的问题，最多比较两三轮，最后用未参与修改的场景检查。这里是借鉴流程，尚未接入 GEPA 框架，也不声称复现了完整算法。</p>
+<p>例如错误回答把“玩家说小芳骂你”当成 NPC 亲耳听见。修改说明应针对消息来源和说话对象，再检查玩家直接引用、含糊转述和故意骗人三种情况；不能把修复写成“出现小芳就不相信”。反思材料使用实际请求、回答、动作结果和人工说明，不需要模型内部推理过程。</p>
+
+<h4>DAgger 思路：让小模型暴露自己的错误，再补数据</h4>
+<p><a href="https://proceedings.mlr.press/v15/ross11a/ross11a.pdf">DAgger</a>针对模仿学习中的一个问题：只看专家示范，学生犯错后遇到的新局面可能从未训练过。它让当前学生进入实际状态，由专家标注这些状态的正确行为，再把新数据加入原数据重新训练。Ally 的教师纠错更适合按整段交互理解，不能当成经典单步动作标注的原样复现。</p>
+<p>对 Delivery，一段“正常问路”的示范还不够。需要记录“NPC 已经认错人，玩家指出错误”“说要打人，但没走到目标面前”“跟班答应等候，玩家随后取消”等后续局面。让教师修改下一段回复，人工确认事实，再加入训练；小模型原来的错误回答保留作问题记录，不直接当作标准答案。</p>
+<pre><code>记录小模型实际遇到的情况
+→ 保留原来的玩家发言、游戏事实和失败原因
+→ 请教师提出更好的回复与动作建议
+→ 检查动作是否合法、台词是否符合人物
+→ 加入经确认的训练数据
+→ 在另一组场景比较训练前后</code></pre>
+<p>教师如果选择了不同动作，后续结果必须来自可验证的游戏记录或重新执行。不能让教师顺便编造“打中了”“包裹已经拿到”，再把这些当作真实训练输入。第一阶段只纠正有完整上下文的少量片段，暂不搭建完整游戏回放训练环境。</p>
+
+<h4>训练数据：保留有用的区别，减少重复示范</h4>
+<p>论文 <a href="https://arxiv.org/html/2609.29837v1#S4.SS2">4.2</a>还包含数据清理、分布平衡和条件相反的样例。对 Delivery，这直接关系到模型会不会学成只会重复顶嘴的角色。下面是本项目的数据整理建议：</p>
+<div class="table-scroll"><table><thead><tr><th>记录情况</th><th>处理方式</th><th>原因</th></tr></thead><tbody>
+<tr><td>导出时丢失玩家原话，或模型回答被截断</td><td>保留为故障记录；补全之前不作为正确回答训练。</td><td>缺少上下文时无法确认回答是否合理。</td></tr>
+<tr><td>NPC 的话被玩家正常打断</td><td>保留打断事件及之后的回应；不把未播放部分记成玩家已听见。</td><td>这是需要学习的交互，不等于数据导出损坏。</td></tr>
+<tr><td>大量相同闲聊或同一句挑拨</td><td>按场景限制重复数量，保留不同关系、现场条件和后续结果。</td><td>避免常见的顶嘴盖过道歉、解释、安静和真正行动的样例。</td></tr>
+<tr><td>同一句话在不同条件下应有不同反应</td><td>准备成对场景，每对明确改变了哪项事实。</td><td>检查模型是否使用现场信息，而非只记住一句话对应一个动作。</td></tr>
+</tbody></table></div>
+<p>例如同样是“小芳刚才骂你”，一组记录大军亲耳听见小芳在夸他，另一组记录两人刚刚发生争执。回答可以不同，也可以都先质问玩家，判断依据必须来自各自的记录。不能预先规定两组必有一组动手。保留同一句话的多种合理回答，让训练学习人物判断，而非固定台词。</p>
+
+<h4>SFT 与蒸馏：学正确答案，还是学教师的选择分布</h4>
+<p><strong>SFT</strong> 是监督微调：给模型输入和经确认的输出，训练它生成这些回答。<a href="https://arxiv.org/abs/2106.09685"><strong>LoRA</strong></a> 是减少需要更新参数的一种实现方式，可以用来做 SFT；它不决定样例质量，也不等于完整蒸馏流程。</p>
+<p><a href="https://arxiv.org/abs/1503.02531">知识蒸馏</a>还可以让学生学习教师对不同输出的概率，而不只学习最终选中的文字。这些“软目标”能表达多个选择之间的相对关系。普通只返回一句台词的接口没有完整概率分布，拿这种输出训练应称为答案监督，不能声称复现了软目标蒸馏。</p>
+<p>Ally 的训练顺序为中间教师 SFT，再做离线和学生自行交互后的蒸馏。两段蒸馏使用温度 1 的 forward KL，只训练回复位置；没有额外任务奖励的强化学习。详细流程见 <a href="https://arxiv.org/html/2609.29837v1#S4.SS2">4.2</a>。下面用标准公式解释这个损失，不将它冒充论文另列的编号公式：</p>
+<pre><code>L = 平均[t 属于回复位置] Σv p教师(v | 当前历史)
+                              × log(p教师(v | 当前历史) / p学生(v | 当前历史))</code></pre>
+<p><code>v</code> 是一个候选 token，<code>p</code> 是模型给它的概率。“当前历史”包含之前的发言和游戏信息。离线训练使用已记录的历史；学生自行交互时，历史由学生的选择继续形成，因此能覆盖它实际会走到的情况。游戏观察是输入条件，不让学生把这些观察当作要生成的答案。</p>
+<p>Delivery 的短期候选是“现有大模型给出经检查的答案 → 中文小模型做一次有限 LoRA → 对照原模型”。先以约 200–400 条为试验预算，保留独立场景；这个数量不代表充分。完整的教师与学生同时训练另算成本：仅 8B 的 bf16 权重就粗略需要约 16 GB，尚未计算学生、优化器和中间结果，当前 12 GB 显卡不能直接照搬这种全量驻留方式。</p>
+<p>论文表 3 的中文教师和学生分别是 <strong>Qwen3-8B、Qwen3-1.7B</strong>；文中的“2B”是学生规模概称。可把 1.7B 列入对照候选，下载或训练前再核对许可证、所用训练框架和显存。当前使用的 Qwen3-TTS 是声音模型，不能替代这个语言模型承担对话判断。</p>
+<p>选择训练目标时，优先修复指代、未知信息、任务延续和合法动作。人物口气可以学，刚发生的碰撞、包裹归属、谁已倒地仍从 UE 读取。训练不能让一个没有数据的角色知道所有玩家的私有信息。</p>
+
+<h3 id="ally-evaluation">评价与反馈：把“没意思”拆成能修改的问题</h3>
+<p>评分标准本身也会出错。例如把“说得多”当作互动好，会鼓励无限接话；把“总是打起来”当作拱火成功，会失去识破挑拨的乐趣。Delivery 的比较应允许角色上当、犹豫或识破，只要回应有依据、人物鲜明，动作和后续交互确实发生。</p>
+<p>Ally 给出主题内加权、主题间投票及玩家偏好校准，但没有公布完整排序损失、最终权重或平票阈值。不能据此写成已复现 RankNet 或 DPO。下面的简化评分用于说明怎样组织 Delivery 的试验，不是它的生产实现：</p>
+<pre><code>某一主题的分数 = Σ(该项权重 × 该项得分)
+各权重不小于 0；同一主题内权重之和为 1</code></pre>
+<p>先分别看“听懂了没有、人物是否一致、动作是否正确、等待是否过长”，同一问题不因写了更多测试就占据更大权重。协议错误、目标不存在和动作越权直接作为失败条件；人物是否好玩再由完整片段试听和试玩判断，不能用一项总分盖住严重故障。</p>
+<div class="table-scroll"><table><thead><tr><th>玩家反馈</th><th>先检查什么</th><th>可能的改动</th></tr></thead><tbody>
+<tr><td>点了拱火没反应</td><td>按钮实际台词、RPC 是否到达、模型输入、动作选择、实际执行</td><td>分别处理 UI、指代、模型选择、导航和动作幅度；不能全部送去训练。</td></tr>
+<tr><td>两人说话对不上</td><td>谁对谁说、回答哪句话、是否把旁听当成被提问</td><td>修正信息记录，再用真实多轮片段调整提示词或训练样例。</td></tr>
+<tr><td>太吵、总在重复</td><td>是否有新事件、旧回复是否又触发了新闲聊</td><td>检查事件与发言安排，同时减少模板式回复；不只降低音量。</td></tr>
+<tr><td>跟班说到了，却还在路上</td><td>台词生成、服务器到达结果、实际播放的先后</td><td>区分行动意图和完成通知，取消时同步处理旧台词。</td></tr>
+<tr><td>感觉不好玩</td><td>先保留整段试玩和原评价，寻找具体时刻</td><td>没有明确片段时保留整体反馈，不能编造某一句就是原因。</td></tr>
+</tbody></table></div>
+<p>建议把每条可定位问题连到同一条记录：玩家原话 → NPC 已知信息 → 候选动作 → 模型回答 → 服务器结果 → 声音与字幕实际时间。资源路径错误和协议错误可用确定检查修复；追逐、帮忙打架、挡路等行为变化仍需试玩。</p>
+<p>模型对照时，同一玩家以不同顺序玩两个版本，并允许选择“没有明显差别”。同一段对话及其改写整组划分训练和测试，避免模型只是记住测试内容。目前没有训练自动评价器或拟合偏好权重；先积累少量可靠比较，再决定是否有必要。</p>
+
+<h3 id="ally-context">上下文与缓存：少算重复内容，同时保留约定</h3>
+<p><strong>KV Cache</strong> 保存模型已经计算过的注意力数据。新请求若有相同前缀，支持这一能力的推理服务可以复用它。<a href="https://arxiv.org/html/2312.07104v2#S3">SGLang 的 RadixAttention</a>用前缀树组织共享内容，并在容量不足时淘汰旧缓存。这里的优化对象是重复计算，不是把上次的答案直接拿来回答新问题。</p>
+<p>Delivery 可以把内容按稳定程度排列：游戏规则与接口说明在前，人物资料其次，近期事件与未完成约定在后，最新玩家原话放在最后。需要缩短历史时一次移除一组旧事件，避免每轮都改写整段开头。后端是否真的复用了缓存，要看返回的缓存 token 和首句时间；仅调整提示词顺序不能保证提速。</p>
+<p>跟班记录应区分两类内容。“玩家让我在路口等”是未完成约定，可以保留；“玩家在路口左侧”是当时的位置，下次行动前重新查询。任务摘要保存对象、目标、取消条件和当前步骤，不能只留下“继续帮忙”这样无法执行的句子。具体位置和 HP 继续由 UE 提供。</p>
+<p>当前独立诊断也说明了这个区别：极短输入仍使用约 5800 个输入 token，去除部分工具与说明后约 4500；少量暖启动首段仍约 2.1–2.4 秒。输入减少已观察到，明显提速尚未证实。记录见 <code>Saved/AIResearch/AppServerIsolation/diagnostic-records.json</code>，该隔离配置还没有改入正式后台。</p>
+
+<h4 id="ally-observation">让模型查询当前需要的信息</h4>
+<p>论文的<a href="https://arxiv.org/html/2609.29837v1#S3.SS2">工具接口</a>允许模型按需查询信息，同一次决策可以包含多次查询。Delivery 可把这一点用于复杂交互，以下接口名称是设计示例，尚未新增到工程。</p>
+<p>例如玩家说“帮我把那件送到老爷子家”。NPC 先用 <code>FindNearbyParcels()</code> 获取自己能看见的包裹；存在多件时询问玩家。确定对象后，<code>GetParcelTask()</code> 只返回这名 NPC 有权知道的目的地，再通过 <code>CanTakeParcel()</code> 检查当前是否能拿。动作完成后，游戏报告结果，NPC 才能声称已经拿到。</p>
+<p>常用信息仍随请求一起发送，避免每句话都增加查询等待。复杂请求只补充缺失内容，并限制查询轮数和总时间。查询返回的是当时的状态，真正取件前服务器仍检查占用和距离。模型看见包裹，不能因此获得另一玩家的全部订单。</p>
+<p>目前的街坊请求会携带已感知事件与动作候选；上面的多轮查询是后续扩展。第一步先检查现有输入是否缺少说话对象、人物关系或动作结果，避免在信息已齐全时无故增加模型调用。</p>
+
+<h3 id="ally-events">事件与行为树：少发重复请求，动作持续执行</h3>
+<p>对 Delivery，可以把连续按喇叭合成“短时间内多次鸣笛”的一次事件，同时保留次数和最近时间。合并不能丢掉玩家的新问题、取消指令或倒地事件。模型仍根据人物关系和现场决定加快走、站住、回嘴或采取其他合法行动。</p>
+<p>“是否值得开口”和“是否需要动作”分别配置。例如路人从身边经过，可以看一眼但保持安静；玩家直接提问时需要回应；同伴到达约定位置，可以简短报到。配置只影响响应倾向，不能把拱火、相信谁或动手写成固定关键词答案。</p>
+<p>UE 行为树继续处理距离、寻路与受击。模型发出一次跟随指令后，行为树持续更新目标位置，不需要模型每次重新选择一遍“走向玩家”。持续偏好和一次操作分开：比如“别主动惹事”保留为任务约束，“去路口”是可以完成或取消的一次任务。取消旧动作时使用原动作编号，避免迟到结果结束新任务。</p>
+<p>第一轮直接复用 UE 的黑板、Decorator 中止和现有动作回调。暂不自建 JSON 行为树引擎，也不让模型生成任意蓝图或 C++。是否需要可动态组合的子任务，等单步跟随与取消稳定后再决定。</p>
+
+<h4>任务中断以后，哪些继续、哪些结束</h4>
+<p>论文的<a href="https://arxiv.org/html/2609.29837v1#A3">行为树附录</a>还描述了临时插入任务、持续模式和中断处理。Delivery 可以用现有 UE 资产表达相同的职责：持续约定保存在任务数据中，一次动作有自己的编号；行为树执行动作并报告结果。</p>
+<div class="table-scroll"><table><thead><tr><th>内容</th><th>Delivery 示例</th><th>修改与结束条件</th></tr></thead><tbody>
+<tr><td>持续约定</td><td>跟着玩家；途中别主动惹事。</td><td>玩家改口、断线或任务结束时更新；一次回头或避让不应删除约定。</td></tr>
+<tr><td>临时动作</td><td>到路边让开；转头回应小芳。</td><td>完成、失败或受击时结束，只处理本次动作的移动、计时器和对应台词。</td></tr>
+<tr><td>立即反应</td><td>受击、倒地，停止不再能执行的移动。</td><td>由现有玩法规则处理；恢复后检查旧约定是否有效，再决定继续或请求模型。</td></tr>
+</tbody></table></div>
+<p>例如跟班正在让路时被撞倒，行为树结束让路动作，停止它的导航请求，并报告“因倒地中断”。跟随约定可以保留，但恢复时要重新查找玩家，不能从被撞前的位置继续。若玩家已取消跟随，就停在正常待机状态。动作开始、成功、失败和中断都要有明确结果，才能让模型解释发生了什么。</p>
+<p>仅在模型需要组合已有步骤时评估 UE 的动态子树能力；树的结构、可用任务和中断规则仍由开发者配置。当前不计划复制论文的整套 Python/C++ JSON 行为树引擎。</p>
+
+<h3 id="ally-voice">语音算法：固定角色可以走专门训练路线</h3>
+<p>语音优化需要分清三件事：减少生成计算、让音频更早开始播放、提高声音自然程度。逐句合成主要帮助第二件事；它不会自动让单句模型计算更快。下面的训练与模型结构方案针对第一件事，仍要通过听感检查第三件事。</p>
+<p><strong>扩散与流匹配语音。</strong><a href="https://ditto-tts.github.io/">DiTTo-TTS</a>在语音的压缩表示中逐步生成声音。<a href="https://arxiv.org/html/2410.06885v3#S3">F5-TTS</a>采用非自回归流匹配，处理文本与音频的对齐，并用 Sway Sampling 调整推理步的位置。它们和当前 Qwen 逐步产生声音编码的过程不同，不能直接向 Qwen 添加一个 F5 参数就获得同样效果。</p>
+<p><strong>一致性训练与蒸馏。</strong>直观目标是让学生用较少步骤逼近原来多步生成的结果。<a href="https://arxiv.org/html/2410.14895v2#S3">Truncated Consistency Models</a>进一步限制训练的时间范围，并用两阶段训练保留必要的边界条件。原论文主要验证图像生成；这提供方法背景，不能直接当作 Delivery 中文语音的性能证据。</p>
+<p>如果以后采用固定角色专用语音，Delivery 的数据准备可以从已经选定的合成音色出发，收集覆盖不同汉字、语速、疑问与顶嘴的完整台词，逐条检查漏字和重复，再评估兼容的学生模型与训练代码。第一轮要比较同一批新台词的完整性、人物辨识度、首声时间和显存，不能只看训练损失下降。</p>
+<p>小芳 B 目前完成的是<strong>参考声音复用</strong>：启动时提取参考，后续生成使用同一份数据；模型权重没有训练。它与固定说话人蒸馏属于不同工作。用户已选定声音，但专用 TTS 训练、少步扩散模型和辅助发音编码尚未接入。大军、小芳、街道名和快递用语可先整理成发音检查表，供后续候选共同测试。</p>
+
+<h3 id="ally-gpu">GPU 调度：后台线程仍可能影响游戏帧率</h3>
+<p><a href="https://docs.nvidia.com/nvigi-sdk/1.7.0/docs/nvigi_core/docs/GpuSchedulingForAI.html">NVIGI 的 GPU 调度文档</a>说明了图形优先、计算优先和平衡模式，并提供 UE 的 D3D12 队列接入示例。它还建议比较启用与关闭 AI 时的总帧时间，因为单独计时一个 CUDA 任务无法表示它对并行渲染的实际影响。</p>
+<p>Delivery 当前语音在独立 Python 进程中运行，还没有把该进程接入 UE 的图形调度。多开线程可以避免阻塞 HTTP，但不会增加显卡的计算能力。先测“游戏单独运行、游戏加一份声音模型、游戏加两份声音模型”，保持地图、分辨率和路线一致；记录慢帧、首声时间、显存及是否出现资源换入换出，再决定是否值得引入新运行库。</p>
+<p>NVIGI 是后续候选，尚未安装或验证 UE 5.8 兼容性。当前不把 Python 多线程称为已实现 GPU 与渲染协同，也不根据单次模型试验宣称游戏性能提升。</p>
+<h3>Delivery 先做怎样的跟班</h3>
+<p class="meta">2026-11-13 补充：用户已确认跟班人物为二狗，跑腿取件和送件进入首版，见<a href="#ergou-research">跟班二狗：设计依据与资料阅读</a>。本小节下文保留当时的通用建议。</p>
+<p>下面是本项目的设计建议。让一名 NPC 陪玩家完成一段配送，比一开始做全能队友更容易看清效果。首版支持跟随、等候、到指定位置和取消；拿包裹、拖人、帮忙打架需要分别接入现有玩法，再提供给模型选择。</p>
+<p>例如玩家说“跟着我，到了前面路口等一下”。NPC 可以边抱怨边跟上，到路口停下；遇到刚才吵架的街坊时，可以看一眼或嘀咕一句，但不能因为闲聊忘记约定。玩家改口“回来，先别过去”后，旧目的地失效。任务做成以后，角色的性格可以影响说法、主动建议和反应方式，不能代替真实的完成结果。</p>
+<p><a href="DeliveryAIPlan.html#companion-design">查看方案中的类图与接口说明</a>。沿用当前交谈入口、NPC Agent、网络请求和人物表现，只给 Agent 增加一份任务数据；不为“跟班”再复制一套组件体系。</p>
+<div class="table-scroll"><table><thead><tr><th>玩家操作或现场变化</th><th>Delivery 的处理建议</th><th>试玩要观察的结果</th></tr></thead><tbody>
+<tr><td>“跟着我，别离太近”</td><td>模型结合上下文选择跟随；服务器确认协作玩家，行为树按配置距离寻路。玩家移动后直接更新跟随目标，不逐帧请求模型。</td><td>转弯、停步时不挤到玩家面前；同伴仍能说话和看路。</td></tr>
+<tr><td>“去路口等我”后又说“回来”</td><td>新任务使用新编号，取消原移动和相关旧台词；未完成约定只保留最新一份。</td><td>NPC 改向后不会继续说正在去旧目的地，也不会稍后又跑回去。</td></tr>
+<tr><td>NPC 被撞倒，恢复后玩家已经走远</td><td>倒地由现有战斗系统处理。恢复后读取玩家最新位置，再判断继续跟随或询问。</td><td>不在倒地时执行移动，不把受击前的位置当作玩家当前位置。</td></tr>
+<tr><td>另一名玩家插话或挑衅</td><td>允许交谈反应；只有协作玩家可以替换配送约定。双方关系和任务归属由服务器保存。</td><td>两端看到同一动作；旁人不能通过一句话接管别人的跟班。</td></tr>
+<tr><td>NPC 找不到路或目标被拿走</td><td>行为树报告实际失败原因；模型据此解释或选择可执行的下一步。</td><td>人物不会说“拿到了”却两手空空，也不会一直原地重试。</td></tr>
+<tr><td>暂时没有事发生</td><td>继续已有任务，限制重复闲聊；只有新的关系或现场事件值得说时才主动开口。</td><td>有陪伴感，也允许安静走路，避免两个 NPC 无限接话。</td></tr>
+</tbody></table></div>
+<h3>实现顺序</h3>
+<ol>
+<li><strong>先完成当前街坊体验。</strong>继续检查自然接话、拱火、动作反馈和小芳 B 声音。跟班是后续功能，本次只记录设计。</li>
+<li><strong>做一段可重复的配送路线。</strong>沿用 Listen Server，先接入跟随、等候、指定位置和取消。行为树及距离、动画参数保存在 UE 资产中。</li>
+<li><strong>让模型理解多轮指令。</strong>给模型提供正在做的事、最新玩家原话和当下可用动作；从含糊指代、改口和中途受击中检查任务是否连续。</li>
+<li><strong>记录失败，再决定训练内容。</strong>保留模型实际看见的信息、选择及游戏结果。把好回答与修改过的坏回答分开；同一段对话及其改写放在同一组，另留未训练场景比较。</li>
+<li><strong>比较小模型与现有大模型。</strong>先测未训练版本，再做有限 LoRA。共同检查接话、任务成功率、取消、首句声音、显存与游戏帧时间，效果不足就继续使用现有模型。</li>
+</ol>
+<p>第一轮训练数据可以覆盖两种相反条件：包裹能拿与不能拿、路线畅通与被堵、玩家仍需帮助与已经取消。这样能检查模型是否真的使用现场信息。任务、动作编号及条件检查仍由游戏维护，训练样本不能让模型获得任意修改奖励和物品归属的能力。</p>
+<h3>目前可以复用与尚缺的部分</h3>
+<p>已有玩家交谈 RPC、感知记录、动作候选、逐句声音、动作结果和取消代码。持续跟随、协作玩家归属、跨动作的任务进度，以及 NPC 使用玩家取件和拖人能力，均未实现。本轮也没有启动语言小模型训练，未验证跟班多人玩法。</p>
+<p>验收时走完一小段路线，至少检查连续改口、倒地恢复、路径失败和另一玩家插话。除完成任务外，还要记录是否挡路、抢话、重复解释，以及有没有让人想继续带着它的片段。玩家觉得有趣和愿意继续玩，才能支持采用这个方案。</p>
+</section>
+<section id="ergou-research"><h2>跟班二狗：设计依据与资料阅读</h2>
+<p class="meta">2026-11-13 · 资料阅读与设计记录 · 二狗尚未实现，也未验证</p>
+<p>用户已确认跟班二狗的设计，完整方案见<a href="DeliveryAIPlan.html#ergou-design">方案文档</a>（主文档 Architecture.md 同名小节）。本节记录参考了哪些资料、读到什么程度、读到的要点，以及二狗采用和不采用哪些做法。本节只有资料与设计，没有代码、资产或试玩结果。</p>
+<div class="notice">阅读程度按“已阅读全文 / 已阅读部分 / 未阅读”标注。游戏与研究资料由上一轮整理，阅读程度沿用当时记录，本轮没有重新核对；影视资料为本轮阅读，没有观看影片，只引用读过的访谈和评析。外部项目的数字只代表他们自己的条件和结果。两位村口街坊现名大壮、翠花。</div>
+<h3 id="ergou-research-games">游戏与研究资料</h3>
+<div class="table-scroll" tabindex="0" aria-label="可横向滚动的数据表"><table><thead><tr><th>资料</th><th>阅读程度</th><th>读到的要点</th><th>二狗怎样用</th></tr></thead><tbody>
+<tr><td><a href="http://www.nadianshi.com/2026/03/407066">和平精英 GDC 2026 AI 队友分享</a>（游戏那点事整理稿）</td><td>已阅读全文（第三方整理稿，未观看原视频）</td><td>意图模型先区分指令和闲聊，再结构化解析指令；记忆分三段：局内实时提取、赛后总结、每日汇总；专家规则加服务器拒绝，“玩家的个人意愿，永远高于AI的系统策略”；亲密度分阶段改变话题和语气。他们自述的不足：“个性主要反映在遣词造句上，我们希望它也能体现在回复的逻辑和内容中”。</td><td>亲密度分阶段改变说话和行为，服务器保留规则。二狗的性格放进选择：先回应什么、选哪个候选、站在谁一边。记忆只保留少量确认事件和小本本，不做每日汇总。</td></tr>
+<tr><td><a href="https://news.qq.com/rain/a/20260601A0827100">和平精英官方“ai小田”上线稿</a></td><td>已阅读全文（宣传稿）</td><td>绝地指挥模式中的 AI 明星队友小田（田曦薇），2026-05-28 起上线；能安排多个请求的先后；被指挥过多会抱怨；遇到不合理要求会拒绝并给出更安全的建议；能生成记忆主题和图片。</td><td>只作同类产品背景。抱怨和拒绝不采用，二狗按用户要求从不拒绝。</td></tr>
+<tr><td><a href="https://view.inews.qq.com/a/20260320A07OEY00">深响：GDC China 案例</a></td><td>已阅读全文</td><td>游戏黑话知识库花的功夫最多；能把玩家昵称“张三”记上几个月；“它不是一个更强的人，而是一个更懂玩家的人”。</td><td>记住玩家给他起的外号。二狗的长处是懂村里、懂大哥，打架和本事都弱。</td></tr>
+<tr><td><a href="https://m.jiemian.com/article/14524539.html">界面新闻</a>、新浪财经、百度百科、7724 相关报道</td><td>已阅读部分（检索摘录）</td><td>组队、训练、送礼提高好感，解锁语音、动作和外观；使用混元 Hy3 preview 与 GameMate1.0。</td><td>只作背景。二狗的亲密度不解锁外观，首版礼物只有食物。</td></tr>
+<tr><td><a href="https://www.4gamer.net/games/433/G043370/20200904133/">4Gamer：CEDEC 2020《集合啦！动物森友会》概念分享</a></td><td>已阅读全文</td><td>居民记住每个玩家的名字、日期和地点，招呼从“はじめまして”变成“また会ったね”；闲话在玩家之间传开；用动物代替人，促进人与人交流；“変化なくして持続させることはできない”。</td><td>记忆按玩家分开；二狗向大爷大妈讲玩家做过的事；亲密度阶段带来可见的变化。</td></tr>
+<tr><td><a href="https://www.4gamer.net/games/433/G043370/20200905003/">4Gamer：CEDEC 2020 动森美术分享</a>、<a href="https://www.famitsu.com/news/202009/05205296.html">Fami 通报道</a>；<a href="https://www.siliconera.com/nintendo-on-how-animal-crossing-new-horizons-lovable-villagers-were-created/">Siliconera 摘要</a></td><td>前两篇已阅读部分；Siliconera 已阅读全文</td><td>目标是“いつの間にか大切な存在になるキャラクター”；行为分成自己发起的和对发现的事作出反应的；用“悩む”这样的停顿避免机械地突然转变；不过度解释，给想象留空间。</td><td>三层反应里的等待小动作；不解释自己的设定，靠动作和反应让人慢慢喜欢上他。</td></tr>
+<tr><td><a href="https://www.nintendo.com/en-gb/News/2016/November/Learn-more-about-the-development-of-the-Animal-Crossing-series-in-our-interview--1159916.html">Nintendo UK 2016 动森开发访谈</a></td><td>已阅读全文</td><td>脾气坏的居民 Rasher 怕虫子，形成反差；居民搬走让人难过，玩家会慢慢走出来；传闻能促进家人之间交流。</td><td>二狗怕狗、对小绿温柔的反差；爷爷搬走的离别；村口闲话。</td></tr>
+<tr><td><a href="https://iwataasks.nintendo.com/interviews/wii/zelda-skyward-sword/2/3/">岩田聪提问《天空之剑》第 3 卷第 4 页</a></td><td>已阅读全文（该页）</td><td>法伊过于客观，玩家感觉不到她是伙伴。</td><td>二狗不客观指路，导航交给罗盘、标记和目的地地面圈。</td></tr>
+<tr><td><a href="https://www.nintendo.com/us/whatsnew/ask-the-developer-vol-11-super-mario-bros-wonder-part-3/">Ask the Developer Vol.11《超级马力欧兄弟 惊奇》第 3 部分</a></td><td>已阅读全文</td><td>没有世界内说话者的解说显得别扭；会说话的花在合适的时机开口，也可以关掉。</td><td>发言预算；玩家说“闭嘴”后，服务器记下安静状态。</td></tr>
+<tr><td><a href="https://www.nintendo.com/us/whatsnew/ask-the-developer-vol-10-pikmin-4-part-2/">Ask the Developer Vol.10《皮克敏 4》第 2 部分</a>；<a href="https://www.4gamer.net/games/656/G065689/20230927005/">4Gamer 皮克敏 4 报道</a></td><td>前者已阅读全文；后者已阅读部分</td><td>“A good idea is something which solves multiple issues at once”；欧初让玩家可以分头做事，迷路时也能帮忙。</td><td>跑腿让玩家可以和二狗分头送件，同时让二狗总有事可做。迷路帮忙不采用，二狗自己也会迷路，指路仍交给界面。</td></tr>
+<tr><td><a href="https://www.zeldadungeon.net/nintendo-shares-some-insight-on-midnas-design/">Zelda Dungeon：Midna 的设计</a></td><td>已阅读部分（二手转述）</td><td>二手转述，未从中提取设计结论。</td><td>不作为依据；任天堂原文列入未读。</td></tr>
+<tr><td><a href="https://www.youtube.com/watch?v=wusK-mciCVc">GDC 2014 Elizabeth AI 分享</a>（YouTube 字幕）；<a href="https://www.4gamer.net/games/117/G011799/20140319104/">4Gamer 报道</a></td><td>字幕已阅读大部分；4Gamer 已阅读全文，但报道把演讲者写作 Shawn Robertson，与视频不一致，引用时以字幕为准</td><td>跟在玩家身后效果很差，改为沿路线走在玩家前面；避免细小的位置调整；落后且没人看见时瞬移；注视有计时和冷却；用叹气、“嗯？”引起玩家注意；“It is more important for game AI to be entertaining than it is to have a clever algorithm.”</td><td>跟随规则直接采用：前方 2–4 m、约 1 m 内不动、落后约 25 m 且双方都看不到才瞬移；等待时的小动作和短反应音。</td></tr>
+<tr><td><a href="https://arxiv.org/html/2304.03442">Generative Agents</a></td><td>已阅读部分</td><td>按新近、重要、相关三项检索记忆；有反思步骤；错误包括捏造细节和说话过于正式；指令微调让人物过分配合；运行成本高。</td><td>不做完整检索与反思。“捏造”和“过于正式”列入台词审查；每条记忆带事件编号。二狗的人设本来就配合，配合体现在行动上，台词仍要像真人。</td></tr>
+<tr><td><a href="https://news.ubisoft.com/en-us/article/5qXdxhshJBXoanFZApdG3L/how-ubisofts-new-generative-ai-prototype-changes-the-narrative-for-npcs">Ubisoft NEO NPC 官方介绍</a>；<a href="https://www.gamedeveloper.com/design/how-do-ubisoft-s-ai-driven-npcs-handle-dynamic-player-interactions-">Game Developer 报道</a></td><td>已阅读全文</td><td>编剧定义背景；用“Would Lisa say this?”检查台词；人物有叙事弧线，没有自由意志；存在偏见问题。</td><td>审台词的标准写成一句话；人物资料由人写；第一幕和第二幕是固定主线，模型在其中说话和选动作。</td></tr>
+<tr><td><a href="https://www.cls.cn/detail/1301708">财联社：网易胡志鹏专访</a>；每经网刘畅、巴哈姆特听雨、游侠网相关报道</td><td>财联社已阅读相关部分；其余已阅读部分（摘录）</td><td>NPC 记得玩家的拒绝，玩家行为会改变人物性格；会吃醋；言语冲突可以升级为行动。</td><td>大爷大妈被二狗打中后加入证据并提供还手候选；亲密度随玩家对他的做法变化。二狗的忠心不因此改变。</td></tr>
+<tr><td><a href="https://developer.nvidia.com/blog/how-krafton-built-pubg-ally-a-co-playable-character-powered-by-nvidia-ace/">NVIDIA 博客：KRAFTON 怎样做 PUBG Ally</a></td><td>已阅读全文</td><td>反射动作不等模型，行为树层与 LLM 层分开；先决定哪些事不处理；游戏状态是唯一事实；稳定的提示词前缀便于缓存；长期记住名字和偏好；频繁试玩。</td><td>三层反应；冲上去打架由游戏执行；台词提到的事实必须来自游戏事件；记住外号。</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2609.29837">PUBG Ally 论文</a></td><td>已阅读部分（更细的章节核对见上方 <a href="#pubg-ally-companion">PUBG Ally</a> 一节）</td><td>他们在自己的条件下测得本地约 1.6 秒、云端约 3.4 秒；玩家反映 AI 说了“Got it, I'll attack”却不行动后，加入说话与行动一致性指标；事件冷却；不顺从但符合人物的拒绝。</td><td>主动发言冷却；检查二狗说要做的事和实际动作是否一致。1.6 秒不作为本项目目标或结果。拒绝不采用。</td></tr>
+</tbody></table></div>
+<h3 id="ergou-research-film">影视角色参考</h3>
+<p>用户提出可以参考相关电影。本轮无法观看影片，下面只引用实际读到的导演、演员访谈和评析，并按读到的范围标注。考察重点是忠心、憨厚、肯干的配角怎样靠真诚、身体反应和处境逗笑；嘴上的花样不在考察范围。</p>
+<div class="table-scroll" tabindex="0" aria-label="可横向滚动的数据表"><table><thead><tr><th>角色与资料</th><th>阅读程度</th><th>读到的要点</th><th>二狗采用</th><th>不采用</th></tr></thead><tbody>
+<tr><td>傻根（《天下无贼》，王宝强）：<a href="http://ent.sina.com.cn/2004-12-13/1553597977.html">新浪娱乐 2004</a>、<a href="http://zqb.cyol.com/content/2005-01/19/content_1018536.htm">中国青年报 2005</a>、<a href="https://yule.sohu.com/2004/04/21/95/article219899502.shtml">搜狐娱乐 2004 开机专访</a></td><td>新浪已阅读全文；其余两篇已阅读部分</td><td>冯小刚说王宝强要“通过自己内心不设防的力量把两个高智商的贼感化”，观众能相信，是“因为他的朴素和善良是发自内心的”；开机时解释改选王宝强，因为“宝强的形象让观众更加信服”。王宝强说傻根“因为实在，所以才会被人认为是傻！”。中国青年报记录了傻根在火车站大喊“你们谁是贼啊？”时影院里的笑声。</td><td>笑点建立在真诚上：他真心觉得大哥对，真心把快递当宝贝。人物资料和审稿都强调“实在”，不写成被取笑的傻子。</td><td>“天下无贼”的信念主题和感化他人的主线，与送快递玩法无关。</td></tr>
+<tr><td>牛耿（《人在囧途》，王宝强）：<a href="http://www.guangyuanol.cn/wenyuan/20121221/38841_3.html">时光网 2012 徐峥专访第 3 页（川北在线转载）</a>、<a href="https://www.1905.com/mdb/film/351757/">1905 电影网影片资料“幕后花絮”</a>、<a href="https://qingdaonews.com/content/2011-08/03/content_8886863.htm">青岛新闻网 2011</a></td><td>专访该页已阅读全文；“幕后花絮”已阅读该段；青岛新闻网已阅读部分</td><td>徐峥认为《人在囧途》口碑好的原因之一是“现实主义题材的表演方法，让你相信这个故事是真的”；谈《泰囧》时希望王宝强的角色有“阳光的、健康的、纯真的价值观”。王宝强说第一次坐飞机要求开窗透气的情节来自农民工朋友的真实经历，“没什么不真实的”。</td><td>笑料来自村里真实的生活细节和处境：怕狗、被喇叭吓一跳、把“等着”当成站岗。台词按真人当场说话来审。</td><td>精明老板和憨厚伙伴互相改变的公路片结构。二狗的主线是认大哥和住进新家。</td></tr>
+<tr><td>Dug（《飞屋环游记》）：<a href="https://freshairarchive.org/segments/and-away-pixars-pete-docter">NPR Fresh Air 访谈彼特·道格特</a>、<a href="https://dvdizzy.com/up-interview2.html">UltimateDisney 访谈道格特与鲍勃·彼德森</a></td><td>Fresh Air 已阅读相关段落；UltimateDisney 已阅读部分（检索摘录）</td><td>道格特说项圈把狗的想法翻译出来，“the dog in behavior is acting just like a normal dog”，所以能专注于真狗在意的东西：食物、嗅闻、松鼠。彼德森说加入 Dug 是为了在妻子去世后给 Carl 一个新的家，并照着自己养过的狗塑造他。访谈播放的片段里，Dug 一见面就说“I have just met you, and I love you”。</td><td>身体照真人来演，怕狗、吓一跳交给动画；台词说出他心里在意的东西：大哥、快递、小绿。爷爷搬走后的“咱有家了”给玩家一个家。一见面就认定大哥，与扶起后立刻认大哥一致。</td><td>“松鼠！”式的固定打断。反复出现就成了口头禅，和“不设固定口头禅”冲突。</td></tr>
+<tr><td>Kronk（《变身国王》）：<a href="https://www.vulture.com/article/an-oral-history-of-disney-the-emperors-new-groove.html">Vulture 口述史</a>、<a href="https://dnyuz.com/2025/12/15/the-emperors-new-groove-at-25-kronks-enduring-appeal/">DNYUZ 转载的二十五周年报道</a></td><td>Vulture 已阅读第五节“Let there be Kronk”；DNYUZ 已阅读部分（检索摘录）</td><td>配音演员帕特里克·沃伯顿把 Kronk 理解为“a reticent henchman, not so aggressive or nasty. He liked to cook”，于是用了偏轻、一兴奋就变调的声音，“There's something kind of sweet about that”。编剧先为他写了晚宴下毒的一场戏，又提议让他做菠菜泡芙。导演马克·戴道尔说他的温柔和体格形成反差。</td><td>把小事当大事：认真捧快递、认真站岗；对小绿说话温柔的反差。</td><td>反派手下在两边摇摆、最后改换阵营。二狗不会离开主人。</td></tr>
+<tr><td>成龙的动作喜剧：<a href="https://www.youtube.com/watch?v=Z1PCtIaM_GQ">Every Frame a Painting《Jackie Chan - How to Do Action Comedy》</a></td><td>已阅读大部分字幕（第三方转写，未观看画面）</td><td>与二狗有关的几条：从劣势开始；命中和反应放在同一个画面里（“action and reaction are in the same frame”）；让观众感到节奏，成龙说观众要等节奏消失才会察觉它；“Pain humanizes him”，脸上的表情常常就能把笑点做出来；“He wins because he doesn't give up”。</td><td>二狗永远处于劣势；击飞时让玩家在同一视野里看清命中、飞起和落地，延迟落地留出节奏；疼的表情交给表情资产；倒了接着冲。</td><td>靠坚持最终打赢。二狗一定打不赢，收尾的笑点放在他爬起来坚持说拖住了对方，胜负留给玩家。</td></tr>
+<tr><td>山姆（《魔戒》）：经 <a href="https://dc.swosu.edu/cgi/viewcontent.cgi?article=1307&amp;context=mythlore">Janet Brennan Croft 的 Mythlore 论文</a>与 <a href="https://johngarth.wordpress.com/2014/02/13/sam-gamgee-and-tolkiens-batmen/">John Garth 博客</a>转引</td><td>已阅读相关段落（二手引用；卡朋特传记原书和托尔金书信原件未读）</td><td>托尔金说：“My ‘Sam Gamgee’ is indeed a reflexion of the English soldier, of the privates and batmen I knew in the 1914 war, and recognized as so far superior to myself”。Garth 介绍的 1956 年书信里，他还提到早年的乡村男孩。勤务兵除了作战，还要照料军官的装备、做饭和打扫。</td><td>任劳任怨写成可靠、可敬的品质。二狗为大哥跑腿是出于忠心，不当作被使唤的笑料。</td><td>关键时刻替主角扛下一切的英雄化转折，首版不做。</td></tr>
+</tbody></table></div>
+<p class="evidence">存疑未采用：检索中出现一篇“大侦探”网站标注为 2026-10-15 的徐峥访谈，内容无法和其他来源相互核对，没有作为依据。吴孟达与周星驰的搭档、《怪物史莱克》的驴子本轮没有查找资料。</p>
+<h3 id="ergou-adoption">采用与不采用</h3>
+<div class="table-scroll" tabindex="0" aria-label="可横向滚动的数据表"><table><thead><tr><th>做法</th><th>决定</th><th>原因</th></tr></thead><tbody>
+<tr><td>沿路线走在玩家前面、不做细小调整、没人看见才瞬移</td><td>采用</td><td>Elizabeth 的经验。二狗不能挡路，也不能让玩家回头找他。</td></tr>
+<tr><td>反射动作不等模型，等待时做小动作</td><td>采用</td><td>PUBG Ally 的分层和动森的“悩む”停顿。填充反应记为降级，模型的决定照常执行。</td></tr>
+<tr><td>冲上去打架写成固定规则</td><td>采用，并在方案中公开记录</td><td>保证每次都帮大哥、每次都挨揍；台词仍由模型写。</td></tr>
+<tr><td>性格放进选择</td><td>采用</td><td>和平精英自述个性主要在遣词造句上；傻根、Kronk 好笑也在于他们怎么做。</td></tr>
+<tr><td>记忆带事件编号，另记小本本</td><td>采用</td><td>Generative Agents 报告过捏造细节；PUBG Ally 以游戏状态为唯一事实。</td></tr>
+<tr><td>亲密度分阶段</td><td>采用，数值不交给模型</td><td>和平精英的亲密度改变话题和语气；Delivery 的数值由游戏维护。</td></tr>
+<tr><td>拒绝、讨价还价、自己的梦想和私心</td><td>不采用</td><td>上一轮研究提过这些建议，用户选择任劳任怨的跟班，并删掉了攒钱买电瓶车的梦想。失败原因交给模型评论，代替拒绝。</td></tr>
+<tr><td>成语乱用、话听岔</td><td>不采用</td><td>用户认为听起来像机器。这类笑点只停在措辞上，正好是和平精英自述的不足。</td></tr>
+<tr><td>固定口头禅</td><td>不采用</td><td>包括 Dug“松鼠！”式的反复打断。</td></tr>
+<tr><td>客观指路</td><td>不采用</td><td>法伊太客观，不像伙伴；罗盘、标记和地面圈已经负责指路。</td></tr>
+<tr><td>可以叫停的发言</td><td>采用</td><td>惊奇里会说话的花可以关掉；二狗在“闭嘴”后由服务器保存安静状态。</td></tr>
+<tr><td>被打后加入证据并提供还手候选</td><td>采用</td><td>网易资料提到言语冲突会升级为行动；还不还手由对方自己的模型决定。</td></tr>
+<tr><td>外部项目的数字</td><td>不作为本项目结果</td><td>和平精英的用户规模、PUBG Ally 的 1.6 秒只代表他们的条件。</td></tr>
+</tbody></table></div>
+<h3 id="ergou-research-pending">尚未阅读</h3>
+<ul>
+<li>动森“反复搭话会不耐烦”的原始页面</li>
+<li>《朋友聚会》的第一手开发访谈</li>
+<li>《旷野之息》《王国之泪》的贤者、《马力欧 RPG》的同伴、Midna 的任天堂官方原文</li>
+<li>和平精英 GDC 原视频和幻灯片、GameMate 技术报告</li>
+<li>Shawn Robertson 关于 Elizabeth 动画的分享</li>
+<li>网易伏羲的技术分享</li>
+<li>Inworld、Convai 及其他 ACE 案例</li>
+</ul>
+<p>后续验证：二狗实现后，用第一幕的同一段路线做真实模型试玩，记录等待时间、抢话、挡路，以及台词像不像憨厚的真人当场说的。结果记入本页；资料里的结论不能代替试玩。</p>
+</section>
+<footer>与方案文档使用相同版式，支持离线阅读。持续记录本项目的实际结果，不把外部演示指标当作本项目性能。</footer></main></div><script>document.getElementById('print').addEventListener('click',()=>window.print());</script></body></html>

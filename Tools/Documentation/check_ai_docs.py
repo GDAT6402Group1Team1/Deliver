@@ -11,7 +11,7 @@ OUT = ROOT / 'Saved/Documentation/AI'
 def check():
     OUT.mkdir(parents=True, exist_ok=True)
     files = list((ROOT / 'Document/Diagrams/AI').glob('*.svg'))
-    assert len(files) == 9
+    assert len(files) == 10
     for file in files: ET.parse(file)
     errors, result = [], {'diagrams':len(files), 'viewports':[]}
     with sync_playwright() as p:
@@ -19,7 +19,7 @@ def check():
         page = browser.new_page(viewport={'width':1440,'height':1000}, device_scale_factor=1)
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto((ROOT / 'Document/DeliveryAIPlan.html').as_uri())
-        assert page.locator('figure.uml').count() == 9
+        assert page.locator('figure.uml').count() == 10
         assert not page.locator('script[src]').count()
         assert not page.locator('img').count(), '图形应内嵌'
         assert page.locator('#chapter-10').inner_text().startswith('问题记录')
@@ -40,7 +40,7 @@ def check():
             page.screenshot(path=str(OUT / f'page-{width}.png'))
             result['viewports'].append({'width':width,'overflow':False})
         page.set_viewport_size({'width':1440,'height':1000})
-        for name in ['overview','conversation-sequence','configuration','combat','stream']:
+        for name in ['overview','conversation-sequence','configuration','combat','stream','companion']:
             figure=page.locator(f'#diagram-{name}')
             figure.locator('button[data-size="actual"]').click()
             assert figure.locator('svg').evaluate('(e)=>e.style.width.endsWith("px")')
