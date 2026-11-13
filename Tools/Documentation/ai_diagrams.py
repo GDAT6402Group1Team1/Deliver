@@ -42,7 +42,7 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'SentenceParser': ('完整句子检查', ['首条结果确定候选动作', '格式错误交给后端处理'], [('feed()', '收集文字并解析完整 JSON'), ('line()', '检查动作与句子后通知后端')]),
         'SpeechSynthesizer': ('可选 Windows 语音', ['显式选择 windows 时使用 SAPI', '两个合成线程复用各自语音进程'], [('prepare()', '提前准备 Windows 中文声音'), ('synthesize()', '返回一句完整 PCM 音频')]),
         'SpeechQueue': ('NPC 共用的语音队列', ['玩家交谈优先于未开始的闲聊', '一个 GPU 实例依次合成句子'], [('submit()', '按来源安排完整句子'), ('close()', '取消排队项并通知当前合成停止')]),
-        'QwenSpeechSynthesizer': ('NPC 台词语音', ['大壮用 Uncle_Fu，翠花用固定 B', '取消获确认后才开始下一句'], [('prepare()', '提前加载两套声音模型'), ('synthesize()', '生成完整音频，超过 8 秒报错')]),
+        'QwenSpeechSynthesizer': ('NPC 台词语音', ['大壮 B 不变，翠花 B 用 Graph', '取消获确认后才开始下一句'], [('prepare()', '提前加载并核对两套声音配置'), ('synthesize()', '生成完整音频，超过 8 秒报错')]),
         'UDeliveryNpcBodyAnimInstance': ('主动作参数', ['读取角色速度、动作与开始时间', '倒地和起身优先于轻拳后仰'], [('NativeUpdateAnimation()', '在游戏线程准备动画所需数值'), ('StrikeTime / HitTime', '按服务器时间显示挥拳与后仰')]),
         'ABP_NpcBody': ('主动画蓝图', ['十种姿势在图中平滑切换', '走路、踱步和快步使用同步组'], [('Blend Poses by Int', '按动作编号混合姿势'), ('Sequence Evaluator', '按时间显示攻击、受击与恢复')]),
         'FDeliveryNpcSentence': ('一句台词及语音', ['保存句子序号、文字和情绪', '保存 PCM 音频及采样率'], [('Sequence / Text / Emotion', '按序播放同一次回复'), ('Pcm / SampleRate', '交给客户端声音播放')]),

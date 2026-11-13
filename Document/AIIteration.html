@@ -13,10 +13,61 @@
     @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
     @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
     .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
-<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
+<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
 <header><div class="meta">AI / 交谈、语音与表情 / 2026-11-13</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
 <div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、轻拳后仰和翠花眉形已加入；本轮修复首句丢失与等待姿态，并接入听见玩家和受击的短音。动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
 <div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
+<section id="b-voice-latency-next"><h2>11 月 13 日：保留 B 音色，继续缩短首声等待</h2>
+<p class="meta">用户已认可并启用女声加速版；独立分段试验已运行，尚未接入游戏，完整交谈等待仍待实测</p>
+<p>用户已经选定两个人的声音，后续优化继续以这份听感为准。先重新检查已有慢请求，再决定哪里值得改；不通过替换音色、固定回复或取消模型决策来缩短等待，也不为了性能研究长期推迟试玩。</p>
+<h3>9.814 秒主要花在什么地方</h3>
+<p>重新核对同一条“翠花，早啊！”请求的后台日志与 HTTP 报告，确认之前的 9.814 秒包含本地 Codex AppServer 首次启动，但启动只用了 322 毫秒。Qwen 双模型的 12.206 秒预热发生在请求之前，没有计入这次等待。云端模型内部怎样排队和计算，当前日志无法进一步拆分。</p>
+<div class="table-scroll" tabindex="0" aria-label="可横向滚动的数据表"><table><tr><th>阶段</th><th>同一历史请求的记录</th><th>如何理解</th></tr>
+<tr><td>后端排队、等待模型名额</td><td>均为 0 毫秒</td><td>这条请求没有卡在队列里</td></tr>
+<tr><td>AppServer 启动</td><td>322 毫秒</td><td>包含在后面的累计时间中，不再相加</td></tr>
+<tr><td>首段文字、完整首句</td><td>请求后 4.330 秒、4.600 秒</td><td>收到一点文字和收到可用的完整句子是两件事</td></tr>
+<tr><td>语音排队、合成</td><td>2 毫秒、5.177 秒</td><td>主要等待在整句声音生成</td></tr>
+<tr><td>后端声音准备完成</td><td>请求后 9.785 秒</td><td>不表示游戏已经播放</td></tr>
+<tr><td>HTTP 检查程序收到声音</td><td>请求后 9.814 秒</td><td>没有包含 UE 实际开始播放的测量</td></tr></table></div>
+<p>这条记录说明，继续优化排队或省掉几百毫秒启动，不能解决主要等待。下一步重点放在声音如何更早准备好，同时保留模型对台词与动作的决定。本轮没有重新发送这条模型请求，上表沿用原日志；后面的独立语音试验另行记录。</p>
+<p class="evidence">请求报告：<code>Saved/AIResearch/FemaleVoiceIntegration/CuihuaB_20261113/formal_female_probe.json</code>。同一请求日志：<code>Saved/Logs/AIResidentBackend.log.20261113-160756-574-fdedae8b.bak</code>，请求编号 <code>c428e6f0-9f7a-4618-88de-e84ea7b1ef1e</code>。</p>
+<h3>用户认可后启用女声加速</h3>
+<p>此前相同参考、台词、种子和生成参数的对照中，两句原版合成分别用了 4.068、7.646 秒，PredictorGraph 分别为 1.474、2.692 秒。但声音编码、波形和时长也变了，不能把它称为输出不变的优化。原版重复生成与历史基线一致，Graph 重复生成也有自己的稳定结果；两种结果之间仍需听感选择。</p>
+<p>本轮把现有的两版澄清台词提供给用户比较，用户明确确认“加速版也自然，可以采用”。完成集成与取消检查后，正式翠花已启用加速版，仍使用同一份 Base 模型和固定 B 参考。男声保留此前已经认可的 Graph1 版本。</p>
+<p>女声配置增加 <code>predictor_mode</code>：<code>official</code> 使用原版，<code>cuda_graph</code> 使用加速版，正式配置已经明确选择后者。未填写时仍按原版处理，并兼容旧配置；Graph 配置另带身份标识，避免工作进程沿用不同模式下的声音配置。继续复用项目已固定版本的依赖，没有新增模型或安装包。切回原版只需改这项配置并重新准备后台，不能仅改文字后沿用旧工作进程。</p>
+<p class="evidence">已有对照：<code>Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T040218056401Z/comparison-with-repeat.json</code>。这组数据证明候选有速度差异，也明确记录 <code>pcm_equal=false</code>、<code>codec_equal=false</code>，不作为本轮重新测量结果。</p>
+<h4>用正式参数检查声音与取消</h4>
+<p>集成检查使用正式固定种子 <code>20261113</code>。问候句的种子与旧 Graph 试听相同，PCM 完全一致；旧澄清试听用的是 <code>20261114</code>，因此本轮澄清作为正式参数下的新结果，不与旧样本声称波形一致，也不把它与旧版 7.646 秒直接相除计算提速。</p>
+<div class="table-scroll" tabindex="0" aria-label="可横向滚动的数据表"><table><tr><th>检查</th><th>本轮结果</th><th>可以确认什么</th></tr>
+<tr><td>女声：“哎，你找我什么事？”</td><td>合成 1.701 秒，声音长 1.52 秒</td><td>与同种子的旧 Graph 样本 PCM 完全一致</td></tr>
+<tr><td>女声：“你别听他瞎说，我刚才说的是车。”</td><td>合成 2.703 秒，声音长 2.88 秒</td><td>正式固定参数可以生成完整澄清台词，不与不同种子的旧试听作逐字节对照</td></tr>
+<tr><td>生成中取消</td><td>约 81.879 毫秒确认退出</td><td>原语音工作进程仍可继续使用</td></tr>
+<tr><td>取消后切回大壮</td><td>原 B 台词正常生成</td><td>PCM 与已认可男声完全一致</td></tr></table></div>
+<p>双模型准备耗时 18.041 秒，单独记录，没有加到每句合成时间里。整卡显存采样峰值为 6026 MiB，包含其他程序，当时没有运行游戏。35 项相关 CPU 检查在 3.461 秒内通过；正式后台于 17:30 恢复到端口 8769，两套声音预热成功，当时标准错误日志为空。这里没有测 UE 渲染负载、主机与客户端听感或完整交谈的首声。</p>
+<p>CPU 检查在 <code>Tools/DeliveryAI</code> 目录执行以下命令，结果保留在当时的终端输出中，没有另存日志文件：</p>
+<pre><code>python -B -X utf8 -m unittest test_neural_voice_clone test_neural_tts test_neural_vendor_integrity test_neural_process_lifetime test_neural_speech_routing -q</code></pre>
+<p class="evidence">集成记录：<code>Saved/AIResearch/CuihuaGraphIntegration_20261113/integration.json</code>；正式后台状态：同目录 <code>backend-final-state.json</code>。后者记录检查当时的进程 63256，不代表以后仍是这个进程。</p>
+<h3>独立分段试验：更早得到前段声音，但暂不接入游戏</h3>
+<p><code>Tools/DeliveryAI/tts_evaluation/stream_voice_chunks.py</code> 先通过 13 项 CPU 检查，覆盖重复、缺失、顺序、长度、尾音和取消后迟到数据。随后运行了有限 GPU 对照，使用同一女声、同一句澄清、相同种子和已批准的 Graph 模式。脚本保留原生成过程，观察每步产生的声音编码，按 4 帧或 8 帧解码此前全部内容，再取出新增音频；参考录音从输出中裁除。</p>
+<div class="table-scroll" tabindex="0" aria-label="可横向滚动的数据表"><table><tr><th>同一句澄清</th><th>首段 PCM 准备完成</th><th>整句生成耗时</th><th>声音长度</th></tr>
+<tr><td>整句基线</td><td>等整句完成</td><td>2.589 秒</td><td>2.88 秒</td></tr>
+<tr><td>每 4 帧处理一段</td><td>0.436 秒</td><td>3.164 秒</td><td>2.88 秒</td></tr>
+<tr><td>每 8 帧处理一段</td><td>0.773 秒</td><td>2.828 秒</td><td>2.88 秒</td></tr></table></div>
+<p>两种分段方式都在整句完成前取得了 PCM，但这次重复解码也增加了总耗时。生成的声音编码与基线相同，最终把整句完整解码得到的 PCM 也相同；<strong>把提前取出的音频段拼起来，波形却不完全相同</strong>。4 帧方式的 16 位 PCM 最大差值为 384、差值均方根约 20.448；8 帧方式分别为 1088 和 34.038。这些数值不能代替试听，也不能据此断言有无可闻接缝。</p>
+<p>“第一段已经准备好”还不等于“现在播放就能一直不断”。根据这一次各段到达时间计算，4 帧方式至少要到约 0.547 秒再开始，即首段之后再留约 0.111 秒；8 帧方式在本样本中从约 0.773 秒开始即可连续供应。它们只是根据已完成样本计算的播放起点下界，没有网络、UE、混音器或下一次生成波动，不能作为正式缓冲配置或玩家实际听见声音的时间。</p>
+<p>脚本在首块解码完成后触发取消，随后重新生成的完整结果与基线一致；这没有覆盖任意 GPU 执行位置或网络中断。审查又发现两个脚本问题：解码结束后、提交音频前还要检查一次取消；不足整块的尾音应该先处理，再保存完整 WAV。旧报告中 8 帧方式的尾块时间包含了写文件的开销。表格和缓冲分析保留原测量，后续脚本修改不能当作已经重新测过。</p>
+<p>这两处脚本问题已修正，新增检查模拟“PCM 已准备好，但解码期间收到取消”，确认不会继续追加声音。修复后 14 项 CPU 预检通过，记录在 <code>Saved/AIResearch/TtsStreaming/preflight-after-cancel-tail-fix.json</code>，其中 <code>gpu_loaded=false</code>。没有重跑 GPU，也没有修改旧测量结果；旧报告中的首段时间不受保存完整 WAV 的顺序影响。</p>
+<p>当前不采用分段播放：拼接声音尚未试听，正式后端和 UE 仍没有这套分段传输、播放与取消处理。先保留试验文件供听感比较，不继续扩大数值算子研究。</p>
+<p class="evidence">结果：<code>Saved/AIResearch/TtsStreaming/20261113T092955946068Z/Manifest.json</code>；按各段生产时间计算的缓冲分析：同目录 <code>buffer-analysis.json</code>。已保存整句基线、每段音频和拼接 WAV；没有通过 HTTP 或 UE 播放。</p>
+<div id="b-voice-streaming-sources"><h3>资料与采用范围</h3>
+<p>本轮核对了 Qwen 官方生成函数的说明与返回方式、技术报告第 3.4 节，以及 faster-qwen 作者仓库的分段生成代码。接口中的“流式”可能指文本怎样输入，也可能指音频何时返回；只有确认声音在生成结束前已经交给调用方，才可作为本项目的句内音频分段依据。</p>
+<div class="table-scroll" tabindex="0" aria-label="可横向滚动的数据表"><table><tr><th>来源与阅读位置</th><th>核对结果</th><th>对本项目的意义</th></tr>
+<tr><td><a href="https://github.com/QwenLM/Qwen3-TTS/blob/main/qwen_tts/inference/qwen3_tts_model.py">Qwen 官方生成接口</a>；同时核对本机 qwen-tts 0.1.1 的 voice_clone、custom_voice 参数说明与生成、解码、返回部分</td><td><code>non_streaming_mode=False</code> 只模拟文本逐步输入。公开函数仍先完成 <code>generate()</code>，再解码并返回 WAV，并未向调用方逐段返回声音。</td><td>不能只改这个布尔值就声称句内音频已经流式播放；也不随意改变正式 B 的输入方式。</td></tr>
+<tr><td><a href="https://arxiv.org/html/2601.15621v1#S3.SS4">Qwen3-TTS 技术报告 §3.4 与表 2</a></td><td>0.6B、12Hz 方案在并发 1 时报告首包 97 毫秒，其中语言模型 93 毫秒、声音解码 4 毫秒。使用内部 vLLM V0，并优化解码阶段；12.5Hz 编码按 4 帧组成约 320 毫秒声音，解码只依赖前文。</td><td>借鉴分段返回声音的方向。97 毫秒属于论文系统，包含条件不同，不能套用到本机公开 Python 包或游戏完整交谈。</td></tr>
+<tr><td><a href="https://github.com/andimarafioti/faster-qwen3-tts/blob/a70afc0f81f7f5f8801c3227968f1102f43f211c/faster_qwen3_tts/model.py">faster-qwen 的模型接口</a>与<a href="https://github.com/andimarafioti/faster-qwen3-tts/blob/a70afc0f81f7f5f8801c3227968f1102f43f211c/faster_qwen3_tts/streaming.py">分段生成实现</a>，固定提交 <code>a70afc0</code></td><td>作者提供 Base 和 CustomVoice 分段接口，Base 可复用固定参考。快速路径同时改变采样、缓存与图执行方式；Base 另有不使用图的 <code>parity_mode</code>。接口没有本项目的取消事件处理。</td><td>作为实现参考，不整体替换正式生成循环。同一随机种子不能证明两种路径的声音一致，取消与返回顺序也需单独接入和检查。</td></tr></table></div>
+<p>faster-qwen 是社区实现，不是 Qwen 官方推理包。项目只引入固定版本的 PredictorGraph、采样函数和许可，没有装入它的完整分段实现。本轮原型沿用已批准的女声生成配置，未启用 Talker Graph；分段解码参考其处理思路，但保留全部已有编码，没有把整套社区生成循环替换进正式后端。</p></div>
+<p><strong>采用与保留：</strong>用户认可的女声 Graph 已正式启用，大壮 B 不变；独立分段实现留作试验。正式游戏仍收到每句完整声音，本轮没有新的端到端首声测量，也没有完成实际游戏或双人听感验收。</p>
+</section>
 <section id="reply-pipeline-repair"><h2>11 月 13 日：首句丢失、等待姿态与短反应音</h2>
 <p class="meta">回复修复、等待姿态和四条短音已接入；构建、后端与四项 UE 专项检查通过，游戏效果待试玩</p>
 <p>这轮继续检查“点了以后没有反应”的具体原因。除了模型和语音本身需要时间，还发现已经生成的有效首句可能被后一句错误一起取消，以及后端结束到本机播放之间人物提前恢复站立的问题。分别修正这些情况，再补听见玩家和受击时的短反应音；短音只表示人物听见或受击，不替模型回答，也不表示同意玩家的要求。</p>
@@ -482,12 +533,12 @@ python -m unittest discover -s Tools/DeliveryAI -p 'test_*.py'</code></pre>
 <audio style="width:420px;max-width:100%" controls preload="none" src="../Saved/AIResearch/FemaleVoiceIntegration/xiaofang_greeting.wav" aria-label="小芳候选声音试听">浏览器不支持音频播放</audio>
 <p>试听台词：“哎，你找我什么事？”实际合成约 1.45 秒，声音长 1.76 秒。另一次正式后端 HTTP 请求，模型先回答“是啊，几十年的老邻居了，他那脾气我熟。”，首句文字约 4.18 秒到达，完整音频约 8.34 秒到达，其中声音合成约 4.15 秒。这两个样本句长不同，不能据此声称所有对话都能在 1.45 秒内发声。</p>
 <p>男声 B 样本与此前认可版本的 PCM 完全一致；女声合成中取消约 46.6 毫秒退出，随后男声正常生成。记录在 <code>Saved/AIResearch/FemaleVoiceIntegration/latest.json</code>、<code>http_review.json</code>。两个音色仍采用整句声音返回，一句内部边生成声音边播放尚未实现。</p>
-<h3>下一步：制作小芳的老年声音</h3><p>用户已确认沿用大军 B 的试听流程。先下载固定版本的 Qwen 1.7B VoiceDesign，设计两种虚构的成熟女声，用相同台词比较；选定后再用 0.6B Base 固定参考声音。当前正式 Serena 和大军 B 保持可用，试听通过后才考虑替换。</p><p>复用已校验的编解码器和词表后，两阶段新增下载上限约 5.66 GB，两个独立模型目录约占 7.04 GB。VoiceDesign 只用于离线制作声音；长期接入 Base 后将多一份模型，必须另测显存和游戏帧率，不能沿用当前男女共用一份 CustomVoice 的结论。来源与流程见 <a href="https://github.com/QwenLM/Qwen3-TTS#voice-design-then-clone">Qwen 官方说明</a>。</p><h4>老年女声 A/B 已生成，用户选择 B</h4><p>第一阶段已完成固定版本下载和发布方校验。两组均使用“哎，你找我什么事？”和“大军，你少在这儿瞎嚷嚷。”，保留原音高与完整停顿。A 按沉稳、嘴快设计；B 按略沙哑、爱顶嘴设计。上述是声音描述的目标，实际年龄感、自然程度与漏字情况需要用户试听。</p><p>A 两句分别合成 4.82、7.26 秒，声音长 1.60、2.96 秒；B 分别为 4.68、9.82 秒，声音长 1.84、3.84 秒。Torch 分配峰值约 4.01 GiB，整卡采样峰值 6428 MiB（含其他程序）。这是离线制作声音，不能直接当成未来 Base 固定音色后的游戏速度。</p><p>A · 顶嘴</p><audio controls preload="none" style="width:420px;max-width:100%" src="../Saved/AIResearch/TtsEvaluation/qwen_voice_design/results/20261113T032449990411Z/Xiaofang_A_retort.wav"></audio><p>B · 顶嘴</p><audio controls preload="none" style="width:420px;max-width:100%" src="../Saved/AIResearch/TtsEvaluation/qwen_voice_design/results/20261113T032449990411Z/Xiaofang_B_retort.wav"></audio><p>完整结果位于 <code>Saved/AIResearch/TtsEvaluation/qwen_voice_design/results/20261113T032449990411Z/evaluation.json</code>。四段均正常生成结束、没有超幅样本；环境提示缺少 SoX 和 FlashAttention，本轮沿用 SDPA，未安装新依赖。0.6B Base 已下载并校验，用户选定的 B 参考已保存到 Design/Art/NPC/Residents/Voice/Generated。正式交谈暂时继续使用 Serena 和原大军 B，固定音色检查见下文。</p><h3 id="xiaofang-fixed-b">小芳 B：固定参考与新台词检查</h3>
+<h3>下一步：制作小芳的老年声音</h3><p>用户已确认沿用大军 B 的试听流程。先下载固定版本的 Qwen 1.7B VoiceDesign，设计两种虚构的成熟女声，用相同台词比较；选定后再用 0.6B Base 固定参考声音。当时正式 Serena 和大军 B 保持可用，试听通过后才考虑替换。</p><p>复用已校验的编解码器和词表后，两阶段新增下载上限约 5.66 GB，两个独立模型目录约占 7.04 GB。VoiceDesign 只用于离线制作声音；长期接入 Base 后将多一份模型，必须另测显存和游戏帧率，不能沿用当前男女共用一份 CustomVoice 的结论。来源与流程见 <a href="https://github.com/QwenLM/Qwen3-TTS#voice-design-then-clone">Qwen 官方说明</a>。</p><h4>老年女声 A/B 已生成，用户选择 B</h4><p>第一阶段已完成固定版本下载和发布方校验。两组均使用“哎，你找我什么事？”和“大军，你少在这儿瞎嚷嚷。”，保留原音高与完整停顿。A 按沉稳、嘴快设计；B 按略沙哑、爱顶嘴设计。上述是声音描述的目标，实际年龄感、自然程度与漏字情况需要用户试听。</p><p>A 两句分别合成 4.82、7.26 秒，声音长 1.60、2.96 秒；B 分别为 4.68、9.82 秒，声音长 1.84、3.84 秒。Torch 分配峰值约 4.01 GiB，整卡采样峰值 6428 MiB（含其他程序）。这是离线制作声音，不能直接当成未来 Base 固定音色后的游戏速度。</p><p>A · 顶嘴</p><audio controls preload="none" style="width:420px;max-width:100%" src="../Saved/AIResearch/TtsEvaluation/qwen_voice_design/results/20261113T032449990411Z/Xiaofang_A_retort.wav"></audio><p>B · 顶嘴</p><audio controls preload="none" style="width:420px;max-width:100%" src="../Saved/AIResearch/TtsEvaluation/qwen_voice_design/results/20261113T032449990411Z/Xiaofang_B_retort.wav"></audio><p>完整结果位于 <code>Saved/AIResearch/TtsEvaluation/qwen_voice_design/results/20261113T032449990411Z/evaluation.json</code>。四段均正常生成结束、没有超幅样本；环境提示缺少 SoX 和 FlashAttention，本轮沿用 SDPA，未安装新依赖。0.6B Base 已下载并校验，用户选定的 B 参考已保存到 Design/Art/NPC/Residents/Voice/Generated。那个阶段正式交谈继续使用 Serena 和原大军 B，后续固定音色检查见下文。</p><h3 id="xiaofang-fixed-b">小芳 B：固定参考与新台词检查</h3>
 <p>固定参考来自用户选中的完整 B 音频，未变调或剪辑。Base 模型一次建立参考，用同一份数据朗读新句子；它没有训练新的模型权重。独立检查生成“哎，你找我什么事？”用了 4.413 秒，“你别听他瞎说，我刚才说的是车。”用了 7.881 秒，音频分别长 1.68 和 3.44 秒。</p>
 <p>参考准备约 13.761 秒，只在这次启动时进行。合成中取消在约 62 毫秒后确认，没有输出取消的音频；随后重复第一句与首次 WAV 完全一致。生成阶段 Torch 分配峰值约 2.27 GiB，整卡采样峰值 4952 MiB，包含其他程序。这个结果未包含大军模型同时驻留和游戏渲染。</p>
 <p>新台词 · 问候</p><audio controls preload="none" style="width:420px;max-width:100%" src="../Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T034110864144Z/Xiaofang_B_greeting.wav"></audio>
 <p>新台词 · 澄清</p><audio controls preload="none" style="width:420px;max-width:100%" src="../Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T034110864144Z/Xiaofang_B_clarification.wav"></audio>
-<p>生产接入代码保留大军原 CustomVoice 模型，另加载小芳 Base；两个模型沿用同一个语音队列，不在每句话之间重新加载。最初 121 项后端测试通过，日志为 Saved/Logs/NpcVoiceCloneBackendTests.log。正式配置暂未切换，仍为大军 B 与 Serena。用户关闭编辑器后已完成下方 Graph 对照；加速候选尚未采用。</p>
+<p>生产接入代码保留大军原 CustomVoice 模型，另加载小芳 Base；两个模型沿用同一个语音队列，不在每句话之间重新加载。最初 121 项后端测试通过，日志为 Saved/Logs/NpcVoiceCloneBackendTests.log。当时正式配置尚未切换，仍为大军 B 与 Serena。用户关闭编辑器后完成了下方 Graph 对照；在这个阶段加速候选尚未采用，之后的选择见<a href="#b-voice-latency-next">女声加速记录</a>。</p>
 <p class="evidence">原始结果：<a href="../Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T034110864144Z/evaluation.json">固定 B 检查</a>。新句子的年龄感、自然程度、两模型显存和游戏效果仍待检查。</p>
 <h4>加速对照与本轮取舍</h4>
 <p>使用同一参考、台词、种子和生成参数，对比官方生成与 PredictorGraph。两句原版复测分别为 4.068、7.646 秒，Graph 为 1.474、2.692 秒。原版复测音频与历史基线完全一致；Graph 的两句声音与编码均不同，时长分别从 1.68、3.44 秒变为 1.52、3.12 秒。取消分别为 78、63 毫秒，两种方式取消后都能重复生成各自相同的声音。</p>
@@ -496,7 +547,7 @@ python -m unittest discover -s Tools/DeliveryAI -p 'test_*.py'</code></pre>
 <div id="cuihua-b-production">
 <h3>翠花 B：正式交谈声音</h3>
 <p class="meta">2026 年 11 月 13 日 · 用户已试听确认，正式后台已启用；游戏内声音尚未验收</p>
-<p>用户听过固定 B 朗读的“你别听他瞎说，我刚才说的是车。”后，确认声音符合翠花，可以正式使用。现在翠花的完整台词采用 Qwen 0.6B Base，并复用这份项目生成的声音参考；内部音色编号仍为 <code>Xiaofang_B</code>。大壮继续使用已经认可的男声 B，模型和生成参数保持不变。女声没有启用前面的 Graph 加速候选，也没有新增下载或训练。</p>
+<p>用户听过固定 B 朗读的“你别听他瞎说，我刚才说的是车。”后，确认声音符合翠花，可以正式使用。当时翠花的完整台词开始采用 Qwen 0.6B Base，并复用这份项目生成的声音参考；内部音色编号仍为 <code>Xiaofang_B</code>。大壮继续使用已经认可的男声 B，模型和生成参数保持不变。那次接入尚未启用 Graph，也没有新增下载或训练；后来用户认可加速版本，正式采用情况见<a href="#b-voice-latency-next">本轮记录</a>。下方数据保留原版接入时的测量。</p>
 <p>正式切换前，两份模型在同一语音进程中同时加载。男声的对照台词与原试听音频完全一致；女声问候合成用了 3.914 秒，澄清用了 6.790 秒。中途取消后约 22 毫秒结束，没有返回旧声音，随后可以正常切回男声，并再次生成相同的女声问候。整卡显存采样峰值为 6418 MiB，总显存为 12227 MiB；当时没有运行游戏渲染，不能据此保证游戏和语音同时运行时的帧率。</p>
 <h4>正式服务的实际回复</h4>
 <p>重启后台后，通过游戏使用的接口发送了一次“翠花，早啊！”。模型选择看向玩家，回答“早啊，今儿送货挺早！”。后台实际使用 <code>Xiaofang_B</code>，返回了 2.4 秒、24 kHz 的声音，没有语音错误。</p>
