@@ -810,6 +810,43 @@
 <li>规则由游戏掌握：跟随、冲上去打架、倒地、亲密度、钱和任务结果都由服务器决定。模型负责台词、理解玩家的话、从候选里选动作和写小本本。</li>
 <li>审台词只用一个标准：像不像一个憨厚的真人当场说出来的。</li>
 </ul>
+<h4>技能与场景互动（后续设计）</h4>
+<p>用户希望玩家和 NPC 都能使用有趣的技能，继续突出送货、恶作剧和无厘头的同伴配合。二狗的复杂度体现在连续互动和人物变化上，按完整配送过程逐步做出可玩内容。</p>
+<p>Pokémon Pokopia 的官方介绍展示了招式如何用于改变环境和移动，例如让草生长、在水面行进。Delivery 可以借鉴“技能扩大场景互动方式”的思路，再根据快递员、街坊和跟班的身份设计自己的能力。这是本项目的设计推导，本轮阅读的是<a href="https://www.nintendo.com/us/store/products/70010000107421/">任天堂官方介绍</a>，没有读取该游戏源码。</p>
+<p>首项候选是<strong>抱着空纸箱挤出一条路</strong>：玩家能用，街坊也可以由模型决定是否顶回来；二狗帮忙挡人时可能自己先踉跄。空箱是独立道具，配置夸张动作、纸屑和短反应。轻推的结果需要单独定义；当前 NPC 的普通受击会直接倒地，这条路径需要先调整，不能只调小冲量就算完成。技能发生后，把谁推了谁、是否碰到等真实结果交给模型，再决定抱怨、还手、避开或继续送货。其他候选围绕接力递物、护住包裹和引开注意力展开，试玩后再确定。</p>
+<p><strong>现有代码情况。</strong> 玩家由 <code>ADeliverPlayerState</code> 持有 GAS 的能力组件与属性，角色通过 <code>IAbilitySystemInterface</code> 提供访问入口。<code>ADeliveryNpcCharacter</code> 目前没有 GAS，攻击和倒地由自己的战斗组件处理。<code>UDeliverAbilitySystemComponent</code> 包含主角布娃娃、抓取和后箱恢复规则，<code>UGA_DeliverPunch</code> 也直接依赖主角类；NPC 接入前先明确这些依赖。这里只完成了源码检查，尚未改动技能或 NPC。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>部分</th>
+<th>计划职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>玩家输入、LLM 与行为树</td>
+<td>玩家按键或模型提出使用技能；行为树处理接近目标，并等待这次技能完成。GAS 返回开始失败、完成或取消的实际结果</td>
+</tr>
+<tr>
+<td>Gameplay Ability</td>
+<td>管理技能开始、条件、冷却、打断和结束。共享技能通过能力接口调用角色，避免直接转换成主角或二狗的具体类</td>
+</tr>
+<tr>
+<td>C++ 与 Ability Task</td>
+<td>实现距离和遮挡校验、命中去重、有限推力、物品交接及跨帧等待。完成、失败和取消通过事件返回蓝图</td>
+</tr>
+<tr>
+<td>蓝图、GE、Gameplay Cue 与配置资产</td>
+<td>蓝图组合技能流程；GE 配置数值与冷却；Cue 和表现资产处理声音、动画和特效。伤害、任务归属和奖励保留服务器检查</td>
+</tr>
+<tr>
+<td>角色已有能力</td>
+<td>主角通过现有物理控制执行，NPC 通过自己的移动和动画执行。倒地状态各自保留明确的修改者，技能结束时恢复临时效果</td>
+</tr>
+</tbody>
+</table></div>
+<p>玩家继续保留 PlayerState 上的 ASC。NPC 首先评估引擎提供的 ASC，由服务器授予并激活技能；角色自身作为 Owner 和 Avatar，检查销毁时的结束处理。先完成一个双方可用的技能，再逐步整理原拳击中需要共享的部分。跨帧 Ability Task 并不自动使用后台线程，访问角色和复制状态仍遵守 UE 的线程要求。</p>
+<p>Epic 的<a href="https://dev.epicgames.com/documentation/unreal-engine/using-gameplay-abilities-in-unreal-engine?application_version=5.8">Gameplay Ability 文档</a>说明了蓝图/C++ 激活、冷却、取消与结束；<a href="https://dev.epicgames.com/documentation/unreal-engine/gameplay-ability-tasks-in-unreal-engine?application_version=5.8">Ability Task 文档</a>说明了跨帧任务和蓝图事件出口。具体接口、类图和蓝图资源在技能实现阶段补齐，并检查玩家/NPC 双向使用、隔墙拒绝、打断、重复请求、上下车与后箱状态。</p>
 <h4>人设</h4>
 <div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
 <thead>
