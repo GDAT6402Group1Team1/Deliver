@@ -18,7 +18,8 @@ PREVIOUS_PERSONA_HASHES = {'chunlai': 'bbd1a685727bc0c074c04e55026e22064c49dd0a0
 PLAYTEST_PERSONA_HASHES = {'chunlai': '751bbb6afbc478d1a2c4c4a409f7f941b4b6074912e01f291d4d12413c464645', 'xiumei': 'b8ddc8ef6aa3893b23ed8264c9874eb9723ccab3c463bef43412bfeb88877f0d'}
 CHALLENGE_PERSONA_HASHES = {'chunlai': '111073dc3beb7e3fbaec4ab2e41c1fbd4823ae81961d472874fbe704cac5b69a', 'xiumei': '892b1c5f038bb296c2173697decb60438d950c51d357fea8fc259eab532e4a8b'}
 SAVED_CHALLENGE_PERSONA_HASHES = {'chunlai': 'f89c1f6c8b8ebd9643c4b5c4528c30fd001c445e302fa8c3c65fe489cc682dc6', 'xiumei': '7364db30830a59d37721ce3f3c7bab3c74f6e5a47656758f62ab467cdba5f3a8'}
-NEW_PERSONA_HASHES = {'chunlai': '471a45019f45f82ea3f1e8b5a737e9190a2be59b552139cd54b8121ce6797d95', 'xiumei': 'd50c9a48808dd5809aa39790bf1f748acbe8290042c1f3e78fa4eccd634a7f86'}
+LAST_SAVED_PERSONA_HASHES = {'chunlai': '471a45019f45f82ea3f1e8b5a737e9190a2be59b552139cd54b8121ce6797d95', 'xiumei': 'd50c9a48808dd5809aa39790bf1f748acbe8290042c1f3e78fa4eccd634a7f86'}
+NEW_PERSONA_HASHES = {'chunlai': '2a9754476f9736e9abaaf0d94512bbeb2bd3ed262dffd07b2eb18c77fdccfe81', 'xiumei': '2e366cfcc343b62f28b18a33c3c04ace408cfc28037c066a803c211102063047'}
 DISPLAY_NAMES = {'chunlai': ('大军', '大壮'), 'xiumei': ('小芳', '翠花')}
 
 
@@ -56,7 +57,7 @@ def updated_rows(before, profiles):
             raise RuntimeError('JSON 人物设定已变化，请先检查：'+name)
         if profiles[name]['display_name'] != DISPLAY_NAMES[name][1]:
             raise RuntimeError('JSON 人物姓名已变化，请先检查：'+name)
-        if text_hash(indexed[name].get('Persona')) not in (OLD_PERSONA_HASHES[name], PREVIOUS_PERSONA_HASHES[name], PLAYTEST_PERSONA_HASHES[name], CHALLENGE_PERSONA_HASHES[name], SAVED_CHALLENGE_PERSONA_HASHES[name], NEW_PERSONA_HASHES[name]):
+        if text_hash(indexed[name].get('Persona')) not in (OLD_PERSONA_HASHES[name], PREVIOUS_PERSONA_HASHES[name], PLAYTEST_PERSONA_HASHES[name], CHALLENGE_PERSONA_HASHES[name], SAVED_CHALLENGE_PERSONA_HASHES[name], LAST_SAVED_PERSONA_HASHES[name], NEW_PERSONA_HASHES[name]):
             raise RuntimeError('正式表中的人物设定已被修改，停止覆盖：'+name)
         indexed[name]['DisplayName'] = checked_display_name(indexed[name].get('DisplayName', ''), name)
         indexed[name]['Persona'] = profiles[name]['persona']
@@ -137,7 +138,7 @@ def main(verify_only=False):
         settings = npc_settings(npc)
         if settings['table'] != table.get_path_name() or settings['row_name'] != name:
             raise RuntimeError('蓝图人物表绑定已变化，停止修改：'+name)
-        if text_hash(settings['persona']) not in (OLD_PERSONA_HASHES[name], PREVIOUS_PERSONA_HASHES[name], PLAYTEST_PERSONA_HASHES[name], CHALLENGE_PERSONA_HASHES[name], SAVED_CHALLENGE_PERSONA_HASHES[name], NEW_PERSONA_HASHES[name]):
+        if text_hash(settings['persona']) not in (OLD_PERSONA_HASHES[name], PREVIOUS_PERSONA_HASHES[name], PLAYTEST_PERSONA_HASHES[name], CHALLENGE_PERSONA_HASHES[name], SAVED_CHALLENGE_PERSONA_HASHES[name], LAST_SAVED_PERSONA_HASHES[name], NEW_PERSONA_HASHES[name]):
             raise RuntimeError('蓝图中的人物设定已被修改，停止覆盖：'+name)
         if settings['display_name'] not in DISPLAY_NAMES[name]:
             raise RuntimeError('蓝图中的姓名已被修改，停止覆盖：'+name)

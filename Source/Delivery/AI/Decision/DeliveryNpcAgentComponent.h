@@ -51,6 +51,8 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Delivery|AI")
     bool TryFinishAction(FGuid ActionId, EDeliveryNpcActionStatus Result, FName Reason);
     UFUNCTION(BlueprintPure, Category="Delivery|AI") FDeliveryNpcPublicState GetPublicState() const { return PublicState; }
+    // 当前回复沿用请求发出时的接话轮数，之后听到的话留给下一次请求
+    int32 GetActionConversationDepth() const { return ActionConversationDepth; }
     UFUNCTION(BlueprintPure, Category="Delivery|AI") bool HasActiveAction() const;
     UFUNCTION(BlueprintPure, Category="Delivery|AI") bool IsDecisionPending() const { return bDecisionPending; }
     bool IsWaitingToReplyToPlayer() const { return bPlayerRequest; }
@@ -110,6 +112,8 @@ private:
     int32 ContextRevision = 0;
     int32 NextPlanRevision = 0;
     FDeliveryNpcDecisionRequest ActiveRequest;
+    TArray<FGuid> LastDecisionEventIds;
+    int32 ActionConversationDepth = 0;
     TArray<FDeliveryNpcEvidence> Evidence;
     TArray<FGuid> RecentEventIds;
     TMap<FGuid, TWeakObjectPtr<AActor>> KnownSubjects;

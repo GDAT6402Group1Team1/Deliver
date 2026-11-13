@@ -375,7 +375,7 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     TestTrue(TEXT("动作编号与本机待播回复不符时不提前显示"),Panel->bAwaitingReply && Panel->LastReplyText.IsEmpty());
     Agent->PublicState=ReplyState; Agent->PublicState.Speech.Reset();
     Neighbor->Agent->PublicState=ReplyState;
-    Neighbor->Presentation->BeginReply(ReplyState.ActionId,Panel->SubmittedEventId); Panel->RefreshReply();
+    Neighbor->Presentation->BeginReply(ReplyState.ActionId,Panel->SubmittedEventId,Neighbor->Agent->GetActionConversationDepth()); Panel->RefreshReply();
     TestTrue(TEXT("相同发言编号也不能读取另一NPC的首句"),Panel->bAwaitingReply && Panel->LastReplyText.IsEmpty());
     Neighbor->Agent->CancelPlan(TEXT("EndOtherNpcPreviewTest"));
     Agent->PublicState=ReplyState;

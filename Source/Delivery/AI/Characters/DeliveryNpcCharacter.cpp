@@ -305,7 +305,7 @@ bool ADeliveryNpcCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
     else if (State.Action==EDeliveryNpcAction::LieDown) bStarted=Combat->SetDeliberateProne(true);
     else if (State.Action==EDeliveryNpcAction::GetUp) bStarted=Combat->SetDeliberateProne(false);
     if (bStarted && !State.bStreamSpeech && !State.Speech.IsEmpty() &&
-        !Presentation->PublishSpeech(State.Speech,State.Emotion,ConversationDepth,State.ReplyToEventId))
+        !Presentation->PublishSpeech(State.Speech,State.Emotion,Agent->GetActionConversationDepth(),State.ReplyToEventId))
     {
         UE_LOG(LogTemp,Warning,TEXT("ResidentSpeech rejected: npc=%s action=%s"),*GetName(),*State.ActionId.ToString());
         return false;

@@ -121,6 +121,32 @@ class ModelContextTests(unittest.TestCase):
         self.assertIsNone(compact['last_complete_player_reply_id'])
         self.assertEqual(compact['recent_self_speech_ids'], [own['event_id']])
 
+    def test_neighbor_speech_during_playback_remains_new_until_next_decision(self):
+        context = dict(make_cases(self.profile))['overheard_reply']
+        question, answer = context['evidence']
+        context['last_decision_event_ids'] = [question['event_id']]
+        # 模型先看见提问，生成和播放期间听见邻居回答，自己的语音随后才播完
+        own = {'event_id':str(uuid.uuid4()), 'subject_id':context['self_subject_id'],
+               'kind':'SelfSpeech', 'description':'我听着呢。', 'reply_to_event_id':''}
+        context['evidence'].append(own)
+        compact = compact_context(context)
+        self.assertIn(answer['event_id'], compact['new_event_ids'])
+        self.assertNotIn(question['event_id'], compact['new_event_ids'])
+        self.assertNotIn(own['event_id'], compact['new_event_ids'])
+        # 下一次确实处理过这句话后，不会每轮都把它当作新话重复接下去
+        context['last_decision_event_ids'] = [item['event_id'] for item in context['evidence']]
+        self.assertEqual(compact_context(context)['new_event_ids'], [])
+
+    def test_last_decision_events_allow_expiry_and_validate_identity(self):
+        context = dict(make_cases(self.profile))['overheard_reply']
+        for seen in ([], [str(uuid.uuid4())]):
+            validate_context({**context, 'last_decision_event_ids':seen})
+        event = str(uuid.uuid4())
+        for seen in (None, event, [event, event], ['not-an-id'],
+                     [str(uuid.uuid4()) for _ in range(33)]):
+            with self.subTest(seen=seen), self.assertRaises(ValueError):
+                validate_context({**context, 'last_decision_event_ids':seen})
+
     def test_fight_result_keeps_the_actual_outcome_and_does_not_complete_player_reply(self):
         context = dict(make_cases(self.profile))['named_provoke']
         neighbor = next(item for item in context['subjects']

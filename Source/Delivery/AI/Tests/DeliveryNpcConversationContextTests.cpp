@@ -73,6 +73,7 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
     const auto* Overheard = OverheardRequest.Evidence.FindByPredicate([&](const auto& Item) { return Item.EventId == PlayerMessage; });
     if (!TestNotNull(TEXT("直接对话保留原发言"), Direct) || !TestNotNull(TEXT("旁听保留同一条原发言"), Overheard)) return false;
     TestEqual(TEXT("直接向我说话标为玩家发言"), Direct->Kind, FName(TEXT("PlayerSpeech")));
+    TestTrue(TEXT("首次请求没有已采纳决策读过的事件"), DirectRequest.LastDecisionEventIds.IsEmpty());
     TestEqual(TEXT("说给别人听的话标为旁听"), Overheard->Kind, FName(TEXT("OverheardSpeech")));
     TestEqual(TEXT("原话保持不变，没有改写成已证实的事实"), Overheard->Description, PlayerText);
     TestEqual(TEXT("请求明确记录自己叫大军"), DirectRequest.SelfName, FString(TEXT("大军")));
@@ -150,10 +151,13 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
 
     if (!TestTrue(TEXT("准备等待期间收到新问题的请求"), PrepareReply(Proposal))) return false;
     const FGuid NewDirectMessage = FGuid::NewGuid();
+    const TArray<FGuid> EventsBeforeRejectedReply=Dajun->Agent->LastDecisionEventIds;
     TestTrue(TEXT("NPC 向我说的新一句能够被接收"),
         Dajun->HearSpeech(Xiaofang, TEXT("大军，我可没说你，别听他瞎说。"), NewDirectMessage, 1, Dajun));
     TestFalse(TEXT("新一句直接对话到达后，旧请求不能继续答上一句"), Dajun->Agent->TryAcceptProposal(Proposal, Reason));
     TestEqual(TEXT("旧回复注明需要更新对话内容"), Reason, FName(TEXT("StaleProposal")));
+    TestTrue(TEXT("被拒绝的回复不能把新话标为已经看过"),
+        Dajun->Agent->LastDecisionEventIds==EventsBeforeRejectedReply);
     FDeliveryNpcDecisionRequest UpdatedRequest;
     TestTrue(TEXT("可以准备包含新一句的后续请求"), Dajun->Agent->BuildDecisionRequest(Epoch, UpdatedRequest));
     TestTrue(TEXT("后续请求保留新的直接发言"), UpdatedRequest.Evidence.ContainsByPredicate([&](const auto& Item)
@@ -163,6 +167,52 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
     TestTrue(TEXT("原有调用省略收话人时仍可交谈"), Dajun->HearSpeech(Xiaofang, TEXT("大军，你听见没有？"), LegacyMessage, 1));
     TestTrue(TEXT("省略收话人默认说给当前 NPC"), Dajun->Agent->Evidence.ContainsByPredicate([&](const auto& Item)
         { return Item.EventId == LegacyMessage && Item.Kind == TEXT("Speech") && Item.AddresseeId == UpdatedRequest.SelfSubjectId; }));
+
+    // 模型还没返回动作建议时听到旁人接话，也要等当前回复结束后处理
+    if (!TestTrue(TEXT("准备尚未收到建议的流式请求"), PrepareReply(Proposal))) return false;
+    Dajun->Agent->bDecisionPending = true;
+    const int32 RequestedDepth=Dajun->Agent->ActiveRequest.ConversationDepth;
+    const FGuid MessageBeforeProposal=FGuid::NewGuid();
+    TestTrue(TEXT("生成动作建议期间接收到旁人的新话"),
+        Dajun->HearSpeech(Neighbor, TEXT("小芳，你刚才说他不敢来？"), MessageBeforeProposal, 3, Xiaofang));
+    TestNotEqual(TEXT("后来听到的话属于另一轮接话"),Dajun->GetConversationDepth(),RequestedDepth);
+    TestTrue(TEXT("新话已安排下一轮请求"), Dajun->Agent->bDecisionQueued);
+    if (!TestTrue(TEXT("旁听不打断正在生成的回复"),
+        Dajun->Agent->ReceiveStreamDecision(Proposal.RequestId, Proposal))) return false;
+    TestTrue(TEXT("收到动作建议仍保留下一轮接话"), Dajun->Agent->bDecisionQueued);
+    TestEqual(TEXT("本次回复沿用请求发出时的轮数"),Dajun->Agent->GetActionConversationDepth(),RequestedDepth);
+    TestFalse(TEXT("生成期间收到的话尚未被本次决策看过"),
+        Dajun->Agent->LastDecisionEventIds.Contains(MessageBeforeProposal));
+    TestTrue(TEXT("已采纳决策记住了此前收到的直接发言"),Dajun->Agent->LastDecisionEventIds.Contains(LegacyMessage));
+    Dajun->Agent->FinishReply(Proposal.RequestId, true, 0);
+    TestTrue(TEXT("本轮生成结束后仍处理生成期间的新话"), Dajun->bDecisionNeeded);
+    TestFalse(TEXT("下一轮请求安排只取出一次"), Dajun->Agent->bDecisionQueued);
+
+    Dajun->Agent->CancelPlan(TEXT("CheckNextConversationRequest"));
+    FDeliveryNpcDecisionRequest NextConversationRequest;
+    if (!TestTrue(TEXT("准备包含待接话内容的下一轮请求"),
+        Dajun->Agent->BuildDecisionRequest(Epoch,NextConversationRequest))) return false;
+    TestTrue(TEXT("取消旧动作不抹掉上次模型看过的事件"),NextConversationRequest.LastDecisionEventIds.Contains(LegacyMessage));
+    TestFalse(TEXT("下一轮仍能分清模型没看过的新话"),NextConversationRequest.LastDecisionEventIds.Contains(MessageBeforeProposal));
+    TSharedPtr<FJsonObject> NextConversationJson;
+    if (!TestTrue(TEXT("新事件记录可以随请求编码"),FJsonSerializer::Deserialize(
+        TJsonReaderFactory<>::Create(DeliveryNpc::EncodeRequest(NextConversationRequest)),NextConversationJson))) return false;
+    const TArray<TSharedPtr<FJsonValue>>* LastDecisionEvents=nullptr;
+    if (!TestTrue(TEXT("JSON 包含上次决策读过的事件编号"),
+        NextConversationJson->TryGetArrayField(TEXT("last_decision_event_ids"),LastDecisionEvents))) return false;
+    TestEqual(TEXT("编码保留全部已读取编号"),LastDecisionEvents->Num(),NextConversationRequest.LastDecisionEventIds.Num());
+    TestFalse(TEXT("JSON 不会把刚收到的话误记为已读取"),LastDecisionEvents->ContainsByPredicate([&](const auto& Value)
+        { return Value->AsString()==MessageBeforeProposal.ToString(EGuidFormats::DigitsWithHyphensLower); }));
+
+    // 完整回复接口与流式回复保持相同规则
+    if (!TestTrue(TEXT("准备完整回复请求"), PrepareReply(Proposal))) return false;
+    Dajun->Agent->bDecisionPending = true;
+    TestTrue(TEXT("完整回复等待期间接收到旁人的新话"),
+        Dajun->HearSpeech(Neighbor, TEXT("小芳，你刚才没说完。"), FGuid::NewGuid(), 1, Xiaofang));
+    Dajun->Agent->ReceiveDecision(Proposal.RequestId, &Proposal, NAME_None);
+    TestEqual(TEXT("当前完整回复可以正常开始"), Dajun->Agent->GetPublicState().Status, EDeliveryNpcActionStatus::Accepted);
+    TestTrue(TEXT("完整回复成功也保留下一轮接话"), Dajun->bDecisionNeeded);
+    TestFalse(TEXT("完整回复不会重复保留旧请求安排"), Dajun->Agent->bDecisionQueued);
 
     // 已开始回答后再听到同伴接话，完成当前生成时仍要保留下一轮回答
     if (!TestTrue(TEXT("准备已经开始的流式回复"), PrepareReply(Proposal))) return false;

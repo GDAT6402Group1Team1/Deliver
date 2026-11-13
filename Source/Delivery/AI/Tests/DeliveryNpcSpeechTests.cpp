@@ -309,7 +309,7 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     {
         const FGuid ActionId=FGuid::NewGuid();
         Agent->PublicState.ActionId=ActionId;Agent->PublicState.Status=EDeliveryNpcActionStatus::Running;
-        Presentation->BeginReply(ActionId,MessageId);
+        Presentation->BeginReply(ActionId,MessageId,Npc->GetConversationDepth());
         FDeliveryNpcSentence FirstText=First,SecondText=Second;
         FirstText.Pcm.Reset();SecondText.Pcm.Reset();
         Presentation->QueueSentence(ActionId,MessageId,FirstText);
@@ -362,7 +362,7 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     FDeliveryNpcPublicState ProneAction;ProneAction.ActionId=FGuid::NewGuid();ProneAction.Action=EDeliveryNpcAction::LieDown;
     ProneAction.Status=EDeliveryNpcActionStatus::Running;ProneAction.bStreamSpeech=true;
     ProneNpc->Agent->PublicState=ProneAction;
-    ProneNpc->Presentation->BeginReply(ProneAction.ActionId,FGuid());
+    ProneNpc->Presentation->BeginReply(ProneAction.ActionId,FGuid(),ProneNpc->GetConversationDepth());
     TestTrue(TEXT("主动躺下使用原有战斗姿态接口"),ProneNpc->ExecuteAction(ProneAction));
     TestTrue(TEXT("主动躺下与受击倒地可区分"),ProneNpc->Combat->IsDeliberatelyProne());
     FDeliveryNpcSentence ProneLine;ProneLine.Sequence=0;ProneLine.Text=TEXT("我就在这儿歇一会儿");
@@ -382,7 +382,7 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
         auto* Speaker=Depth%2==0?Npc:Peer;
         auto* Listener=Depth%2==0?Peer:Npc;
         auto* Speech=Speaker->Presentation.Get();
-        Speech->BeginReply(FGuid::NewGuid(),FGuid());
+        Speech->BeginReply(FGuid::NewGuid(),FGuid(),Speaker->GetConversationDepth());
         TestEqual(TEXT("流式回复保留当前接话轮数"),Speech->SpeechDepth,Depth);
         const FGuid Turn=FGuid::NewGuid();
         Speech->Speech.TurnId=Turn;Speech->SpokenReply=FString::Printf(TEXT("这是第%d轮接话"),Depth);
@@ -406,16 +406,16 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     PlayerController->Possess(Npc);
     TestTrue(TEXT("闲聊结束后仍可接收玩家的新发言"),Peer->HearSpeech(Npc,TEXT("请问哪边能送货？"),FGuid::NewGuid(),0));
     TestEqual(TEXT("玩家新发言把接话轮数重置为零"),Peer->GetConversationDepth(),0);
-    Peer->Presentation->BeginReply(FGuid::NewGuid(),FGuid::NewGuid());
+    Peer->Presentation->BeginReply(FGuid::NewGuid(),FGuid::NewGuid(),Peer->GetConversationDepth());
     TestEqual(TEXT("新玩家话题的流式回复从零开始"),Peer->Presentation->SpeechDepth,0);
     const FGuid CancelledAction=FGuid::NewGuid(), CancelledMessage=FGuid::NewGuid();
-    Presentation->BeginReply(CancelledAction,CancelledMessage);
+    Presentation->BeginReply(CancelledAction,CancelledMessage,Npc->GetConversationDepth());
     Presentation->QueueSentence(CancelledAction,CancelledMessage,First);
     Presentation->CancelSpeech();
     TestTrue(TEXT("取消后仍处理已开始编码任务的完成回调"),WaitForEncoding());
     TestTrue(TEXT("晚到的编码结果不能恢复已取消的回复"),Presentation->EncodedSentences.IsEmpty() && Presentation->Sentences.IsEmpty() && !Presentation->HasPendingSpeech());
     const FGuid EndingAction=FGuid::NewGuid(), EndingMessage=FGuid::NewGuid();
-    Presentation->BeginReply(EndingAction,EndingMessage);
+    Presentation->BeginReply(EndingAction,EndingMessage,Npc->GetConversationDepth());
     Presentation->QueueSentence(EndingAction,EndingMessage,First);
     Presentation->EndPlay(EEndPlayReason::EndPlayInEditor);
     TestTrue(TEXT("组件结束后后台任务能正常返回"),WaitForEncoding());

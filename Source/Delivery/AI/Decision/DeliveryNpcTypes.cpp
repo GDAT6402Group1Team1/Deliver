@@ -91,6 +91,10 @@ FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
         Evidence.Add(MakeShared<FJsonValueObject>(Item));
     }
     Root->SetArrayField(TEXT("evidence"), Evidence);
+    TArray<TSharedPtr<FJsonValue>> LastDecisionEvents;
+    for (const auto& EventId : Request.LastDecisionEventIds)
+        LastDecisionEvents.Add(MakeShared<FJsonValueString>(Id(EventId)));
+    Root->SetArrayField(TEXT("last_decision_event_ids"), LastDecisionEvents);
     TArray<TSharedPtr<FJsonValue>> Candidates;
     for (const auto& Entry : Request.Candidates)
     {

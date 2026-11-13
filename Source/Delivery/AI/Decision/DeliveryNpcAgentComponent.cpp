@@ -189,6 +189,7 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
     {
         OutRequest.Voice = Npc->Presentation->TtsVoice.ToString();
         OutRequest.SelfName = Npc->DisplayName.ToString();
+        OutRequest.ConversationDepth = Npc->GetConversationDepth();
         if (!Npc->Profile.RowName.IsNone()) OutRequest.ProfileId = Npc->Profile.RowName.ToString();
     }
     OutRequest.Subjects.Add({NpcId, OutRequest.SelfName.Left(64), TEXT("npc")});
@@ -213,6 +214,7 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
         OutRequest.Subjects.Add(MoveTemp(Subject));
     }
     OutRequest.Evidence = Evidence;
+    OutRequest.LastDecisionEventIds = LastDecisionEventIds;
     OutRequest.AllowedActions.Add(EDeliveryNpcAction::Wait);
     for (const auto& Pair : KnownSubjects)
         if (CanLookAt(Pair.Value.Get())) { OutRequest.AllowedActions.Add(EDeliveryNpcAction::LookAt); break; }
@@ -308,8 +310,8 @@ bool UDeliveryNpcAgentComponent::ReceiveStreamDecision(FGuid RequestId, const FD
     ReplyRequest = RequestId;
     ReplyAction = PublicState.ActionId;
     if (auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner()))
-        Npc->Presentation->BeginReply(ReplyAction, PublicState.ReplyToEventId);
-    bDecisionQueued = false;
+        Npc->Presentation->BeginReply(ReplyAction, PublicState.ReplyToEventId, ActionConversationDepth);
+    // 模型生成期间听到的新话仍留给下一轮，收到动作建议不能清掉接话安排
     EndListening();
     PublishState();
     UE_LOG(LogDeliveryNpcAgent, Log, TEXT("NpcLatency request=%s stage=approved"), *RequestId.ToString());
@@ -499,6 +501,10 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
             { Reason=TEXT("StaleProposal"); return false; }
         }
     }
+    // 只记本次模型实际收到的事件，生成和播放期间听到的新话不能算已经处理
+    LastDecisionEventIds.Reset(ActiveRequest.Evidence.Num());
+    for (const auto& Item : ActiveRequest.Evidence) LastDecisionEventIds.Add(Item.EventId);
+    ActionConversationDepth = ActiveRequest.ConversationDepth;
     PublicState = {};
     PublicState.ReplyToEventId=PlayerMessage;
     PublicState.ActionId = FGuid::NewGuid();
@@ -522,6 +528,7 @@ void UDeliveryNpcAgentComponent::ReceiveDecision(FGuid RequestId, const FDeliver
     if (!IsAuthority() || RequestId != ActiveRequest.RequestId) return;
     const bool bAccepted = Error.IsNone() && Proposal && TryAcceptProposal(*Proposal, Error);
     const bool bRetry = bDecisionQueued && !bAccepted;
+    const bool bContinueConversation = bDecisionQueued && bAccepted;
     FGuid FailedMessage;
     AActor* FailedSpeaker=nullptr;
     if (!bAccepted) GetRequestedPlayerMessage(FailedMessage,FailedSpeaker);
@@ -540,7 +547,9 @@ void UDeliveryNpcAgentComponent::ReceiveDecision(FGuid RequestId, const FDeliver
         EndListening();
     }
     OnDecisionFinished.Broadcast(Error);
-    const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    // 完成通知会结束本轮等待，新话需要在当前动作和台词结束后继续处理
+    if (bContinueConversation && Npc) Npc->WakeDecision();
     const bool bRetryAllowed=!FailedMessage.IsValid() || FailedMessage!=PlayerReplyMessage || (Npc && Npc->IsDecisionRetryScheduled());
     const bool bRetryStarted=bRetry && bRetryAllowed && !IsDecisionPending() && !HasActiveAction() && RequestDecision();
     if (!bAccepted)
@@ -764,6 +773,8 @@ void UDeliveryNpcAgentComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
         PublicState.Target = nullptr;
     }
     Evidence.Reset();
+    LastDecisionEventIds.Reset();
+    ActionConversationDepth = 0;
     KnownSubjects.Reset();
     OnPublicStateChanged.Clear();
     OnDecisionFinished.Clear();

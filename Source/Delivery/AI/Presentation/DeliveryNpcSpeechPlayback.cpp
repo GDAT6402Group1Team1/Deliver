@@ -16,15 +16,16 @@
 #include "Async/Async.h"
 #include "VoiceModule.h"
 
-void UDeliveryNpcPresentationComponent::BeginReply(FGuid ActionId, FGuid MessageId)
+void UDeliveryNpcPresentationComponent::BeginReply(FGuid ActionId, FGuid MessageId, int32 Depth)
 {
     if (!GetOwner()->HasAuthority()) return;
     CancelSpeech();
     Sentences.Reset(); SpokenReply.Reset(); NextSentence=0; ExpectedSentences=INDEX_NONE;
     ReplyAction=ActionId; ReplyMessage=MessageId;
+    SpeechDepth=FMath::Clamp(Depth,0,3);
     GetOwner()->ForceNetUpdate();
     if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()))
-    { SpeechDepth=Npc->GetConversationDepth(); ReplyListener=Npc->Agent->GetPublicState().SpeechTarget; }
+        ReplyListener=Npc->Agent->GetPublicState().SpeechTarget;
 }
 
 void UDeliveryNpcPresentationComponent::QueueSentence(FGuid ActionId, FGuid MessageId, const FDeliveryNpcSentence& Sentence)

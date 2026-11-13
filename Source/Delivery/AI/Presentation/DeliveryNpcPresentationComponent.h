@@ -104,7 +104,7 @@ public:
     bool PublishSpeech(const FString& Text,FName Emotion,int32 Depth,FGuid ReplyToEventId=FGuid());
     // 停止对白，并让各客户端停止对应声音和字幕
     void CancelSpeech();
-    void BeginReply(FGuid ActionId, FGuid MessageId);
+    void BeginReply(FGuid ActionId, FGuid MessageId, int32 Depth);
     void QueueSentence(FGuid ActionId, FGuid MessageId, const FDeliveryNpcSentence& Sentence);
     // 返回 true 表示本轮接受了数据，声音仍可能正在编码或等待播放
     bool BeginSentenceAudio(FGuid ActionId, FGuid MessageId, const FDeliveryNpcSpeechBegin& Begin);

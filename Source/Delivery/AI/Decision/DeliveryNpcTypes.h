@@ -104,6 +104,10 @@ struct DELIVERY_API FDeliveryNpcDecisionRequest
     FGuid SelfSubjectId;
     TArray<FDeliveryNpcSubject> Subjects;
     TArray<FDeliveryNpcEvidence> Evidence;
+    // 上次已采纳的决策读过哪些事件，用于区分随后听到的新话
+    TArray<FGuid> LastDecisionEventIds;
+    // 本次接话来自哪一轮，在 UE 内保存，不发送给模型
+    int32 ConversationDepth = 0;
     TArray<EDeliveryNpcAction> AllowedActions;
     TArray<FDeliveryNpcCandidate> Candidates;
     bool bPlayerRequest = false;
