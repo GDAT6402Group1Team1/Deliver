@@ -90,7 +90,7 @@ void UDeliveryNpcBodyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
         Pose=EPose::Walk;
         if (bRunning && State.Action==EDeliveryNpcAction::Pace)
         { Pose=EPose::Pace; ReferenceSpeed=Npc->Presentation->PaceAnimationSpeed; }
-        else if (bRunning && bAttackAction)
+        else if (bRunning && (bAttackAction || State.Action==EDeliveryNpcAction::Flee))
         { Pose=EPose::Hurry; ReferenceSpeed=Npc->Presentation->HurryAnimationSpeed; }
     }
     // 缺音时暂停说话动作，声音接上后继续，字幕和注视仍保留当前句子

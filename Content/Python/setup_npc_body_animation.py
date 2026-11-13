@@ -82,16 +82,19 @@ def file_hash(file):
     return hashlib.sha256(file.read_bytes()).hexdigest()
 
 
-def import_hit_animation(root):
-    source = root/'Design/Art/NPC/Residents/A_ResidentHit.fbx'
-    license_file = root/'Design/Art/NPC/Grandpa/Quaternius2_License.txt'
+def import_hit_animation(root, light_hit=False):
+    name = 'A_NpcLightHit' if light_hit else 'A_ResidentHit'
+    path = '/Game/NPC/Residents/Animation/'+name
+    source = root/('Design/Art/NPC/Residents/'+name+'.fbx')
+    license_file = root/('Design/Art/NPC/Grandpa/Quaternius_License.txt' if light_hit
+                         else 'Design/Art/NPC/Grandpa/Quaternius2_License.txt')
     if not source.is_file() or not license_file.is_file():
         raise RuntimeError('缺少受击源动画或已有许可文件')
     original_mesh = unreal.load_asset('/Game/Characters/NPC/SK_NpcMan')
     if not original_mesh:
         raise RuntimeError('缺少居民原模型，无法确定受击动画的骨架和比例')
     skeleton = original_mesh.get_editor_property('skeleton')
-    created = not unreal.EditorAssetLibrary.does_asset_exist(HIT)
+    created = not unreal.EditorAssetLibrary.does_asset_exist(path)
     if created:
         options = unreal.FbxImportUI()
         options.set_editor_property('automated_import_should_detect_type', False)
@@ -109,18 +112,19 @@ def import_hit_animation(root):
         task = unreal.AssetImportTask()
         task.filename = str(source)
         task.destination_path = '/Game/NPC/Residents/Animation'
-        task.destination_name = 'A_ResidentHit'
+        task.destination_name = name
         task.automated = True
         task.save = False
         task.replace_existing = False
         task.options = options
         task.factory = unreal.FbxFactory()
         unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
-    animation = unreal.load_asset(HIT)
+    animation = unreal.load_asset(path)
     if not isinstance(animation, unreal.AnimSequence) or animation.get_editor_property('skeleton') != skeleton:
         raise RuntimeError('受击动画的类型或骨架与居民不符')
-    # 原始 Hit_Knockback 长 25/30 秒，沿用已有重定向文件的完整片段
-    if abs(animation.get_play_length()-25/30) > .04:
+    # 站立受击使用完整 Hit_Chest，原倒地素材保留给已有资源
+    duration = 10/30 if light_hit else 25/30
+    if abs(animation.get_play_length()-duration) > .04:
         raise RuntimeError('受击动画长度与源剪辑不符')
     if created:
         animation.set_editor_property('enable_root_motion', False)
@@ -128,11 +132,12 @@ def import_hit_animation(root):
         raise RuntimeError('已有受击动画启用了 Root Motion，停止绑定并保留原配置')
     if created and not unreal.EditorAssetLibrary.save_loaded_asset(animation):
         raise RuntimeError('受击动画保存失败')
-    return animation, {'path': HIT, 'created': created, 'source': str(source),
+    return animation, {'path': path, 'created': created, 'source': str(source),
                        'source_sha256': file_hash(source), 'duration': animation.get_play_length(),
-                       'source_clip': 'Hit_Knockback', 'author': 'Quaternius', 'license': 'CC0',
+                       'source_clip': 'Hit_Chest' if light_hit else 'Hit_Knockback', 'author': 'Quaternius', 'license': 'CC0',
                        'license_file': str(license_file), 'license_sha256': file_hash(license_file),
-                       'source_url': 'https://quaternius.com/packs/universalanimationlibrary2.html',
+                       'source_url': 'https://quaternius.com/packs/universalanimationlibrary.html' if light_hit
+                                     else 'https://quaternius.com/packs/universalanimationlibrary2.html',
                        'retarget_script': 'Content/Python/retarget_residents.py'}
 
 

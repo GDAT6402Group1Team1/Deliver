@@ -3,6 +3,8 @@
 #include "Components/ActorComponent.h"
 #include "DeliveryNpcCombatComponent.generated.h"
 
+class USkeletalMeshComponent;
+
 // 在服务器处理 NPC 挥拳、受击和起身，同一拳只判定一次命中
 // 倒地和起身状态同步给客户端，由表现组件播放相应动画
 UCLASS(ClassGroup=(Delivery),meta=(BlueprintSpawnableComponent))
@@ -14,11 +16,13 @@ public:
     UDeliveryNpcCombatComponent();
     // 检查距离、遮挡和身体状态，攻击冷却在 StartStrike 中检查
     bool CanStrike(AActor* Target) const;
+    // 导航靠近到双方身体之间只剩小段间隙，命中仍由实际拳头接触决定
+    float GetStrikeApproachDistance(const AActor* Target) const;
     // 近身可直接挥拳，较远的目标必须有完整导航路径才提供给模型
     bool CanApproachStrike(AActor* Target) const;
     // 接近途中检查目标和攻击冷却，实际路径由正在运行的导航任务检查
     bool CanContinueStrikeApproach(AActor* Target) const;
-    // 返回 true 表示开始挥拳，是否命中要等到命中时间再判断
+    // 返回 true 表示开始挥拳，只有有效窗口内的拳头扫掠碰到目标才算命中
     bool StartStrike(AActor* Target,FGuid ActionId);
     // 模型选择持续交战后，由行为树调用；整轮固定目标、时间和最多挥拳次数
     bool CanBeginFight(AActor* Target) const;
@@ -29,6 +33,8 @@ public:
     bool IsReadyToStrike() const;
     void EndFight(FGuid ActionId);
     FString DescribeFight(FGuid ActionId,FName Reason) const;
+    // 只介绍自己实际经历的受击与出拳，供模型判断继续交战、逃跑或停手
+    FString DescribeCombatState() const;
     int32 GetFightPunchCount() const { return FightPunches; }
     int32 GetFightHitCount() const { return FightHits; }
     int32 GetFightPunchLimit() const { return FMath::Clamp(FightPunchLimit,1,5); }
@@ -56,6 +62,13 @@ public:
     UFUNCTION(BlueprintPure) bool IsRecovering() const { return bRecovering; }
     UFUNCTION(BlueprintPure) bool IsStriking() const { return AttackId.IsValid(); }
     UPROPERTY(EditAnywhere,Category="Delivery|居民战斗",meta=(ClampMin="50",ClampMax="250",Units="cm")) float StrikeRange=160;
+    UPROPERTY(EditAnywhere,Category="Delivery|拳头接触") FName StrikeHandBone=TEXT("LeftHand");
+    // 可按模型握拳位置调整，保持检测球贴着拳头，不用偏移延长攻击距离
+    UPROPERTY(EditAnywhere,Category="Delivery|拳头接触",meta=(Units="cm")) FVector StrikeHandOffset=FVector::ZeroVector;
+    UPROPERTY(EditAnywhere,Category="Delivery|拳头接触",meta=(ClampMin="2",ClampMax="12",Units="cm")) float StrikeHandRadius=8;
+    UPROPERTY(EditAnywhere,Category="Delivery|拳头接触",meta=(ClampMin="0",ClampMax="12",Units="cm")) float StrikeBodyGap=4;
+    UPROPERTY(EditAnywhere,Category="Delivery|拳头接触",meta=(ClampMin="0",ClampMax="0.5",Units="s")) float StrikeContactStart=.12f;
+    UPROPERTY(EditAnywhere,Category="Delivery|拳头接触",meta=(ClampMin="0.15",ClampMax="0.8",Units="s")) float StrikeContactEnd=.4f;
     UPROPERTY(EditAnywhere,Category="Delivery|居民战斗",meta=(ClampMin="160",ClampMax="1200",Units="cm")) float StrikeApproachRange=600;
     UPROPERTY(EditAnywhere,Category="Delivery|居民战斗",meta=(ClampMin="1",ClampMax="10",Units="s")) float RecoverySeconds=4;
     UPROPERTY(EditAnywhere,Category="Delivery|交战",meta=(ClampMin="1",ClampMax="5")) int32 FightPunchLimit=3;
@@ -66,11 +79,16 @@ public:
     UPROPERTY(EditAnywhere,Category="Delivery|交战",meta=(ClampMin="2",ClampMax="20",Units="s")) float LightHitResetSeconds=10;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out) const override;
 protected:
+    virtual void BeginPlay() override;
     virtual void TickComponent(float Dt,ELevelTick Type,FActorComponentTickFunction* Fn) override;
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:
     bool CanStrikeTarget(AActor* Target,float MaxDistance) const;
     bool StartStrikeInternal(AActor* Target,FGuid PunchId,FGuid ActionId,bool bLightHit);
+    bool HasStrikePose() const;
+    void OnStrikePoseUpdated();
+    void FinishStrike(bool bHit,const FVector& ImpactPoint);
+    void RestoreMeshTickSettings();
     void ReceiveFightHit(AActor* Source,FGuid PunchId);
     UPROPERTY(ReplicatedUsing=OnRep_Down) bool bDown=false;
     UPROPERTY(Replicated) bool bDeliberate=false;
@@ -86,7 +104,14 @@ private:
     FGuid FinishedStrikeId;
     bool bFinishedStrikeHit=false;
     TWeakObjectPtr<AActor> AttackTarget;
-    double HitAt=0;
+    TWeakObjectPtr<USkeletalMeshComponent> StrikeMesh;
+    FDelegateHandle StrikePoseHandle;
+    FVector PreviousHandPosition=FVector::ZeroVector;
+    FVector PreviousOwnerPosition=FVector::ZeroVector;
+    double PreviousHandTime=-1;
+    uint8 PreviousMeshVisibility=0;
+    bool bPreviousUpdateRateOptimization=false;
+    bool bOverrideMeshTick=false;
     double RecoverAt=0;
     double NextStrikeAt=0;
     bool bCurrentStrikeIsLight=false;

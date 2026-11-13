@@ -5,7 +5,7 @@
 
 // 只允许模型选择游戏已经实现的动作
 UENUM(BlueprintType)
-enum class EDeliveryNpcAction : uint8 { None, Wait, LookAt, MoveTo, StrikeOnce, HoldVehicle, ReleaseVehicle, LieDown, GetUp, Pace, MoveAside, Fight };
+enum class EDeliveryNpcAction : uint8 { None, Wait, LookAt, MoveTo, StrikeOnce, HoldVehicle, ReleaseVehicle, LieDown, GetUp, Pace, MoveAside, Fight, Flee };
 
 UENUM(BlueprintType)
 enum class EDeliveryNpcActionStatus : uint8 { Idle, Accepted, Running, Succeeded, Failed, Cancelled };

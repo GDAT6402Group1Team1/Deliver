@@ -16,7 +16,9 @@ BLUEPRINTS = {'chunlai': '/Game/NPC/Residents/BP_ResidentLoud',
 OLD_PERSONA_HASHES = {'chunlai': '571b075b048750f71aa37f5f37fa5b667df579d22b157703a0e88e0fad309fd1', 'xiumei': 'a8c50296961501cc6cb1e1b0fecd6ba79b20e15559c26bfe1b7dc78089a86133'}
 PREVIOUS_PERSONA_HASHES = {'chunlai': 'bbd1a685727bc0c074c04e55026e22064c49dd0a0e4bdf6d21a0ce53e16d69ed', 'xiumei': 'ad4ae12a088b67376dcff6976151f1870da9969cf9cd18aa9e50c771a0cf6014'}
 PLAYTEST_PERSONA_HASHES = {'chunlai': '751bbb6afbc478d1a2c4c4a409f7f941b4b6074912e01f291d4d12413c464645', 'xiumei': 'b8ddc8ef6aa3893b23ed8264c9874eb9723ccab3c463bef43412bfeb88877f0d'}
-NEW_PERSONA_HASHES = {'chunlai': '111073dc3beb7e3fbaec4ab2e41c1fbd4823ae81961d472874fbe704cac5b69a', 'xiumei': '892b1c5f038bb296c2173697decb60438d950c51d357fea8fc259eab532e4a8b'}
+CHALLENGE_PERSONA_HASHES = {'chunlai': '111073dc3beb7e3fbaec4ab2e41c1fbd4823ae81961d472874fbe704cac5b69a', 'xiumei': '892b1c5f038bb296c2173697decb60438d950c51d357fea8fc259eab532e4a8b'}
+SAVED_CHALLENGE_PERSONA_HASHES = {'chunlai': 'f89c1f6c8b8ebd9643c4b5c4528c30fd001c445e302fa8c3c65fe489cc682dc6', 'xiumei': '7364db30830a59d37721ce3f3c7bab3c74f6e5a47656758f62ab467cdba5f3a8'}
+NEW_PERSONA_HASHES = {'chunlai': '471a45019f45f82ea3f1e8b5a737e9190a2be59b552139cd54b8121ce6797d95', 'xiumei': 'd50c9a48808dd5809aa39790bf1f748acbe8290042c1f3e78fa4eccd634a7f86'}
 DISPLAY_NAMES = {'chunlai': ('大军', '大壮'), 'xiumei': ('小芳', '翠花')}
 
 
@@ -54,7 +56,7 @@ def updated_rows(before, profiles):
             raise RuntimeError('JSON 人物设定已变化，请先检查：'+name)
         if profiles[name]['display_name'] != DISPLAY_NAMES[name][1]:
             raise RuntimeError('JSON 人物姓名已变化，请先检查：'+name)
-        if text_hash(indexed[name].get('Persona')) not in (OLD_PERSONA_HASHES[name], PREVIOUS_PERSONA_HASHES[name], PLAYTEST_PERSONA_HASHES[name], NEW_PERSONA_HASHES[name]):
+        if text_hash(indexed[name].get('Persona')) not in (OLD_PERSONA_HASHES[name], PREVIOUS_PERSONA_HASHES[name], PLAYTEST_PERSONA_HASHES[name], CHALLENGE_PERSONA_HASHES[name], SAVED_CHALLENGE_PERSONA_HASHES[name], NEW_PERSONA_HASHES[name]):
             raise RuntimeError('正式表中的人物设定已被修改，停止覆盖：'+name)
         indexed[name]['DisplayName'] = checked_display_name(indexed[name].get('DisplayName', ''), name)
         indexed[name]['Persona'] = profiles[name]['persona']
@@ -90,7 +92,7 @@ def main(verify_only=False):
                      'expressions': object_path(presentation.get_editor_property('expressions'))}
         unchanged['animations'] = {field: object_path(presentation.get_editor_property(field)) for field in
                                    ('idle_animation', 'walk_animation', 'pace_animation', 'hurry_animation',
-                                    'attack_animation', 'down_animation', 'talk_animation', 'get_up_animation', 'hold_animation')}
+                                    'attack_animation', 'hit_animation', 'down_animation', 'talk_animation', 'get_up_animation', 'hold_animation')}
         unchanged['movement'] = {field: npc.get_editor_property(field) for field in
                                  ('walk_speed', 'pace_speed', 'angry_approach_speed', 'pace_distance', 'side_step_distance')}
         return {'display_name': str(npc.get_editor_property('display_name')),
@@ -135,7 +137,7 @@ def main(verify_only=False):
         settings = npc_settings(npc)
         if settings['table'] != table.get_path_name() or settings['row_name'] != name:
             raise RuntimeError('蓝图人物表绑定已变化，停止修改：'+name)
-        if text_hash(settings['persona']) not in (OLD_PERSONA_HASHES[name], PREVIOUS_PERSONA_HASHES[name], PLAYTEST_PERSONA_HASHES[name], NEW_PERSONA_HASHES[name]):
+        if text_hash(settings['persona']) not in (OLD_PERSONA_HASHES[name], PREVIOUS_PERSONA_HASHES[name], PLAYTEST_PERSONA_HASHES[name], CHALLENGE_PERSONA_HASHES[name], SAVED_CHALLENGE_PERSONA_HASHES[name], NEW_PERSONA_HASHES[name]):
             raise RuntimeError('蓝图中的人物设定已被修改，停止覆盖：'+name)
         if settings['display_name'] not in DISPLAY_NAMES[name]:
             raise RuntimeError('蓝图中的姓名已被修改，停止覆盖：'+name)

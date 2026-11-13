@@ -63,8 +63,9 @@ void ADeliveryNpcCharacter::BeginPlay()
     GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera,ECR_Ignore);
     ImpactSensor->SetCapsuleSize(GetCapsuleComponent()->GetUnscaledCapsuleRadius(),GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight());
     ConversationInteractable->bPromptAtTarget=true;
-    ConversationInteractable->bUseConversationIcon=true;
-    ConversationInteractable->PromptOffset=FVector(0,0,GetCapsuleComponent()->GetScaledCapsuleHalfHeight()+20);
+    ConversationInteractable->bUseConversationIcon=false;
+    ConversationInteractable->PromptText=FText::Format(NSLOCTEXT("Delivery","NpcTalkPrompt","[T] 和{0}说话"),DisplayName);
+    ConversationInteractable->PromptOffset=FVector(0,0,GetCapsuleComponent()->GetScaledCapsuleHalfHeight()-20);
     ConversationInteractable->CanUse.BindUObject(this,&ADeliveryNpcCharacter::CanTalk);
     ConversationInteractable->Use.BindUObject(this,&ADeliveryNpcCharacter::OpenConversation);
     Agent->OnDecisionFinished.AddUniqueDynamic(this,&ADeliveryNpcCharacter::OnDecisionFinished);
@@ -149,7 +150,7 @@ bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid
 bool ADeliveryNpcCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target) const
 {
     if (Action==EDeliveryNpcAction::GetUp) return Combat->IsDown();
-    if (IsKnockedDown() || (Combat->IsReactingToHit() && Action!=EDeliveryNpcAction::Fight)) return false;
+    if (IsKnockedDown() || (Combat->IsReactingToHit() && Action!=EDeliveryNpcAction::Fight && Action!=EDeliveryNpcAction::Flee)) return false;
     if (Action==EDeliveryNpcAction::ReleaseVehicle) return GetHeldVehicle()!=nullptr;
     if (GetHeldVehicle()) return Action==EDeliveryNpcAction::Wait || Action==EDeliveryNpcAction::LookAt;
     if (Action==EDeliveryNpcAction::Pace || Action==EDeliveryNpcAction::MoveAside)
@@ -161,6 +162,11 @@ bool ADeliveryNpcCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target)
         return Cast<AAIController>(GetController()) && Combat->CanApproachStrike(Target);
     if (Action==EDeliveryNpcAction::Fight)
         return Cast<AAIController>(GetController()) && Combat->CanBeginFight(Target);
+    if (Action==EDeliveryNpcAction::Flee)
+    {
+        FVector Destination;
+        return FindFleeDestination(Target,FMath::Clamp(FleeTravelLimit,200.f,1200.f),Destination);
+    }
     if (Action==EDeliveryNpcAction::HoldVehicle)
     { const auto* Bike=Cast<ADeliveryMotorbike>(Target); return Bike && Bike->ResidentHold && Bike->ResidentHold->CanHold(this); }
     if (Action==EDeliveryNpcAction::MoveTo)
@@ -255,16 +261,39 @@ bool ADeliveryNpcCharacter::FindSideStepDestination(AActor* Target,FVector& OutL
         if (FindNearbyWalkDestination(GetNavAgentLocation()+Side*Sign*Distance,Distance*1.5f,OutLocation)) return true;
     return false;
 }
+bool ADeliveryNpcCharacter::FindFleeDestination(AActor* Threat,float RemainingTravel,FVector& OutLocation) const
+{
+    const auto* Person=Cast<APawn>(Threat);
+    if (!HasAuthority() || IsKnockedDown() || GetHeldVehicle() || !IsValid(Person) || Person==this ||
+        Person->GetWorld()!=GetWorld() || !FMath::IsFinite(RemainingTravel) || RemainingTravel<60) return false;
+    const FVector Start=GetNavAgentLocation();
+    const FVector ThreatPosition=Person->GetActorLocation();
+    const float CurrentDistance=FVector::Dist2D(Start,ThreatPosition);
+    if (CurrentDistance>=FMath::Clamp(FleeSafeDistance,200.f,900.f)) return false;
+    FVector Away=(Start-ThreatPosition).GetSafeNormal2D();
+    if (Away.IsNearlyZero()) Away=-GetActorForwardVector();
+    const float Step=FMath::Min(FMath::Clamp(FleeStepDistance,80.f,350.f),RemainingTravel/1.5f);
+    // 正后方被挡住时尝试两侧，落点必须比当前位置离对方更远
+    for (const float Angle:{0.f,40.f,-40.f,75.f,-75.f})
+    {
+        const FVector Desired=Start+Away.RotateAngleAxis(Angle,FVector::UpVector)*Step;
+        FVector Destination;
+        if (FindNearbyWalkDestination(Desired,FMath::Min(RemainingTravel,Step*1.5f),Destination) &&
+            FVector::Dist2D(Destination,ThreatPosition)>=CurrentDistance+35)
+        { OutLocation=Destination; return true; }
+    }
+    return false;
+}
 bool ADeliveryNpcCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
 {
     if (!HasAuthority() || ExecutingAction.IsValid() || !CanExecute(State.Action,State.Target)) return false;
     ExecutingAction=State.ActionId;
     if (State.Action==EDeliveryNpcAction::Pace || State.Action==EDeliveryNpcAction::MoveAside ||
-        State.Action==EDeliveryNpcAction::MoveTo || State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight)
+        State.Action==EDeliveryNpcAction::MoveTo || State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight || State.Action==EDeliveryNpcAction::Flee)
     {
         PreviousActionWalkSpeed=GetCharacterMovement()->MaxWalkSpeed;
         GetCharacterMovement()->MaxWalkSpeed=State.Action==EDeliveryNpcAction::Pace?PaceSpeed:
-            (State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight)?AngryApproachSpeed:WalkSpeed;
+            (State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight || State.Action==EDeliveryNpcAction::Flee)?AngryApproachSpeed:WalkSpeed;
     }
     bool bStarted=true;
     // 攻击目标还在远处时，由行为树先靠近；到达前不会启动命中判定

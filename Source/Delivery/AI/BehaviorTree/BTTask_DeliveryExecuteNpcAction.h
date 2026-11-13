@@ -26,6 +26,7 @@ private:
     void ReleaseFocus();
     bool StartNearbyMove(const FVector& Destination);
     void TickFight(UBehaviorTreeComponent& OwnerComp,ADeliveryNpcCharacter* Npc,const FDeliveryNpcPublicState& State);
+    void TickFlee(UBehaviorTreeComponent& OwnerComp,ADeliveryNpcCharacter* Npc,const FDeliveryNpcPublicState& State);
     void FinishFight(UBehaviorTreeComponent& OwnerComp,FName Reason,bool bFailed);
     // 每个 NPC 使用自己的任务实例，动作编号和计时不会与其他 NPC 共用
     TWeakObjectPtr<UDeliveryNpcAgentComponent> Agent;
@@ -40,4 +41,9 @@ private:
     bool bReturningToOrigin=false;
     FGuid FightPunchId;
     bool bFightMoveRequested=false;
+    double NextFleePathUpdate=0;
+    float FleeTravelled=0;
+    FVector PreviousFleePosition=FVector::ZeroVector;
+    FVector PreviousThreatPosition=FVector::ZeroVector;
+    bool bReportedFlee=false;
 };

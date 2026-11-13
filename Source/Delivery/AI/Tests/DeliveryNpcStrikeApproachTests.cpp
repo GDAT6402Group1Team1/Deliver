@@ -10,6 +10,8 @@
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "UObject/StrongObjectPtr.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -37,9 +39,15 @@ bool FDeliveryNpcStrikeApproachTest::RunTest(const FString&)
     FloorBox->SetCollisionProfileName(TEXT("BlockAll")); FloorBox->RegisterComponent();
     Floor->SetActorLocation(FVector(0,0,-20));
     FActorSpawnParameters Spawn; Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    auto* A=World->SpawnActor<ADeliveryNpcCharacter>(FVector(0,0,90),FRotator::ZeroRotator,Spawn);
-    auto* B=World->SpawnActor<ADeliveryNpcCharacter>(FVector(208,0,90),FRotator::ZeroRotator,Spawn);
+    auto* ManClass=LoadClass<ADeliveryNpcCharacter>(nullptr,TEXT("/Game/NPC/Residents/BP_ResidentLoud.BP_ResidentLoud_C"));
+    auto* WomanClass=LoadClass<ADeliveryNpcCharacter>(nullptr,TEXT("/Game/NPC/Residents/BP_ResidentShrewd.BP_ResidentShrewd_C"));
+    if (!TestNotNull(TEXT("正式男NPC蓝图"),ManClass) || !TestNotNull(TEXT("正式女NPC蓝图"),WomanClass)) return false;
+    auto* A=World->SpawnActor<ADeliveryNpcCharacter>(ManClass,FVector(0,0,90),FRotator::ZeroRotator,Spawn);
+    auto* B=World->SpawnActor<ADeliveryNpcCharacter>(WomanClass,FVector(208,0,90),FRotator(0,180,0),Spawn);
     A->SetActorTickEnabled(false); B->SetActorTickEnabled(false);
+    for (auto* Npc:{A,B})
+        if (auto* AI=Cast<AAIController>(Npc->GetController()); AI && AI->BrainComponent)
+            AI->BrainComponent->StopLogic(TEXT("IsolatedContactTest"));
     const auto Tick=[&](float Seconds)
     {
         for (int32 Index=0;Index<FMath::CeilToInt(Seconds/.02f);++Index)
@@ -91,7 +99,7 @@ bool FDeliveryNpcStrikeApproachTest::RunTest(const FString&)
     if (!TestTrue(TEXT("仍可生成交谈请求"),A->Agent->BuildDecisionRequest(FGuid::NewGuid(),NoNavRequest))) return false;
     TestFalse(TEXT("无路径的攻击和移动不会发给模型选择"),NoNavRequest.Candidates.ContainsByPredicate([](const auto& Item)
         { return Item.Action==EDeliveryNpcAction::StrikeOnce || Item.Action==EDeliveryNpcAction::MoveTo; }));
-    Place(120);
+    Place(A->Combat->GetStrikeApproachDistance(B)-.5f);
     TestTrue(TEXT("已在近战范围内时不要求导航"),A->Combat->CanApproachStrike(B));
     if (!TestTrue(TEXT("没有导航也能选择近身挥拳"),Approve())) return false;
     B->SetActorLocation(FVector(400,0,90));
@@ -99,6 +107,8 @@ bool FDeliveryNpcStrikeApproachTest::RunTest(const FString&)
     if (!TestNotNull(TEXT("攻击由AI控制器执行"),AI)) return false;
     auto* Tree=NewObject<UBehaviorTreeComponent>(AI); Tree->RegisterComponent();
     auto* Task=NewObject<UBTTask_DeliveryExecuteNpcAction>(Tree);
+    TStrongObjectPtr<UBehaviorTreeComponent> KeepTree(Tree);
+    TStrongObjectPtr<UBTTask_DeliveryExecuteNpcAction> KeepTask(Task);
     TestEqual(TEXT("模型回复后目标退到无路径位置时拒绝启动"),Task->ExecuteTask(*Tree,nullptr),EBTNodeResult::Failed);
     TestFalse(TEXT("目标位置变化后不会提前出拳"),A->Combat->IsStriking());
     Task->OnTaskFinished(*Tree,nullptr,EBTNodeResult::Failed);
@@ -108,10 +118,10 @@ bool FDeliveryNpcStrikeApproachTest::RunTest(const FString&)
     Place(400);
     FGuid Attack;
     TestFalse(TEXT("无路径时不能开始接近阶段"),A->Combat->CanApproachStrike(B));
-    Place(120); Tick(.5f);
+    Place(A->Combat->GetStrikeApproachDistance(B)-.5f); Tick(.5f);
     TestFalse(TEXT("拒绝启动后即使目标靠近也不会补打一拳"),B->IsKnockedDown());
 
-    Place(120);
+    Place(A->Combat->GetStrikeApproachDistance(B)-.5f);
     if (!TestTrue(TEXT("近身后服务器开始挥拳"),BeginStrike(Attack))) return false;
     TestTrue(TEXT("只有实际挥拳才同步出拳时间"),A->Combat->GetStrikeStartTime(Attack)>=0);
     TestFalse(TEXT("同一拳的重复开始被拒绝"),A->Combat->StartStrike(B,Attack));
@@ -124,7 +134,7 @@ bool FDeliveryNpcStrikeApproachTest::RunTest(const FString&)
     Stop(Attack); Tick(6);
     TestFalse(TEXT("恢复后可以继续交互"),B->IsKnockedDown());
 
-    Place(120);
+    Place(A->Combat->GetStrikeApproachDistance(B)-.5f);
     if (!TestTrue(TEXT("准备会被目标躲开的攻击"),BeginStrike(Attack))) return false;
     B->SetActorLocation(FVector(250,0,90)); Tick(.5f);
     TestTrue(TEXT("未命中也结束本拳的判定"),A->Combat->GetStrikeResult(Attack,bHit));
@@ -132,7 +142,7 @@ bool FDeliveryNpcStrikeApproachTest::RunTest(const FString&)
     TestFalse(TEXT("未命中不让目标倒地"),B->IsKnockedDown());
     Stop(Attack); Tick(1);
 
-    Place(120);
+    Place(A->Combat->GetStrikeApproachDistance(B)-.5f);
     if (!TestTrue(TEXT("准备被取消的挥拳"),BeginStrike(Attack))) return false;
     Stop(Attack); Tick(.5f);
     TestFalse(TEXT("取消挥拳不留下稍后发生的命中"),B->IsKnockedDown());
@@ -140,7 +150,7 @@ bool FDeliveryNpcStrikeApproachTest::RunTest(const FString&)
     Tick(1);
     Place(700);
     TestFalse(TEXT("追近距离之外不提供攻击"),A->CanExecute(EDeliveryNpcAction::StrikeOnce,B));
-    Place(120);
+    Place(A->Combat->GetStrikeApproachDistance(B)-.5f);
     auto* Wall=World->SpawnActor<AActor>(); auto* WallBox=NewObject<UBoxComponent>(Wall);
     Wall->SetRootComponent(WallBox); WallBox->SetBoxExtent(FVector(10,100,120));
     WallBox->SetCollisionProfileName(TEXT("BlockAll")); WallBox->RegisterComponent(); Wall->SetActorLocation(FVector(60,0,90));

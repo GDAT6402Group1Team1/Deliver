@@ -16,6 +16,8 @@
 #include "Builders/CubeBuilder.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "UObject/StrongObjectPtr.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
@@ -74,9 +76,15 @@ bool FDeliveryNpcStrikeNavigationTest::RunTest(const FString&)
         !TestTrue(TEXT("终点位于生成的导航网格"),Nav->ProjectPointToNavigation(FVector(400,0,0),End,FVector(50,50,100)))) return false;
 
     FActorSpawnParameters Spawn; Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    auto* A=World->SpawnActor<ADeliveryNpcCharacter>(FVector(0,0,90),FRotator::ZeroRotator,Spawn);
-    auto* B=World->SpawnActor<ADeliveryNpcCharacter>(FVector(400,0,90),FRotator::ZeroRotator,Spawn);
+    auto* ManClass=LoadClass<ADeliveryNpcCharacter>(nullptr,TEXT("/Game/NPC/Residents/BP_ResidentLoud.BP_ResidentLoud_C"));
+    auto* WomanClass=LoadClass<ADeliveryNpcCharacter>(nullptr,TEXT("/Game/NPC/Residents/BP_ResidentShrewd.BP_ResidentShrewd_C"));
+    if (!TestNotNull(TEXT("正式男NPC蓝图"),ManClass) || !TestNotNull(TEXT("正式女NPC蓝图"),WomanClass)) return false;
+    auto* A=World->SpawnActor<ADeliveryNpcCharacter>(ManClass,FVector(0,0,90),FRotator::ZeroRotator,Spawn);
+    auto* B=World->SpawnActor<ADeliveryNpcCharacter>(WomanClass,FVector(400,0,90),FRotator(0,180,0),Spawn);
     A->SetActorTickEnabled(false); B->SetActorTickEnabled(false);
+    for (auto* Npc:{A,B})
+        if (auto* AI=Cast<AAIController>(Npc->GetController()); AI && AI->BrainComponent)
+            AI->BrainComponent->StopLogic(TEXT("IsolatedContactTest"));
     const auto DescribeNavigation=[&](const TCHAR* Stage)
     {
         const FVector StartPosition=A->GetNavAgentLocation();
@@ -187,14 +195,14 @@ bool FDeliveryNpcStrikeNavigationTest::RunTest(const FString&)
         if (Started>=0 && StrikeTime<0)
         {
             StrikeTime=Started;
-            bStartedOutsideRange=FVector::Dist(A->GetActorLocation(),B->GetActorLocation())>A->Combat->StrikeRange+.1f;
+            bStartedOutsideRange=FVector::Dist2D(A->GetActorLocation(),B->GetActorLocation())>A->Combat->GetStrikeApproachDistance(B)+.1f;
         }
         if (DeliveryNpc::IsTerminal(A->Agent->GetPublicState().Status)) break;
     }
     if (AI->BrainComponent) AI->BrainComponent->StopLogic(TEXT("NavigationTestFinished"));
     TestTrue(TEXT("NPC实际沿导航移动了至少200厘米"),FVector::Dist2D(Original,A->GetActorLocation())>200);
     TestTrue(TEXT("接近后才开始出拳"),StrikeTime>=0);
-    TestFalse(TEXT("不会在160厘米以外启动挥拳"),bStartedOutsideRange);
+    TestFalse(TEXT("靠近到实际身体间距后才启动挥拳"),bStartedOutsideRange);
     TestTrue(TEXT("对方确实被击倒"),B->IsKnockedDown());
     TestEqual(TEXT("正式行为树报告攻击成功"),A->Agent->GetPublicState().Status,EDeliveryNpcActionStatus::Succeeded);
     TestEqual(TEXT("攻击结束恢复普通行走速度"),A->GetCharacterMovement()->MaxWalkSpeed,A->WalkSpeed);
@@ -268,6 +276,10 @@ bool FDeliveryNpcStrikeNavigationTest::RunTest(const FString&)
     if (!TestTrue(TEXT("完整导航允许模型选择持续交战"),StartMove(EDeliveryNpcAction::Fight))) return false;
     bool bFightOutsideRange=false;
     FGuid LastPunch;
+    double FirstPunchAt=-1;
+    FVector AttackerAtFirstPunch=FVector::ZeroVector;
+    FVector TargetAtFirstPunch=FVector::ZeroVector;
+    bool bStoppedTarget=false;
     for (int32 Step=0;Step<275;++Step)
     {
         Tick(.02f);
@@ -275,14 +287,27 @@ bool FDeliveryNpcStrikeNavigationTest::RunTest(const FString&)
         if (Punch.IsValid() && Punch!=LastPunch)
         {
             LastPunch=Punch;
-            bFightOutsideRange|=FVector::Dist(A->GetActorLocation(),B->GetActorLocation())>A->Combat->StrikeRange+.1f;
+            bFightOutsideRange|=FVector::Dist2D(A->GetActorLocation(),B->GetActorLocation())>A->Combat->GetStrikeApproachDistance(B)+.1f;
+            if (FirstPunchAt<0)
+            {
+                FirstPunchAt=World->GetTimeSeconds();
+                AttackerAtFirstPunch=A->GetActorLocation(); TargetAtFirstPunch=B->GetActorLocation();
+            }
         }
+        // 对方后仰结束后实际走开一小段，追赶必须跟随移动对象，而非停在旧目标位置
+        if (FirstPunchAt>=0 && World->GetTimeSeconds()-FirstPunchAt>=.8 && World->GetTimeSeconds()-FirstPunchAt<1.25)
+            B->AddMovementInput(FVector::YAxisVector);
+        else if (FirstPunchAt>=0 && World->GetTimeSeconds()-FirstPunchAt>=1.25 && !bStoppedTarget)
+        { B->GetCharacterMovement()->StopMovementImmediately(); bStoppedTarget=true; }
         if (DeliveryNpc::IsTerminal(A->Agent->GetPublicState().Status)) break;
     }
     if (AI->BrainComponent) AI->BrainComponent->StopLogic(TEXT("FightNavigationFinished"));
     TestTrue(TEXT("持续交战确实沿导航追近目标"),FVector::Dist2D(FightOrigin,A->GetActorLocation())>200);
     TestFalse(TEXT("持续交战也不会隔空启动挥拳"),bFightOutsideRange);
     TestTrue(TEXT("追近后发生真实轻拳命中"),A->Combat->GetFightHitCount()>0);
+    TestTrue(TEXT("目标在第一拳之后确实自行走开"),FirstPunchAt>=0 && FVector::Dist2D(TargetAtFirstPunch,B->GetActorLocation())>30);
+    TestTrue(TEXT("攻击者重新追向已经移动的目标"),FirstPunchAt>=0 && FVector::Dist2D(AttackerAtFirstPunch,A->GetActorLocation())>20);
+    TestTrue(TEXT("重新靠近后拳头再次接触目标"),A->Combat->GetFightHitCount()>=2);
     TestTrue(TEXT("导航交战遵守每轮三拳上限"),A->Combat->GetFightPunchCount()<=3);
     TestFalse(TEXT("这一轮轻拳不会按旧规则一拳击倒"),B->IsKnockedDown());
     TestEqual(TEXT("交战结束后恢复普通速度"),A->GetCharacterMovement()->MaxWalkSpeed,A->WalkSpeed);

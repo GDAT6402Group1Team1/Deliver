@@ -162,6 +162,15 @@ bool UDeliveryNpcAgentComponent::ObserveEvent(const FDeliveryNpcObservation& Obs
 bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliveryNpcDecisionRequest& OutRequest)
 {
     if (!IsAuthority() || !WorldEpoch.IsValid() || HasActiveAction()) return false;
+    if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()))
+    {
+        // 每次请求只保存一份自己的当前战况，不把对方的私有数值发给模型
+        Evidence.RemoveAll([](const auto& Item){ return Item.Kind==TEXT("SelfCombat"); });
+        FDeliveryNpcObservation Body;
+        Body.Kind=TEXT("SelfCombat"); Body.Subject=GetOwner(); Body.Source=EDeliveryNpcEvidenceSource::ActionResult;
+        Body.Description=Npc->Combat->DescribeCombatState(); Body.Lifetime=30;
+        ObserveEvent(Body);
+    }
     PruneEvidence();
     if (!NpcId.IsValid()) NpcId = FGuid::NewGuid();
     OutRequest = {};
@@ -225,7 +234,7 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
             const int32 FactIndex=Evidence.FindLastByPredicate([&](const auto& Item){ return Item.SubjectId==Pair.Key; });
             if (FactIndex==INDEX_NONE) continue;
             const auto* Fact=&Evidence[FactIndex];
-            for (auto Action : {EDeliveryNpcAction::LookAt,EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::MoveAside,EDeliveryNpcAction::Fight})
+            for (auto Action : {EDeliveryNpcAction::LookAt,EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::MoveAside,EDeliveryNpcAction::Fight,EDeliveryNpcAction::Flee})
                 if (Resident->CanExecute(Action,Target)) AddCandidate(Action,Pair.Key,Fact->EventId);
         }
     }
@@ -431,7 +440,7 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
     Reason = TEXT("UnsupportedAction");
     if (!ActiveRequest.AllowedActions.Contains(Proposal.Action)) return false;
     Reason = TEXT("InvalidDuration");
-    if (Proposal.Action==EDeliveryNpcAction::Fight &&
+    if ((Proposal.Action==EDeliveryNpcAction::Fight || Proposal.Action==EDeliveryNpcAction::Flee) &&
         (!FMath::IsFinite(Proposal.Duration) || Proposal.Duration<UDeliveryNpcCombatComponent::StrikeDuration || Proposal.Duration>5.f)) return false;
     Reason = TEXT("InvalidEvidence");
     for (const auto& Id : Proposal.EvidenceIds)
@@ -440,7 +449,7 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
     AActor* Target = nullptr;
     Reason = TEXT("InvalidTarget");
     if (Proposal.Action == EDeliveryNpcAction::LookAt || Proposal.Action == EDeliveryNpcAction::MoveTo ||
-        Proposal.Action == EDeliveryNpcAction::StrikeOnce || Proposal.Action == EDeliveryNpcAction::Fight || Proposal.Action == EDeliveryNpcAction::HoldVehicle || Proposal.Action == EDeliveryNpcAction::MoveAside)
+        Proposal.Action == EDeliveryNpcAction::StrikeOnce || Proposal.Action == EDeliveryNpcAction::Fight || Proposal.Action == EDeliveryNpcAction::Flee || Proposal.Action == EDeliveryNpcAction::HoldVehicle || Proposal.Action == EDeliveryNpcAction::MoveAside)
     {
         Target = KnownSubjects.FindRef(Proposal.TargetId).Get();
         if (!CanLookAt(Target) || !Evidence.ContainsByPredicate([&Proposal](const auto& Item)
@@ -468,7 +477,7 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
         const bool bVisibleAction=Proposal.Action==EDeliveryNpcAction::LookAt || Proposal.Action==EDeliveryNpcAction::MoveTo ||
             Proposal.Action==EDeliveryNpcAction::StrikeOnce || Proposal.Action==EDeliveryNpcAction::Fight || Proposal.Action==EDeliveryNpcAction::HoldVehicle ||
             Proposal.Action==EDeliveryNpcAction::ReleaseVehicle || Proposal.Action==EDeliveryNpcAction::LieDown ||
-            Proposal.Action==EDeliveryNpcAction::Pace || Proposal.Action==EDeliveryNpcAction::MoveAside;
+            Proposal.Action==EDeliveryNpcAction::Pace || Proposal.Action==EDeliveryNpcAction::MoveAside || Proposal.Action==EDeliveryNpcAction::Flee;
         if (PlayerMessage.IsValid() && Proposal.Speech.TrimStartAndEnd().IsEmpty() && !bVisibleAction)
         { Reason=TEXT("MissingPlayerReply"); return false; }
         if (!PlayerMessage.IsValid())
@@ -617,6 +626,20 @@ bool UDeliveryNpcAgentComponent::TryFinishAction(FGuid ActionId, EDeliveryNpcAct
     const auto* FightingNpc=Cast<ADeliveryNpcCharacter>(GetOwner());
     const FString FightDescription=PublicState.Action==EDeliveryNpcAction::Fight && FightingNpc
         ?FightingNpc->Combat->DescribeFight(ActionId,Reason):FString();
+    FString FleeDescription;
+    if (PublicState.Action==EDeliveryNpcAction::Flee)
+    {
+        const TCHAR* Stop=TEXT("这次逃跑动作已停止");
+        if (Reason==TEXT("FleeReachedDistance")) Stop=TEXT("已经与对方拉开距离，停止这次逃跑");
+        else if (Reason==TEXT("FleeTimeLimit") || Reason==TEXT("FleeTravelLimit")) Stop=TEXT("这次短程逃跑结束");
+        else if (Reason==TEXT("FleePathUnavailable")) Stop=TEXT("前面的路走不通，我停下了");
+        else if (Reason==TEXT("ReconsiderAfterHit")) Stop=TEXT("逃跑时挨了一拳，我停下重新判断");
+        else if (Reason==TEXT("FleeTargetLost")) Stop=TEXT("原先躲避的对象已经不在当前场景里");
+        FleeDescription=Stop;
+        if (IsValid(PublicState.Target))
+            FleeDescription+=FString::Printf(TEXT("，当前与对方相距约 %.0f 厘米"),FVector::Dist2D(GetOwner()->GetActorLocation(),PublicState.Target->GetActorLocation()));
+        FleeDescription+=TEXT("。这不代表对方已经放弃追赶。");
+    }
     // 先停止移动和尚未发生的命中，避免打断后到下一帧仍补出一拳
     if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->StopAction(ActionId);
     UE_LOG(LogDeliveryNpcAgent, Display, TEXT("Action npc=%s action=%s revision=%d result=%s reason=%s"),
@@ -635,6 +658,7 @@ bool UDeliveryNpcAgentComponent::TryFinishAction(FGuid ActionId, EDeliveryNpcAct
     ResultEvent.Description = FString::Printf(TEXT("%s %s %s"), *DeliveryNpc::ActionName(PublicState.Action),
         *StaticEnum<EDeliveryNpcActionStatus>()->GetNameStringByValue(static_cast<int64>(Result)), *Reason.ToString());
     if (!FightDescription.IsEmpty()) ResultEvent.Description=FightDescription;
+    else if (!FleeDescription.IsEmpty()) ResultEvent.Description=FleeDescription;
     ResultEvent.Lifetime = 30.f;
     ObserveEvent(ResultEvent);
     RecordActionReply();

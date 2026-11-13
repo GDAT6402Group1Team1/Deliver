@@ -3,6 +3,7 @@
 保留目标骨长和静止位移，不复用源人物的身高，不写入现有玩家骨架
 运行 blender --background --python Content/Python/retarget_residents.py
 追加 -- --locomotion-only 时只创建新的走路和慢跑 FBX，保留原有动画
+追加 -- --light-hit-only 时只创建站立受击动画，保留倒地和起身素材
 """
 import bpy
 import math
@@ -71,7 +72,10 @@ select_target(True)
 # 保持现有居民网格与骨架不变，只输出独立动画
 bpy.context.scene.render.fps = 30
 locomotion_only = '--locomotion-only' in sys.argv
-clips = [('Walk_Loop','A_NpcWalk'), ('Jog_Fwd_Loop','A_NpcJog')] if locomotion_only else [
+light_hit_only = '--light-hit-only' in sys.argv
+if locomotion_only and light_hit_only:
+    raise RuntimeError('请分别生成移动动画和站立受击动画')
+clips = [('Hit_Chest','A_NpcLightHit')] if light_hit_only else [('Walk_Loop','A_NpcWalk'), ('Jog_Fwd_Loop','A_NpcJog')] if locomotion_only else [
     ('Idle_FoldArms_Loop','A_ResidentIdle'), ('Idle_Talking_Loop','A_ResidentTalk'),
     ('Walk_Formal_Loop','A_ResidentWalk'), ('Punch_Jab','A_ResidentPunch'), ('Death01','A_ResidentDown'),
     ('Push_Loop','A_ResidentHold'), ('Hit_Knockback','A_ResidentHit'), ('LayToIdle','A_ResidentGetUp')]
@@ -93,6 +97,7 @@ for source_name, output in clips:
     # GLB 导入动作按 24 fps 定义，输出统一采样为 30 fps
     duration = float(action.frame_range[1] - action.frame_range[0]) / 24.0
     count = round(duration*30)
+    standing_samples = []
     for frame in range(count+1):
         source_frame = float(action.frame_range[0]) + frame / 30.0 * 24.0
         bpy.context.scene.frame_set(int(source_frame), subframe=source_frame % 1)
@@ -121,6 +126,11 @@ for source_name, output in clips:
                 bone.keyframe_insert('location', frame=frame)
             bone.keyframe_insert('rotation_quaternion', frame=frame)
         bpy.context.view_layer.update()
+        if light_hit_only:
+            # 记录重定向后的髋、头和双脚，确认普通受击没有包含倒地
+            standing_samples.append({'time': frame/30.0,
+                **{name: list(target.pose.bones[name].matrix.translation)
+                   for name in ['Hips', 'Head', 'LeftFoot', 'RightFoot']}})
     bpy.context.scene.frame_start = 0
     bpy.context.scene.frame_end = count
     source.animation_data.action = None
@@ -128,9 +138,28 @@ for source_name, output in clips:
     export(output, True, False)
     reports.append({'source':source_name,'output':output,'status':'created',
         'duration_seconds':duration,'sample_rate':30,'last_frame':count,'bone_count':len(ordered)})
+    if light_hit_only:
+        report = reports[-1]
+        reference_hip = float(target.data.bones['Hips'].matrix_local.translation.z)
+        report.update(reference_hip_height=reference_hip, samples=standing_samples,
+            hip_min=min(row['Hips'][2] for row in standing_samples),
+            hip_final=standing_samples[-1]['Hips'][2],
+            head_above_hip_min=min(row['Head'][2]-row['Hips'][2] for row in standing_samples))
+        if report['hip_min'] < reference_hip*.85 or report['head_above_hip_min'] <= 0:
+            raise RuntimeError('站立受击姿势检查未通过，停止后续导入')
     print('RETARGET_EXPORTED', output, duration, count)
 
-if locomotion_only:
+if light_hit_only:
+    report_path = OUT / 'LightHitSource.json'
+    report_path.write_text(json.dumps({'author':'Quaternius','license':'CC0 1.0 Universal',
+        'source_url':'https://quaternius.com/packs/universalanimationlibrary.html',
+        'source_file':'Design/Art/NPC/Grandpa/Quaternius_AnimationLibrary_Standard.glb',
+        'license_file':'Design/Art/NPC/Grandpa/Quaternius_License.txt',
+        'retarget_script':'Content/Python/retarget_residents.py --light-hit-only',
+        'notes':['只替换普通轻拳表现，倒地和起身动画保持原样',
+                 '目标骨架坐标为 Blender 米制，站姿数据检查不代替游戏画面检查'],
+        'animations':reports}, ensure_ascii=False,indent=2),encoding='utf-8')
+elif locomotion_only:
     (OUT / 'LocomotionSources.txt').write_text(
         'Author: Quaternius\nLicense: CC0 1.0 Universal\n'
         'Source: https://quaternius.com/packs/universalanimationlibrary.html\n'

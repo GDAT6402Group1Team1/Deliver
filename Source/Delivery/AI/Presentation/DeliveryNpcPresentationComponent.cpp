@@ -161,7 +161,7 @@ void UDeliveryNpcPresentationComponent::UpdateLegacyAnimation(ADeliveryNpcCharac
         if (State.Status==EDeliveryNpcActionStatus::Running && State.Action==EDeliveryNpcAction::Pace && PaceAnimation)
         { Desired=PaceAnimation; ReferenceSpeed=PaceAnimationSpeed; }
         else if (State.Status==EDeliveryNpcActionStatus::Running &&
-            (State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight) && HurryAnimation)
+            (State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight || State.Action==EDeliveryNpcAction::Flee) && HurryAnimation)
         { Desired=HurryAnimation; ReferenceSpeed=HurryAnimationSpeed; }
         DesiredPlayRate=FMath::Clamp(Resident->GetVelocity().Size2D()/FMath::Max(10.f,ReferenceSpeed),.2f,2.f);
     }

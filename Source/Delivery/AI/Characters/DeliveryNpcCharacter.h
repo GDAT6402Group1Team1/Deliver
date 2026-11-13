@@ -46,11 +46,16 @@ public:
     // 找到附近可完整走到的落点，查询本身不移动 NPC
     bool FindPaceDestination(FVector& OutLocation) const;
     bool FindSideStepDestination(AActor* Target,FVector& OutLocation) const;
+    // 选取远离威胁、沿导航可达且胶囊能通过的位置，不在查询中移动角色
+    bool FindFleeDestination(AActor* Threat,float RemainingTravel,FVector& OutLocation) const;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|步态",meta=(ClampMin="30",ClampMax="400",Units="cm/s")) float WalkSpeed=180;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|步态",meta=(ClampMin="30",ClampMax="180",Units="cm/s")) float PaceSpeed=80;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|步态",meta=(ClampMin="80",ClampMax="400",Units="cm/s")) float AngryApproachSpeed=240;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|步态",meta=(ClampMin="40",ClampMax="140",Units="cm")) float PaceDistance=100;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|步态",meta=(ClampMin="80",ClampMax="250",Units="cm")) float SideStepDistance=180;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|逃跑",meta=(ClampMin="80",ClampMax="350",Units="cm")) float FleeStepDistance=240;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|逃跑",meta=(ClampMin="200",ClampMax="900",Units="cm")) float FleeSafeDistance=500;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|逃跑",meta=(ClampMin="200",ClampMax="1200",Units="cm")) float FleeTravelLimit=700;
     // 返回 true 表示动作已开始；攻击是否命中、移动是否到达要等待执行结果
     bool ExecuteAction(const FDeliveryNpcPublicState& State);
     // 停止指定编号的动作，较早任务的结束通知不会影响当前动作

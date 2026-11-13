@@ -65,6 +65,7 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
         FActorSpawnParameters Spawn; Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
         Case.Attacker=World->SpawnActor<ADeliveryNpcCharacter>(ManClass,FVector(0,0,90),FRotator::ZeroRotator,Spawn);
         Case.Target=World->SpawnActor<ADeliveryNpcCharacter>(WomanClass,FVector(120,0,90),FRotator(0,180,0),Spawn);
+        Case.Target->SetActorLocation(FVector(Case.Attacker->Combat->GetStrikeApproachDistance(Case.Target)-.5f,0,90));
         for (auto* Npc:{Case.Attacker,Case.Target})
         {
             Npc->SetActorTickEnabled(false);
@@ -140,6 +141,37 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
         Case.Target=nullptr; Case.Attacker=nullptr;
     };
 
+    auto TooFar=SpawnCase(); Tick(TooFar,.2f);
+    TooFar.Target->SetActorLocation(FVector(120,0,90));
+    TestFalse(TEXT("旧120厘米范围内也不能隔空开始出拳"),TooFar.Attacker->Combat->StartStrike(TooFar.Target,FGuid::NewGuid()));
+    Tick(TooFar,.6f);
+    TestFalse(TEXT("距离判定不会直接让远处目标受击"),TooFar.Target->Combat->IsReactingToHit());
+    TooFar.Target->SetActorLocation(FVector(TooFar.Attacker->Combat->GetStrikeApproachDistance(TooFar.Target)-.5f,0,90));
+    TooFar.Attacker->Combat->StrikeHandBone=TEXT("MissingHandForTest");
+    TestFalse(TEXT("缺失拳头骨骼时拒绝出拳，不退回距离命中"),TooFar.Attacker->Combat->StartStrike(TooFar.Target,FGuid::NewGuid()));
+    Close(TooFar);
+
+    auto Dodge=SpawnCase(); Tick(Dodge,.2f);
+    if (!TestTrue(TEXT("准备真实拳路未接触的攻击"),Begin(Dodge,EDeliveryNpcAction::StrikeOnce))) return false;
+    Tick(Dodge,.06f); Dodge.Target->SetActorLocation(FVector(120,0,90)); Tick(Dodge,.5f);
+    bool bDodgedHit=true;
+    TestTrue(TEXT("躲出拳路后这一拳仍有明确结果"),Dodge.Attacker->Combat->GetStrikeResult(Dodge.ActionId,bDodgedHit));
+    TestFalse(TEXT("目标仍在旧160厘米范围内也可以躲过拳头"),bDodgedHit);
+    TestFalse(TEXT("未接触的目标不倒地"),Dodge.Target->IsKnockedDown());
+    Close(Dodge);
+
+    auto WallCase=SpawnCase(); Tick(WallCase,.2f);
+    if (!TestTrue(TEXT("先启动攻击再检查新增阻挡"),Begin(WallCase,EDeliveryNpcAction::StrikeOnce))) return false;
+    auto* Wall=World->SpawnActor<AActor>(); auto* WallBox=NewObject<UBoxComponent>(Wall);
+    Wall->SetRootComponent(WallBox); WallBox->SetBoxExtent(FVector(2,100,100));
+    WallBox->SetCollisionProfileName(TEXT("BlockAll")); WallBox->RegisterComponent();
+    Wall->SetActorLocation((WallCase.Attacker->GetActorLocation()+WallCase.Target->GetActorLocation())*.5f);
+    Tick(WallCase,.5f); bool bWallHit=true;
+    TestTrue(TEXT("阻挡后结束拳头判定"),WallCase.Attacker->Combat->GetStrikeResult(WallCase.ActionId,bWallHit));
+    TestFalse(TEXT("拳头不能穿过墙体让目标受击"),bWallHit);
+    TestFalse(TEXT("墙后目标保持站立"),WallCase.Target->IsKnockedDown());
+    Wall->Destroy(); Close(WallCase);
+
     auto Main=SpawnCase(); Tick(Main,.2f);
     // 模拟尚未生成结果的普通闲聊，受击后这份旧请求应停止
     Main.Target->Agent->ActiveRequest.RequestId=FGuid::NewGuid();
@@ -206,6 +238,8 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
     }
     TestTrue(TEXT("双方各自挥出了拳"),Pair.Attacker->Combat->GetFightPunchCount()>0 && Reply.Attacker->Combat->GetFightPunchCount()>0);
     TestTrue(TEXT("后仰结束后双方仍能实际命中"),Pair.Attacker->Combat->GetFightHitCount()>0 && Reply.Attacker->Combat->GetFightHitCount()>0);
+    TestEqual(TEXT("遭到还击后结束旧交战，等待模型重新选择"),Pair.Attacker->Agent->GetPublicState().Reason,FName(TEXT("ReconsiderAfterHit")));
+    TestFalse(TEXT("结束旧交战后不会留下尚未命中的拳头"),Pair.Attacker->Combat->IsStriking());
     TestTrue(TEXT("两人都遵守各自的挥拳次数"),Pair.Attacker->Combat->GetFightPunchCount()<=3 && Reply.Attacker->Combat->GetFightPunchCount()<=3);
     TestTrue(TEXT("双方在各自的时限后结束"),DeliveryNpc::IsTerminal(Pair.Attacker->Agent->GetPublicState().Status) &&
         DeliveryNpc::IsTerminal(Reply.Attacker->Agent->GetPublicState().Status));
@@ -244,7 +278,7 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
     TestTrue(TEXT("没有路径时仍能生成其他候选"),Blocked.Attacker->Agent->BuildDecisionRequest(FGuid::NewGuid(),NoPath));
     TestFalse(TEXT("没有导航路径时不向模型提供Fight"),NoPath.Candidates.ContainsByPredicate([](const auto& Item)
         { return Item.Action==EDeliveryNpcAction::Fight; }));
-    Blocked.Target->SetActorLocation(FVector(120,0,90));
+    Blocked.Target->SetActorLocation(FVector(Blocked.Attacker->Combat->GetStrikeApproachDistance(Blocked.Target)-.5f,0,90));
     if (!TestTrue(TEXT("近身时可以开始，无需路径"),Begin(Blocked,EDeliveryNpcAction::Fight))) return false;
     Blocked.Target->SetActorLocation(FVector(400,0,90)); Tick(Blocked,.1f);
     TestEqual(TEXT("执行时路不可用会结束动作"),Blocked.Attacker->Agent->GetPublicState().Reason,FName(TEXT("PathUnavailable")));

@@ -3,7 +3,10 @@
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "Navigation/PathFollowingComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
+#include "AI/Conversation/DeliveryNpcConversationTrace.h"
 #include "AIController.h"
+#include "Perception/AIPerceptionComponent.h"
+#include "Perception/AISense_Sight.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "GameFramework/Pawn.h"
 #include "Engine/World.h"
@@ -30,6 +33,9 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
     bReturningToOrigin=false;
     FightPunchId.Invalidate();
     bFightMoveRequested=false;
+    NextFleePathUpdate=0;
+    FleeTravelled=0;
+    bReportedFlee=false;
     Controller = OwnerComp.GetAIOwner();
     APawn* Pawn = Controller.IsValid() ? Controller->GetPawn() : nullptr;
     Agent = Pawn ? Pawn->FindComponentByClass<UDeliveryNpcAgentComponent>() : nullptr;
@@ -65,7 +71,7 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
                 // 攻击按两人中心距离停步，不能再把双方胶囊半径加进到达距离
                 FAIMoveRequest Request(Action.Target);
                 Request.SetNavigationFilter(Controller->GetDefaultNavigationFilterClass());
-                Request.SetAcceptanceRadius(FMath::Max(10.f,Resident->Combat->StrikeRange-25.f));
+                Request.SetAcceptanceRadius(FMath::Max(10.f,Resident->Combat->GetStrikeApproachDistance(Action.Target)-1.f));
                 Request.SetReachTestIncludesAgentRadius(false);
                 Request.SetReachTestIncludesGoalRadius(false);
                 Request.SetAllowPartialPath(false);
@@ -80,6 +86,13 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
                 Resident->FindSideStepDestination(Action.Target,WalkDestination);
             if (!bFound || !StartNearbyMove(WalkDestination))
             { Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,TEXT("NearbyPathUnavailable")); return EBTNodeResult::Failed; }
+        }
+        else if (Action.Action==EDeliveryNpcAction::Flee)
+        {
+            WalkOrigin=Resident->GetNavAgentLocation();
+            PreviousFleePosition=WalkOrigin;
+            PreviousThreatPosition=Action.Target->GetActorLocation();
+            // 下一帧先检查受击姿势，再朝导航方向跑，逃跑时不盯着身后的威胁转身
         }
     }
     return EBTNodeResult::InProgress;
@@ -108,6 +121,11 @@ void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerCom
     if (State.Action==EDeliveryNpcAction::Fight)
     {
         TickFight(OwnerComp,Controller.IsValid()?Cast<ADeliveryNpcCharacter>(Controller->GetPawn()):nullptr,State);
+        return;
+    }
+    if (State.Action==EDeliveryNpcAction::Flee)
+    {
+        TickFlee(OwnerComp,Controller.IsValid()?Cast<ADeliveryNpcCharacter>(Controller->GetPawn()):nullptr,State);
         return;
     }
     if (State.Action==EDeliveryNpcAction::Pace || State.Action==EDeliveryNpcAction::MoveAside)
@@ -225,7 +243,7 @@ void UBTTask_DeliveryExecuteNpcAction::TickFight(UBehaviorTreeComponent& OwnerCo
     {
         bool bHit=false;
         const bool bJudged=Combat->GetStrikeResult(FightPunchId,bHit);
-        // 轻拳打断时已保存未命中结果，后仰结束后可以接下一拳
+        // 这一拳已有结果后再继续；受击结束整轮动作时会由上方状态检查退出
         if (Combat->GetStrikeStartTime(ActionId)<0 && !bJudged)
         { FinishFight(OwnerComp,TEXT("StrikeCancelled"),true); return; }
         if (Combat->GetStrikeStartTime(ActionId)>=0 && Now<StrikeFinishAt) return;
@@ -249,18 +267,67 @@ void UBTTask_DeliveryExecuteNpcAction::TickFight(UBehaviorTreeComponent& OwnerCo
     }
     if (Controller->GetMoveStatus()==EPathFollowingStatus::Idle)
     {
-        if (bFightMoveRequested) { FinishFight(OwnerComp,TEXT("PathInterrupted"),true); return; }
+        // 对方在收拳时跑开，使用它当前的位置重新追赶；没有完整路径时本次请求会失败
         FAIMoveRequest Request(State.Target);
         Request.SetNavigationFilter(Controller->GetDefaultNavigationFilterClass());
-        Request.SetAcceptanceRadius(FMath::Max(10.f,Combat->StrikeRange-25.f));
+        Request.SetAcceptanceRadius(FMath::Max(10.f,Combat->GetStrikeApproachDistance(State.Target)-1.f));
         Request.SetReachTestIncludesAgentRadius(false);
         Request.SetReachTestIncludesGoalRadius(false);
         Request.SetAllowPartialPath(false);
         const auto Result=Controller->MoveTo(Request).Code;
-        if (Result!=EPathFollowingRequestResult::RequestSuccessful)
+        if (Result==EPathFollowingRequestResult::Failed)
         { FinishFight(OwnerComp,TEXT("PathUnavailable"),true); return; }
         bFightMoveRequested=true;
     }
+}
+
+void UBTTask_DeliveryExecuteNpcAction::TickFlee(UBehaviorTreeComponent& OwnerComp,ADeliveryNpcCharacter* Npc,const FDeliveryNpcPublicState& State)
+{
+    const auto Finish=[&](FName Reason,bool bFailed)
+    {
+        Agent->TryFinishAction(ActionId,bFailed?EDeliveryNpcActionStatus::Failed:EDeliveryNpcActionStatus::Succeeded,Reason);
+        FinishLatentTask(OwnerComp,bFailed?EBTNodeResult::Failed:EBTNodeResult::Succeeded);
+    };
+    if (!Npc || !Controller.IsValid() || Npc->IsKnockedDown()) { Finish(TEXT("RunnerUnavailable"),true); return; }
+    if (!IsValid(State.Target) || State.Target->GetWorld()!=Npc->GetWorld()) { Finish(TEXT("FleeTargetLost"),true); return; }
+    const double Now=OwnerComp.GetWorld()->GetTimeSeconds();
+    const FVector Position=Npc->GetNavAgentLocation();
+    FleeTravelled+=FVector::Dist2D(Position,PreviousFleePosition);
+    PreviousFleePosition=Position;
+    const float Remaining=FMath::Clamp(Npc->FleeTravelLimit,200.f,1200.f)-FleeTravelled;
+    const bool bFarEnough=FVector::Dist2D(Position,State.Target->GetActorLocation())>=FMath::Clamp(Npc->FleeSafeDistance,200.f,900.f);
+    const bool bEnding=Now>=FinishAt || Remaining<60 || bFarEnough;
+    // 已经跑动并被对方看见后才记下逃跑事实，动作刚被选中时还不能声称跑开了
+    if (!bReportedFlee && FVector::Dist2D(WalkOrigin,Position)>=35 && (Now>=NextFleePathUpdate || bEnding))
+    {
+        if (auto* Other=Cast<ADeliveryNpcCharacter>(State.Target))
+        {
+            auto* OtherAI=Cast<AAIController>(Other->GetController());
+            auto* Senses=OtherAI?OtherAI->GetPerceptionComponent():nullptr;
+            TArray<AActor*> Seen;
+            if (Senses) Senses->GetCurrentlyPerceivedActors(UAISense_Sight::StaticClass(),Seen);
+            if (Seen.Contains(Npc) && DeliveryNpcConversationTrace::HasClearPath(Other,Npc,FVector(0,0,40)))
+            {
+                Other->ObserveFact(TEXT("FleeStarted"),Npc,TEXT("这个人正在远离我跑开"),EDeliveryNpcEvidenceSource::Seen);
+                bReportedFlee=true;
+            }
+        }
+    }
+    if (Now>=FinishAt) { Finish(TEXT("FleeTimeLimit"),false); return; }
+    if (Remaining<60) { Finish(TEXT("FleeTravelLimit"),false); return; }
+    if (bFarEnough) { Finish(TEXT("FleeReachedDistance"),false); return; }
+    if (Npc->Combat->IsReactingToHit())
+    {
+        Controller->StopMovement();
+        return;
+    }
+    if (Now<NextFleePathUpdate) return;
+    NextFleePathUpdate=Now+.6;
+    const bool bThreatMoved=FVector::DistSquared2D(PreviousThreatPosition,State.Target->GetActorLocation())>FMath::Square(80.f);
+    if (Controller->GetMoveStatus()!=EPathFollowingStatus::Idle && !bThreatMoved) return;
+    if (!Npc->FindFleeDestination(State.Target,Remaining,WalkDestination) || !StartNearbyMove(WalkDestination))
+    { Finish(TEXT("FleePathUnavailable"),true); return; }
+    PreviousThreatPosition=State.Target->GetActorLocation();
 }
 
 EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::AbortTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
@@ -294,5 +361,8 @@ void UBTTask_DeliveryExecuteNpcAction::OnTaskFinished(UBehaviorTreeComponent& Ow
     bReturningToOrigin=false;
     FightPunchId.Invalidate();
     bFightMoveRequested=false;
+    NextFleePathUpdate=0;
+    FleeTravelled=0;
+    bReportedFlee=false;
     Super::OnTaskFinished(OwnerComp, NodeMemory, TaskResult);
 }
