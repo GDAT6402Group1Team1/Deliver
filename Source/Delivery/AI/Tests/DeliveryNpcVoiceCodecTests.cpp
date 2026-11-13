@@ -161,6 +161,118 @@ bool FDeliveryNpcVoiceCodecBoundariesTest::RunTest(const FString&)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcVoiceCodecStreamingTest, "Delivery.AI.VoiceCodec.Streaming",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDeliveryNpcVoiceCodecStreamingTest::RunTest(const FString&)
+{
+    for (const int32 Rate : {16000, 24000})
+    {
+        const auto Pcm = MakeVoiceSignal(Rate);
+        FString Error;
+        TArray<uint8> FullEncoded, FullDecoded;
+        FDeliveryNpcVoiceDecoder FullDecoder;
+        int32 FullOffset = 0;
+        if (!TestTrue(TEXT("准备整句编码作为对照"), DeliveryNpcVoice::Encode(Pcm, Rate, FullEncoded, Error)) ||
+            !TestTrue(TEXT("解码整句对照"), FullDecoder.TryDecodeAvailable(FullEncoded, FullOffset, FullDecoded, Error))) return false;
+
+        FDeliveryNpcVoiceStreamEncoder Encoder;
+        FDeliveryNpcVoiceDecoder Decoder;
+        TArray<uint8> Wire, Received, Decoded, Part;
+        int32 Offset = 0;
+        bool bPlayedBeforeFinish = false;
+        auto ReceiveAvailable = [&]()
+        {
+            while (Received.Num() < Wire.Num())
+            {
+                const int32 Size = FMath::Min(37, Wire.Num() - Received.Num());
+                Received.Append(Wire.GetData() + Received.Num(), Size);
+                TArray<uint8> Added;
+                if (!Decoder.TryDecodeAvailable(Received, Offset, Added, Error)) { AddError(Error); return false; }
+                Decoded.Append(Added);
+            }
+            return true;
+        };
+        if (!TestTrue(TEXT("总长未知时先发格式头"), Encoder.Start(Rate, Part, Error))) return false;
+        Wire.Append(Part);
+        if (!ReceiveAvailable()) return false;
+        TestEqual(TEXT("开始时没有虚构声音总长"), Decoder.GetTotalPcmBytes(), 0);
+        // 模拟模型回调大小不同，编码器应保留不足一包的数据
+        for (int32 InputOffset = 0, Step = 0; InputOffset < Pcm.Num(); ++Step)
+        {
+            const int32 Sizes[] = {34, 318, 15360, 960};
+            const int32 Size = FMath::Min(Sizes[Step % 4], Pcm.Num() - InputOffset);
+            TArray<uint8> Chunk; Chunk.Append(Pcm.GetData() + InputOffset, Size);
+            if (!TestTrue(TEXT("逐次追加原始音频"), Encoder.Append(Chunk, Part, Error))) return false;
+            Wire.Append(Part); InputOffset += Size;
+            if (!ReceiveAvailable()) return false;
+            bPlayedBeforeFinish |= !Decoded.IsEmpty();
+            TestFalse(TEXT("缓冲暂时读完不代表一句结束"), Decoder.IsComplete());
+        }
+        TestTrue(TEXT("模型未完成时已能解出可播放的声音"), bPlayedBeforeFinish);
+        if (!TestTrue(TEXT("一句结束后补尾音和最终长度"), Encoder.Finish(Part, Error))) return false;
+        Wire.Append(Part);
+        if (!ReceiveAvailable()) return false;
+        TestTrue(TEXT("完整结束通知确认收齐"), Decoder.FinishInput(Error));
+        TestEqual(TEXT("尾部只补一次 40 ms"), Decoded.Num(), DeliveryNpcVoice::GetDecodedPcmBytes(Pcm.Num(), Rate));
+        TestTrue(TEXT("不同模型块大小不改变 UE 编码后的声音"), Decoded == FullDecoded);
+        TestEqual(TEXT("最终原始长度与输入相同"), Decoder.GetSourcePcmBytes(), Pcm.Num());
+        const int32 PreviousOffset = Offset;
+        TestTrue(TEXT("再次检查结束不重复解码"), Decoder.TryDecodeAvailable(Received, Offset, Part, Error));
+        TestTrue(TEXT("没有重复尾音"), Part.IsEmpty() && PreviousOffset == Offset);
+        TestFalse(TEXT("结束后拒绝继续追加原始声音"), Encoder.Append(Pcm, Part, Error));
+        TestFalse(TEXT("结束通知不会发送第二遍"), Encoder.Finish(Part, Error));
+    }
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcVoiceCodecStreamingBoundariesTest, "Delivery.AI.VoiceCodec.StreamingBoundaries",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDeliveryNpcVoiceCodecStreamingBoundariesTest::RunTest(const FString&)
+{
+    FString Error;
+    TArray<uint8> Header, Body, End;
+    FDeliveryNpcVoiceStreamEncoder Encoder;
+    auto Pcm = MakeVoiceSignal(24000);
+    if (!TestTrue(TEXT("开始分段声音"), Encoder.Start(24000, Header, Error)) ||
+        !TestTrue(TEXT("编码分段声音"), Encoder.Append(Pcm, Body, Error)) ||
+        !TestTrue(TEXT("结束分段声音"), Encoder.Finish(End, Error))) return false;
+    TArray<uint8> Valid = Header; Valid.Append(Body); Valid.Append(End);
+    const int32 EndOffset = Valid.Num() - 14;
+    for (const int32 BadByte : {4, 12, 16, 24, EndOffset + 2, EndOffset + 4, EndOffset + 6, EndOffset + 10})
+    {
+        auto Invalid = Valid; Invalid[BadByte] ^= 0xff;
+        FDeliveryNpcVoiceDecoder Decoder; TArray<uint8> Added; int32 Offset = 0;
+        TestFalse(FString::Printf(TEXT("拒绝损坏的分段字段 %d"), BadByte), Decoder.TryDecodeAvailable(Invalid, Offset, Added, Error));
+        TestTrue(TEXT("本次失败不返回半段声音"), Added.IsEmpty());
+    }
+    FDeliveryNpcVoiceDecoder Decoder;
+    TArray<uint8> Added, Truncated = Valid; Truncated.SetNum(EndOffset);
+    int32 Offset = 0;
+    TestTrue(TEXT("缺少结束通知时仍能解码前面的声音"), Decoder.TryDecodeAvailable(Truncated, Offset, Added, Error));
+    TestFalse(TEXT("断线不能把部分声音标成完整句"), Decoder.FinishInput(Error));
+    TestFalse(TEXT("断线后的迟到数据不能继续播放"), Decoder.TryDecodeAvailable(Valid, Offset, Added, Error));
+    Decoder.Reset(); Offset = 0;
+    TestTrue(TEXT("取消后重建可处理下一句"), Decoder.TryDecodeAvailable(Valid, Offset, Added, Error));
+    auto Extra = Valid; Extra.Add(0);
+    TestFalse(TEXT("结束后多余数据被拒绝"), Decoder.TryDecodeAvailable(Extra, Offset, Added, Error));
+
+    Encoder.Reset(); Encoder.Reset();
+    TestTrue(TEXT("重复清理后可重新开始"), Encoder.Start(24000, Header, Error));
+    TArray<uint8> OneSample; OneSample.Add(0); OneSample.Add(0);
+    TestTrue(TEXT("比一帧还短的声音暂存在编码器"), Encoder.Append(OneSample, Body, Error) && Body.IsEmpty());
+    TestTrue(TEXT("短句结束时发送尾音"), Encoder.Finish(End, Error));
+    Valid = Header; Valid.Append(End); Decoder.Reset(); Offset = 0;
+    TestTrue(TEXT("短句正常解码"), Decoder.TryDecodeAvailable(Valid, Offset, Added, Error) && Decoder.FinishInput(Error));
+    TestEqual(TEXT("短句也只补一次尾音"), Added.Num(), DeliveryNpcVoice::GetDecodedPcmBytes(2, 24000));
+    Encoder.Reset(); Encoder.Start(24000, Header, Error);
+    Pcm.SetNumZeroed(DeliveryNpcVoice::MaxPcmBytes + 2);
+    TestFalse(TEXT("累计原始声音受长度上限约束"), Encoder.Append(Pcm, Body, Error));
+    TestTrue(TEXT("超过上限不发送部分包"), Body.IsEmpty());
+    Encoder.Reset(); Encoder.Start(24000, Header, Error);
+    TestFalse(TEXT("没有声音的结束不是成功"), Encoder.Finish(End, Error));
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcVoiceCodecRecordedSpeechTest, "Delivery.AI.VoiceCodec.RecordedSpeech",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FDeliveryNpcVoiceCodecRecordedSpeechTest::RunTest(const FString&)
