@@ -25,7 +25,7 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'ADeliveryNpcCharacter': ('NPC 角色', ['创建决策、战斗和表现组件', '保存当前执行的动作编号'], [('HearSpeech()', '接收玩家或其他 NPC 的话'), ('ExecuteAction()', '按动作类型调用相应功能')]),
         'UDeliveryNpcPresentationComponent': ('对白与人物表现', ['安排逐句对白和客户端播放', '管理声音、字幕、表情和动画'], [('QueueSentence()', '按序保存这次回复的句子'), ('GetDisplayedSpeech()', '读取本机实际播放的句子')]),
         'ADeliveryNpcAIController': ('NPC 控制器', ['使用 UE 的视听感知', '更新行为树需要的条件'], [('OnTargetSeenOrHeard()', '记录发现或失去目标的通知'), ('RefreshBlackboard()', '更新倒地、动作和目标信息')]),
-        'UBTTask_DeliveryExecuteNpcAction': ('动作执行任务', ['保存本次动作编号', '记录目标和结束时间'], [('ExecuteTask()', '开始执行行为树任务'), ('AbortTask()', '中止任务并停止对应动作')]),
+        'UBTTask_DeliveryExecuteNpcAction': ('动作执行任务', ['保存本次动作编号与目标', 'Fight 等待靠近、收拳与冷却'], [('ExecuteTask()', '开始执行行为树任务'), ('TickFight()', '检查次数、距离与停止条件')]),
         'UDeliveryConversationComponent': ('玩家交谈', ['位于玩家控制器上', '记录发言编号和发送间隔'], [('Submit()', '从玩家本机发送消息'), ('ServerSubmit()', '服务器检查后交给 NPC')]),
         'DecisionServer / DecisionHandler': ('AI 后端', ['模型结束后可调用下一条请求', '本轮语音完成后再结束 HTTP 回复'], [('do_POST()', '接收请求、取消和逐句连接'), ('run_job() [模块函数]', '调用模型并安排语音合成')]),
         'BT_Resident / BTT_ResidentExecute': ('NPC 行为树', ['保存各个行为分支', '倒地时优先停止普通动作'], [('选择动作分支', '读取黑板中的条件'), ('运行动作任务', '交给 C++ 任务类执行')]),
@@ -43,8 +43,8 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'SpeechSynthesizer': ('可选 Windows 语音', ['显式选择 windows 时使用 SAPI', '两个合成线程复用各自语音进程'], [('prepare()', '提前准备 Windows 中文声音'), ('synthesize()', '返回一句完整 PCM 音频')]),
         'SpeechQueue': ('NPC 共用的语音队列', ['玩家交谈优先于未开始的闲聊', '一个 GPU 实例依次合成句子'], [('submit()', '按来源安排完整句子'), ('close()', '取消排队项并通知当前合成停止')]),
         'QwenSpeechSynthesizer': ('NPC 台词语音', ['大壮用 Uncle_Fu，翠花用固定 B', '取消获确认后才开始下一句'], [('prepare()', '提前加载两套声音模型'), ('synthesize()', '生成完整音频，超过 8 秒报错')]),
-        'UDeliveryNpcBodyAnimInstance': ('主动作参数', ['读取角色速度、动作与开始时间', '按当前人物配置选择动画片段'], [('NativeUpdateAnimation()', '在游戏线程准备动画所需数值'), ('StrikeTime / DownTime / GetUpTime', '使用服务器时间接上当前动作')]),
-        'ABP_NpcBody': ('主动画蓝图', ['九种动作在图中平滑切换', '走路、踱步和快步使用同步组'], [('Blend Poses by Int', '按动作编号混合姿势'), ('Sequence Evaluator', '按时间显示挥拳、倒地和起身')]),
+        'UDeliveryNpcBodyAnimInstance': ('主动作参数', ['读取角色速度、动作与开始时间', '倒地和起身优先于轻拳后仰'], [('NativeUpdateAnimation()', '在游戏线程准备动画所需数值'), ('StrikeTime / HitTime', '按服务器时间显示挥拳与后仰')]),
+        'ABP_NpcBody': ('主动画蓝图', ['十种姿势在图中平滑切换', '走路、踱步和快步使用同步组'], [('Blend Poses by Int', '按动作编号混合姿势'), ('Sequence Evaluator', '按时间显示攻击、受击与恢复')]),
         'FDeliveryNpcSentence': ('一句台词及语音', ['保存句子序号、文字和情绪', '保存 PCM 音频及采样率'], [('Sequence / Text / Emotion', '按序播放同一次回复'), ('Pcm / SampleRate', '交给客户端声音播放')]),
         'FDeliveryNpcLocalVoice': ('本机待播语音', ['保存收到的 Opus 和解码后的声音', '记录播放进度和本句解码器'], [('State / Pcm', '文字和声音对应同一句话'), ('QueuedBytes / TotalBytes', '判断这句是否已经播放结束')]),
         'UDeliveryNpcExpressionSet': ('表情与交谈姿态配置', ['保存眼睛、眉毛和眨眼曲线', '保存倾听前倾和头部过渡参数'], [('Poses / BlinkCurve', '按情绪选择形态键权重'), ('ListeningLean / HeadTurnLimit', '调整姿态幅度与转头范围')]),
@@ -53,7 +53,7 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'ADeliveryPedestrian': ('普通路人', ['沿原路线和 Boids 规则行走', '保留程序化步态与受击行为'], [('NpcLook', '短暂关注附近玩家'), ('头部叠加旋转', '走路时看一眼，再恢复')]),
         'ABP_NpcConversation': ('交谈动画蓝图', ['保留原动作，调整 Spine2 与 Head', '仅用于两份独立 Face 网格'], [('LookAt / ModifyBone 节点', '跟随视线并叠加前倾和侧头'), ('姿态权重降到零', '挥拳、倒地、拽车时退出')]),
         'FDeliveryNpcSpeechState': ('对白状态', ['保存台词、情绪和发言编号', '保存句子顺序、时间与音频信息'], [('Speech / DisplayedSpeech', '分别记录安排和本机实际播放'), ('ReplyToEventId / Sequence', '对应玩家发言和句子顺序')]),
-        'UDeliveryNpcCombatComponent': ('NPC 战斗', ['保存攻击目标和命中时间', '记录倒地和恢复状态'], [('StartStrike()', '检查条件后开始挥拳'), ('ReceiveImpact()', '处理受击、倒地和恢复')]),
+        'UDeliveryNpcCombatComponent': ('NPC 战斗', ['Fight：默认 5 秒、3 拳、6 米', '轻拳累计，重击保留倒地规则'], [('StartFightStrike()', '检查本轮目标和次数再出一拳'), ('ReceiveFightHit()', '记录轻拳，后仰或倒地')]),
         'UDeliveryVehicleHoldComponent': ('车辆拽车处理', ['记录拽住车辆的 NPC', '记录拽车和持续油门时间'], [('TryHold()', '检查条件后建立拽车关系'), ('Release()', '松手并恢复正常速度倍率')]),
         'ADeliveryMotorbike': ('电瓶车', ['处理驾驶与车辆移动', '持有拽车处理组件'], [('读取 GetSpeedScale()', '根据拽车状态调整速度'), ('调用 UpdateThrottle()', '累计油门时间以便挣脱')]),
         'FDeliveryNpcProfileRow': ('NPC 人物配置', ['DisplayName / Persona：名字与性格', 'TtsVoice / VoiceSet：两类声音配置'], [('继承 FTableRowBase', 'DT_NpcProfiles 每行对应一名角色'), ('chunlai / xiumei', '分别配置大壮与翠花')]),
@@ -227,7 +227,7 @@ def diagrams():
         presentation,
         n('ABP_NpcBody','身体动画混合',[],[],kind='asset'),
         n('ABP_NpcConversation','交谈后处理',[],[],kind='asset')
-    ],[(0,1,'角色持有战斗组件','composition'),(1,2,'提供挥拳、倒地与起身的开始时间','dependency'),(0,2,'提供速度和当前动作','dependency'),(3,2,'提供动画配置和本机正在说的话','dependency'),(2,4,'更新动作编号、步频和播放时间','dependency'),(4,5,'先得到身体姿势，再叠加转头和倾听','dependency')])
+    ],[(0,1,'角色持有战斗组件','composition'),(1,2,'提供挥拳、受击与恢复的开始时间','dependency'),(0,2,'提供速度和当前动作','dependency'),(3,2,'提供动画配置和本机正在说的话','dependency'),(2,4,'更新动作编号、步频和播放时间','dependency'),(4,5,'先得到身体姿势，再叠加转头和倾听','dependency')])
     d['stream']=class_diagram('逐句语音类图 · 后端已接入，游戏效果待试玩',[
         n('AppServer','本机模型连接',[],[],kind='Python classes'),
         n('SentenceParser','完整句子检查',[],[],kind='Python classes'),

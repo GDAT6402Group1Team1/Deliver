@@ -13,19 +13,53 @@
     @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
     @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
     .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
-<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
+<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
 <header><div class="meta">AI / 交谈、语音与表情 / 2026-11-13</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
-<div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。接下来优先做出能试玩的争吵、互殴与追赶，再根据反馈完善表演；声音与多人画面仍需实际验收。</div>
+<div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、轻拳后仰和翠花眉形已加入本轮版本；动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
 <div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
+<section id="npc-fight"><h2>11 月 13 日：有限互殴与轻拳受击</h2>
+<p class="meta">代码与动画资产已接入，六项专项测试通过；正式关卡与多人画面待试玩</p>
+<p>此前两名居民只有一次挥拳动作，而且每次有效受击都会倒地。把人物提示词改得更凶，仍不能让他们来回动手：第一拳命中后，对方已经倒下，原来的攻击也随之取消。本轮增加独立的 <code>Fight</code>，让模型可以选择短暂追打，并将这种动作中的居民轻拳与原有重击分开。</p>
+<h3>玩家会遇到什么</h3>
+<p>拱火按钮仍然只发送玩家的话。模型可以选择顶嘴、识破挑拨、转而找玩家理论，也可以从服务器提供的候选中选择 <code>Fight</code>。选定后，行为树追同一个人，靠近后挥拳，再收拳等待；不会因为按钮叫“拱火”就强制两人开打，也不会在目标离开后自动换一个人打。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table><tr><th>规则</th><th>当前处理</th></tr>
+<tr><td>一轮追打</td><td>接受 1.2–5 秒，默认最多挥拳 3 次。打空也占一次，次数或时间到就停止。</td></tr>
+<tr><td>范围与命中</td><td>默认最多离开起点 6 米，与目标相距也不能超过 6 米。挥拳须进入 160 厘米并再次检查遮挡，路不可用时停下。</td></tr>
+<tr><td>居民轻拳</td><td>前三次先后仰，第 4 次累计轻拳倒地。距离上次轻拳超过 10 秒，累计重新开始；普通 StrikeOnce、玩家攻击和车撞沿用原受击规则。</td></tr>
+<tr><td>停止与重新开始</td><td>倒地、目标销毁、逃远、路径失败或动作取消都会停止相应攻击。整轮结束默认冷却 4 秒，下一轮仍须重新获得模型决定。</td></tr>
+<tr><td>结果交给模型</td><td>记录“挥拳几次、实际命中几次、为什么停止”，不会把执行完成写成打赢，也不会根据台词伪造命中。</td></tr></table></div>
+<h3>动作与动画怎样配合</h3>
+<p>Agent 保存整轮动作编号，战斗组件为每一拳另存编号和开始时间。行为树查询单拳结果，再决定等待、继续靠近或结束；上一拳的结果不能完成下一拳。轻拳打断尚未命中的拳时，会记录这拳没有命中；后仰结束后，仍处于有效 Fight 的 NPC 才能继续检查。倒地则结束整轮。</p>
+<p>主动画图从九个输入扩展为十个，原编号保持不变，新增第 9 号受击姿势。复用 Quaternius 的 <code>Hit_Knockback</code>，通过已有重定向 FBX 导入；原片段约 0.833 秒，在 0.55 秒内完整播放，入场混合为 0.06 秒。倒地和起身优先，随后是受击后仰、挥拳与其他动作。服务器只提供动作和开始时间，动画图负责显示与过渡，不用动画移动胶囊或判定伤害。</p>
+<p>素材来自 <a href="https://quaternius.com/packs/universalanimationlibrary2.html">Quaternius Universal Animation Library 2</a>，现有许可为 CC0。源文件与许可分别保存在 <code>Design/Art/NPC/Residents/A_ResidentHit.fbx</code> 和 <code>Design/Art/NPC/Grandpa/Quaternius2_License.txt</code>。这轮复用了本地资源，没有新增动画依赖。继续使用 UE Blend Poses by Int 与 Sequence Evaluator：当前缺的是连续过渡和明确受击反馈，还不足以用少量片段搭出完整 Motion Matching 动作库。</p>
+<h3>验证中发现的问题</h3>
+<p>第一次专项测试已经打完首轮三拳，但在准备第二轮时崩溃。原因是测试临时创建的行为树任务只有普通指针，没有对象持有它；世界更新期间 UE 回收了任务，测试随后又调用旧指针。测试现在用强引用保留任务和树，并在结束时解除引用。第二轮、累计第四拳倒地等场景完整保留，没有通过删掉失败场景绕过问题。</p>
+<p>服务器还补齐了与战斗组件一致的最短时长：小于 1.2 秒的 Fight 在接收模型建议时就拒绝，避免界面先显示动作被接受、执行时又失败。普通收拳和攻击冷却分别处理，不能因为下一拳尚未冷却完成就判定追打失败。</p>
+<p>轻拳还需要正确打断对话。此前 NPC 被打时，旧闲聊请求可能继续生成；若反过来每拳都取消，则正在判断攻击的新请求又可能一直算不完。现在停止旧闲聊及其声音；尚未开始发布台词、且当前请求已包含同一攻击者的攻击记录时，保留这次判断。<code>IsRespondingToAttackFrom()</code> 只查询请求内容，倒地仍取消整轮。</p>
+<h3 id="npc-fight-validation">本轮检查结果</h3>
+<p>DeliveryEditor 编译通过，补齐受击请求处理后的最终构建耗时 24.23 秒。同一组六项专项测试再次全部通过：Fight、StrikeApproach、StrikeNavigation、BodyAnimation、SentencePlayback、Protocol；其中逐句播放带预期的音频超时警告，其余五项没有测试警告。之前的六项与这次复跑是同一组，不累加为十二项。</p>
+<p>Fight 检查使用两份正式角色蓝图，在独立世界中执行真实候选校验、行为树任务和命中判定，覆盖三拳上限、整轮与单拳编号、轻拳后仰、第四次累计倒地、取消不补拳、目标逃离或销毁、路不可用、时间截止和原 StrikeOnce 重击。补充场景让双方各自执行 Fight，确认双方都实际命中，并能在轻拳打断后继续；旧闲聊请求取消、已包含同人攻击的新请求保留也通过检查。导航专项另验证从 400 厘米外沿实际路径靠近并命中。结果次数进入后续请求上下文，没有使用模型或语音服务替代这些检查。</p>
+<p>正式资源在另一个命令行进程中读回成功：主动画有十个输入，第 9 个受击节点连接正确，两名居民的主动画和受击资源绑定保持一致，三个蓝图重新编译通过。检查报告为 Saved/AIResearch/NpcBodyAnimation/20261113T081450625139Z/report.json，日志为 Saved/Logs/NpcFightBodyReadback.log。</p>
+<p><strong>尚未验收：</strong>这些测试使用 NullRHI，没有检查真实关卡中的观感，也没有完成主机与客户端的双人 PIE。动作是否滑稽、后仰是否够明显，以及玩家插话后收手是否自然，仍需实际试玩。模型每次是否选择 Fight 也不属于这组确定性测试的保证。翠花的眉形已正式采用并完成独立读回，实际生气表情的观看效果仍待验收。</p>
+<h3 id="npc-fight-backend-result">模型是否真的选择了追打</h3>
+<p>后端本轮 49 项检查通过，耗时 5.840 秒，与上方 6 项 UE 检查分开记录。正式后台已重启，端口 8769 正常，两套声音预热成功；大壮 Uncle_Fu 与翠花固定 B 的配置文件哈希未变。随后使用同两条文本分别请求一次模型，检查动作说明是否会让它理解不同拳击的后果。</p>
+<p>第一次发现提示词只描述“出拳”与“交战”，没有清楚说明旧 StrikeOnce 命中居民会立即击倒，而 Fight 先用轻拳、累计后才倒地。已补充这项实际规则，同时说明 Fight 对玩家继续沿用原伤害规则。没有要求模型优先选 Fight，也没有修改按钮含义来强行触发。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table><tr><th>输入场景</th><th>补充说明后的选择</th><th>实际台词</th><th>首句时间：说明前 / 后</th></tr>
+<tr><td>大壮听到指名挑衅</td><td>看向翠花，回答玩家</td><td>我可不怕她！不过这话是你传的，我得当面问她。</td><td>4.410 / 4.008 秒</td></tr>
+<tr><td>翠花刚被大壮轻拳打中</td><td>选择 StrikeOnce，目标与说话对象均为大壮</td><td>你还真敢打我！</td><td>2.635 / 2.765 秒</td></tr></table></div>
+<p>两轮都没有选择 Fight。因此当前能够确认的是：模型能区分说话对象与行动对象，并能选择实际存在的单次攻击；尚不能说它在这些输入中使用了持续追打。每个场景每版仅一次，不据此判断速度改善或 Fight 的选择概率。探针使用独立 App Server 连接和正式提示词、解析器，没有经过游戏 HTTP、请求排队、TTS 或实际人物动作；它不等于玩家在游戏中看到互殴。</p>
+<p class="evidence">前后两轮原始结果：Saved/AIResearch/FightSelection_20261113/fight-selection-probe.json、fight-selection-after-action-description.json；后台状态：同目录 backend-action-description-restarted.json。正式后台 PID 49740，启动时间 2026-11-13 16:10:56 +08；本条为当时检查记录，之后重新启动时 PID 会变化。</p>
+<p class="evidence">最终测试：Saved/Automation/NpcFightMutualFinal/index.json；最终构建：Saved/Logs/NpcFightBuild-context.log；此前同组结果：Saved/Automation/NpcFightFinal/index.json、Saved/Logs/NpcFightTests-final.log；首次测试崩溃：Saved/Logs/NpcFightTests.log；十姿势资源与源素材校验：Saved/AIResearch/NpcBodyAnimation/20261113T075515700247Z/report.json。资源命令为 setup_npc_body_animation.py 加 -ImportNpcHitAnimation -ReplaceNpcBodyAnimation；独立读回使用 -InspectNpcBodyAnimation。</p>
+</section>
 <section id="npc-body-animation"><h2>11 月 13 日：让身体动作平滑衔接</h2>
 <p>原表现组件通过 <code>PlayAnimation()</code> 切换整段动画。核对本机 UE 5.8 源码后确认，该调用会把网格改为单片段播放，因此已有的走路、踱步、挥拳等素材缺少统一的混合过渡。本轮将两名正式街坊接到可编辑的 <code>ABP_NpcBody</code>，保留原有交谈后处理图。</p>
-<p>主图使用九个动画输入与 Blend Poses by Int，过渡时间直接保存在蓝图节点中。走路、踱步和快步共用同步组；挥拳、倒地和起身根据服务器开始时间显示当前姿势。C++ 只准备动作、速度和时间，动画图负责混合。角色移动、命中、伤害和恢复规则继续由原玩法处理；主角的主动布娃娃没有改动。</p>
+<p>主图使用 Blend Poses by Int，过渡时间直接保存在蓝图节点中。首次接入包含九种动作，本轮加入轻拳受击后扩展为十种，见上方互殴记录。走路、踱步和快步共用同步组；挥拳、受击、倒地和起身根据服务器开始时间显示当前姿势。C++ 只准备动作、速度和时间，动画图负责混合；主角的主动布娃娃没有改动。</p>
 <p>本次选用普通动画混合，是因为现有片段已能覆盖这些动作，当前问题在于播放方式。Motion Matching 需要更完整的启停、转向动画库，本轮没有新增相应依赖。此选择解决动作衔接，不代表已经完成精细的手脚对位或夸张表演。</p>
 <h3>检查中发现的问题</h3>
 <ul><li>初次构图时，每增加一个输入都会触发编译，但输出节点尚未创建。工具改为先完成整张图，再统一编译，复建后不再出现缺少根节点的错误。</li>
 <li>UE Python 没有直接公开蓝图的 parent_class 属性，检查脚本改用 BlueprintEditorLibrary 提供的父类查询接口，并分别检查主动画与两名角色蓝图的编译结果。</li>
 <li>第一次动画测试手动设置 Running 状态后，服务器的动作超时检查把它取消了。测试现仅停止该决策组件的更新，用同步状态检查动画；真实战斗组件仍负责挥拳、受击和起身。原失败报告保留，没有修改正式超时规则。</li></ul>
-<h3>本轮结果</h3>
+<h3>首次接入结果</h3>
 <p>DeliveryEditor 完整构建通过，最终增量构建耗时 4.98 秒。三个蓝图已保存，并在新进程中读回、编译通过。共享骨架、两份面部网格和交谈后处理资产的文件哈希保持不变，人物名字、声音、行为树、模型、材质和变换也通过检查。</p>
 <p><code>Delivery.AI.BodyAnimation</code>、<code>Delivery.AI.StrikeApproach</code>、<code>Delivery.AI.SentencePlayback</code> 三项通过。动画检查使用两份正式角色蓝图，确认实际脚部姿势变化、低速切换、踱步与快步、挥拳重建后的进度，以及倒地起身。逐句播放测试包含预期的音频超时警告。进程启动仍有既有的 GEngine 初始化前物理材质访问错误和自动化模块 Condition failed 信息，本轮没有修复这些启动问题。</p>
 <p><strong>范围：</strong>上述检查使用 NullRHI 和独立测试世界，没有操作玩家游戏窗口，也没有完成真实关卡、主机与客户端的画面验收。过渡是否自然、步态是否滑稽、挥拳是否够明显，仍需实际试玩。本轮新增身体动画类图；11 张图的文字边界、页面跳转、缩放和 1440 / 390 / 320 像素布局检查通过。</p>
@@ -235,7 +269,7 @@
 </section><section id="iteration-8">
 <h2 id="tts-evaluation-plan">中文人物语音：独立对照与试听</h2>
 <p>玩家反馈完整台词听起来机械。现有 Windows 男声 Kangkang 和女声 Huihui 都是系统标注的成年音色，调快或调慢语速不能解决人物年龄与说话方式的问题。已收集的真人短音用于轻笑、不满等反应；NPC 临时生成的完整中文台词仍需要语音合成。</p>
-<div class="notice">2026-11-13：正式后台已准备好大军选定的 B 音色，即 Qwen Uncle_Fu；当时小芳使用 SAPI，Sol 处理玩家交谈、Luna 处理闲聊。最新后台已改用 Serena 候选，模型默认均为 Sol。音频按完整句子生成后发送，尚未实现一句之内边生成边播放；新声音的游戏听感和等待仍待试玩确认。以下保留独立试验、接入问题和实际结果。</div>
+<div class="notice">2026-11-13：正式后台已准备好大军选定的 B 音色，即 Qwen Uncle_Fu；当时小芳使用 SAPI，Sol 处理玩家交谈、Luna 处理闲聊。当时后续版本改用 Serena 候选，模型默认均为 Sol；正式后台后来已接入用户选定的翠花 B，见本页最新声音记录。音频按完整句子生成后发送，尚未实现一句之内边生成边播放；新声音的游戏听感和等待仍待试玩确认。以下保留独立试验、接入问题和实际结果。</div>
 <h3>先比较两种方案</h3>
 <div aria-label="中文语音试验方案" class="table-scroll" role="region" tabindex="0"><table>
 <thead><tr><th>方案</th><th>本轮比较内容</th><th>一次下载预算</th><th>磁盘预留</th><th>需要注意</th></tr></thead>
@@ -494,9 +528,9 @@ python -m unittest discover -s Tools/DeliveryAI -p 'test_*.py'</code></pre>
 <p class="evidence">构建日志：Saved/Logs/NpcConversationAimBuild.log；自动化报告：Saved/Automation/NpcConversationAim/index.json；后台重启日志：Saved/Logs/BackendRestart/20261113T042601180Z。</p>
 <p class="evidence">资产读回：Saved/AIResearch/NpcPersonaUpdate/20261113T042006261163Z/report.json。命令行启动仍有三条物理材质 CDO 错误；人物脚本写入与读回成功，不代表引擎启动没有错误。</p>
 <h3 id="conflict-priority">调整重点：先完成争吵、互殴和人物表演</h3>
-<p>翠花的生气眉毛另有一个资源问题：正式 FBX 中 BrowsAngry 的位移为零。已在独立候选中明确选择左右眉毛的 153 个顶点，并固定与头部相连的顶点 3057；眉毛之外所有顶点的位移为零。配置保存在 Design/Art/NPC/Residents/Appearance/WomanBrowSelection.json，候选在 Saved/AIResearch/NpcWomanBrowsCandidate。正式模型尚未替换，正面、侧面和原贴图眉影检查留待试玩版交付后继续。</p>
+<p>翠花的生气眉毛另有一个资源问题：正式 FBX 中 BrowsAngry 的位移为零。已在独立候选中明确选择左右眉毛的 153 个顶点，并固定与头部相连的顶点 3057；眉毛之外所有顶点的位移为零。配置保存在 Design/Art/NPC/Residents/Appearance/WomanBrowSelection.json，候选在 Saved/AIResearch/NpcWomanBrowsCandidate。当时正式模型尚未替换；后续修复、正式采用和仍待试玩的部分见<a href="#cuihua-brow-candidate">眉形记录</a>。</p>
 <p>用户要求停止过度深入延迟研究，优先看到挑拨之后的实际互动。读码确认：现有攻击会靠近后出一拳，总时限 5 秒；NPC 挨一次有效攻击就倒地，默认恢复过程约 5.6 秒；当前神经语音未使用情绪参数控制语调。这三处限制不能靠更强硬的提示词解决。</p>
-<p>下一轮先补轻击与击倒的区别、有限交战和追赶，再加入配置表中的表演强度。模型仍决定相信谁、向谁发难、继续还是收手；游戏执行追赶、命中与停止条件。头顶冒气、扬尘、夸张动作和声音分别由 UE 资产配置，命中特效只在真实命中后出现。完整的拟采用字段、职责与验收场景见<a href="DeliveryAIPlan.html#npc-conflict-next">争吵、互殴与追赶设计</a>，这些新增玩法尚未实现。</p>
+<p>下一轮先补轻击与击倒的区别、有限交战和追赶，再加入配置表中的表演强度。模型仍决定相信谁、向谁发难、继续还是收手；游戏执行追赶、命中与停止条件。头顶冒气、扬尘、夸张动作和声音分别由 UE 资产配置，命中特效只在真实命中后出现。完整的拟采用字段、职责与验收场景见<a href="DeliveryAIPlan.html#npc-conflict-next">争吵、互殴与追赶设计</a>，这些内容是当时的下一轮计划；有限追打与轻拳反馈现已接入，最新结果见上方<a href="#npc-fight">互殴记录</a>，强烈表演和特效仍待实现。</p>
 <h3>检查结果与尚未覆盖的部分</h3>
 <p>UE 5.8 <code>DeliveryEditor</code> 完整构建成功，耗时 37.36 秒。<code>Delivery.AI.Protocol</code>、<code>NpcProfiles</code>、<code>SentencePlayback</code>、<code>ConversationContext</code> 四项检查通过；其中两项带预期的无语音、音频超时或非法音色警告。后端 111 项检查通过，包含人物资料隔离、旧协议兼容、男女声切换和取消。</p>
 <p>本轮没有进入游戏，也没有操作用户窗口。正式地图里的嘴型、声音大小、女声年龄感、连续争吵和多人显示尚未验收。已有动作直接切动画的问题、女性眉形变化不明显的问题也仍保留，不能用这次逻辑检查证明表现已经完成。</p>
@@ -732,19 +766,29 @@ python -m unittest discover -s Tools/DeliveryAI -p 'test_*.py'</code></pre>
 <p>后续验证：二狗实现后，用第一幕的同一段路线做真实模型试玩，记录等待时间、抢话、挡路，以及台词像不像憨厚的真人当场说的。结果记入本页；资料里的结论不能代替试玩。</p>
 </section>
 <section id="cuihua-brow-candidate"><h2>翠花的生气眉毛：候选制作与导入检查</h2>
-<p class="meta">2026-11-13 · Blender 候选已检查 · UE 导入未完成，正式模型尚未替换</p>
-<p>正式女性模型的 <code>BrowsAngry</code> 没有顶点位移，所以调高表情强度也不会改变眉形。候选只选中两侧眉毛，保留与头部相连的顶点 3057。配置列出了 154 个顶点，其中 153 个移动；其余 4122 个顶点保持原位，没有用扩大选区的方法把头发一起拉动。</p>
+<p class="meta">2026-11-13 · 正式女性模型已更新，独立读回通过；UE 画面待试玩</p>
+<p>修改前，正式源文件的 <code>BrowsAngry</code> 没有顶点位移，UE 中的女性资产也没有可用的同名表情，所以调高强度不会改变眉形。候选只选中两侧眉毛，保留与头部相连的顶点 3057。Blender 配置列出了 154 个顶点，其中 153 个移动；其余 4122 个顶点保持原位，没有用扩大选区的方法把头发一起拉动。</p>
 <h3>为什么又修改了一版</h3>
 <p>第一版把眉毛直接移开，连接处被拉成三角形，原贴图上的眉毛也留下了残影。第二版改为围绕固定连接点旋转眉毛，并用局部肤色遮住旧眉影；拉伸和残影消失了，但额头出现一块矩形色差。第三版将明确选中的面部区域从 31 个顶点扩展到 42 个，在边缘逐渐减弱新增的肤色遮罩，避免突然切出一个色块。这个范围仍然位于面部，未扩展到头发。</p>
 <p>第三版使用 32° 的眉毛旋转，不额外向前或向下移动。已逐张查看原材质下的中性正面、生气正面、侧面和远景图片：第二版的矩形边缘已不明显，没有再看到原来的三角拉伸和双重眉影。头发仍会遮住左眉的一部分；远景中表情变化也比较弱，因此尚不能据此认定游戏里的生气效果足够明显。</p>
 <div style="display:flex;flex-wrap:wrap;gap:18px"><figure style="margin:0;max-width:100%"><a href="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-front.png"><img loading="lazy" src="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-front.png" alt="翠花第三版生气眉毛的正面预览" style="width:260px;max-width:100%;height:auto"></a><figcaption>第三版：正面</figcaption></figure><figure style="margin:0;max-width:100%"><a href="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-side.png"><img loading="lazy" src="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-side.png" alt="翠花第三版生气眉毛的侧面预览" style="width:260px;max-width:100%;height:auto"></a><figcaption>第三版：侧面</figcaption></figure><figure style="margin:0;max-width:100%"><a href="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-distance.png"><img loading="lazy" src="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-distance.png" alt="翠花第三版生气眉毛的远景预览" style="width:260px;max-width:100%;height:auto"></a><figcaption>第三版：远景</figcaption></figure></div>
 <p>图片由 Blender 5.0.1 使用 CPU、2 个线程和低优先级生成，未占用声音服务的 GPU。几何检查确认眉毛之外的位移为 0，固定连接点位移为 0，明确选定面部范围之外的新增遮罩为 0。眉形达到完整强度时，眉毛边长与原模型几乎一致；半强度时最多缩短约 3.9%，没有出现第一版的明显拉伸。静态图片只用于检查模型，不能代替 UE 中动画、光照和实际观看距离的验收。</p>
-<h3>UE 导入为什么暂时停止</h3>
-<p>独立导入脚本默认只创建 Preview 目录下的女性候选，检查骨架、尺寸、材质、物理资产、后处理动画和 LOD 设置后才允许保存。本轮三次命令行尝试均在导入前停止，没有创建候选 uasset，也没有覆盖正式男女模型。</p>
+<h3>UE 导入遇到的问题</h3>
+<p>独立导入脚本默认只创建 Preview 目录下的女性候选，检查骨架、尺寸、材质、物理资产、后处理动画和 LOD 设置后才允许保存。上一轮三次命令行尝试均在导入前停止，当时没有创建候选 uasset，也没有覆盖正式男女模型。</p>
 <ol><li>第一次无法通过 Python 读取受保护的 <code>LODMaterialMap</code>。脚本已改为使用 SkeletalMeshEditorSubsystem，逐项核对各个网格分段实际使用的材质槽，保留材质对应关系检查。</li>
 <li>第二次发现正式模型使用 Interchange 导入记录，不能按旧 FBX 记录读取缩放和旋转。脚本依据本机 UE 5.8 的 <code>InterchangeFbxAssetImportDataConverter.cpp</code> 补充了对应读取方式。</li>
 <li>第三次未通过导入记录完整性检查：脚本要求唯一的通用导入配置，以及保存过的 FBX 转换设置。尚未进一步确认是哪一项不满足，因而没有用默认值代替原配置。为先交付已完成的声音与身体动画，本轮在此停止。</li></ol>
-<p>导入工具和候选选择配置保留在本地，未并入本轮已验证功能的交付范围。后续应先读取并确认正式模型实际保存的导入设置，再完成独立候选导入、重新加载检查和游戏内比较，最后决定是否替换正式女性模型。本轮五份受保护的正式模型与元数据文件哈希均未变化。</p>
+<p>继续核查后，正式模型确实只有一份通用导入配置，缩放为 1.40273988；保存的转换设置为空。本机 UE 5.8 官方转换代码允许这个值为空，并在这种情况下读取默认对象，所以脚本按引擎做法处理，没有猜测一套新缩放。</p>
+<p>候选随后成功导入内存，但在 NullRHI 下尝试导出 FBX 时，导出器因缺少渲染网格对象崩溃。检查改为直接读取 UE 形态键中的位移数据，不再依赖导出。第一次查询还把位移条目数当作整个网格的顶点数；核对引擎赋值后，已改为读取实际 LOD 顶点数。</p>
+<p>最终候选已保存到 <code>/Game/NPC/Residents/Appearance/Preview/SK_NpcWomanBrowsCandidate</code>，并在新的命令行进程中重新加载检查：LOD 0 有 8837 个顶点，BrowsAngry 有 338 条位移记录，其中 335 条位置位移非零，最大约 4.275 厘米。UE 导入会按材质、UV 等拆分顶点，因此这个数量不能与 Blender 的 153 个直接逐项比较。</p>
+<p>候选与正式模型的包围盒差值为零，材质、物理资产、交谈后处理、LOD 和各分段材质对应关系一致。候选阶段六份受保护的正式模型、源文件、表情配置和共享骨架文件哈希未变。以上检查先确认独立候选正确保存，再进行下面的正式替换。</p>
+<p class="evidence">本轮成功导入与独立读回：Saved/AIResearch/NpcWomanBrowsCandidate/UEImport/20261113T080246219413Z、20261113T080313280462Z；结果：ue-import-latest.json、ue-morph-comparison.json；日志：Saved/Logs/NpcWomanBrowCandidateFinal.log、NpcWomanBrowCandidateReadback.log。</p>
+<h3>正式替换与尺寸检查</h3>
+<p>第一次正式重导发现人物变小：原来的导入缩放约 1.40274 被改为 1，包围盒半高从约 70 厘米变成 49.902 厘米，材质的 UV 密度也随之变化。查阅本机 UE 的 <code>EditorFactories.cpp</code> 后，确认旧 FBX 重导流程会用资源自身的导入记录覆盖传入参数。工具现在先按官方映射转换导入记录，保留原变换；没有放宽尺寸或材质检查。失败的 uasset 没有保存，源 FBX 已恢复后重新处理。</p>
+<p>修正后已正式更新女性 <code>SK_NpcWomanFace.fbx</code>、对应 uasset 和 <code>face-shapes.json</code> 的女性条目。新的命令行进程读回确认：8837 个顶点中有 335 个非零位置位移，最大约 4.275 厘米；包围盒、材质及 UV 密度、物理资产、交谈后处理、LOD 和材质分段均与原设置一致。男性源文件、男性资源、共享骨架及其他人物的表情条目没有改变。</p>
+<p>两名角色仍绑定各自面部模型、十姿势主动画与受击片段，交谈后处理保持开启。独立 Preview 资源确认没有正式引用后，已移入 Saved 下的备份目录，不作为正式资源提交。检查期间还修正了异常恢复流程：先比较文件哈希，跳过没有变化的文件，并记录恢复失败，避免因文件被占用而掩盖原错误。</p>
+<p><strong>限制：</strong>正式采用和读回使用 CPU / NullRHI 检查，没有在 UE 游戏画面中验收眉形强度、光照和观看距离。此前 Blender 远景预览中的变化较弱，这一点仍需要试玩确认。</p>
+<p class="evidence">正式备份与结果：Saved/AIResearch/NpcWomanBrowsCandidate/UEImport/20261113T081133332496Z；独立读回：20261113T081223540772Z；汇总：ue-promote-latest.json、ue-formal-readback.json；Preview 归档：preview-archive.json。</p>
 <p class="evidence">候选与图片：<a href="../Saved/AIResearch/NpcWomanBrowsCandidate/review-status.json">review-status.json</a>；几何：<a href="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-geometry-check.json">v3-geometry-check.json</a>；三次导入及文件保护：<a href="../Saved/AIResearch/NpcWomanBrowsCandidate/ue-import-stopped.json">ue-import-stopped.json</a>。日志分别为 Saved/Logs/NpcWomanBrowCandidateImport.log、NpcWomanBrowCandidateRetry.log、NpcWomanBrowCandidateInterchange.log。上述链接指向本地检查文件，转发文档时需要一并保留。</p>
 </section>
 <footer>与方案文档使用相同版式，支持离线阅读。持续记录本项目的实际结果，不把外部演示指标当作本项目性能。</footer></main></div><script>document.getElementById('print').addEventListener('click',()=>window.print());</script></body></html>
