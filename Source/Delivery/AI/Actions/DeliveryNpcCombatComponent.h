@@ -9,6 +9,7 @@ UCLASS(ClassGroup=(Delivery),meta=(BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryNpcCombatComponent : public UActorComponent
 {
     GENERATED_BODY()
+    friend class FDeliveryNpcLookTest;
 public:
     UDeliveryNpcCombatComponent();
     // 检查距离、遮挡和身体状态，攻击冷却在 StartStrike 中检查

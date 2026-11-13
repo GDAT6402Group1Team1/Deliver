@@ -207,7 +207,11 @@ void ADeliveryHUD::OpenResidentConversation(ADeliveryNpcCharacter* Resident)
 {
     CloseResidentConversation();
     UClass* WidgetClass=ConversationWidgetClass.LoadSynchronous();
-    if (!WidgetClass) WidgetClass=UDeliveryConversationWidget::StaticClass();
+    if (!WidgetClass || !WidgetClass->IsChildOf(UDeliveryConversationWidget::StaticClass()))
+    {
+        UE_LOG(LogTemp,Warning,TEXT("Conversation Widget Blueprint is missing or has the wrong parent"));
+        return;
+    }
     ConversationWidget=CreateWidget<UDeliveryConversationWidget>(GetOwningPlayerController(),WidgetClass);
     if (!ConversationWidget) return;
     ConversationWidget->SetResident(Resident);
@@ -223,16 +227,15 @@ void ADeliveryHUD::RefreshConversationLayout()
     GetOwningPlayerController()->GetViewportSize(Width,Height);
     if (Width<=0 || Height<=0) return;
     const float Scale=FMath::Max(.1f,UWidgetLayoutLibrary::GetViewportScale(this));
-    // 按屏幕像素确定面板大小，UMG 的 ScaleBox 同时缩放文字、布局和点击区域
-    float PanelWidth=FMath::Clamp(Width*.36f,320.f,440.f);
+    // 输入区留在左下角，展开例句时只增加高度
+    float PanelWidth=FMath::Clamp(Width*.36f,320.f,480.f);
     PanelWidth=FMath::Min(PanelWidth,FMath::Max(1.f,Width-32.f));
-    const float PanelHeight=FMath::Min(PanelWidth*.75f,FMath::Max(1.f,Height-32.f));
-    PanelWidth=PanelHeight/.75f;
+    const float PanelHeight=FMath::Min(ConversationWidget->IsSuggestionsVisible()?360.f:250.f,
+        FMath::Max(1.f,Height-32.f));
     ConversationWidget->SetDesiredSizeInViewport(FVector2D(PanelWidth/Scale,PanelHeight/Scale));
-    // 手机打开时将交谈移到左下角，两边的操作和来电状态继续保持
-    const bool bPhoneOpen=IsPanelOpen(UDeliveryPhoneController::PanelId);
-    ConversationWidget->SetAlignmentInViewport(FVector2D(bPhoneOpen?0.f:1.f,1.f));
-    ConversationWidget->SetPositionInViewport(FVector2D(bPhoneOpen?16.f:Width-16.f,Height-16.f));
+    // 交谈固定在左下角，手机来电和收起时按钮位置保持不变
+    ConversationWidget->SetAlignmentInViewport(FVector2D(0.f,1.f));
+    ConversationWidget->SetPositionInViewport(FVector2D(16.f,Height-16.f));
 }
 void ADeliveryHUD::CloseResidentConversation()
 {

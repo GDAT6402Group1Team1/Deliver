@@ -14,7 +14,7 @@ struct FDeliveryNpcLookState
 };
 
 // 服务器决定 NPC 短暂看向谁，动画和眼睛在各台机器上平滑跟随
-// 经过时只看一眼，擦身时可通知已有 AI；这里不改变移动、伤害或布娃娃
+// 经过或轻擦时只看一眼；实际受击由战斗系统记录，这里不改变移动和伤害
 UCLASS(ClassGroup=(Delivery),meta=(BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryNpcLookComponent : public UActorComponent
 {

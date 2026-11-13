@@ -18,6 +18,22 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryNpcAgent, Log, All);
 
+namespace
+{
+    bool IsConversationMemory(FName Kind)
+    {
+        return Kind==TEXT("PlayerSpeech") || Kind==TEXT("Speech") || Kind==TEXT("OverheardSpeech") ||
+            Kind==TEXT("SelfSpeech") || Kind==TEXT("ActionReply");
+    }
+
+    bool IsSightMemory(const FDeliveryNpcEvidence& Item)
+    {
+        return Item.Source==EDeliveryNpcEvidenceSource::Seen &&
+            (Item.Kind==TEXT("VisibleNow") || Item.Kind==TEXT("Perceived") ||
+             Item.Kind==TEXT("LostSight") || Item.Kind==TEXT("LastSeen"));
+    }
+}
+
 UDeliveryNpcAgentComponent::UDeliveryNpcAgentComponent()
 {
     SetIsReplicatedByDefault(true);
@@ -46,7 +62,53 @@ double UDeliveryNpcAgentComponent::ServerTime() const
 void UDeliveryNpcAgentComponent::PruneEvidence()
 {
     const double Now = GetWorld()->GetTimeSeconds();
-    if (Evidence.RemoveAll([Now](const auto& Item) { return Item.ExpiresAt <= Now; }) > 0) ++ContextRevision;
+    auto IsReferenced = [this](const FDeliveryNpcEvidence& Item)
+    {
+        return (ActiveRequest.RequestId.IsValid() && ActiveRequest.Evidence.ContainsByPredicate(
+            [&Item](const auto& Sent) { return Sent.EventId==Item.EventId; })) ||
+            (HasActiveAction() && ActionEvidenceIds.Contains(Item.EventId));
+    };
+    // 原定时限照常生效，引用保护只防止重复观察和容量淘汰删掉正在使用的记录
+    bool bChanged = Evidence.RemoveAll([Now](const auto& Item) { return Item.ExpiresAt<=Now; })>0;
+    for (auto& Item : Evidence)
+    {
+        // 转头后仍记得刚才见过谁，但不再向模型声称对方仍在原地
+        // 当前请求保留发送时的原描述，等这一轮结束后再标为历史观察
+        if (IsSightMemory(Item) && Item.Kind!=TEXT("LostSight") && Item.Kind!=TEXT("LastSeen") &&
+            Now-Item.ObservedAt>=45.0 && !IsReferenced(Item))
+        {
+            Item.Kind=TEXT("LastSeen");
+            Item.Description=TEXT("此前见过这个对象；记录的位置是当时所见，当前位置和行为未知");
+            bChanged=true;
+        }
+    }
+    TSet<FGuid> SeenSubjects;
+    for (int32 Index=Evidence.Num()-1; Index>=0; --Index)
+    {
+        const auto& Item=Evidence[Index];
+        if (!IsSightMemory(Item) || !Item.SubjectId.IsValid()) continue;
+        // 同一个人的定时视野更新只留最新一条，正在被请求或动作引用的编号暂时保留
+        if (SeenSubjects.Contains(Item.SubjectId) && !IsReferenced(Item))
+        { Evidence.RemoveAt(Index); bChanged=true; }
+        else SeenSubjects.Add(Item.SubjectId);
+    }
+    while (Evidence.Num()>32)
+    {
+        int32 RemoveIndex=INDEX_NONE;
+        int32 LowestPriority=3;
+        // 保留刚收到的新事件，避免满额时把玩家刚说的话立即删掉
+        for (int32 Index=0; Index<Evidence.Num()-1; ++Index)
+        {
+            const auto& Item=Evidence[Index];
+            if (IsReferenced(Item)) continue;
+            const int32 Priority=IsSightMemory(Item)?0:IsConversationMemory(Item.Kind)?2:1;
+            if (Priority<LowestPriority) { RemoveIndex=Index; LowestPriority=Priority; }
+        }
+        // 极端情况下全部记录都被引用，仍沿用原来的容量上限，避免记忆无限增长
+        Evidence.RemoveAt(RemoveIndex==INDEX_NONE?0:RemoveIndex);
+        bChanged=true;
+    }
+    if (bChanged) ++ContextRevision;
     for (auto It = KnownSubjects.CreateIterator(); It; ++It)
     {
         if (!It.Value().IsValid() || !Evidence.ContainsByPredicate([&It](const auto& Item)
@@ -71,7 +133,10 @@ bool UDeliveryNpcAgentComponent::ObserveEvent(const FDeliveryNpcObservation& Obs
     Item.Source = Observation.Source;
     Item.Description = Observation.Description.Left(512);
     Item.ObservedAt = GetWorld()->GetTimeSeconds();
-    Item.ExpiresAt = Item.ObservedAt + FMath::Clamp(Observation.Lifetime, .1f, 60.f);
+    // 刚说过的话和见过的人记住五分钟，碰撞、受击等现场事件仍使用各自的短时限
+    const float Lifetime=IsConversationMemory(Item.Kind) || IsSightMemory(Item)?300.f:
+        FMath::Clamp(Observation.Lifetime, .1f, 60.f);
+    Item.ExpiresAt = Item.ObservedAt + Lifetime;
     Item.bHasObservedLocation = Observation.bHasObservedLocation;
     Item.ObservedLocation = Observation.bHasObservedLocation ? Observation.ObservedLocation : FVector::ZeroVector;
     auto RememberSubject = [this](AActor* Actor)
@@ -87,7 +152,7 @@ bool UDeliveryNpcAgentComponent::ObserveEvent(const FDeliveryNpcObservation& Obs
     Item.SubjectId = RememberSubject(Observation.Subject);
     Item.AddresseeId = RememberSubject(Observation.Addressee);
     Evidence.Add(MoveTemp(Item));
-    if (Evidence.Num() > 32) Evidence.RemoveAt(0);
+    PruneEvidence();
     RecentEventIds.Add(EventId);
     if (RecentEventIds.Num() > 128) RecentEventIds.RemoveAt(0);
     ++ContextRevision;
@@ -279,8 +344,12 @@ bool UDeliveryNpcAgentComponent::ReceiveAudioEnd(FGuid RequestId, const FDeliver
 
 void UDeliveryNpcAgentComponent::FinishReply(FGuid RequestId, bool bSucceeded, int32 SentenceCount)
 {
-    if (!IsAuthority() || RequestId != ActiveRequest.RequestId) return;
+    if (!IsAuthority() || !RequestId.IsValid() || RequestId != ActiveRequest.RequestId) return;
     if (!ReplyRequest.IsValid()) { ReceiveDecision(RequestId, nullptr, TEXT("TransportFailure")); return; }
+    if (ReplyRequest!=RequestId || ReplyAction!=PublicState.ActionId) return;
+    if (bSucceeded && (SentenceCount<0 || SentenceCount>3)) bSucceeded=false;
+    // 动作失败后，表现组件可能已经停止对白；是否零台词仍以本次后台结束通知为准
+    const bool bSilent=bSucceeded && SentenceCount==0 && PublicState.bStreamSpeech;
     FGuid FailedMessage;
     AActor* FailedSpeaker=nullptr;
     if (!bSucceeded) GetRequestedPlayerMessage(FailedMessage,FailedSpeaker);
@@ -295,9 +364,14 @@ void UDeliveryNpcAgentComponent::FinishReply(FGuid RequestId, bool bSucceeded, i
     bDecisionPending = false; bDecisionQueued = false;
     if (bSucceeded)
     {
+        // 动作先失败、后端随后确认没有台词时，也结束这次界面等待
+        if (bSilent && DeliveryNpc::IsTerminal(PublicState.Status) && PublicState.Status!=EDeliveryNpcActionStatus::Succeeded)
+            FinishFailedPlayerReply(PublicState.ReplyToEventId,nullptr,false);
         bPlayerRequest = false;
-        PlayerReplyMessage.Invalidate();
-        PlayerReplyController.Reset();
+        // 没有台词时等动作真正完成，再通知原来发言的玩家
+        const bool bAwaitingAction=HasActiveAction() && PlayerReplyMessage.IsValid() &&
+            PlayerReplyMessage==PublicState.ReplyToEventId && bSilent;
+        if (!bAwaitingAction) { PlayerReplyMessage.Invalidate(); PlayerReplyController.Reset(); }
         EndListening();
     }
     OnDecisionFinished.Broadcast(bSucceeded ? NAME_None : FName(TEXT("TransportFailure")));
@@ -448,7 +522,14 @@ void UDeliveryNpcAgentComponent::ReceiveDecision(FGuid RequestId, const FDeliver
     UE_LOG(LogDeliveryNpcAgent, Display, TEXT("Decision npc=%s request=%s accepted=%d reason=%s"),
         *NpcId.ToString(), *RequestId.ToString(), bAccepted, *Error.ToString());
     if (bAccepted) PublishState();
-    if (bAccepted) { bPlayerRequest = false; PlayerReplyMessage.Invalidate(); PlayerReplyController.Reset(); EndListening(); }
+    if (bAccepted)
+    {
+        bPlayerRequest = false;
+        const bool bAwaitingAction=HasActiveAction() && PlayerReplyMessage.IsValid() &&
+            PlayerReplyMessage==PublicState.ReplyToEventId && PublicState.Speech.TrimStartAndEnd().IsEmpty();
+        if (!bAwaitingAction) { PlayerReplyMessage.Invalidate(); PlayerReplyController.Reset(); }
+        EndListening();
+    }
     OnDecisionFinished.Broadcast(Error);
     const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
     const bool bRetryAllowed=!FailedMessage.IsValid() || FailedMessage!=PlayerReplyMessage || (Npc && Npc->IsDecisionRetryScheduled());
@@ -475,7 +556,7 @@ void UDeliveryNpcAgentComponent::GetRequestedPlayerMessage(FGuid& OutMessage, AA
 void UDeliveryNpcAgentComponent::FinishFailedPlayerReply(FGuid MessageId, AActor* Speaker, bool bWillRetry)
 {
     // 失败通知只处理原来那句玩家发言，新的插话和新请求继续按自己的状态执行
-    if (!MessageId.IsValid() || !bPlayerRequest || PlayerReplyMessage!=MessageId || ActiveRequest.RequestId.IsValid() ||
+    if (!MessageId.IsValid() || PlayerReplyMessage!=MessageId || ActiveRequest.RequestId.IsValid() ||
         (ListeningMessage.IsValid() && ListeningMessage!=MessageId)) return;
     if (bWillRetry)
     {
@@ -557,6 +638,16 @@ bool UDeliveryNpcAgentComponent::TryFinishAction(FGuid ActionId, EDeliveryNpcAct
     ResultEvent.Lifetime = 30.f;
     ObserveEvent(ResultEvent);
     RecordActionReply();
+    // 回复已结束时处理动作回执；等待重试的玩家仍要收到下一次请求的结果
+    if (!bDecisionPending && !bPlayerRequest && PlayerReplyMessage==PublicState.ReplyToEventId)
+    {
+        const bool bSilent=PublicState.bStreamSpeech
+            ? FightingNpc && FightingNpc->Presentation->IsReplyWithoutSpeech(ActionId)
+            : PublicState.Speech.TrimStartAndEnd().IsEmpty();
+        if (Result!=EDeliveryNpcActionStatus::Succeeded && bSilent)
+            FinishFailedPlayerReply(PublicState.ReplyToEventId,nullptr,false);
+        PlayerReplyMessage.Invalidate(); PlayerReplyController.Reset();
+    }
     PublishState();
     return true;
 }
@@ -577,6 +668,13 @@ void UDeliveryNpcAgentComponent::RecordActionReply()
     Reply.ReplyToEventId=PublicState.ReplyToEventId; Reply.Lifetime=60;
     Reply.Description=FString::Printf(TEXT("%s 动作已完成，这次没有台词"),*DeliveryNpc::ActionName(PublicState.Action));
     ObserveEvent(Reply);
+    if (PlayerReplyMessage!=Reply.ReplyToEventId) return;
+    auto* Controller=PlayerReplyController.Get();
+    PlayerReplyMessage.Invalidate();
+    PlayerReplyController.Reset();
+    // 控制器换过 Pawn 也只通知原玩家，界面继续按发言编号过滤旧回执
+    if (auto* Conversation=Controller && Controller->GetWorld()==GetWorld()?Controller->FindComponentByClass<UDeliveryConversationComponent>():nullptr)
+        Conversation->ClientResult(TEXT("ActionReply"),Reply.ReplyToEventId);
 }
 
 void UDeliveryNpcAgentComponent::CancelPlan(FName Reason)

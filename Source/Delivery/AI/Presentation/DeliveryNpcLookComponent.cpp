@@ -1,6 +1,5 @@
 #include "AI/Presentation/DeliveryNpcLookComponent.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
-#include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "Combat/DeliveryImpactReceiver.h"
 #include "Character/DeliveryCharacter.h"
 #include "Components/CapsuleComponent.h"
@@ -82,9 +81,8 @@ void UDeliveryNpcLookComponent::StartLook(AActor* Player,bool bAfterBrush,double
     LookState.EndTime=Now+FMath::Max(.2f,bAfterBrush?BrushLookDuration:LookDuration);
     LookState.bAfterBrush=bAfterBrush;
     GetOwner()->ForceNetUpdate();
-    if (bAfterBrush)
-        if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()); Npc && Npc->Agent)
-            Npc->ObserveFact(TEXT("PlayerBrush"),Player,TEXT("这名快递员刚与你擦身碰到，你没有倒地"),EDeliveryNpcEvidenceSource::Seen);
+    // 轻擦只让人物回头看一眼，身体接近不能说明玩家有意撞人
+    // 拳击和车撞由实际命中记录，交谈也不因这次注视重新请求回复
 }
 
 void UDeliveryNpcLookComponent::ClearLook()

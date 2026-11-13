@@ -182,6 +182,93 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
     TestTrue(TEXT("生成完成通知不会清掉下一轮回答"), Dajun->bDecisionNeeded);
     TestTrue(TEXT("下一轮回答仍能找到刚收到的原话"), Dajun->Agent->Evidence.ContainsByPredicate([&](const auto& Item)
         { return Item.EventId == MessageDuringReply && Item.Kind == TEXT("Speech"); }));
+
+    // 连续交谈两分钟后转向玩家，邻居和刚才的答话仍应留在记忆里
+    auto* Memory=Dajun->Agent.Get();
+    Memory->CancelPlan(TEXT("MemoryRetentionCheck"));
+    Memory->Evidence.Reset(); Memory->KnownSubjects.Reset(); Memory->RecentEventIds.Reset();
+    Xiaofang->SetActorLocation(FVector(120,0,90));
+    FDeliveryNpcObservation Sight;
+    Sight.EventId=FGuid::NewGuid(); Sight.Kind=TEXT("VisibleNow"); Sight.Source=EDeliveryNpcEvidenceSource::Seen;
+    Sight.Subject=Xiaofang; Sight.Description=TEXT("小芳仍在视线中，距离约 120 厘米");
+    Sight.bHasObservedLocation=true; Sight.ObservedLocation=Xiaofang->GetActorLocation(); Sight.Lifetime=45;
+    TestTrue(TEXT("记下邻居出现的位置"),Memory->ObserveEvent(Sight));
+    const FGuid FirstSight=Sight.EventId;
+    TArray<FGuid> ConversationIds;
+    for (const FName Kind : {FName(TEXT("PlayerSpeech")),FName(TEXT("Speech")),FName(TEXT("OverheardSpeech")),
+        FName(TEXT("SelfSpeech")),FName(TEXT("ActionReply"))})
+    {
+        FDeliveryNpcObservation Line;
+        Line.EventId=FGuid::NewGuid(); Line.Kind=Kind;
+        Line.Source=Kind==TEXT("SelfSpeech") || Kind==TEXT("ActionReply")?EDeliveryNpcEvidenceSource::ActionResult:EDeliveryNpcEvidenceSource::Heard;
+        Line.Subject=Kind==TEXT("PlayerSpeech")?Player:Kind==TEXT("SelfSpeech") || Kind==TEXT("ActionReply")?Dajun:Xiaofang;
+        Line.Addressee=Dajun; Line.Description=TEXT("刚才说的是谁先认怂，别装作没听见。"); Line.Lifetime=45;
+        ConversationIds.Add(Line.EventId);
+        TestTrue(TEXT("记录交谈中实际发生的话与回应"),Memory->ObserveEvent(Line));
+    }
+    FDeliveryNpcDecisionRequest RememberedRequest;
+    TestTrue(TEXT("准备含邻居和交谈的请求"),Memory->BuildDecisionRequest(Epoch,RememberedRequest));
+    Memory->ActiveRequest=RememberedRequest;
+    const FGuid NeighborId=Memory->Evidence[0].SubjectId;
+    for (int32 Refresh=0; Refresh<4; ++Refresh)
+    {
+        Sight.EventId=FGuid::NewGuid();
+        Memory->ObserveEvent(Sight);
+    }
+    TestTrue(TEXT("视野刷新保留当前请求引用的原编号"),Memory->Evidence.ContainsByPredicate(
+        [&](const auto& Item) { return Item.EventId==FirstSight; }));
+    TestEqual(TEXT("请求期间只额外保留一条最新视野记录"),Memory->Evidence.FilterByPredicate(
+        [](const auto& Item) { return Item.Kind==TEXT("VisibleNow"); }).Num(),2);
+    Memory->CancelDecision();
+    for (int32 Interval=0; Interval<8; ++Interval)
+    {
+        // 只推进这个独立测试世界的记忆时钟，不让无地面的角色连续下落两分钟
+        World->TimeSeconds+=15;
+        for (int32 Refresh=0; Refresh<5; ++Refresh)
+        {
+            Sight.EventId=FGuid::NewGuid();
+            Memory->ObserveEvent(Sight);
+        }
+    }
+    TestEqual(TEXT("同一个人的重复视野记录最终只占一条"),Memory->Evidence.FilterByPredicate(
+        [](const auto& Item) { return Item.Kind==TEXT("VisibleNow"); }).Num(),1);
+    TestEqual(TEXT("四十次视野刷新没有挤掉五条交谈记录"),Memory->Evidence.Num(),6);
+    World->TimeSeconds+=90;
+    Xiaofang->SetActorLocation(FVector(140,0,90));
+    TestTrue(TEXT("转头一分半后仍能准备交谈上下文"),Memory->BuildDecisionRequest(Epoch,RememberedRequest));
+    for (const FGuid Id : ConversationIds)
+        TestTrue(TEXT("几分钟前的原话、旁听和本人答话仍保留"),RememberedRequest.Evidence.ContainsByPredicate(
+            [&](const auto& Item) { return Item.EventId==Id; }));
+    const auto* OldSight=RememberedRequest.Evidence.FindByPredicate([&](const auto& Item)
+        { return Item.SubjectId==NeighborId && Item.Kind==TEXT("LastSeen"); });
+    if (!TestNotNull(TEXT("过时视野改为先前见过的记录"),OldSight)) return false;
+    TestTrue(TEXT("旧位置明确说明当前位置未知"),OldSight->Description.Contains(TEXT("当前位置和行为未知")));
+    TestEqual(TEXT("记忆没有偷读邻居移动后的实时位置"),OldSight->ObservedLocation,Sight.ObservedLocation);
+    TestTrue(TEXT("模型仍知道刚才交谈的邻居姓名"),RememberedRequest.Subjects.ContainsByPredicate(
+        [&](const auto& Item) { return Item.SubjectId==NeighborId && Item.Name==TEXT("小芳"); }));
+    TestTrue(TEXT("仍在近处且没有遮挡时可以提供真实攻击候选"),RememberedRequest.Candidates.ContainsByPredicate(
+        [&](const auto& Item) { return Item.TargetId==NeighborId && Item.Action==EDeliveryNpcAction::StrikeOnce; }));
+    Xiaofang->SetActorLocation(FVector(5000,0,90));
+    Memory->BuildDecisionRequest(Epoch,RememberedRequest);
+    TestFalse(TEXT("记得邻居不代表能攻击已经远离的人"),RememberedRequest.Candidates.ContainsByPredicate(
+        [&](const auto& Item) { return Item.TargetId==NeighborId; }));
+    Xiaofang->Destroy();
+    Memory->BuildDecisionRequest(Epoch,RememberedRequest);
+    TestFalse(TEXT("销毁后的邻居不再作为可操作人物发送"),RememberedRequest.Subjects.ContainsByPredicate(
+        [&](const auto& Item) { return Item.SubjectId==NeighborId; }));
+    World->TimeSeconds+=211;
+    Memory->BuildDecisionRequest(Epoch,RememberedRequest);
+    TestTrue(TEXT("五分钟后结束本段短时记忆"),RememberedRequest.Evidence.IsEmpty());
+    FDeliveryNpcObservation FullWindow; FullWindow.Kind=TEXT("TestFact"); FullWindow.Lifetime=45;
+    for (int32 Index=0; Index<32; ++Index) Memory->ObserveEvent(FullWindow);
+    Memory->BuildDecisionRequest(Epoch,RememberedRequest);
+    Memory->ActiveRequest=RememberedRequest;
+    FullWindow.EventId=FGuid::NewGuid(); FullWindow.Kind=TEXT("PlayerSpeech"); FullWindow.Subject=Player;
+    FullWindow.Description=TEXT("这次先听我说。");
+    Memory->ObserveEvent(FullWindow);
+    TestEqual(TEXT("满额请求期间仍保持三十二条上限"),Memory->Evidence.Num(),32);
+    TestTrue(TEXT("全部旧记录都被引用时也不会立即删掉玩家的新话"),Memory->Evidence.ContainsByPredicate(
+        [&](const auto& Item) { return Item.EventId==FullWindow.EventId; }));
     return true;
 }
 #endif

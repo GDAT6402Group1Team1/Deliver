@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Interaction/DeliveryInteractionProbeComponent.h"
+#include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Conversation/DeliveryConversationComponent.h"
 #include "UI/Controllers/DeliveryInteractionController.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -10,6 +12,7 @@
 #include "Interaction/DeliveryInteractionRegistry.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
@@ -86,6 +89,13 @@ void UDeliveryInteractionProbeComponent::TickComponent(float DeltaTime, ELevelTi
 
     // 左键目标比 F 优先：手上有货走到车尾时，该出现的是"左键装货"而不是"按 F 驾驶"
     UDeliveryInteractableComponent *PromptTarget = Action ? Action : (Pickup ? Pickup : General);
+    const auto* Controller=Cast<APlayerController>(bLocallyDriving?RiddenBike->GetController():Owner->GetController());
+    const auto* Conversation=Controller?Controller->FindComponentByClass<UDeliveryConversationComponent>():nullptr;
+    if (const auto* Npc=Conversation?Conversation->GetAimedNpc():nullptr)
+    {
+        // 对准NPC时优先显示T提示，E、F和左键仍使用各自原来的交互目标
+        if (Npc->ConversationInteractable->bShowPrompt) PromptTarget=Npc->ConversationInteractable;
+    }
     if (bShowPrompt && PromptTarget && PromptTarget->bShowPrompt)
     {
         if (UDeliveryPromptSubsystem *Prompt = UDeliveryPromptSubsystem::Get(this))

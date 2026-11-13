@@ -14,6 +14,8 @@ public:
     UFUNCTION(meta=(AICallable)) static FString CreateResidentAssets();
     // 只补充倾听分支，保留居民模型、关卡位置与已有配置
     UFUNCTION(meta=(AICallable)) static FString UpdateNpcConversationAssets();
+    // 将聊天布局保存到正式 UMG 资产，仅在退出 PIE 后按明确请求重建
+    UFUNCTION(meta=(AICallable)) static FString RebuildConversationWidget();
     UFUNCTION(meta=(AICallable)) static FString PlaceResidentPair(FVector Location);
     // 默认只检查导航；修复时只补全空体积，保留已有的有效范围
     UFUNCTION(BlueprintCallable, Category="Delivery|NPC", meta=(AICallable)) static FString CheckNpcNavigation(bool bRepairEmpty = false);

@@ -1,4 +1,5 @@
 #include "DeliveryNpcToolset.h"
+#include "DeliveryConversationAssetTools.h"
 #include "AI/BehaviorTree/BTTask_DeliveryListen.h"
 #include "AI/Presentation/DeliveryNpcExpressionSet.h"
 #include "Curves/CurveFloat.h"
@@ -175,6 +176,12 @@ void RebuildResidentGraph(UBehaviorTree* Tree)
     Graph->UpdateAsset();
 }
 
+}
+
+FString UDeliveryNpcToolset::RebuildConversationWidget()
+{
+    if (!GEditor || GEditor->PlayWorld) return TEXT("退出 PIE 后再更新交谈界面");
+    return UDeliveryConversationAssetTools::CreateConversationWidget(true);
 }
 
 FString UDeliveryNpcToolset::UpdateNpcConversationAssets()

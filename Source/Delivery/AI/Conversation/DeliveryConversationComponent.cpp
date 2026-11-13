@@ -88,13 +88,14 @@ ADeliveryNpcCharacter* UDeliveryConversationComponent::FindNpcInView(
         FVector RayPoint,BodyPoint;
         FMath::SegmentDistToSegmentSafe(ViewLocation,ViewEnd,Center-Axis,Center+Axis,RayPoint,BodyPoint);
         const double Miss=FVector::Distance(RayPoint,BodyPoint);
-        // 头部和身体都可选中，边缘只留少量容差，不选远离准星的邻居
-        if (Miss>Radius+10.0 || !CanTalkTo(Npc)) continue;
+        const double Along=FVector::DotProduct(RayPoint-ViewLocation,Direction);
+        // 镜头前方约三十度内的人物都可选中，俯视和拉远镜头时也不用精准瞄准
+        const double EdgeAllowance=Along*FMath::Tan(FMath::DegreesToRadians(30.0));
+        if (Miss>Radius+EdgeAllowance || !CanTalkTo(Npc)) continue;
         FHitResult Hit;
         FCollisionQueryParams Params(SCENE_QUERY_STAT(NpcConversationAim),false,Pawn);
         if (GetWorld()->LineTraceSingleByChannel(Hit,ViewLocation,BodyPoint,ECC_Visibility,Params) &&
             Hit.GetActor()!=Npc) continue;
-        const double Along=FVector::DotProduct(RayPoint-ViewLocation,Direction);
         const double Angle=Miss/FMath::Max(Along,1.0);
         const bool bDirect=Miss<=Radius;
         // 前后重叠时选择挡在前面的人；只有擦过边缘时才比较偏离准星的角度
@@ -126,7 +127,7 @@ FString UDeliveryConversationComponent::GetProvokeText(const ADeliveryNpcCharact
         if (Distance<Closest) { Closest=Distance; Other=*It; }
     }
     return Other
-        ? FString::Printf(TEXT("%s，你敢不敢跟%s比划两下？我看你只敢动嘴。"),
+        ? FString::Printf(TEXT("%s，%s就在旁边。你俩到底谁厉害？敢不敢比划两下，输的当面认怂？"),
             *Npc->DisplayName.ToString(),*Other->DisplayName.ToString())
         : FString::Printf(TEXT("%s，你就只敢嘴上横？我站这儿呢，你敢动手吗？"),*Npc->DisplayName.ToString());
 }

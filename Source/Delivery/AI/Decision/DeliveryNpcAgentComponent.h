@@ -16,6 +16,7 @@ class DELIVERY_API UDeliveryNpcAgentComponent : public UActorComponent
 {
     GENERATED_BODY()
     friend class FDeliveryNpcConversationContextTest;
+    friend class FDeliveryAiContextTest;
     friend class FDeliveryConversationFeedbackTest;
     friend class FDeliveryNpcConversationOcclusionTest;
     friend class FDeliveryNpcStrikeApproachTest;

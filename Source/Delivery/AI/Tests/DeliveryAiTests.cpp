@@ -255,6 +255,18 @@ bool FDeliveryAiContextTest::RunTest(const FString&)
     Agent->BuildDecisionRequest(FGuid::NewGuid(), Request);
     TestFalse(TEXT("过期事件不进入请求"), Request.Evidence.ContainsByPredicate([&Brief](const auto& Item) { return Item.EventId == Brief.EventId; }));
     TestFalse(TEXT("过期后重复投递仍被近期去重窗口拦截"), Agent->ObserveEvent(Brief));
+    Brief.EventId=FGuid::NewGuid();
+    Agent->ObserveEvent(Brief);
+    Agent->BuildDecisionRequest(FGuid::NewGuid(),Request);
+    Agent->ActiveRequest=Request;
+    FDeliveryNpcDecisionProposal LateProposal;
+    FName Reason;
+    if (!TestTrue(TEXT("准备引用短时事件的合法模型回复"),DeliveryNpc::DecodeProposal(
+        Reply(Request,TEXT("Wait"),{},Brief.EventId),LateProposal,Reason))) return false;
+    TestWorld.World->TimeSeconds+=.2;
+    TestFalse(TEXT("等待模型期间到期的普通事件不能继续用于批准动作"),Agent->TryAcceptProposal(LateProposal,Reason));
+    TestFalse(TEXT("请求引用不会延长普通事件的原定时限"),Agent->Evidence.ContainsByPredicate(
+        [&](const auto& Item) { return Item.EventId==Brief.EventId; }));
     return true;
 }
 

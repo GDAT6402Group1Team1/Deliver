@@ -56,7 +56,6 @@ void UDeliveryNpcPresentationComponent::TickExpression(float DeltaTime)
     // 快步上前或踱步时也保留这次决定的表情，不能等声音开始才看出生气
     else if (!ActionEmotion.IsNone() && ActionEmotion!=TEXT("Calm")) Pose=ActionEmotion;
     else if (Npc->Agent->IsListening() || Npc->Agent->IsDecisionPending() || IsWaitingForSpeechPlayback()) Pose=TEXT("Thinking");
-    else if (Npc->Look && Npc->Look->IsAfterBrush()) Pose=TEXT("Angry");
     TMap<FName,float> Targets;
     if (const auto* Settings=Expressions->Poses.Find(Pose)) Targets=Settings->MorphWeights;
     // 眼睛沿用动画蓝图正在跟随的目标，头转过去后只补剩余角度

@@ -47,6 +47,7 @@ class DELIVERY_API UDeliveryPromptSubsystem : public UWorldSubsystem
 
   private:
     friend class FDeliveryPersistentHintTest;
+    friend class FDeliveryInteractionFlowTest;
 	// 控件创建与可见性检查
 	void EnsureWidget();
 	bool ComputeScreenPosition(FVector2D& OutPosition) const;

@@ -7,10 +7,15 @@
 #include "Engine/World.h"
 #include "UObject/UnrealType.h"
 #include "Character/DeliveryCharacter.h"
+#include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Conversation/DeliveryConversationComponent.h"
+#include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Player/DeliveryPlayerController.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Interaction/DeliveryInteractionProbeComponent.h"
 #include "Interaction/DeliveryInteractionRegistry.h"
+#include "Interaction/DeliveryPromptSubsystem.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryPackageItem.h"
@@ -233,6 +238,68 @@ bool FDeliveryInteractionFlowTest::RunTest(const FString &)
     TestEqual(TEXT("rejected pickup does not advance task"), Tasks->GetTaskStatus(Definition),
               EDeliveryTaskStatus::AwaitingPickup);
 
+    // 在同一个骑车夹具里加入T提示竞争，实际E/F/左键目标保持各自原来的选择
+    auto* Prompt=World->GetSubsystem<UDeliveryPromptSubsystem>();
+    auto* Conversation=Player->FindComponentByClass<UDeliveryConversationComponent>();
+    // 夹具没有启动角色初始化，使用引擎入口创建并初始化相机管理器
+    if (!Player->PlayerCameraManager)
+        Player->SpawnPlayerCameraManager();
+    if (!TestNotNull(TEXT("prompt subsystem"),Prompt) || !TestNotNull(TEXT("conversation component"),Conversation) ||
+        !TestNotNull(TEXT("player camera manager"),Player->PlayerCameraManager.Get())) return false;
+    const FVector NpcLocation=Bike->GetActorLocation()+FVector(300,150,90);
+    auto* Npc=World->SpawnActor<ADeliveryNpcCharacter>(NpcLocation,FRotator::ZeroRotator,Spawn);
+    Npc->SetActorTickEnabled(false);
+    Npc->SetActorEnableCollision(false);
+    Npc->ConversationInteractable->bPromptAtTarget=true;
+    Npc->ConversationInteractable->bUseConversationIcon=true;
+    const auto AddPromptTarget=[&](EDeliveryInteractionKey Key,const TCHAR* Text)
+    {
+        auto* Actor=World->SpawnActor<AActor>(Spawn);
+        auto* Anchor=NewObject<USceneComponent>(Actor); Actor->SetRootComponent(Anchor); Anchor->RegisterComponent();
+        Actor->SetActorLocation(Character->GetActorLocation()+FVector(0,30,0));
+        auto* Interactable=NewObject<UDeliveryInteractableComponent>(Actor); Actor->AddInstanceComponent(Interactable);
+        Interactable->InteractionKey=Key; Interactable->PromptText=FText::FromString(Text); Interactable->InteractRadius=1000;
+        Interactable->CanUse.BindLambda([](APawn*,bool){return true;});
+        Interactable->Use.BindLambda([](APawn*){return true;});
+        Interactable->RegisterComponent(); World->GetSubsystem<UDeliveryInteractionRegistry>()->Register(Interactable);
+        return Actor;
+    };
+    auto* GeneralPromptActor=AddPromptTarget(EDeliveryInteractionKey::GeneralF,TEXT("普通交互"));
+    auto* LeftPromptActor=AddPromptTarget(EDeliveryInteractionKey::ActionLeft,TEXT("左键操作"));
+    auto* ViewActor=World->SpawnActor<AActor>(Spawn);
+    auto* ViewCamera=NewObject<UCameraComponent>(ViewActor); ViewActor->SetRootComponent(ViewCamera); ViewCamera->RegisterComponent();
+    ViewActor->SetActorLocation(Bike->GetActorLocation()+FVector(-150,0,140));
+    auto* PreviousView=Player->GetViewTarget();
+    const bool WalkerCollision=Walker->GetActorEnableCollision();
+    const bool CharacterCollision=Character->GetActorEnableCollision();
+    const bool BikeCollision=Bike->GetActorEnableCollision();
+    // 夹具角色和车辆生成在同一点，先移除它们的遮挡以单独检查提示竞争
+    Walker->SetActorEnableCollision(false); Character->SetActorEnableCollision(false); Bike->SetActorEnableCollision(false);
+    auto CheckConversationPrompt=[&](const TCHAR* Label)
+    {
+        GeneralPromptActor->SetActorLocation(Character->GetActorLocation()+FVector(0,10,0));
+        LeftPromptActor->SetActorLocation(Character->GetActorLocation()+FVector(0,20,0));
+        Player->SetViewTarget(ViewActor);
+        ViewActor->SetActorRotation(FRotator(0,180,0)); Player->PlayerCameraManager->UpdateCamera(0);
+        Probe->TickComponent(.05f,LEVELTICK_All,nullptr);
+        const auto PreviousPickup=Probe->GetFocusedPickupActor();
+        const auto PreviousGeneral=Probe->GetFocusedActor();
+        const auto PreviousAction=Probe->GetFocusedActionActor();
+        TestFalse(TEXT("镜头转开时显示原操作提示"),Prompt->bPromptConversationIcon);
+        ViewActor->SetActorRotation((NpcLocation-ViewActor->GetActorLocation()).Rotation());
+        Player->PlayerCameraManager->UpdateCamera(0);
+        TestTrue(Label,Conversation->GetAimedNpc()==Npc);
+        Probe->TickComponent(.05f,LEVELTICK_All,nullptr);
+        TestTrue(TEXT("对准NPC时T图示优先于身边物品和左键操作"),Prompt->bPromptConversationIcon &&
+            Prompt->PromptAnchor.Equals(Npc->ConversationInteractable->GetPromptLocation(),.1));
+        TestTrue(TEXT("交谈提示不会改写E/F/左键的实际目标"),Probe->GetFocusedPickupActor()==PreviousPickup &&
+            Probe->GetFocusedActor()==PreviousGeneral && Probe->GetFocusedActionActor()==PreviousAction &&
+            PreviousPickup==Target && PreviousGeneral==GeneralPromptActor && PreviousAction==LeftPromptActor);
+    };
+    CheckConversationPrompt(TEXT("骑车时交谈提示通过车辆当前控制器选择NPC"));
+    Player->SetViewTarget(PreviousView); Player->PlayerCameraManager->UpdateCamera(0);
+    Walker->SetActorEnableCollision(WalkerCollision); Character->SetActorEnableCollision(CharacterCollision); Bike->SetActorEnableCollision(BikeCollision);
+
     // 无模型夹具下车时会尝试重启布娃娃，仅预期这一条缺少物理资产日志
     AddExpectedError(TEXT("DeliveryCharacter_0: Skeletal mesh has no Physics Asset."),
                      EAutomationExpectedErrorFlags::Contains, 1);
@@ -247,6 +314,11 @@ bool FDeliveryInteractionFlowTest::RunTest(const FString &)
     TestEqual(TEXT("probe keeps pickup target after dismount"), Probe->GetFocusedPickupActor(), Target);
     TestTrue(TEXT("normal E prompt returns after dismount"),
              Prompts->GetPrompt(Action, true, Character).EqualTo(Action->PromptText));
+    Walker->SetActorEnableCollision(false); Character->SetActorEnableCollision(false); Bike->SetActorEnableCollision(false);
+    CheckConversationPrompt(TEXT("下车后交谈提示使用角色当前控制器"));
+    Player->SetViewTarget(Character); Player->PlayerCameraManager->UpdateCamera(0);
+    Walker->SetActorEnableCollision(WalkerCollision); Character->SetActorEnableCollision(CharacterCollision); Bike->SetActorEnableCollision(BikeCollision);
+    GeneralPromptActor->Destroy(); LeftPromptActor->Destroy(); ViewActor->Destroy(); Npc->Destroy();
     TestTrue(TEXT("walking pickup is available"), Character->CanUsePickupTarget(Target, true));
     Send(EDeliveryInteractionRequest::BeginHold);
     Advance();

@@ -62,6 +62,7 @@
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/EditableTextBox.h"
+#include "Components/MultiLineEditableTextBox.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "UI/DeliveryConversationWidget.h"
@@ -227,11 +228,11 @@ public:
                     else
                     {
                         if (!CheckConversationPanel(Panel)) return End();
-                        if (!ClickConversationButton(Panel,TEXT("ApologizeButton"))) return End();
+                        if (!ClickConversationButton(Panel,TEXT("SendButton"))) return End();
                         bConversationSent=true;
                         LiveSubmittedAt=FPlatformTime::Seconds();
                         LiveMessage=PC->FindComponentByClass<UDeliveryConversationComponent>()->GetLastSubmissionId();
-                        Test->AddInfo(FString::Printf(TEXT("LiveModel submitted round=0 speech=%s button=Apologize"),*LiveMessage.ToString()));
+                        Test->AddInfo(FString::Printf(TEXT("LiveModel submitted round=0 speech=%s button=Send"),*LiveMessage.ToString()));
                     }
                 }
                 if (!Test->TestTrue(TEXT("通过实际交谈面板发送文本"),bConversationSent)) return End();
@@ -646,7 +647,12 @@ private:
         Valid=Test->TestNotNull(TEXT("蓝图中的输入框"),Cast<UEditableTextBox>(Panel->GetWidgetFromName(TEXT("Input")))) && Valid;
         Valid=Test->TestNotNull(TEXT("蓝图中的回复文本"),Cast<UTextBlock>(Panel->GetWidgetFromName(TEXT("Reply")))) && Valid;
         Valid=Test->TestNotNull(TEXT("蓝图中的说话人名称"),Cast<UTextBlock>(Panel->GetWidgetFromName(TEXT("SpeakerName")))) && Valid;
-        for (const FName Name:{FName(TEXT("SendButton")),FName(TEXT("ApologizeButton")),FName(TEXT("ProvokeButton")),FName(TEXT("CloseButton"))})
+        auto* Suggestions=Cast<UMultiLineEditableTextBox>(Panel->GetWidgetFromName(TEXT("Suggestions")));
+        Valid=Test->TestNotNull(TEXT("蓝图中的可复制建议"),Suggestions) && Valid;
+        if (Suggestions) Valid=Test->TestTrue(TEXT("建议只读且保持可选中"),Suggestions->GetIsReadOnly() && Suggestions->GetIsEnabled()) && Valid;
+        Valid=Test->TestNull(TEXT("不再提供一键拱火按钮"),Panel->GetWidgetFromName(TEXT("ProvokeButton"))) && Valid;
+        Valid=Test->TestNull(TEXT("不再提供一键道歉按钮"),Panel->GetWidgetFromName(TEXT("ApologizeButton"))) && Valid;
+        for (const FName Name:{FName(TEXT("SendButton")),FName(TEXT("SuggestionToggle")),FName(TEXT("CloseButton"))})
             Valid=Test->TestNotNull(TEXT("蓝图中的交谈按钮"),Cast<UButton>(Panel->GetWidgetFromName(Name))) && Valid;
         return Valid;
     }
@@ -658,6 +664,13 @@ private:
         if (!Test->TestEqual(TEXT("按钮只绑定一次当前界面的处理函数"),Bindings.FilterByPredicate([Panel](const UObject* Object){return Object==Panel;}).Num(),1)) return false;
         Button->OnClicked.Broadcast();
         return true;
+    }
+    bool SendConversationText(UUserWidget* Panel,const FString& Text)
+    {
+        auto* Input=Cast<UEditableTextBox>(Panel->GetWidgetFromName(TEXT("Input")));
+        if (!Test->TestNotNull(TEXT("找到蓝图中的输入框"),Input)) return false;
+        Input->SetText(FText::FromString(Text));
+        return ClickConversationButton(Panel,TEXT("SendButton"));
     }
     bool CheckReopenedConversation(APlayerController* PC,ADeliveryNpcCharacter* RemoteNpc)
     {
@@ -671,7 +684,7 @@ private:
         if (!Test->TestNotNull(TEXT("找到当前玩家的交谈界面"),Panel)) return End();
         if (UiReopenStage==0)
         {
-            auto* OldButton=Cast<UButton>(Panel->GetWidgetFromName(TEXT("ApologizeButton")));
+            auto* OldButton=Cast<UButton>(Panel->GetWidgetFromName(TEXT("SendButton")));
             PreviousPanel=Panel;
             if (!ClickConversationButton(Panel,TEXT("CloseButton"))) return End();
             Test->TestFalse(TEXT("结束按钮关闭交谈界面"),HUD->IsPanelOpen(TEXT("ResidentConversation")));
@@ -687,7 +700,7 @@ private:
             if (!Test->TestTrue(TEXT("重新打开创建新的界面实例"),Panel!=PreviousPanel.Get()) || !CheckConversationPanel(Panel)) return End();
             for (const auto& Event:A->Agent->Evidence) if (Event.Kind==TEXT("PlayerSpeech")) UiPreviousMessages.Add(Event.EventId);
             const FGuid Before=Conversation->GetLastSubmissionId();
-            if (!ClickConversationButton(Panel,TEXT("ApologizeButton"))) return End();
+            if (!SendConversationText(Panel,TEXT("对不起，请让我先送货"))) return End();
             UiNewMessage=Conversation->GetLastSubmissionId();
             if (!Test->TestTrue(TEXT("重建后点击按钮产生新的发言"),UiNewMessage.IsValid() && UiNewMessage!=Before)) return End();
             UiReopenStage=2; UiReopenAt=FPlatformTime::Seconds();
@@ -787,14 +800,17 @@ private:
             for (auto* Panel:Panels)
             {
                 if (Panel->GetOwningPlayer()!=PC) continue;
-                if (Panel->GetWidgetFromName(TEXT("ProvokeButton")))
+                if (auto* Suggestions=Cast<UMultiLineEditableTextBox>(Panel->GetWidgetFromName(TEXT("Suggestions"))))
                 {
                     PreviousMessage=LiveMessage;
-                    if (!ClickConversationButton(Panel,TEXT("ProvokeButton"))) return End();
+                    TArray<FString> Examples;
+                    Suggestions->GetText().ToString().ParseIntoArrayLines(Examples,true);
+                    if (!Test->TestFalse(TEXT("面板提供可编辑的挑战例句"),Examples.IsEmpty()) ||
+                        !SendConversationText(Panel,Examples[0])) return End();
                     LiveMessage=PC->FindComponentByClass<UDeliveryConversationComponent>()->GetLastSubmissionId();
-                    if (!Test->TestTrue(TEXT("拱火按钮发出另一条消息"),LiveMessage.IsValid() && LiveMessage!=PreviousMessage)) return End();
+                    if (!Test->TestTrue(TEXT("建议放入输入框后通过发送键提交另一条消息"),LiveMessage.IsValid() && LiveMessage!=PreviousMessage)) return End();
                     LiveRound=1; LiveSubmittedAt=Now; LiveListening.Reset(); LivePlayed.Reset();
-                    Test->AddInfo(FString::Printf(TEXT("LiveModel submitted round=1 speech=%s button=Provoke"),*LiveMessage.ToString()));
+                    Test->AddInfo(FString::Printf(TEXT("LiveModel submitted round=1 speech=%s button=Send"),*LiveMessage.ToString()));
                     return false;
                 }
             }

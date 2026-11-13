@@ -82,6 +82,49 @@ bool FDeliveryNpcConversationAimTest::RunTest(const FString&)
     TestTrue(TEXT("对准头部也能交谈，不要求准星对着角色中心"),
         Conversation->FindNpcInView(View,(FarNpc->GetActorLocation()+FVector(0,0,75)-View).GetSafeNormal())==FarNpc);
 
+    const FVector LevelView(0,0,90);
+    FarNpc->SetActorLocation(FVector(450,100,90));
+    TestTrue(TEXT("中距离看向人物旁边也能选中，不要求击中身体"),
+        Conversation->FindNpcInView(LevelView,FVector::ForwardVector)==FarNpc);
+    FarNpc->SetActorLocation(FVector(400,400*FMath::Tan(FMath::DegreesToRadians(20.0)),90));
+    TestTrue(TEXT("偏离镜头中心二十度的人物仍可交谈"),
+        Conversation->FindNpcInView(LevelView,FVector::ForwardVector)==FarNpc);
+    FarNpc->SetActorLocation(FVector(400,400*FMath::Tan(FMath::DegreesToRadians(25.0)),90));
+    TestTrue(TEXT("偏离镜头中心二十五度的人物仍可交谈"),
+        Conversation->FindNpcInView(LevelView,FVector::ForwardVector)==FarNpc);
+    FarNpc->SetActorLocation(FVector(400,400*FMath::Tan(FMath::DegreesToRadians(40.0)),90));
+    TestTrue(TEXT("范围外样例仍在玩家六百厘米内"),Conversation->CanTalkTo(FarNpc));
+    TestNull(TEXT("身体也离开三十度范围后不选中"),Conversation->FindNpcInView(LevelView,FVector::ForwardVector));
+    FarNpc->SetActorLocation(FVector(100,70,90));
+    TestTrue(TEXT("近身时看向人物附近仍可选中"),Conversation->FindNpcInView(LevelView,FVector::ForwardVector)==FarNpc);
+    FarNpc->SetActorLocation(FVector(100,120,90));
+    TestNull(TEXT("近身选择也保留前方角度限制"),Conversation->FindNpcInView(LevelView,FVector::ForwardVector));
+    FarNpc->SetActorLocation(FVector(450,300,90));
+    const FVector DistantCamera(-1000,0,90);
+    TestTrue(TEXT("镜头拉远后保持可选角度，不被一百二十厘米截断"),
+        Conversation->FindNpcInView(DistantCamera,FVector::ForwardVector)==FarNpc);
+    FarNpc->SetActorLocation(FVector(450,0,90));
+    const FVector HighView(-150,0,260);
+    TestTrue(TEXT("镜头俯视地面时仍能选择上半屏附近的人物"),
+        Conversation->FindNpcInView(HighView,FRotator(-40,0,0).Vector())==FarNpc);
+    TestNull(TEXT("俯视过深且人物离开范围时不选择"),
+        Conversation->FindNpcInView(HighView,FRotator(-75,0,0).Vector()));
+    FarNpc->SetActorLocation(FVector(450,200,90));
+    NearNpc->SetActorLocation(FVector(250,-140,90));
+    TestTrue(TEXT("两人都在边缘范围时选择视线更接近者，不选最近者"),
+        Conversation->FindNpcInView(LevelView,FVector::ForwardVector)==FarNpc);
+    NearNpc->SetActorLocation(FVector(450,-200,90));
+    TestTrue(TEXT("两人并排时看向左边的人可以切换"),AimAt(FarNpc)==FarNpc);
+    TestTrue(TEXT("两人并排时看向右边的人可以切换"),AimAt(NearNpc)==NearNpc);
+    FarNpc->SetActorLocation(FVector(450,350,90));
+    NearNpc->SetActorLocation(FVector(450,-350,90));
+    TestNull(TEXT("两人都在范围外时不回退最近的人"),Conversation->FindNpcInView(LevelView,FVector::ForwardVector));
+    FarNpc->SetActorLocation(FVector(0,150,90));
+    NearNpc->SetActorLocation(FVector(-100,100,90));
+    TestNull(TEXT("正侧面和身后的人都不会抢走前方交谈"),Conversation->FindNpcInView(LevelView,FVector::ForwardVector));
+    FarNpc->SetActorLocation(FVector(450,0,90));
+    NearNpc->SetActorLocation(FVector(2000,1500,90));
+
     auto* Wall=World->SpawnActor<AActor>();
     auto* WallBox=NewObject<UBoxComponent>(Wall);
     Wall->SetRootComponent(WallBox);
@@ -94,6 +137,9 @@ bool FDeliveryNpcConversationAimTest::RunTest(const FString&)
     Wall->SetActorLocation(FVector(200,0,110));
     TestFalse(TEXT("玩家与 NPC 之间有墙时拒绝交谈"),Conversation->CanTalkTo(FarNpc));
     TestNull(TEXT("准星隔着墙时不会选中 NPC"),AimAt(FarNpc));
+    FarNpc->SetActorLocation(FVector(450,100,90));
+    TestNull(TEXT("放宽边缘辅助也不能隔墙选择NPC"),Conversation->FindNpcInView(LevelView,FVector::ForwardVector));
+    FarNpc->SetActorLocation(FVector(450,0,90));
     Wall->SetActorLocation(FVector(-80,0,110));
     TestTrue(TEXT("只挡住身后镜头的墙不影响玩家到 NPC 的检查"),Conversation->CanTalkTo(FarNpc));
     TestNull(TEXT("玩家能靠近交谈，但镜头被墙挡住时仍不选中"),AimAt(FarNpc));
