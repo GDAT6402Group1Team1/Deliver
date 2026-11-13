@@ -9,8 +9,27 @@
     "source": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/tree/85e237c12c027371202489a0ec509ded67b5e4b5",
     "speaker_descriptions": "https://github.com/QwenLM/Qwen3-TTS#custom-voice-generate",
     "male": {"speaker": "Uncle_Fu", "review": "保留用户认可的 B 音色与生成参数"},
-    "female": {"speaker": "Serena", "review": "自然女声候选，官方描述为温和的年轻女声，尚未验收为翠花正式声音"},
-    "limits": "本地 0.6B 不支持声音设计或情绪指令，不能靠提示词改成老人声音；不做变调或真人声音复刻；与短反应录音分别配置"
+    "female": {
+      "speaker": "Xiaofang_B",
+      "provider": "qwen_base",
+      "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+      "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+      "license": "Apache-2.0",
+      "source": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base/tree/5d83992436eae1d760afd27aff78a71d676296fc",
+      "reference": {
+        "audio": "Design/Art/NPC/Residents/Voice/Generated/Xiaofang_B_Reference.wav",
+        "metadata": "Design/Art/NPC/Residents/Voice/Generated/Xiaofang_B_Reference.json",
+        "sha256": "35d6e6f5fda0189495782df45c7d13c45edd835066e84456a25760b409d5ca65",
+        "text": "大军，你少在这儿瞎嚷嚷。",
+        "synthetic_reference": true,
+        "design_model": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+        "design_revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+        "design_license": "Apache-2.0"
+      },
+      "review": "用户已试听固定 B 的澄清台词，确认符合翠花并同意正式使用；使用原版 Base 生成，未采用女声 PredictorGraph。参考文本保留录音原话，游戏内声音与多人效果尚待试玩",
+      "accepted_sample": "Saved/AIResearch/FemaleVoiceIntegration/20261113T151516/runtime-trial-after-lf/xiaofang_clarification.wav"
+    },
+    "limits": "男声保留已认可的 CustomVoice B，女声由 Base 复用项目合成参考，不复刻真人。当前未用情绪参数控制语调；完整台词与短反应录音分别配置"
   },
   "voices": [
     {

@@ -2,6 +2,9 @@
 # Binary assets should not be stored as plain Git blobs.
 # See: https://dev.epicgames.com/documentation/en-us/unreal-engine/using-git-source-control-in-unreal-engine
 
+# 固定版本的语音加速源码按原始字节校验，Windows 检出时保持 LF
+Tools/DeliveryAI/vendor/faster_qwen_v032/** text eol=lf
+
 # Unreal assets / maps
 *.uasset filter=lfs diff=lfs merge=lfs -text
 *.umap filter=lfs diff=lfs merge=lfs -text

@@ -10,8 +10,15 @@
       "speaker": "Uncle_Fu"
     },
     "female": {
-      "provider": "qwen",
-      "speaker": "Serena"
+      "provider": "qwen_base",
+      "speaker": "Xiaofang_B",
+      "model_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model",
+      "model_revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+      "model_manifest_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model-downloads.json",
+      "model_manifest_sha256": "004284ecfa9008b58a7d6332e3d91583f608b74b9f5a947921f2d7be8850868d",
+      "reference_path": "Design/Art/NPC/Residents/Voice/Generated/Xiaofang_B_Reference.wav",
+      "reference_sha256": "35d6e6f5fda0189495782df45c7d13c45edd835066e84456a25760b409d5ca65",
+      "reference_text": "大军，你少在这儿瞎嚷嚷。"
     }
   },
   "packages": {
