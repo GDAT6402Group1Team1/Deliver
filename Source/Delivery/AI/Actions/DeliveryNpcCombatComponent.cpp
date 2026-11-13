@@ -197,6 +197,8 @@ void UDeliveryNpcCombatComponent::ReceiveFightHit(AActor* Source,FGuid PunchId)
     Npc->GetCharacterMovement()->StopMovementImmediately();
     HitReactionStartedAt=Now;
     Npc->ForceNetUpdate();
+    // 使用这次命中的编号播放人物短呼声，声音直接来自游戏资源
+    Npc->Presentation->PlayReaction(EDeliveryNpcVoiceReaction::Hit,PunchId);
     Npc->ObserveFact(TEXT("LightMeleeHit"),Source,TEXT("这个人打了我一拳，我后仰了一下，仍然站着"),EDeliveryNpcEvidenceSource::Seen);
 }
 bool UDeliveryNpcCombatComponent::SetDeliberateProne(bool bProne)

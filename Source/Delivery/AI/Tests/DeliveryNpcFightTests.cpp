@@ -8,6 +8,8 @@
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
 #include "AI/Network/DeliveryAiSettings.h"
 #include "AI/Presentation/DeliveryNpcBodyAnimInstance.h"
+#include "AI/Presentation/DeliveryNpcPresentationComponent.h"
+#include "Components/AudioComponent.h"
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "Components/BoxComponent.h"
@@ -149,6 +151,10 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
     TestEqual(TEXT("第一拳已实际命中"),Main.Attacker->Combat->GetFightHitCount(),1);
     TestFalse(TEXT("轻拳不会立即击倒居民"),Main.Target->IsKnockedDown());
     TestTrue(TEXT("目标进入短暂后仰"),Main.Target->Combat->IsReactingToHit());
+    auto* HitPresentation=Main.Target->Presentation.Get();
+    TestTrue(TEXT("轻拳播放受击者自己的短音"),HitPresentation->ReactionAudio &&
+        HitPresentation->ReactionAudio->Sound==HitPresentation->VoiceSet->Hit &&
+        HitPresentation->ReactionEventId==Main.Attacker->Combat->GetCurrentPunchId());
     TestFalse(TEXT("第一次轻拳会取消此前的闲聊请求"),Main.Target->Agent->IsDecisionPending());
     FDeliveryNpcDecisionRequest Retaliation;
     TestTrue(TEXT("被打后可以结合现场生成新请求"),Main.Target->Agent->BuildDecisionRequest(FGuid::NewGuid(),Retaliation));

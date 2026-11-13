@@ -74,6 +74,21 @@ bool FDeliveryNpcProfileTest::RunTest(const FString&)
     TestTrue(TEXT("倾听使用配置的短音"),P->ReactionAudio->Sound==Heard);
     TestFalse(TEXT("相同事件不重复播放"),P->PlayReaction(EDeliveryNpcVoiceReaction::HeardPlayer,HeardEvent));
     TestFalse(TEXT("未配置的反应类别保持安静"),P->PlayReaction(EDeliveryNpcVoiceReaction::Laugh,FGuid::NewGuid()));
+    auto* ReactionAttenuation=NewObject<USoundAttenuation>();
+    ReactionAttenuation->Attenuation.bAttenuate=true;
+    ReactionAttenuation->Attenuation.bSpatialize=true;
+    ReactionAttenuation->Attenuation.DistanceAlgorithm=EAttenuationDistanceModel::Linear;
+    ReactionAttenuation->Attenuation.AttenuationShapeExtents=FVector(600,0,0);
+    ReactionAttenuation->Attenuation.FalloffDistance=1200;
+    VoiceSet->ReactionAttenuation=ReactionAttenuation;
+    TestTrue(TEXT("人物配置可以更新下一声短音的范围"),P->PlayReaction(EDeliveryNpcVoiceReaction::HeardPlayer,FGuid::NewGuid()));
+    TestTrue(TEXT("短音使用人物指定的衰减资产"),P->ReactionAudio->AttenuationSettings==ReactionAttenuation && !P->ReactionAudio->bOverrideAttenuation);
+    TestTrue(TEXT("交谈边缘加第三人称镜头仍能听见短音"),P->ReactionAudio->GetAttenuationSettingsToApply()->Evaluate(FTransform::Identity,FVector(1000,0,0))>.6f);
+    TestNull(TEXT("短音配置不改变完整台词的衰减"),VoiceSet->DialogueAttenuation.Get());
+    VoiceSet->ReactionAttenuation=nullptr;
+    P->PlayReaction(EDeliveryNpcVoiceReaction::HeardPlayer,FGuid::NewGuid());
+    TestTrue(TEXT("清空配置后恢复原短音范围"),P->ReactionAudio->bOverrideAttenuation &&
+        P->ReactionAudio->AttenuationSettings==nullptr && P->ReactionAudio->AttenuationOverrides.AttenuationShapeExtents.X==150);
     P->CancelSpeech();
     P->MulticastPlayReaction_Implementation(EDeliveryNpcVoiceReaction::HeardPlayer,HeardEvent,P->ServerTime());
     TestFalse(TEXT("取消后的迟到播放通知不会恢复声音"),P->ReactionEventId.IsValid());
@@ -175,6 +190,9 @@ bool FDeliveryNpcDialogueVoiceAssetsTest::RunTest(const FString&)
         const auto* Profile=Table->FindRow<FDeliveryNpcProfileRow>(RowName,TEXT("DialogueVoiceAssets"),false);
         if (!TestNotNull(TEXT("人物行存在"),Profile) || !TestNotNull(TEXT("人物行仍引用声音资产"),Profile->VoiceSet.Get())) return false;
         TestTrue(TEXT("人物声音资产引用正式台词衰减"),Profile->VoiceSet->DialogueAttenuation==Attenuation);
+        TestTrue(TEXT("正式短音同样覆盖第三人称交谈距离"),Profile->VoiceSet->ReactionAttenuation==Attenuation);
+        TestNotNull(TEXT("正式人物配置了听见玩家的短音"),Profile->VoiceSet->HeardPlayer.Get());
+        TestNotNull(TEXT("正式人物配置了受击短音"),Profile->VoiceSet->Hit.Get());
         TestTrue(TEXT("正式台词音量有效"),FMath::IsFinite(Profile->VoiceSet->DialogueVolume) &&
             Profile->VoiceSet->DialogueVolume>=0.f && Profile->VoiceSet->DialogueVolume<=2.f);
     }

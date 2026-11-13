@@ -268,17 +268,20 @@ FDeliveryNpcSpeechState UDeliveryNpcPresentationComponent::GetDisplayedSpeech() 
 
 bool UDeliveryNpcPresentationComponent::IsWaitingForSpeechPlayback() const
 {
-    if (LocalVoices.IsEmpty() || DisplayedSpeech.bActive) return false;
+    if (DisplayedSpeech.bActive) return false;
     const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
     if (!Npc || !Npc->Agent) return false;
     const auto State=Npc->Agent->GetPublicState();
-    const auto& Local=LocalVoices[0];
     const bool bCurrentReply=State.Status==EDeliveryNpcActionStatus::Accepted ||
         State.Status==EDeliveryNpcActionStatus::Running || State.Status==EDeliveryNpcActionStatus::Succeeded;
+    if (!bCurrentReply || !State.ActionId.IsValid() || CancelledVoiceActions.Contains(State.ActionId)) return false;
+    // 后台结束时声音可能还在编码或传输，服务器会在播放结束或取消时清除本轮编号
+    if (LocalVoices.IsEmpty()) return ReplyAction==State.ActionId;
+    const auto& Local=LocalVoices[0];
     // 只查看客户端收到的当前回复，旧句子不能让新一轮交谈继续保持等待姿态
-    if (!bCurrentReply || !State.ActionId.IsValid() || Local.State.ActionId!=State.ActionId ||
+    if (Local.State.ActionId!=State.ActionId ||
         Local.State.ReplyToEventId!=State.ReplyToEventId || !Local.State.bActive ||
-        CancelledVoiceActions.Contains(State.ActionId) || FinishedVoiceTurns.Contains(Local.State.TurnId)) return false;
+        FinishedVoiceTurns.Contains(Local.State.TurnId)) return false;
     const double WaitingSince=Local.FrontSince>0?Local.FrontSince:Local.LastDataAt;
     // 与播放器使用相同的超时范围，音频中断后不继续保持注视
     return WaitingSince>0 && FPlatformTime::Seconds()-WaitingSince<=Local.State.Duration+5;

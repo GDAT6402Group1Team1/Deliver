@@ -210,7 +210,7 @@ FString UDeliveryNpcAnimationAssetTools::CreateConversationAnimation(bool bRepla
 
 FString UDeliveryNpcAnimationAssetTools::CreateBodyAnimation(bool bReplaceGraph)
 {
-    const FString Folder=TEXT("/Game/NPC/Residents/Animation");
+    const FString NpcAnimationFolder=TEXT("/Game/NPC/Residents/Animation");
     const FString Name=TEXT("ABP_NpcBody");
     const TCHAR* NpcPaths[]={TEXT("/Game/NPC/Residents/BP_ResidentLoud"),TEXT("/Game/NPC/Residents/BP_ResidentShrewd")};
     TArray<UBlueprint*> NpcBlueprints;
@@ -228,7 +228,7 @@ FString UDeliveryNpcAnimationAssetTools::CreateBodyAnimation(bool bReplaceGraph)
         Skeleton=Mesh->GetSkeleton();
         NpcBlueprints.Add(NpcBP);
     }
-    auto* Blueprint=LoadObject<UAnimBlueprint>(nullptr,*(Folder/Name+TEXT(".")+Name));
+    auto* Blueprint=LoadObject<UAnimBlueprint>(nullptr,*(NpcAnimationFolder/Name+TEXT(".")+Name));
     if (Blueprint && (Blueprint->ParentClass!=UDeliveryNpcBodyAnimInstance::StaticClass() || Blueprint->TargetSkeleton!=Skeleton))
         return TEXT("Existing body animation has another parent or skeleton; graph was not changed");
     if (!Blueprint)
@@ -238,7 +238,7 @@ FString UDeliveryNpcAnimationAssetTools::CreateBodyAnimation(bool bReplaceGraph)
         Factory->TargetSkeleton=Skeleton;
         Factory->PreviewSkeletalMesh=Preview;
         Blueprint=Cast<UAnimBlueprint>(FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().CreateAsset(
-            Name,Folder,UAnimBlueprint::StaticClass(),Factory));
+            Name,NpcAnimationFolder,UAnimBlueprint::StaticClass(),Factory));
         bReplaceGraph=true;
     }
     if (!Blueprint) return TEXT("Could not create NPC body animation blueprint");

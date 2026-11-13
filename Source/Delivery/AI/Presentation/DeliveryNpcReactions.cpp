@@ -2,6 +2,7 @@
 #include "Components/AudioComponent.h"
 #include "Engine/World.h"
 #include "Sound/SoundBase.h"
+#include "Sound/SoundAttenuation.h"
 
 namespace
 {
@@ -43,16 +44,29 @@ void UDeliveryNpcPresentationComponent::MulticastPlayReaction_Implementation(EDe
         ReactionAudio=NewObject<UAudioComponent>(GetOwner());
         ReactionAudio->bAutoActivate=false;
         ReactionAudio->SetupAttachment(GetOwner()->GetRootComponent());
-        ReactionAudio->bAllowSpatialization=true;ReactionAudio->bOverrideAttenuation=true;
+        ReactionAudio->RegisterComponent();
+    }
+    // 每次播放都读取人物配置，保证更换或清空声音配置后不会沿用旧范围
+    ReactionAudio->bAllowSpatialization=true;
+    ReactionAudio->AttenuationSettings=VoiceSet->ReactionAttenuation;
+    ReactionAudio->bOverrideAttenuation=ReactionAudio->AttenuationSettings==nullptr;
+    if (ReactionAudio->bOverrideAttenuation)
+    {
+        ReactionAudio->AttenuationOverrides=FSoundAttenuationSettings();
         ReactionAudio->AttenuationOverrides.bAttenuate=true;
+        ReactionAudio->AttenuationOverrides.bSpatialize=true;
         ReactionAudio->AttenuationOverrides.AttenuationShapeExtents=FVector(150,0,0);
         ReactionAudio->AttenuationOverrides.FalloffDistance=800;
-        ReactionAudio->RegisterComponent();
     }
     ReactionAudio->SetSound(Sound);
     ReactionAudio->SetVolumeMultiplier(FMath::Clamp(VoiceSet->Volume,0.f,2.f));
     ReactionAudio->SetPitchMultiplier(FMath::Clamp(VoiceSet->Pitch,.5f,1.5f));
-    if (GetWorld()->AllowAudioPlayback()) ReactionAudio->Play(float(Elapsed));
+    if (GetWorld()->AllowAudioPlayback())
+    {
+        ReactionAudio->Play(float(Elapsed));
+        UE_LOG(LogTemp,Log,TEXT("NpcLatency reaction=%s stage=reaction_play_requested kind=%d role=%d late_ms=%d"),
+            *EventId.ToString(),int32(Reaction),int32(GetOwner()->GetLocalRole()),int32(Elapsed*1000));
+    }
 }
 
 void UDeliveryNpcPresentationComponent::StopReaction()

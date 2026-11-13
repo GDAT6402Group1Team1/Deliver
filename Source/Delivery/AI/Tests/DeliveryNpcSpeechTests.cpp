@@ -91,7 +91,7 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     ViewNpc->Agent->PublicState.Emotion=TEXT("Angry");
     ViewPresentation->ReplyAction=ViewNpc->Agent->PublicState.ActionId;
     TestTrue(TEXT("合成首句期间本机声音队列仍为空"),ViewPresentation->LocalVoices.IsEmpty());
-    TestFalse(TEXT("合成首句期间没有本机待播声音"),ViewPresentation->IsWaitingForSpeechPlayback());
+    TestTrue(TEXT("声音尚未到达本机时仍等待本轮播放"),ViewPresentation->IsWaitingForSpeechPlayback());
     ConversationPose->NativeUpdateAnimation(1.f);
     ViewPresentation->TickExpression(1.f);
     TestTrue(TEXT("动作结束后仍按同轮编号保留生气表情"),ViewNpc->GetMesh()->GetMorphTarget(TEXT("EyesAngry"))>.9f);
@@ -109,6 +109,30 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     }
     ViewNpc->Agent->PublicState=BeforeVoiceState;
     ViewPresentation->ReplyAction.Invalidate();
+
+    // 后台先发来完成通知，首句编码还未返回；客户端此时只有本轮编号和收话人
+    ViewNpc->Agent->bDecisionPending=false;
+    ViewNpc->Agent->PublicState.Status=EDeliveryNpcActionStatus::Succeeded;
+    ViewPresentation->ReplyAction=ViewNpc->Agent->PublicState.ActionId;
+    TestTrue(TEXT("后台完成到声音入队之间仍有等待表现"),ViewPresentation->LocalVoices.IsEmpty() &&
+        !ViewNpc->Agent->IsDecisionPending() && ViewPresentation->IsWaitingForSpeechPlayback());
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestTrue(TEXT("首句尚未入队时继续看向收话人"),ConversationPose->LookWeight>.9f);
+    TestFalse(TEXT("首句尚未入队时保持思考歪头"),ConversationPose->HeadRotation.IsNearlyZero());
+    TestTrue(TEXT("首句尚未入队时保持思考眼神"),ViewNpc->GetMesh()->GetMorphTarget(TEXT("FaceThinking"))>.9f);
+    ViewPresentation->ReplyAction=FGuid::NewGuid();
+    TestFalse(TEXT("其他轮次的编号不能延长本轮等待"),ViewPresentation->IsWaitingForSpeechPlayback());
+    ViewPresentation->ReplyAction=ViewNpc->Agent->PublicState.ActionId;
+    ViewPresentation->CancelledVoiceActions.Add(ViewPresentation->ReplyAction);
+    TestFalse(TEXT("声音入队前收到取消也立即结束等待"),ViewPresentation->IsWaitingForSpeechPlayback());
+    ViewPresentation->CancelledVoiceActions.Reset();
+    ViewPresentation->ReplyAction.Invalidate();
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestTrue(TEXT("本轮编号清除后解除注视与思考表情"),!ViewPresentation->IsWaitingForSpeechPlayback() &&
+        FMath::IsNearlyZero(ConversationPose->LookWeight) &&
+        FMath::IsNearlyZero(ViewNpc->GetMesh()->GetMorphTarget(TEXT("FaceThinking"))));
 
     // 后台已完成，客户端收到台词但声音还未缓冲到可播放的长度
     ViewNpc->Agent->bDecisionPending=false;

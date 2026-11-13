@@ -30,6 +30,7 @@ public:
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="短反应音",meta=(DisplayName="笑")) TObjectPtr<USoundBase> Laugh;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="短反应音",meta=(DisplayName="惊讶")) TObjectPtr<USoundBase> Surprised;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="短反应音",meta=(DisplayName="受击")) TObjectPtr<USoundBase> Hit;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="短反应音",meta=(DisplayName="短音距离衰减",ToolTip="控制听见玩家、受击等短音的空间范围，留空时沿用原来的 150 厘米内原音量、再用 800 厘米衰减")) TObjectPtr<USoundAttenuation> ReactionAttenuation;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="播放",meta=(ClampMin="0",ClampMax="2")) float Volume=0.8f;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="播放",meta=(ClampMin="0.5",ClampMax="1.5")) float Pitch=1.f;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="播放",meta=(ClampMin="0.1",ClampMax="3",Units="s")) float MaxDuration=1.2f;

@@ -73,6 +73,7 @@ class DELIVERY_API UDeliveryNpcPresentationComponent : public UActorComponent
     friend class FDeliveryNpcCompleteSpeechTest;
     friend class UDeliveryConversationComponent;
     friend class FDeliveryNpcProfileTest;
+    friend class FDeliveryNpcFightTest;
 public:
     UDeliveryNpcPresentationComponent();
     // 服务器设置台词并通知客户端播放，返回 true 表示已安排播放

@@ -8,7 +8,10 @@
     "license": "Apache-2.0",
     "source": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice/tree/85e237c12c027371202489a0ec509ded67b5e4b5",
     "speaker_descriptions": "https://github.com/QwenLM/Qwen3-TTS#custom-voice-generate",
-    "male": {"speaker": "Uncle_Fu", "review": "保留用户认可的 B 音色与生成参数"},
+    "male": {
+      "speaker": "Uncle_Fu",
+      "review": "保留用户认可的 B 音色与生成参数"
+    },
     "female": {
       "speaker": "Xiaofang_B",
       "provider": "qwen_base",
@@ -38,16 +41,28 @@
       "max_duration": 3.0,
       "sounds": {
         "displeased": "/Game/NPC/Residents/Audio/Voices/OldMan/SW_NpcOldMan_Belizarius_Displeased_01",
-        "laugh": "/Game/NPC/Residents/Audio/Voices/OldMan/SW_NpcOldMan_Elenalostale_Laugh_01"
-      }
+        "laugh": "/Game/NPC/Residents/Audio/Voices/OldMan/SW_NpcOldMan_Elenalostale_Laugh_01",
+        "heard_player": "/Game/NPC/Residents/Audio/Voices/ShortReactions/SW_NpcMale_B_HeardPlayer",
+        "hit": "/Game/NPC/Residents/Audio/Voices/ShortReactions/SW_NpcMale_B_Hit"
+      },
+      "reaction_attenuation": "/Game/NPC/Residents/Audio/SA_NpcDialogue"
     },
     {
       "asset": "/Game/NPC/Residents/Audio/DA_Voice_OldWoman",
       "volume": 0.6,
       "max_duration": 2.0,
       "sounds": {
-        "laugh": "/Game/NPC/Residents/Audio/Voices/OldWoman/SW_NpcOldWoman_ivanmilic_Laugh_01"
-      }
+        "laugh": "/Game/NPC/Residents/Audio/Voices/OldWoman/SW_NpcOldWoman_ivanmilic_Laugh_01",
+        "heard_player": "/Game/NPC/Residents/Audio/Voices/ShortReactions/SW_NpcFemale_B_HeardPlayer",
+        "hit": "/Game/NPC/Residents/Audio/Voices/ShortReactions/SW_NpcFemale_B_Hit"
+      },
+      "reaction_attenuation": "/Game/NPC/Residents/Audio/SA_NpcDialogue"
     }
-  ]
+  ],
+  "short_reactions": {
+    "manifest": "Design/Art/NPC/Residents/Voice/Generated/ShortReactions_B/Manifest.json",
+    "rebuild_script": "Content/Python/import_npc_voice_sets.py",
+    "source": "使用完整对白已认可的两种 B 音色生成；保留原始 WAV，导入版仅调整振幅和缩短确定的开头静音，处理参数见清单",
+    "review": "短音听感和多人游戏效果待玩家试玩"
+  }
 }
