@@ -1,6 +1,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
+#include "AI/Characters/DeliveryNpcAIController.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Network/DeliveryAiSettings.h"
@@ -12,6 +13,9 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/WorldSettings.h"
+#include "Perception/AISense_Hearing.h"
+#include "Perception/AISense_Sight.h"
+#include "Perception/AISense_Touch.h"
 #include "Serialization/JsonSerializer.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcConversationContextTest, "Delivery.AI.ConversationContext",
@@ -319,6 +323,87 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
     TestEqual(TEXT("满额请求期间仍保持三十二条上限"),Memory->Evidence.Num(),32);
     TestTrue(TEXT("全部旧记录都被引用时也不会立即删掉玩家的新话"),Memory->Evidence.ContainsByPredicate(
         [&](const auto& Item) { return Item.EventId==FullWindow.EventId; }));
+
+    // 通过正式感知回调检查声音到期，防止它把仍在附近的人记成已经离开
+    auto* Observer=World->SpawnActor<ADeliveryNpcCharacter>(FVector(0,-2000,90),FRotator::ZeroRotator,Spawn);
+    auto* NpcController=Cast<ADeliveryNpcAIController>(Observer->GetController());
+    if (!TestNotNull(TEXT("测试 NPC 使用正式感知控制器"),NpcController)) return false;
+    UFunction* PerceptionCallback=NpcController->FindFunction(TEXT("OnTargetSeenOrHeard"));
+    if (!TestNotNull(TEXT("正式感知回调可通过反射调用"),PerceptionCallback)) return false;
+    auto NotifyPerception=[&](const FAIStimulus& Stimulus)
+    {
+        struct FCallbackParameters
+        {
+            AActor* Target;
+            FAIStimulus Stimulus;
+        } Parameters{Neighbor,Stimulus};
+        NpcController->ProcessEvent(PerceptionCallback,&Parameters);
+    };
+    auto* ObservationMemory=Observer->Agent.Get();
+    ObservationMemory->Evidence.Reset();
+    Observer->bDecisionNeeded=false;
+    const FVector SeenLocation(120,-2000,90);
+    const FVector HeardLocation(180,-2000,90);
+    const FAIStimulus Seen(*GetDefault<UAISense_Sight>(),1.f,SeenLocation,Observer->GetActorLocation());
+    const FAIStimulus Heard(*GetDefault<UAISense_Hearing>(),1.f,HeardLocation,Observer->GetActorLocation());
+    NotifyPerception(Seen);
+    if (!TestEqual(TEXT("看见对象后保存一次观察"),ObservationMemory->Evidence.Num(),1)) return false;
+    TestEqual(TEXT("视觉观察标为看见"),ObservationMemory->Evidence.Last().Source,EDeliveryNpcEvidenceSource::Seen);
+    TestEqual(TEXT("观察保存感知时的位置"),ObservationMemory->Evidence.Last().ObservedLocation,SeenLocation);
+    TestTrue(TEXT("距离使用感知位置，没有偷读目标当前坐标"),ObservationMemory->Evidence.Last().Description.Contains(TEXT("120 厘米")));
+    TestTrue(TEXT("成功看见对象仍会安排一次决策"),Observer->bDecisionNeeded);
+    Observer->bDecisionNeeded=false;
+    NotifyPerception(Heard);
+    if (!TestEqual(TEXT("听见声音后保留视觉和听觉两条记录"),ObservationMemory->Evidence.Num(),2)) return false;
+    TestEqual(TEXT("听觉观察标为听见"),ObservationMemory->Evidence.Last().Source,EDeliveryNpcEvidenceSource::Heard);
+    TestEqual(TEXT("声音保留实际听到的位置"),ObservationMemory->Evidence.Last().ObservedLocation,HeardLocation);
+    TestTrue(TEXT("成功听见声音仍会安排一次决策"),Observer->bDecisionNeeded);
+
+    Observer->bDecisionNeeded=false;
+    Observer->NextDecision=World->GetTimeSeconds()+100;
+    const double PreviousDecisionTime=Observer->NextDecision;
+    const auto RevisionBeforeExpiry=ObservationMemory->ContextRevision;
+    FAIStimulus ExpiredHearing=Heard;
+    ExpiredHearing.MarkExpired();
+    NotifyPerception(ExpiredHearing);
+    TestEqual(TEXT("声音到期没有添加或删除观察"),ObservationMemory->Evidence.Num(),2);
+    TestEqual(TEXT("声音到期没有改变模型上下文版本"),ObservationMemory->ContextRevision,RevisionBeforeExpiry);
+    TestFalse(TEXT("声音到期不会生成 LostSight"),ObservationMemory->Evidence.ContainsByPredicate(
+        [](const auto& Item){ return Item.Kind==TEXT("LostSight"); }));
+    TestFalse(TEXT("声音到期不会安排下一轮模型请求"),Observer->bDecisionNeeded);
+    TestFalse(TEXT("声音到期不会合并出下一轮请求"),ObservationMemory->bDecisionQueued);
+    TestEqual(TEXT("声音到期不改变下一次决策时间"),Observer->NextDecision,PreviousDecisionTime);
+
+    // 未接入的感知类型也不能默认当成视觉
+    auto* TouchSense=GetMutableDefault<UAISense_Touch>();
+    TouchSense->UpdateSenseID();
+    FAIStimulus OtherSense(*TouchSense,1.f,SeenLocation,Observer->GetActorLocation());
+    NotifyPerception(OtherSense);
+    OtherSense.MarkNoLongerSensed();
+    NotifyPerception(OtherSense);
+    NotifyPerception(FAIStimulus());
+    TestEqual(TEXT("其它感知与无效感知不会添加记录"),ObservationMemory->Evidence.Num(),2);
+    TestFalse(TEXT("其它感知与无效感知不会安排下一轮请求"),Observer->bDecisionNeeded);
+
+    FAIStimulus LostSight=Seen;
+    LostSight.MarkNoLongerSensed();
+    NotifyPerception(LostSight);
+    const auto* LastSight=ObservationMemory->Evidence.FindByPredicate(
+        [](const auto& Item){ return Item.Kind==TEXT("LostSight"); });
+    if (!TestNotNull(TEXT("视觉失效仍记录暂时看不见"),LastSight)) return false;
+    TestEqual(TEXT("视觉失效仍属于视觉观察"),LastSight->Source,EDeliveryNpcEvidenceSource::Seen);
+    TestTrue(TEXT("视觉失效保留最后一次有效观察位置"),LastSight->bHasObservedLocation);
+    TestEqual(TEXT("视觉失效不会改用目标当前坐标"),LastSight->ObservedLocation,SeenLocation);
+    TestTrue(TEXT("暂时看不见不声称对象已经走远"),LastSight->Description.Contains(TEXT("不能据此判断对方已经走远")));
+    TestTrue(TEXT("真实视觉变化仍安排决策"),Observer->bDecisionNeeded);
+
+    LostSight.StimulusLocation=FAISystem::InvalidLocation;
+    NotifyPerception(LostSight);
+    TestFalse(TEXT("无效视觉位置不会被当作有效观察"),ObservationMemory->Evidence.Last().bHasObservedLocation);
+    NotifyPerception(Seen);
+    TestEqual(TEXT("再次看见对象恢复正常视觉观察"),ObservationMemory->Evidence.Last().Kind,FName(TEXT("Perceived")));
+    TestFalse(TEXT("再次看见对象后替换旧的失去视线记录"),ObservationMemory->Evidence.ContainsByPredicate(
+        [](const auto& Item){ return Item.Kind==TEXT("LostSight"); }));
     return true;
 }
 #endif

@@ -40,14 +40,34 @@ void ADeliveryNpcAIController::OnUnPossess()
 void ADeliveryNpcAIController::OnTargetSeenOrHeard(AActor* Target,FAIStimulus Stimulus)
 {
     auto* Resident=Cast<ADeliveryNpcCharacter>(GetPawn());
-    if (!Resident || !HasAuthority() || !Target || Target==Resident) return;
+    if (!Resident || !HasAuthority() || !IsValid(Target) || Target==Resident || !Stimulus.Type.IsValid()) return;
+    const bool bSight=Stimulus.Type==Sight->GetSenseID();
+    const bool bHearing=Stimulus.Type==Hearing->GetSenseID();
+    const bool bSensed=Stimulus.WasSuccessfullySensed();
+    // 听觉记录到期不能说明说话的人离开了视线
+    if ((!bSight && !bHearing) || (bHearing && !bSensed)) return;
+
     FDeliveryNpcObservation Event;
-    Event.Kind=Stimulus.WasSuccessfullySensed()?TEXT("Perceived"):TEXT("LostSight");
-    Event.Subject=Target; Event.Source=Stimulus.Type==Hearing->GetSenseID()?EDeliveryNpcEvidenceSource::Heard:EDeliveryNpcEvidenceSource::Seen;
+    Event.Kind=bSensed?TEXT("Perceived"):TEXT("LostSight");
+    Event.Subject=Target;
+    Event.Source=bHearing?EDeliveryNpcEvidenceSource::Heard:EDeliveryNpcEvidenceSource::Seen;
+    // 视觉失效回调保留 UE 上次看见的位置，不读取对象当前的坐标
+    Event.bHasObservedLocation=FAISystem::IsValidLocation(Stimulus.StimulusLocation);
+    if (Event.bHasObservedLocation) Event.ObservedLocation=Stimulus.StimulusLocation;
+    Event.Lifetime=45;
     const auto* OtherResident=Cast<ADeliveryNpcCharacter>(Target);
     const FString Subject=OtherResident?OtherResident->DisplayName.ToString():Target->IsA<ADeliveryMotorbike>()?TEXT("电瓶车"):Target->IsA<ADeliveryCharacter>()?TEXT("快递员"):TEXT("行人");
-    Event.Description=Stimulus.WasSuccessfullySensed()?FString::Printf(TEXT("感知到附近的%s，距离约 %.0f 厘米"),*Subject,FVector::Dist(Target->GetActorLocation(),Resident->GetActorLocation())):TEXT("对象已经离开视线，不能断言其当前行为");
-    Event.bHasObservedLocation=true; Event.ObservedLocation=Stimulus.StimulusLocation; Event.Lifetime=45;
+    if (bSensed)
+    {
+        Event.Description=bSight?FString::Printf(TEXT("看见附近的%s"),*Subject):FString::Printf(TEXT("听见附近的%s发出声音"),*Subject);
+        if (Event.bHasObservedLocation && FAISystem::IsValidLocation(Stimulus.ReceiverLocation))
+            Event.Description+=FString::Printf(TEXT("，当时距离约 %.0f 厘米"),FVector::Dist(Stimulus.StimulusLocation,Stimulus.ReceiverLocation));
+    }
+    else
+    {
+        Event.Description=FString::Printf(TEXT("暂时看不见%s，可能只是转头或被遮挡，不能据此判断对方已经走远"),*Subject);
+        if (Event.bHasObservedLocation) Event.Description+=TEXT("；记录的位置是最后一次看见的位置");
+    }
     if (Resident->Agent->ObserveEvent(Event)) Resident->WakeDecision();
 }
 void ADeliveryNpcAIController::RefreshBlackboard()

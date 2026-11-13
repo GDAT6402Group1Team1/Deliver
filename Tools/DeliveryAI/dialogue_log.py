@@ -2,6 +2,8 @@
 
 只在启动后端时设置 DELIVERY_AI_DIALOGUE_LOG 才写入；内容包含 NPC 台词和玩家原话，只保存在本机 Saved/Logs
 """
+import copy
+import hashlib
 import json
 import os
 import threading
@@ -16,7 +18,7 @@ def enabled():
     return bool(os.environ.get('DELIVERY_AI_DIALOGUE_LOG'))
 
 
-def record(request_id, source, model, original, context, proposal, sentences, error=None):
+def record(request_id, source, model, original, context, proposal, sentences, error=None, instructions=None):
     """模型调用结束后写一行
 
     original 是游戏发来的请求，context 是发给模型的短编号版本；两者候选顺序相同，
@@ -37,6 +39,10 @@ def record(request_id, source, model, original, context, proposal, sentences, er
         'source': source,
         'model': model,
         'persona': (context.get('persona') or '')[:12],
+        'profile_id': original.get('profile_id', ''),
+        'full_persona': context.get('persona') or '',
+        # 保存模型实际看到的人物、背景和对话，避免复查时拿新配置代替当时的内容
+        'model_context': copy.deepcopy(context),
         'pending_player_message': (context.get('pending_player_message') or {}).get('description'),
         'new_event_ids': context.get('new_event_ids', []),
         'evidence': [{'id': e.get('event_id'), 'who': e.get('subject_id'), 'kind': e.get('kind'),
@@ -47,6 +53,8 @@ def record(request_id, source, model, original, context, proposal, sentences, er
         'speech': sentences,
         'error': error,
     }
+    if instructions is not None:
+        row['instructions_sha256'] = hashlib.sha256(instructions.encode('utf-8')).hexdigest()
     line = json.dumps(row, ensure_ascii=False)
     with _lock:
         _path.parent.mkdir(parents=True, exist_ok=True)

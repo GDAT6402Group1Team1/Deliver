@@ -57,6 +57,30 @@ class ConversationScene:
             ]
             for item in self.fixture:
                 self.npc_says(item['speaker'], self.ids[item['target']], item['text'])
+        if scenario in ('latest', 'recent_refusal'):
+            self.fixture = [
+                {'speaker': 'chunlai', 'target': 'xiumei', 'text': '翠花，今天又出来逛啦？',
+                 'source': 'NpcDialogue.ndjson 2026-11-14 03:26:13'},
+            ]
+            self.npc_says('chunlai', self.ids['xiumei'], self.fixture[0]['text'])
+        if scenario == 'recent_refusal':
+            # 保留这次实机已经形成的互相否认，再看后续发言能否让人物改变主意
+            first_message = '翠花，大壮就在旁边。你俩到底谁厉害？敢不敢比划两下，输的当面认怂？'
+            player_event = self.player_says(first_message)
+            replies = [
+                {'speaker': 'xiumei', 'target': 'player', 'text': '你少起哄，我逛个街还得比个输赢？',
+                 'source': 'NpcDialogue.ndjson 2026-11-14 03:26:31'},
+                {'speaker': 'chunlai', 'target': 'xiumei', 'text': '逛你的，我也没说要比。',
+                 'source': 'NpcDialogue.ndjson 2026-11-14 03:26:39'},
+            ]
+            self.fixture.append({'speaker': 'player', 'target': 'xiumei', 'text': first_message,
+                                 'source': 'NpcDialogue.ndjson 2026-11-14 03:26:31'})
+            for item in replies:
+                self.npc_says(item['speaker'], self.ids[item['target']], item['text'],
+                              player_event if item['speaker'] == 'xiumei' else '')
+                self.fixture.append(item)
+            for key in self.profiles:
+                self.seen[key] = [item['event_id'] for item in self.history[key]]
         if scenario == 'apology':
             # 这个对照从双方已经把话说开的状态开始，预置内容单独标明来源
             apology = '刚才是我瞎起哄，对不起，我不该挑你们打架。'
@@ -107,6 +131,15 @@ class ConversationScene:
                 f'{female}，{male}就在旁边。你俩到底谁厉害？敢不敢比划两下，输的当面认怂？',
                 '我没起哄，他就是想和你打架',
                 '他真的想和你打架',
+            ],
+            'latest': [
+                f'{female}，{male}就在旁边。你俩到底谁厉害？敢不敢比划两下，输的当面认怂？',
+                '我真没起哄，他就是这么说的',
+                '你俩到底谁厉害？敢不敢比划两下，输的当面认怂？',
+            ],
+            'recent_refusal': [
+                '我真没起哄，他就是这么说的',
+                '你俩到底谁厉害？敢不敢比划两下，输的当面认怂？',
             ],
             'paraphrase': [
                 f'{female}，{male}说你就是嘴上厉害，真较量你不敢。',
@@ -232,7 +265,7 @@ def run(args):
         dialogue_background._read_profiles()
         scene = ConversationScene(profiles, args.scenario)
         report.update(player_lines=scene.player_lines(), initial_dialogue=scene.fixture,
-                      initial_dialogue_note='actual 使用同一段实机开场；apology 预置已接受道歉的对照；其余场景没有预置对话')
+                      initial_dialogue_note='actual 使用 03:00 的三句实机开场；latest 使用 03:26 的开场和玩家原话；recent_refusal 还保留首轮双方拒绝，报告的第一轮对应实机第二次玩家发言。这些场景仍假设双方始终在附近可见，不重放视野变化；apology 预置已接受道歉的对照；其余场景没有预置对话')
         save()
         for player_round, text in enumerate(scene.player_lines(), 1):
             scene.player_says(text)
@@ -289,7 +322,7 @@ def main():
     parser.add_argument('--instructions')
     parser.add_argument('--output', required=True)
     parser.add_argument('--variant', required=True)
-    parser.add_argument('--scenario', choices=('actual', 'paraphrase', 'colloquial', 'greeting', 'apology'), default='actual')
+    parser.add_argument('--scenario', choices=('actual', 'latest', 'recent_refusal', 'paraphrase', 'colloquial', 'greeting', 'apology'), default='actual')
     parser.add_argument('--model', default='gpt-6.1-sol')
     parser.add_argument('--max-calls', type=int, default=MAX_CALLS, choices=range(1, MAX_CALLS + 1))
     args = parser.parse_args()
