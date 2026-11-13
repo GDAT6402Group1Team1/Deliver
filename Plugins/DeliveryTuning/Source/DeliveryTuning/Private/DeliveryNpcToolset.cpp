@@ -5,6 +5,13 @@
 #include "NavigationSystem.h"
 #include "NavMesh/NavMeshBoundsVolume.h"
 #include "Builders/CubeBuilder.h"
+#include "ActorFactories/ActorFactory.h"
+#include "Components/BrushComponent.h"
+#include "Model.h"
+#include "Engine/Polys.h"
+#include "NavigationData.h"
+#include "AssetCompilingManager.h"
+#include "UObject/UObjectGlobals.h"
 #include "AssetToolsModule.h"
 #include "AssetImportTask.h"
 #include "Factories/FbxFactory.h"
@@ -351,18 +358,146 @@ FString UDeliveryNpcToolset::PlaceResidentPair(FVector Location)
         Actor->SetActorLocationAndRotation(Point,FRotator(0,Index==0?0:180,0));
         Actor->SetActorLabel(Label); Actor->MarkPackageDirty();
     }
-    // 仅给居民所在街区补导航，普通路人仍沿用现有 Boids 路线
+    // 新建体积交给统一检查补全，已有有效范围不会随人物位置被改写
     bool bHasBounds=false;
     for (TActorIterator<ANavMeshBoundsVolume> It(World);It;++It) if (It->GetActorLabel()==TEXT("Resident_Navigation")) bHasBounds=true;
     if (!bHasBounds)
     {
         auto* Volume=World->SpawnActor<ANavMeshBoundsVolume>(Location,FRotator::ZeroRotator);
-        auto* Builder=NewObject<UCubeBuilder>(); Builder->X=3200; Builder->Y=3200; Builder->Z=1200;
-        if (!Builder->Build(World,Volume)) return TEXT("Resident navigation bounds build failed");
-        Volume->SetActorLocation(Location); Volume->SetActorLabel(TEXT("Resident_Navigation")); Volume->MarkPackageDirty();
-        if (auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(World)) { Nav->OnNavigationBoundsUpdated(Volume); Nav->Build(); }
+        if (!Volume) return TEXT("Resident navigation volume spawn failed");
+        Volume->SetActorLabel(TEXT("Resident_Navigation"));
     }
-    return TEXT("Placed resident pair and navigation; save current level to keep placement");
+    return CheckNpcNavigation(true);
+}
+FString UDeliveryNpcToolset::CheckNpcNavigation(bool bRepairEmpty)
+{
+    auto Report=MakeShared<FJsonObject>();
+    const auto Finish=[&Report](const FString& Status)
+    {
+        Report->SetStringField(TEXT("status"),Status);
+        FString Json;
+        FJsonSerializer::Serialize(Report,TJsonWriterFactory<>::Create(&Json));
+        return Json;
+    };
+    UWorld* World=GEditor?GEditor->GetEditorWorldContext().World():nullptr;
+    if (!World || GEditor->PlayWorld) return Finish(TEXT("editor_world_required"));
+    Report->SetStringField(TEXT("world"),World->GetOutermost()->GetName());
+    TArray<ADeliveryNpcCharacter*> Npcs;
+    TArray<ANavMeshBoundsVolume*> Volumes;
+    for (TActorIterator<ADeliveryNpcCharacter> It(World);It;++It)
+        if (It->GetActorLabel()==TEXT("Resident_Loud") || It->GetActorLabel()==TEXT("Resident_Shrewd")) Npcs.Add(*It);
+    for (TActorIterator<ANavMeshBoundsVolume> It(World);It;++It)
+        if (It->GetActorLabel()==TEXT("Resident_Navigation")) Volumes.Add(*It);
+    Report->SetNumberField(TEXT("npc_count"),Npcs.Num());
+    Report->SetNumberField(TEXT("volume_count"),Volumes.Num());
+    if (Npcs.Num()!=2 || Volumes.Num()!=1 || Npcs[0]->GetActorLabel()==Npcs[1]->GetActorLabel())
+        return Finish(TEXT("unexpected_actors"));
+    auto* Volume=Volumes[0];
+    auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+    const auto HasBrush=[Volume]()
+    {
+        return Volume->Brush && Volume->Brush->Polys && Volume->Brush->Polys->Element.Num()>=4
+            && Volume->GetBrushComponent() && Volume->GetBrushComponent()->Bounds.BoxExtent.GetMin()>1.f;
+    };
+    const auto Describe=[&]()
+    {
+        auto State=MakeShared<FJsonObject>();
+        State->SetBoolField(TEXT("valid_brush"),HasBrush());
+        State->SetNumberField(TEXT("polygons"),Volume->Brush && Volume->Brush->Polys?Volume->Brush->Polys->Element.Num():0);
+        State->SetStringField(TEXT("volume_transform"),Volume->GetActorTransform().ToHumanReadableString());
+        const FBox Bounds=Volume->GetComponentsBoundingBox(true);
+        State->SetStringField(TEXT("bounds"),Bounds.ToString());
+        TArray<TSharedPtr<FJsonValue>> Actors;
+        for (auto* Npc:Npcs)
+        {
+            const FVector Feet=Npc->GetNavAgentLocation();
+            auto Actor=MakeShared<FJsonObject>();
+            Actor->SetStringField(TEXT("label"),Npc->GetActorLabel());
+            Actor->SetStringField(TEXT("feet"),Feet.ToString());
+            Actor->SetBoolField(TEXT("inside_bounds"),HasBrush() && Bounds.IsInsideOrOn(Feet));
+            const auto* Data=Nav?Nav->GetNavDataForProps(Npc->GetNavAgentPropertiesRef(),Feet):nullptr;
+            FNavLocation Projected;
+            const bool bProjected=Data && Nav->ProjectPointToNavigation(Feet,Projected,FVector(60,60,150),Data);
+            Actor->SetBoolField(TEXT("on_navigation"),bProjected);
+            Actor->SetStringField(TEXT("projected_feet"),bProjected?Projected.Location.ToString():TEXT(""));
+            bool bCompletePath=false;
+            if (Data)
+            {
+                auto* Other=Npcs[0]==Npc?Npcs[1]:Npcs[0];
+                FPathFindingQuery Query(Npc,*Data,Feet,Other->GetNavAgentLocation());
+                Query.SetAllowPartialPaths(false);
+                const FPathFindingResult Path=Nav->FindPathSync(Npc->GetNavAgentPropertiesRef(),Query);
+                bCompletePath=Path.IsSuccessful() && Path.Path.IsValid() && Path.Path->IsValid() && !Path.Path->IsPartial();
+            }
+            Actor->SetBoolField(TEXT("complete_path_to_other"),bCompletePath);
+            Actors.Add(MakeShared<FJsonValueObject>(Actor));
+        }
+        State->SetArrayField(TEXT("npcs"),Actors);
+        return State;
+    };
+    Report->SetObjectField(TEXT("before"),Describe());
+    if (!bRepairEmpty) return Finish(TEXT("inspected"));
+    if (!Nav) return Finish(TEXT("navigation_system_missing"));
+    const auto ReadBuildLocks=[Nav]()
+    {
+        uint8 Flags=0;
+        for (uint32 Bit=1;Bit<=128;Bit<<=1)
+            if (Nav->IsNavigationBuildingLocked(static_cast<uint8>(Bit))) Flags|=static_cast<uint8>(Bit);
+        return Flags;
+    };
+    Report->SetNumberField(TEXT("build_locks_before"),ReadBuildLocks());
+    Report->SetBoolField(TEXT("async_loading_before"),IsAsyncLoading());
+    Report->SetNumberField(TEXT("assets_compiling_before"),FAssetCompilingManager::Get().GetNumRemainingAssets());
+    bool bRemovedAsyncLoadLock=false;
+    if (IsRunningCommandlet())
+    {
+        // 命令行脚本没有编辑器的延后 Tick，先等模型加载与编译完成，再解除加载期间的导航锁
+        FlushAsyncLoading();
+        FAssetCompilingManager::Get().FinishAllCompilation();
+        if (!IsAsyncLoading() && FAssetCompilingManager::Get().GetNumRemainingAssets()==0
+            && Nav->IsNavigationBuildingLocked(ENavigationBuildLock::AsyncLoadLock))
+        {
+            Nav->RemoveNavigationBuildLock(ENavigationBuildLock::AsyncLoadLock,
+                UNavigationSystemV1::ELockRemovalRebuildAction::NoRebuild);
+            bRemovedAsyncLoadLock=true;
+        }
+    }
+    Report->SetBoolField(TEXT("async_loading_after"),IsAsyncLoading());
+    Report->SetNumberField(TEXT("assets_compiling_after"),FAssetCompilingManager::Get().GetNumRemainingAssets());
+    Report->SetBoolField(TEXT("removed_async_load_lock"),bRemovedAsyncLoadLock);
+    Report->SetNumberField(TEXT("build_locks_after"),ReadBuildLocks());
+    if (IsAsyncLoading() || FAssetCompilingManager::Get().GetNumRemainingAssets()!=0)
+        return Finish(TEXT("assets_not_ready"));
+    // 用户设置和其他系统留下的锁保持原样，显式 Build 沿用引擎对编辑器自动更新开关的处理
+    if (Nav->IsNavigationBuildingLocked(static_cast<uint8>(~ENavigationBuildLock::NoUpdateInEditor)))
+        return Finish(TEXT("navigation_build_locked"));
+    FString Status=TEXT("rebuilt_existing_bounds");
+    if (HasBrush())
+    {
+        // 有效范围可能是用户手工配置的，人物移到范围外时报告问题，不自动扩张
+        const FBox Bounds=Volume->GetComponentsBoundingBox(true);
+        for (auto* Npc:Npcs) if (!Bounds.IsInsideOrOn(Npc->GetNavAgentLocation())) return Finish(TEXT("existing_bounds_exclude_npc"));
+    }
+    else
+    {
+        const FVector A=Npcs[0]->GetNavAgentLocation(),B=Npcs[1]->GetNavAgentLocation();
+        Volume->Modify();
+        Volume->SetActorTransform(FTransform(FQuat::Identity,(A+B)*.5f,FVector::OneVector));
+        auto* Builder=NewObject<UCubeBuilder>();
+        Builder->X=FMath::Max(3200.f,float(FMath::Abs(A.X-B.X)+1200.f));
+        Builder->Y=FMath::Max(3200.f,float(FMath::Abs(A.Y-B.Y)+1200.f));
+        Builder->Z=FMath::Max(1200.f,float(FMath::Abs(A.Z-B.Z)+400.f));
+        // SpawnActor 的体积没有 UModel，直接调用 CubeBuilder 会返回成功却留下一只空盒
+        UActorFactory::CreateBrushForVolumeActor(Volume,Builder);
+        Volume->MarkPackageDirty();
+        if (!HasBrush()) return Finish(TEXT("brush_creation_failed"));
+        Status=TEXT("repaired_empty_bounds");
+    }
+    Nav->FlushPendingOperations();
+    Nav->OnNavigationBoundsUpdated(Volume);
+    Nav->Build();
+    Report->SetObjectField(TEXT("after"),Describe());
+    return Finish(Status);
 }
 FString UDeliveryNpcToolset::InspectResidentWorlds()
 {

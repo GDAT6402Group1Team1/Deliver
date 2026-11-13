@@ -13,6 +13,8 @@ public:
     // 只补充倾听分支，保留居民模型、关卡位置与已有配置
     UFUNCTION(meta=(AICallable)) static FString UpdateNpcConversationAssets();
     UFUNCTION(meta=(AICallable)) static FString PlaceResidentPair(FVector Location);
+    // 默认只检查导航；修复时只补全空体积，保留已有的有效范围
+    UFUNCTION(BlueprintCallable, Category="Delivery|NPC", meta=(AICallable)) static FString CheckNpcNavigation(bool bRepairEmpty = false);
     UFUNCTION(meta=(AICallable)) static FString InspectResidentWorlds();
     UFUNCTION(meta=(AICallable)) static bool ConfigureResidentPIE(int32 Players);
     // 联调入口只发布实际台词，不伪造模型建议或绕过执行校验

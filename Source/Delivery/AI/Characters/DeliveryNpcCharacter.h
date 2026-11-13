@@ -21,6 +21,7 @@ UCLASS()
 class DELIVERY_API ADeliveryNpcCharacter : public ACharacter, public IDeliveryImpactReceiver, public IDeliveryHornReceiver
 {
     GENERATED_BODY()
+    friend class FDeliveryNpcConversationContextTest;
 public:
     ADeliveryNpcCharacter();
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|居民") TObjectPtr<UCapsuleComponent> ImpactSensor;
@@ -39,6 +40,16 @@ public:
     static constexpr float MoveAcceptanceRadius=140.f;
     // 使用 UE 导航的到达判断，同时考虑双方碰撞体和高度
     bool HasReachedMoveTarget(AActor* Target) const;
+    // 只检查当前导航是否能完整走到目标，不启动移动或修改现有路径
+    bool CanReachTarget(AActor* Target) const;
+    // 找到附近可完整走到的落点，查询本身不移动 NPC
+    bool FindPaceDestination(FVector& OutLocation) const;
+    bool FindSideStepDestination(AActor* Target,FVector& OutLocation) const;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|步态",meta=(ClampMin="30",ClampMax="400",Units="cm/s")) float WalkSpeed=180;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|步态",meta=(ClampMin="30",ClampMax="180",Units="cm/s")) float PaceSpeed=80;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|步态",meta=(ClampMin="80",ClampMax="400",Units="cm/s")) float AngryApproachSpeed=240;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|步态",meta=(ClampMin="40",ClampMax="140",Units="cm")) float PaceDistance=100;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|步态",meta=(ClampMin="80",ClampMax="250",Units="cm")) float SideStepDistance=180;
     // 返回 true 表示动作已开始；攻击是否命中、移动是否到达要等待执行结果
     bool ExecuteAction(const FDeliveryNpcPublicState& State);
     // 停止指定编号的动作，较早任务的结束通知不会影响当前动作
@@ -52,7 +63,7 @@ public:
     virtual void ReceiveHornFrom(float Multiplier,AActor* Vehicle,AActor* Driver) override;
     // 接收玩家或其他 NPC 的发言，返回 true 表示已听见，还不表示已经回答
     // 玩家发言先经过交谈组件检查，再从服务器调用这里
-    bool HearSpeech(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth);
+    bool HearSpeech(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth,AActor* Addressee=nullptr,FGuid ReplyToEventId=FGuid());
     // 玩家开口从第 0 轮开始，NPC 接话时逐轮增加
     int32 GetConversationDepth() const { return ConversationDepth; }
     void WakeDecision();
@@ -62,6 +73,8 @@ protected:
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     virtual void Tick(float Dt) override;
 private:
+    bool FindNearbyWalkDestination(const FVector& Desired,float MaxTravel,FVector& OutLocation) const;
+    float PreviousActionWalkSpeed=-1;
     UFUNCTION() void OnDecisionFinished(FName Reason);
     int32 DecisionRetryCount=0;
     bool CanTalk(APawn* Interactor,bool bCheckAvailability);

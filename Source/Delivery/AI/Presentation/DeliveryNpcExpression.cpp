@@ -9,16 +9,33 @@
 #include "Curves/CurveFloat.h"
 #include "GameFramework/Pawn.h"
 
+FName UDeliveryNpcPresentationComponent::GetActionEmotion() const
+{
+    const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    if (!Npc || !Npc->Agent || Npc->IsKnockedDown()) return NAME_None;
+    const auto State=Npc->Agent->GetPublicState();
+    if (State.Status==EDeliveryNpcActionStatus::Accepted || State.Status==EDeliveryNpcActionStatus::Running) return State.Emotion;
+    if (State.Status!=EDeliveryNpcActionStatus::Succeeded || State.Emotion.IsNone() ||
+        State.Emotion==TEXT("Calm") || !IsValid(State.SpeechTarget)) return NAME_None;
+    // 后台合成期间还没有本机声音，使用服务器同步的本轮编号；旧编号和停止通知都不能恢复表情
+    const bool bThisReply=State.ActionId.IsValid() && ReplyAction==State.ActionId &&
+        !CancelledVoiceActions.Contains(State.ActionId);
+    return bThisReply || IsWaitingForSpeechPlayback()?State.Emotion:NAME_None;
+}
+
 void UDeliveryNpcPresentationComponent::TickExpression(float DeltaTime)
 {
     auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
     if (!Npc || !Expressions) return;
     const auto Display=GetDisplayedSpeech();
+    const FName ActionEmotion=GetActionEmotion();
     FName Pose=TEXT("Calm");
     if (Npc->IsKnockedDown()) Pose=TEXT("Down");
     else if (Display.bActive) Pose=Display.Emotion;
+    // 快步上前或踱步时也保留这次决定的表情，不能等声音开始才看出生气
+    else if (!ActionEmotion.IsNone()) Pose=ActionEmotion;
     else if (Npc->Agent->IsListening()) Pose=TEXT("Listening");
-    else if (Npc->Agent->IsDecisionPending()) Pose=TEXT("Thinking");
+    else if (Npc->Agent->IsDecisionPending() || IsWaitingForSpeechPlayback()) Pose=TEXT("Thinking");
     else if (Npc->Look && Npc->Look->IsAfterBrush()) Pose=TEXT("Angry");
     TMap<FName,float> Targets;
     if (const auto* Settings=Expressions->Poses.Find(Pose)) Targets=Settings->MorphWeights;

@@ -35,7 +35,7 @@ FString DeliveryNpc::ActionName(EDeliveryNpcAction Action)
 {
     if (Action == EDeliveryNpcAction::Wait) return TEXT("Wait");
     if (Action == EDeliveryNpcAction::LookAt) return TEXT("LookAt");
-    for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp})
+    for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp,EDeliveryNpcAction::Pace,EDeliveryNpcAction::MoveAside})
         if (Action==Value) return StaticEnum<EDeliveryNpcAction>()->GetNameStringByValue(int64(Value));
     return TEXT("None");
 }
@@ -51,6 +51,19 @@ FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
     Root->SetNumberField(TEXT("context_revision"), Request.ContextRevision);
     Root->SetNumberField(TEXT("plan_revision"), Request.PlanRevision);
     Root->SetStringField(TEXT("persona"), Request.Persona);
+    if (!Request.ProfileId.IsEmpty()) Root->SetStringField(TEXT("profile_id"), Request.ProfileId);
+    Root->SetStringField(TEXT("self_name"), Request.SelfName);
+    Root->SetStringField(TEXT("self_subject_id"), Request.SelfSubjectId.IsValid() ? Id(Request.SelfSubjectId) : TEXT(""));
+    TArray<TSharedPtr<FJsonValue>> Subjects;
+    for (const auto& Entry : Request.Subjects)
+    {
+        auto Item = MakeShared<FJsonObject>();
+        Item->SetStringField(TEXT("subject_id"), Id(Entry.SubjectId));
+        Item->SetStringField(TEXT("name"), Entry.Name);
+        Item->SetStringField(TEXT("kind"), Entry.Kind);
+        Subjects.Add(MakeShared<FJsonValueObject>(Item));
+    }
+    Root->SetArrayField(TEXT("subjects"), Subjects);
     Root->SetStringField(TEXT("request_source"), Request.bPlayerRequest ? TEXT("player") : TEXT("ambient"));
     Root->SetStringField(TEXT("voice"), Request.Voice);
     TArray<TSharedPtr<FJsonValue>> Actions;
@@ -63,6 +76,7 @@ FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
         Item->SetStringField(TEXT("event_id"), Id(Entry.EventId));
         Item->SetStringField(TEXT("reply_to_event_id"), Entry.ReplyToEventId.IsValid()?Id(Entry.ReplyToEventId):TEXT(""));
         Item->SetStringField(TEXT("subject_id"), Entry.SubjectId.IsValid() ? Id(Entry.SubjectId) : TEXT(""));
+        Item->SetStringField(TEXT("addressee_id"), Entry.AddresseeId.IsValid() ? Id(Entry.AddresseeId) : TEXT(""));
         Item->SetStringField(TEXT("kind"), Entry.Kind.ToString());
         Item->SetStringField(TEXT("source"), StaticEnum<EDeliveryNpcEvidenceSource>()->GetNameStringByValue(static_cast<int64>(Entry.Source)));
         Item->SetStringField(TEXT("description"), Entry.Description);
@@ -82,7 +96,8 @@ FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
         auto Item=MakeShared<FJsonObject>();
         Item->SetStringField(TEXT("action"),ActionName(Entry.Action));
         Item->SetStringField(TEXT("target_id"),Entry.TargetId.IsValid()?Id(Entry.TargetId):TEXT(""));
-        Item->SetNumberField(TEXT("duration"),Entry.Action==EDeliveryNpcAction::StrikeOnce?1.2:4.0);
+        const bool bNeedsMovementTime=Entry.Action==EDeliveryNpcAction::StrikeOnce || Entry.Action==EDeliveryNpcAction::Pace || Entry.Action==EDeliveryNpcAction::MoveAside;
+        Item->SetNumberField(TEXT("duration"),bNeedsMovementTime?5.0:4.0);
         TArray<TSharedPtr<FJsonValue>> Refs;
         for (const auto& Ref : Entry.EvidenceIds) Refs.Add(MakeShared<FJsonValueString>(Id(Ref)));
         Item->SetArrayField(TEXT("evidence_ids"),Refs);
@@ -115,11 +130,13 @@ bool DeliveryNpc::DecodeProposal(const FString& Json, FDeliveryNpcDecisionPropos
     else if (Action == TEXT("LookAt")) Parsed.Action = EDeliveryNpcAction::LookAt;
     else
     {
-        for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp})
+        for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp,EDeliveryNpcAction::Pace,EDeliveryNpcAction::MoveAside})
             if (Action==ActionName(Value)) Parsed.Action=Value;
         if (Parsed.Action==EDeliveryNpcAction::None) { Reason=TEXT("UnsupportedAction"); return false; }
     }
     if (Root->HasField(TEXT("speech")) && (!Root->TryGetStringField(TEXT("speech"),Parsed.Speech) || Parsed.Speech.Len()>120)) return false;
+    Parsed.bHasSpeechTarget = Root->HasField(TEXT("speech_target_id"));
+    if (Parsed.bHasSpeechTarget && !ReadId(*Root,TEXT("speech_target_id"),Parsed.SpeechTargetId,true)) return false;
     FString Emotion;
     if (Root->TryGetStringField(TEXT("emotion"),Emotion))
     {

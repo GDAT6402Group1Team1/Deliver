@@ -1,5 +1,6 @@
 #include "AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "Navigation/PathFollowingComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AIController.h"
@@ -24,6 +25,9 @@ UBTTask_DeliveryExecuteNpcAction::UBTTask_DeliveryExecuteNpcAction()
 EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
     ReleaseFocus();
+    bStrikeStarted=false;
+    StrikeFinishAt=0;
+    bReturningToOrigin=false;
     Controller = OwnerComp.GetAIOwner();
     APawn* Pawn = Controller.IsValid() ? Controller->GetPawn() : nullptr;
     Agent = Pawn ? Pawn->FindComponentByClass<UDeliveryNpcAgentComponent>() : nullptr;
@@ -32,23 +36,62 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
     ActionId = Action.ActionId;
     FinishAt = Pawn->GetWorld()->GetTimeSeconds() + Action.Duration;
     Controller->StopMovement();
-    if (Action.Action == EDeliveryNpcAction::LookAt)
+    if (Action.Action == EDeliveryNpcAction::LookAt || Action.Action == EDeliveryNpcAction::StrikeOnce)
     {
         FocusTarget = Action.Target;
         Controller->SetFocus(Action.Target, ResidentActionFocus);
     }
     if (auto* Resident=Cast<ADeliveryNpcCharacter>(Pawn))
     {
+        if (Action.Action==EDeliveryNpcAction::StrikeOnce && Action.Duration<UDeliveryNpcCombatComponent::StrikeWindup)
+        { Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,TEXT("StrikeDurationTooShort")); return EBTNodeResult::Failed; }
         if (!Resident->ExecuteAction(Action))
         { Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,TEXT("StartRejected")); return EBTNodeResult::Failed; }
         if (Action.Action==EDeliveryNpcAction::MoveTo)
         {
-            const auto Result=Controller->MoveToActor(Action.Target,ADeliveryNpcCharacter::MoveAcceptanceRadius,true,true,true,nullptr,true);
+            const auto Result=Controller->MoveToActor(Action.Target,ADeliveryNpcCharacter::MoveAcceptanceRadius,true,true,true,nullptr,false);
             if (Result==EPathFollowingRequestResult::Failed)
             { Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,TEXT("PathUnavailable")); return EBTNodeResult::Failed; }
         }
+        else if (Action.Action==EDeliveryNpcAction::StrikeOnce)
+        {
+            bStrikeStarted=Resident->Combat->GetStrikeStartTime(ActionId)>=0;
+            if (bStrikeStarted)
+                StrikeFinishAt=FMath::Min(FinishAt,Pawn->GetWorld()->GetTimeSeconds()+UDeliveryNpcCombatComponent::StrikeDuration);
+            else
+            {
+                // 攻击按两人中心距离停步，不能再把双方胶囊半径加进到达距离
+                FAIMoveRequest Request(Action.Target);
+                Request.SetNavigationFilter(Controller->GetDefaultNavigationFilterClass());
+                Request.SetAcceptanceRadius(FMath::Max(10.f,Resident->Combat->StrikeRange-25.f));
+                Request.SetReachTestIncludesAgentRadius(false);
+                Request.SetReachTestIncludesGoalRadius(false);
+                Request.SetAllowPartialPath(false);
+                if (Controller->MoveTo(Request).Code==EPathFollowingRequestResult::Failed)
+                { Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,TEXT("PathUnavailable")); return EBTNodeResult::Failed; }
+            }
+        }
+        else if (Action.Action==EDeliveryNpcAction::Pace || Action.Action==EDeliveryNpcAction::MoveAside)
+        {
+            WalkOrigin=Resident->GetNavAgentLocation();
+            const bool bFound=Action.Action==EDeliveryNpcAction::Pace?Resident->FindPaceDestination(WalkDestination):
+                Resident->FindSideStepDestination(Action.Target,WalkDestination);
+            if (!bFound || !StartNearbyMove(WalkDestination))
+            { Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,TEXT("NearbyPathUnavailable")); return EBTNodeResult::Failed; }
+        }
     }
     return EBTNodeResult::InProgress;
+}
+
+bool UBTTask_DeliveryExecuteNpcAction::StartNearbyMove(const FVector& Destination)
+{
+    if (!Controller.IsValid()) return false;
+    FAIMoveRequest Request(Destination);
+    Request.SetAcceptanceRadius(8.f);
+    Request.SetReachTestIncludesAgentRadius(false);
+    Request.SetReachTestIncludesGoalRadius(false);
+    Request.SetAllowPartialPath(false);
+    return Controller->MoveTo(Request).Code!=EPathFollowingRequestResult::Failed;
 }
 
 void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds)
@@ -58,6 +101,75 @@ void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerCom
     if (State.ActionId != ActionId || State.Status != EDeliveryNpcActionStatus::Running)
     {
         FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+        return;
+    }
+    if (State.Action==EDeliveryNpcAction::Pace || State.Action==EDeliveryNpcAction::MoveAside)
+    {
+        auto* Npc=Controller.IsValid()?Cast<ADeliveryNpcCharacter>(Controller->GetPawn()):nullptr;
+        FName Failure;
+        if (!Npc || Npc->IsKnockedDown()) Failure=TEXT("WalkerUnavailable");
+        else if (State.Action==EDeliveryNpcAction::MoveAside && !IsValid(State.Target)) Failure=TEXT("StepAsideTargetLost");
+        else if (OwnerComp.GetWorld()->GetTimeSeconds()>=FinishAt) Failure=TEXT("NearbyMoveTimeout");
+        else if (Controller->GetMoveStatus()==EPathFollowingStatus::Idle)
+        {
+            const FVector Feet=Npc->GetNavAgentLocation();
+            const bool bReached=FVector::Dist2D(Feet,WalkDestination)<=12 && FMath::Abs(Feet.Z-WalkDestination.Z)<=60;
+            if (!bReached) Failure=TEXT("NearbyPathInterrupted");
+            else if (State.Action==EDeliveryNpcAction::Pace && !bReturningToOrigin)
+            {
+                // 返回本次记录的起点，让一次踱步停在附近
+                bReturningToOrigin=true;
+                WalkDestination=WalkOrigin;
+                if (!StartNearbyMove(WalkDestination)) Failure=TEXT("PaceReturnBlocked");
+            }
+            else
+            {
+                Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Succeeded,NAME_None);
+                FinishLatentTask(OwnerComp,EBTNodeResult::Succeeded);
+                return;
+            }
+        }
+        if (!Failure.IsNone())
+        {
+            Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,Failure);
+            FinishLatentTask(OwnerComp,EBTNodeResult::Failed);
+        }
+        return;
+    }
+    if (State.Action==EDeliveryNpcAction::StrikeOnce)
+    {
+        auto* Npc=Controller.IsValid()?Cast<ADeliveryNpcCharacter>(Controller->GetPawn()):nullptr;
+        const double Now=OwnerComp.GetWorld()->GetTimeSeconds();
+        FName Failure;
+        if (!Npc || Npc->IsKnockedDown()) Failure=TEXT("AttackerUnavailable");
+        else if (bStrikeStarted)
+        {
+            if (Npc->Combat->GetStrikeStartTime(ActionId)<0) Failure=TEXT("StrikeCancelled");
+            else if (Now>=StrikeFinishAt)
+            {
+                bool bHit=false;
+                const bool bFinished=Npc->Combat->GetStrikeResult(ActionId,bHit);
+                Agent->TryFinishAction(ActionId,bFinished && bHit?EDeliveryNpcActionStatus::Succeeded:EDeliveryNpcActionStatus::Failed,
+                    bFinished && bHit?NAME_None:FName(TEXT("StrikeMissed")));
+                FinishLatentTask(OwnerComp,bFinished && bHit?EBTNodeResult::Succeeded:EBTNodeResult::Failed);
+                return;
+            }
+        }
+        else if (Now+UDeliveryNpcCombatComponent::StrikeWindup>FinishAt) Failure=TEXT("ApproachTimeout");
+        else if (!Npc->Combat->CanContinueStrikeApproach(State.Target)) Failure=TEXT("StrikeTargetUnavailable");
+        else if (Npc->Combat->CanStrike(State.Target))
+        {
+            Controller->StopMovement();
+            bStrikeStarted=Npc->Combat->StartStrike(State.Target,ActionId);
+            if (bStrikeStarted) StrikeFinishAt=FMath::Min(FinishAt,Now+UDeliveryNpcCombatComponent::StrikeDuration);
+            else Failure=TEXT("StrikeStartRejected");
+        }
+        else if (Controller->GetMoveStatus()==EPathFollowingStatus::Idle) Failure=TEXT("PathInterrupted");
+        if (!Failure.IsNone())
+        {
+            Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,Failure);
+            FinishLatentTask(OwnerComp,EBTNodeResult::Failed);
+        }
         return;
     }
     if (State.Action==EDeliveryNpcAction::MoveTo && Controller.IsValid() && Controller->GetMoveStatus()==EPathFollowingStatus::Idle)
@@ -103,5 +215,8 @@ void UBTTask_DeliveryExecuteNpcAction::OnTaskFinished(UBehaviorTreeComponent& Ow
     Agent.Reset();
     Controller.Reset();
     ActionId.Invalidate();
+    bStrikeStarted=false;
+    StrikeFinishAt=0;
+    bReturningToOrigin=false;
     Super::OnTaskFinished(OwnerComp, NodeMemory, TaskResult);
 }

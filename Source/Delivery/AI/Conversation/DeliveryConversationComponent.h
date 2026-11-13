@@ -24,9 +24,19 @@ public:
     UFUNCTION(Client,Reliable) void ClientReceiveNpcAudio(ADeliveryNpcCharacter* Npc,FGuid TurnId,int32 Offset,int32 Total,const TArray<uint8>& Data);
     UFUNCTION(BlueprintPure) FName GetLastResult() const { return FPlatformTime::Seconds()<ResultExpiresAt ? LastResult : NAME_None; }
     FGuid GetLastSubmissionId() const { return LastSubmissionId; }
+    // 交谈窗口按发言编号读取结果，短提示消失后仍能说明这句话有没有送到
+    FName GetSubmissionResult(FGuid SpeechId) const { return SpeechId.IsValid() && SpeechId==LastSubmissionId ? LastResult : NAME_None; }
+    bool CanSendNow() const { return FPlatformTime::Seconds()>=NextLocalSendAt; }
     bool CanTalkTo(const ADeliveryNpcCharacter* Resident) const;
+    // 使用本机镜头选择准星对着的 NPC，没对准任何人时返回空
+    ADeliveryNpcCharacter* GetAimedNpc() const;
+    // 快捷发言点明现场另一位 NPC，具体反应仍交给模型决定
+    FString GetProvokeText(const ADeliveryNpcCharacter* Npc) const;
 private:
-    void OpenNearest();
+    void OpenAimedConversation();
+    ADeliveryNpcCharacter* FindNpcInView(const FVector& ViewLocation,const FVector& ViewDirection) const;
+    friend class FDeliveryNpcConversationAimTest;
+    friend class FDeliveryConversationFeedbackTest;
     double NextSendAt=0;
     double NextAudioRequestAt=0;
     // 快捷按钮和文本框使用相同的发送间隔，服务器再检查一次

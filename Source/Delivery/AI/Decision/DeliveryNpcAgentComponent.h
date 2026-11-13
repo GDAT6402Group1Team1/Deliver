@@ -14,6 +14,10 @@ UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
 class DELIVERY_API UDeliveryNpcAgentComponent : public UActorComponent
 {
     GENERATED_BODY()
+    friend class FDeliveryNpcConversationContextTest;
+    friend class FDeliveryNpcConversationOcclusionTest;
+    friend class FDeliveryNpcStrikeApproachTest;
+    friend class FDeliveryNpcStrikeNavigationTest;
     friend class FDeliveryNpcSpeechStreamTest;
     friend class FDeliveryResidentIntegrationTest;
     friend class FDeliveryResidentPIECommand;

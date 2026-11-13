@@ -102,7 +102,7 @@ bool GetHeadAxes(USkeletalMesh* Mesh,const FTransform& MeshRelative,FVector& Fro
 
 FString UDeliveryNpcAnimationAssetTools::CreateConversationAnimation(bool bReplaceGraph)
 {
-    const FString Folder=TEXT("/Game/NPC/Residents/Animation");
+    const FString AnimationFolder=TEXT("/Game/NPC/Residents/Animation");
     const FString Name=TEXT("ABP_NpcConversation");
     auto* Man=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/NPC/Residents/Appearance/SK_NpcManFace.SK_NpcManFace"));
     auto* Woman=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/NPC/Residents/Appearance/SK_NpcWomanFace.SK_NpcWomanFace"));
@@ -116,7 +116,7 @@ FString UDeliveryNpcAnimationAssetTools::CreateConversationAnimation(bool bRepla
         !Front.Equals(WomanFront,.01f) || !Up.Equals(WomanUp,.01f))
         return TEXT("NPC head axes differ; check the two meshes before sharing an animation graph");
     UE_LOG(LogTemp,Log,TEXT("NpcConversationAxes HeadForward=%s HeadUp=%s"),*Front.ToString(),*Up.ToString());
-    auto* Blueprint=LoadObject<UAnimBlueprint>(nullptr,*(Folder/Name+TEXT(".")+Name));
+    auto* Blueprint=LoadObject<UAnimBlueprint>(nullptr,*(AnimationFolder/Name+TEXT(".")+Name));
     if (Blueprint && Blueprint->ParentClass!=UDeliveryNpcConversationAnimInstance::StaticClass())
         return TEXT("Conversation animation blueprint uses another parent class");
     if (Blueprint && Blueprint->TargetSkeleton!=Man->GetSkeleton())
@@ -128,7 +128,7 @@ FString UDeliveryNpcAnimationAssetTools::CreateConversationAnimation(bool bRepla
         Factory->TargetSkeleton=Man->GetSkeleton();
         Factory->PreviewSkeletalMesh=Man;
         Blueprint=Cast<UAnimBlueprint>(FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().CreateAsset(
-            Name,Folder,UAnimBlueprint::StaticClass(),Factory));
+            Name,AnimationFolder,UAnimBlueprint::StaticClass(),Factory));
         bReplaceGraph=true;
     }
     if (!Blueprint) return TEXT("Could not create NPC conversation animation blueprint");

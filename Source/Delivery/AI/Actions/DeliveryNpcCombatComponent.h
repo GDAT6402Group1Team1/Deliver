@@ -13,8 +13,18 @@ public:
     UDeliveryNpcCombatComponent();
     // 检查距离、遮挡和身体状态，攻击冷却在 StartStrike 中检查
     bool CanStrike(AActor* Target) const;
+    // 近身可直接挥拳，较远的目标必须有完整导航路径才提供给模型
+    bool CanApproachStrike(AActor* Target) const;
+    // 接近途中检查目标和攻击冷却，实际路径由正在运行的导航任务检查
+    bool CanContinueStrikeApproach(AActor* Target) const;
     // 返回 true 表示开始挥拳，是否命中要等到命中时间再判断
     bool StartStrike(AActor* Target,FGuid ActionId);
+    // 只查询这一次挥拳的判定结果，挥拳尚未判定或已取消时返回 false
+    bool GetStrikeResult(FGuid ActionId,bool& bOutHit) const;
+    // 客户端按服务器时间播放当前这一拳，接近目标时没有出拳时间
+    double GetStrikeStartTime(FGuid ActionId) const;
+    static constexpr float StrikeDuration=1.2f;
+    static constexpr float StrikeWindup=.35f;
     // 清除攻击目标和编号，取消后不再判定尚未发生的命中
     void CancelStrike();
     // 在服务器处理击退和倒地，不等待模型回复
@@ -26,17 +36,23 @@ public:
     UFUNCTION(BlueprintPure) bool IsRecovering() const { return bRecovering; }
     UFUNCTION(BlueprintPure) bool IsStriking() const { return AttackId.IsValid(); }
     UPROPERTY(EditAnywhere,Category="Delivery|居民战斗",meta=(ClampMin="50",ClampMax="250",Units="cm")) float StrikeRange=160;
+    UPROPERTY(EditAnywhere,Category="Delivery|居民战斗",meta=(ClampMin="160",ClampMax="1200",Units="cm")) float StrikeApproachRange=600;
     UPROPERTY(EditAnywhere,Category="Delivery|居民战斗",meta=(ClampMin="1",ClampMax="10",Units="s")) float RecoverySeconds=4;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out) const override;
 protected:
     virtual void TickComponent(float Dt,ELevelTick Type,FActorComponentTickFunction* Fn) override;
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:
+    bool CanStrikeTarget(AActor* Target,float MaxDistance) const;
     UPROPERTY(ReplicatedUsing=OnRep_Down) bool bDown=false;
     UPROPERTY(Replicated) bool bDeliberate=false;
     UPROPERTY(Replicated) bool bRecovering=false;
     UFUNCTION() void OnRep_Down();
     FGuid AttackId;
+    UPROPERTY(Replicated) FGuid StrikeAnimationId;
+    UPROPERTY(Replicated) double StrikeStartedAt=-1;
+    FGuid FinishedStrikeId;
+    bool bFinishedStrikeHit=false;
     TWeakObjectPtr<AActor> AttackTarget;
     double HitAt=0;
     double RecoverAt=0;

@@ -89,17 +89,40 @@ bool FDeliveryAiProtocolTest::RunTest(const FString&)
     FDeliveryNpcDecisionRequest Request;
     Request.WorldEpoch = FGuid::NewGuid(); Request.NpcId = FGuid::NewGuid(); Request.RequestId = FGuid::NewGuid();
     Request.AllowedActions.Add(EDeliveryNpcAction::Wait);
+    TSharedPtr<FJsonObject> RequestJson;
+    if (!TestTrue(TEXT("旧请求仍可编码"), FJsonSerializer::Deserialize(
+        TJsonReaderFactory<>::Create(DeliveryNpc::EncodeRequest(Request)), RequestJson))) return false;
+    TestFalse(TEXT("未配置人物编号时省略可选字段"), RequestJson->HasField(TEXT("profile_id")));
+    Request.ProfileId = TEXT("chunlai");
+    if (!TestTrue(TEXT("带人物编号的请求可以编码"), FJsonSerializer::Deserialize(
+        TJsonReaderFactory<>::Create(DeliveryNpc::EncodeRequest(Request)), RequestJson))) return false;
+    TestEqual(TEXT("后端收到人物表行名"), RequestJson->GetStringField(TEXT("profile_id")), FString(TEXT("chunlai")));
+    Request.ProfileId.Reset();
     FDeliveryNpcDecisionProposal Proposal;
     FName Reason;
     const FString Valid = Reply(Request);
     TestTrue(TEXT("完整协议可解析"), DeliveryNpc::DecodeProposal(Valid, Proposal, Reason));
     TestEqual(TEXT("请求标识不丢失"), Proposal.RequestId, Request.RequestId);
+    TestFalse(TEXT("旧格式省略说话对象时保留默认交谈对象"), Proposal.bHasSpeechTarget);
     TestFalse(TEXT("模型不能指定未实现的动作"), DeliveryNpc::DecodeProposal(Reply(Request, TEXT("Teleport")), Proposal, Reason));
     TestEqual(TEXT("未知动作有稳定拒绝原因"), Reason, FName(TEXT("UnsupportedAction")));
     TestFalse(TEXT("损坏 JSON 被拒绝"), DeliveryNpc::DecodeProposal(TEXT("{bad"), Proposal, Reason));
     TestFalse(TEXT("超大回复被拒绝"), DeliveryNpc::DecodeProposal(FString::ChrN(65537, TEXT('x')), Proposal, Reason));
     TSharedPtr<FJsonObject> Json;
     FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Valid), Json);
+    const FGuid Listener = FGuid::NewGuid();
+    Json->SetStringField(TEXT("speech_target_id"), Listener.ToString(EGuidFormats::DigitsWithHyphensLower));
+    FString WithListener;
+    FJsonSerializer::Serialize(Json.ToSharedRef(), TJsonWriterFactory<>::Create(&WithListener));
+    TestTrue(TEXT("模型选出的说话对象能够解析"), DeliveryNpc::DecodeProposal(WithListener, Proposal, Reason));
+    TestTrue(TEXT("识别模型明确选择了说话对象"), Proposal.bHasSpeechTarget);
+    TestEqual(TEXT("说话对象与动作目标分别保存"), Proposal.SpeechTargetId, Listener);
+    Json->SetStringField(TEXT("speech_target_id"), TEXT(""));
+    WithListener.Reset();
+    FJsonSerializer::Serialize(Json.ToSharedRef(), TJsonWriterFactory<>::Create(&WithListener));
+    TestTrue(TEXT("模型可以明确选择自言自语"), DeliveryNpc::DecodeProposal(WithListener, Proposal, Reason));
+    TestTrue(TEXT("空说话对象和旧格式省略字段可以区分"), Proposal.bHasSpeechTarget && !Proposal.SpeechTargetId.IsValid());
+    Json->RemoveField(TEXT("speech_target_id"));
     for (const auto& Key : {TEXT("protocol_version"), TEXT("context_revision"), TEXT("duration")})
     {
         const auto Original = Json->Values[Key];

@@ -65,7 +65,8 @@ void UDeliveryNpcConversationAnimInstance::NativeUpdateAnimation(float DeltaSeco
     const auto State=Npc->Agent->GetPublicState();
     const auto Speech=Npc->Presentation->GetDisplayedSpeech();
     const bool bListening=Npc->Agent->IsListening();
-    const bool bThinking=Npc->Agent->IsDecisionPending();
+    // 后台完成后，本机可能仍在缓冲声音，等实际开口再结束等待姿态
+    const bool bThinking=Npc->Agent->IsDecisionPending() || Npc->Presentation->IsWaitingForSpeechPlayback();
     const bool bBusyAction=State.Status==EDeliveryNpcActionStatus::Running &&
         (State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::HoldVehicle);
     const bool bCanLookPose=Settings && Settings->bConversationPose && !Npc->IsKnockedDown() &&
@@ -76,9 +77,10 @@ void UDeliveryNpcConversationAnimInstance::NativeUpdateAnimation(float DeltaSeco
     if (AActor* Speaker=Npc->Agent->GetListeningSpeaker()) PreviousSpeaker=Speaker;
     AActor* Target=nullptr;
     if (bListening || (bThinking && Npc->Agent->GetListeningSpeaker())) Target=Npc->Agent->GetListeningSpeaker();
-    else if (Speech.bActive)
+    else if (Speech.bActive || (bThinking && IsValid(State.SpeechTarget)))
     {
-        Target=State.Target.Get();
+        // 模型已经选好收话人时，等待语音也继续看着对方
+        Target=State.SpeechTarget.Get();
         if (!IsValid(Target)) Target=State.ReplyToEventId.IsValid()?PreviousSpeaker.Get():(Npc->Look?Npc->Look->GetLookTarget():nullptr);
     }
     else if ((State.Status==EDeliveryNpcActionStatus::Running || State.Status==EDeliveryNpcActionStatus::Accepted) && State.Action==EDeliveryNpcAction::LookAt)
@@ -116,7 +118,9 @@ void UDeliveryNpcConversationAnimInstance::NativeUpdateAnimation(float DeltaSeco
     const FVector Forward=bHasLookTarget?(LookTargetWorld-Mesh->GetSocketLocation(TEXT("Head"))).GetSafeNormal():Npc->GetActorForwardVector();
     const FVector TiltAxis=MeshTransform.InverseTransformVectorNoScale(Forward).GetSafeNormal();
     const float Lean=Settings && bListening?Settings->ListeningLean:0.f;
-    const float Tilt=Settings?(bListening?Settings->ListeningHeadTilt:(bThinking?Settings->ThinkingHeadTilt:0.f)):0.f;
+    const FName ActionEmotion=Npc->Presentation->GetActionEmotion();
+    const bool bEmotionChosen=!ActionEmotion.IsNone() && ActionEmotion!=TEXT("Calm");
+    const float Tilt=Settings?(bListening?Settings->ListeningHeadTilt:(bThinking && !Speech.bActive && !bEmotionChosen?Settings->ThinkingHeadTilt:0.f)):0.f;
     const FRotator DesiredChest=FQuat(LeanAxis,FMath::DegreesToRadians(Lean)).Rotator();
     const FRotator DesiredHead=FQuat(TiltAxis,FMath::DegreesToRadians(Tilt)).Rotator();
     ChestRotation=FMath::RInterpTo(ChestRotation,DesiredChest,DeltaSeconds,BlendSpeed);

@@ -22,10 +22,16 @@ public:
 
 private:
     void ReleaseFocus();
+    bool StartNearbyMove(const FVector& Destination);
     // 每个 NPC 使用自己的任务实例，动作编号和计时不会与其他 NPC 共用
     TWeakObjectPtr<UDeliveryNpcAgentComponent> Agent;
     TWeakObjectPtr<AAIController> Controller;
     TWeakObjectPtr<AActor> FocusTarget;
     FGuid ActionId;
     double FinishAt = 0;
+    double StrikeFinishAt = 0;
+    bool bStrikeStarted = false;
+    FVector WalkOrigin=FVector::ZeroVector;
+    FVector WalkDestination=FVector::ZeroVector;
+    bool bReturningToOrigin=false;
 };

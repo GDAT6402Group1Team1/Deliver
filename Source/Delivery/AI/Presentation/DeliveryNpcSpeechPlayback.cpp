@@ -22,7 +22,9 @@ void UDeliveryNpcPresentationComponent::BeginReply(FGuid ActionId, FGuid Message
     CancelSpeech();
     Sentences.Reset(); SpokenReply.Reset(); NextSentence=0; ExpectedSentences=INDEX_NONE;
     ReplyAction=ActionId; ReplyMessage=MessageId;
-    if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner())) SpeechDepth=Npc->GetConversationDepth();
+    GetOwner()->ForceNetUpdate();
+    if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()))
+    { SpeechDepth=Npc->GetConversationDepth(); ReplyListener=Npc->Agent->GetPublicState().SpeechTarget; }
 }
 
 void UDeliveryNpcPresentationComponent::QueueSentence(FGuid ActionId, FGuid MessageId, const FDeliveryNpcSentence& Sentence)
@@ -92,6 +94,7 @@ void UDeliveryNpcPresentationComponent::TickSentences()
         {
             RecordSpokenReply(true);
             ReplyAction.Invalidate(); ReplyMessage.Invalidate();
+            GetOwner()->ForceNetUpdate();
         }
         else if (!Speech.bActive && (State.Status==EDeliveryNpcActionStatus::Running || State.Status==EDeliveryNpcActionStatus::Succeeded))
         {
@@ -263,6 +266,24 @@ FDeliveryNpcSpeechState UDeliveryNpcPresentationComponent::GetDisplayedSpeech() 
     return Speech;
 }
 
+bool UDeliveryNpcPresentationComponent::IsWaitingForSpeechPlayback() const
+{
+    if (LocalVoices.IsEmpty() || DisplayedSpeech.bActive) return false;
+    const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    if (!Npc || !Npc->Agent) return false;
+    const auto State=Npc->Agent->GetPublicState();
+    const auto& Local=LocalVoices[0];
+    const bool bCurrentReply=State.Status==EDeliveryNpcActionStatus::Accepted ||
+        State.Status==EDeliveryNpcActionStatus::Running || State.Status==EDeliveryNpcActionStatus::Succeeded;
+    // 只查看客户端收到的当前回复，旧句子不能让新一轮交谈继续保持等待姿态
+    if (!bCurrentReply || !State.ActionId.IsValid() || Local.State.ActionId!=State.ActionId ||
+        Local.State.ReplyToEventId!=State.ReplyToEventId || !Local.State.bActive ||
+        CancelledVoiceActions.Contains(State.ActionId) || FinishedVoiceTurns.Contains(Local.State.TurnId)) return false;
+    const double WaitingSince=Local.FrontSince>0?Local.FrontSince:Local.LastDataAt;
+    // 与播放器使用相同的超时范围，音频中断后不继续保持注视
+    return WaitingSince>0 && FPlatformTime::Seconds()-WaitingSince<=Local.State.Duration+5;
+}
+
 int32 UDeliveryNpcPresentationComponent::GetConsumedVoiceBytes() const
 {
     if (!RecordedWave || LocalVoices.IsEmpty() || !DisplayedSpeech.bActive || LocalVoices[0].State.TurnId!=DisplayedSpeech.TurnId) return 0;
@@ -320,14 +341,15 @@ void UDeliveryNpcPresentationComponent::RecordSpokenReply(bool bCompleteReply)
     if (SpokenReply.IsEmpty()) return;
     FDeliveryNpcObservation Said; Said.Kind=TEXT("SelfSpeech"); Said.Source=EDeliveryNpcEvidenceSource::ActionResult;
     Said.Description=SpokenReply; Said.Lifetime=60;
+    Said.Subject=Npc; Said.Addressee=ReplyListener.Get();
     // 整段说完才标记玩家的问题已回答，中途停止仍保留前面说过的内容
-    if (bCompleteReply) Said.ReplyToEventId=ReplyMessage;
+    if (bCompleteReply) { Said.EventId=Speech.TurnId; Said.ReplyToEventId=ReplyMessage; }
     Npc->Agent->ObserveEvent(Said);
     // 接话达到三轮后结束这次闲聊，新的玩家发言仍会重新开始
     if (bCompleteReply && SpeechDepth<3)
         for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
             if (*It!=Npc && FVector::DistSquared(It->GetActorLocation(),Npc->GetActorLocation())<FMath::Square(800.f))
-                It->HearSpeech(Npc,SpokenReply,Speech.TurnId,SpeechDepth+1);
+                It->HearSpeech(Npc,SpokenReply,Speech.TurnId,SpeechDepth+1,ReplyListener.IsValid()?ReplyListener.Get():Npc,ReplyMessage);
     if (bCompleteReply)
     {
         UE_LOG(LogTemp,Log,TEXT("NpcLatency speech=%s stage=reply_completed sentences=%d"),*ReplyMessage.ToString(),NextSentence);

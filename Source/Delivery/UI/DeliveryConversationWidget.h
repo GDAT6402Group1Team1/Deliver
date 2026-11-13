@@ -31,6 +31,7 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> ProvokeButton;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> CloseButton;
 private:
+    friend class FDeliveryConversationFeedbackTest;
     UFUNCTION() void Send();
     UFUNCTION() void Apologize();
     UFUNCTION() void Provoke();
@@ -42,6 +43,9 @@ private:
     FString LastReplyText;
     FGuid SubmittedEventId;
     FGuid DisplayedTurnId;
+    FName SubmissionResult;
+    FString InputNotice;
+    double InputNoticeUntil=0;
     double ReplyWaitUntil=0;
     bool bAwaitingReply=false;
     bool bReplyTimedOut=false;

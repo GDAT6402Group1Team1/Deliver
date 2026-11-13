@@ -1,4 +1,5 @@
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
+#include "AI/Conversation/DeliveryNpcConversationTrace.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
@@ -8,6 +9,8 @@
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerState.h"
+#include "Vehicle/DeliveryMotorbike.h"
 #include "Net/UnrealNetwork.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDeliveryNpcAgent, Log, All);
@@ -43,7 +46,8 @@ void UDeliveryNpcAgentComponent::PruneEvidence()
     if (Evidence.RemoveAll([Now](const auto& Item) { return Item.ExpiresAt <= Now; }) > 0) ++ContextRevision;
     for (auto It = KnownSubjects.CreateIterator(); It; ++It)
     {
-        if (!It.Value().IsValid() || !Evidence.ContainsByPredicate([&It](const auto& Item) { return Item.SubjectId == It.Key(); }))
+        if (!It.Value().IsValid() || !Evidence.ContainsByPredicate([&It](const auto& Item)
+            { return Item.SubjectId == It.Key() || Item.AddresseeId == It.Key(); }))
             It.RemoveCurrent();
     }
 }
@@ -52,7 +56,8 @@ bool UDeliveryNpcAgentComponent::ObserveEvent(const FDeliveryNpcObservation& Obs
 {
     if (!IsAuthority() || Observation.Kind.IsNone() || !FMath::IsFinite(Observation.Lifetime) || Observation.Lifetime <= 0 ||
         (Observation.bHasObservedLocation && Observation.ObservedLocation.ContainsNaN()) ||
-        (Observation.Subject && (!IsValid(Observation.Subject) || Observation.Subject->GetWorld() != GetWorld()))) return false;
+        (Observation.Subject && (!IsValid(Observation.Subject) || Observation.Subject->GetWorld() != GetWorld())) ||
+        (Observation.Addressee && (!IsValid(Observation.Addressee) || Observation.Addressee->GetWorld() != GetWorld()))) return false;
     const FGuid EventId = Observation.EventId.IsValid() ? Observation.EventId : FGuid::NewGuid();
     if (RecentEventIds.Contains(EventId)) return false;
     PruneEvidence();
@@ -66,13 +71,18 @@ bool UDeliveryNpcAgentComponent::ObserveEvent(const FDeliveryNpcObservation& Obs
     Item.ExpiresAt = Item.ObservedAt + FMath::Clamp(Observation.Lifetime, .1f, 60.f);
     Item.bHasObservedLocation = Observation.bHasObservedLocation;
     Item.ObservedLocation = Observation.bHasObservedLocation ? Observation.ObservedLocation : FVector::ZeroVector;
-    if (Observation.Subject)
+    auto RememberSubject = [this](AActor* Actor)
     {
+        if (!Actor) return FGuid();
+        if (Actor == GetOwner() && !NpcId.IsValid()) NpcId = FGuid::NewGuid();
         for (const auto& Pair : KnownSubjects)
-            if (Pair.Value == Observation.Subject) { Item.SubjectId = Pair.Key; break; }
-        if (!Item.SubjectId.IsValid()) Item.SubjectId = FGuid::NewGuid();
-        KnownSubjects.Add(Item.SubjectId, Observation.Subject);
-    }
+            if (Pair.Value == Actor) return Pair.Key;
+        const FGuid SubjectId = Actor == GetOwner() ? NpcId : FGuid::NewGuid();
+        KnownSubjects.Add(SubjectId, Actor);
+        return SubjectId;
+    };
+    Item.SubjectId = RememberSubject(Observation.Subject);
+    Item.AddresseeId = RememberSubject(Observation.Addressee);
     Evidence.Add(MoveTemp(Item));
     if (Evidence.Num() > 32) Evidence.RemoveAt(0);
     RecentEventIds.Add(EventId);
@@ -94,7 +104,35 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
     OutRequest.PlanRevision = ++NextPlanRevision;
     OutRequest.Persona = Persona.Left(1024);
     OutRequest.bPlayerRequest = bPlayerRequest;
-    if (const auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner())) OutRequest.Voice = Npc->Presentation->TtsVoice.ToString();
+    OutRequest.SelfSubjectId = NpcId;
+    OutRequest.SelfName = TEXT("NPC");
+    if (const auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner()))
+    {
+        OutRequest.Voice = Npc->Presentation->TtsVoice.ToString();
+        OutRequest.SelfName = Npc->DisplayName.ToString();
+        if (!Npc->Profile.RowName.IsNone()) OutRequest.ProfileId = Npc->Profile.RowName.ToString();
+    }
+    OutRequest.Subjects.Add({NpcId, OutRequest.SelfName.Left(64), TEXT("npc")});
+    for (const auto& Pair : KnownSubjects)
+    {
+        const AActor* Actor = Pair.Value.Get();
+        if (!Actor || Actor == GetOwner()) continue;
+        FDeliveryNpcSubject Subject;
+        Subject.SubjectId = Pair.Key;
+        if (const auto* Npc = Cast<ADeliveryNpcCharacter>(Actor))
+        { Subject.Name = Npc->DisplayName.ToString(); Subject.Kind = TEXT("npc"); }
+        else if (const auto* Pawn = Cast<APawn>(Actor); Pawn && Pawn->IsPlayerControlled())
+        {
+            const auto* Player = Pawn->GetPlayerState();
+            Subject.Name = Player ? FString::Printf(TEXT("快递员%d"), Player->GetPlayerId()) : TEXT("快递员");
+            Subject.Kind = TEXT("player");
+        }
+        else if (Actor->IsA<ADeliveryMotorbike>())
+        { Subject.Name = TEXT("电瓶车"); Subject.Kind = TEXT("vehicle"); }
+        else { Subject.Name = TEXT("附近的对象"); Subject.Kind = TEXT("other"); }
+        Subject.Name = Subject.Name.Left(64);
+        OutRequest.Subjects.Add(MoveTemp(Subject));
+    }
     OutRequest.Evidence = Evidence;
     OutRequest.AllowedActions.Add(EDeliveryNpcAction::Wait);
     for (const auto& Pair : KnownSubjects)
@@ -108,7 +146,7 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
             if (EvidenceId.IsValid()) Candidate.EvidenceIds.Add(EvidenceId);
             OutRequest.Candidates.Add(Candidate);
         };
-        for (auto Action : {EDeliveryNpcAction::Wait,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::ReleaseVehicle})
+        for (auto Action : {EDeliveryNpcAction::Wait,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::Pace})
             if (Resident->CanExecute(Action,nullptr)) AddCandidate(Action,{},{});
         for (const auto& Pair : KnownSubjects)
         {
@@ -117,7 +155,7 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
             const int32 FactIndex=Evidence.FindLastByPredicate([&](const auto& Item){ return Item.SubjectId==Pair.Key; });
             if (FactIndex==INDEX_NONE) continue;
             const auto* Fact=&Evidence[FactIndex];
-            for (auto Action : {EDeliveryNpcAction::LookAt,EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle})
+            for (auto Action : {EDeliveryNpcAction::LookAt,EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::MoveAside})
                 if (Resident->CanExecute(Action,Target)) AddCandidate(Action,Pair.Key,Fact->EventId);
         }
     }
@@ -126,8 +164,9 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
 
 bool UDeliveryNpcAgentComponent::RequestDecision()
 {
-    if (!IsAuthority() || HasActiveAction()) return false;
+    if (!IsAuthority()) return false;
     if (IsDecisionPending()) { bDecisionQueued = true; return true; }
+    if (HasActiveAction()) return false;
     auto* Gateway = GetWorld()->GetSubsystem<UDeliveryAiGatewaySubsystem>();
     if (!Gateway || !BuildDecisionRequest(Gateway->GetWorldEpoch(), ActiveRequest)) return false;
     if (!Gateway->Enqueue(this, ActiveRequest)) { ActiveRequest = {}; return false; }
@@ -212,10 +251,14 @@ void UDeliveryNpcAgentComponent::FinishReply(FGuid RequestId, bool bSucceeded, i
         else Npc->Presentation->CancelSpeech();
     }
     if (bSucceeded) RecordActionReply();
+    const bool bContinueConversation = bDecisionQueued;
     ActiveRequest = {}; ReplyRequest.Invalidate(); ReplyAction.Invalidate();
     bDecisionPending = false; bDecisionQueued = false; bPlayerRequest = false;
     EndListening();
     OnDecisionFinished.Broadcast(bSucceeded ? NAME_None : FName(TEXT("TransportFailure")));
+    // 播放上一句期间有人接话，等这句结束后继续处理，不让完成通知清掉新话
+    if (bContinueConversation)
+        if (auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->WakeDecision();
     GetOwner()->ForceNetUpdate();
 }
 
@@ -225,11 +268,12 @@ bool UDeliveryNpcAgentComponent::CanLookAt(AActor* Target) const
     if (!Pawn || !Cast<AAIController>(Pawn->GetController()) || !IsValid(Target) || Target == GetOwner() ||
         Target->GetWorld() != GetWorld() || FVector::DistSquared(Target->GetActorLocation(), GetOwner()->GetActorLocation()) >
         FMath::Square(FMath::Clamp(MaxLookAtDistance, 100.f, 3000.f))) return false;
+    // 居民视线取躯干高度，车辆根点可能位于地面，不能把地面误判成目标前的墙
+    if (Cast<ADeliveryNpcCharacter>(GetOwner()))
+        return DeliveryNpcConversationTrace::HasClearPath(GetOwner(),Target,FVector(0,0,40));
     FHitResult Hit;
     FCollisionQueryParams Params(SCENE_QUERY_STAT(DeliveryNpcLookAt), false, GetOwner());
-    // 居民视线取躯干高度，车辆根点可能位于地面，不能把地面误判成目标前的墙
-    const FVector Offset=Cast<ADeliveryNpcCharacter>(GetOwner())?FVector(0,0,40):FVector::ZeroVector;
-    return !GetWorld()->LineTraceSingleByChannel(Hit, GetOwner()->GetActorLocation()+Offset, Target->GetActorLocation()+Offset, ECC_Visibility, Params) ||
+    return !GetWorld()->LineTraceSingleByChannel(Hit, GetOwner()->GetActorLocation(), Target->GetActorLocation(), ECC_Visibility, Params) ||
         Hit.GetActor() == Target;
 }
 
@@ -244,10 +288,10 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
         Proposal.NpcId != NpcId || Proposal.ContextRevision != ActiveRequest.ContextRevision ||
         (!bResident && Proposal.ContextRevision != ContextRevision) ||
         Proposal.PlanRevision != ActiveRequest.PlanRevision || HasActiveAction()) return false;
-    // 新的玩家话题需要合并后重答，不能让旧回应误标记后来的玩家消息已回答
+    // 玩家或同伴又对自己说了新话时，重新结合上下文回答；旁听不打断当前回答
     if (bResident && Evidence.ContainsByPredicate([this](const auto& Item)
         {
-            return Item.Kind==TEXT("PlayerSpeech") && !ActiveRequest.Evidence.ContainsByPredicate(
+            return (Item.Kind==TEXT("PlayerSpeech") || Item.Kind==TEXT("Speech")) && !ActiveRequest.Evidence.ContainsByPredicate(
                 [&Item](const auto& Sent){ return Sent.EventId==Item.EventId; });
         })) return false;
     Reason = TEXT("UnsupportedAction");
@@ -259,7 +303,7 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
     AActor* Target = nullptr;
     Reason = TEXT("InvalidTarget");
     if (Proposal.Action == EDeliveryNpcAction::LookAt || Proposal.Action == EDeliveryNpcAction::MoveTo ||
-        Proposal.Action == EDeliveryNpcAction::StrikeOnce || Proposal.Action == EDeliveryNpcAction::HoldVehicle)
+        Proposal.Action == EDeliveryNpcAction::StrikeOnce || Proposal.Action == EDeliveryNpcAction::HoldVehicle || Proposal.Action == EDeliveryNpcAction::MoveAside)
     {
         Target = KnownSubjects.FindRef(Proposal.TargetId).Get();
         if (!CanLookAt(Target) || !Evidence.ContainsByPredicate([&Proposal](const auto& Item)
@@ -276,18 +320,38 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
     Reason = TEXT("InvalidDuration");
     if (!FMath::IsFinite(Proposal.Duration) || Proposal.Duration < .1f || Proposal.Duration > 5.f) return false;
     FGuid PlayerMessage;
+    AActor* SpeechTarget = nullptr;
     if (bResident)
     {
         for (const auto& Item : ActiveRequest.Evidence)
-            if (Item.Kind==TEXT("PlayerSpeech")) PlayerMessage=Item.EventId;
+            if (Item.Kind==TEXT("PlayerSpeech")) { PlayerMessage=Item.EventId; SpeechTarget=KnownSubjects.FindRef(Item.SubjectId).Get(); }
         if (ActiveRequest.Evidence.ContainsByPredicate([&PlayerMessage](const auto& Item)
             { return (Item.Kind==TEXT("SelfSpeech") || Item.Kind==TEXT("ActionReply")) && Item.ReplyToEventId==PlayerMessage; })) PlayerMessage.Invalidate();
         // 没有台词时仍要做出玩家能看见的动作，空等不能算作回应
         const bool bVisibleAction=Proposal.Action==EDeliveryNpcAction::LookAt || Proposal.Action==EDeliveryNpcAction::MoveTo ||
             Proposal.Action==EDeliveryNpcAction::StrikeOnce || Proposal.Action==EDeliveryNpcAction::HoldVehicle ||
-            Proposal.Action==EDeliveryNpcAction::ReleaseVehicle || Proposal.Action==EDeliveryNpcAction::LieDown;
+            Proposal.Action==EDeliveryNpcAction::ReleaseVehicle || Proposal.Action==EDeliveryNpcAction::LieDown ||
+            Proposal.Action==EDeliveryNpcAction::Pace || Proposal.Action==EDeliveryNpcAction::MoveAside;
         if (PlayerMessage.IsValid() && Proposal.Speech.TrimStartAndEnd().IsEmpty() && !bVisibleAction)
         { Reason=TEXT("MissingPlayerReply"); return false; }
+        if (!PlayerMessage.IsValid())
+        {
+            SpeechTarget = nullptr;
+            for (const auto& Item : ActiveRequest.Evidence)
+                if (Item.Kind==TEXT("Speech"))
+                { PlayerMessage=Item.EventId; SpeechTarget=KnownSubjects.FindRef(Item.SubjectId).Get(); }
+            if (ActiveRequest.Evidence.ContainsByPredicate([&PlayerMessage](const auto& Item)
+                { return PlayerMessage.IsValid() && (Item.Kind==TEXT("SelfSpeech") || Item.Kind==TEXT("ActionReply")) && Item.ReplyToEventId==PlayerMessage; }))
+            { PlayerMessage.Invalidate(); SpeechTarget=nullptr; }
+        }
+        // 台词对象和动作目标可以不同，例如看着小芳，却回答正在拱火的玩家
+        if (Proposal.bHasSpeechTarget)
+        {
+            SpeechTarget = KnownSubjects.FindRef(Proposal.SpeechTargetId).Get();
+            if (Proposal.SpeechTargetId.IsValid() && (!IsValid(SpeechTarget) || SpeechTarget==GetOwner() ||
+                !Cast<APawn>(SpeechTarget) || SpeechTarget->GetWorld()!=GetWorld()))
+            { Reason=TEXT("StaleProposal"); return false; }
+        }
     }
     PublicState = {};
     PublicState.ReplyToEventId=PlayerMessage;
@@ -296,6 +360,7 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
     PublicState.Action = Proposal.Action;
     PublicState.Status = EDeliveryNpcActionStatus::Accepted;
     PublicState.Target = Target;
+    PublicState.SpeechTarget = SpeechTarget;
     PublicState.Duration = Proposal.Duration;
     PublicState.Speech=Proposal.Speech.Left(120); PublicState.Emotion=Proposal.Emotion;
     ActionTargetId = Proposal.TargetId;
@@ -357,9 +422,12 @@ bool UDeliveryNpcAgentComponent::TryFinishAction(FGuid ActionId, EDeliveryNpcAct
     // 先记下动作已经结束，再发送通知，避免通知过程中再次结束同一动作
     PublicState.Status = Result;
     PublicState.Reason = Reason;
+    // 先停止移动和尚未发生的命中，避免打断后到下一帧仍补出一拳
+    if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->StopAction(ActionId);
     UE_LOG(LogDeliveryNpcAgent, Display, TEXT("Action npc=%s action=%s revision=%d result=%s reason=%s"),
         *NpcId.ToString(), *ActionId.ToString(), PublicState.PlanRevision,
         *StaticEnum<EDeliveryNpcActionStatus>()->GetNameStringByValue(static_cast<int64>(Result)), *Reason.ToString());
+    AActor* FinishedTarget = PublicState.Target;
     PublicState.Target = nullptr;
     ActionEvidenceIds.Reset();
     ActionTargetId.Invalidate();
@@ -367,6 +435,8 @@ bool UDeliveryNpcAgentComponent::TryFinishAction(FGuid ActionId, EDeliveryNpcAct
     ResultEvent.EventId = FGuid::NewGuid();
     ResultEvent.Kind = TEXT("ActionFinished");
     ResultEvent.Source = EDeliveryNpcEvidenceSource::ActionResult;
+    ResultEvent.Subject = GetOwner();
+    ResultEvent.Addressee = IsValid(FinishedTarget)?FinishedTarget:nullptr;
     ResultEvent.Description = FString::Printf(TEXT("%s %s %s"), *DeliveryNpc::ActionName(PublicState.Action),
         *StaticEnum<EDeliveryNpcActionStatus>()->GetNameStringByValue(static_cast<int64>(Result)), *Reason.ToString());
     ResultEvent.Lifetime = 30.f;
@@ -388,6 +458,7 @@ void UDeliveryNpcAgentComponent::RecordActionReply()
     // 动作成功且确认没有台词后，才记录这次回应；台词记忆仍由播放完成时写入
     FDeliveryNpcObservation Reply;
     Reply.Kind=TEXT("ActionReply"); Reply.Source=EDeliveryNpcEvidenceSource::ActionResult;
+    Reply.Subject=GetOwner(); Reply.Addressee=IsValid(PublicState.SpeechTarget)?PublicState.SpeechTarget.Get():nullptr;
     Reply.ReplyToEventId=PublicState.ReplyToEventId; Reply.Lifetime=60;
     Reply.Description=FString::Printf(TEXT("%s 动作已完成，这次没有台词"),*DeliveryNpc::ActionName(PublicState.Action));
     ObserveEvent(Reply);

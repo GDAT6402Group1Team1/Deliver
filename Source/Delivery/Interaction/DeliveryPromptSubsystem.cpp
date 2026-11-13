@@ -18,13 +18,13 @@
 
 namespace
 {
-// 小气泡直接绘制，避免依赖 emoji 字体或编辑器专用图标资源
+// 沿用头顶小气泡，在旁边画出 T 键，玩家能直接看出交谈入口
 class SDeliveryConversationPromptIcon : public SLeafWidget
 {
 public:
     SLATE_BEGIN_ARGS(SDeliveryConversationPromptIcon) {} SLATE_END_ARGS()
     void Construct(const FArguments&) {}
-    virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(24.f,24.f); }
+    virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(56.f,30.f); }
     virtual int32 OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FSlateRect&,
         FSlateWindowElementList& Elements, int32 Layer, const FWidgetStyle& Style, bool) const override
     {
@@ -40,7 +40,21 @@ public:
             FSlateDrawElement::MakeLines(Elements,Layer+2,Geometry.ToPaintGeometry(),Dot,
                 ESlateDrawEffect::None,FLinearColor::White*Tint,true,2.5f);
         }
-        return Layer+2;
+        const TArray<FVector2D> KeyOutline={{31,2},{53,2},{53,26},{31,26},{31,2}};
+        FSlateDrawElement::MakeLines(Elements,Layer+2,Geometry.ToPaintGeometry(),KeyOutline,
+            ESlateDrawEffect::None,FLinearColor(0,0,0,.9f)*Tint,true,5.f);
+        FSlateDrawElement::MakeLines(Elements,Layer+3,Geometry.ToPaintGeometry(),KeyOutline,
+            ESlateDrawEffect::None,FLinearColor(1.f,.9f,.5f)*Tint,true,2.f);
+        const TArray<FVector2D> KeyTop={{36,8},{48,8}};
+        const TArray<FVector2D> KeyStem={{42,8},{42,21}};
+        for (const TArray<FVector2D>* Stroke : {&KeyTop,&KeyStem})
+        {
+            FSlateDrawElement::MakeLines(Elements,Layer+3,Geometry.ToPaintGeometry(),*Stroke,
+                ESlateDrawEffect::None,FLinearColor(0,0,0,.9f)*Tint,true,5.f);
+            FSlateDrawElement::MakeLines(Elements,Layer+4,Geometry.ToPaintGeometry(),*Stroke,
+                ESlateDrawEffect::None,FLinearColor::White*Tint,true,2.5f);
+        }
+        return Layer+4;
     }
 };
 }
@@ -196,7 +210,8 @@ void UDeliveryPromptSubsystem::EnsureWidget()
 		    if (Self)
 		    {
 			    Self->ComputeScreenPosition(Position);
-			    if (Self->bPromptConversationIcon) Position += FVector2D(24.f,18.f);
+			    // NPC 字幕在头顶上方，交谈键放在下面，开口时两者可以同时显示
+			    if (Self->bPromptConversationIcon) Position += FVector2D(0.f,76.f);
 		    }
 		    return FMargin(Position.X, Position.Y, 0.0f, 0.0f);
 	    });

@@ -6,14 +6,26 @@
 #include "AI/Presentation/DeliveryNpcLookComponent.h"
 #include "AI/Actions/DeliveryVehicleHoldComponent.h"
 #include "AI/Conversation/DeliveryConversationComponent.h"
+#include "AI/Conversation/DeliveryNpcConversationTrace.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Combat/DeliveryCollisionChannels.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Navigation/PathFollowingComponent.h"
+#include "NavigationSystem.h"
+#include "NavigationData.h"
+#include "HAL/IConsoleManager.h"
 #include "Engine/World.h"
+
+namespace
+{
+TAutoConsoleVariable<int32> CVarNpcNavigationDiagnostics(
+    TEXT("Delivery.Npc.NavigationDiagnostics"),0,
+    TEXT("记录 NPC 行动候选的导航起点、终点和路径结果"),ECVF_Default);
+}
 
 ADeliveryNpcCharacter::ADeliveryNpcCharacter()
 {
@@ -24,7 +36,7 @@ ADeliveryNpcCharacter::ADeliveryNpcCharacter()
     Presentation=CreateDefaultSubobject<UDeliveryNpcPresentationComponent>(TEXT("Presentation"));
     Look=CreateDefaultSubobject<UDeliveryNpcLookComponent>(TEXT("Look"));
     ConversationInteractable=CreateDefaultSubobject<UDeliveryInteractableComponent>(TEXT("Conversation"));
-    ConversationInteractable->PromptText=FText::FromString(TEXT("交谈")); ConversationInteractable->InteractRadius=300;
+    ConversationInteractable->PromptText=FText::FromString(TEXT("交谈")); ConversationInteractable->InteractRadius=600;
     GetCapsuleComponent()->InitCapsuleSize(34,88); GetCapsuleComponent()->SetCollisionObjectType(ECC_Pawn);
     GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera,ECR_Ignore);
     // Pawn 胶囊负责贴地；专用查询体只供车撞和出拳发现，不能用 Ignore 地面的通道行走
@@ -44,6 +56,8 @@ void ADeliveryNpcCharacter::BeginPlay()
 {
     Super::BeginPlay();
     ApplyProfile();
+    ConversationInteractable->InteractRadius=600;
+    GetCharacterMovement()->MaxWalkSpeed=WalkSpeed;
     GetCapsuleComponent()->SetCollisionObjectType(ECC_Pawn);
     // 居民靠近和拽车不压缩玩家镜头，场景墙壁仍按原 Camera 通道防穿透
     GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera,ECR_Ignore);
@@ -73,7 +87,14 @@ bool ADeliveryNpcCharacter::ApplyProfile()
     return true;
 }
 bool ADeliveryNpcCharacter::CanTalk(APawn* Interactor,bool bCheckAvailability)
-{ return Interactor && !IsKnockedDown() && FVector::DistSquared(Interactor->GetActorLocation(),GetActorLocation())<=FMath::Square(350.f); }
+{
+    if (!Interactor || IsKnockedDown()) return false;
+    const auto* PC=Cast<APlayerController>(Interactor->GetController());
+    const auto* Conversation=PC?PC->FindComponentByClass<UDeliveryConversationComponent>():nullptr;
+    if (!Conversation || !Conversation->CanTalkTo(this)) return false;
+    // 本机提示与 T 键采用同一个对象，服务器不使用远端玩家的镜头重选目标
+    return !PC->IsLocalController() || Conversation->GetAimedNpc()==this;
+}
 bool ADeliveryNpcCharacter::OpenConversation(APawn* Interactor)
 {
     if (!HasAuthority() || !CanTalk(Interactor,true) || !Interactor->GetController()) return false;
@@ -94,17 +115,23 @@ void ADeliveryNpcCharacter::ObserveFact(FName Kind,AActor* Subject,const FString
         WakeDecision();
     }
 }
-bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth)
+bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth,AActor* Addressee,FGuid ReplyToEventId)
 {
     if (!HasAuthority() || !IsValid(Speaker) || Speaker->GetWorld()!=GetWorld() || Depth>3 ||
+        (Addressee && (!IsValid(Addressee) || Addressee->GetWorld()!=GetWorld())) ||
         Text.IsEmpty() || Text.Len()>256 || FVector::DistSquared(Speaker->GetActorLocation(),GetActorLocation())>FMath::Square(900.f)) return false;
-    FHitResult Hit; FCollisionQueryParams Params(SCENE_QUERY_STAT(ResidentSpeech),false,this);
-    if (GetWorld()->LineTraceSingleByChannel(Hit,GetActorLocation(),Speaker->GetActorLocation(),ECC_Visibility,Params) && Hit.GetActor()!=Speaker) return false;
+    if (!Addressee) Addressee=this;
+    if (!DeliveryNpcConversationTrace::HasClearPath(this,Speaker)) return false;
     const auto* SpeakingPawn=Cast<APawn>(Speaker);
     FDeliveryNpcObservation Event; Event.EventId=TurnId;
-    Event.Kind=SpeakingPawn && SpeakingPawn->IsPlayerControlled()?TEXT("PlayerSpeech"):TEXT("Speech"); Event.Subject=Speaker;
+    Event.ReplyToEventId=ReplyToEventId;
+    const bool bPlayerSpeaking=SpeakingPawn && SpeakingPawn->IsPlayerControlled();
+    Event.Kind=Addressee!=this?TEXT("OverheardSpeech"):bPlayerSpeaking?TEXT("PlayerSpeech"):TEXT("Speech");
+    Event.Subject=Speaker; Event.Addressee=Addressee;
     Event.Source=EDeliveryNpcEvidenceSource::Heard; Event.Description=Text; Event.Lifetime=45;
     if (!Agent->ObserveEvent(Event)) return false;
+    // 旁人先记住玩家问了什么，等听到回答后再决定是否插话
+    if (bPlayerSpeaking && Addressee!=this) return true;
     if (Event.Kind==TEXT("PlayerSpeech"))
     {
         Agent->BeginListening(Speaker,TurnId);
@@ -113,8 +140,7 @@ bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid
         return true;
     }
     ConversationDepth=Depth; WakeDecision();
-    // 先保存玩家的新发言，继续等待后端正在处理的请求
-    // 旧回复到达后会检查是否已有新发言，再根据最新内容请求回复
+    // 正在回复时收到同伴的新话，保存后安排下一次回答
     if (Agent->IsDecisionPending()) Agent->RequestDecision();
     return true;
 }
@@ -124,11 +150,17 @@ bool ADeliveryNpcCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target)
     if (IsKnockedDown()) return false;
     if (Action==EDeliveryNpcAction::ReleaseVehicle) return GetHeldVehicle()!=nullptr;
     if (GetHeldVehicle()) return Action==EDeliveryNpcAction::Wait || Action==EDeliveryNpcAction::LookAt;
-    if (Action==EDeliveryNpcAction::StrikeOnce) return Combat->CanStrike(Target);
+    if (Action==EDeliveryNpcAction::Pace || Action==EDeliveryNpcAction::MoveAside)
+    {
+        FVector Destination;
+        return Action==EDeliveryNpcAction::Pace?FindPaceDestination(Destination):FindSideStepDestination(Target,Destination);
+    }
+    if (Action==EDeliveryNpcAction::StrikeOnce)
+        return Cast<AAIController>(GetController()) && Combat->CanApproachStrike(Target);
     if (Action==EDeliveryNpcAction::HoldVehicle)
     { const auto* Bike=Cast<ADeliveryMotorbike>(Target); return Bike && Bike->ResidentHold && Bike->ResidentHold->CanHold(this); }
     if (Action==EDeliveryNpcAction::MoveTo)
-        return IsValid(Target) && Target!=this && Cast<AAIController>(GetController()) && !HasReachedMoveTarget(Target);
+        return IsValid(Target) && Target!=this && !HasReachedMoveTarget(Target) && CanReachTarget(Target);
     return Action==EDeliveryNpcAction::Wait || Action==EDeliveryNpcAction::LookAt || Action==EDeliveryNpcAction::LieDown;
 }
 bool ADeliveryNpcCharacter::HasReachedMoveTarget(AActor* Target) const
@@ -142,12 +174,98 @@ bool ADeliveryNpcCharacter::HasReachedMoveTarget(AActor* Target) const
     Request.SetReachTestIncludesGoalRadius(true);
     return PathFollowing->HasReached(Request);
 }
+bool ADeliveryNpcCharacter::CanReachTarget(AActor* Target) const
+{
+    const auto* AI=Cast<AAIController>(GetController());
+    auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+    if (!IsValid(Target) || Target==this || Target->GetWorld()!=GetWorld()) return false;
+    const bool bDiagnose=CVarNpcNavigationDiagnostics.GetValueOnGameThread()!=0;
+    if (!AI || !Nav)
+    {
+        if (bDiagnose) UE_LOG(LogTemp,Display,TEXT("NpcNavigation npc=%s target=%s stage=Unavailable controller=%d navigation=%d world=%s"),
+            *GetName(),*GetNameSafe(Target),AI!=nullptr,Nav!=nullptr,*GetNameSafe(GetWorld()));
+        return false;
+    }
+    // 与实际 MoveTo 使用相同的角色位置、目标偏移和导航过滤器
+    FAIMoveRequest Request(Target);
+    Request.SetNavigationFilter(AI->GetDefaultNavigationFilterClass());
+    Request.SetAllowPartialPath(false);
+    Request.SetRequireNavigableEndLocation(true);
+    FPathFindingQuery Query;
+    if (!AI->BuildPathfindingQuery(Request,Query))
+    {
+        if (bDiagnose) UE_LOG(LogTemp,Display,TEXT("NpcNavigation npc=%s target=%s stage=BuildQueryFailed start=%s goal=%s"),
+            *GetName(),*GetNameSafe(Target),*GetNavAgentLocation().ToString(),*Target->GetActorLocation().ToString());
+        return false;
+    }
+    const auto Result=Nav->FindPathSync(Query);
+    if (bDiagnose) UE_LOG(LogTemp,Display,TEXT("NpcNavigation npc=%s target=%s stage=FindPath navData=%s start=%s end=%s result=%d valid=%d partial=%d points=%d"),
+        *GetName(),*GetNameSafe(Target),*GetNameSafe(Query.NavData.Get()),*Query.StartLocation.ToString(),*Query.EndLocation.ToString(),
+        int32(Result.Result),Result.Path.IsValid() && Result.Path->IsValid(),Result.Path.IsValid() && Result.Path->IsPartial(),
+        Result.Path.IsValid()?Result.Path->GetPathPoints().Num():0);
+    return Result.IsSuccessful() && Result.Path.IsValid() && Result.Path->IsValid() && !Result.Path->IsPartial();
+}
+bool ADeliveryNpcCharacter::FindNearbyWalkDestination(const FVector& Desired,float MaxTravel,FVector& OutLocation) const
+{
+    auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+    if (!Nav || !Cast<AAIController>(GetController()) || !GetCharacterMovement()->IsMovingOnGround()) return false;
+    const FVector Start=GetNavAgentLocation();
+    const auto& Properties=GetNavAgentPropertiesRef();
+    const auto* NavData=Nav->GetNavDataForProps(Properties,Start);
+    FNavLocation Projected;
+    if (!NavData || !Nav->ProjectPointToNavigation(Desired,Projected,FVector(30,30,80),NavData) ||
+        FVector::Dist2D(Start,Projected.Location)<35 || FMath::Abs(Start.Z-Projected.Location.Z)>60) return false;
+    const float HalfHeight=GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+    const auto Shape=FCollisionShape::MakeCapsule(GetCapsuleComponent()->GetScaledCapsuleRadius(),HalfHeight);
+    const FVector EndCenter=Projected.Location+FVector(0,0,HalfHeight+2);
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(NpcNearbyWalk),false,this);
+    if (GetWorld()->OverlapBlockingTestByChannel(EndCenter,FQuat::Identity,ECC_Pawn,Shape,Params)) return false;
+    FHitResult Hit;
+    // 查询胶囊抬高两厘米，避免把当前脚下的接触地面当成前方障碍
+    if (GetWorld()->SweepSingleByChannel(Hit,GetActorLocation()+FVector(0,0,2),EndCenter,FQuat::Identity,ECC_Pawn,Shape,Params)) return false;
+    FPathFindingQuery Query(this,*NavData,Start,Projected.Location);
+    Query.SetAllowPartialPaths(false);
+    const auto Path=Nav->FindPathSync(Properties,Query);
+    if (!Path.IsSuccessful() || !Path.Path.IsValid() || Path.Path->IsPartial() || Path.Path->GetLength()>MaxTravel) return false;
+    OutLocation=Projected.Location;
+    return true;
+}
+bool ADeliveryNpcCharacter::FindPaceDestination(FVector& OutLocation) const
+{
+    if (!HasAuthority() || IsKnockedDown() || GetHeldVehicle()) return false;
+    const float Distance=FMath::Clamp(PaceDistance,40.f,140.f);
+    for (const FVector& Direction:{GetActorRightVector(),-GetActorRightVector(),GetActorForwardVector(),-GetActorForwardVector()})
+        if (FindNearbyWalkDestination(GetNavAgentLocation()+Direction*Distance,Distance*1.5f,OutLocation)) return true;
+    return false;
+}
+bool ADeliveryNpcCharacter::FindSideStepDestination(AActor* Target,FVector& OutLocation) const
+{
+    const auto* Person=Cast<APawn>(Target);
+    if (!HasAuthority() || IsKnockedDown() || GetHeldVehicle() || !IsValid(Person) || Person==this || Person->GetWorld()!=GetWorld() ||
+        FVector::DistSquared(GetActorLocation(),Person->GetActorLocation())>FMath::Square(600.f)) return false;
+    FVector Toward=(Person->GetActorLocation()-GetActorLocation()).GetSafeNormal2D();
+    if (Toward.IsNearlyZero()) Toward=GetActorForwardVector();
+    const FVector Side=FVector::CrossProduct(FVector::UpVector,Toward).GetSafeNormal();
+    const float Distance=FMath::Clamp(SideStepDistance,80.f,250.f);
+    for (const float Sign:{1.f,-1.f})
+        if (FindNearbyWalkDestination(GetNavAgentLocation()+Side*Sign*Distance,Distance*1.5f,OutLocation)) return true;
+    return false;
+}
 bool ADeliveryNpcCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
 {
-    if (!HasAuthority() || !CanExecute(State.Action,State.Target)) return false;
+    if (!HasAuthority() || ExecutingAction.IsValid() || !CanExecute(State.Action,State.Target)) return false;
     ExecutingAction=State.ActionId;
+    if (State.Action==EDeliveryNpcAction::Pace || State.Action==EDeliveryNpcAction::MoveAside ||
+        State.Action==EDeliveryNpcAction::MoveTo || State.Action==EDeliveryNpcAction::StrikeOnce)
+    {
+        PreviousActionWalkSpeed=GetCharacterMovement()->MaxWalkSpeed;
+        GetCharacterMovement()->MaxWalkSpeed=State.Action==EDeliveryNpcAction::Pace?PaceSpeed:
+            State.Action==EDeliveryNpcAction::StrikeOnce?AngryApproachSpeed:WalkSpeed;
+    }
     bool bStarted=true;
-    if (State.Action==EDeliveryNpcAction::StrikeOnce) bStarted=Combat->StartStrike(State.Target,State.ActionId);
+    // 攻击目标还在远处时，由行为树先靠近；到达前不会启动命中判定
+    if (State.Action==EDeliveryNpcAction::StrikeOnce && Combat->CanStrike(State.Target))
+        bStarted=Combat->StartStrike(State.Target,State.ActionId);
     else if (State.Action==EDeliveryNpcAction::HoldVehicle) bStarted=CastChecked<ADeliveryMotorbike>(State.Target)->ResidentHold->TryHold(this,State.ActionId);
     else if (State.Action==EDeliveryNpcAction::ReleaseVehicle) { if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("VoluntaryRelease")); }
     else if (State.Action==EDeliveryNpcAction::LieDown) bStarted=Combat->SetDeliberateProne(true);
@@ -162,7 +280,13 @@ bool ADeliveryNpcCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
 }
 void ADeliveryNpcCharacter::StopAction(FGuid Id)
 {
-    if (Id!=ExecutingAction) return;
+    if (!Id.IsValid() || Id!=ExecutingAction) return;
+    if (auto* AI=Cast<AAIController>(GetController())) AI->StopMovement();
+    if (PreviousActionWalkSpeed>=0)
+    {
+        GetCharacterMovement()->MaxWalkSpeed=IsKnockedDown()?0.f:PreviousActionWalkSpeed;
+        PreviousActionWalkSpeed=-1;
+    }
     Combat->CancelStrike(); if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("ActionEnded")); ExecutingAction.Invalidate();
 }
 void ADeliveryNpcCharacter::SetHeldVehicle(UDeliveryVehicleHoldComponent* Hold)
@@ -194,7 +318,7 @@ void ADeliveryNpcCharacter::Tick(float Dt)
 {
     Super::Tick(Dt);
     // 交谈期间隐藏图标，为对白字幕留出位置，玩家仍可继续交谈
-    ConversationInteractable->bShowPrompt=!Presentation->GetSpeech().bActive && !Agent->IsDecisionPending();
+    ConversationInteractable->bShowPrompt=!IsKnockedDown();
     if (!HasAuthority()) return;
     if (auto* AI=Cast<ADeliveryNpcAIController>(GetController())) AI->RefreshBlackboard();
     const auto State=Agent->GetPublicState();
@@ -208,6 +332,7 @@ void ADeliveryNpcCharacter::Tick(float Dt)
 }
 void ADeliveryNpcCharacter::EndPlay(const EEndPlayReason::Type Reason)
 {
+    StopAction(ExecutingAction);
     if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("ResidentEndPlay"));
     Agent->OnDecisionFinished.RemoveDynamic(this,&ADeliveryNpcCharacter::OnDecisionFinished);
     ConversationInteractable->CanUse.Unbind(); ConversationInteractable->Use.Unbind(); Super::EndPlay(Reason);

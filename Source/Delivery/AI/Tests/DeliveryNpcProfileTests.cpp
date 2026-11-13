@@ -29,6 +29,10 @@ bool FDeliveryNpcProfileTest::RunTest(const FString&)
     const FText OriginalName=Npc->DisplayName;const FString OriginalPersona=Npc->Agent->Persona;
     TestFalse(TEXT("没有选择人物表时保留原配置"),Npc->ApplyProfile());
     TestEqual(TEXT("未配表不改变原姓名"),Npc->DisplayName.ToString(),OriginalName.ToString());
+    FDeliveryNpcDecisionRequest ProfileRequest;
+    const FGuid ProfileWorldEpoch=FGuid::NewGuid();
+    if (!TestTrue(TEXT("未配表的 NPC 仍能准备请求"),Npc->Agent->BuildDecisionRequest(ProfileWorldEpoch,ProfileRequest))) return false;
+    TestTrue(TEXT("未配表时不发送虚构的人物编号"),ProfileRequest.ProfileId.IsEmpty());
     TestFalse(TEXT("没有声音素材时不添加短音"),P->PlayReaction(EDeliveryNpcVoiceReaction::HeardPlayer,FGuid::NewGuid()));
     auto* Table=NewObject<UDataTable>();Table->RowStruct=FDeliveryNpcProfileRow::StaticStruct();
     auto* VoiceSet=NewObject<UDeliveryNpcVoiceSet>();
@@ -44,6 +48,16 @@ bool FDeliveryNpcProfileTest::RunTest(const FString&)
     TestTrue(TEXT("人物行应用到现有组件"),Npc->ApplyProfile());
     TestEqual(TEXT("姓名来自人物表"),Npc->DisplayName.ToString(),Row.DisplayName.ToString());
     TestEqual(TEXT("性格来自人物表"),Npc->Agent->Persona,Row.Persona);
+    if (!TestTrue(TEXT("使用人物表后准备请求"),Npc->Agent->BuildDecisionRequest(ProfileWorldEpoch,ProfileRequest))) return false;
+    TestEqual(TEXT("背景资料使用人物表行名"),ProfileRequest.ProfileId,FString(TEXT("test")));
+    Npc->DisplayName=FText::FromString(TEXT("换了显示名字"));
+    if (!TestTrue(TEXT("改显示名字后仍可准备请求"),Npc->Agent->BuildDecisionRequest(ProfileWorldEpoch,ProfileRequest))) return false;
+    TestEqual(TEXT("改显示名字不会改变背景资料编号"),ProfileRequest.ProfileId,FString(TEXT("test")));
+    Npc->DisplayName=Row.DisplayName;
+    Npc->Profile.RowName=NAME_None;
+    if (!TestTrue(TEXT("清除人物行后重新准备请求"),Npc->Agent->BuildDecisionRequest(ProfileWorldEpoch,ProfileRequest))) return false;
+    TestTrue(TEXT("重新使用请求对象不会保留旧人物编号"),ProfileRequest.ProfileId.IsEmpty());
+    Npc->Profile.RowName=TEXT("test");
     TestEqual(TEXT("TTS 音色与短反应音分别配置"),P->TtsVoice,Row.TtsVoice);
     TestTrue(TEXT("人物表引用短反应音资产"),P->VoiceSet==VoiceSet);
     Row.TtsVoice=TEXT("unsupported-voice");Row.DisplayName=FText::FromString(TEXT("不应应用的姓名"));Table->AddRow(TEXT("test"),Row);

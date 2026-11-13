@@ -15,25 +15,60 @@ UDeliveryNpcCombatComponent::UDeliveryNpcCombatComponent()
 {
     SetIsReplicatedByDefault(true); PrimaryComponentTick.bCanEverTick=true;
 }
-bool UDeliveryNpcCombatComponent::CanStrike(AActor* Target) const
+bool UDeliveryNpcCombatComponent::CanStrikeTarget(AActor* Target,float MaxDistance) const
 {
+    if (!GetOwner() || !GetWorld() || bDown || !IsValid(Target) || Target==GetOwner() || Target->GetWorld()!=GetWorld()) return false;
     const auto* Player=Cast<ADeliveryCharacter>(Target);
     const auto* Receiver=Cast<IDeliveryImpactReceiver>(Target);
     const bool bValidReceiver=Receiver && !Receiver->IsKnockedDown();
     const bool bValidPlayer=Player && Player->GetActiveRagdoll() && Player->GetActiveRagdoll()->GetControlMode()==EDeliveryRagdollControlMode::Active;
-    if (bDown || !IsValid(Target) || Target==GetOwner() || Target->GetWorld()!=GetWorld() ||
-        (!bValidReceiver && !bValidPlayer) ||
-        FVector::DistSquared(Target->GetActorLocation(),GetOwner()->GetActorLocation())>FMath::Square(StrikeRange)) return false;
+    if ((!bValidReceiver && !bValidPlayer) ||
+        FVector::DistSquared(Target->GetActorLocation(),GetOwner()->GetActorLocation())>FMath::Square(MaxDistance)) return false;
     FHitResult Hit; FCollisionQueryParams Params(SCENE_QUERY_STAT(ResidentStrike),false,GetOwner());
     return !GetWorld()->LineTraceSingleByChannel(Hit,GetOwner()->GetActorLocation(),Target->GetActorLocation(),ECC_Visibility,Params) || Hit.GetActor()==Target;
+}
+bool UDeliveryNpcCombatComponent::CanStrike(AActor* Target) const
+{
+    return CanStrikeTarget(Target,StrikeRange);
+}
+bool UDeliveryNpcCombatComponent::CanApproachStrike(AActor* Target) const
+{
+    if (!CanContinueStrikeApproach(Target)) return false;
+    if (CanStrike(Target)) return true;
+    const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    return Npc && Npc->CanReachTarget(Target);
+}
+bool UDeliveryNpcCombatComponent::CanContinueStrikeApproach(AActor* Target) const
+{
+    return !AttackId.IsValid() && GetWorld() && GetWorld()->GetTimeSeconds()>=NextStrikeAt &&
+        CanStrikeTarget(Target,FMath::Max(StrikeRange,StrikeApproachRange));
 }
 bool UDeliveryNpcCombatComponent::StartStrike(AActor* Target,FGuid Id)
 {
     if (!GetOwner()->HasAuthority() || !Id.IsValid() || AttackId.IsValid() || GetWorld()->GetTimeSeconds()<NextStrikeAt || !CanStrike(Target)) return false;
-    AttackId=Id; AttackTarget=Target; HitAt=GetWorld()->GetTimeSeconds()+.35; NextStrikeAt=HitAt+1;
+    AttackId=Id; AttackTarget=Target; StrikeAnimationId=Id; StrikeStartedAt=GetWorld()->GetTimeSeconds();
+    FinishedStrikeId.Invalidate(); bFinishedStrikeHit=false;
+    HitAt=StrikeStartedAt+StrikeWindup; NextStrikeAt=HitAt+1;
+    GetOwner()->ForceNetUpdate();
     return true;
 }
-void UDeliveryNpcCombatComponent::CancelStrike() { AttackId.Invalidate(); AttackTarget.Reset(); }
+bool UDeliveryNpcCombatComponent::GetStrikeResult(FGuid Id,bool& bOutHit) const
+{
+    bOutHit=false;
+    if (!Id.IsValid() || FinishedStrikeId!=Id) return false;
+    bOutHit=bFinishedStrikeHit;
+    return true;
+}
+double UDeliveryNpcCombatComponent::GetStrikeStartTime(FGuid Id) const
+{
+    return Id.IsValid() && StrikeAnimationId==Id?StrikeStartedAt:-1;
+}
+void UDeliveryNpcCombatComponent::CancelStrike()
+{
+    AttackId.Invalidate(); AttackTarget.Reset(); StrikeAnimationId.Invalidate(); StrikeStartedAt=-1;
+    FinishedStrikeId.Invalidate(); bFinishedStrikeHit=false;
+    if (GetOwner() && GetOwner()->HasAuthority()) GetOwner()->ForceNetUpdate();
+}
 void UDeliveryNpcCombatComponent::ReceiveImpact(const FVector& Impulse,AActor* Source)
 {
     auto* Resident=Cast<ADeliveryNpcCharacter>(GetOwner());
@@ -54,7 +89,7 @@ bool UDeliveryNpcCombatComponent::SetDeliberateProne(bool bProne)
 }
 void UDeliveryNpcCombatComponent::OnRep_Down()
 {
-    if (auto* Resident=Cast<ADeliveryNpcCharacter>(GetOwner())) Resident->GetCharacterMovement()->MaxWalkSpeed=bDown?0.f:180.f;
+    if (auto* Resident=Cast<ADeliveryNpcCharacter>(GetOwner())) Resident->GetCharacterMovement()->MaxWalkSpeed=bDown?0.f:Resident->WalkSpeed;
 }
 void UDeliveryNpcCombatComponent::TickComponent(float Dt,ELevelTick Type,FActorComponentTickFunction* Fn)
 {
@@ -62,8 +97,10 @@ void UDeliveryNpcCombatComponent::TickComponent(float Dt,ELevelTick Type,FActorC
     const double Now=GetWorld()->GetTimeSeconds();
     if (AttackId.IsValid() && Now>=HitAt)
     {
-        auto* Target=AttackTarget.Get(); CancelStrike(); // 先清除本次攻击，再通知目标受击，避免回调中重复命中
-        if (CanStrike(Target))
+        auto* Target=AttackTarget.Get(); FinishedStrikeId=AttackId;
+        AttackId.Invalidate(); AttackTarget.Reset(); // 先结束命中判定，再通知目标，防止同一拳重复命中
+        bFinishedStrikeHit=CanStrike(Target);
+        if (bFinishedStrikeHit)
         {
             const FVector Direction=(Target->GetActorLocation()-GetOwner()->GetActorLocation()).GetSafeNormal();
             if (auto* Receiver=Cast<IDeliveryImpactReceiver>(Target))
@@ -97,4 +134,5 @@ void UDeliveryNpcCombatComponent::EndPlay(const EEndPlayReason::Type Reason) { C
 void UDeliveryNpcCombatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(UDeliveryNpcCombatComponent,bDown); DOREPLIFETIME(UDeliveryNpcCombatComponent,bDeliberate); DOREPLIFETIME(UDeliveryNpcCombatComponent,bRecovering);
+    DOREPLIFETIME(UDeliveryNpcCombatComponent,StrikeAnimationId); DOREPLIFETIME(UDeliveryNpcCombatComponent,StrikeStartedAt);
 }

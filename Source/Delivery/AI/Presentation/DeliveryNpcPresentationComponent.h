@@ -97,9 +97,18 @@ public:
     UFUNCTION(BlueprintPure) FDeliveryNpcSpeechState GetSpeech() const { return Speech; }
     // 返回本机正在播放的句子，供字幕和人物表演使用
     UFUNCTION(BlueprintPure) FDeliveryNpcSpeechState GetDisplayedSpeech() const;
+    // 当前回复已到达本机、但声音或文字还未开始播放时返回 true
+    bool IsWaitingForSpeechPlayback() const;
+    // 动作结束后若同一轮语音还没播完，继续使用模型选定的表情
+    FName GetActionEmotion() const;
     UFUNCTION(BlueprintPure) float GetDisplayedSpeechProgress() const;
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> IdleAnimation;
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> WalkAnimation;
+    UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> PaceAnimation;
+    UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> HurryAnimation;
+    UPROPERTY(EditAnywhere,Category="Delivery|表演",meta=(ClampMin="10",Units="cm/s")) float WalkAnimationSpeed=180;
+    UPROPERTY(EditAnywhere,Category="Delivery|表演",meta=(ClampMin="10",Units="cm/s")) float PaceAnimationSpeed=80;
+    UPROPERTY(EditAnywhere,Category="Delivery|表演",meta=(ClampMin="10",Units="cm/s")) float HurryAnimationSpeed=240;
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> AttackAnimation;
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> DownAnimation;
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> TalkAnimation;
@@ -126,6 +135,7 @@ private:
     UFUNCTION(NetMulticast,Reliable) void MulticastStopReaction(FGuid EventId);
     void TickReaction();
     FGuid ReactionEventId;
+    FGuid PlayingStrike;
     TArray<FGuid> SeenReactionEvents;
     TArray<FGuid> CancelledReactionEvents;
     double ReactionEndsAt=0;
@@ -133,7 +143,10 @@ private:
     UFUNCTION(NetMulticast,Reliable) void ReceiveAudio(FGuid TurnId,int32 Offset,int32 Total,const TArray<uint8>& Data);
     UFUNCTION(NetMulticast,Reliable) void StartStreamSpeech(FDeliveryNpcSpeechState State);
     UFUNCTION(NetMulticast,Reliable) void StopStreamSpeech(FGuid ActionId,bool bStopAll=false);
-    FGuid ReplyAction, ReplyMessage;
+    // 后台还在合成首句时也同步本轮编号，客户端据此保留模型已经选定的表情
+    UPROPERTY(Replicated) FGuid ReplyAction;
+    FGuid ReplyMessage;
+    TWeakObjectPtr<AActor> ReplyListener;
     FGuid RequestedAudioTurn;
     double NextAudioRetry=0;
     int32 AudioAttempts=0;

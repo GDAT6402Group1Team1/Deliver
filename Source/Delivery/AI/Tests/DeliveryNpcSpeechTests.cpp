@@ -9,12 +9,17 @@
 #include "AI/Network/DeliveryAiSettings.h"
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
+#include "AI/Presentation/DeliveryNpcConversationAnimInstance.h"
+#include "AI/Presentation/DeliveryNpcExpressionSet.h"
 #include "AI/Presentation/DeliveryNpcSpeechTiming.h"
 #include "AI/Presentation/DeliveryNpcVoiceCodec.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "GameFramework/WorldSettings.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcSpeechStreamTest,"Delivery.AI.SentencePlayback",
     EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
@@ -54,6 +59,156 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     Proposal.ContextRevision=Request.ContextRevision;Proposal.PlanRevision=Request.PlanRevision;
     Proposal.Action=EDeliveryNpcAction::Wait;Proposal.Duration=4;Proposal.Speech=TEXT("我听见了。");Proposal.Emotion=TEXT("Calm");
     TestTrue(TEXT("接收首个完整动作建议"),Agent->ReceiveStreamDecision(Request.RequestId,Proposal));
+    TestFalse(TEXT("选好回复后已经结束倾听"),Agent->IsListening());
+    TestTrue(TEXT("首句语音尚未到达时仍在等待回复"),Agent->IsDecisionPending());
+    TestEqual(TEXT("等待语音时保留收话人"),Agent->GetPublicState().SpeechTarget.Get(),Player);
+
+    // 只复制客户端能收到的状态，检查等待语音时的视线不会依赖服务器请求记录
+    FActorSpawnParameters ViewSpawn;ViewSpawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    auto* ViewNpc=World->SpawnActor<ADeliveryNpcCharacter>(FVector(200,0,0),FRotator::ZeroRotator,ViewSpawn);
+    ViewNpc->SetActorTickEnabled(false);
+    ViewNpc->Agent->PublicState=Agent->GetPublicState();
+    ViewNpc->Agent->bDecisionPending=Agent->IsDecisionPending();
+    ViewNpc->Presentation->Expressions=NewObject<UDeliveryNpcExpressionSet>(ViewNpc);
+    auto* ViewPresentation=ViewNpc->Presentation.Get();
+    ViewPresentation->Expressions->Poses.FindOrAdd(TEXT("Thinking")).MorphWeights.Add(TEXT("FaceThinking"),1.f);
+    ViewPresentation->Expressions->Poses.FindOrAdd(TEXT("Angry")).MorphWeights.Add(TEXT("EyesAngry"),1.f);
+    ViewPresentation->Expressions->Poses.FindOrAdd(TEXT("Down")).MorphWeights.Add(TEXT("EyesBlink"),1.f);
+    ViewPresentation->NextBlink=ViewPresentation->ServerTime()+100;
+    auto* FaceMesh=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/NPC/Residents/Appearance/SK_NpcManFace.SK_NpcManFace"));
+    if (!TestNotNull(TEXT("注视回归使用正式角色网格"),FaceMesh)) return false;
+    ViewNpc->GetMesh()->SetSkeletalMeshAsset(FaceMesh);
+    auto* ConversationPose=NewObject<UDeliveryNpcConversationAnimInstance>(ViewNpc->GetMesh());
+    ConversationPose->NativeInitializeAnimation();
+    ConversationPose->NativeUpdateAnimation(1.f);
+    TestFalse(TEXT("显示对象没有服务器正在处理的回复"),ViewNpc->Agent->ReplyAction.IsValid());
+    TestTrue(TEXT("Wait 回复等待首句时仍看向收话人"),ConversationPose->LookWeight>.9f);
+    TestFalse(TEXT("等待语音时保留思考姿态"),ConversationPose->HeadRotation.IsNearlyZero());
+
+    // 客户端只收到本轮编号时，后台仍在合成声音，本机还没有可排队的音频
+    const auto BeforeVoiceState=ViewNpc->Agent->PublicState;
+    ViewNpc->Agent->PublicState.Status=EDeliveryNpcActionStatus::Succeeded;
+    ViewNpc->Agent->PublicState.Emotion=TEXT("Angry");
+    ViewPresentation->ReplyAction=ViewNpc->Agent->PublicState.ActionId;
+    TestTrue(TEXT("合成首句期间本机声音队列仍为空"),ViewPresentation->LocalVoices.IsEmpty());
+    TestFalse(TEXT("合成首句期间没有本机待播声音"),ViewPresentation->IsWaitingForSpeechPlayback());
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestTrue(TEXT("动作结束后仍按同轮编号保留生气表情"),ViewNpc->GetMesh()->GetMorphTarget(TEXT("EyesAngry"))>.9f);
+    TestTrue(TEXT("后台合成首句时不改回思考歪头"),ConversationPose->HeadRotation.IsNearlyZero());
+    ViewPresentation->ReplyAction=FGuid::NewGuid();
+    TestTrue(TEXT("不同轮的后台合成不会延长旧情绪"),ViewPresentation->GetActionEmotion().IsNone());
+    ViewPresentation->ReplyAction=ViewNpc->Agent->PublicState.ActionId;
+    ViewPresentation->CancelledVoiceActions.Add(ViewPresentation->ReplyAction);
+    TestTrue(TEXT("停止通知先到时立即结束旧表情"),ViewPresentation->GetActionEmotion().IsNone());
+    ViewPresentation->CancelledVoiceActions.Reset();
+    for (const auto Status:{EDeliveryNpcActionStatus::Failed,EDeliveryNpcActionStatus::Cancelled})
+    {
+        ViewNpc->Agent->PublicState.Status=Status;
+        TestTrue(TEXT("后台尚在返回音频时失败和取消也能结束旧表情"),ViewPresentation->GetActionEmotion().IsNone());
+    }
+    ViewNpc->Agent->PublicState=BeforeVoiceState;
+    ViewPresentation->ReplyAction.Invalidate();
+
+    // 后台已完成，客户端收到台词但声音还未缓冲到可播放的长度
+    ViewNpc->Agent->bDecisionPending=false;
+    ViewNpc->Agent->PublicState.Status=EDeliveryNpcActionStatus::Succeeded;
+    FDeliveryNpcSpeechState WaitingSpeech;
+    WaitingSpeech.ActionId=ViewNpc->Agent->PublicState.ActionId;WaitingSpeech.TurnId=FGuid::NewGuid();
+    WaitingSpeech.ReplyToEventId=ViewNpc->Agent->PublicState.ReplyToEventId;
+    WaitingSpeech.Text=Proposal.Speech;WaitingSpeech.Emotion=TEXT("Calm");
+    WaitingSpeech.bActive=true;WaitingSpeech.bRecordedVoice=true;WaitingSpeech.SampleRate=16000;
+    WaitingSpeech.AudioFormatVersion=DeliveryNpcVoice::FormatVersion;WaitingSpeech.PcmBytes=6400;WaitingSpeech.EncodedBytes=32;
+    WaitingSpeech.StartTime=ViewPresentation->ServerTime()+.25;WaitingSpeech.Duration=.24f;
+    ViewPresentation->StartStreamSpeech_Implementation(WaitingSpeech);
+    ViewPresentation->PlayRecordedVoice();
+    TestFalse(TEXT("后台已结束且本机尚未开始播放"),ViewNpc->Agent->IsDecisionPending() || ViewPresentation->GetDisplayedSpeech().bActive);
+    TestTrue(TEXT("当前回复仍在本机等待声音"),ViewPresentation->IsWaitingForSpeechPlayback());
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestTrue(TEXT("后台完成后待播期间仍看向这次回复的收话人"),ConversationPose->LookWeight>.9f);
+    TestFalse(TEXT("待播期间仍保持思考歪头"),ConversationPose->HeadRotation.IsNearlyZero());
+    TestTrue(TEXT("待播期间眼部继续显示思考表情"),ViewNpc->GetMesh()->GetMorphTarget(TEXT("FaceThinking"))>.9f);
+    TestFalse(TEXT("本机等待查询不依赖服务器播放编号"),ViewPresentation->ReplyAction.IsValid());
+
+    auto& WaitingVoice=ViewPresentation->LocalVoices[0];
+    WaitingVoice.Pcm.SetNumZeroed(WaitingVoice.TotalBytes);
+    WaitingVoice.State.StartTime=ViewPresentation->ServerTime()-1;
+    ViewPresentation->PlayRecordedVoice();
+    TestTrue(TEXT("声音就绪后实际开始显示台词"),ViewPresentation->GetDisplayedSpeech().bActive);
+    TestFalse(TEXT("实际播放后不再报告待播"),ViewPresentation->IsWaitingForSpeechPlayback());
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestTrue(TEXT("实际开口后不再保持思考歪头"),ConversationPose->HeadRotation.IsNearlyZero());
+    TestTrue(TEXT("实际播放时使用台词表情"),FMath::IsNearlyZero(ViewNpc->GetMesh()->GetMorphTarget(TEXT("FaceThinking"))));
+    ViewPresentation->FinishLocalSentence();
+    WaitingSpeech.TurnId=FGuid::NewGuid();
+    ViewPresentation->StartStreamSpeech_Implementation(WaitingSpeech);
+
+    ViewNpc->Agent->PublicState.Action=EDeliveryNpcAction::StrikeOnce;
+    ViewNpc->Agent->PublicState.Status=EDeliveryNpcActionStatus::Running;
+    ViewNpc->Agent->PublicState.Emotion=TEXT("Angry");
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestTrue(TEXT("接近攻击对象时不叠加交谈注视"),FMath::IsNearlyZero(ConversationPose->LookWeight));
+    TestTrue(TEXT("动作的生气表情优先于声音待播"),ViewNpc->GetMesh()->GetMorphTarget(TEXT("EyesAngry"))>.9f &&
+        FMath::IsNearlyZero(ViewNpc->GetMesh()->GetMorphTarget(TEXT("FaceThinking"))));
+    ViewNpc->Agent->PublicState.Status=EDeliveryNpcActionStatus::Succeeded;
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestTrue(TEXT("动作完成但同轮声音待播时继续生气"),ViewNpc->GetMesh()->GetMorphTarget(TEXT("EyesAngry"))>.9f &&
+        FMath::IsNearlyZero(ViewNpc->GetMesh()->GetMorphTarget(TEXT("FaceThinking"))));
+    TestTrue(TEXT("已经生气时不切回思考歪头"),ConversationPose->HeadRotation.IsNearlyZero());
+    for (const auto Status:{EDeliveryNpcActionStatus::Failed,EDeliveryNpcActionStatus::Cancelled})
+    {
+        ViewNpc->Agent->PublicState.Status=Status;
+        ViewPresentation->TickExpression(1.f);
+        TestTrue(TEXT("失败或取消后不保留上一轮生气表情"),FMath::IsNearlyZero(ViewNpc->GetMesh()->GetMorphTarget(TEXT("EyesAngry"))));
+    }
+    ViewNpc->Agent->PublicState=Agent->GetPublicState();
+    ViewNpc->Agent->PublicState.Status=EDeliveryNpcActionStatus::Succeeded;
+    ViewNpc->Combat->SetDeliberateProne(true);
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestTrue(TEXT("倒地时声音待播不能继续交谈注视"),FMath::IsNearlyZero(ConversationPose->LookWeight));
+    TestTrue(TEXT("倒地表情优先于声音待播"),ViewNpc->GetMesh()->GetMorphTarget(TEXT("EyesBlink"))>.9f);
+    ViewNpc->Combat->SetDeliberateProne(false);
+    const float LookDistance=ViewNpc->Agent->MaxLookAtDistance;
+    ViewNpc->Agent->MaxLookAtDistance=50;
+    ConversationPose->NativeUpdateAnimation(1.f);
+    TestTrue(TEXT("收话人太远时解除注视"),FMath::IsNearlyZero(ConversationPose->LookWeight));
+    ViewNpc->Agent->MaxLookAtDistance=LookDistance;
+    auto* LostSpeaker=World->SpawnActor<AActor>();
+    ViewNpc->Agent->PublicState.SpeechTarget=LostSpeaker;LostSpeaker->Destroy();
+    ConversationPose->NativeUpdateAnimation(1.f);
+    TestTrue(TEXT("待播期间收话人失效后解除注视"),FMath::IsNearlyZero(ConversationPose->LookWeight));
+    ViewNpc->Agent->PublicState.SpeechTarget=Player;
+    ViewNpc->Agent->PublicState.ActionId=FGuid::NewGuid();
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestFalse(TEXT("旧队列不能让新的动作继续等待"),ViewPresentation->IsWaitingForSpeechPlayback());
+    TestTrue(TEXT("替换动作后不保留旧回复的注视和表情"),FMath::IsNearlyZero(ConversationPose->LookWeight) &&
+        FMath::IsNearlyZero(ViewNpc->GetMesh()->GetMorphTarget(TEXT("FaceThinking"))));
+    ViewNpc->Agent->PublicState=Agent->GetPublicState();
+    ViewNpc->Agent->PublicState.ReplyToEventId=FGuid::NewGuid();
+    TestFalse(TEXT("不同玩家发言的旧语音不能保持等待"),ViewPresentation->IsWaitingForSpeechPlayback());
+    ViewNpc->Agent->PublicState.ReplyToEventId=WaitingSpeech.ReplyToEventId;
+    ViewNpc->Agent->PublicState.Status=EDeliveryNpcActionStatus::Failed;
+    TestFalse(TEXT("失败动作不能通过旧语音队列保持等待"),ViewPresentation->IsWaitingForSpeechPlayback());
+    ViewNpc->Agent->PublicState.Status=EDeliveryNpcActionStatus::Succeeded;
+    ViewPresentation->LocalVoices[0].FrontSince=FPlatformTime::Seconds()-WaitingSpeech.Duration-6;
+    TestFalse(TEXT("声音等待超时后不再保留等待表现"),ViewPresentation->IsWaitingForSpeechPlayback());
+    ViewPresentation->LocalVoices[0].FrontSince=FPlatformTime::Seconds();
+    TestTrue(TEXT("取消前仍有这次回复的待播声音"),ViewPresentation->IsWaitingForSpeechPlayback());
+    ViewNpc->Agent->CancelPlan(TEXT("TestInterrupt"));
+    ConversationPose->NativeUpdateAnimation(1.f);
+    ViewPresentation->TickExpression(1.f);
+    TestTrue(TEXT("取消回复后解除等待语音的注视"),FMath::IsNearlyZero(ConversationPose->LookWeight));
+    TestFalse(TEXT("取消回复后本机不再等待播放"),ViewPresentation->IsWaitingForSpeechPlayback());
+    TestTrue(TEXT("取消回复后结束思考表情"),FMath::IsNearlyZero(ViewNpc->GetMesh()->GetMorphTarget(TEXT("FaceThinking"))));
+    ConversationPose->NativeUninitializeAnimation();
+    ViewNpc->Destroy();
+
     FDeliveryNpcSentence Second;Second.Sequence=1;Second.Text=TEXT("这就让开。");Second.Emotion=TEXT("Calm");Second.Pcm.SetNumZeroed(6400);
     Agent->ReceiveSentence(Request.RequestId,Second);
     Presentation->TickSentences();
@@ -149,8 +304,8 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     TestEqual(TEXT("正常完成只保存整段，不额外保存每一句"),CountSelfSpeech(),BeforeInterruptedReply+2);
     TestTrue(TEXT("两句都结束后才标记玩家已获得完整回答"),Agent->Evidence.ContainsByPredicate([&](const auto& Item)
         {return Item.Kind==TEXT("SelfSpeech") && Item.ReplyToEventId==CompleteMessage && Item.Description==First.Text+Second.Text;}));
-    TestEqual(TEXT("完整回复只通知邻居一次"),Peer->Agent->Evidence.FilterByPredicate([&](const auto& Item)
-        {return Item.Kind==TEXT("Speech") && Item.Description==First.Text+Second.Text;}).Num(),1);
+    TestEqual(TEXT("完整回复只通知邻居一次，并保留原问题编号"),Peer->Agent->Evidence.FilterByPredicate([&](const auto& Item)
+        {return Item.Kind==TEXT("OverheardSpeech") && Item.ReplyToEventId==CompleteMessage && Item.Description==First.Text+Second.Text;}).Num(),1);
     StartTwoSentences(FGuid::NewGuid());
     if (!TestFalse(TEXT("超时检查前存在本机待播内容"),Presentation->LocalVoices.IsEmpty())) return false;
     Presentation->LocalVoices[0].FrontSince=FPlatformTime::Seconds()-20;
@@ -200,7 +355,10 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     Peer->ObserveFact(TEXT("PlayerBrush"),Npc,TEXT("这名快递员刚与你擦身碰到"),EDeliveryNpcEvidenceSource::Seen);
     TestEqual(TEXT("新的擦身事件可以开启下一次互动"),Peer->GetConversationDepth(),0);
     // 让玩家控制一个 Pawn，经过 HearSpeech 的正式玩家发言判断重新开启话题
-    auto* PlayerController=World->SpawnActor<APlayerController>();PlayerController->Possess(Npc);
+    auto* PlayerController=World->SpawnActor<APlayerController>();
+    PlayerController->PlayerState=World->SpawnActor<APlayerState>();
+    PlayerController->PlayerState->SetIsABot(false);
+    PlayerController->Possess(Npc);
     TestTrue(TEXT("闲聊结束后仍可接收玩家的新发言"),Peer->HearSpeech(Npc,TEXT("请问哪边能送货？"),FGuid::NewGuid(),0));
     TestEqual(TEXT("玩家新发言把接话轮数重置为零"),Peer->GetConversationDepth(),0);
     Peer->Presentation->BeginReply(FGuid::NewGuid(),FGuid::NewGuid());

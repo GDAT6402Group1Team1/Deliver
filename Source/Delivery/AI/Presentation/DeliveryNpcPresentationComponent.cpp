@@ -44,6 +44,7 @@ bool UDeliveryNpcPresentationComponent::PublishSpeech(const FString& Text,FName 
     Speech={}; Speech.TurnId=FGuid::NewGuid(); Speech.Text=Text; Speech.Emotion=Emotion; Speech.ReplyToEventId=ReplyToEventId;
     Speech.StartTime=ServerTime(); Speech.Duration=FMath::Clamp(Text.Len()*.075f+.5f,1.f,10.f); Speech.bActive=true;
     SpeechDepth=Depth; GetOwner()->ForceNetUpdate(); OnRep_Speech();
+    if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner())) ReplyListener=Npc->Agent->GetPublicState().SpeechTarget;
     UE_LOG(LogTemp,Log,TEXT("ResidentSpeech started: npc=%s turn=%s replyTo=%s length=%d"),
         *GetNameSafe(GetOwner()),*Speech.TurnId.ToString(),*Speech.ReplyToEventId.ToString(),Speech.Text.Len());
     return true;
@@ -59,6 +60,7 @@ void UDeliveryNpcPresentationComponent::CancelSpeech()
     StopReaction();
     StopStreamSpeech(ReplyAction.IsValid()?ReplyAction:Speech.ActionId,true);
     ReplyAction.Invalidate(); ReplyMessage.Invalidate(); Sentences.Reset(); EncodedSentences.Reset(); SpokenReply.Reset();
+    ReplyListener.Reset();
     NextSentence=0; ExpectedSentences=INDEX_NONE; SendingAudio.Reset(); SendingOffset=0; ServerVoices.Reset();
     Speech.bActive=false; GetOwner()->ForceNetUpdate(); OnRep_Speech();
 }
@@ -98,28 +100,55 @@ void UDeliveryNpcPresentationComponent::TickComponent(float Dt,ELevelTick Type,F
         Speech.bActive=false; GetOwner()->ForceNetUpdate(); OnRep_Speech();
         FDeliveryNpcObservation Said; Said.Kind=TEXT("SelfSpeech");
         Said.Source=EDeliveryNpcEvidenceSource::ActionResult; Said.Description=Speech.Text; Said.Lifetime=60;
+        Said.Subject=Resident; Said.Addressee=ReplyListener.Get();
         Said.ReplyToEventId=Speech.ReplyToEventId;
+        Said.EventId=Speech.TurnId;
         UE_LOG(LogTemp,Log,TEXT("ResidentSpeech completed: npc=%s turn=%s replyTo=%s"),
             *GetNameSafe(GetOwner()),*Speech.TurnId.ToString(),*Speech.ReplyToEventId.ToString());
         Resident->Agent->ObserveEvent(Said);
         if (SpeechDepth<3)
             for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
                 if (*It!=Resident && FVector::DistSquared(It->GetActorLocation(),Resident->GetActorLocation())<FMath::Square(800.f))
-                    It->HearSpeech(Resident,Speech.Text,Speech.TurnId,SpeechDepth+1);
+                    It->HearSpeech(Resident,Speech.Text,Speech.TurnId,SpeechDepth+1,ReplyListener.IsValid()?ReplyListener.Get():Resident,Speech.ReplyToEventId);
     }
     if (GetNetMode()==NM_DedicatedServer) return;
     TickExpression(Dt);
     const auto Display=GetDisplayedSpeech();
     UAnimSequence* Desired=IdleAnimation;
     bool bLoop=true;
+    float DesiredPlayRate=1.f;
     const auto State=Resident->Agent->GetPublicState();
+    const double StrikeStartedAt=Resident->Combat->GetStrikeStartTime(State.ActionId);
+    const double StrikeElapsed=StrikeStartedAt>=0?ServerTime()-StrikeStartedAt:-1;
+    const bool bStrikePlaying=State.Status==EDeliveryNpcActionStatus::Running && State.Action==EDeliveryNpcAction::StrikeOnce &&
+        StrikeElapsed>=0 && StrikeElapsed<UDeliveryNpcCombatComponent::StrikeDuration;
     if (Resident->Combat->IsRecovering() && GetUpAnimation) { Desired=GetUpAnimation; bLoop=false; }
     else if (Resident->IsKnockedDown()) { Desired=DownAnimation; bLoop=false; }
-    else if (State.Status==EDeliveryNpcActionStatus::Running && State.Action==EDeliveryNpcAction::StrikeOnce) { Desired=AttackAnimation; bLoop=false; }
+    else if (bStrikePlaying) { Desired=AttackAnimation; bLoop=false; }
     else if (State.Status==EDeliveryNpcActionStatus::Running && State.Action==EDeliveryNpcAction::HoldVehicle) Desired=HoldAnimation;
-    else if (Resident->GetVelocity().Size2D()>20) Desired=WalkAnimation;
+    else if (Resident->GetVelocity().Size2D()>20)
+    {
+        Desired=WalkAnimation;
+        float ReferenceSpeed=WalkAnimationSpeed;
+        if (State.Status==EDeliveryNpcActionStatus::Running && State.Action==EDeliveryNpcAction::Pace && PaceAnimation)
+        { Desired=PaceAnimation; ReferenceSpeed=PaceAnimationSpeed; }
+        else if (State.Status==EDeliveryNpcActionStatus::Running && State.Action==EDeliveryNpcAction::StrikeOnce && HurryAnimation)
+        { Desired=HurryAnimation; ReferenceSpeed=HurryAnimationSpeed; }
+        DesiredPlayRate=FMath::Clamp(Resident->GetVelocity().Size2D()/FMath::Max(10.f,ReferenceSpeed),.2f,2.f);
+    }
     else if (Display.bActive && TalkAnimation) Desired=TalkAnimation;
-    if (Desired && Playing!=Desired) { Resident->GetMesh()->PlayAnimation(Desired,bLoop); Playing=Desired; }
+    if (Desired && (Playing!=Desired || (bStrikePlaying && PlayingStrike!=State.ActionId)))
+    {
+        Resident->GetMesh()->PlayAnimation(Desired,bLoop); Playing=Desired;
+        if (bStrikePlaying && Desired==AttackAnimation)
+        {
+            // 远端按实际出拳时间播放，较晚收到消息时从当前进度开始
+            Resident->GetMesh()->SetPosition(static_cast<float>(StrikeElapsed),false);
+            PlayingStrike=State.ActionId;
+        }
+    }
+    // 低速踱步和快步靠近各用自己的步频，停下后恢复其他动作的原速
+    if (Desired) Resident->GetMesh()->SetPlayRate(DesiredPlayRate);
     if (!MouthMorph.IsNone()) Resident->GetMesh()->SetMorphTarget(MouthMorph,GetVoiceAmplitude());
     if (!AngryMorph.IsNone()) Resident->GetMesh()->SetMorphTarget(AngryMorph,Display.bActive && Display.Emotion==TEXT("Angry")?1.f:0.f);
     if (Caption)
@@ -145,4 +174,8 @@ void UDeliveryNpcPresentationComponent::EndPlay(const EEndPlayReason::Type Reaso
     Super::EndPlay(Reason);
 }
 void UDeliveryNpcPresentationComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{ Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(UDeliveryNpcPresentationComponent,Speech); }
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(UDeliveryNpcPresentationComponent,Speech);
+    DOREPLIFETIME(UDeliveryNpcPresentationComponent,ReplyAction);
+}
