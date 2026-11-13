@@ -5,6 +5,7 @@
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Network/DeliveryAiSettings.h"
+#include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "Components/SceneComponent.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
@@ -404,6 +405,75 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
     TestEqual(TEXT("再次看见对象恢复正常视觉观察"),ObservationMemory->Evidence.Last().Kind,FName(TEXT("Perceived")));
     TestFalse(TEXT("再次看见对象后替换旧的失去视线记录"),ObservationMemory->Evidence.ContainsByPredicate(
         [](const auto& Item){ return Item.Kind==TEXT("LostSight"); }));
+
+    // 最后一轮话照常记住，不打断当前台词，也不额外安排模型回复
+    Neighbor->SetActorLocation(Observer->GetActorLocation()+FVector(200,0,0));
+    Observer->ConversationDepth=1;
+    if (!TestTrue(TEXT("先开始一段尚未说完的台词"),
+        Observer->Presentation->PublishSpeech(TEXT("我这句话还没说完。"),TEXT("Calm"),1))) return false;
+    const FGuid SpeakingTurn=Observer->Presentation->GetSpeech().TurnId;
+    for (const bool bPending:{false,true})
+    {
+        Observer->bDecisionNeeded=false;
+        Observer->NextDecision=World->GetTimeSeconds()+100;
+        ObservationMemory->bDecisionPending=bPending;
+        ObservationMemory->bDecisionQueued=false;
+        const double NextDecisionBeforeSpeech=Observer->NextDecision;
+        const FGuid FinalMessage=FGuid::NewGuid(), ReplyToMessage=FGuid::NewGuid();
+        TestTrue(TEXT("只记住最后一句也经过正式交谈入口"),
+            Observer->HearSpeech(Neighbor,TEXT("你刚才那句话我可记住了。"),FinalMessage,3,Observer,ReplyToMessage,false));
+        TestTrue(TEXT("最后一句保留原文、收听方式和回应编号"),ObservationMemory->Evidence.ContainsByPredicate(
+            [&](const auto& Item){ return Item.EventId==FinalMessage && Item.Kind==TEXT("Speech") &&
+                Item.ReplyToEventId==ReplyToMessage && Item.Description==TEXT("你刚才那句话我可记住了。") && !Item.bNeedsReply; }));
+        TestEqual(TEXT("只记住话不改变原来的接话轮数"),Observer->GetConversationDepth(),1);
+        TestFalse(TEXT("只记住话不唤醒下一轮决策"),Observer->bDecisionNeeded);
+        TestFalse(TEXT("等待模型时只记住话也不追加请求"),ObservationMemory->bDecisionQueued);
+        TestEqual(TEXT("只记住话保留当前请求状态"),ObservationMemory->bDecisionPending,bPending);
+        TestEqual(TEXT("只记住话不提前下一次决策"),Observer->NextDecision,NextDecisionBeforeSpeech);
+        TestTrue(TEXT("记住邻居最后一句时当前台词继续播放"),Observer->Presentation->GetSpeech().bActive &&
+            Observer->Presentation->GetSpeech().TurnId==SpeakingTurn);
+        const auto RevisionAfterSpeech=ObservationMemory->ContextRevision;
+        TestFalse(TEXT("只记住话也拒绝同一句重复通知"),
+            Observer->HearSpeech(Neighbor,TEXT("你刚才那句话我可记住了。"),FinalMessage,3,Observer,ReplyToMessage,false));
+        TestEqual(TEXT("重复通知不会再次修改记忆"),ObservationMemory->ContextRevision,RevisionAfterSpeech);
+    }
+    Observer->bDecisionNeeded=true;
+    ObservationMemory->bDecisionQueued=true;
+    TestTrue(TEXT("已有后续安排时仍可记住最后一句"),
+        Observer->HearSpeech(Neighbor,TEXT("行了，这事以后再说。"),FGuid::NewGuid(),3,Observer,FGuid(),false));
+    TestTrue(TEXT("记住最后一句不会清掉原来的决策安排"),Observer->bDecisionNeeded && ObservationMemory->bDecisionQueued);
+    ObservationMemory->bDecisionPending=false;
+    ObservationMemory->bDecisionQueued=false;
+    Observer->bDecisionNeeded=false;
+    Player->SetActorLocation(Observer->GetActorLocation()+FVector(0,200,0));
+    TestTrue(TEXT("最后一句之后玩家可以重新开口"),
+        Observer->HearSpeech(Player,TEXT("先听我说，刚才是我没讲清楚。"),FGuid::NewGuid(),0));
+    TestEqual(TEXT("新的玩家发言重新从零开始接话"),Observer->GetConversationDepth(),0);
+    TestTrue(TEXT("新的玩家发言照常进入倾听"),ObservationMemory->IsListening());
+    TestTrue(TEXT("后端关闭时新玩家发言仍安排稍后回复"),Observer->bDecisionNeeded);
+    TestFalse(TEXT("只有新玩家发言才打断原来的台词"),Observer->Presentation->GetSpeech().bActive);
+
+    // 请求已经发出时收到最后一句，也不能把正在生成的回复判为过期
+    FDeliveryNpcDecisionRequest PendingRequest;
+    if (!TestTrue(TEXT("实际建立一份等待模型的请求"),ObservationMemory->BuildDecisionRequest(Epoch,PendingRequest))) return false;
+    ObservationMemory->ActiveRequest=PendingRequest;
+    ObservationMemory->bDecisionPending=true;
+    Observer->bDecisionNeeded=false;
+    const FGuid LastHeardMessage=FGuid::NewGuid();
+    TestTrue(TEXT("等待模型期间记住邻居的最后一句"),
+        Observer->HearSpeech(Neighbor,TEXT("我先把话说到这儿。"),LastHeardMessage,3,Observer,FGuid(),false));
+    FDeliveryNpcDecisionProposal PendingProposal;
+    PendingProposal.WorldEpoch=PendingRequest.WorldEpoch;
+    PendingProposal.NpcId=PendingRequest.NpcId;
+    PendingProposal.RequestId=PendingRequest.RequestId;
+    PendingProposal.ContextRevision=PendingRequest.ContextRevision;
+    PendingProposal.PlanRevision=PendingRequest.PlanRevision;
+    PendingProposal.Action=EDeliveryNpcAction::Wait;
+    PendingProposal.Duration=1;
+    PendingProposal.Speech=TEXT("行，你接着说，我听着呢。");
+    TestTrue(TEXT("只记住的直接发言不会作废已发出的请求"),ObservationMemory->TryAcceptProposal(PendingProposal,Reason));
+    TestFalse(TEXT("记住最后一句后没有额外唤醒请求"),Observer->bDecisionNeeded || ObservationMemory->bDecisionQueued);
+    TestFalse(TEXT("当前模型没读过最后一句，不把它记成已经处理"),ObservationMemory->LastDecisionEventIds.Contains(LastHeardMessage));
     return true;
 }
 #endif

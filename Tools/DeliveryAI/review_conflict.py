@@ -90,6 +90,16 @@ class ConversationScene:
                 {'speaker': 'xiumei', 'text': '行，刚才那事过去了。', 'source': 'authored_control'},
             ]
             self.npc_says('xiumei', self.ids['player'], self.fixture[1]['text'], event_id)
+        if scenario == 'deescalation':
+            # 只预置口角，不预置动手、命中或接受道歉
+            self.fixture = [
+                {'speaker': 'chunlai', 'target': 'xiumei',
+                 'text': '你少冲我嚷，我也没服你！', 'source': 'authored_control'},
+                {'speaker': 'xiumei', 'target': 'chunlai',
+                 'text': '谁要你服了？你也别挤兑我！', 'source': 'authored_control'},
+            ]
+            for item in self.fixture:
+                self.npc_says(item['speaker'], self.ids[item['target']], item['text'])
 
     def identity(self, label):
         return str(uuid.uuid5(uuid.NAMESPACE_URL, f'delivery-conflict-review/{self.scenario}/{label}'))
@@ -152,6 +162,14 @@ class ConversationScene:
                 '你问他啊，他人不就在这儿。',
             ],
             'greeting': [f'{female}，早啊，今天出来散步？'],
+            'smalltalk': [
+                f'{female}，今天出来散步啊？',
+                '我送完这单也想歇会儿，你们聊，我就在旁边喘口气。',
+            ],
+            'deescalation': [
+                '刚才那些话是我编的，他没那么说。对不起，你们别为了我瞎传的话动手。',
+                '是我不对，我不再挑拨了。你们歇会儿，我去送货。',
+            ],
             'apology': ['那我送货去了，你们慢慢聊。'],
         }[self.scenario]
 
@@ -253,7 +271,7 @@ def run(args):
               'instructions_path': str(Path(args.instructions).resolve()) if args.instructions else 'STREAM_INSTRUCTIONS',
               'instructions': instructions,
               'instructions_sha256': hashlib.sha256(instructions.encode('utf-8')).hexdigest(),
-              'limits': {'model_calls': args.max_calls, 'neighbor_replies_per_round': MAX_NEIGHBOR_REPLIES},
+              'limits': {'model_calls': args.max_calls, 'neighbor_replies_per_round': args.neighbor_replies},
               'notice': '这是模型顺序对话模拟，不是 UE 动作测试；选择攻击不代表追到、命中、受击或多人同步。静态场景不模拟移动、播放等待、打断和事件过期。',
               'calls': [], 'attack_selected': None, 'status': 'running'}
 
@@ -264,13 +282,17 @@ def run(args):
         # 人物背景和示例必须与指定快照一致，不能混入正式配置中的新文字
         dialogue_background._read_profiles()
         scene = ConversationScene(profiles, args.scenario)
+        report['limits'].update(player_rounds=len(scene.player_lines()),
+                                npc_followups_per_player_round=args.neighbor_replies)
+        report['previous_player_rounds'] = 1 if args.scenario == 'recent_refusal' else 0
         report.update(player_lines=scene.player_lines(), initial_dialogue=scene.fixture,
-                      initial_dialogue_note='actual 使用 03:00 的三句实机开场；latest 使用 03:26 的开场和玩家原话；recent_refusal 还保留首轮双方拒绝，报告的第一轮对应实机第二次玩家发言。这些场景仍假设双方始终在附近可见，不重放视野变化；apology 预置已接受道歉的对照；其余场景没有预置对话')
+                      initial_dialogue_note='actual 使用 03:00 的三句实机开场；latest 使用 03:26 的开场和玩家原话；recent_refusal 还保留首轮双方拒绝，报告的第一轮对应实机第二次玩家发言。这些场景仍假设双方始终在附近可见，不重放视野变化；apology 预置已接受道歉；deescalation 只预置两句口角，不预置道歉结果；其余场景没有预置对话',
+                      round_note='player_round 计本次运行中玩家发言次数，followup=0 是直接回答，1 到 3 是随后 NPC 接话；recent_refusal 的实机轮数还需加 previous_player_rounds。达到调用上限时未发送的玩家原话不算已测试')
         save()
         for player_round, text in enumerate(scene.player_lines(), 1):
             scene.player_says(text)
             speaker, stop_after_reply = 'xiumei', False
-            for followup in range(MAX_NEIGHBOR_REPLIES + 1):
+            for followup in range(args.neighbor_replies + 1):
                 if len(report['calls']) >= args.max_calls:
                     report['status'] = 'call_limit'
                     return report
@@ -322,9 +344,12 @@ def main():
     parser.add_argument('--instructions')
     parser.add_argument('--output', required=True)
     parser.add_argument('--variant', required=True)
-    parser.add_argument('--scenario', choices=('actual', 'latest', 'recent_refusal', 'paraphrase', 'colloquial', 'greeting', 'apology'), default='actual')
+    parser.add_argument('--scenario', choices=('actual', 'latest', 'recent_refusal', 'paraphrase', 'colloquial', 'greeting', 'smalltalk', 'deescalation', 'apology'), default='actual')
     parser.add_argument('--model', default='gpt-6.1-sol')
     parser.add_argument('--max-calls', type=int, default=MAX_CALLS, choices=range(1, MAX_CALLS + 1))
+    parser.add_argument('--neighbor-replies', type=int, default=MAX_NEIGHBOR_REPLIES,
+                        choices=range(MAX_NEIGHBOR_REPLIES + 1),
+                        help='每次玩家发言后，最多让 NPC 接话几次；0 表示只看被问到的 NPC 如何回答')
     args = parser.parse_args()
     report = run(args)
     print(json.dumps({'output': str(Path(args.output).resolve()), 'status': report['status'],

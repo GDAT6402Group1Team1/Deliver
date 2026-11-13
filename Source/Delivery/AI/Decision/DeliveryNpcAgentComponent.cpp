@@ -132,6 +132,7 @@ bool UDeliveryNpcAgentComponent::ObserveEvent(const FDeliveryNpcObservation& Obs
     Item.Kind = Observation.Kind;
     Item.Source = Observation.Source;
     Item.Description = Observation.Description.Left(512);
+    Item.bNeedsReply = Observation.bNeedsReply;
     Item.ObservedAt = GetWorld()->GetTimeSeconds();
     // 刚说过的话和见过的人记住五分钟，碰撞、受击等现场事件仍使用各自的短时限
     const float Lifetime=IsConversationMemory(Item.Kind) || IsSightMemory(Item)?300.f:
@@ -433,10 +434,10 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
         Proposal.NpcId != NpcId || Proposal.ContextRevision != ActiveRequest.ContextRevision ||
         (!bResident && Proposal.ContextRevision != ContextRevision) ||
         Proposal.PlanRevision != ActiveRequest.PlanRevision || HasActiveAction()) return false;
-    // 玩家或同伴又对自己说了新话时，重新结合上下文回答；旁听不打断当前回答
+    // 需要接话的新发言会让旧回复过期；只记住的最后一句和旁听保留当前回复
     if (bResident && Evidence.ContainsByPredicate([this](const auto& Item)
         {
-            return (Item.Kind==TEXT("PlayerSpeech") || Item.Kind==TEXT("Speech")) && !ActiveRequest.Evidence.ContainsByPredicate(
+            return Item.bNeedsReply && (Item.Kind==TEXT("PlayerSpeech") || Item.Kind==TEXT("Speech")) && !ActiveRequest.Evidence.ContainsByPredicate(
                 [&Item](const auto& Sent){ return Sent.EventId==Item.EventId; });
         })) return false;
     Reason = TEXT("UnsupportedAction");

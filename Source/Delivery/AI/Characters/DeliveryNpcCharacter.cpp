@@ -116,7 +116,7 @@ void ADeliveryNpcCharacter::ObserveFact(FName Kind,AActor* Subject,const FString
         WakeDecision();
     }
 }
-bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth,AActor* Addressee,FGuid ReplyToEventId)
+bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth,AActor* Addressee,FGuid ReplyToEventId,bool bRequestReply)
 {
     if (!HasAuthority() || !IsValid(Speaker) || Speaker->GetWorld()!=GetWorld() || Depth>3 ||
         (Addressee && (!IsValid(Addressee) || Addressee->GetWorld()!=GetWorld())) ||
@@ -130,7 +130,9 @@ bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid
     Event.Kind=Addressee!=this?TEXT("OverheardSpeech"):bPlayerSpeaking?TEXT("PlayerSpeech"):TEXT("Speech");
     Event.Subject=Speaker; Event.Addressee=Addressee;
     Event.Source=EDeliveryNpcEvidenceSource::Heard; Event.Description=Text; Event.Lifetime=45;
+    Event.bNeedsReply=bRequestReply;
     if (!Agent->ObserveEvent(Event)) return false;
+    if (!bRequestReply) return true;
     // 旁人先记住玩家问了什么，等听到回答后再决定是否插话
     if (bPlayerSpeaking && Addressee!=this) return true;
     if (Event.Kind==TEXT("PlayerSpeech"))

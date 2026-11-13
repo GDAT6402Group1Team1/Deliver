@@ -34,6 +34,8 @@ struct DELIVERY_API FDeliveryNpcObservation
     UPROPERTY(EditAnywhere, BlueprintReadWrite) FString Description;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin="0.1", ClampMax="60", Units="s"))
     float Lifetime = 10.f;
+    // 只记住的 NPC 发言不作废当前回复；仅供 C++ 使用
+    bool bNeedsReply = true;
 };
 
 // 将动作状态同步给玩家，NPC 的个人经历和发给模型的信息保存在服务器
@@ -71,6 +73,8 @@ struct DELIVERY_API FDeliveryNpcEvidence
     FVector ObservedLocation = FVector::ZeroVector;
     double ObservedAt = 0;
     double ExpiresAt = 0;
+    // 只记住的 NPC 发言不作废当前回复，不写入模型请求的 JSON
+    bool bNeedsReply = true;
 };
 
 struct FDeliveryNpcCandidate

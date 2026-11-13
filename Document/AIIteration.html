@@ -13,11 +13,36 @@
     @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
     @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
     .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
-<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#npc-natural-perception-20261114">自然口语与感知记录</a><a href="#npc-contact-ui-v4-20261114">命中与 v4 界面</a><a href="#light-dialogue-ui-20261114">v3 界面历史</a><a href="#npc-playability-result-20261114">互殴与道歉让路</a><a href="#npc-playability-trial-20261114">旧按钮失败记录</a><a href="#silent-action-feedback">无台词动作的交谈反馈</a><a href="#model-speech-streaming">真实回复分段与缓冲</a><a href="#reply-waiting-feedback">交谈等待与反馈调整</a><a href="#speech-streaming-comparison">分段对照与停顿表现</a><a href="#sentence-audio-playback">句内语音播放</a><a href="#sentence-audio-integration">分段接口与编码</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
+<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#npc-rivalry-goals-20261114">拱火与完整记忆</a><a href="#next-chat-handoff">二狗交接提示词</a><a href="#npc-natural-perception-20261114">自然口语与感知记录</a><a href="#npc-contact-ui-v4-20261114">命中与 v4 界面</a><a href="#light-dialogue-ui-20261114">v3 界面历史</a><a href="#npc-playability-result-20261114">互殴与道歉让路</a><a href="#npc-playability-trial-20261114">旧按钮失败记录</a><a href="#silent-action-feedback">无台词动作的交谈反馈</a><a href="#model-speech-streaming">真实回复分段与缓冲</a><a href="#reply-waiting-feedback">交谈等待与反馈调整</a><a href="#speech-streaming-comparison">分段对照与停顿表现</a><a href="#sentence-audio-playback">句内语音播放</a><a href="#sentence-audio-integration">分段接口与编码</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
 <header><div class="meta">AI / 交谈、语音与表情 / 2026-11-14</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
-<div class="finding"><strong>最新进展：</strong>已按用户给出的口气调整整套对白要求，并修正把听觉失效写成“离开视线”的问题。最新实机仍未互殴；后台对照有动手也有继续顶嘴的情况，不能认定两三轮的节奏已稳定。没有操作游戏或生成试听声音，二狗暂不实施。<a href="#npc-natural-perception-20261114">查看本次修改与限制</a>；<a href="#npc-rivalry-spoken-20261114">此前人物关系调整</a>。</div>
+<div class="finding"><strong>最新进展：</strong>合并人物决策指导，保留自然口语，并修复邻居漏记闲聊最后一句的问题。最终模型样本分别在第一、第三轮选择交战，道歉后能收场；不能据此保证固定节奏或实际命中。构建与后台检查通过，没有进入游戏。<a href="#npc-rivalry-goals-20261114">查看本次对照</a>；<a href="#next-chat-handoff">复制二狗实施提示词</a>。</div>
 <div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、翠花眉形和 B 音色短反应已加入；轻拳误用倒地片段已修正，本次单人实际受击保持站立。翠花已采用用户认可的 B 加速版；句内音频已接到 UE 接收、编码和播放流程，八项专项通过。句内分段已接入试玩，开播缓冲为 1.28 秒。一次真实模型到 UE 播放器的检查通过，两句完整且没有再次等待音频；随后语音生成中的打断检查也通过。用户已试听并认可分段 B 样本；游戏中的空间音量、画面与真实多人效果仍需验收。倾听和失败反馈已修复并通过六项专项检查。动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
 <div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
+<section id="npc-rivalry-goals-20261114"><h2>11 月 14 日：让争执发展成行动，保留完整对话</h2>
+<h3>这次调整的依据</h3>
+<p>用户希望正常情况下约两三轮对话能吵起来、动手，同时坚持由模型根据性格和对话决定，不能按次数开打。这里按玩家一次发言算一轮，并另外记录 NPC 接话次数；不把第三次 NPC 回复说成第三次玩家挑拨。</p>
+<p>原提示反复列出核实传话、拒绝、退让和停止，人物在意什么却不够突出。本次将重复内容合并到 <code>CHARACTER_DECISION_INSTRUCTIONS</code>，完整回复与流式回复共用。模型先结合性格判断此刻在意什么、想让谁怎样，再选择实际行动；否认传闻不会自动解决对方当面摆架子引起的不满，认真道歉或求停仍有机会收场。模型只能选择当前候选，命中、倒地和任务结果仍由游戏确认。</p>
+<p>第一版只加强“急躁、手比嘴快”，仍在三次玩家挑拨后一起拒绝较量。第二版补充他们被比较时的说话习惯：大壮爱显摆，翠花会拆台，也可能借起哄的机会逗对方。这让人物自己说出当面的贬低，给对方一个真实的新反应对象。示例保存在人物配置中，程序没有匹配例句或替换模型动作。</p>
+<p>第二版曾生成“传话我不全信，可你这不服气的劲儿……”这样的解释，仍不像用户给出的当面说话方式。最后一版明确让这些判断用于选择行动，台词直接回应眼前的话。问真假、喊冤和嫌对方态度差分别参考“他真这么说了？”、“我没说啊，别血口喷人！”、“你这是什么态度！”，不固定拼接或复诵。</p>
+<h3>修复漏掉最后一句的记忆</h3>
+<p>对照工具一直把双方台词记入下一轮，而正式游戏在 <code>SpeechDepth == 3</code> 时停止通知邻居。玩家能听见最后一句，另一个 NPC 却不知道。后续继续挑拨时，模型收到的经过因此不完整。</p>
+<p>现在完整回复与流式回复都通知附近 NPC 记住最后一句。<code>HearSpeech</code> 增加 <code>bRequestReply</code> 参数，默认保留原行为；传入 false 时经过原有距离、遮挡和去重检查后只保存台词，不改变接话轮数、不唤醒模型、不取消语音。观察与记忆中的内部 <code>bNeedsReply</code> 还让这句话不会作废已经发出的请求；普通新玩家发言仍会要求重新回答。两个标记不提供给模型，也不参与选择攻击。</p>
+<p>闲聊仍最多自动接三轮，新玩家发言仍会重新开始，其他现场事件沿用原规则。只记住最后一句不会额外请求模型，也没有把这句话改成“旁听”来绕过检查。补充的 C++ 断言包括完整与流式末句、去重、当前语音、已排队请求、晚回包采纳及新玩家插话。</p>
+<h3>固定场景对照</h3>
+<p>本轮统一限制每次玩家发言后最多一次 NPC 跟进，用于检查玩家较快再次插话的情况。这只是后台顺序模拟，不等于重放实机异步取消。使用 <code>gpt-6.1-sol</code>，每版每场仅运行一次，不重试挑选成功结果；背景和提示快照随报告保存。</p>
+<div class="table-scroll"><table><thead><tr><th>版本</th><th>场景与调用数</th><th>结果</th></tr></thead><tbody>
+<tr><td>修改前基线</td><td>换说法，3 次；使用原来的每轮最多三次跟进</td><td>第一玩家轮选择交战，说明旧版也可能成功；不能与新上限混成成功率</td></tr>
+<tr><td>第一版</td><td>7 场、26 次调用</td><td>换说法在第二轮交战；原话完整三轮、先前拒绝场景都未攻击。问候、寒暄、真诚道歉与已和解告辞正常</td></tr>
+<tr><td>第二版</td><td>5 场、17 次调用</td><td>原话第一轮、换说法第二轮交战；先前拒绝仍未攻击，寒暄和认真道歉无攻击。部分台词仍在解释自己的判断</td></tr>
+<tr><td>最终口语版本</td><td>3 场、12 次调用</td><td>原话第一轮、换说法第三轮交战；真诚道歉后收场。其他控制场景沿用上一版口气的结果，没有重复测试</td></tr>
+</tbody></table></div>
+<p>最终换说法场景中，双方先否认传闻，随后因“摆威风”的口气继续争吵。第三次玩家发言后，翠花说“大壮，你当然能顶嘴，可我也没说要服你！”，大壮接“你不服，我还不服你呢，来试试！”，模型选择对翠花 <code>Fight</code>。直接激将场景更快：翠花当面说大壮“嘴上可厉害”，他在第一轮便选择交战。认真道歉的场景没有动手，随后让路或等待。</p>
+<p>本轮共 16 份场景报告、58 次模型调用，没有协议错误。记录位于 <code>Saved/AIResearch/NpcRivalryTuning_20261114/</code>，包含 <code>baseline</code>、<code>candidate</code>、<code>candidate2</code>、<code>release</code> 四组。第一轮过快、双方已经拒绝后仍不肯较量的样本均保留。模型选择交战之后工具就停止，不模拟对方还手、导航、命中或倒地；场景默认双方仍在附近可见，所有玩家发言都先对翠花，不能代表向大壮交谈的全部情况。</p>
+<h3>构建、检查与下一任务</h3>
+<p>UE 5.8 <code>DeliveryEditor Win64 Development</code> 完整构建成功，18 个步骤，用时 26.86 秒，未见编译警告；日志为 <code>Saved/Logs/NpcRivalryMemoryBuild.log</code>。在 <code>Tools/DeliveryAI</code> 运行 <code>python -X utf8 -m unittest test_dialogue_background test_dialogue_log test_model_context test_streaming test_server test_review_conflict -q</code>，65 项通过。C++ 回归断言已编译，遵守当前测试范围，没有运行 UE 自动化、进入游戏或合成试听语音。</p>
+<p>交付前已重启本工程后端，继续使用端口 <code>8769</code>、<code>gpt-6.1-sol</code>、Qwen 语音、对话日志与音频分段。监听和语音准备日志正常，错误日志为空；没有额外发送模型请求或生成试听。</p>
+<p>这次完成的是人物配置、决策指导、记忆修复与后台验证。实际按钮、双方真正追打、拳头接触、声音和多人画面仍需用户验收，不能宣称稳定达到两三轮互殴。用户要求下一任务实施二狗，已更新<a href="#next-chat-handoff">交接提示词</a>，其中保留这些限制；本轮没有开始实现二狗。</p>
+</section>
 <section id="npc-natural-perception-20261114"><h2>11 月 14 日：自然口语与感知记录</h2>
 <h3>用户指出的问题</h3>
 <p>此前模型生成的“我没说你怂，别一上来就冲我嚷！”和“没说就没说，少拿这口气训我！”没有得到认可。用户希望口气更接近日常争吵：“我没说你怂啊，别血口喷人！”、“没说就没说嘛，你这是什么态度！”。这两句已作为作者示例加入人物资料，不能当作本次模型实际生成的结果。</p>
@@ -202,21 +227,39 @@ UnrealEditor-Cmd.exe D:/Udev/Delivery/Delivery.uproject -NullRHI -unattended -no
 <p>同批修改还让聊天框先显示模型已返回的有效首句，声音和头顶字幕保留原播放顺序；轻微擦身只短暂回头，不再直接写入撞人事实或强制生气。随后完成了三次旧拱火按钮的实际操作，文字和声音正常返回，但没有打起来，结果与下一轮修复见<a href="#npc-playability-trial-20261114">实际试玩记录</a>。仅准备的五步剧情模拟脚本没有执行，也没有模型结果。</p>
 <p><strong>本轮完成条件：</strong>实际检查结束后，把可玩的版本交给用户验收。只有用户认可当前交谈、冲突和表现，才能结束这个目标。自动化通过不能代替用户认可，本轮不启动二狗或新技能阶段。</p>
 <p class="evidence">构建：<a href="../Saved/Logs/NpcPlayabilityBuild3.log">NpcPlayabilityBuild3.log</a>；首轮：<a href="../Saved/Automation/NpcPlayability/index.json">NpcPlayability/index.json</a>；两项复测：<a href="../Saved/Automation/NpcPlayabilityFollowup/index.json">NpcPlayabilityFollowup/index.json</a>。运行日志分别为 <code>Saved/Logs/NpcPlayabilityTests.log</code> 与 <code>NpcPlayabilityFollowupTests.log</code>。后端命令在 <code>Tools/DeliveryAI</code> 运行：<code>python -B -X utf8 -m unittest test_model_context test_streaming test_server test_dialogue_background -q</code>。</p></div>
-<div id="next-chat-handoff"><h3>后续工作交接提示词</h3>
-<p>下面这段供后续新对话使用。本轮先完成街坊体验验收；未完成的功能只作交接，不在等待验收时继续扩展。</p>
-<pre>继续 D:\Udev\Delivery 项目。先读 AGENTS.md、CLAUDE.md、Document/Architecture.md 的当前状态与“AI 跟班二狗设计”，以及 Document/AIIteration.html 最近记录。检查 Git 和正在运行的编辑器、后台，保护已有改动；不要重新做已经完成的声音或性能试验。
+<div id="next-chat-handoff"><h3>二狗实施交接提示词</h3><p>用户要求将下列内容作为新任务的目标。它保留完整二狗范围与本轮未复测项目；复制到新对话后，以那次用户指令安排实施和测试。</p><pre>继续 D:\Udev\Delivery 项目，实施长期陪伴角色“牛二狗”。先读 AGENTS.md、CLAUDE.md，再读 Document/Architecture.md 的“AI 跟班二狗设计”（2026-11-13）、Document/DeliveryAIPlan.html#ergou-design 和 Document/AIIteration.html 的最新记录、ergou-research、pubg-ally-companion。
 
-先确认上一轮用户验收结论。当前目标是交谈容易触发、玩家清楚自己说了什么，拱火后的台词和动作有联系，互殴、追赶和受击明显且滑稽。只有用户认可才结束；未认可时继续修具体问题。后续实施由新对话中的用户指令决定。
+先检查 Git、编辑器和后端，保护已有改动。二狗目前只有设计，尚无正式类、行为树、动作和验收结果。较新的完整方案覆盖早期“只做跟随”的建议；先沿一次玩家操作说明职责、接口和多人流程，再逐步实现。不要重新进行已经完成的声音下载、试听和长时间性能研究。
 
-二狗尚未实现。按主文档完整方案分步交付：面馆扶起认大哥、跟随与避让、取件帮送、共同战斗、当局记忆与亲密度、爷爷离开和入住。主人绑定 PlayerState，正常上下车不换主人；任务、钱和包裹由现有服务器规则确认。先做认识二狗并走完第一单，再做连续任务与关系变化，不只交付一个跟随演示。
+上一轮状态：已合并街坊决策指导，改为自然口语；模型自己根据性格、对话和现场选择动作，没有关键词或挑拨次数开打。完整与流式回复的最后一句现在都会被邻居记住，bRequestReply=false 不自动接话，内部 bNeedsReply=false 不作废等待中的回复。听觉失效不再误报离开视线。DeliveryEditor 构建通过，65项后台检查通过；最终模型对照分别在第一、第三玩家轮选 Fight，道歉后收场，但此前双方已拒绝时仍可能继续拒绝。本轮没有运行UE自动化或实际PIE，真实追赶、命中、声音与多人效果未复测，不能把模型选中动作说成实机验收完成。当前提交状态以 git log/status 为准。
 
-共享技能优先使用已有 GAS。玩家 ASC 保留在 PlayerState；先核对 NPC 接入与主角布娃娃依赖，用能力接口连接各自的执行方式。C++ 处理服务器规则、命中和取消，蓝图与数据资产配置流程和表现。空纸箱推搡是候选，具体效果先按当前代码确认，不另建一套平行技能系统。
+人物按完整主文档执行：二狗是被第一单面馆开除的年轻帮厨，憨厚、忠心、认真干活，认了玩家就不改跟别人。他熟悉村里，怕狗和喇叭，编织袋里养着毛毛虫小绿。笑点来自逞强、处境和身体反应，不靠固定口头禅、成语乱用或故意听错话。台词像真人面对面说话，保留自然语气，不机械省略，也不把模型的分析直接说出来。
 
-声音保留用户认可的大壮 Uncle_Fu、翠花固定 Xiaofang_B、女声加速版与分段 B。句内分段已接入试玩，初始缓冲1.28秒、续播0.32秒；后台用 -DialogueLog -StreamAudio 启动。不要更换音色、变调、下载新模型或重做试听；游戏内音量、动作配合和多人听感按实际反馈完善。二狗专属声音另按既定流程试听，未选定时沿用现有男声。
+按以下过程逐步交付，每一步都要能玩：
+1. 第一单期间在面馆附近看见二狗被赶出来，玩家按住E扶起，服务器确认主人，二狗由模型生成感谢并接受交谈。检查面馆与出生点的位置关系，使剧情容易被发现，不擅自搬动已有地点。
+2. 跟随、避让、等候和召回接入第一单；通过自然语言理解“跟着我”“等一下”“回来”“算了”等意图，并从当时能做的事中选择。主人骑车时原地等候，下车后继续跟随，不瞬移穿墙、不堵住交付和门口。
+3. 接上取件、接件、帮送、交还与取消，让玩家带二狗完成一单。包裹、任务归属和奖励由现有服务器系统确认，二狗只能根据实际结果回应，不能只答应却不行动。
+4. 完整目标继续包括共同战斗、当局记忆与亲密度、小绿恶作剧、爷爷收到进城车票后离开以及入住共用房屋。按主文档实现，不把最后交付缩成只会跟随的演示；先交付第一单闭环，再扩展连续跑腿与家中日常。
 
-LLM 继续负责理解、台词和可用动作选择。行为树执行动作，服务器确认真实结果；不要用固定关键词保证街坊打架。二狗已确认的固定玩法规则与模型职责按主文档分别实现。交谈界面采用用户确认的轻量方案 A：NPC 对白只在人物附近，下方只有玩家原话和输入，例句按需展开、选中复制编辑后自行发送；不要恢复自动拱火/道歉按钮，不增加聊天历史或下方重复 NPC 回复。v2 大面板草图未采用；v3 已保存并完成过单人复制编辑发送检查，但用户仍不满意视觉效果。当前参考 v4：下中奶油色窄输入条、玩家原话在上方、NPC 头顶对白与 T 提示。v4 与拳头接触修复已构建，四项专项通过，单人实际 T、输入、点击发送、站立受击和 Esc 关闭已观察；双人客户端发送未完成。DPI 间距以及新增 Flee、自身战况和受击后重新选择已通过最终编译，正式人物表已保存，但没有新增运行检查，不沿用前一版本的成功记录。用户要求停止测试后不得继续操作游戏或追加自动化。人物由模型决定逃跑、追赶或罢手，不按挨打次数硬切动作；普通交谈和冲突收尾应减少过激反应。重点 UI 先做符合项目风格的效果图，再用 UMG 和现有 HUD/UI Controller 接入。优先 UE 编辑器资产、MCP 和成熟能力，避免机械堆组件。
+架构沿用 Listen Server＋独立AI后端。玩家通过自己的控制器与 ConversationComponent 提交原话，服务器检查距离、遮挡、权限后交给NPC。NpcAgent 保存实际经历、请求和动作，Gateway 管理模型连接；模型理解玩家意图、生成台词、选择当时能执行的动作，蓝图行为树执行，服务器确认结果。
 
-每阶段做少量有效回归与真实互动检查，明确主机、客户端、旁观者及未覆盖范围。先交可玩版本，性能研究围绕实际瓶颈，不长期推迟试玩。问题、修复和采用理由继续记录在上述两份文档；提交与推送按用户授权分别处理。</pre></div>
+按主文档评估 CompanionCharacter 与 CompanionComponent：角色复用现有NPC移动、战斗和表现；同伴对象保存主人PlayerState、跟随状态、当前跑腿、携带物品和亲密度。检查现有 CanExecute、ExecuteAction、StopAction 再扩展。每份状态只有明确的主要修改者；接口解释调用者、返回结果和取消方式，不机械增加Component。Follow、Stay、FetchPackage、GoHome等先有真实执行能力再加入模型候选。长时间跟随与跑腿不能直接沿用当前0.1–5秒短动作限制，要设计可取消、能报告进度与结果的任务，并保留街坊旧协议兼容。
+
+保留二狗已确认的固定规则：主人打谁或被谁打，他会冲上去帮忙，这部分由游戏规则触发，模型负责台词。街坊是否还手、逃跑或追赶仍由各自模型选择，不能把二狗的例外扩展成街坊固定打架。接近、挥拳、真实命中、倒地和恢复继续走游戏规则，不能凭空受击。
+
+共享技能优先使用GAS，先查现有依赖。玩家ASC继续保留在PlayerState；NPC接入时通过能力接口隔离主角主动布娃娃与NPC动画的差异。C++处理复杂判定、命中、物品交接、取消和服务器规则；蓝图、GE、Cue、数据资产配置流程与表现。空纸箱推搡等是后续候选，未经确认不扩大本轮范围。
+
+多人和清理必须检查：主人绑定PlayerState，正常上下车不换主人；其他玩家能聊天或碰撞，不能抢改归属和跑腿命令。重复扶起、交付不重复加入或发奖。倒地、目标销毁、订单被别人完成、主人断线、换Pawn、切图和EndPlay时，处理包裹并取消相关导航、模型任务、字幕、声音及临时效果。旧回调不得控制新任务，各World分别管理。跟随补位必须检查所有玩家视角，不能只看房主相机。
+
+优先通过UE MCP创建和检查可编辑的行为树、动画蓝图、数据表和UMG。按业务选择行为树、状态管理、导航或LLM，避免多个系统同时移动角色；不把UE已有表现配置重写到C++里。重点UI先参考美术风格做效果图，再沿用HUD/UI Controller/UMG。保留当前v4轻量对话：NPC附近对白和T提示、下方玩家原话及输入、例句按需展开复制；不恢复自动拱火按钮。
+
+保留大壮Uncle_Fu、翠花Xiaofang_B及已认可加速与分段声音。后端启动脚本 Tools/DeliveryAI/start_backend.ps1，当前工程配置端口8769，使用 -DialogueLog -StreamAudio；启动前检查已有服务，不叠加进程。二狗专属年轻男声未选定前按主文档暂用现有男声，新的下载或试听按既定授权流程处理。
+
+参考PUBG Ally、和平精英及已有任天堂设计记录时，先核对已读范围再补读原文。现有和平精英GDC资料有第三方整理稿，不能说已读完整录像或源码；把采用部分、限制和为什么适合本项目记入AIIteration。不要照搬训练系统，也不要把外部延迟数字当作项目结果。
+
+每阶段做少量有效回归，重点验收持续陪伴：是否挡路抢话、是否理解当前订单、是否答应后真正去做、取消后是否停下，以及声音动作是否自然。检查主机、客户端、旁观者的归属和表现。上一轮用户只允许后台模型对照，不授权操作其游戏；新任务按用户明确的测试范围执行，不擅自启动PIE。获得实际试玩授权后，使用游戏里的E、T、输入和按钮验证；直接调用RPC不能代替真实互动。自动化通过不等于玩法完成。
+
+将问题、修复、依据和未验证范围更新在已有 Architecture.md、DeliveryAIPlan.html、AIIteration.html，注释使用简短自然中文。先交可玩版本，再按反馈迭代；不要等待所有未来功能完成才给用户试玩。提交、推送和结束目标按用户授权处理。</pre></div>
 </section>
 <section id="model-speech-streaming"><h2>11 月 13 日：真实回复分段与缓冲调整</h2>
 <p class="meta">真实模型分段与 UE 播放检查完成，分段 B 样本获用户认可，现已接入试玩；游戏内声音与多人效果待验收</p>

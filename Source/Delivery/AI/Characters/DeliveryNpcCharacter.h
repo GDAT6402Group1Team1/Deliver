@@ -69,7 +69,8 @@ public:
     virtual void ReceiveHornFrom(float Multiplier,AActor* Vehicle,AActor* Driver) override;
     // 接收玩家或其他 NPC 的发言，返回 true 表示已听见，还不表示已经回答
     // 玩家发言先经过交谈组件检查，再从服务器调用这里
-    bool HearSpeech(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth,AActor* Addressee=nullptr,FGuid ReplyToEventId=FGuid());
+    // bRequestReply 为 false 时只记住这句话，不安排接话或打断当前回复
+    bool HearSpeech(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth,AActor* Addressee=nullptr,FGuid ReplyToEventId=FGuid(),bool bRequestReply=true);
     // 玩家开口从第 0 轮开始，NPC 接话时逐轮增加
     int32 GetConversationDepth() const { return ConversationDepth; }
     void WakeDecision();

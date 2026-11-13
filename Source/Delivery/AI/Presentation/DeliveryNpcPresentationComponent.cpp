@@ -114,10 +114,11 @@ void UDeliveryNpcPresentationComponent::TickComponent(float Dt,ELevelTick Type,F
         UE_LOG(LogTemp,Log,TEXT("ResidentSpeech completed: npc=%s turn=%s replyTo=%s"),
             *GetNameSafe(GetOwner()),*Speech.TurnId.ToString(),*Speech.ReplyToEventId.ToString());
         Resident->Agent->ObserveEvent(Said);
-        if (SpeechDepth<3)
-            for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
-                if (*It!=Resident && FVector::DistSquared(It->GetActorLocation(),Resident->GetActorLocation())<FMath::Square(800.f))
-                    It->HearSpeech(Resident,Speech.Text,Speech.TurnId,SpeechDepth+1,ReplyListener.IsValid()?ReplyListener.Get():Resident,Speech.ReplyToEventId);
+        // 完整回复与流式回复一样，最后一轮只通知邻居记住台词
+        for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
+            if (*It!=Resident && FVector::DistSquared(It->GetActorLocation(),Resident->GetActorLocation())<FMath::Square(800.f))
+                It->HearSpeech(Resident,Speech.Text,Speech.TurnId,FMath::Min(SpeechDepth+1,3),
+                    ReplyListener.IsValid()?ReplyListener.Get():Resident,Speech.ReplyToEventId,SpeechDepth<3);
     }
     if (GetNetMode()==NM_DedicatedServer) return;
     TickExpression(Dt);

@@ -429,11 +429,12 @@ void UDeliveryNpcPresentationComponent::RecordSpokenReply(bool bCompleteReply)
     // 整段说完才标记玩家的问题已回答，中途停止仍保留前面说过的内容
     if (bCompleteReply) { Said.EventId=Speech.TurnId; Said.ReplyToEventId=ReplyMessage; }
     Npc->Agent->ObserveEvent(Said);
-    // 接话达到三轮后结束这次闲聊，新的玩家发言仍会重新开始
-    if (bCompleteReply && SpeechDepth<3)
+    // 最后一轮仍让邻居记住完整台词，但不再安排下一轮接话
+    if (bCompleteReply)
         for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
             if (*It!=Npc && FVector::DistSquared(It->GetActorLocation(),Npc->GetActorLocation())<FMath::Square(800.f))
-                It->HearSpeech(Npc,SpokenReply,Speech.TurnId,SpeechDepth+1,ReplyListener.IsValid()?ReplyListener.Get():Npc,ReplyMessage);
+                It->HearSpeech(Npc,SpokenReply,Speech.TurnId,FMath::Min(SpeechDepth+1,3),
+                    ReplyListener.IsValid()?ReplyListener.Get():Npc,ReplyMessage,SpeechDepth<3);
     if (bCompleteReply)
     {
         UE_LOG(LogTemp,Log,TEXT("NpcLatency speech=%s stage=reply_completed sentences=%d"),*ReplyMessage.ToString(),NextSentence);

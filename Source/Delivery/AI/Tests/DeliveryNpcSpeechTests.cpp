@@ -385,6 +385,7 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
         Speech->BeginReply(FGuid::NewGuid(),FGuid(),Speaker->GetConversationDepth());
         TestEqual(TEXT("流式回复保留当前接话轮数"),Speech->SpeechDepth,Depth);
         const FGuid Turn=FGuid::NewGuid();
+        const int32 PreviousListenerDepth=Listener->GetConversationDepth();
         Speech->Speech.TurnId=Turn;Speech->SpokenReply=FString::Printf(TEXT("这是第%d轮接话"),Depth);
         Speech->RecordSpokenReply(true);
         const bool Heard=Listener->Agent->RecentEventIds.Contains(Turn);
@@ -393,8 +394,21 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
             TestTrue(TEXT("前几轮完整台词通知附近居民"),Heard);
             TestEqual(TEXT("附近居民接话时增加一轮"),Listener->GetConversationDepth(),Depth+1);
         }
-        else TestFalse(TEXT("第三轮结束后不再用旧闲聊唤醒邻居"),Heard);
+        else
+        {
+            TestTrue(TEXT("第三轮完整台词仍被邻居记住"),Heard);
+            TestEqual(TEXT("最后一句不会推进邻居的接话轮数"),Listener->GetConversationDepth(),PreviousListenerDepth);
+        }
     }
+    // 原有完整回复也要通知最后一句，不能只有流式回复保留这段记忆
+    Peer->Presentation->CancelSpeech();
+    const int32 PreviousListenerDepth=Npc->GetConversationDepth();
+    TestTrue(TEXT("开始第三轮完整回复"),Peer->Presentation->PublishSpeech(TEXT("话说到这儿吧。"),TEXT("Calm"),3));
+    const FGuid FinalTurn=Peer->Presentation->Speech.TurnId;
+    Peer->Presentation->Speech.StartTime=Peer->Presentation->ServerTime()-Peer->Presentation->Speech.Duration-.1;
+    Peer->Presentation->TickComponent(0,LEVELTICK_All,nullptr);
+    TestTrue(TEXT("完整回复的最后一句也被邻居记住"),Npc->Agent->RecentEventIds.Contains(FinalTurn));
+    TestEqual(TEXT("完整回复的最后一句也不推进接话轮数"),Npc->GetConversationDepth(),PreviousListenerDepth);
     Peer->ObserveFact(TEXT("Recovered"),nullptr,TEXT("我已经恢复站立"),EDeliveryNpcEvidenceSource::ActionResult);
     TestEqual(TEXT("自己的动作结果不会重新开启闲聊"),Peer->GetConversationDepth(),3);
     Peer->ObserveFact(TEXT("PlayerBrush"),Npc,TEXT("这名快递员刚与你擦身碰到"),EDeliveryNpcEvidenceSource::Seen);
