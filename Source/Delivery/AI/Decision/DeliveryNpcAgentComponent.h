@@ -18,6 +18,7 @@ class DELIVERY_API UDeliveryNpcAgentComponent : public UActorComponent
     friend class FDeliveryNpcConversationOcclusionTest;
     friend class FDeliveryNpcStrikeApproachTest;
     friend class FDeliveryNpcStrikeNavigationTest;
+    friend class FDeliveryNpcBodyAnimationTest;
     friend class FDeliveryNpcSpeechStreamTest;
     friend class FDeliveryResidentIntegrationTest;
     friend class FDeliveryResidentPIECommand;

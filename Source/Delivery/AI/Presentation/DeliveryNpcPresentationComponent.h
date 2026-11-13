@@ -124,6 +124,8 @@ protected:
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     virtual void TickComponent(float Dt,ELevelTick Type,FActorComponentTickFunction* Fn) override;
 private:
+    // 尚未配置主动画蓝图的旧 NPC 保留原播放入口，正式街坊由 ABP_NpcBody 处理
+    void UpdateLegacyAnimation(class ADeliveryNpcCharacter* Resident);
     UPROPERTY(ReplicatedUsing=OnRep_Speech) FDeliveryNpcSpeechState Speech;
     UFUNCTION() void OnRep_Speech();
     UPROPERTY(Transient) TObjectPtr<UDeliveryDialogueVoiceComponent> Voice;

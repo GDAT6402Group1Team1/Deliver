@@ -75,7 +75,8 @@ void UDeliveryNpcCombatComponent::ReceiveImpact(const FVector& Impulse,AActor* S
     if (!Resident || !Resident->HasAuthority() || bDown || Impulse.ContainsNaN()) return;
     CancelStrike(); Resident->Agent->CancelPlan(TEXT("Hit"));
     if (auto* Hold=Resident->GetHeldVehicle()) Hold->Release(TEXT("HolderHit"));
-    bDown=true; bDeliberate=false; bRecovering=false; RecoverAt=GetWorld()->GetTimeSeconds()+RecoverySeconds;
+    bDown=true; bDeliberate=false; bRecovering=false;
+    DownStartedAt=GetWorld()->GetTimeSeconds(); RecoveryStartedAt=-1; RecoverAt=DownStartedAt+RecoverySeconds;
     // 使用 CharacterMovement 处理 NPC 击退和地面碰撞，并限制击退速度
     Resident->LaunchCharacter(Impulse.GetClampedToMaxSize(450.f)+FVector(0,0,100),true,true);
     OnRep_Down(); Resident->ForceNetUpdate();
@@ -84,6 +85,8 @@ void UDeliveryNpcCombatComponent::ReceiveImpact(const FVector& Impulse,AActor* S
 bool UDeliveryNpcCombatComponent::SetDeliberateProne(bool bProne)
 {
     if (!GetOwner()->HasAuthority() || (bDown && !bDeliberate)) return false;
+    if (bProne && !bDown) DownStartedAt=GetWorld()->GetTimeSeconds();
+    if (!bProne) { DownStartedAt=-1; RecoveryStartedAt=-1; bRecovering=false; }
     bDown=bProne; bDeliberate=bProne; RecoverAt=GetWorld()->GetTimeSeconds()+4;
     OnRep_Down(); GetOwner()->ForceNetUpdate(); return true;
 }
@@ -123,16 +126,22 @@ void UDeliveryNpcCombatComponent::TickComponent(float Dt,ELevelTick Type,FActorC
         {
             auto* Resident=CastChecked<ADeliveryNpcCharacter>(GetOwner());
             if (!Resident->GetCharacterMovement()->IsMovingOnGround()) return;
-            bRecovering=true; RecoverAt=Now+1.6; GetOwner()->ForceNetUpdate(); return;
+            bRecovering=true; RecoveryStartedAt=Now; RecoverAt=Now+1.6; GetOwner()->ForceNetUpdate(); return;
         }
-        bDown=false; bDeliberate=false; bRecovering=false; OnRep_Down(); GetOwner()->ForceNetUpdate();
+        bDown=false; bDeliberate=false; bRecovering=false; DownStartedAt=-1; RecoveryStartedAt=-1;
+        OnRep_Down(); GetOwner()->ForceNetUpdate();
         if (auto* Resident=Cast<ADeliveryNpcCharacter>(GetOwner()))
             Resident->ObserveFact(TEXT("Recovered"),nullptr,TEXT("我已经恢复站立，可以继续行动"),EDeliveryNpcEvidenceSource::ActionResult);
     }
 }
-void UDeliveryNpcCombatComponent::EndPlay(const EEndPlayReason::Type Reason) { CancelStrike(); Super::EndPlay(Reason); }
+void UDeliveryNpcCombatComponent::EndPlay(const EEndPlayReason::Type Reason)
+{
+    CancelStrike(); DownStartedAt=-1; RecoveryStartedAt=-1;
+    Super::EndPlay(Reason);
+}
 void UDeliveryNpcCombatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(UDeliveryNpcCombatComponent,bDown); DOREPLIFETIME(UDeliveryNpcCombatComponent,bDeliberate); DOREPLIFETIME(UDeliveryNpcCombatComponent,bRecovering);
     DOREPLIFETIME(UDeliveryNpcCombatComponent,StrikeAnimationId); DOREPLIFETIME(UDeliveryNpcCombatComponent,StrikeStartedAt);
+    DOREPLIFETIME(UDeliveryNpcCombatComponent,DownStartedAt); DOREPLIFETIME(UDeliveryNpcCombatComponent,RecoveryStartedAt);
 }

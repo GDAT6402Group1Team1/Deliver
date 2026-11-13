@@ -1,5 +1,7 @@
 #include "DeliveryNpcAnimationAssetTools.h"
 #include "AI/Presentation/DeliveryNpcConversationAnimInstance.h"
+#include "AI/Presentation/DeliveryNpcBodyAnimInstance.h"
+#include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimBlueprintGeneratedClass.h"
@@ -14,6 +16,9 @@
 #include "AnimGraphNode_ComponentToLocalSpace.h"
 #include "AnimGraphNode_ModifyBone.h"
 #include "AnimGraphNode_LookAt.h"
+#include "AnimGraphNode_BlendListByInt.h"
+#include "AnimGraphNode_SequencePlayer.h"
+#include "AnimGraphNode_SequenceEvaluator.h"
 #include "AnimationGraphSchema.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphPin.h"
@@ -22,6 +27,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
+#include "UObject/UnrealType.h"
 
 namespace
 {
@@ -97,6 +103,21 @@ bool GetHeadAxes(USkeletalMesh* Mesh,const FTransform& MeshRelative,FVector& Fro
     Front=HeadInMesh.InverseTransformVectorNoScale(MeshFront).GetSafeNormal();
     Up=HeadInMesh.InverseTransformVectorNoScale(MeshUp).GetSafeNormal();
     return !Front.IsNearlyZero() && !Up.IsNearlyZero() && FMath::Abs(FVector::DotProduct(Front,Up))<.01f;
+}
+
+bool SetNpcAnimationBool(UScriptStruct* Type,void* Data,FName Name,bool Value)
+{
+    auto* Property=FindFProperty<FBoolProperty>(Type,Name);
+    if (!Property) return false;
+    Property->SetPropertyValue_InContainer(Data,Value);
+    return true;
+}
+
+bool ConnectNpcBodyPose(UEdGraph* Graph,UEdGraphNode* From,UAnimGraphNode_BlendListByInt* Blend,int32 Index)
+{
+    auto* Output=FindPosePin(From,EGPD_Output);
+    auto* Input=Blend->FindPin(FName(*FString::Printf(TEXT("BlendPose_%d"),Index)),EGPD_Input);
+    return Output && Input && Graph->GetSchema()->TryCreateConnection(Output,Input);
 }
 }
 
@@ -185,4 +206,155 @@ FString UDeliveryNpcAnimationAssetTools::CreateConversationAnimation(bool bRepla
         if (!SaveNpcAnimationAsset(Mesh)) return TEXT("NPC face mesh save failed");
     }
     return FString::Printf(TEXT("NPC conversation animation saved; HeadForward=%s HeadUp=%s"),*Front.ToString(),*Up.ToString());
+}
+
+FString UDeliveryNpcAnimationAssetTools::CreateBodyAnimation(bool bReplaceGraph)
+{
+    const FString Folder=TEXT("/Game/NPC/Residents/Animation");
+    const FString Name=TEXT("ABP_NpcBody");
+    const TCHAR* NpcPaths[]={TEXT("/Game/NPC/Residents/BP_ResidentLoud"),TEXT("/Game/NPC/Residents/BP_ResidentShrewd")};
+    TArray<UBlueprint*> NpcBlueprints;
+    USkeletalMesh* Preview=nullptr;
+    USkeleton* Skeleton=nullptr;
+    for (const TCHAR* Path:NpcPaths)
+    {
+        auto* NpcBP=LoadObject<UBlueprint>(nullptr,Path);
+        auto* Npc=NpcBP && NpcBP->GeneratedClass?Cast<ADeliveryNpcCharacter>(NpcBP->GeneratedClass->GetDefaultObject()):nullptr;
+        auto* Mesh=Npc?Npc->GetMesh()->GetSkeletalMeshAsset():nullptr;
+        if (!Mesh || !Mesh->GetSkeleton()) return FString::Printf(TEXT("Missing NPC mesh or skeleton: %s"),Path);
+        if (Skeleton && Skeleton!=Mesh->GetSkeleton()) return TEXT("NPC body animation requires the existing shared skeleton");
+        if (!Mesh->GetPostProcessAnimBlueprint()) return TEXT("NPC conversation post-process animation is missing");
+        if (!Preview) Preview=Mesh;
+        Skeleton=Mesh->GetSkeleton();
+        NpcBlueprints.Add(NpcBP);
+    }
+    auto* Blueprint=LoadObject<UAnimBlueprint>(nullptr,*(Folder/Name+TEXT(".")+Name));
+    if (Blueprint && (Blueprint->ParentClass!=UDeliveryNpcBodyAnimInstance::StaticClass() || Blueprint->TargetSkeleton!=Skeleton))
+        return TEXT("Existing body animation has another parent or skeleton; graph was not changed");
+    if (!Blueprint)
+    {
+        auto* Factory=NewObject<UAnimBlueprintFactory>();
+        Factory->ParentClass=UDeliveryNpcBodyAnimInstance::StaticClass();
+        Factory->TargetSkeleton=Skeleton;
+        Factory->PreviewSkeletalMesh=Preview;
+        Blueprint=Cast<UAnimBlueprint>(FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().CreateAsset(
+            Name,Folder,UAnimBlueprint::StaticClass(),Factory));
+        bReplaceGraph=true;
+    }
+    if (!Blueprint) return TEXT("Could not create NPC body animation blueprint");
+    if (bReplaceGraph)
+    {
+        UEdGraph* Graph=nullptr;
+        for (UEdGraph* Candidate:Blueprint->FunctionGraphs)
+            if (Candidate && Candidate->GetFName()==TEXT("AnimGraph")) Graph=Candidate;
+        if (!Graph) return TEXT("Body animation graph is missing");
+        Blueprint->Modify(); Graph->Modify();
+        const auto OldNodes=Graph->Nodes;
+        for (UEdGraphNode* Node:OldNodes) FBlueprintEditorUtils::RemoveNode(Blueprint,Node,true);
+        auto* Blend=AddAnimationNode<UAnimGraphNode_BlendListByInt>(Graph,800,640,TEXT("按动作编号混合，过渡时间可在此修改"));
+        auto* TimesProperty=FindFProperty<FArrayProperty>(FAnimNode_BlendListBase::StaticStruct(),TEXT("BlendTime"));
+        auto* TimeValue=TimesProperty?CastField<FFloatProperty>(TimesProperty->Inner):nullptr;
+        if (!TimeValue) return TEXT("UE blend-time property is unavailable");
+        FScriptArrayHelper Times(TimesProperty,TimesProperty->ContainerPtrToValuePtr<void>(&Blend->Node));
+        // 先补齐输入，完整图连接后再编译，避免编辑器在缺少输出节点时反复编译
+        while (Times.Num()<9) Blend->Node.AddPose();
+        if (Times.Num()!=9) return TEXT("Body animation requires nine blend inputs");
+        const float Durations[]={.16f,.16f,.16f,.16f,.16f,.16f,.06f,.08f,.16f};
+        for (int32 Index=0;Index<9;++Index) TimeValue->SetPropertyValue(Times.GetRawPtr(Index),Durations[Index]);
+        Blend->ReconstructNode();
+        for (int32 Index=0;Index<9;++Index)
+        {
+            auto* Pin=Blend->FindPin(FName(*FString::Printf(TEXT("BlendTime_%d"),Index)),EGPD_Input);
+            if (!Pin) return TEXT("Body animation blend-time pin is missing");
+            Graph->GetSchema()->TrySetDefaultValue(*Pin,FString::SanitizeFloat(Durations[Index]));
+        }
+        if (!ConnectParameter(Graph,Blend,TEXT("ActiveChildIndex"),TEXT("PoseIndex"),540))
+            return TEXT("Could not connect body pose index");
+        const FName Assets[]={TEXT("IdleAnimation"),TEXT("TalkAnimation"),TEXT("WalkAnimation"),TEXT("PaceAnimation"),
+            TEXT("HurryAnimation"),TEXT("HoldAnimation"),TEXT("AttackAnimation"),TEXT("DownAnimation"),TEXT("GetUpAnimation")};
+        const TCHAR* Labels[]={TEXT("0 站立"),TEXT("1 说话"),TEXT("2 行走"),TEXT("3 踱步"),TEXT("4 快步靠近"),
+            TEXT("5 拽车"),TEXT("6 挥拳：按服务器时间显示"),TEXT("7 倒地：按游戏状态显示"),TEXT("8 起身：按游戏状态显示")};
+        const FName ExplicitTimes[]={TEXT("StrikeTime"),TEXT("DownTime"),TEXT("GetUpTime")};
+        for (int32 Index=0;Index<9;++Index)
+        {
+            const int32 Y=Index*240;
+            UAnimGraphNode_Base* Node=nullptr;
+            if (Index<6)
+            {
+                auto* Player=AddAnimationNode<UAnimGraphNode_SequencePlayer>(Graph,200,Y,Labels[Index]);
+                Player->Node.SetLoopAnimation(true);
+                if (Index>=2 && Index<=4)
+                {
+                    Player->Node.SetGroupName(TEXT("NpcLocomotion"));
+                    Player->Node.SetGroupRole(EAnimGroupRole::CanBeLeader);
+                    Player->Node.SetGroupMethod(EAnimSyncMethod::SyncGroup);
+                    if (!ConnectParameter(Graph,Player,TEXT("PlayRate"),TEXT("MovePlayRate"),Y+95))
+                        return TEXT("Could not connect movement play rate");
+                }
+                Node=Player;
+            }
+            else
+            {
+                auto* Evaluator=AddAnimationNode<UAnimGraphNode_SequenceEvaluator>(Graph,200,Y,Labels[Index]);
+                // Evaluator 加入同步组会强制推进时间，因此这三个节点明确不参与步态同步
+                Evaluator->Node.SetGroupName(NAME_None);
+                Evaluator->Node.SetGroupMethod(EAnimSyncMethod::DoNotSync);
+                Evaluator->Node.SetShouldUseExplicitFrame(false);
+                Evaluator->Node.SetShouldLoop(false);
+                if (!SetNpcAnimationBool(FAnimNode_SequenceEvaluator::StaticStruct(),&Evaluator->Node,TEXT("bTeleportToExplicitTime"),true) ||
+                    !ConnectParameter(Graph,Evaluator,TEXT("ExplicitTime"),ExplicitTimes[Index-6],Y+95))
+                    return TEXT("Could not configure explicit animation time");
+                Node=Evaluator;
+            }
+            if (!ConnectParameter(Graph,Node,TEXT("Sequence"),Assets[Index],Y) || !ConnectNpcBodyPose(Graph,Node,Blend,Index))
+                return FString::Printf(TEXT("Could not connect NPC animation %s"),*Assets[Index].ToString());
+        }
+        auto* Output=AddAnimationNode<UAnimGraphNode_Root>(Graph,1200,640,TEXT("主动作完成后继续应用现有交谈后处理图"));
+        if (!ConnectPose(Graph,Blend,Output)) return TEXT("Could not connect body animation output");
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+    }
+    FKismetEditorUtilities::CompileBlueprint(Blueprint,EBlueprintCompileOptions::SkipSave);
+    if (Blueprint->Status==BS_Error || !Blueprint->GeneratedClass) return TEXT("Body animation blueprint compilation failed");
+    auto* Defaults=Blueprint->GeneratedClass->GetDefaultObject<UDeliveryNpcBodyAnimInstance>();
+    const auto* PreviewSettings=CastChecked<ADeliveryNpcCharacter>(NpcBlueprints[0]->GeneratedClass->GetDefaultObject())->Presentation.Get();
+    // 编辑器预览使用正式居民的动作；游戏实例仍从各自角色的表现配置读取
+    Defaults->IdleAnimation=PreviewSettings->IdleAnimation;
+    Defaults->TalkAnimation=PreviewSettings->TalkAnimation;
+    Defaults->WalkAnimation=PreviewSettings->WalkAnimation;
+    Defaults->PaceAnimation=PreviewSettings->PaceAnimation;
+    Defaults->HurryAnimation=PreviewSettings->HurryAnimation;
+    Defaults->HoldAnimation=PreviewSettings->HoldAnimation;
+    Defaults->AttackAnimation=PreviewSettings->AttackAnimation;
+    Defaults->DownAnimation=PreviewSettings->DownAnimation;
+    Defaults->GetUpAnimation=PreviewSettings->GetUpAnimation;
+    Defaults->SetRootMotionMode(ERootMotionMode::NoRootMotionExtraction);
+    if (!SaveNpcAnimationAsset(Blueprint)) return TEXT("Body animation blueprint save failed");
+
+    // 只写蓝图组件模板的两个动画字段，不初始化 CDO 的运行实例，也不改网格或后处理图
+    auto* ModeProperty=FindFProperty<FByteProperty>(USkeletalMeshComponent::StaticClass(),TEXT("AnimationMode"));
+    auto* ClassProperty=FindFProperty<FObjectPropertyBase>(USkeletalMeshComponent::StaticClass(),TEXT("AnimClass"));
+    if (!ModeProperty || !ClassProperty) return TEXT("NPC mesh animation properties are unavailable");
+    for (UBlueprint* NpcBP:NpcBlueprints)
+    {
+        auto* Npc=CastChecked<ADeliveryNpcCharacter>(NpcBP->GeneratedClass->GetDefaultObject());
+        auto* Mesh=Npc->GetMesh();
+        USkeletalMesh* OriginalMesh=Mesh->GetSkeletalMeshAsset();
+        const auto OriginalPostProcess=OriginalMesh->GetPostProcessAnimBlueprint();
+        const auto OriginalTransform=Mesh->GetRelativeTransform();
+        const auto OriginalMaterials=Mesh->GetMaterials();
+        NpcBP->Modify(); Npc->Modify(); Mesh->Modify();
+        ModeProperty->SetPropertyValue_InContainer(Mesh,EAnimationMode::AnimationBlueprint);
+        ClassProperty->SetObjectPropertyValue_InContainer(Mesh,Blueprint->GeneratedClass);
+        FBlueprintEditorUtils::MarkBlueprintAsModified(NpcBP);
+        FKismetEditorUtilities::CompileBlueprint(NpcBP,EBlueprintCompileOptions::SkipSave);
+        if (NpcBP->Status==BS_Error) return TEXT("NPC blueprint compilation failed after assigning body animation");
+        Mesh=CastChecked<ADeliveryNpcCharacter>(NpcBP->GeneratedClass->GetDefaultObject())->GetMesh();
+        if (Mesh->GetAnimClass()!=Blueprint->GeneratedClass || Mesh->GetAnimationMode()!=EAnimationMode::AnimationBlueprint ||
+            Mesh->GetSkeletalMeshAsset()!=OriginalMesh || OriginalMesh->GetPostProcessAnimBlueprint()!=OriginalPostProcess ||
+            !Mesh->GetRelativeTransform().Equals(OriginalTransform) || Mesh->GetMaterials()!=OriginalMaterials)
+            return TEXT("NPC body animation binding or preserved mesh settings did not match");
+        if (!SaveNpcAnimationAsset(NpcBP)) return TEXT("NPC blueprint save failed after assigning body animation");
+    }
+    return FString::Printf(TEXT("NPC body animation saved; graph=%s; rebuilt=%d; poses=9; locomotion_group=NpcLocomotion"),
+        *Blueprint->GetPathName(),bReplaceGraph);
 }

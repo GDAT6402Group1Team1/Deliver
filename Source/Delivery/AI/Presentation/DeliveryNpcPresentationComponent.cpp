@@ -1,4 +1,5 @@
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
+#include "AI/Presentation/DeliveryNpcBodyAnimInstance.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
@@ -26,6 +27,12 @@ double UDeliveryNpcPresentationComponent::ServerTime() const
 void UDeliveryNpcPresentationComponent::BeginPlay()
 {
     Super::BeginPlay();
+    if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()))
+    {
+        // 先准备本帧的战斗和对白状态，再由网格更新主动画与注视姿态
+        Npc->GetMesh()->AddTickPrerequisiteComponent(this);
+        Npc->GetMesh()->AddTickPrerequisiteComponent(Npc->Combat);
+    }
     if (GetNetMode()!=NM_DedicatedServer)
     {
         Voice=NewObject<UDeliveryDialogueVoiceComponent>(GetOwner());
@@ -114,6 +121,24 @@ void UDeliveryNpcPresentationComponent::TickComponent(float Dt,ELevelTick Type,F
     if (GetNetMode()==NM_DedicatedServer) return;
     TickExpression(Dt);
     const auto Display=GetDisplayedSpeech();
+    // PlayAnimation 会把网格切回单片段模式，主动画蓝图已经接管时不能再调用
+    const auto* MainClass=Resident->GetMesh()->GetAnimClass();
+    if (!MainClass || !MainClass->IsChildOf(UDeliveryNpcBodyAnimInstance::StaticClass())) UpdateLegacyAnimation(Resident);
+    if (!MouthMorph.IsNone()) Resident->GetMesh()->SetMorphTarget(MouthMorph,GetVoiceAmplitude());
+    if (!AngryMorph.IsNone()) Resident->GetMesh()->SetMorphTarget(AngryMorph,Display.bActive && Display.Emotion==TEXT("Angry")?1.f:0.f);
+    if (Caption)
+        if (auto* Widget=Cast<UDeliveryNpcCaptionWidget>(Caption->GetUserWidgetObject()))
+        {
+            const int32 Count=FMath::Clamp(int32(GetDisplayedSpeechProgress()*Display.Text.Len())+1,0,Display.Text.Len());
+            // 等待回复时用眼神和姿态表现倾听，开口后显示字幕
+            FString Line;
+            if (Display.bActive) Line=Resident->DisplayName.ToString()+TEXT("：")+Display.Text.Left(Count);
+            Widget->SetCaption(FText::FromString(Line));
+        }
+}
+void UDeliveryNpcPresentationComponent::UpdateLegacyAnimation(ADeliveryNpcCharacter* Resident)
+{
+    const auto Display=GetDisplayedSpeech();
     UAnimSequence* Desired=IdleAnimation;
     bool bLoop=true;
     float DesiredPlayRate=1.f;
@@ -149,20 +174,14 @@ void UDeliveryNpcPresentationComponent::TickComponent(float Dt,ELevelTick Type,F
     }
     // 低速踱步和快步靠近各用自己的步频，停下后恢复其他动作的原速
     if (Desired) Resident->GetMesh()->SetPlayRate(DesiredPlayRate);
-    if (!MouthMorph.IsNone()) Resident->GetMesh()->SetMorphTarget(MouthMorph,GetVoiceAmplitude());
-    if (!AngryMorph.IsNone()) Resident->GetMesh()->SetMorphTarget(AngryMorph,Display.bActive && Display.Emotion==TEXT("Angry")?1.f:0.f);
-    if (Caption)
-        if (auto* Widget=Cast<UDeliveryNpcCaptionWidget>(Caption->GetUserWidgetObject()))
-        {
-            const int32 Count=FMath::Clamp(int32(GetDisplayedSpeechProgress()*Display.Text.Len())+1,0,Display.Text.Len());
-            // 等待回复时用眼神和姿态表现倾听，开口后显示字幕
-            FString Line;
-            if (Display.bActive) Line=Resident->DisplayName.ToString()+TEXT("：")+Display.Text.Left(Count);
-            Widget->SetCaption(FText::FromString(Line));
-        }
 }
 void UDeliveryNpcPresentationComponent::EndPlay(const EEndPlayReason::Type Reason)
 {
+    if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()))
+    {
+        Npc->GetMesh()->RemoveTickPrerequisiteComponent(this);
+        Npc->GetMesh()->RemoveTickPrerequisiteComponent(Npc->Combat);
+    }
     bReactionsEnded=true;
     if (ReactionAudio) { ReactionAudio->Stop();ReactionAudio->DestroyComponent();ReactionAudio=nullptr; }
     ReactionEventId.Invalidate();ReactionEndsAt=0;SeenReactionEvents.Reset();CancelledReactionEvents.Reset();

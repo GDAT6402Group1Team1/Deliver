@@ -23,6 +23,9 @@ public:
     bool GetStrikeResult(FGuid ActionId,bool& bOutHit) const;
     // 客户端按服务器时间播放当前这一拳，接近目标时没有出拳时间
     double GetStrikeStartTime(FGuid ActionId) const;
+    // 倒地与起身也按服务器开始时间显示，迟到的客户端接上当前姿势
+    double GetDownStartTime() const { return bDown?DownStartedAt:-1; }
+    double GetRecoveryStartTime() const { return bRecovering?RecoveryStartedAt:-1; }
     static constexpr float StrikeDuration=1.2f;
     static constexpr float StrikeWindup=.35f;
     // 清除攻击目标和编号，取消后不再判定尚未发生的命中
@@ -51,6 +54,8 @@ private:
     FGuid AttackId;
     UPROPERTY(Replicated) FGuid StrikeAnimationId;
     UPROPERTY(Replicated) double StrikeStartedAt=-1;
+    UPROPERTY(Replicated) double DownStartedAt=-1;
+    UPROPERTY(Replicated) double RecoveryStartedAt=-1;
     FGuid FinishedStrikeId;
     bool bFinishedStrikeHit=false;
     TWeakObjectPtr<AActor> AttackTarget;
