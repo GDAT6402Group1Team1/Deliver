@@ -13,10 +13,24 @@
     @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
     @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
     .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
-<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
+<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
 <header><div class="meta">AI / 交谈、语音与表情 / 2026-11-13</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
 <div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。接下来优先做出能试玩的争吵、互殴与追赶，再根据反馈完善表演；声音与多人画面仍需实际验收。</div>
 <div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
+<section id="npc-body-animation"><h2>11 月 13 日：让身体动作平滑衔接</h2>
+<p>原表现组件通过 <code>PlayAnimation()</code> 切换整段动画。核对本机 UE 5.8 源码后确认，该调用会把网格改为单片段播放，因此已有的走路、踱步、挥拳等素材缺少统一的混合过渡。本轮将两名正式街坊接到可编辑的 <code>ABP_NpcBody</code>，保留原有交谈后处理图。</p>
+<p>主图使用九个动画输入与 Blend Poses by Int，过渡时间直接保存在蓝图节点中。走路、踱步和快步共用同步组；挥拳、倒地和起身根据服务器开始时间显示当前姿势。C++ 只准备动作、速度和时间，动画图负责混合。角色移动、命中、伤害和恢复规则继续由原玩法处理；主角的主动布娃娃没有改动。</p>
+<p>本次选用普通动画混合，是因为现有片段已能覆盖这些动作，当前问题在于播放方式。Motion Matching 需要更完整的启停、转向动画库，本轮没有新增相应依赖。此选择解决动作衔接，不代表已经完成精细的手脚对位或夸张表演。</p>
+<h3>检查中发现的问题</h3>
+<ul><li>初次构图时，每增加一个输入都会触发编译，但输出节点尚未创建。工具改为先完成整张图，再统一编译，复建后不再出现缺少根节点的错误。</li>
+<li>UE Python 没有直接公开蓝图的 parent_class 属性，检查脚本改用 BlueprintEditorLibrary 提供的父类查询接口，并分别检查主动画与两名角色蓝图的编译结果。</li>
+<li>第一次动画测试手动设置 Running 状态后，服务器的动作超时检查把它取消了。测试现仅停止该决策组件的更新，用同步状态检查动画；真实战斗组件仍负责挥拳、受击和起身。原失败报告保留，没有修改正式超时规则。</li></ul>
+<h3>本轮结果</h3>
+<p>DeliveryEditor 完整构建通过，最终增量构建耗时 4.98 秒。三个蓝图已保存，并在新进程中读回、编译通过。共享骨架、两份面部网格和交谈后处理资产的文件哈希保持不变，人物名字、声音、行为树、模型、材质和变换也通过检查。</p>
+<p><code>Delivery.AI.BodyAnimation</code>、<code>Delivery.AI.StrikeApproach</code>、<code>Delivery.AI.SentencePlayback</code> 三项通过。动画检查使用两份正式角色蓝图，确认实际脚部姿势变化、低速切换、踱步与快步、挥拳重建后的进度，以及倒地起身。逐句播放测试包含预期的音频超时警告。进程启动仍有既有的 GEngine 初始化前物理材质访问错误和自动化模块 Condition failed 信息，本轮没有修复这些启动问题。</p>
+<p><strong>范围：</strong>上述检查使用 NullRHI 和独立测试世界，没有操作玩家游戏窗口，也没有完成真实关卡、主机与客户端的画面验收。过渡是否自然、步态是否滑稽、挥拳是否够明显，仍需实际试玩。本轮新增身体动画类图；11 张图的文字边界、页面跳转、缩放和 1440 / 390 / 320 像素布局检查通过。</p>
+<p class="evidence">构建：Saved/Logs/NpcBodyAnimationBuild-final.log；复建：Saved/AIResearch/NpcBodyAnimation/20261113T073624575909Z/report.json；独立读回：20261113T073655894428Z/report.json；测试：Saved/Automation/NpcBodyAnimationFinal/index.json；首次失败：Saved/Automation/NpcBodyAnimation/index.json；文档：Saved/Documentation/AI/check-results.json。复建命令使用 setup_npc_body_animation.py 的 -ReplaceNpcBodyAnimation，读回使用 -InspectNpcBodyAnimation；自动化过滤为 Delivery.AI.BodyAnimation+Delivery.AI.StrikeApproach+Delivery.AI.SentencePlayback。</p>
+</section>
 <section id="iteration-1"><h2>交谈延迟：初步测量与改进</h2>
 <p>玩家点按钮后，旧流程会等待完整模型输出，再把结果交给游戏。即使第一句话已经生成，玩家也要等后面的内容生成完才看到回复。此外，NPC 闲聊与玩家交谈共用处理能力，排队会继续增加等待。</p>
 <p>目前把等待拆成五段测量：请求排队、模型产生首句、合成该句声音、发送给客户端、实际开始播放。服务器接收消息时立即让 NPC 停下并看向玩家，但这个动作不能算作模型已经回答。</p>
@@ -416,6 +430,27 @@ python -m unittest discover -s Tools/DeliveryAI -p 'test_*.py'</code></pre>
 <p>使用同一参考、台词、种子和生成参数，对比官方生成与 PredictorGraph。两句原版复测分别为 4.068、7.646 秒，Graph 为 1.474、2.692 秒。原版复测音频与历史基线完全一致；Graph 的两句声音与编码均不同，时长分别从 1.68、3.44 秒变为 1.52、3.12 秒。取消分别为 78、63 毫秒，两种方式取消后都能重复生成各自相同的声音。</p>
 <p>同进程诊断发现，声音编码的前两帧相同，第三帧的第七个子组首先不同。生成参数没有漏传；具体数值差异尚未确定。Graph 是速度更快的候选，需要重新比较听感，不能直接记为保持输出一致的优化。整卡采样峰值约 5116 MiB，包含其他程序；没有测游戏同时运行。</p>
 <p>从这两句看，原版生成时间超过声音本身长度，逐句处理仍可能出现停顿。Graph 已接近或快于播放速度，但这只反映单独合成，不能据此承诺两人交谈或游戏中没有等待。用户随后明确要求优先互动与表现，本轮停止继续追查数值算子，恢复原后台。<a href="../Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T040218056401Z/comparison-with-repeat.json">对照数据</a>与<a href="../Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T040557990915Z/evaluation.json">编码诊断</a>保留供后续参考。</p>
+<div id="cuihua-b-production">
+<h3>翠花 B：正式交谈声音</h3>
+<p class="meta">2026 年 11 月 13 日 · 用户已试听确认，正式后台已启用；游戏内声音尚未验收</p>
+<p>用户听过固定 B 朗读的“你别听他瞎说，我刚才说的是车。”后，确认声音符合翠花，可以正式使用。现在翠花的完整台词采用 Qwen 0.6B Base，并复用这份项目生成的声音参考；内部音色编号仍为 <code>Xiaofang_B</code>。大壮继续使用已经认可的男声 B，模型和生成参数保持不变。女声没有启用前面的 Graph 加速候选，也没有新增下载或训练。</p>
+<p>正式切换前，两份模型在同一语音进程中同时加载。男声的对照台词与原试听音频完全一致；女声问候合成用了 3.914 秒，澄清用了 6.790 秒。中途取消后约 22 毫秒结束，没有返回旧声音，随后可以正常切回男声，并再次生成相同的女声问候。整卡显存采样峰值为 6418 MiB，总显存为 12227 MiB；当时没有运行游戏渲染，不能据此保证游戏和语音同时运行时的帧率。</p>
+<h4>正式服务的实际回复</h4>
+<p>重启后台后，通过游戏使用的接口发送了一次“翠花，早啊！”。模型选择看向玩家，回答“早啊，今儿送货挺早！”。后台实际使用 <code>Xiaofang_B</code>，返回了 2.4 秒、24 kHz 的声音，没有语音错误。</p>
+<div class="table-scroll"><table><thead><tr><th>测量位置</th><th>本次耗时</th></tr></thead><tbody>
+<tr><td>发送问候到收到模型的台词与动作</td><td>4.627 秒</td></tr>
+<tr><td>等待语音合成</td><td>0.002 秒</td></tr>
+<tr><td>合成这句声音</td><td>5.177 秒</td></tr>
+<tr><td>发送问候到收到首段声音</td><td>9.814 秒</td></tr>
+</tbody></table></div>
+<p>这次确认了正式后台使用的是用户选定的声音，回复等待仍然偏长。9.814 秒是检查程序收到声音的时间，不是玩家听见声音的时间；模型生成与 5.177 秒的语音合成都还需要继续缩短。这里只测了一次实际回复，不能据此给出稳定延迟或最慢耗时的结论。</p>
+<p>正式回复试听：</p><audio controls preload="none" style="width:420px;max-width:100%" src="../Saved/AIResearch/FemaleVoiceIntegration/CuihuaB_20261113/formal_female_0.wav"></audio>
+<h4>启动故障：Git 改变了依赖文件的换行</h4>
+<p>本轮第一次启动在生成声音前失败，报错为 <code>neural_tts_vendor_changed</code>。原因是 Git 重写本地未发布提交时，Windows 检出过程把三份语音依赖文件的 LF 换行转成了 CRLF。程序按原始文件计算哈希，换行增加的字节使校验失败；模型、声音参考和依赖代码本身没有被改写。</p>
+<p>修复在 <code>.gitattributes</code> 中为这组依赖明确设置 <code>text eol=lf</code>，并从 Git 保存的原始内容恢复文件。程序继续严格检查原始哈希，没有跳过校验。新增检查同时核对 Git 的换行规则和实际检出的文件内容，避免以后换电脑或重新检出时再次无法启动声音。第一次失败的报告保留，修复后才进行上述双模型检查。</p>
+<p>本轮 15 项专项测试通过，覆盖声音配置、固定参考、男女声选择、取消以及依赖文件检查。正式后台已重新启动并完成双模型预热，旧后台和检查进程均已退出。用户批准的是本次试听的声音；游戏中的音量、空间位置、字幕配合和主机、客户端听感尚未验收。当前也没有通过情绪参数控制语调，不能把更换音色记作生气、惊讶等表演已经完成。</p>
+<p class="evidence">记录：<a href="../Saved/AIResearch/FemaleVoiceIntegration/20261113T151516/runtime-trial-after-lf/latest.json">双模型与取消检查</a>；<a href="../Saved/AIResearch/FemaleVoiceIntegration/CuihuaB_20261113/formal_female_probe.json">正式女声请求</a>；<a href="../Saved/AIResearch/FemaleVoiceIntegration/CuihuaB_20261113/backend-enabled.json">后台恢复与进程检查</a>；<a href="../Saved/AIResearch/FemaleVoiceIntegration/20261113T151516/vendor-line-ending-diagnosis.json">换行故障记录</a>。专项命令：在 Tools/DeliveryAI 执行 <code>python -B -X utf8 -m unittest test_neural_voice_clone test_neural_speech_routing test_neural_vendor_integrity -q</code>。</p>
+</div>
 <h3>等待期间的注视修复</h3>
 <p>模型给出动作后，原来的倾听对象会清空，而声音还没准备好。NPC 因此可能提前把视线移开，让玩家觉得它又不理人了。现在等待首句语音期间继续看着这次的说话对象，真正开口时再停止思考歪头。判断只使用客户端能收到的状态；攻击、倒地、拽车、距离过远或取消交谈时，仍按原规则解除注视。</p>
 <p>后续又确认了一处空档：后台已经完成，但本机声音还在排队或缓冲时，原判断会提前结束等待姿态。现增加 <code>IsWaitingForSpeechPlayback()</code>，使用本机队首与当前回复编号保持注视和眼部表情；播放开始、取消、轮次替换或超时后结束。它不新增字幕，也不读取客户端没有的服务器请求记录。</p>
@@ -695,5 +730,21 @@ python -m unittest discover -s Tools/DeliveryAI -p 'test_*.py'</code></pre>
 <li>Inworld、Convai 及其他 ACE 案例</li>
 </ul>
 <p>后续验证：二狗实现后，用第一幕的同一段路线做真实模型试玩，记录等待时间、抢话、挡路，以及台词像不像憨厚的真人当场说的。结果记入本页；资料里的结论不能代替试玩。</p>
+</section>
+<section id="cuihua-brow-candidate"><h2>翠花的生气眉毛：候选制作与导入检查</h2>
+<p class="meta">2026-11-13 · Blender 候选已检查 · UE 导入未完成，正式模型尚未替换</p>
+<p>正式女性模型的 <code>BrowsAngry</code> 没有顶点位移，所以调高表情强度也不会改变眉形。候选只选中两侧眉毛，保留与头部相连的顶点 3057。配置列出了 154 个顶点，其中 153 个移动；其余 4122 个顶点保持原位，没有用扩大选区的方法把头发一起拉动。</p>
+<h3>为什么又修改了一版</h3>
+<p>第一版把眉毛直接移开，连接处被拉成三角形，原贴图上的眉毛也留下了残影。第二版改为围绕固定连接点旋转眉毛，并用局部肤色遮住旧眉影；拉伸和残影消失了，但额头出现一块矩形色差。第三版将明确选中的面部区域从 31 个顶点扩展到 42 个，在边缘逐渐减弱新增的肤色遮罩，避免突然切出一个色块。这个范围仍然位于面部，未扩展到头发。</p>
+<p>第三版使用 32° 的眉毛旋转，不额外向前或向下移动。已逐张查看原材质下的中性正面、生气正面、侧面和远景图片：第二版的矩形边缘已不明显，没有再看到原来的三角拉伸和双重眉影。头发仍会遮住左眉的一部分；远景中表情变化也比较弱，因此尚不能据此认定游戏里的生气效果足够明显。</p>
+<div style="display:flex;flex-wrap:wrap;gap:18px"><figure style="margin:0;max-width:100%"><a href="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-front.png"><img loading="lazy" src="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-front.png" alt="翠花第三版生气眉毛的正面预览" style="width:260px;max-width:100%;height:auto"></a><figcaption>第三版：正面</figcaption></figure><figure style="margin:0;max-width:100%"><a href="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-side.png"><img loading="lazy" src="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-side.png" alt="翠花第三版生气眉毛的侧面预览" style="width:260px;max-width:100%;height:auto"></a><figcaption>第三版：侧面</figcaption></figure><figure style="margin:0;max-width:100%"><a href="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-distance.png"><img loading="lazy" src="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-distance.png" alt="翠花第三版生气眉毛的远景预览" style="width:260px;max-width:100%;height:auto"></a><figcaption>第三版：远景</figcaption></figure></div>
+<p>图片由 Blender 5.0.1 使用 CPU、2 个线程和低优先级生成，未占用声音服务的 GPU。几何检查确认眉毛之外的位移为 0，固定连接点位移为 0，明确选定面部范围之外的新增遮罩为 0。眉形达到完整强度时，眉毛边长与原模型几乎一致；半强度时最多缩短约 3.9%，没有出现第一版的明显拉伸。静态图片只用于检查模型，不能代替 UE 中动画、光照和实际观看距离的验收。</p>
+<h3>UE 导入为什么暂时停止</h3>
+<p>独立导入脚本默认只创建 Preview 目录下的女性候选，检查骨架、尺寸、材质、物理资产、后处理动画和 LOD 设置后才允许保存。本轮三次命令行尝试均在导入前停止，没有创建候选 uasset，也没有覆盖正式男女模型。</p>
+<ol><li>第一次无法通过 Python 读取受保护的 <code>LODMaterialMap</code>。脚本已改为使用 SkeletalMeshEditorSubsystem，逐项核对各个网格分段实际使用的材质槽，保留材质对应关系检查。</li>
+<li>第二次发现正式模型使用 Interchange 导入记录，不能按旧 FBX 记录读取缩放和旋转。脚本依据本机 UE 5.8 的 <code>InterchangeFbxAssetImportDataConverter.cpp</code> 补充了对应读取方式。</li>
+<li>第三次未通过导入记录完整性检查：脚本要求唯一的通用导入配置，以及保存过的 FBX 转换设置。尚未进一步确认是哪一项不满足，因而没有用默认值代替原配置。为先交付已完成的声音与身体动画，本轮在此停止。</li></ol>
+<p>导入工具和候选选择配置保留在本地，未并入本轮已验证功能的交付范围。后续应先读取并确认正式模型实际保存的导入设置，再完成独立候选导入、重新加载检查和游戏内比较，最后决定是否替换正式女性模型。本轮五份受保护的正式模型与元数据文件哈希均未变化。</p>
+<p class="evidence">候选与图片：<a href="../Saved/AIResearch/NpcWomanBrowsCandidate/review-status.json">review-status.json</a>；几何：<a href="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-geometry-check.json">v3-geometry-check.json</a>；三次导入及文件保护：<a href="../Saved/AIResearch/NpcWomanBrowsCandidate/ue-import-stopped.json">ue-import-stopped.json</a>。日志分别为 Saved/Logs/NpcWomanBrowCandidateImport.log、NpcWomanBrowCandidateRetry.log、NpcWomanBrowCandidateInterchange.log。上述链接指向本地检查文件，转发文档时需要一并保留。</p>
 </section>
 <footer>与方案文档使用相同版式，支持离线阅读。持续记录本项目的实际结果，不把外部演示指标当作本项目性能。</footer></main></div><script>document.getElementById('print').addEventListener('click',()=>window.print());</script></body></html>

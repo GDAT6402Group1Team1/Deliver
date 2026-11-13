@@ -42,7 +42,9 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'SentenceParser': ('完整句子检查', ['首条结果确定候选动作', '后续结果只补充台词'], [('feed()', '收集文字并解析完整 JSON'), ('line()', '检查动作与句子后通知后端')]),
         'SpeechSynthesizer': ('可选 Windows 语音', ['显式选择 windows 时使用 SAPI', '两个合成线程复用各自语音进程'], [('prepare()', '提前准备 Windows 中文声音'), ('synthesize()', '返回一句完整 PCM 音频')]),
         'SpeechQueue': ('NPC 共用的语音队列', ['玩家交谈优先于未开始的闲聊', '一个 GPU 实例依次合成句子'], [('submit()', '按来源安排完整句子'), ('close()', '取消排队项并通知当前合成停止')]),
-        'QwenSpeechSynthesizer': ('NPC 台词语音', ['Uncle_Fu / Serena 按配置选择', '取消获确认后才开始下一句'], [('prepare()', '提前加载模型并准备 Graph'), ('synthesize()', '生成完整音频，超过 8 秒报错')]),
+        'QwenSpeechSynthesizer': ('NPC 台词语音', ['大壮用 Uncle_Fu，翠花用固定 B', '取消获确认后才开始下一句'], [('prepare()', '提前加载两套声音模型'), ('synthesize()', '生成完整音频，超过 8 秒报错')]),
+        'UDeliveryNpcBodyAnimInstance': ('主动作参数', ['读取角色速度、动作与开始时间', '按当前人物配置选择动画片段'], [('NativeUpdateAnimation()', '在游戏线程准备动画所需数值'), ('StrikeTime / DownTime / GetUpTime', '使用服务器时间接上当前动作')]),
+        'ABP_NpcBody': ('主动画蓝图', ['九种动作在图中平滑切换', '走路、踱步和快步使用同步组'], [('Blend Poses by Int', '按动作编号混合姿势'), ('Sequence Evaluator', '按时间显示挥拳、倒地和起身')]),
         'FDeliveryNpcSentence': ('一句台词及语音', ['保存句子序号、文字和情绪', '保存 PCM 音频及采样率'], [('Sequence / Text / Emotion', '按序播放同一次回复'), ('Pcm / SampleRate', '交给客户端声音播放')]),
         'FDeliveryNpcLocalVoice': ('本机待播语音', ['保存收到的 Opus 和解码后的声音', '记录播放进度和本句解码器'], [('State / Pcm', '文字和声音对应同一句话'), ('QueuedBytes / TotalBytes', '判断这句是否已经播放结束')]),
         'UDeliveryNpcExpressionSet': ('表情与交谈姿态配置', ['保存眼睛、眉毛和眨眼曲线', '保存倾听前倾和头部过渡参数'], [('Poses / BlinkCurve', '按情绪选择形态键权重'), ('ListeningLean / HeadTurnLimit', '调整姿态幅度与转头范围')]),
@@ -218,6 +220,14 @@ def diagrams():
         n('UDeliveryNpcLookComponent','短暂注视玩家',[],[]),
         n('ADeliveryPedestrian','普通行人',[],[])
     ],[(0,1,'更新倒地、动作和倾听条件','dependency'),(1,2,'行为树读取条件选择分支','dependency'),(2,3,'运行倾听任务','dependency'),(3,0,'停止移动并设置朝向，结束时解除','dependency'),(5,4,'角色持有决策组件','composition'),(4,7,'提供倾听目标和模型等待状态','dependency'),(6,7,'读取姿态幅度与过渡速度','dependency'),(7,8,'提供平滑后的视线和旋转','dependency'),(8,5,'在 NPC 原动作上调整胸部和头部','dependency'),(5,9,'持有注视组件','composition'),(10,9,'复用注视组件','composition'),(9,7,'没有重要动作时短暂转头','dependency')])
+    d['body-animation']=class_diagram('NPC 身体动画类图 · 游戏效果待试玩',[
+        resident,
+        n('UDeliveryNpcCombatComponent','服务器战斗时间',[],[]),
+        n('UDeliveryNpcBodyAnimInstance','主动作参数',[],[]),
+        presentation,
+        n('ABP_NpcBody','身体动画混合',[],[],kind='asset'),
+        n('ABP_NpcConversation','交谈后处理',[],[],kind='asset')
+    ],[(0,1,'角色持有战斗组件','composition'),(1,2,'提供挥拳、倒地与起身的开始时间','dependency'),(0,2,'提供速度和当前动作','dependency'),(3,2,'提供动画配置和本机正在说的话','dependency'),(2,4,'更新动作编号、步频和播放时间','dependency'),(4,5,'先得到身体姿势，再叠加转头和倾听','dependency')])
     d['stream']=class_diagram('逐句语音类图 · 后端已接入，游戏效果待试玩',[
         n('AppServer','本机模型连接',[],[],kind='Python classes'),
         n('SentenceParser','完整句子检查',[],[],kind='Python classes'),
