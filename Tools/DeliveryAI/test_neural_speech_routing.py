@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import streaming
 from scheduler import Job
+from neural_tts import load_voice_config
 from server import validate_action
 from test_sentence_pipeline import request
 
@@ -14,10 +15,15 @@ class NeuralSpeechRoutingTests(unittest.TestCase):
     def setUp(self):
         self.environment = patch.dict('os.environ', {'DELIVERY_TTS_PROVIDER': 'qwen'})
         self.environment.start()
+        config = load_voice_config()
+        config['voices']['female'] = {'provider': 'qwen', 'speaker': 'Serena'}
+        self.voices = patch('neural_tts.load_voice_config', return_value=config)
+        self.voices.start()
         streaming.prepare_resources(local_speech=False)
 
     def tearDown(self):
         streaming.close_resources()
+        self.voices.stop()
         self.environment.stop()
 
     def run_reply(self, text, source='player', voice='male'):
@@ -36,7 +42,7 @@ class NeuralSpeechRoutingTests(unittest.TestCase):
         class Voice:
             voice_name = 'Uncle_Fu'
             def synthesize(self, text, voice, emotion, cancel):
-                spoken.append(text)
+                spoken.append((text, voice))
                 if text == '第一句。':
                     started.set()
                     if not release.wait(2):
@@ -49,12 +55,12 @@ class NeuralSpeechRoutingTests(unittest.TestCase):
                 first = self.run_reply('第一句。', source='ambient')
                 self.assertTrue(started.wait(1))
                 chatter = self.run_reply('闲聊。', source='ambient')
-                player = self.run_reply('回答玩家。')
+                player = self.run_reply('回答玩家。', voice='female')
                 self.assertFalse(first.completion.done())
                 release.set()
                 for job in (first, player, chatter):
                     job.completion.result(timeout=2)
-                self.assertEqual(spoken, ['第一句。', '回答玩家。', '闲聊。'])
+                self.assertEqual(spoken, [('第一句。', 'male'), ('回答玩家。', 'female'), ('闲聊。', 'male')])
                 factory.assert_called_once()
             finally:
                 release.set()
@@ -81,27 +87,24 @@ class NeuralSpeechRoutingTests(unittest.TestCase):
             finally:
                 release.set()
 
-    def test_female_keeps_current_voice_and_failure_never_switches_male_to_windows(self):
-        class FemaleVoice:
-            voice_name = 'current-female'
-            def synthesize(self, text, voice, emotion, cancel):
-                return b'\x01\x00'*160, 16000
+    def test_neither_voice_switches_to_windows_after_neural_failure(self):
         class BrokenNeuralVoice:
             def synthesize(self, text, voice, emotion, cancel):
                 raise RuntimeError('test_neural_failed')
             def close(self):
                 pass
         with patch('streaming.QwenSpeechSynthesizer', return_value=BrokenNeuralVoice()) as neural, \
-             patch('streaming.speech_synthesizer', return_value=FemaleVoice()) as windows:
+             patch('streaming.speech_synthesizer', side_effect=AssertionError('unexpected fallback')) as windows:
             female = self.run_reply('小芳的话。', voice='female')
             female.completion.result(timeout=2)
-            neural.assert_not_called()
             male = self.run_reply('大军的话。')
             male.completion.result(timeout=2)
-            windows.assert_called_once()
-            sentence = next(item for item in list(male.events.queue) if item['type'] == 'sentence')
-            self.assertEqual(sentence['pcm'], '')
-            self.assertEqual(sentence['audio_error'], 'RuntimeError')
+            neural.assert_called_once()
+            windows.assert_not_called()
+            for job in (female, male):
+                sentence = next(item for item in list(job.events.queue) if item['type'] == 'sentence')
+                self.assertEqual(sentence['pcm'], '')
+                self.assertEqual(sentence['audio_error'], 'RuntimeError')
 
     def test_failed_close_keeps_resource_for_retry_and_closes_other_resources(self):
         calls = []

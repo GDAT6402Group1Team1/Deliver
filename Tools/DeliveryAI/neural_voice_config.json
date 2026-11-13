@@ -5,10 +5,20 @@
   "installation_path": "Saved/AIResearch/TtsEvaluation/qwen/installation.json",
   "model_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
   "voices": {
-    "male": {"provider": "qwen", "speaker": "Uncle_Fu"},
-    "female": {"provider": "windows"}
+    "male": {
+      "provider": "qwen",
+      "speaker": "Uncle_Fu"
+    },
+    "female": {
+      "provider": "qwen",
+      "speaker": "Serena"
+    }
   },
-  "packages": {"torch": "2.7.1+cu128", "qwen-tts": "0.1.1", "transformers": "4.57.3"},
+  "packages": {
+    "torch": "2.7.1+cu128",
+    "qwen-tts": "0.1.1",
+    "transformers": "4.57.3"
+  },
   "sample_rate": 24000,
   "max_pcm_bytes": 384000,
   "max_text_chars": 120,

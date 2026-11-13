@@ -7,7 +7,7 @@ import unittest
 import urllib.error
 import urllib.request
 import uuid
-from server import DecisionServer, decide, validate_action
+from server import DecisionServer, decide, validate_action, validate_context
 
 
 def context():
@@ -46,6 +46,35 @@ class ContractTests(unittest.TestCase):
                          {"world_epoch": "invalid"}, {"evidence": request["evidence"] * 2}):
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 decide({**request, **mutation}, "fixture")
+
+    def test_pacing_has_no_target_and_moving_aside_keeps_the_person_target(self):
+        request = context()
+        person = request['evidence'][0]
+        pace = {'action':'Pace', 'target_id':'', 'duration':5, 'evidence_ids':[]}
+        aside = {'action':'MoveAside', 'target_id':person['subject_id'], 'duration':5,
+                 'evidence_ids':[person['event_id']]}
+        request['allowed_actions'] += ['Pace', 'MoveAside']
+        request['candidates'] = [pace, aside]
+        validate_context(request)
+        self.assertEqual(validate_action(request, pace)['target_id'], '')
+        self.assertEqual(validate_action(request, aside)['target_id'], person['subject_id'])
+        invalid = [dict(pace, target_id=person['subject_id']), dict(pace, duration=5.1),
+                   dict(aside, target_id=''), dict(aside, evidence_ids=[]),
+                   dict(aside, target_id=str(uuid.uuid4()))]
+        for action in invalid:
+            with self.subTest(action=action), self.assertRaises(ValueError):
+                validate_action(request, action)
+
+    def test_movement_text_cannot_add_an_action_the_game_did_not_offer(self):
+        request = context()
+        request['allowed_actions'] += ['Pace', 'MoveAside']
+        person = request['evidence'][0]
+        request['candidates'] = [{'action':'Wait', 'target_id':'', 'duration':1, 'evidence_ids':[]}]
+        for action in ({'action':'Pace', 'target_id':'', 'duration':5, 'evidence_ids':[]},
+                       {'action':'MoveAside', 'target_id':person['subject_id'], 'duration':5,
+                        'evidence_ids':[person['event_id']]}):
+            with self.subTest(action=action), self.assertRaises(ValueError):
+                validate_action(request, action)
 
     def test_http_success_rejection_and_backpressure(self):
         server = DecisionServer(("127.0.0.1", 0), "fixture")

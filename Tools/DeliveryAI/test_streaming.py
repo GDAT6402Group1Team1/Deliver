@@ -346,7 +346,7 @@ class ModelSelectionTests(unittest.TestCase):
             with patch('streaming._local',threading.local()),patch('streaming.AppServer',side_effect=Model) as factory,patch('builtins.print') as logs:
                 for settings,cases in (
                     ({'DELIVERY_CODEX_MODEL':'','DELIVERY_CODEX_PLAYER_MODEL':''},
-                     [('player','gpt-6.1-sol'),('ambient','gpt-6-luna'),(None,'gpt-6-luna')]),
+                     [('player','gpt-6.1-sol'),('ambient','gpt-6.1-sol'),(None,'gpt-6.1-sol')]),
                     ({'DELIVERY_CODEX_MODEL':'custom-ambient','DELIVERY_CODEX_PLAYER_MODEL':'custom-player'},
                      [('player','custom-player'),('ambient','custom-ambient')])):
                     with patch.dict('os.environ',settings):
@@ -364,7 +364,7 @@ class ModelSelectionTests(unittest.TestCase):
                 choices=[call.args[0] for call in logs.call_args_list if 'stage=model_selected' in call.args[0]]
                 self.assertEqual(len(choices),5)
                 self.assertIn('source=player model="gpt-6.1-sol"',choices[0])
-                self.assertIn('source=ambient model="gpt-6-luna"',choices[1])
+                self.assertIn('source=ambient model="gpt-6.1-sol"',choices[1])
         finally:close_resources()
 
     def test_external_llm_keeps_its_existing_provider(self):

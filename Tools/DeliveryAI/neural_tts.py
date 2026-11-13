@@ -1,9 +1,11 @@
 """通过独立 Python 进程合成 Qwen 语音，主后端不加载模型或 CUDA"""
 import base64
+import hashlib
 import json
 import os
 from pathlib import Path
 import queue
+import re
 import stat
 import subprocess
 import threading
@@ -36,13 +38,34 @@ def project_path(relative):
     return path.resolve()
 
 
-def load_voice_config():
-    config = json.loads(CONFIG_PATH.read_text(encoding='utf-8-sig'))
-    if (config.get('schema_version') != 1 or config.get('sample_rate') != 24000
-            or config.get('max_pcm_bytes') != 384000 or config.get('max_text_chars') != 120
-            or config.get('voices') != {'male': {'provider': 'qwen', 'speaker': 'Uncle_Fu'},
-                                        'female': {'provider': 'windows'}}):
+def load_voice_config(config_path=None):
+    config = json.loads(project_path(config_path or CONFIG_PATH).read_text(encoding='utf-8-sig'))
+    if (not isinstance(config, dict) or type(config.get('schema_version')) is not int
+            or config.get('schema_version') != 1 or config.get('sample_rate') != 24000
+            or config.get('max_pcm_bytes') != 384000 or config.get('max_text_chars') != 120):
         raise NeuralTtsError('neural_tts_invalid_config')
+    voices = config.get('voices')
+    if (not isinstance(voices, dict) or set(voices) != {'male', 'female'}
+            or voices['male'] != {'provider': 'qwen', 'speaker': 'Uncle_Fu'}):
+        raise NeuralTtsError('neural_tts_invalid_voices')
+    female = voices['female']
+    if isinstance(female, dict) and female.get('provider') == 'qwen_base':
+        fields = {'provider', 'speaker', 'model_path', 'model_revision', 'model_manifest_path',
+                  'model_manifest_sha256', 'reference_path', 'reference_sha256', 'reference_text'}
+        if (set(female) != fields or female['speaker'] != 'Xiaofang_B'
+                or not isinstance(female['reference_text'], str)
+                or not 1 <= len(female['reference_text'].strip()) <= 120):
+            raise NeuralTtsError('neural_tts_invalid_voices')
+        for key, length in (('model_revision', 40), ('model_manifest_sha256', 64), ('reference_sha256', 64)):
+            if not isinstance(female[key], str) or not re.fullmatch('[0-9a-f]{'+str(length)+'}', female[key]):
+                raise NeuralTtsError('neural_tts_invalid_voices')
+        for key in ('model_path', 'model_manifest_path', 'reference_path'):
+            if not isinstance(female[key], str) or not female[key]:
+                raise NeuralTtsError('neural_tts_invalid_voices')
+            project_path(female[key])
+    elif female not in ({'provider': 'windows'}, {'provider': 'qwen', 'speaker': 'Serena'},
+                         {'provider': 'qwen', 'speaker': 'Vivian'}):
+        raise NeuralTtsError('neural_tts_invalid_voices')
     for key in ('python_path', 'model_path', 'installation_path'):
         project_path(config[key])
     for key in ('startup_timeout_seconds', 'synthesis_timeout_seconds', 'cancel_grace_seconds',
@@ -52,18 +75,40 @@ def load_voice_config():
     return config
 
 
+def neural_voice_speakers(config):
+    return {voice: entry['speaker'] for voice, entry in config['voices'].items()
+            if entry['provider'] in ('qwen', 'qwen_base')}
+
+
+def neural_voice_identities(config):
+    identities = {}
+    for voice, entry in config['voices'].items():
+        if entry['provider'] not in ('qwen', 'qwen_base'):
+            continue
+        identity = {'provider': entry['provider'], 'speaker': entry['speaker'],
+                    'model_revision': entry.get('model_revision', config['model_revision'])}
+        if entry['provider'] == 'qwen_base':
+            identity.update(reference_sha256=entry['reference_sha256'],
+                            reference_text_sha256=hashlib.sha256(entry['reference_text'].encode('utf-8')).hexdigest())
+        identities[voice] = identity
+    return identities
+
+
 def uses_neural_voice(voice):
     # 只有明确启用 Qwen 时才接入，普通测试和 fixture 不启动模型
     if os.environ.get('DELIVERY_TTS_PROVIDER', '').lower() != 'qwen':
         return False
-    return load_voice_config()['voices'].get(voice, {}).get('provider') == 'qwen'
+    return load_voice_config()['voices'].get(voice, {}).get('provider') in ('qwen', 'qwen_base')
 
 
 class QwenSpeechSynthesizer:
     """后端共享一个实例，GPU 任务由调用方按玩家优先顺序提交"""
-    def __init__(self):
-        self.config = load_voice_config()
-        self.voice_name = 'Uncle_Fu'
+    def __init__(self, config_path=None):
+        self.config_path = project_path(config_path or CONFIG_PATH)
+        self.config = load_voice_config(self.config_path)
+        self.speakers = neural_voice_speakers(self.config)
+        self.identities = neural_voice_identities(self.config)
+        self._completed_voice = threading.local()
         self.process = None
         self.ready = False
         self.closed = threading.Event()
@@ -72,6 +117,11 @@ class QwenSpeechSynthesizer:
         self.reader_failed = threading.Event()
         self.stderr_file = None
         self.stopping_failed = False
+
+    @property
+    def voice_name(self):
+        # 每个调用线程记录自己的结果，男女同时排队时日志不会串音色
+        return getattr(self._completed_voice, 'name', self.speakers['male'])
 
     def _acquire(self, cancel):
         while True:
@@ -124,7 +174,8 @@ class QwenSpeechSynthesizer:
         self.stderr_file = log_path.open('a', encoding='utf-8')
         try:
             self.process = subprocess.Popen(
-                [str(executable), '-B', '-X', 'utf8', '-u', str(Path(__file__).with_name('neural_tts_worker.py'))],
+                [str(executable), '-B', '-X', 'utf8', '-u', str(Path(__file__).with_name('neural_tts_worker.py')),
+                 '--config', str(self.config_path)],
                 cwd=str(PROJECT_ROOT), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.stderr_file,
                 text=True, encoding='utf-8', env=environment,
                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
@@ -178,7 +229,9 @@ class QwenSpeechSynthesizer:
                 if message is None:
                     continue
                 if (message.get('type') != 'ready' or message.get('protocol_version') != 1
-                        or message.get('voice_name') != 'Uncle_Fu' or message.get('sample_rate') != 24000):
+                        or message.get('voice_name') != 'Uncle_Fu' or message.get('sample_rate') != 24000
+                        or message.get('voices') != self.speakers
+                        or message.get('voice_identities') != self.identities):
                     raise NeuralTtsError(message.get('code', 'neural_tts_prepare_failed'))
                 self.ready = True
                 return True
@@ -194,7 +247,8 @@ class QwenSpeechSynthesizer:
             self.lock.release()
 
     def synthesize(self, text, voice, emotion, cancel):
-        if not isinstance(text, str) or not text.strip() or len(text) > 120 or voice != 'male':
+        if (not isinstance(text, str) or not text.strip() or len(text) > 120
+                or not isinstance(voice, str) or voice not in self.speakers):
             raise NeuralTtsError('neural_tts_invalid_speech')
         if emotion not in ('Calm', 'Angry', 'Surprised'):
             raise NeuralTtsError('neural_tts_invalid_emotion')
@@ -223,11 +277,13 @@ class QwenSpeechSynthesizer:
                     raise NeuralTtsError(abort_reason or 'cancelled')
                 if message['type'] != 'audio':
                     raise NeuralTtsError(message.get('code', 'neural_tts_generation_failed'))
-                if message.get('sample_rate') != 24000 or message.get('voice_name') != 'Uncle_Fu':
+                if (message.get('sample_rate') != 24000 or message.get('voice_name') != self.speakers[voice]
+                        or message.get('voice_identity') != self.identities[voice]):
                     raise NeuralTtsError('neural_tts_invalid_audio_format')
                 pcm = base64.b64decode(message.get('pcm', ''), validate=True)
                 if not pcm or len(pcm) > 384000 or len(pcm) % 2:
                     raise NeuralTtsError('neural_tts_invalid_pcm')
+                self._completed_voice.name = message['voice_name']
                 return pcm, 24000
         except BaseException as error:
             # 已收到明确终态时保留常驻模型；管道或协议异常时停止自身子进程

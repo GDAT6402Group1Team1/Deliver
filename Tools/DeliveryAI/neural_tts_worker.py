@@ -1,4 +1,4 @@
-"""独立进程只加载一份 Qwen 模型，接收线程处理取消，主线程依次生成声音"""
+"""独立进程保留已配置的 Qwen 模型，接收线程处理取消，主线程依次生成声音"""
 import base64
 import argparse
 from contextlib import contextmanager, redirect_stdout
@@ -14,8 +14,10 @@ import sys
 import threading
 import time
 from types import SimpleNamespace
+import wave
 
-from neural_tts import NeuralTtsError, load_voice_config, project_path
+from neural_tts import (NeuralTtsError, load_voice_config, neural_voice_identities,
+                        neural_voice_speakers, project_path)
 
 
 VENDOR_HASHES = {
@@ -24,6 +26,64 @@ VENDOR_HASHES = {
     'LICENSE': '442472a518bf71e371f2581aa0fcaf6ee2ef6854f78c340fdbe87c099950ea82',
     '__init__.py': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
 }
+_torch_threads_initialized = False
+_torch_threads_lock = threading.Lock()
+
+
+def initialize_torch_threads(torch):
+    global _torch_threads_initialized
+    with _torch_threads_lock:
+        if not _torch_threads_initialized:
+            torch.set_num_threads(4)
+            torch.set_num_interop_threads(1)
+            _torch_threads_initialized = True
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with path.open('rb') as source:
+        for block in iter(lambda: source.read(1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def checked_clone_assets(entry):
+    model_dir = project_path(entry['model_path'])
+    manifest_path = project_path(entry['model_manifest_path'])
+    if file_sha256(manifest_path) != entry['model_manifest_sha256']:
+        raise NeuralTtsError('neural_tts_clone_manifest_changed')
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8-sig'))
+    if (manifest.get('status') != 'completed' or manifest.get('revision') != entry['model_revision']
+            or manifest.get('model_id') != 'Qwen/Qwen3-TTS-12Hz-0.6B-Base'
+            or not isinstance(manifest.get('files'), list) or not manifest['files']):
+        raise NeuralTtsError('neural_tts_clone_installation_incomplete')
+    checked = set()
+    for item in manifest['files']:
+        if (not isinstance(item, dict) or not isinstance(item.get('path'), str)
+                or type(item.get('bytes')) is not int or item['bytes'] <= 0
+                or not isinstance(item.get('sha256'), str) or not re.fullmatch('[0-9a-f]{64}', item['sha256'])):
+            raise NeuralTtsError('neural_tts_clone_manifest_invalid')
+        path = project_path(model_dir / item['path'])
+        try:
+            path.relative_to(model_dir)
+        except ValueError:
+            raise NeuralTtsError('neural_tts_clone_file_outside_model') from None
+        if path in checked:
+            raise NeuralTtsError('neural_tts_clone_manifest_invalid')
+        checked.add(path)
+        if not path.is_file() or path.stat().st_size != item['bytes'] or file_sha256(path) != item['sha256']:
+            raise NeuralTtsError('neural_tts_clone_model_changed')
+    if not {'config.json', 'model.safetensors', 'speech_tokenizer/model.safetensors'}.issubset(
+            {item['path'] for item in manifest['files']}):
+        raise NeuralTtsError('neural_tts_clone_manifest_invalid')
+    reference = project_path(entry['reference_path'])
+    if file_sha256(reference) != entry['reference_sha256']:
+        raise NeuralTtsError('neural_tts_clone_reference_changed')
+    with wave.open(str(reference), 'rb') as sound:
+        if (sound.getnchannels() != 1 or sound.getsampwidth() != 2 or sound.getframerate() != 24000
+                or sound.getcomptype() != 'NONE' or not 2400 <= sound.getnframes() <= 240000):
+            raise NeuralTtsError('neural_tts_clone_reference_format')
+    return model_dir, reference
 
 
 def check_cancel(cancel, closed, deadline):
@@ -34,8 +94,9 @@ def check_cancel(cancel, closed, deadline):
 
 
 class WorkerRequests:
-    def __init__(self, send):
+    def __init__(self, send, speakers):
         self.send = send
+        self.speakers = speakers
         self.closed = threading.Event()
         self.lock = threading.Lock()
         self.pending = queue.Queue(maxsize=1)
@@ -59,14 +120,17 @@ class WorkerRequests:
             if kind != 'synthesize':
                 raise ValueError('invalid_command')
             text = message.get('text')
+            voice = message.get('voice')
             if (not isinstance(text, str) or not text.strip() or len(text) > 120
-                    or message.get('voice') != 'male' or message.get('emotion') not in ('Calm', 'Angry', 'Surprised')):
+                    or not isinstance(voice, str) or voice not in self.speakers
+                    or message.get('emotion') not in ('Calm', 'Angry', 'Surprised')):
                 self.send({'type': 'error', 'task_id': task_id, 'code': 'neural_tts_invalid_speech'})
                 return
             if self.closed.is_set() or self.current:
                 self.send({'type': 'error', 'task_id': task_id, 'code': 'neural_tts_busy'})
                 return
-            self.current = SimpleNamespace(task_id=task_id, text=text, cancel=threading.Event())
+            self.current = SimpleNamespace(task_id=task_id, text=text, voice=voice, speaker=self.speakers[voice],
+                                           cancel=threading.Event())
             self.pending.put_nowait(self.current)
 
     def finish(self, task):
@@ -177,11 +241,11 @@ class QwenEngine:
         from transformers import StoppingCriteria, StoppingCriteriaList
         stage('imports_completed')
         self.torch, self.np = torch, np
+        self.ModelClass = Qwen3TTSModel
         self.StoppingCriteria, self.StoppingCriteriaList = StoppingCriteria, StoppingCriteriaList
         if check_startup:
             return
-        torch.set_num_threads(4)
-        torch.set_num_interop_threads(1)
+        initialize_torch_threads(torch)
         if not torch.cuda.is_available():
             raise NeuralTtsError('neural_tts_cuda_unavailable')
         torch.cuda.set_device(0)
@@ -191,6 +255,10 @@ class QwenEngine:
             str(model_dir), device_map='cuda:0', dtype=torch.bfloat16,
             attn_implementation='sdpa', local_files_only=True)
         stage('model_loaded')
+        available_speakers = {name.lower() for name in self.model.get_supported_speakers()}
+        if any(entry['speaker'].lower() not in available_speakers
+               for entry in config['voices'].values() if entry['provider'] == 'qwen'):
+            raise NeuralTtsError('neural_tts_speaker_unavailable')
         check_cancel(closed, closed, float('inf'))
         predictor = self.model.model.talker.code_predictor
         self.hidden_size = self.model.model.config.talker_config.hidden_size
@@ -237,7 +305,7 @@ class QwenEngine:
         torch.cuda.manual_seed_all(self.config['seed'])
         with generation_controls(self, task.cancel, closed, deadline), torch.inference_mode():
             wavs, rate = self.model.generate_custom_voice(
-                text=task.text, language='Chinese', speaker='Uncle_Fu', non_streaming_mode=True,
+                text=task.text, language='Chinese', speaker=task.speaker, non_streaming_mode=True,
                 max_new_tokens=256, do_sample=True, top_k=50, top_p=1.0, temperature=.9,
                 repetition_penalty=1.05, subtalker_dosample=True, subtalker_top_k=50,
                 subtalker_top_p=1.0, subtalker_temperature=.9)
@@ -253,13 +321,129 @@ class QwenEngine:
         clipped = int(np.count_nonzero(np.abs(values) > 1.0))
         pcm = np.rint(np.clip(values, -1.0, 1.0) * 32767).astype('<i2').tobytes()
         return {'type': 'audio', 'task_id': task.task_id, 'pcm': base64.b64encode(pcm).decode('ascii'),
-                'sample_rate': 24000, 'voice_name': 'Uncle_Fu', 'frames': int(values.size),
+                'sample_rate': 24000, 'voice_name': task.speaker, 'frames': int(values.size),
                 'clipped_samples': clipped}
+
+
+@contextmanager
+def clone_generation_controls(engine, cancel, closed, deadline):
+    """Base 保留官方采样，仅在生成步骤间检查取消和正常结束"""
+    talker = engine.model.model.talker
+    had_value, previous = 'generate' in vars(talker), vars(talker).get('generate')
+    original = talker.generate
+
+    class CancellationCriterion(engine.StoppingCriteria):
+        def __call__(self, input_ids, scores, **kwargs):
+            check_cancel(cancel, closed, deadline)
+            return False
+
+    def generate(*args, **kwargs):
+        check_cancel(cancel, closed, deadline)
+        kwargs['stopping_criteria'] = engine.StoppingCriteriaList(
+            [*(kwargs.get('stopping_criteria') or []), CancellationCriterion()])
+        output = original(*args, **kwargs)
+        check_cancel(cancel, closed, deadline)
+        eos = engine.model.model.config.talker_config.codec_eos_token_id
+        if not bool((output.sequences == eos).any().item()):
+            raise NeuralTtsError('neural_tts_token_limit')
+        return output
+
+    talker.generate = generate
+    try:
+        yield
+    finally:
+        if had_value:
+            talker.generate = previous
+        else:
+            delattr(talker, 'generate')
+
+
+class QwenCloneEngine:
+    """小芳的 Base 模型常驻，固定参考只在启动时建立一次"""
+    def __init__(self, config, closed, runtime, check_startup=False):
+        self.config = config
+        self.entry = config['voices']['female']
+        self.torch, self.np = runtime.torch, runtime.np
+        self.StoppingCriteria, self.StoppingCriteriaList = runtime.StoppingCriteria, runtime.StoppingCriteriaList
+        model_dir, reference = checked_clone_assets(self.entry)
+        if check_startup:
+            return
+        check_cancel(closed, closed, float('inf'))
+        print('qwen startup=loading_female_base', file=sys.stderr, flush=True)
+        self.model = runtime.ModelClass.from_pretrained(
+            str(model_dir), device_map='cuda:0', dtype=self.torch.bfloat16,
+            attn_implementation='sdpa', local_files_only=True)
+        if self.model.model.tts_model_type != 'base':
+            raise NeuralTtsError('neural_tts_clone_wrong_model')
+        check_cancel(closed, closed, float('inf'))
+        self.torch.manual_seed(config['seed'])
+        self.torch.cuda.manual_seed_all(config['seed'])
+        with self.torch.inference_mode():
+            self.prompt = self.model.create_voice_clone_prompt(
+                ref_audio=str(reference), ref_text=self.entry['reference_text'], x_vector_only_mode=False)
+        self.synchronize()
+        check_cancel(closed, closed, float('inf'))
+        if not self.prompt:
+            raise NeuralTtsError('neural_tts_clone_reference_empty')
+        print('qwen startup=female_reference_ready', file=sys.stderr, flush=True)
+
+    def synchronize(self):
+        self.torch.cuda.synchronize()
+
+    def synthesize(self, task, closed):
+        torch, np = self.torch, self.np
+        deadline = time.monotonic() + self.config['synthesis_timeout_seconds']
+        check_cancel(task.cancel, closed, deadline)
+        torch.manual_seed(self.config['seed'])
+        torch.cuda.manual_seed_all(self.config['seed'])
+        with clone_generation_controls(self, task.cancel, closed, deadline), torch.inference_mode():
+            wavs, rate = self.model.generate_voice_clone(
+                text=task.text, language='Chinese', voice_clone_prompt=self.prompt, non_streaming_mode=True,
+                max_new_tokens=256, do_sample=True, top_k=50, top_p=1.0, temperature=.9,
+                repetition_penalty=1.05, subtalker_dosample=True, subtalker_top_k=50,
+                subtalker_top_p=1.0, subtalker_temperature=.9)
+        self.synchronize()
+        check_cancel(task.cancel, closed, deadline)
+        if rate != 24000 or len(wavs) != 1:
+            raise NeuralTtsError('neural_tts_invalid_audio_format')
+        values = np.asarray(wavs[0], dtype=np.float32)
+        if values.ndim != 1 or not values.size or not np.isfinite(values).all():
+            raise NeuralTtsError('neural_tts_invalid_pcm')
+        if values.size * 2 > self.config['max_pcm_bytes']:
+            raise NeuralTtsError('neural_tts_audio_too_long')
+        clipped = int(np.count_nonzero(np.abs(values) > 1.0))
+        pcm = np.rint(np.clip(values, -1.0, 1.0) * 32767).astype('<i2').tobytes()
+        return {'type': 'audio', 'task_id': task.task_id, 'pcm': base64.b64encode(pcm).decode('ascii'),
+                'sample_rate': 24000, 'voice_name': self.entry['speaker'], 'frames': int(values.size),
+                'clipped_samples': clipped}
+
+
+class QwenVoiceEngines:
+    """两类声音共用现有单任务队列，轮到哪位 NPC 就使用已加载的对应模型"""
+    def __init__(self, config, closed, check_startup=False):
+        self.custom = QwenEngine(config, closed, check_startup=check_startup)
+        self.identities = neural_voice_identities(config)
+        self.engines = {voice: self.custom for voice, entry in config['voices'].items() if entry['provider'] == 'qwen'}
+        if config['voices']['female']['provider'] == 'qwen_base':
+            self.engines['female'] = QwenCloneEngine(config, closed, self.custom, check_startup=check_startup)
+
+    def synthesize(self, task, closed):
+        engine = self.engines.get(task.voice)
+        if engine is None or task.speaker != self.identities[task.voice]['speaker']:
+            raise NeuralTtsError('neural_tts_invalid_speech')
+        result = engine.synthesize(task, closed)
+        result['voice_identity'] = self.identities[task.voice]
+        return result
+
+    def synchronize(self):
+        # 同一 CUDA 设备上的两份模型都确认结束后，才能通知主后端开始下一句
+        self.custom.synchronize()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check-startup', action='store_true', help='仅检查环境和导入，不加载模型或使用 CUDA')
+    parser.add_argument('--config', help='使用项目目录内的语音配置，省略时读取正式配置')
     args = parser.parse_args()
     protocol_output = sys.stdout
     output_lock = threading.Lock()
@@ -269,7 +453,9 @@ def main():
             protocol_output.write(json.dumps(message, ensure_ascii=False, separators=(',', ':')) + '\n')
             protocol_output.flush()
 
-    requests = WorkerRequests(send)
+    config = load_voice_config(args.config)
+    speakers = neural_voice_speakers(config)
+    requests = WorkerRequests(send, speakers)
 
     def read_input():
         try:
@@ -292,7 +478,7 @@ def main():
             faulthandler.dump_traceback_later(12, file=sys.stderr)
         # 库的初始化日志和录图提示写入 stderr，stdout 始终只发送协议消息
         with redirect_stdout(sys.stderr):
-            engine = QwenEngine(load_voice_config(), requests.closed, check_startup=args.check_startup)
+            engine = QwenVoiceEngines(config, requests.closed, check_startup=args.check_startup)
         # Windows 加载 NumPy 扩展时会访问标准输入锁，模型初始化后再启动阻塞读取
         input_thread.start()
         if args.check_startup:
@@ -300,7 +486,8 @@ def main():
             send({'type': 'startup_checked', 'imports_only': True})
             requests.closed.wait(20)
             return 0
-        send({'type': 'ready', 'protocol_version': 1, 'voice_name': 'Uncle_Fu', 'sample_rate': 24000})
+        send({'type': 'ready', 'protocol_version': 1, 'voice_name': 'Uncle_Fu',
+              'voices': speakers, 'voice_identities': neural_voice_identities(config), 'sample_rate': 24000})
         while not requests.closed.is_set() or not requests.pending.empty():
             try:
                 task = requests.pending.get(timeout=.1)

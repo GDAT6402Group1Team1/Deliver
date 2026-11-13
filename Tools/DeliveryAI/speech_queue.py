@@ -15,6 +15,23 @@ class _Work:
     cancel: threading.Event
 
 
+class _PlayerReservation:
+    """玩家仍在生成台词时保留优先权，释放可以重复调用"""
+
+    def __init__(self, owner, key):
+        self._owner = owner
+        self._key = key
+
+    def release(self):
+        self._owner._release_player_reservation(self._key)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.release()
+
+
 class SpeechQueue:
     """后端持有的语音队列，每个实例独立管理线程、等待任务和取消通知"""
 
@@ -26,6 +43,7 @@ class SpeechQueue:
         self._stop = threading.Event()
         self._waiting = []
         self._active = {}
+        self._player_reservations = {}
         self._next_id = 0
         self._threads = [threading.Thread(target=self._worker, name=f'npc-speech-{index}', daemon=True)
                          for index in range(workers)]
@@ -34,6 +52,35 @@ class SpeechQueue:
                                               name='npc-speech-cancel', daemon=True))
         for thread in self._threads:
             thread.start()
+
+    def reserve_player(self, cancel=None):
+        """玩家生成回复期间暂停新的闲聊合成，玩家语音和已运行任务继续处理
+
+        调用方在模型结束或异常时释放；取消通知也会解除等待，不占用语音队列容量
+        """
+        if cancel is not None and not isinstance(cancel, threading.Event):
+            raise TypeError('cancel must be a threading.Event')
+        cancel = cancel if cancel is not None else threading.Event()
+        key = object()
+        with self._condition:
+            if self._stop.is_set():
+                raise RuntimeError('speech_queue_closed')
+            if not cancel.is_set():
+                self._player_reservations[key] = cancel
+            self._condition.notify_all()
+        return _PlayerReservation(self, key)
+
+    def _release_player_reservation(self, key):
+        with self._condition:
+            self._player_reservations.pop(key, None)
+            self._condition.notify_all()
+
+    def _remove_cancelled_reservations_locked(self):
+        cancelled = [key for key, cancel in self._player_reservations.items() if cancel.is_set()]
+        for key in cancelled:
+            del self._player_reservations[key]
+        if cancelled:
+            self._condition.notify_all()
 
     def submit(self, function, *args, priority=0, cancel=None):
         """提交一次调用，0 为玩家、1 为闲聊，同类按提交顺序开始
@@ -99,10 +146,11 @@ class SpeechQueue:
         while True:
             with self._condition:
                 removed = self._remove_cancelled_locked()
+                self._remove_cancelled_reservations_locked()
                 if not removed:
                     if self._stop.is_set():
                         return
-                    self._condition.wait(timeout=.05 if self._waiting else None)
+                    self._condition.wait(timeout=.05 if self._waiting or self._player_reservations else None)
                     continue
             self._cancel_waiting(removed)
 
@@ -112,9 +160,11 @@ class SpeechQueue:
             with self._condition:
                 while True:
                     removed = self._remove_cancelled_locked()
+                    self._remove_cancelled_reservations_locked()
                     if removed:
                         break
-                    if self._waiting:
+                    # 玩家台词还没生成时，闲聊不能抢先开始；已排队的玩家语音仍可执行
+                    if self._waiting and (not self._player_reservations or self._waiting[0][0] == 0):
                         _, sequence, candidate = heapq.heappop(self._waiting)
                         if not candidate.future.set_running_or_notify_cancel():
                             self._condition.notify_all()
@@ -151,6 +201,9 @@ class SpeechQueue:
             self._stop.set()
             waiting = [item[2] for item in self._waiting]
             self._waiting.clear()
+            for cancel in self._player_reservations.values():
+                cancel.set()
+            self._player_reservations.clear()
             for work in waiting+list(self._active.values()):
                 work.cancel.set()
             self._condition.notify_all()

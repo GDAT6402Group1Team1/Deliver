@@ -1,13 +1,15 @@
 param(
     [ValidateSet('codex-local', 'fixture', 'llm', 'jev', 'hybrid')]
     [string]$Provider = 'codex-local',
-    [string]$Model = 'gpt-6-luna',
+    [string]$Model = 'gpt-6.1-sol',
     [string]$PlayerModel = 'gpt-6.1-sol',
     [ValidateSet('qwen', 'windows')]
     [string]$SpeechProvider = 'qwen',
     [ValidateRange(1024, 65535)]
     [int]$Port = 8765,
-    [string]$PythonExecutable = 'python.exe'
+    [string]$PythonExecutable = 'python.exe',
+    # 把每轮候选、现场事件、选中的动作和台词写入 Saved/Logs/NpcDialogue.ndjson，排查对话问题时打开
+    [switch]$DialogueLog
 )
 
 $ErrorActionPreference = 'Stop'
@@ -77,6 +79,7 @@ if (-not $PSBoundParameters.ContainsKey('PlayerModel') -and $env:DELIVERY_CODEX_
     $PlayerModel = $env:DELIVERY_CODEX_PLAYER_MODEL
 }
 $env:DELIVERY_CODEX_PLAYER_MODEL = $PlayerModel
+$env:DELIVERY_AI_DIALOGUE_LOG = if ($DialogueLog) { '1' } else { '' }
 $env:DELIVERY_TTS_PROVIDER = $SpeechProvider
 if ($SpeechProvider -eq 'qwen') {
     $voicePython = Join-Path $projectRoot 'Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe'

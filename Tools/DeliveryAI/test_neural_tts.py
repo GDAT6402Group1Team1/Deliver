@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from neural_tts import NeuralTtsError, QwenSpeechSynthesizer, uses_neural_voice
+from neural_tts import NeuralTtsError, QwenSpeechSynthesizer, load_voice_config, uses_neural_voice
 from neural_tts_worker import WorkerRequests, generation_controls
 
 
@@ -37,7 +37,11 @@ class FakeProcess:
             self.exit_code = 0
 
     def reply(self, task_id, kind='audio', pcm=b'\0\0\1\0'):
-        self.client.messages.put({'type': kind, 'task_id': task_id, 'voice_name': 'Uncle_Fu',
+        command = next(item for item in reversed(self.commands) if item.get('task_id') == task_id
+                       and item['type'] == 'synthesize')
+        self.client.messages.put({'type': kind, 'task_id': task_id,
+                                  'voice_name': self.client.speakers[command['voice']],
+                                  'voice_identity': self.client.identities[command['voice']],
                                   'sample_rate': 24000, 'pcm': base64.b64encode(pcm).decode(), 'code': 'cancelled'})
 
     def poll(self):
@@ -54,6 +58,13 @@ class FakeProcess:
 
 
 class NeuralTtsTests(unittest.TestCase):
+    def setUp(self):
+        self.config = load_voice_config()
+        self.config['voices']['female'] = {'provider': 'qwen', 'speaker': 'Serena'}
+        override = patch('neural_tts.load_voice_config', return_value=self.config)
+        override.start()
+        self.addCleanup(override.stop)
+
     def client(self):
         client = QwenSpeechSynthesizer()
         process = FakeProcess(client)
@@ -63,12 +74,13 @@ class NeuralTtsTests(unittest.TestCase):
         self.addCleanup(client.close)
         return client, process
 
-    def test_explicit_routing_and_female_unchanged(self):
+    def test_explicit_routing_for_both_configured_voices(self):
         with patch.dict('os.environ', {}, clear=True):
             self.assertFalse(uses_neural_voice('male'))
         with patch.dict('os.environ', {'DELIVERY_TTS_PROVIDER': 'qwen'}):
             self.assertTrue(uses_neural_voice('male'))
-            self.assertFalse(uses_neural_voice('female'))
+            self.assertTrue(uses_neural_voice('female'))
+            self.assertFalse(uses_neural_voice('unconfigured'))
 
     def test_prepare_reuses_worker_and_returns_complete_pcm(self):
         client, process = self.client()
@@ -77,6 +89,23 @@ class NeuralTtsTests(unittest.TestCase):
             self.assertTrue(client.prepare(threading.Event()))
             self.assertEqual(client.synthesize('先听我说。', 'male', 'Calm', threading.Event()), (b'\0\0\1\0', 24000))
         self.assertEqual(len(process.commands), 1)
+
+    def test_switching_speaker_reuses_worker_and_keeps_male_configuration(self):
+        client, process = self.client()
+        with patch('neural_tts.subprocess.Popen', side_effect=AssertionError('second worker')):
+            for voice, expected in (('male', 'Uncle_Fu'), ('female', 'Serena'), ('male', 'Uncle_Fu')):
+                self.assertEqual(client.synthesize('你先说。', voice, 'Calm', threading.Event())[1], 24000)
+                self.assertEqual(client.voice_name, expected)
+        self.assertEqual([item['voice'] for item in process.commands], ['male', 'female', 'male'])
+
+    def test_wrong_speaker_audio_is_rejected(self):
+        client, process = self.client()
+        process.reply = lambda task_id: client.messages.put({
+            'type': 'audio', 'task_id': task_id, 'voice_name': 'Uncle_Fu', 'sample_rate': 24000,
+            'pcm': base64.b64encode(b'\0\0').decode()})
+        with self.assertRaisesRegex(NeuralTtsError, 'invalid_audio_format'):
+            client.synthesize('小芳的话。', 'female', 'Calm', threading.Event())
+        self.assertTrue(process.killed)
 
     def test_cancel_waits_for_worker_terminal_and_discards_late_audio(self):
         client, process = self.client()
@@ -101,7 +130,8 @@ class NeuralTtsTests(unittest.TestCase):
         self.assertEqual(errors, ['cancelled'])
         self.assertFalse(process.killed)
         process.auto_audio = True
-        self.assertEqual(client.synthesize('再说一句。', 'male', 'Calm', threading.Event())[1], 24000)
+        self.assertEqual(client.synthesize('再说一句。', 'female', 'Calm', threading.Event())[1], 24000)
+        self.assertEqual(client.voice_name, 'Serena')
 
     def test_cancel_timeout_stops_owned_worker_before_return(self):
         client, process = self.client()
@@ -130,6 +160,7 @@ class NeuralTtsTests(unittest.TestCase):
         client, process = self.client()
         process.reply = lambda task_id: client.messages.put({
             'type': 'audio', 'task_id': task_id, 'voice_name': 'Uncle_Fu', 'sample_rate': 24000,
+            'voice_identity': client.identities['male'],
             'pcm': base64.b64encode(b'\0' * 384002).decode()})
         with self.assertRaisesRegex(NeuralTtsError, 'invalid_pcm'):
             client.synthesize('先听我说。', 'male', 'Calm', threading.Event())
@@ -140,10 +171,11 @@ class NeuralTtsTests(unittest.TestCase):
 
     def test_worker_cancel_targets_only_current_task(self):
         replies = []
-        requests = WorkerRequests(replies.append)
+        requests = WorkerRequests(replies.append, {'male': 'Uncle_Fu', 'female': 'Serena'})
         command = {'type': 'synthesize', 'task_id': 'a' * 32, 'text': '你好。', 'voice': 'male', 'emotion': 'Calm'}
         requests.receive(command)
         current = requests.pending.get_nowait()
+        self.assertEqual(current.speaker, 'Uncle_Fu')
         requests.receive({**command, 'task_id': 'b' * 32})
         self.assertEqual(replies[0]['code'], 'neural_tts_busy')
         requests.receive({'type': 'cancel', 'task_id': 'b' * 32})
@@ -151,6 +183,8 @@ class NeuralTtsTests(unittest.TestCase):
         requests.receive({'type': 'cancel', 'task_id': 'a' * 32})
         self.assertTrue(current.cancel.is_set())
         requests.finish(current)
+        requests.receive({**command, 'task_id': 'c' * 32, 'voice': 'female'})
+        self.assertEqual(requests.pending.get_nowait().speaker, 'Serena')
         requests.close()
         requests.close()
 

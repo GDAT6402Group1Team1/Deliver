@@ -42,6 +42,20 @@ class JevTests(unittest.TestCase):
                  patch("jev.urllib.request.urlopen", return_value=io.BytesIO(raw)), self.assertRaises(ValueError):
                 decide(self.request(), "jev")
 
+    def test_jev_can_choose_new_movement_candidates_without_a_keyword_rule(self):
+        for action in ('Pace', 'MoveAside'):
+            request = self.request()
+            person = request['evidence'][0]
+            request['allowed_actions'].append(action)
+            request['candidates'][1] = {'action':action, 'target_id':person['subject_id'] if action=='MoveAside' else '',
+                                        'duration':5, 'evidence_ids':[person['event_id']] if action=='MoveAside' else []}
+            response = {'answers':{'action':{'type':'choice', 'choice':'option_1', 'confidence':.8}}}
+            with self.subTest(action=action), patch.dict(os.environ, {'TYPESAFE_API_KEY':'test-only'}), \
+                 patch('jev.urllib.request.urlopen', return_value=io.BytesIO(json.dumps(response).encode())):
+                result = decide(request, 'jev')
+            self.assertEqual(result['action'], action)
+            self.assertEqual(result['target_id'], request['candidates'][1]['target_id'])
+
     def test_candidate_pair_and_dialogue_limits(self):
         request = self.request()
         good = request["candidates"][1]
