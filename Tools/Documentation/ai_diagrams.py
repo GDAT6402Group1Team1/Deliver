@@ -42,11 +42,11 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'SentenceParser': ('完整句子检查', ['首条结果确定候选动作', '格式错误交给后端处理'], [('feed()', '收集文字并解析完整 JSON'), ('line()', '检查动作与句子后通知后端')]),
         'SpeechSynthesizer': ('可选 Windows 语音', ['显式选择 windows 时使用 SAPI', '两个合成线程复用各自语音进程'], [('prepare()', '提前准备 Windows 中文声音'), ('synthesize()', '返回一句完整 PCM 音频')]),
         'SpeechQueue': ('NPC 共用的语音队列', ['玩家交谈优先于未开始的闲聊', '一个 GPU 实例依次合成句子'], [('submit()', '按来源安排完整句子'), ('close()', '取消排队项并通知当前合成停止')]),
-        'QwenSpeechSynthesizer': ('NPC 台词语音', ['大壮 B 不变，翠花 B 用 Graph', '取消获确认后才开始下一句'], [('prepare()', '提前加载并核对两套声音配置'), ('synthesize()', '生成完整音频，超过 8 秒报错')]),
+        'QwenSpeechSynthesizer': ('NPC 台词语音', ['大壮 B 不变，翠花 B 用 Graph', '句内分段须单独启用，默认关闭'], [('synthesize()', '按完整句返回声音'), ('synthesize_stream()', '生成过程中返回新增声音')]),
         'UDeliveryNpcBodyAnimInstance': ('主动作参数', ['读取角色速度、动作与开始时间', '倒地和起身优先于轻拳后仰'], [('NativeUpdateAnimation()', '在游戏线程准备动画所需数值'), ('StrikeTime / HitTime', '按服务器时间显示挥拳与后仰')]),
         'ABP_NpcBody': ('主动画蓝图', ['十种姿势在图中平滑切换', '走路、踱步和快步使用同步组'], [('Blend Poses by Int', '按动作编号混合姿势'), ('Sequence Evaluator', '按时间显示攻击、受击与恢复')]),
         'FDeliveryNpcSentence': ('一句台词及语音', ['保存句子序号、文字和情绪', '保存 PCM 音频及采样率'], [('Sequence / Text / Emotion', '按序播放同一次回复'), ('Pcm / SampleRate', '交给客户端声音播放')]),
-        'FDeliveryNpcLocalVoice': ('本机待播语音', ['保存收到的 Opus 和解码后的声音', '记录播放进度和本句解码器'], [('State / Pcm', '文字和声音对应同一句话'), ('QueuedBytes / TotalBytes', '判断这句是否已经播放结束')]),
+        'FDeliveryNpcLocalVoice': ('本机待播语音', ['保存声音、解码器和字幕进度', '同一句积累声音后接续播放'], [('State.bAudioComplete', '句末到达后才能结束本句'), ('QueuedBytes / TotalBytes', '记录已排入声音与最终长度')]),
         'FDeliveryNpcVoiceStreamEncoder': ('句内声音编码', ['每句话保留同一个 Opus 编码器', 'V2 到句末才确定声音总长'], [('Append()', '收到新 PCM 后接着编码'), ('Finish()', '补齐尾音并通知最终长度')]),
         'UDeliveryNpcExpressionSet': ('表情与交谈姿态配置', ['保存眼睛、眉毛和眨眼曲线', '保存倾听前倾和头部过渡参数'], [('Poses / BlinkCurve', '按情绪选择形态键权重'), ('ListeningLean / HeadTurnLimit', '调整姿态幅度与转头范围')]),
         'UDeliveryNpcConversationAnimInstance': ('交谈姿态参数', ['读取倾听、思考与实际播放状态', '平滑视线、胸部和头部旋转'], [('NativeUpdateAnimation()', '在游戏线程准备姿态参数'), ('NativeUninitializeAnimation()', '清除目标并恢复叠加权重')]),
@@ -58,7 +58,7 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'UDeliveryVehicleHoldComponent': ('车辆拽车处理', ['记录拽住车辆的 NPC', '记录拽车和持续油门时间'], [('TryHold()', '检查条件后建立拽车关系'), ('Release()', '松手并恢复正常速度倍率')]),
         'ADeliveryMotorbike': ('电瓶车', ['处理驾驶与车辆移动', '持有拽车处理组件'], [('读取 GetSpeedScale()', '根据拽车状态调整速度'), ('调用 UpdateThrottle()', '累计油门时间以便挣脱')]),
         'FDeliveryNpcProfileRow': ('NPC 人物配置', ['DisplayName / Persona：名字与性格', 'TtsVoice / VoiceSet：两类声音配置'], [('继承 FTableRowBase', 'DT_NpcProfiles 每行对应一名角色'), ('chunlai / xiumei', '分别配置大壮与翠花')]),
-        'UDeliveryNpcVoiceSet': ('台词音量与短音配置', ['DialogueVolume：完整台词音量', 'DialogueAttenuation：台词距离衰减', 'ReactionAttenuation：短音距离衰减', 'HeardPlayer / Hit：听见与受击短音'], [('GetSound(Reaction)', '查找对应 Sound Wave 或 Sound Cue'), ('Volume / Pitch / MaxDuration', '分别调整短反应音的播放效果')]),
+        'UDeliveryNpcVoiceSet': ('台词音量与短音配置', ['DialogueVolume：完整台词音量', 'DialogueAttenuation：台词距离衰减', 'ReactionAttenuation：短音距离衰减', 'HeardPlayer / Hit：听见与受击短音', 'StreamingStartBufferSeconds：开播缓冲', 'StreamingResumeBufferSeconds：续播缓冲'], [('GetSound(Reaction)', '查找对应 Sound Wave 或 Sound Cue'), ('Volume / Pitch / MaxDuration', '分别调整短反应音的播放效果')]),
         'UDeliveryAiSettings': ('AI 项目设置', ['保存后端地址和启用开关', '保存请求数量上限和超时'], [('在项目设置中修改', '配置写入 DefaultGame.ini'), ('由网络子系统读取', '不再建立重复的数据表')]),
         'FDeliveryConversationOptionRow': ('快捷发言配置', ['保存按钮文字和实际台词', '保存意图、排序和启用开关'], [('界面按配置生成按钮', '显示文字使用 FText'), ('服务器按行名读取台词', '仍需检查是否允许交谈')]),
         'UDeliveryNpcPresentationData': ('动画与声音配置', ['保存移动、战斗和说话动画', '保存声音和面部形态键名称'], [('使用 UDataAsset 保存资源', '由 NPC 选择对应资产'), ('资源加载完成后使用', '交给表现组件播放')]),
@@ -69,10 +69,13 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         methods = [('BeginListening()', '玩家插话时结束旧交谈'), ('EndListening()', '清除倾听目标和发言编号')]
     if name == 'UDeliveryNpcAgentComponent' and '逐句' in role:
         fields = ['检查请求、动作和回复编号', '只接收本次交谈的有效句子']
-        methods = [('ReceiveStreamDecision()', '检查完整的动作建议'), ('ReceiveSentence()', '把句子交给人物表现组件')]
+        methods = [('ReceiveSentence()', '接收旧格式的完整句子'), ('ReceiveAudioChunk()', '接收当前句的新增声音')]
     if name == 'UDeliveryAiGatewaySubsystem' and '逐句' in role:
-        fields = ['接收动作建议、句子和结束消息', '取消或结束关卡后忽略旧回复']
+        fields = ['检查句子顺序、音频段与最终长度', '取消或结束关卡后忽略旧回复']
         methods = [('ReadStream()', '在游戏线程读取完整消息'), ('Cancel()', '停止接收并通知后端取消')]
+    if name == 'UDeliveryNpcPresentationComponent' and '分段播放' in role:
+        fields = ['按句安排声音、字幕与情绪', '同一句持续编码并同步音频']
+        methods = [('BeginSentenceAudio()', '开始本句，暂不要求最终长度'), ('EndSentenceAudio()', '确认句末或退回文字显示')]
     if name == 'ADeliveryNpcCharacter' and '人物配置' in role:
         fields = ['Profile：选择人物数据表及表行', '保留原模型、动画和关卡位置']
         methods = [('ApplyProfile()', '检查后应用名字、性格和声音'), ('未选表或配置无效', '保留角色原有设置')]
@@ -127,6 +130,12 @@ def class_diagram(title, nodes, edges):
         elif nodes[a]['name']=='QwenSpeechSynthesizer' and nodes[b]['name']=='FDeliveryNpcSentence':
             # 语音结果从下方绕到右侧，不穿过新增的持续编码类
             points=[(x1+w1/2,y1+h1),(x1+w1/2,y1+h1+28),(1218,y1+h1+28),(1218,y2+h2/2),(x2+w2,y2+h2/2)]
+        elif nodes[a]['name']=='QwenSpeechSynthesizer' and nodes[b]['name']=='UDeliveryAiGatewaySubsystem':
+            # 可选分段沿外侧发送到 Gateway，不经过旧整句数据结构
+            points=[(x1+w1/2,y1+h1),(x1+w1/2,y1+h1+28),(15,y1+h1+28),(15,y2-34),(x2+w2/2,y2-34),(x2+w2/2,y2)]
+        elif nodes[a]['name']=='SentenceParser' and nodes[b]['name']=='SpeechQueue':
+            # 沿两列之间下行，避开 Gateway；起点稍错开输入线和连线编号
+            points=[(x1,y1+h1/2+22),(430,y1+h1/2+22),(430,y2-28),(x2+w2/2,y2-28),(x2+w2/2,y2)]
         elif len(nodes)==11 and (a,b)==(5,9):
             # 跨过中间一行的组件关系沿外侧走，避免穿过动画类的文字
             points=[(x1+w1,y1+h1/2),(1218,y1+h1/2),(1218,y2-28),(x2+w2/2,y2-28),(x2+w2/2,y2)]
@@ -229,20 +238,20 @@ def diagrams():
         n('ABP_NpcBody','身体动画混合',[],[],kind='asset'),
         n('ABP_NpcConversation','交谈后处理',[],[],kind='asset')
     ],[(0,1,'角色持有战斗组件','composition'),(1,2,'提供挥拳、受击与恢复的开始时间','dependency'),(0,2,'提供速度和当前动作','dependency'),(3,2,'提供动画配置和本机正在说的话','dependency'),(2,4,'更新动作编号、步频和播放时间','dependency'),(4,5,'先得到身体姿势，再叠加转头和倾听','dependency')])
-    d['stream']=class_diagram('逐句语音类图 · 句内分段尚未接入游戏',[
+    d['stream']=class_diagram('对白播放类图 · 句内分段已接入，默认关闭',[
         n('AppServer','本机模型连接',[],[],kind='Python classes'),
         n('SentenceParser','完整句子检查',[],[],kind='Python classes'),
         n('SpeechSynthesizer','独立线程合成语音',[],[],kind='Python classes'),
         n('UDeliveryNpcAgentComponent','服务器：逐句检查',[],[]),
         n('UDeliveryAiGatewaySubsystem','服务器：逐句消息',[],[]),
         n('FDeliveryNpcSentence','完整句子及语音',[],[],kind='DTO'),
-        presentation,
+        n('UDeliveryNpcPresentationComponent','服务器与本机：分段播放',[],[]),
         n('FDeliveryNpcLocalVoice','各客户端：待播句子',[],[],kind='struct'),
         n('FDeliveryNpcSpeechState','实际播放的对白状态',[],[],kind='struct'),
         n('SpeechQueue','Qwen 语音队列',[],[],kind='Python classes'),
         n('QwenSpeechSynthesizer','常驻 NPC 语音',[],[],kind='Python classes'),
-        n('FDeliveryNpcVoiceStreamEncoder','句内声音编码',[],[],status='接口已实现，待接入')
-    ],[(0,1,'模型文字逐步到达','dependency'),(1,2,'选择 windows 时合成完整句子','dependency'),(2,5,'返回文本、情绪、PCM 与句子序号','dependency'),(5,4,'整句音频生成后通过 HTTP 发送','dependency'),(4,3,'在游戏线程检查本次请求','dependency'),(3,6,'通过检查后按序安排句子','dependency'),(6,7,'后台压缩 Opus，客户端收到后解码','dependency'),(7,8,'开始播放时更新本机字幕与情绪','dependency'),(1,9,'Qwen 句子按玩家优先顺序排队','dependency'),(9,10,'前一句结束或确认取消后调用','dependency'),(10,5,'返回完整 PCM，过长则明确失败','dependency'),(6,11,'后续接入：同一句持续编码','dependency')])
+        n('FDeliveryNpcVoiceStreamEncoder','句内声音编码',[],[])
+    ],[(0,1,'模型文字逐步到达','dependency'),(1,2,'选择 windows 时合成完整句子','dependency'),(2,5,'返回文本、情绪、PCM 与句子序号','dependency'),(5,4,'默认方式：整句音频经 HTTP 发送','dependency'),(4,3,'在游戏线程检查本次请求','dependency'),(3,6,'通过检查后按序安排句子','dependency'),(6,7,'后台压缩 Opus，客户端收到后解码','dependency'),(7,8,'开始播放时更新本机字幕与情绪','dependency'),(1,9,'Qwen 句子按玩家优先顺序排队','dependency'),(9,10,'前一句结束或确认取消后调用','dependency'),(10,5,'默认返回完整 PCM，过长则明确失败','dependency'),(6,11,'启用分段时，同一句持续编码','dependency'),(10,4,'启用分段时，经后端 HTTP 发送台词、音频与句末','dependency')])
     d['combat']=class_diagram('战斗与拽车类图 · 当前实现',[
         task,resident,n('UDeliveryNpcCombatComponent','服务器：攻击与倒地状态',['AttackId / HitAt','bDown / bRecovering'],['StartStrike() / CancelStrike()','ReceiveImpact()','SetDeliberateProne()']),
         agent,n('UDeliveryVehicleHoldComponent','车辆组件：独占拽持事务',['Holder / HoldActionId','ExpiresAt / ThrottleSeconds'],['CanHold() / TryHold()','Release() / UpdateThrottle()','GetSpeedScale()']),
