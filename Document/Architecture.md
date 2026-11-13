@@ -385,15 +385,17 @@ Delivery 中的 NPC 可以听玩家说话，观察附近发生的事，并根据
 
 游戏使用 Listen Server，也就是由房主同时运行服务器和客户端。AI 后端是另外运行的程序，负责调用模型。其他玩家通过游戏服务器接收 NPC 的动作和对白，不需要各自连接模型。
 
-目前已有感知、交谈、动作选择、互殴、拽车和多人同步代码。玩家请求优先、行为树倾听、逐句生成与语音合成也已接入。NPC 的眼睛表情由独立网格和表情资产控制，交谈时的前倾、侧头和视线跟随使用可编辑动画蓝图。此前三人 PIE 已确认 `ABP_NpcConversation` 的三个实例存在，倾听姿态和注视权重生效。最新一轮已保存简化人物设定和台词距离衰减，通过完整构建、2 项声音配置逻辑检查及 95 项后端测试。正式后台使用 Qwen Uncle_Fu 和 Serena 分别朗读大壮、翠花的台词；Serena 年龄感偏年轻，当前作为候选。新声音的游戏听感、等待时间和多人效果仍待试玩确认。
+目前已有感知、交谈、动作选择、互殴、拽车和多人同步代码。玩家请求优先、行为树倾听、逐句生成与语音合成也已接入。正式声音配置中，大壮使用用户认可的 Qwen `Uncle_Fu`，翠花使用用户选定的固定 B 音色，内部名称为 `Xiaofang_B`；Serena 是此前的试听方案，已经替换。每句声音仍要合成完整后才能播放，首句等待尚未解决。
 
-此前 `NpcVoiceAsyncMap` 共 8 项检查，7 项成功（其中 2 项带警告），主机拽车结束原因一项失败，报告保留。调整测试站位并检查前进路径后，最终 `NpcOpusMapFinal` 的主机与客户端地图回归均成功，带警告，结束原因均为持续油门挣脱 `DriverEscaped`。这次只修改测试布局，没有改变生产玩法。压缩版三人 10 FPS 完整两句播放及下一轮中断、正式 UI 调用真实模型的道歉与拱火也已通过。首声仍约 3 秒，其中模型首句约 2.6 秒；这些少量同机样本不足以统计 P95，也未覆盖远程弱网。详细数据与历史对照见 `Document/AIIteration.html`。
+两名街坊共用 `ABP_NpcBody`，在站立、交谈、不同步态、攻击和受击等十种姿势之间过渡。`ABP_NpcConversation` 再叠加转头、前倾和侧头，眼睛与眉毛使用独立表情资产。翠花的新眉形已保存到正式模型，有限追打和轻拳后仰也已接入。对应构建、专项检查和资源读回已完成；这些检查没有游戏画面，当前版本的动作、声音、字幕和双人效果仍需试玩。具体结果分别见[互殴检查](AIIteration.html#npc-fight)、[翠花 B 音色](AIIteration.html#cuihua-b-production)和[眉形调整](AIIteration.html#cuihua-brow-candidate)。
+
+此前 `NpcVoiceAsyncMap` 共 8 项检查，7 项成功（其中 2 项带警告），主机拽车结束原因一项失败，报告保留。调整测试站位并检查前进路径后，最终 `NpcOpusMapFinal` 的主机与客户端地图回归均成功，带警告，结束原因均为持续油门挣脱 `DriverEscaped`。这次只修改测试布局，没有改变生产玩法。压缩版三人 10 FPS 完整两句播放及下一轮中断、正式 UI 调用真实模型的道歉与拱火也已通过。当时首声约 3 秒，其中模型首句约 2.6 秒；这是更换当前声音前的记录，不能代表翠花 B 的等待时间。这些少量同机样本不足以统计 P95，也未覆盖远程弱网。详细数据与历史对照见 `Document/AIIteration.html`。
 
 试玩步骤：
 
 1. 先启动 AI 后端，确认项目配置的 `127.0.0.1:8769` 可以连接，再打开 `TestForCharacter` 进入游戏。文档中的历史启动记录不代表后台现在仍在运行。
 2. 靠近大壮或翠花，按 **T** 打开交谈。分别尝试道歉、拱火和自由输入。原蓝图资源名仍保留 `BP_ResidentLoud` 和 `BP_ResidentShrewd`。
-3. 观察 NPC 是否先转头倾听，随后按句子顺序播放声音和字幕，并显示对应表情。玩家交谈现在默认使用另一款模型；新配置的游戏内等待时间尚未重新测量，不能沿用此前约 3 秒的结果。
+3. 观察 NPC 是否先转头倾听，随后按句子顺序播放声音和字幕，并显示对应表情。启动脚本当前默认用 `gpt-6.1-sol` 处理玩家交谈与 NPC 闲聊；当前声音配置的游戏内完整等待时间尚未重新测量，不能沿用此前约 3 秒的结果。
 4. 在 NPC 说话时使其受击，检查声音与字幕停止；多人试玩时同时观察主机与客户端。连续交谈的自然程度和远程弱网效果仍需后续检查。
 
 本文先介绍一次交谈如何执行，再说明相关类、函数和配置。图中“已有代码”表示可以找到对应实现，不表示本次已进入游戏验证；“计划增加”和“计划修改”表示后续设计。类名中的 `Npc` 是 NPC 的代码写法，旧类名与蓝图的兼容方式见“设计参考”。
@@ -426,11 +428,13 @@ NPC 会结合玩家的话、附近发生的事件和此前的对话，请求模�
 
 **AI 控制器 `ADeliveryNpcAIController`** 使用 UE 的视听感知功能发现附近角色和声音，并启动 NPC 的行为树。它把是否倒地、是否有动作可执行等条件写入黑板，供行为树选择分支。不再控制这个 NPC 时，它停止接收相关感知通知，并取消当前计划。
 
-**表现组件 `UDeliveryNpcPresentationComponent`** 负责字幕、声音、表情和原有动作动画。服务器按句子顺序安排对白，把文字和语音同步给客户端。每个客户端保存自己的待播句子，前一句播完再接下一句，字幕显示实际正在播放的内容。对白被打断或 NPC 被移除时，停止对应声音和字幕，并移除还没播放的句子。
+**表现组件 `UDeliveryNpcPresentationComponent`** 负责字幕、声音和表情，也保存角色使用的动画片段。服务器按句子顺序安排对白，把文字和语音同步给客户端。每个客户端保存自己的待播句子，前一句播完再接下一句，字幕显示实际正在播放的内容。对白被打断或 NPC 被移除时，停止对应声音和字幕，并移除还没播放的句子。
 
-**后端 `DecisionServer`** 接收游戏发来的信息，使用 `Scheduler` 先安排玩家消息，再处理尚未开始的 NPC 闲聊。`AppServer` 复用本机模型连接，逐步接收生成文字；`SentenceParser` 检查完整句子和动作建议，`SpeechSynthesizer` 将句子转成语音。后端不持有 UE 角色对象，不能直接修改伤害、任务奖励或车速。
+**身体动画 `UDeliveryNpcBodyAnimInstance`** 读取速度、当前动作和服务器记录的动作时间，交给主动画蓝图 `ABP_NpcBody` 选择姿势并混合。两名正式街坊使用这条路径；未绑定主动画蓝图的旧角色继续沿用原片段播放方式。动画只表现已经发生的移动和战斗，不决定伤害或替角色移动。
 
-本机模型接口按消息来源选择模型：玩家直接交谈默认使用 `gpt-6.1-sol`，NPC 闲聊使用 `gpt-6-luna`。选择只读取游戏已经提供的消息来源，不增加一次模型判断，也不为每次交谈启动新程序。小样本中前者更能接住玩家纠正和松手要求，但首句更慢；具体样例与代价见迭代文档。
+**后端 `DecisionServer`** 接收游戏发来的信息，使用 `Scheduler` 先安排玩家消息，再处理尚未开始的 NPC 闲聊。`AppServer` 复用本机模型连接，逐步接收生成文字；`SentenceParser` 检查完整句子和动作建议。正式 Qwen 语音由 `QwenSpeechSynthesizer` 处理，两个人的声音依次使用同一个合成队列；`SpeechSynthesizer` 保留给可选的 Windows 语音。后端不持有 UE 角色对象，不能直接修改伤害、任务奖励或车速。
+
+本机模型接口允许分别配置玩家交谈与 NPC 闲聊的模型，启动脚本当前默认都使用 `gpt-6.1-sol`。选择只读取游戏已经提供的消息来源，不增加一次模型判断，也不为每次交谈启动新程序。此前 Sol 与 Luna 的小样本比较保留在迭代文档中；当时的模型组合和耗时不代表当前启动配置。
 
 **交谈动画 `UDeliveryNpcConversationAnimInstance`** 读取倾听、等待回复和本机播放状态，平滑更新头部视线和身体姿态参数。`ABP_NpcConversation` 在原动作上调整胸部和头部，参数保存在 `UDeliveryNpcExpressionSet`。它只用于两份独立 NPC 表情网格，主角的物理身体继续使用原实现。
 
@@ -582,7 +586,9 @@ NPC 也可以通过动作回应玩家。无台词动作真正成功后，Agent �
 
 `SentenceParser` 收到完整 JSON 后，先检查候选动作和句子。第一个完整短句立即交给语音线程合成，后续文字继续生成。正式后台以 `-SpeechProvider qwen` 启动：大壮使用 Uncle_Fu，翠花使用用户选定的固定 B 音色。两套声音模型共用一个 GPU 合成队列，依次生成声音。可选 Windows 语音保留两个合成线程；外部 `DELIVERY_TTS_URL` 接口继续保留。
 
-翠花 B 已通过新台词试听并正式启用，后端内部名称保留为 `Xiaofang_B`。`QwenCloneEngine` 启动时读取 Base 模型和固定参考声音，后续句子复用同一参考；取消时等当前合成实际结束后再开始下一条。声音模型与参考文件同时核对，避免配置和工作进程不一致。本轮正式请求收到正确音色，15 项专项检查通过；首段音频在 9.814 秒到达，其中合成约 5.177 秒，等待仍明显。双模型测试期间整机显存峰值约 6418 MiB，当时没有运行游戏渲染，不能据此推断游戏帧率。详见[正式接入与检查记录](AIIteration.html#cuihua-b-production)。
+若后续句子格式错误，已经检查通过的完整句子继续合成并发送，回复按实际句数结束。首句无效、超时或断线仍停止整轮。后端内部失败保留一次错误通知，玩家主动打断则丢弃旧内容；两种情况在发送前再次区分，避免已经生成的首句或失败原因无故消失。修复前后记录见[首句丢失与短反应音](AIIteration.html#reply-pipeline-repair)。
+
+翠花 B 已通过新台词试听并正式启用，后端内部名称保留为 `Xiaofang_B`。`QwenCloneEngine` 启动时读取 Base 模型和固定参考声音，后续句子复用同一参考；取消时等当前合成实际结束后再开始下一条。声音模型与参考文件同时核对，避免配置和工作进程不一致。正式接入 B 时，实际请求收到正确音色，15 项专项检查通过；那次首段音频在 9.814 秒到达，其中合成约 5.177 秒，等待仍明显。这个数字是检查程序收到声音的时间，近期回复修复没有重新测量完整回答的等待。双模型测试期间整机显存峰值约 6418 MiB，当时没有运行游戏渲染，不能据此推断游戏帧率。详见[正式接入与检查记录](AIIteration.html#cuihua-b-production)。
 
 用户为大壮选择了试听 B 的 `Uncle_Fu`，并认可 Graph1 样本，本轮保留该声音。`SpeechQueue` 优先安排玩家交谈的句子；取消正在合成的句子时，确认实际退出后才开始下一条。人物表继续填写 `male` / `female`，具体音色、模型版本和参考声音配置在 `Tools/DeliveryAI/neural_voice_config.json`，来源与许可记录在 `Design/AI/NpcVoices.json`。
 
@@ -598,7 +604,9 @@ NPC 也可以通过动作回应玩家。无台词动作真正成功后，Agent �
 
 说完整段回复后，NPC 将它保存为一次 `SelfSpeech`，并记下回答了哪条玩家消息。中途被打断时，只保存此前已经说完的句子，正在说的半句不写入，也不把玩家标为已得到完整回答。保存过的短句不会再以整段形式重复加入记录。房主有音频设备时以本机播放完成为准；专用服务器或关闭音频时使用安排的播放时间，异常播放也有超时退出。这里没有等待所有客户端逐一确认，不能由服务器记录推断每个远端玩家都听完了。
 
-短反应音使用独立的 `UDeliveryNpcVoiceSet`，由表现组件复用 UE 音频组件播放。收到玩家发言时可以播放“听见了”的短音，正式台词开始后停止；受击、打断或离开关卡时也会停止。同一个事件不会重复播放，先收到停止通知、后收到旧播放通知时也不会重新响起。目前资产只填写了不满和笑声，“听见玩家”和“受击”仍为空，因此尚未产生这两类自动短音。
+短反应音使用独立的 `UDeliveryNpcVoiceSet`，由表现组件复用 UE 音频组件播放。大壮、翠花现已各自绑定“嗯？”和“哎哟！”：收到玩家发言后播放听见玩家的短音，轻拳实际命中后播放受击短音，并用本拳编号防止重复。四条声音提前用两人的 B 音色生成，游戏直接播放本地资源；短音不表示同意玩家，也不代替模型的正式回答。
+
+正式台词开始后，倾听短音停止；打断和离开关卡也会停止旧短音。先收到停止通知、后收到旧播放通知时，不会重新响起。`ReactionAttenuation` 控制短音的距离衰减，两名街坊均复用 `SA_NpcDialogue`。正式资源和绑定已独立读回，实际音量、听感与多人效果仍待试玩。
 
 语音压缩用于减轻低帧率下的网络负担。原始 PCM 在真实地图中占用了普通状态同步所需的发送额度，导致远端较晚收到倒地状态。`DeliveryNpcVoice::Encode()` 负责编码，`FDeliveryNpcVoiceDecoder::TryDecodeAvailable()` 处理已经完整收到的包；都不负责人物决策，也不使用麦克风采集。Opus 是有损压缩，末尾增加 40 毫秒用于保留编码延后的尾音。传输量、编码耗时和实际地图对照记录在 [研究与迭代](AIIteration.html) 中。
 
@@ -613,7 +621,7 @@ NPC 也可以通过动作回应玩家。无台词动作真正成功后，Agent �
 | `OnRep_Speech()` | UE 在客户端收到对白更新时调用。根据新的状态开始或停止声音和字幕。 |
 | `GetSpeech()` | 读取服务器安排的对白状态，供同步和语音补发使用。 |
 | `GetDisplayedSpeech()` | 读取本机实际播放的句子，字幕和表情使用这份结果。 |
-| `IsWaitingForSpeechPlayback()` | 检查当前回复是否已经到达本机、但还未开始播放。后台已完成时，仍用它保持待播期间的注视；取消、旧回复和超时内容不计入。 |
+| `IsWaitingForSpeechPlayback()` | 检查当前这一轮是否仍在等声音。声音尚在编码或传输、本机队列为空时，也按同轮 `ReplyAction` 保持等待姿态；开始播放、取消或轮次变化后更新，收到音频后继续检查播放超时。 |
 | `BeginReply(ActionId, MessageId)` | 为这次回复记录动作编号和玩家发言编号。 |
 | `QueueSentence(ActionId, MessageId, Sentence)` | 保存属于本次回复的完整句子和音频，按序安排播放。 |
 | `FinishSentences(ActionId, Count)` | 记录本次回复共有多少句，已收到的句子继续按顺序播放。 |
@@ -708,17 +716,19 @@ NPC 也可以通过动作回应玩家。无台词动作真正成功后，Agent �
 | 配置 | 内容和使用方式 |
 | --- | --- |
 | `DT_NpcProfiles` / `FDeliveryNpcProfileRow` | 已创建。每行有 `DisplayName`（名字）、`Persona`（人物设定）、`TtsVoice`（中文朗读音色）和 `VoiceSet`（人物声音配置）四项。没有动画字段。 |
-| `UDeliveryNpcVoiceSet` | 已创建 `DA_Voice_OldMan`、`DA_Voice_OldWoman`。`DialogueVolume` 调整完整台词音量，当前为 1；`DialogueAttenuation` 指向 `/Game/NPC/Residents/Audio/SA_NpcDialogue`，6 米内保持原音量，再用 12 米逐渐衰减。短反应音仍单独选择 Sound Wave / Sound Cue，并使用原来的音量、音调和最长播放时间。 |
+| `UDeliveryNpcVoiceSet` | 已创建 `DA_Voice_OldMan`、`DA_Voice_OldWoman`。`DialogueVolume` 调整完整台词音量，当前为 1；`DialogueAttenuation` 指向 `/Game/NPC/Residents/Audio/SA_NpcDialogue`，6 米内保持原音量，再用 12 米逐渐衰减。短音用 `ReactionAttenuation`，两名街坊也选择这份衰减资产；`HeardPlayer` 与 `Hit` 分别绑定本人的 B 音色短音。短音音量、音调和最长播放时间仍单独配置。 |
 | `UDeliveryNpcExpressionSet`（已有） | 保存各情绪的眼睛和眉毛权重、眨眼曲线、视线范围，以及倾听前倾、头部侧倾和过渡速度。`Expressions` 指向 NPC 使用的资产。 |
 | `ABP_NpcConversation`（已保存正式资源） | 在 NPC 原有动作上叠加胸部与头部姿态，仅绑定独立 Face 网格。节点可在动画蓝图编辑器中继续调整，三人实例检查已确认参数生效。 |
 | `UDeliveryAiSettings` | 保存是否启用 AI、后端地址、同时执行和排队的请求数量上限、超时时间。网络子系统从这里读取，不再建一张内容相同的表。 |
-| 后端配置 | `DELIVERY_CODEX_PLAYER_MODEL` 选择玩家交谈模型，默认 `gpt-6.1-sol`；`DELIVERY_CODEX_MODEL` 选择 NPC 闲聊模型，默认 `gpt-6-luna`。启动脚本提供 `-PlayerModel`。外部 `llm` 接口不受这次选择逻辑影响。密钥继续留在后端。 |
+| 后端配置 | `DELIVERY_CODEX_PLAYER_MODEL` 选择玩家交谈模型，`DELIVERY_CODEX_MODEL` 选择 NPC 闲聊模型。启动脚本当前默认均为 `gpt-6.1-sol`，分别提供 `-PlayerModel` 与 `-Model` 参数。外部 `llm` 接口继续使用自身的模型配置。密钥留在后端。 |
 
 `FDeliveryNpcProfileRow` 继承 UE 的 `FTableRowBase`，角色使用 `FDataTableRowHandle` 选表和行。显示名字使用 FText，声音资产采用普通 UE 对象引用。`TtsVoice` 目前只接受 `male`、`female`，留空保留原音色；其他值会记录警告，整行不应用，避免后端拒绝这个 NPC 的所有请求。
 
 `Design/AI/NpcProfiles.json` 是首次导入的人物稿。`Content/Python/update_npc_profiles.py` 只在数据表或 VoiceSet 不存在时创建资源，再为两份蓝图设置表行并应用配置；表已存在时保留编辑器里的修改。之后调整人物请编辑数据表，修改 JSON 不会自动覆盖它。编辑器的 NPC 创建工具也从同一数据表读取，运行时不再同时读取 JSON。
 
-短录音的导入使用 `Content/Python/import_npc_voice_sets.py`，清单在 `Design/Art/NPC/Residents/Voice/ElderlyCandidates/Manifest.json`，绑定配置在 `Design/AI/NpcVoices.json`。本轮导入了三条录音：大壮的不满、大壮的笑和翠花的笑。“老年角色”依据作者说明，尚未试听确认与角色是否合适；两条男声来自不同作者，一致性仍需检查。其余类别保持空。完整中文台词仍由后端 TTS 逐句生成，换这些短录音并不会把全文朗读换成老爷爷或老奶奶的声音。
+现有三条外部短录音继续保留：大壮的不满、大壮的笑和翠花的笑。来源清单在 `Design/Art/NPC/Residents/Voice/ElderlyCandidates/Manifest.json`，“老年角色”依据作者说明；两条男声来自不同作者，实际听感和一致性仍需检查。
+
+听见玩家和受击另使用四条项目生成的 B 音色短音，原始文件、处理版和来源清单在 `Design/Art/NPC/Residents/Voice/Generated/ShortReactions_B/`。`Content/Python/prepare_npc_short_reactions.py` 保留原始文件，调整振幅并缩短确定接近静音的开头；`import_npc_short_reactions.py` 负责备份、导入和绑定。两类来源都登记在 `Design/AI/NpcVoices.json`，原 `import_npc_voice_sets.py` 已能读取。疑问、惊讶等没有选定资源的类别继续留空。完整中文台词仍由后端按句子合成，短音不会改变全文朗读的音色。
 
 | 函数 | 配置生效时做什么 |
 | --- | --- |
@@ -965,7 +975,7 @@ AI 源码按功能放在 `Source/Delivery/AI/` 下。查找一次交谈时，可
 | `Presentation/` | 逐句对白、客户端语音播放、表情和交谈动画；`DeliveryNpcVoiceSet` 保存短音配置，`DeliveryNpcReactions.cpp` 处理短音播放与停止。 |
 | `Tests/` | AI 协议、行为树、NPC 交互、多人和重命名兼容检查。 |
 
-独立后端继续集中放在 `Tools/DeliveryAI/`，其中 `scheduler.py` 安排请求，`app_server.py` 连接模型，`streaming.py` 检查句子并安排合成，`tts.py` 调用语音服务。编辑器工具位于 `Plugins/DeliveryTuning/`，文档生成工具位于 `Tools/Documentation/`。游戏资产位于 `Content/NPC/Residents/`：`AI/` 保存行为树，`Animation/` 保存动画，`Appearance/` 保存独立表情网格与配置，`Input/` 保存交谈输入，`Config/` 保存人物表，`Audio/` 保存 VoiceSet 和短录音。
+独立后端继续集中放在 `Tools/DeliveryAI/`，其中 `scheduler.py` 安排请求，`app_server.py` 连接模型，`streaming.py` 检查句子并安排合成，`neural_tts.py` 调用正式 Qwen 语音，`tts.py` 保留可选 Windows 语音。编辑器工具位于 `Plugins/DeliveryTuning/`，文档生成工具位于 `Tools/Documentation/`。游戏资产位于 `Content/NPC/Residents/`：`AI/` 保存行为树，`Animation/` 保存动画，`Appearance/` 保存独立表情网格与配置，`Input/` 保存交谈输入，`Config/` 保存人物表，`Audio/` 保存 VoiceSet 和短录音。
 
 #### 源码参考
 
@@ -1289,7 +1299,7 @@ Epic 的[Gameplay Ability 文档](https://dev.epicgames.com/documentation/unreal
 
 ## LLM 行人奇遇实施方案（2026-11-12，设计阶段）
 
-本节包含总体设计与分阶段实现状态。目标交付日为 2026-11-17（周二），采用 Listen Server + 独立 AI 后端，遵循 [AGENTS.md](../AGENTS.md) 的输入、服务器校验、复制、MVC 和生命周期约定。2026-11-12 已接入正式居民、感知、蓝图行为树、交谈、互殴、拽车和动画。当前本机 GPT 已走过真实游戏请求；Jev 真实账户、清晰人声 TTS 和面部资产仍未验收。各节中的远期设计不自动视为已实现，实际交付以“居民玩法接入与本机模型”一节为准。
+本节保留 2026-11-12 的总体设计、分阶段实现和当时的检查记录，目标交付日为 2026-11-17（周二）。方案采用 Listen Server + 独立 AI 后端，遵循 [AGENTS.md](../AGENTS.md) 的输入、服务器校验、复制、MVC 和生命周期约定。下文提到的声音、模型、界面和完成状态属于各自记录时的版本；当前实现请以上方“AI 居民架构参考”为准，后续设计不能直接视为已完成。
 
 ### 居民玩法接入与本机模型（2026-11-12）
 

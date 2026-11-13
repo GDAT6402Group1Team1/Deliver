@@ -13,10 +13,39 @@
     @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
     @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
     .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
-<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
+<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
 <header><div class="meta">AI / 交谈、语音与表情 / 2026-11-13</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
-<div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、轻拳后仰和翠花眉形已加入本轮版本；动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
+<div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、轻拳后仰和翠花眉形已加入；本轮修复首句丢失与等待姿态，并接入听见玩家和受击的短音。动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
 <div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
+<section id="reply-pipeline-repair"><h2>11 月 13 日：首句丢失、等待姿态与短反应音</h2>
+<p class="meta">回复修复、等待姿态和四条短音已接入；构建、后端与四项 UE 专项检查通过，游戏效果待试玩</p>
+<p>这轮继续检查“点了以后没有反应”的具体原因。除了模型和语音本身需要时间，还发现已经生成的有效首句可能被后一句错误一起取消，以及后端结束到本机播放之间人物提前恢复站立的问题。分别修正这些情况，再补听见玩家和受击时的短反应音；短音只表示人物听见或受击，不替模型回答，也不表示同意玩家的要求。</p>
+<h3>后一句格式错误，为什么连第一句也没说出来</h3>
+<p>独立复现中，模型先给出合法的“我听见了。”，语音任务也已经开始；之后模型多生成了一句，触发句数限制。旧处理把整轮设为取消，游戏最终只收到动作建议和错误，已经检查通过的第一句没有送出。另一个复现发现，内部失败也使用同一取消标志，发送线程因此丢掉错误通知，只留下空的 HTTP 回复。这两项复现使用替代模型和语音，不调用正式服务。</p>
+<p>现在由 <code>ReplyFormatError</code> 区分模型输出格式错误。如果此前已有完整、有效的句子，保留这些句子，等待对应语音结束后按实际句数完成回复，错误的后续内容不发送。若首句本身无效、调用超时或连接断开，仍停止这一轮。玩家主动打断也继续丢弃旧回复，不会因为已经产生首句而强行播放。</p>
+<p><code>Job.fail()</code> 处理内部失败：停止后续工作，同时保留一次发给游戏的错误通知。<code>cancel_request()</code> 处理真正的取消，丢弃还没有发送的台词和错误。发送前再次检查本轮状态，避免失败与玩家打断同时发生时，旧消息又被送到游戏。</p>
+<p>用同一组替代输入复测后，第一句已经完整送出，随后收到正常结束消息，实际句数为 1；错误的后续句没有继续发送。内部失败也能在 HTTP 回复中送出一次错误通知。这验证了两个原先会丢内容的步骤，没有调用正式模型或语音服务。</p>
+<p class="evidence">修改前后分别记录在 <code>Saved/AIResearch/ReplyPipelineAudit_20261113/reply-failure-reproduction.json</code> 与 <code>reply-failure-after-fix.json</code>。修改位置：<code>Tools/DeliveryAI/streaming.py</code>、<code>scheduler.py</code> 与 <code>server.py</code>。这项修复减少丢回复，不表示模型或语音生成变快。</p>
+<h3>后端已经结束，人物仍要等声音到达</h3>
+<p>一条回复从后端完成，到游戏压缩声音、放入本机队列，再到实际播放，中间还有工作要做。原来的等待判断只看到本机已经有声音数据，遇到这段空档就返回“没有等待”，人物可能恢复普通站姿，随后又突然开口。</p>
+<p>等待判断现在继续核对同一轮的 <code>ReplyAction</code>。只要这一轮仍有效，就保持相应的等待姿态和已选情绪，直到声音播放或回复结束。动作编号不匹配、取消及超时都会退出；新一轮不会借用旧一轮的生气表情。它只改善人物在等待时的表现，不隐藏实际耗时。</p>
+<h3>补齐“听见了”和受击短音</h3>
+<p>正式声音表此前只有不满和笑声，<code>HeardPlayer</code> 与 <code>Hit</code> 都为空。现已使用用户认可的大壮、翠花 B 音色，各生成“嗯？”和“哎哟！”，保存为四条本地声音资源并绑定到两人的声音配置。运行时直接播放资源，不再为这两个短反应等待合成；它们也不是新的模型回答。</p>
+<p>处理版只调整振幅，并缩短开头确定接近静音的部分：连续至少 80 毫秒、16 位采样绝对值不超过 8 时，才将这段前导缩短到保留 60 毫秒。没有裁切句尾、变调或变速。峰值统一到 -6 dBFS，但这不代表听起来一样响。四个原始文件完整保留，处理后的文件均未削波。</p>
+<div class="table-scroll" tabindex="0" aria-label="可横向滚动的数据表"><table><tr><th>人物</th><th>听见玩家：“嗯？”</th><th>受击：“哎哟！”</th></tr><tr><td>大壮</td><td>0.988 秒</td><td>1.014 秒</td></tr><tr><td>翠花</td><td>0.620 秒</td><td>0.768 秒</td></tr></table></div>
+<p>翠花“嗯？”的开头移除了约 0.420 秒，删除部分最大的采样绝对值只有 4，低于上述阈值；据此确认移除的是近零静音，不能据此评价音质或年龄感。翠花两段文件已提供试听，实际游戏中的响度、自然程度与人物是否相符仍待玩家确认。</p>
+<p><code>ReactionAttenuation</code> 已绑定正式对白使用的 <code>SA_NpcDialogue</code>。轻拳短音以本拳的 <code>PunchId</code> 去重，只在真实命中后播放。收到玩家发言后的短音表示听见，不默认同意，不替模型选择行为；完整回答仍由模型生成并逐句合成。</p>
+<p>来源清单保存在 <code>Design/Art/NPC/Residents/Voice/Generated/ShortReactions_B/Manifest.json</code>，同时记录原始文件、处理版、模型版本、固定参考声音和文件校验值。四条原始 WAV 在 <code>Original/</code> 中，四条处理版用于导入。<code>prepare_npc_short_reactions.py</code> 只做 CPU 文件处理；<code>import_npc_short_reactions.py</code> 默认只读检查，明确要求应用时才备份并绑定。原 <code>import_npc_voice_sets.py</code> 也已支持这份来源清单。</p>
+<p>首次导入已经保存资源，但写报告时使用了错误的 Python API 名称。根据本机 UE 的导出名称改用 <code>AssetImportData.get_first_filename()</code> 后，重跑及独立新进程读回通过。两个 VoiceSet 都只改变 <code>HeardPlayer</code>、<code>Hit</code> 和 <code>ReactionAttenuation</code>，原有声音、音量和音调保留；四个原始 WAV 的校验值未变。</p>
+<p class="evidence">正式资源目录：<code>/Game/NPC/Residents/Audio/Voices/ShortReactions</code>。独立读回：<code>Saved/AIResearch/NpcShortReactions_20261113/UEImport/20261113T090829905964Z/result.json</code>；保护检查：同研究目录的 <code>final-protection-check.json</code>。</p>
+<div id="reply-pipeline-validation"><h3>本轮检查与尚未覆盖的范围</h3>
+<p>95 项相关后端检查在 7.230 秒内通过。其中 2 项检查失败与取消同时发生的处理，又单独运行一次，在 0.001 秒内通过；它们属于同一批测试，不另计为新增数量。确定性复现覆盖了有效首句丢失和错误通知丢失，尚不能证明正式游戏中的听感或等待体验已经改善。</p>
+<p>本轮统一构建还发现旧动画工具中的局部 <code>Folder</code> 与 Grandpa 工具匿名命名空间中的同名变量冲突。此前文件分开编译没有出现，合并编译后暴露；现已改为职责明确的 <code>NpcAnimationFolder</code>。最终 DeliveryEditor 构建成功，耗时 12.21 秒。</p>
+<p>修复后的正式后端已于 16:34 恢复，端口归属和 Qwen 预热检查通过，记录在 <code>Saved/AIResearch/ReplyPipelineAudit_20261113/backend-final-state.json</code>。这只说明当时服务可用，不代表已经进行新一轮完整交谈测量。翠花 B 的 9.814 秒首段声音记录仍是此前的一次 HTTP 样本，本轮没有更新这个数字，也没有测量玩家实际听见首声的时间。</p>
+<p>四项 UE 专项全部通过：<code>DialogueVoiceAssets</code>、<code>Fight</code> 无测试警告；<code>NpcProfiles</code> 的两个预期警告来自不支持的音色和没有合成声音的测试条件；<code>SentencePlayback</code> 有一条预期的 <code>audio_timeout</code>。报告为 <code>Saved/Automation/NpcReplyFeedback/index.json</code>，汇总是 2 项成功、2 项成功但带警告、0 项失败，进程正常退出。</p>
+<p>启动日志仍有 3 条 CDO 物理材质错误和 13 条 <code>Condition failed</code>；此前互殴与身体动画日志中也出现过，本轮没有处理。专项断言通过不能写成整个日志没有错误，资源导入命令的总体摘要也要与脚本自身结果分开看。</p>
+<p><strong>尚未验证：</strong>正式关卡的声音听感、实际动画与界面、双人网络画面，以及新版本从玩家发言到听见完整回答的时间。短音加入后是否更有反应，需要通过试玩确认；本轮没有据此宣称消除延迟。</p></div>
+</section>
 <section id="npc-fight"><h2>11 月 13 日：有限互殴与轻拳受击</h2>
 <p class="meta">代码与动画资产已接入，六项专项测试通过；正式关卡与多人画面待试玩</p>
 <p>此前两名居民只有一次挥拳动作，而且每次有效受击都会倒地。把人物提示词改得更凶，仍不能让他们来回动手：第一拳命中后，对方已经倒下，原来的攻击也随之取消。本轮增加独立的 <code>Fight</code>，让模型可以选择短暂追打，并将这种动作中的居民轻拳与原有重击分开。</p>
