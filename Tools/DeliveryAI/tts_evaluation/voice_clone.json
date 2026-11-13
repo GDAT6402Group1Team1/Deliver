@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "candidate": "qwen_voice_clone",
+  "model_id": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+  "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+  "license": "Apache-2.0",
+  "download_bytes": 1829352406,
+  "reuse_candidate": "qwen",
+  "reuse_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+  "reuse_files": [
+    "generation_config.json", "merges.txt", "preprocessor_config.json",
+    "speech_tokenizer/config.json", "speech_tokenizer/configuration.json",
+    "speech_tokenizer/model.safetensors", "speech_tokenizer/preprocessor_config.json",
+    "tokenizer_config.json", "vocab.json"
+  ],
+  "new_files": [
+    {"path": "README.md", "bytes": 3640, "git_blob_sha1": "50931da8c9b34f7233394b5c3063a47ef3285acf"},
+    {"path": "config.json", "bytes": 4494, "git_blob_sha1": "4e923f500f5c3eeb78d44072e7049b28817c2e04"},
+    {"path": "model.safetensors", "bytes": 1829344272, "sha256": "180b3b10eb1c9f1b4db7806d5475bae3071c0243c299d49926bab1da3b6946f6"}
+  ],
+  "license_copy": {
+    "path": "LICENSE",
+    "source": "Saved/AIResearch/TtsEvaluation/qwen/.venv/Lib/site-packages/qwen_tts-0.1.1.dist-info/licenses/LICENSE",
+    "bytes": 11343,
+    "sha256": "a44a6081c73ad75f0255bb2bb5cab74ef1829565a895a24e53a4f11290ab7655",
+    "url": "https://github.com/QwenLM/Qwen3-TTS/blob/main/LICENSE",
+    "note": "复用已安装官方 qwen-tts 包中的 Apache-2.0 全文；模型许可见固定版本 README"
+  },
+  "reference": {
+    "path": "Design/Art/NPC/Residents/Voice/Generated/Xiaofang_B_Reference.wav",
+    "sha256": "35d6e6f5fda0189495782df45c7d13c45edd835066e84456a25760b409d5ca65",
+    "text": "大军，你少在这儿瞎嚷嚷。",
+    "source_report": "Saved/AIResearch/TtsEvaluation/qwen_voice_design/results/20261113T032449990411Z/evaluation.json",
+    "selected_by_user": true
+  },
+  "sentences": [
+    {"id": "greeting", "text": "哎，你找我什么事？", "seed": 20261113},
+    {"id": "clarification", "text": "你别听他瞎说，我刚才说的是车。", "seed": 20261114}
+  ],
+  "after_cancel": {"id": "after_cancel", "text": "哎，你找我什么事？", "seed": 20261113},
+  "settings": {"threads": 4, "max_new_tokens": 256, "do_sample": true, "top_k": 50, "top_p": 1.0, "temperature": 0.9, "repetition_penalty": 1.05, "subtalker_dosample": true, "subtalker_top_k": 50, "subtalker_top_p": 1.0, "subtalker_temperature": 0.9},
+  "scope": "只使用用户选中的项目合成声音创建参考，不克隆真人；固定参考只计算一次并复用；不替换已认可的大军 B 音色"
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "candidate": "qwen_voice_design",
+  "model_id": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+  "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+  "license": "Apache-2.0",
+  "download_bytes": 3833410187,
+  "reuse_candidate": "qwen",
+  "reuse_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+  "reuse_files": [
+    "generation_config.json", "merges.txt", "preprocessor_config.json",
+    "speech_tokenizer/config.json", "speech_tokenizer/configuration.json",
+    "speech_tokenizer/model.safetensors", "speech_tokenizer/preprocessor_config.json",
+    "tokenizer_config.json", "vocab.json"
+  ],
+  "new_files": [
+    {"path": "README.md", "bytes": 3214, "git_blob_sha1": "7474784d52d29a8d370e1d6bbd6044a7af61e3e8"},
+    {"path": "config.json", "bytes": 4421, "git_blob_sha1": "2c2c027c574a85c0d5a5d48e3cfed1a8a051ff9d"},
+    {"path": "model.safetensors", "bytes": 3833402552, "sha256": "391e8db219f292c515297cdceeb43e4eae67cdde35fa57e79a6a8a532fca0522"}
+  ],
+  "license_copy": {
+    "path": "LICENSE",
+    "source": "Saved/AIResearch/TtsEvaluation/qwen/.venv/Lib/site-packages/qwen_tts-0.1.1.dist-info/licenses/LICENSE",
+    "bytes": 11343,
+    "sha256": "a44a6081c73ad75f0255bb2bb5cab74ef1829565a895a24e53a4f11290ab7655",
+    "url": "https://github.com/QwenLM/Qwen3-TTS/blob/main/LICENSE",
+    "note": "复用已安装官方 qwen-tts 包中的 Apache-2.0 全文；模型许可见固定版本 README"
+  },
+  "voices": [
+    {"id": "A", "seed": 20261113, "description": "一位六十岁左右的中国大妈，成熟女中低音，声音稳当、有生活气息，带自然的年龄感。普通话，像在村口和认识多年的邻居当面说话。语气直爽，压着一点火气，吐字清楚，句子短促自然。使用正常说话音量，不是播音、朗诵或表演腔，不尖声喊叫。"},
+    {"id": "B", "seed": 20261113, "description": "一位六十岁左右的中国大妈，成熟而稍微沙哑的女声，声线偏中低，不虚弱。说普通话，语气利落，像和熟悉的邻居抬杠，带一点挤兑人的劲儿，尾音自然，听起来是日常随口说话。使用正常音量，不做作，不播音，不唱腔，不刻意尖叫。"}
+  ],
+  "sentences": [
+    {"id": "greeting", "text": "哎，你找我什么事？"},
+    {"id": "retort", "text": "大军，你少在这儿瞎嚷嚷。"}
+  ],
+  "settings": {"threads": 4, "max_new_tokens": 256, "do_sample": true, "top_k": 50, "top_p": 1.0, "temperature": 0.9, "repetition_penalty": 1.05, "subtalker_dosample": true, "subtalker_top_k": 50, "subtalker_top_p": 1.0, "subtalker_temperature": 0.9},
+  "scope": "仅生成虚构人物的独立试听，不修改生产语音、不复刻真人声音、不下载 Base；年龄感与自然度等待用户试听"
+}
