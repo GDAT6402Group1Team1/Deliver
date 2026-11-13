@@ -52,10 +52,12 @@ def load_voice_config(config_path=None):
     if isinstance(female, dict) and female.get('provider') == 'qwen_base':
         fields = {'provider', 'speaker', 'model_path', 'model_revision', 'model_manifest_path',
                   'model_manifest_sha256', 'reference_path', 'reference_sha256', 'reference_text'}
-        if (set(female) != fields or female['speaker'] != 'Xiaofang_B'
+        if (set(female) not in (fields, fields | {'predictor_mode'}) or female['speaker'] != 'Xiaofang_B'
                 or not isinstance(female['reference_text'], str)
                 or not 1 <= len(female['reference_text'].strip()) <= 120):
             raise NeuralTtsError('neural_tts_invalid_voices')
+        if female.get('predictor_mode', 'official') not in ('official', 'cuda_graph'):
+            raise NeuralTtsError('neural_tts_invalid_predictor_mode')
         for key, length in (('model_revision', 40), ('model_manifest_sha256', 64), ('reference_sha256', 64)):
             if not isinstance(female[key], str) or not re.fullmatch('[0-9a-f]{'+str(length)+'}', female[key]):
                 raise NeuralTtsError('neural_tts_invalid_voices')
@@ -90,6 +92,9 @@ def neural_voice_identities(config):
         if entry['provider'] == 'qwen_base':
             identity.update(reference_sha256=entry['reference_sha256'],
                             reference_text_sha256=hashlib.sha256(entry['reference_text'].encode('utf-8')).hexdigest())
+            # 旧进程的女声只有 official；Graph 必须明确标记，不能作为原版声音接收
+            if entry.get('predictor_mode', 'official') != 'official':
+                identity['predictor_mode'] = entry['predictor_mode']
         identities[voice] = identity
     return identities
 

@@ -20,20 +20,36 @@ from neural_tts import (NeuralTtsError, PROJECT_ROOT, QwenSpeechSynthesizer, loa
 from test_neural_tts import FakeProcess
 
 
+class FakePredictor:
+    def __init__(self):
+        self.calls = 0
+        self.model = SimpleNamespace(config=object())
+
+    def generate(self, **kwargs):
+        self.calls += 1
+        return SimpleNamespace(sequences=np.zeros((1, 15), dtype=int))
+
+
 class FakeTalker:
     def __init__(self):
         self.before_step = lambda: None
+        self.code_predictor = FakePredictor()
 
     def generate(self, **kwargs):
         self.before_step()
         kwargs['stopping_criteria'][-1](None, None)
+        self.code_predictor.generate(
+            inputs_embeds=SimpleNamespace(shape=(1, 2, 4), dtype='bfloat16', device='cuda:0'),
+            max_new_tokens=15, do_sample=True, top_p=1.0, top_k=50, temperature=.9,
+            output_hidden_states=True, return_dict_in_generate=True)
         return SimpleNamespace(sequences=np.array([17]))
 
 
 class FakeBaseModel:
     def __init__(self):
         self.model = SimpleNamespace(tts_model_type='base', talker=FakeTalker(),
-                                     config=SimpleNamespace(talker_config=SimpleNamespace(codec_eos_token_id=17)))
+                                     config=SimpleNamespace(talker_config=SimpleNamespace(
+                                         codec_eos_token_id=17, hidden_size=4, num_code_groups=16)))
         self.prompt = [object()]
         self.create_voice_clone_prompt = Mock(return_value=self.prompt)
         self.calls = []
@@ -97,6 +113,7 @@ class NeuralVoiceCloneTests(unittest.TestCase):
 
     def runtime(self, model):
         torch = SimpleNamespace(bfloat16='bfloat16', manual_seed=Mock(), inference_mode=nullcontext,
+                                device=lambda name: name,
                                 cuda=SimpleNamespace(manual_seed_all=Mock(), synchronize=Mock()))
         factory = SimpleNamespace(from_pretrained=Mock(return_value=model))
         return SimpleNamespace(torch=torch, np=np, ModelClass=factory,
@@ -121,6 +138,105 @@ class NeuralVoiceCloneTests(unittest.TestCase):
                 with self.assertRaises((NeuralTtsError, ValueError)):
                     load_voice_config(self.config_path)
                 self.entry[key] = previous
+
+    def test_predictor_mode_defaults_to_official_and_requires_known_choice(self):
+        old_identity = neural_voice_identities(self.config)
+        self.assertNotIn('predictor_mode', old_identity['female'])
+        for mode in ('official', 'cuda_graph'):
+            with self.subTest(mode=mode):
+                self.entry['predictor_mode'] = mode
+                self.save_config()
+                loaded = load_voice_config(self.config_path)
+                identity = neural_voice_identities(loaded)
+                self.assertEqual(identity['male'], old_identity['male'])
+                if mode == 'official':
+                    self.assertEqual(identity, old_identity)
+                else:
+                    self.assertEqual(identity['female'], {**old_identity['female'], 'predictor_mode':'cuda_graph'})
+        for mode in ('graph', '', None, True, 1, [], {}):
+            with self.subTest(invalid=mode):
+                self.entry['predictor_mode'] = mode
+                self.save_config()
+                with self.assertRaisesRegex(NeuralTtsError, 'invalid_predictor_mode'):
+                    load_voice_config(self.config_path)
+
+    def test_official_mode_does_not_capture_graph_and_preserves_sampling(self):
+        for mode in (None, 'official'):
+            with self.subTest(mode=mode), patch.object(worker, 'capture_predictor_graph') as capture:
+                if mode is not None:
+                    self.entry['predictor_mode'] = mode
+                model = FakeBaseModel()
+                engine = worker.QwenCloneEngine(self.config, threading.Event(), self.runtime(model))
+                engine.synthesize(self.task(), threading.Event())
+                capture.assert_not_called()
+                self.assertEqual(model.model.talker.code_predictor.calls, 1)
+                self.assertEqual(model.calls[-1], {
+                    'text':self.task().text, 'language':'Chinese', 'voice_clone_prompt':model.prompt,
+                    'non_streaming_mode':True, 'max_new_tokens':256, 'do_sample':True, 'top_k':50,
+                    'top_p':1.0, 'temperature':.9, 'repetition_penalty':1.05,
+                    'subtalker_dosample':True, 'subtalker_top_k':50, 'subtalker_top_p':1.0,
+                    'subtalker_temperature':.9})
+
+    def test_graph_mode_restores_methods_after_failure_and_cancel_then_reuses_model(self):
+        self.entry['predictor_mode'] = 'cuda_graph'
+        model = FakeBaseModel()
+        talker = model.model.talker
+        runtime = self.runtime(model)
+        tokens = SimpleNamespace(unsqueeze=lambda dimension: np.zeros((1, 15), dtype=int))
+        graph = SimpleNamespace(run=Mock(return_value=tokens))
+        with patch.object(worker, 'capture_predictor_graph', return_value=(graph, 4)) as capture:
+            engine = worker.QwenCloneEngine(self.config, threading.Event(), runtime)
+            first = engine.synthesize(self.task(), threading.Event())
+            graph.run.side_effect = RuntimeError('test_graph_failed')
+            with self.assertRaisesRegex(RuntimeError, 'test_graph_failed'):
+                engine.synthesize(self.task(), threading.Event())
+            for owner in (talker, talker.code_predictor):
+                self.assertNotIn('generate', vars(owner))
+            cancelled = self.task()
+            def cancel_after_replay(inputs):
+                cancelled.cancel.set()
+                return tokens
+            graph.run.side_effect = cancel_after_replay
+            with self.assertRaisesRegex(NeuralTtsError, 'cancelled'):
+                engine.synthesize(cancelled, threading.Event())
+            for owner in (talker, talker.code_predictor):
+                self.assertNotIn('generate', vars(owner))
+            graph.run.side_effect = None
+            second = engine.synthesize(self.task(), threading.Event())
+            self.assertEqual(first['pcm'], second['pcm'])
+            self.assertEqual(graph.run.call_count, 4)
+            self.assertEqual(talker.code_predictor.calls, 0)
+            capture.assert_called_once()
+            model.create_voice_clone_prompt.assert_called_once()
+            runtime.ModelClass.from_pretrained.assert_called_once()
+
+    def test_graph_capture_uses_fp32_sampling_and_restores_it_on_failure(self):
+        model = FakeBaseModel()
+        runtime = self.runtime(model)
+        logits = SimpleNamespace(float=Mock(return_value=object()))
+        original_sample = Mock(return_value='sampled')
+        module = SimpleNamespace(
+            __file__=str(Path(worker.__file__).parent/'vendor/faster_qwen_v032/predictor_graph.py'),
+            sample_logits=original_sample)
+        graph = SimpleNamespace(capture=Mock())
+        module.PredictorGraph = Mock(return_value=graph)
+        def capture(**kwargs):
+            self.assertEqual(kwargs, {'num_warmup':3})
+            module.sample_logits(logits, temperature=.9)
+        graph.capture.side_effect = capture
+        with patch.object(worker.importlib, 'import_module', return_value=module):
+            result, hidden = worker.capture_predictor_graph(model, runtime.torch, lambda name: None)
+            self.assertIs(result, graph)
+            self.assertEqual(hidden, 4)
+            self.assertIs(module.sample_logits, original_sample)
+            original_sample.assert_called_once_with(logits.float.return_value, temperature=.9)
+            self.assertEqual(module.PredictorGraph.call_args.kwargs, {
+                'device':'cuda:0', 'dtype':'bfloat16', 'do_sample':True,
+                'top_k':50, 'top_p':1.0, 'temperature':.9})
+            graph.capture.side_effect = RuntimeError('test_capture_failed')
+            with self.assertRaisesRegex(RuntimeError, 'test_capture_failed'):
+                worker.capture_predictor_graph(model, runtime.torch, lambda name: None)
+            self.assertIs(module.sample_logits, original_sample)
 
     def test_manifest_reference_hash_and_model_boundaries_are_checked(self):
         worker.checked_clone_assets(self.entry)
@@ -215,6 +331,40 @@ class NeuralVoiceCloneTests(unittest.TestCase):
         self.assertEqual(client.config_path, self.config_path)
         self.assertFalse(process.killed)
 
+    def test_ready_and_audio_reject_other_predictor_mode_in_both_directions(self):
+        for mode in ('official', 'cuda_graph'):
+            with self.subTest(mode=mode):
+                self.entry['predictor_mode'] = mode
+                client, process = self.client()
+                wrong = copy.deepcopy(client.identities)
+                if mode == 'official':
+                    wrong['female']['predictor_mode'] = 'cuda_graph'
+                else:
+                    del wrong['female']['predictor_mode']
+                client.ready = False
+                client.messages.put({'type':'ready', 'protocol_version':1, 'voice_name':'Uncle_Fu',
+                                     'sample_rate':24000, 'voices':client.speakers, 'voice_identities':wrong})
+                with self.assertRaisesRegex(NeuralTtsError, 'prepare_failed'):
+                    client.prepare(threading.Event())
+                self.assertTrue(process.killed)
+                client, process = self.client()
+                process.reply = lambda task_id: client.messages.put({
+                    'type':'audio', 'task_id':task_id, 'voice_name':'Xiaofang_B', 'sample_rate':24000,
+                    'voice_identity':wrong['female'], 'pcm':base64.b64encode(b'\0\0').decode()})
+                with self.assertRaisesRegex(NeuralTtsError, 'invalid_audio_format'):
+                    client.synthesize('你找谁？', 'female', 'Calm', threading.Event())
+                self.assertTrue(process.killed)
+
+    def test_graph_identity_is_accepted_by_same_configured_client(self):
+        self.entry['predictor_mode'] = 'cuda_graph'
+        client, process = self.client()
+        client.ready = False
+        client.messages.put({'type':'ready', 'protocol_version':1, 'voice_name':'Uncle_Fu',
+                             'sample_rate':24000, 'voices':client.speakers, 'voice_identities':client.identities})
+        self.assertTrue(client.prepare(threading.Event()))
+        self.assertEqual(client.synthesize('你找谁？', 'female', 'Calm', threading.Event())[1], 24000)
+        self.assertFalse(process.killed)
+
     def test_original_male_sampling_arguments_are_unchanged(self):
         runtime = self.runtime(FakeBaseModel())
         generate = Mock(return_value=([np.array([0., .25, -.25], dtype=np.float32)], 24000))
@@ -222,9 +372,12 @@ class NeuralVoiceCloneTests(unittest.TestCase):
         engine.config, engine.torch, engine.np = self.config, runtime.torch, runtime.np
         engine.model = SimpleNamespace(generate_custom_voice=generate)
         task = self.task('male')
-        with patch.object(worker, 'generation_controls', return_value=nullcontext()) as controls:
-            result = engine.synthesize(task, threading.Event())
-        controls.assert_called_once()
+        for mode in ('official', 'cuda_graph'):
+            self.entry['predictor_mode'] = mode
+            with self.subTest(female_mode=mode), \
+                 patch.object(worker, 'generation_controls', return_value=nullcontext()) as controls:
+                result = engine.synthesize(task, threading.Event())
+                controls.assert_called_once()
         self.assertEqual(generate.call_args.kwargs, {
             'text':task.text, 'language':'Chinese', 'speaker':'Uncle_Fu', 'non_streaming_mode':True,
             'max_new_tokens':256, 'do_sample':True, 'top_k':50, 'top_p':1.0, 'temperature':.9,

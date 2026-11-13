@@ -196,6 +196,41 @@ def generation_controls(engine, cancel, closed, deadline):
                 delattr(owner, 'generate')
 
 
+def capture_predictor_graph(model, torch, stage):
+    """按同一套采样设置，为当前模型建立独立的 Graph"""
+    predictor = model.model.talker.code_predictor
+    hidden_size = model.model.config.talker_config.hidden_size
+    if model.model.config.talker_config.num_code_groups != 16:
+        raise NeuralTtsError('neural_tts_code_groups_changed')
+    vendor = Path(__file__).with_name('vendor') / 'faster_qwen_v032'
+    for name, digest in VENDOR_HASHES.items():
+        if hashlib.sha256((vendor / name).read_bytes()).hexdigest() != digest:
+            raise NeuralTtsError('neural_tts_vendor_changed')
+    sys.path.insert(0, str(vendor.parent))
+    try:
+        module = importlib.import_module('faster_qwen_v032.predictor_graph')
+    finally:
+        sys.path.remove(str(vendor.parent))
+    if Path(module.__file__).resolve() != (vendor / 'predictor_graph.py').resolve():
+        raise NeuralTtsError('neural_tts_wrong_vendor')
+    original_sample = module.sample_logits
+
+    def sample(logits, **kwargs):
+        return original_sample(logits.float(), **kwargs)
+
+    # 录图时使用与原 HF 生成相同的 float32 采样精度
+    module.sample_logits = sample
+    try:
+        stage('capturing_predictor_graph')
+        graph = module.PredictorGraph(
+            predictor, predictor.model.config, hidden_size, device='cuda:0',
+            dtype=torch.bfloat16, do_sample=True, top_k=50, top_p=1.0, temperature=.9)
+        graph.capture(num_warmup=3)
+    finally:
+        module.sample_logits = original_sample
+    return graph, hidden_size
+
+
 class QwenEngine:
     def __init__(self, config, closed, check_startup=False):
         def stage(name):
@@ -260,36 +295,7 @@ class QwenEngine:
                for entry in config['voices'].values() if entry['provider'] == 'qwen'):
             raise NeuralTtsError('neural_tts_speaker_unavailable')
         check_cancel(closed, closed, float('inf'))
-        predictor = self.model.model.talker.code_predictor
-        self.hidden_size = self.model.model.config.talker_config.hidden_size
-        if self.model.model.config.talker_config.num_code_groups != 16:
-            raise NeuralTtsError('neural_tts_code_groups_changed')
-        vendor = Path(__file__).with_name('vendor') / 'faster_qwen_v032'
-        for name, digest in VENDOR_HASHES.items():
-            if hashlib.sha256((vendor / name).read_bytes()).hexdigest() != digest:
-                raise NeuralTtsError('neural_tts_vendor_changed')
-        sys.path.insert(0, str(vendor.parent))
-        try:
-            module = importlib.import_module('faster_qwen_v032.predictor_graph')
-        finally:
-            sys.path.remove(str(vendor.parent))
-        if Path(module.__file__).resolve() != (vendor / 'predictor_graph.py').resolve():
-            raise NeuralTtsError('neural_tts_wrong_vendor')
-        original_sample = module.sample_logits
-
-        def sample(logits, **kwargs):
-            return original_sample(logits.float(), **kwargs)
-
-        # 录图时使用与原 HF 生成相同的 float32 采样精度
-        module.sample_logits = sample
-        try:
-            stage('capturing_predictor_graph')
-            self.graph = module.PredictorGraph(
-                predictor, predictor.model.config, self.hidden_size, device='cuda:0',
-                dtype=torch.bfloat16, do_sample=True, top_k=50, top_p=1.0, temperature=.9)
-            self.graph.capture(num_warmup=3)
-        finally:
-            module.sample_logits = original_sample
+        self.graph, self.hidden_size = capture_predictor_graph(self.model, torch, stage)
         torch.cuda.synchronize()
         check_cancel(closed, closed, float('inf'))
         stage('ready')
@@ -359,10 +365,13 @@ def clone_generation_controls(engine, cancel, closed, deadline):
 
 
 class QwenCloneEngine:
-    """小芳的 Base 模型常驻，固定参考只在启动时建立一次"""
+    """女声 Base 模型常驻，固定参考只在启动时建立一次"""
     def __init__(self, config, closed, runtime, check_startup=False):
         self.config = config
         self.entry = config['voices']['female']
+        self.predictor_mode = self.entry.get('predictor_mode', 'official')
+        if self.predictor_mode not in ('official', 'cuda_graph'):
+            raise NeuralTtsError('neural_tts_invalid_predictor_mode')
         self.torch, self.np = runtime.torch, runtime.np
         self.StoppingCriteria, self.StoppingCriteriaList = runtime.StoppingCriteria, runtime.StoppingCriteriaList
         model_dir, reference = checked_clone_assets(self.entry)
@@ -386,6 +395,12 @@ class QwenCloneEngine:
         if not self.prompt:
             raise NeuralTtsError('neural_tts_clone_reference_empty')
         print('qwen startup=female_reference_ready', file=sys.stderr, flush=True)
+        if self.predictor_mode == 'cuda_graph':
+            def stage(name):
+                print(f'qwen startup=female_{name}', file=sys.stderr, flush=True)
+            self.graph, self.hidden_size = capture_predictor_graph(self.model, self.torch, stage)
+            self.synchronize()
+            check_cancel(closed, closed, float('inf'))
 
     def synchronize(self):
         self.torch.cuda.synchronize()
@@ -396,7 +411,9 @@ class QwenCloneEngine:
         check_cancel(task.cancel, closed, deadline)
         torch.manual_seed(self.config['seed'])
         torch.cuda.manual_seed_all(self.config['seed'])
-        with clone_generation_controls(self, task.cancel, closed, deadline), torch.inference_mode():
+        # Graph 只在配置明确选择时使用；取消或异常后，两条路径都会还原模型方法
+        controls = generation_controls if self.predictor_mode == 'cuda_graph' else clone_generation_controls
+        with controls(self, task.cancel, closed, deadline), torch.inference_mode():
             wavs, rate = self.model.generate_voice_clone(
                 text=task.text, language='Chinese', voice_clone_prompt=self.prompt, non_streaming_mode=True,
                 max_new_tokens=256, do_sample=True, top_k=50, top_p=1.0, temperature=.9,

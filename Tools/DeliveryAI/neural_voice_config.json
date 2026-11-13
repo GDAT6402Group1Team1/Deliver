@@ -12,6 +12,7 @@
     "female": {
       "provider": "qwen_base",
       "speaker": "Xiaofang_B",
+      "predictor_mode": "cuda_graph",
       "model_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model",
       "model_revision": "5d83992436eae1d760afd27aff78a71d676296fc",
       "model_manifest_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model-downloads.json",

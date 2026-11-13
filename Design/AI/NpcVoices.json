@@ -15,6 +15,7 @@
     "female": {
       "speaker": "Xiaofang_B",
       "provider": "qwen_base",
+      "predictor_mode": "cuda_graph",
       "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
       "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
       "license": "Apache-2.0",
@@ -29,8 +30,9 @@
         "design_revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
         "design_license": "Apache-2.0"
       },
-      "review": "用户已试听固定 B 的澄清台词，确认符合翠花并同意正式使用；使用原版 Base 生成，未采用女声 PredictorGraph。参考文本保留录音原话，游戏内声音与多人效果尚待试玩",
-      "accepted_sample": "Saved/AIResearch/FemaleVoiceIntegration/20261113T151516/runtime-trial-after-lf/xiaofang_clarification.wav"
+      "review": "用户已认可固定 B，并试听加速版后确认声音自然、同意采用；使用 Base 与独立 PredictorGraph，参考音频和生成参数保持不变。接入检查确认同种子短句与加速试听一致，取消后男声 B 不变；游戏内声音与多人效果尚待试玩",
+      "accepted_sample": "Saved/AIResearch/FemaleVoiceIntegration/20261113T151516/runtime-trial-after-lf/xiaofang_clarification.wav",
+      "accepted_accelerated_sample": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T040218056401Z/Xiaofang_B_clarification.wav"
     },
     "limits": "男声保留已认可的 CustomVoice B，女声由 Base 复用项目合成参考，不复刻真人。当前未用情绪参数控制语调；完整台词与短反应录音分别配置"
   },
