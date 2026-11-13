@@ -6,7 +6,9 @@
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
 #include "AI/Network/DeliveryAiSettings.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
+#include "AI/Presentation/DeliveryNpcBodyAnimInstance.h"
 #include "AI/Presentation/DeliveryNpcVoiceCodec.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Async/TaskGraphInterfaces.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
@@ -90,6 +92,17 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     auto* Agent = ServerNpc->Agent.Get();
     auto* Host = ServerNpc->Presentation.Get();
     auto* Client = ClientNpc->Presentation.Get();
+    // 使用正式姿势选择代码读取两端各自的播放器，不人为设置动画阶段
+    auto* HostBody = NewObject<UDeliveryNpcBodyAnimInstance>(ServerNpc->GetMesh());
+    auto* ClientBody = NewObject<UDeliveryNpcBodyAnimInstance>(ClientNpc->GetMesh());
+    HostBody->NativeInitializeAnimation(); ClientBody->NativeInitializeAnimation();
+    using EBodyPose = UDeliveryNpcBodyAnimInstance::EPose;
+    auto CheckBodyPose = [&](EBodyPose Expected, const TCHAR* Message)
+    {
+        HostBody->NativeUpdateAnimation(.02f); ClientBody->NativeUpdateAnimation(.02f);
+        TestEqual(FString::Printf(TEXT("主机：%s"), Message), HostBody->PoseIndex, static_cast<int32>(Expected));
+        TestEqual(FString::Printf(TEXT("客户端：%s"), Message), ClientBody->PoseIndex, static_cast<int32>(Expected));
+    };
     auto* Gateway = ServerWorld->GetSubsystem<UDeliveryAiGatewaySubsystem>();
     if (!TestNotNull(TEXT("服务器世界具有正式请求入口"), Gateway)) return false;
     TestTrue(TEXT("主机和模拟客户端使用独立世界与播放组件"), Host != Client && Host->GetWorld() != Client->GetWorld());
@@ -262,6 +275,8 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     if (!TestTrue(TEXT("第一小段经过正式接收、编码和客户端解码"), WaitUntil([&]() { return HavePcm(7680); }))) return false;
     TestNull(TEXT("主机不足初始缓冲时没有开播"), Host->RecordedWave.Get());
     TestNull(TEXT("客户端不足初始缓冲时没有开播"), Client->RecordedWave.Get());
+    CheckBodyPose(EBodyPose::Idle, TEXT("首句声音未开始时不播放说话动作"));
+    TestTrue(TEXT("首句声音未开始时两端都闭嘴"), Host->GetVoiceAmplitude()==0 && Client->GetVoiceAmplitude()==0);
     Chunk(0, 1, 7680, Pcm, 26880);
     if (!TestTrue(TEXT("句末尚未到达，两端已有可读声音"), WaitUntil([&]() { return HavePcm(34560) && Host->RecordedWave && Client->RecordedWave; }))) return false;
     const auto FirstState = Host->GetSpeech();
@@ -269,6 +284,7 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     USoundWaveProcedural* ClientFirstWave = Client->RecordedWave.Get();
     TestFalse(TEXT("开始播放时后端尚未结束本句"), FirstState.bAudioComplete);
     TestTrue(TEXT("首次播放时模型请求仍存在"), Agent->IsDecisionPending() && Gateway->Pending.Contains(Request.RequestId));
+    CheckBodyPose(EBodyPose::Talk, TEXT("实际开始播放后进入说话动作"));
     ReadAudio(Host, HostHeard); ReadAudio(Client, ClientHeard);
     TestTrue(TEXT("主机在句未完成时实际读出 PCM"), HostHeard.Num() > 0 && HostHeard.Num() < Pcm.Num());
     TestTrue(TEXT("模拟客户端在句未完成时实际读出解码 PCM"), ClientHeard.Num() > 0 && ClientHeard.Num() < Pcm.Num());
@@ -281,12 +297,18 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     TestTrue(TEXT("暂时读空音频不会结束句子或清字幕"), Client->GetDisplayedSpeech().bActive &&
         Client->GetDisplayedSpeech().TurnId == FirstState.TurnId && !Client->FinishedVoiceTurns.Contains(FirstState.TurnId));
     TestTrue(TEXT("两端读空时等待续播缓冲"), Host->LocalVoices[0].bRebuffering && Client->LocalVoices[0].bRebuffering);
+    TestTrue(TEXT("两端都能区分暂时缺音与整句结束"), Host->IsWaitingForMoreAudio() && Client->IsWaitingForMoreAudio());
+    CheckBodyPose(EBodyPose::Idle, TEXT("音频读空时停止说话动作"));
+    TestTrue(TEXT("暂时缺音时两端都闭嘴"), Host->GetVoiceAmplitude()==0 && Client->GetVoiceAmplitude()==0);
     Chunk(0, 2, 34560, Pcm, 7680);
     if (!TestTrue(TEXT("收到低于续播阈值的下一小段"), WaitUntil([&]() { return HavePcm(42240); }))) return false;
     TestTrue(TEXT("不足续播缓冲时继续保留当前句"), Client->LocalVoices[0].bRebuffering);
     Chunk(0, 3, 42240, Pcm, 23040);
     if (!TestTrue(TEXT("缓冲恢复后接着原句播放"), WaitUntil([&]() { return HavePcm(65280) && !Client->LocalVoices[0].bRebuffering; }))) return false;
     TestTrue(TEXT("续播仍使用原句的两个音频队列"), Host->RecordedWave == HostFirstWave && Client->RecordedWave == ClientFirstWave);
+    TestTrue(TEXT("后续声音到达后结束临时等待"), !Host->IsWaitingForMoreAudio() && !Client->IsWaitingForMoreAudio());
+    CheckBodyPose(EBodyPose::Talk, TEXT("续播时恢复原句的说话动作"));
+    TestEqual(TEXT("身体动作恢复时仍显示原句字幕"), Client->GetDisplayedSpeech().TurnId, FirstState.TurnId);
     ReadAudio(Host, HostHeard); ReadAudio(Client, ClientHeard);
     Chunk(0, 4, 65280, Pcm, 11520);
     if (!TestTrue(TEXT("接收最后一段 PCM，仍不把它当句末"), WaitUntil([&]() { return HavePcm(Pcm.Num()); }))) return false;
@@ -361,6 +383,9 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     TestTrue(TEXT("迟到编码与句末通知不能恢复字幕"), !Host->GetDisplayedSpeech().bActive && !Client->GetDisplayedSpeech().bActive);
     TestNull(TEXT("取消后主机释放程序音频"), Host->RecordedWave.Get());
     TestNull(TEXT("取消后客户端释放程序音频"), Client->RecordedWave.Get());
+    CheckBodyPose(EBodyPose::Idle, TEXT("取消后不继续播放说话动作"));
+    TestTrue(TEXT("取消后没有遗留的缺音状态或张嘴动作"), !Host->IsWaitingForMoreAudio() &&
+        !Client->IsWaitingForMoreAudio() && Host->GetVoiceAmplitude()==0 && Client->GetVoiceAmplitude()==0);
 
     // 后台合成失败与玩家取消不同，失败句保留文字，后一句继续走正常生成和播放
     if (!TestTrue(TEXT("开始检查单句合成失败"), BeginReply(true))) return false;

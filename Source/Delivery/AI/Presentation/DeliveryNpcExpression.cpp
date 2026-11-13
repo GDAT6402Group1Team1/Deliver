@@ -9,6 +9,15 @@
 #include "Curves/CurveFloat.h"
 #include "GameFramework/Pawn.h"
 
+bool UDeliveryNpcPresentationComponent::IsWaitingForMoreAudio() const
+{
+    if (!DisplayedSpeech.bActive || !DisplayedSpeech.bRecordedVoice || LocalVoices.IsEmpty()) return false;
+    const auto& Local=LocalVoices[0];
+    return Local.bRebuffering && Local.State.bActive && Local.State.bRecordedVoice &&
+        Local.State.TurnId==DisplayedSpeech.TurnId && Local.State.ActionId==DisplayedSpeech.ActionId &&
+        !CancelledVoiceActions.Contains(Local.State.ActionId) && !FinishedVoiceTurns.Contains(Local.State.TurnId);
+}
+
 FName UDeliveryNpcPresentationComponent::GetActionEmotion() const
 {
     const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());

@@ -125,6 +125,8 @@ public:
     UFUNCTION(BlueprintPure) FDeliveryNpcSpeechState GetDisplayedSpeech() const;
     // 当前回复已到达本机、但声音或文字还未开始播放时返回 true
     bool IsWaitingForSpeechPlayback() const;
+    // 本机这句话已开始播放，但声音暂时读空，正在等待后续音频
+    bool IsWaitingForMoreAudio() const;
     // 动作结束后若同一轮语音还没播完，继续使用模型选定的表情
     FName GetActionEmotion() const;
     UFUNCTION(BlueprintPure) float GetDisplayedSpeechProgress() const;

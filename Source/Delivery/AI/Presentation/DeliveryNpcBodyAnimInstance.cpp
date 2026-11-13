@@ -93,7 +93,8 @@ void UDeliveryNpcBodyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
         else if (bRunning && bAttackAction)
         { Pose=EPose::Hurry; ReferenceSpeed=Npc->Presentation->HurryAnimationSpeed; }
     }
-    else if (Npc->Presentation->GetDisplayedSpeech().bActive) Pose=EPose::Talk;
+    // 缺音时暂停说话动作，声音接上后继续，字幕和注视仍保留当前句子
+    else if (Npc->Presentation->GetDisplayedSpeech().bActive && !Npc->Presentation->IsWaitingForMoreAudio()) Pose=EPose::Talk;
     PoseIndex=static_cast<int32>(Pose);
     if (!FMath::IsFinite(ReferenceSpeed)) ReferenceSpeed=180;
     MovePlayRate=FMath::IsFinite(Speed)?FMath::Clamp(Speed/FMath::Max(10.f,ReferenceSpeed),.2f,2.f):1.f;
