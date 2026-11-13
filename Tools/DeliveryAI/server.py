@@ -336,12 +336,15 @@ class DecisionHandler(BaseHTTPRequestHandler):
                     event = job.events.get(timeout=.25)
                 except queue.Empty:
                     event = {'type': 'keepalive'}
-                # 取消后结束这条连接，已经准备好的旧台词和声音一同丢弃
-                if job.cancel.is_set():
+                # 玩家取消后丢弃旧内容；内部失败仍发送一次错误，让游戏结束这轮等待
+                event = job.event_for_client(event)
+                if event is None:
                     break
                 body = (json.dumps(event, ensure_ascii=False, separators=(',', ':'))+'\n').encode()
                 self.wfile.write(f'{len(body):X}\r\n'.encode()+body+b'\r\n')
                 self.wfile.flush()
+                if event['type'] == 'error':
+                    break
             self.wfile.write(b'0\r\n\r\n')
             self.wfile.flush()
         except (ValueError, TypeError):
@@ -349,7 +352,7 @@ class DecisionHandler(BaseHTTPRequestHandler):
                 self.reply(400, {'error': 'invalid_context'})
         except (OSError, queue.Full):
             if job:
-                job.cancel.set()
+                job.cancel_request()
 
     def log_message(self, fmt, *args):
         # 只记录 HTTP 状态，不记录玩家文本和模型凭据

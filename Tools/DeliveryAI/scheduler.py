@@ -11,15 +11,50 @@ class Job:
         self.priority = 0 if context.get('request_source') == 'player' else 1
         self.cancel = threading.Event()
         self.events = queue.Queue(maxsize=64)
+        self._terminal_lock = threading.Lock()
+        self._failure = None
+        self._cancelled_by_request = False
         self.created = time.monotonic()
         self.finished = False
         # 模型调用结束后，由这个 Future 通知本轮语音任务已结束；不表示游戏已播放
         self.completion = None
 
     def emit(self, kind, **data):
+        if kind == 'error':
+            self.fail(data.get('reason', 'reply_failed'))
+            return
         if self.cancel.is_set():
             return
         self.events.put({'type': kind, 'request_id': self.key[2], **data}, timeout=2)
+
+    def fail(self, reason):
+        """内部失败停止剩余工作，同时保留一次发给游戏的错误通知"""
+        with self._terminal_lock:
+            if self.cancel.is_set():
+                return
+            self._failure = {'type':'error', 'request_id':self.key[2], 'reason':reason}
+            try:
+                self.events.put_nowait(self._failure)
+            except queue.Full:
+                # 网络线程下一次发送前仍会读取 _failure，队列里的旧台词不会继续发送
+                pass
+            self.cancel.set()
+
+    def cancel_request(self):
+        """玩家打断或连接断开后，停止工作并丢弃尚未发送的全部内容"""
+        with self._terminal_lock:
+            self._cancelled_by_request = True
+            self._failure = None
+            self.cancel.set()
+
+    def event_for_client(self, event):
+        """发送前检查本轮状态，失败通知替代旧台词，真正取消后不再发送"""
+        with self._terminal_lock:
+            if self._cancelled_by_request:
+                return None
+            if self._failure is not None:
+                return self._failure
+            return None if self.cancel.is_set() else event
 
 
 class Scheduler:
@@ -55,7 +90,7 @@ class Scheduler:
 
     def _remove_waiting(self, job):
         # 调用时已持有 condition；没有开始的请求可以立即结束
-        job.cancel.set()
+        job.cancel_request()
         job.finished = True
         self.waiting.remove(job)
         self.jobs.pop(job.key, None)
@@ -64,7 +99,7 @@ class Scheduler:
         with self.condition:
             job = self.jobs.get(tuple(key))
             if job:
-                job.cancel.set()
+                job.cancel_request()
                 if job in self.waiting:
                     self._remove_waiting(job)
             self.condition.notify_all()
@@ -93,11 +128,7 @@ class Scheduler:
                     print(f"latency request={job.key[2]} stage=worker_started scheduler_queue_ms={int((time.monotonic()-job.created)*1000)}", flush=True)
                     self.run(job)
             except Exception as error:
-                if not job.cancel.is_set():
-                    try:
-                        job.emit('error', reason=type(error).__name__)
-                    except queue.Full:
-                        pass
+                job.fail(type(error).__name__)
             finally:
                 # 模型函数已返回，工作线程可以接下一项；原回复等语音真正结束后再移除
                 if job.completion is None:
@@ -121,7 +152,7 @@ class Scheduler:
         with self.condition:
             self.closed = True
             for job in self.jobs.values():
-                job.cancel.set()
+                job.cancel_request()
             self.condition.notify_all()
         for thread in self.threads:
             thread.join(timeout=8)

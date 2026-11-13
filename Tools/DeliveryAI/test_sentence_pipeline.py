@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from scheduler import Job
 from server import validate_action
-from streaming import SentenceParser, split_speech, run_job, prepare_resources, close_resources
+from streaming import SentenceParser, ReplyFormatError, split_speech, run_job, prepare_resources, close_resources
 from test_server import context
 
 
@@ -72,6 +72,98 @@ class SentenceSplitTests(unittest.TestCase):
 
 
 class SpeechPipelineTests(unittest.TestCase):
+    def test_invalid_followup_keeps_the_checked_first_sentence_and_waits_for_its_audio(self):
+        followups = [json.dumps({'speech':'二。三。四。'}),
+                     json.dumps({'candidate_index':0,'speech':'追加动作。'}),
+                     '{"speech":', '[]']
+        for followup in followups:
+            with self.subTest(followup=followup):
+                started, release = threading.Event(), threading.Event()
+                job = Job(request())
+                class Voice:
+                    def synthesize(self, text, voice, emotion, cancel):
+                        started.set()
+                        if not release.wait(2):
+                            raise TimeoutError('test voice was not released')
+                        return b'\x01\x00'*160,16000
+                def model(prompt, cancel, on_delta):
+                    on_delta(json.dumps({'candidate_index':0,'speech':'我听见了。','emotion':'Calm'}))
+                    self.assertTrue(started.wait(1))
+                    on_delta(followup)
+                prepare_resources(local_speech=False)
+                try:
+                    with patch('streaming.stream_api',side_effect=model), \
+                         patch('streaming.uses_neural_speech',return_value=False), \
+                         patch('streaming.speech_synthesizer',return_value=Voice()):
+                        run_job(job,'llm',validate_action,None)
+                        self.assertFalse(job.cancel.is_set())
+                        self.assertFalse(job.completion.done(), '首句声音仍在合成')
+                        release.set()
+                        job.completion.result(timeout=2)
+                    events=list(job.events.queue)
+                    self.assertEqual([event['type'] for event in events],['proposal','sentence','done'])
+                    self.assertEqual(events[1]['text'],'我听见了。')
+                    self.assertTrue(events[1]['pcm'])
+                    self.assertEqual(events[-1]['sentences'],1)
+                finally:
+                    release.set();close_resources()
+
+    def test_transport_timeout_and_external_cancel_still_discard_the_first_audio(self):
+        for failure in ('timeout','transport','external_cancel'):
+            with self.subTest(failure=failure):
+                started, release = threading.Event(), threading.Event()
+                job = Job(request())
+                class Voice:
+                    def synthesize(self, text, voice, emotion, cancel):
+                        started.set()
+                        if not release.wait(2):
+                            raise TimeoutError('test voice was not released')
+                        return b'\x01\x00'*160,16000
+                def model(prompt, cancel, on_delta):
+                    on_delta(json.dumps({'candidate_index':0,'speech':'我听见了。','emotion':'Calm'}))
+                    self.assertTrue(started.wait(1))
+                    if failure == 'timeout':
+                        raise TimeoutError('model timeout')
+                    if failure == 'transport':
+                        raise OSError('connection lost')
+                    job.cancel_request()
+                    on_delta(json.dumps({'speech':'二。三。四。'}))
+                prepare_resources(local_speech=False)
+                try:
+                    with patch('streaming.stream_api',side_effect=model), \
+                         patch('streaming.uses_neural_speech',return_value=False), \
+                         patch('streaming.speech_synthesizer',return_value=Voice()):
+                        with self.assertRaises((TimeoutError,OSError,ReplyFormatError)):
+                            run_job(job,'llm',validate_action,None)
+                        self.assertTrue(job.cancel.is_set())
+                        self.assertFalse(job.completion.done(), '取消后仍要等实际合成返回')
+                        release.set()
+                        job.completion.result(timeout=2)
+                    events=list(job.events.queue)
+                    self.assertFalse(any(event['type'] in ('sentence','done') for event in events))
+                    if failure == 'external_cancel':
+                        self.assertTrue(all(job.event_for_client(event) is None for event in events))
+                    else:
+                        self.assertEqual(job.event_for_client(events[0])['type'],'error')
+                finally:
+                    release.set();close_resources()
+
+    def test_invalid_initial_action_still_fails_without_starting_tts(self):
+        job = Job(request())
+        def model(prompt,cancel,on_delta):
+            on_delta(json.dumps({'candidate_index':99,'speech':'我听见了。','emotion':'Calm'}))
+        prepare_resources(local_speech=False)
+        try:
+            with patch('streaming.stream_api',side_effect=model), \
+                 patch('streaming.uses_neural_speech',return_value=False), \
+                 patch('streaming.speech_synthesizer',side_effect=AssertionError('unexpected TTS')):
+                with self.assertRaisesRegex(ReplyFormatError,'invalid_candidate'):
+                    run_job(job,'llm',validate_action,None)
+            self.assertTrue(job.completion.done())
+            self.assertEqual([event['type'] for event in list(job.events.queue)],['error'])
+        finally:
+            close_resources()
+
     def test_first_audio_is_ready_while_model_continues_and_tts_finishes_out_of_order(self):
         continue_model=threading.Event()
         continue_second_voice=threading.Event()

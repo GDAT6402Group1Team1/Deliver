@@ -2,7 +2,7 @@
 import threading
 import unittest
 
-from scheduler import Scheduler
+from scheduler import Job, Scheduler
 
 
 class ControlledWork:
@@ -136,6 +136,52 @@ class PlayerSchedulingTests(unittest.TestCase):
         self.assertEqual(scheduler.running_players, 0)
         self.assertEqual(scheduler.running_ambient, 0)
         self.assertFalse(scheduler.jobs or scheduler.waiting)
+
+
+class JobTerminalTests(unittest.TestCase):
+    def test_failure_replaces_queued_audio_and_stops_work(self):
+        job = Job(context('failed'))
+        job.emit('sentence', pcm='old-audio')
+        job.emit('error', reason='invalid_sentence')
+        self.assertTrue(job.cancel.is_set())
+        event = job.event_for_client(job.events.get_nowait())
+        self.assertEqual(event, {'type':'error', 'request_id':'failed', 'reason':'invalid_sentence'})
+        self.assertFalse(job.finished, '停止通知不能代表实际工作已经结束')
+
+    def test_external_cancel_wins_before_or_after_failure_from_another_thread(self):
+        for cancel_first in (False, True):
+            with self.subTest(cancel_first=cancel_first):
+                job = Job(context('cancelled'))
+                first_done = threading.Event()
+                errors = []
+                def fail():
+                    if cancel_first:
+                        self.assertTrue(first_done.wait(1))
+                    job.emit('error', reason='invalid_sentence')
+                    if not cancel_first:
+                        first_done.set()
+                def cancel():
+                    if not cancel_first:
+                        self.assertTrue(first_done.wait(1))
+                    job.cancel_request()
+                    if cancel_first:
+                        first_done.set()
+                def run(operation):
+                    try:
+                        operation()
+                    except Exception as error:
+                        errors.append(error)
+                        first_done.set()
+                workers = [threading.Thread(target=run,args=(fail,)), threading.Thread(target=run,args=(cancel,))]
+                for worker in workers:
+                    worker.start()
+                for worker in workers:
+                    worker.join(2)
+                    self.assertFalse(worker.is_alive())
+                self.assertTrue(job.cancel.is_set())
+                self.assertEqual(errors, [])
+                for event in list(job.events.queue) + [{'type':'sentence', 'pcm':'late-audio'}]:
+                    self.assertIsNone(job.event_for_client(event))
 
 
 if __name__ == '__main__':

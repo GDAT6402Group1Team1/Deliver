@@ -454,6 +454,31 @@ class SpeechPreparationTests(unittest.TestCase):
             start.assert_not_called()
 
 class HttpStreamTests(unittest.TestCase):
+    def test_internal_model_failure_is_sent_once_after_work_has_finished(self):
+        server=DecisionServer(('127.0.0.1',0),'fixture')
+        server.provider='llm'
+        original_submit=server.scheduler.submit
+        def submit(data):
+            job=original_submit(data)
+            with server.scheduler.condition:
+                self.assertTrue(server.scheduler.condition.wait_for(lambda:job.finished,2))
+            return job
+        server.scheduler.submit=submit
+        thread=threading.Thread(target=server.serve_forever,daemon=True)
+        try:
+            with patch('streaming.stream_api',side_effect=ValueError('invalid_sentence')), \
+                 patch('streaming.uses_neural_speech',return_value=False), \
+                 patch('streaming.speech_synthesizer',side_effect=AssertionError('unexpected TTS')):
+                thread.start()
+                url=f'http://127.0.0.1:{server.server_port}/v1/decisions/stream'
+                with urllib.request.urlopen(urllib.request.Request(url,json.dumps(request()).encode(),
+                        {'Content-Type':'application/json'}),timeout=3) as response:
+                    events=[json.loads(line) for line in response]
+                self.assertEqual([event['type'] for event in events],['error'])
+                self.assertEqual(events[0]['reason'],'ValueError')
+        finally:
+            server.shutdown();server.server_close();thread.join(2)
+
     def test_cancel_discards_prepared_audio_and_closes_response(self):
         server=DecisionServer(('127.0.0.1',0),'fixture')
         release=threading.Event();cancelled=threading.Event()

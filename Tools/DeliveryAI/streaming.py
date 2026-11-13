@@ -30,7 +30,7 @@ _resource_closing = False
 
 
 def uses_neural_speech(voice):
-    # 大壮采用已试听的 B 音色，翠花暂时沿用原有声音
+    # 每位人物使用声音配置中选定的模型和音色
     return uses_neural_voice(voice)
 
 
@@ -359,6 +359,10 @@ def split_speech(text):
     return parts
 
 
+class ReplyFormatError(ValueError):
+    """模型返回的句子格式不符合协议，与网络或合成失败分开处理"""
+
+
 class SentenceParser:
     def __init__(self, context, validate, emit):
         self.context, self.validate, self.emit = context, validate, emit
@@ -374,7 +378,7 @@ class SentenceParser:
     def feed(self, delta):
         self.pending += delta
         if len(self.pending) > 8192:
-            raise ValueError('model_line_too_large')
+            raise ReplyFormatError('model_line_too_large')
         # 完整 JSON 通过检查后，按句子分别合成语音
         while self.pending.strip():
             self.pending = self.pending.lstrip()
@@ -388,30 +392,35 @@ class SentenceParser:
     def line(self, line):
         if not line.strip():
             return
-        item = json.loads(line)
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ReplyFormatError('invalid_json') from error
+        if not isinstance(item, dict):
+            raise ReplyFormatError('invalid_sentence')
         speech = item.get('speech')
         if not isinstance(speech, str) or (speech and not speech.strip()) or self.records >= 3:
-            raise ValueError('invalid_sentence')
+            raise ReplyFormatError('invalid_sentence')
         if self.total+len(speech) > 120:
-            raise ValueError('reply_too_long')
+            raise ReplyFormatError('reply_too_long')
         sentences = split_speech(speech)
         if self.count+len(sentences) > 3:
-            raise ValueError('too_many_sentences')
+            raise ReplyFormatError('too_many_sentences')
         if self.proposal is None:
             index = item.get('candidate_index')
             candidates = self.context.get('candidates', [])
             if type(index) is not int or not 0 <= index < len(candidates):
-                raise ValueError('invalid_candidate')
+                raise ReplyFormatError('invalid_candidate')
             action = {**candidates[index], 'speech': speech, 'emotion': item.get('emotion')}
             if 'speech_target_id' in item:
                 target = item['speech_target_id']
                 if not isinstance(target, str):
-                    raise ValueError('invalid_speech_target')
+                    raise ReplyFormatError('invalid_speech_target')
                 action['speech_target_id'] = self.speech_targets.get(target, target)
             self.proposal = self.validate(self.context, action)
             self.emit('proposal', self.proposal)
         elif set(item) != {'speech'} or not speech or not self.proposal['speech']:
-            raise ValueError('invalid_followup')
+            raise ReplyFormatError('invalid_followup')
         self.total += len(speech)
         self.records += 1
         for sentence in sentences:
@@ -422,7 +431,7 @@ class SentenceParser:
         self.line(self.pending)
         self.pending = ''
         if self.proposal is None:
-            raise ValueError('missing_reply')
+            raise ReplyFormatError('missing_reply')
 
 
 def stream_api(prompt, cancel, on_delta):
@@ -467,13 +476,12 @@ def run_job(job, provider, validate, fallback):
                 failure = next((future.exception() for future in futures
                                 if not future.cancelled() and future.exception() is not None), None)
                 if failure is not None:
-                    job.emit('error', reason=type(failure).__name__)
-                    job.cancel.set()
+                    job.fail(type(failure).__name__)
                 elif not job.cancel.is_set():
                     job.emit('done', sentences=len(futures))
                     print(f"latency request={job.key[2]} stage=reply_finished elapsed_ms={int((time.monotonic()-job.created)*1000)}", flush=True)
             except queue.Full:
-                job.cancel.set()
+                job.fail('reply_queue_full')
             finally:
                 # 完成通知只表示后台工作已结束；取消或合成失败不会补发成功台词
                 job.completion.set_result(None)
@@ -577,16 +585,16 @@ def run_job(job, provider, validate, fallback):
         if context is not None:
             dialogue_log.record(job.key[2], job.context.get('request_source', 'ambient'), model,
                                 job.context, context, parser.proposal, spoken, type(error).__name__)
-        # 先停止语音工作，防止模型失败后仍把晚到的声音交给游戏
-        if not job.cancel.is_set():
-            try:
-                job.emit('error', reason=type(error).__name__)
-            except queue.Full:
-                pass
-        job.cancel.set()
-        for future in futures:
-            future.cancel()
-        raise
+        if isinstance(error, ReplyFormatError) and parser.count > 0 and not job.cancel.is_set():
+            # 后一句格式错误时保留已经检查过的完整句子，按实际句数结束回复
+            print(f"latency request={job.key[2]} stage=followup_rejected "
+                  f"reason={error} kept_sentences={parser.count}", flush=True)
+        else:
+            # 真正打断、首句无效或网络失败时，停止语音并保留可发送的失败通知
+            job.fail(type(error).__name__)
+            for future in futures:
+                future.cancel()
+            raise
     finally:
         if speech_reservation is not None:
             speech_reservation.release()
