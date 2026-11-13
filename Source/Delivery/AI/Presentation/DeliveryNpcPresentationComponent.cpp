@@ -145,10 +145,12 @@ void UDeliveryNpcPresentationComponent::UpdateLegacyAnimation(ADeliveryNpcCharac
     const auto State=Resident->Agent->GetPublicState();
     const double StrikeStartedAt=Resident->Combat->GetStrikeStartTime(State.ActionId);
     const double StrikeElapsed=StrikeStartedAt>=0?ServerTime()-StrikeStartedAt:-1;
-    const bool bStrikePlaying=State.Status==EDeliveryNpcActionStatus::Running && State.Action==EDeliveryNpcAction::StrikeOnce &&
+    const bool bStrikePlaying=State.Status==EDeliveryNpcActionStatus::Running &&
+        (State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight) &&
         StrikeElapsed>=0 && StrikeElapsed<UDeliveryNpcCombatComponent::StrikeDuration;
     if (Resident->Combat->IsRecovering() && GetUpAnimation) { Desired=GetUpAnimation; bLoop=false; }
     else if (Resident->IsKnockedDown()) { Desired=DownAnimation; bLoop=false; }
+    else if (Resident->Combat->IsReactingToHit() && HitAnimation) { Desired=HitAnimation; bLoop=false; }
     else if (bStrikePlaying) { Desired=AttackAnimation; bLoop=false; }
     else if (State.Status==EDeliveryNpcActionStatus::Running && State.Action==EDeliveryNpcAction::HoldVehicle) Desired=HoldAnimation;
     else if (Resident->GetVelocity().Size2D()>20)
@@ -157,23 +159,30 @@ void UDeliveryNpcPresentationComponent::UpdateLegacyAnimation(ADeliveryNpcCharac
         float ReferenceSpeed=WalkAnimationSpeed;
         if (State.Status==EDeliveryNpcActionStatus::Running && State.Action==EDeliveryNpcAction::Pace && PaceAnimation)
         { Desired=PaceAnimation; ReferenceSpeed=PaceAnimationSpeed; }
-        else if (State.Status==EDeliveryNpcActionStatus::Running && State.Action==EDeliveryNpcAction::StrikeOnce && HurryAnimation)
+        else if (State.Status==EDeliveryNpcActionStatus::Running &&
+            (State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight) && HurryAnimation)
         { Desired=HurryAnimation; ReferenceSpeed=HurryAnimationSpeed; }
         DesiredPlayRate=FMath::Clamp(Resident->GetVelocity().Size2D()/FMath::Max(10.f,ReferenceSpeed),.2f,2.f);
     }
     else if (Display.bActive && TalkAnimation) Desired=TalkAnimation;
-    if (Desired && (Playing!=Desired || (bStrikePlaying && PlayingStrike!=State.ActionId)))
+    if (Desired && (Playing!=Desired || (bStrikePlaying && PlayingStrike!=Resident->Combat->GetCurrentPunchId())))
     {
         Resident->GetMesh()->PlayAnimation(Desired,bLoop); Playing=Desired;
         if (bStrikePlaying && Desired==AttackAnimation)
         {
             // 远端按实际出拳时间播放，较晚收到消息时从当前进度开始
             Resident->GetMesh()->SetPosition(static_cast<float>(StrikeElapsed),false);
-            PlayingStrike=State.ActionId;
+            PlayingStrike=Resident->Combat->GetCurrentPunchId();
         }
     }
     // 低速踱步和快步靠近各用自己的步频，停下后恢复其他动作的原速
     if (Desired) Resident->GetMesh()->SetPlayRate(DesiredPlayRate);
+    if (Desired==HitAnimation && HitAnimation && Resident->Combat->IsReactingToHit())
+    {
+        const float Progress=FMath::Clamp(static_cast<float>((ServerTime()-Resident->Combat->GetHitReactionStartTime()) /
+            UDeliveryNpcCombatComponent::HitReactionDuration),0.f,1.f);
+        Resident->GetMesh()->SetPosition(Progress*HitAnimation->GetPlayLength(),false);
+    }
 }
 void UDeliveryNpcPresentationComponent::EndPlay(const EEndPlayReason::Type Reason)
 {

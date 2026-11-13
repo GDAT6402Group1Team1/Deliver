@@ -257,12 +257,12 @@ FString UDeliveryNpcAnimationAssetTools::CreateBodyAnimation(bool bReplaceGraph)
         if (!TimeValue) return TEXT("UE blend-time property is unavailable");
         FScriptArrayHelper Times(TimesProperty,TimesProperty->ContainerPtrToValuePtr<void>(&Blend->Node));
         // 先补齐输入，完整图连接后再编译，避免编辑器在缺少输出节点时反复编译
-        while (Times.Num()<9) Blend->Node.AddPose();
-        if (Times.Num()!=9) return TEXT("Body animation requires nine blend inputs");
-        const float Durations[]={.16f,.16f,.16f,.16f,.16f,.16f,.06f,.08f,.16f};
-        for (int32 Index=0;Index<9;++Index) TimeValue->SetPropertyValue(Times.GetRawPtr(Index),Durations[Index]);
+        while (Times.Num()<10) Blend->Node.AddPose();
+        if (Times.Num()!=10) return TEXT("Body animation requires ten blend inputs");
+        const float Durations[]={.16f,.16f,.16f,.16f,.16f,.16f,.06f,.08f,.16f,.06f};
+        for (int32 Index=0;Index<10;++Index) TimeValue->SetPropertyValue(Times.GetRawPtr(Index),Durations[Index]);
         Blend->ReconstructNode();
-        for (int32 Index=0;Index<9;++Index)
+        for (int32 Index=0;Index<10;++Index)
         {
             auto* Pin=Blend->FindPin(FName(*FString::Printf(TEXT("BlendTime_%d"),Index)),EGPD_Input);
             if (!Pin) return TEXT("Body animation blend-time pin is missing");
@@ -271,11 +271,11 @@ FString UDeliveryNpcAnimationAssetTools::CreateBodyAnimation(bool bReplaceGraph)
         if (!ConnectParameter(Graph,Blend,TEXT("ActiveChildIndex"),TEXT("PoseIndex"),540))
             return TEXT("Could not connect body pose index");
         const FName Assets[]={TEXT("IdleAnimation"),TEXT("TalkAnimation"),TEXT("WalkAnimation"),TEXT("PaceAnimation"),
-            TEXT("HurryAnimation"),TEXT("HoldAnimation"),TEXT("AttackAnimation"),TEXT("DownAnimation"),TEXT("GetUpAnimation")};
+            TEXT("HurryAnimation"),TEXT("HoldAnimation"),TEXT("AttackAnimation"),TEXT("DownAnimation"),TEXT("GetUpAnimation"),TEXT("HitAnimation")};
         const TCHAR* Labels[]={TEXT("0 站立"),TEXT("1 说话"),TEXT("2 行走"),TEXT("3 踱步"),TEXT("4 快步靠近"),
-            TEXT("5 拽车"),TEXT("6 挥拳：按服务器时间显示"),TEXT("7 倒地：按游戏状态显示"),TEXT("8 起身：按游戏状态显示")};
-        const FName ExplicitTimes[]={TEXT("StrikeTime"),TEXT("DownTime"),TEXT("GetUpTime")};
-        for (int32 Index=0;Index<9;++Index)
+            TEXT("5 拽车"),TEXT("6 挥拳：按服务器时间显示"),TEXT("7 倒地：按游戏状态显示"),TEXT("8 起身：按游戏状态显示"),TEXT("9 受击：按服务器时间显示")};
+        const FName ExplicitTimes[]={TEXT("StrikeTime"),TEXT("DownTime"),TEXT("GetUpTime"),TEXT("HitTime")};
+        for (int32 Index=0;Index<10;++Index)
         {
             const int32 Y=Index*240;
             UAnimGraphNode_Base* Node=nullptr;
@@ -296,7 +296,7 @@ FString UDeliveryNpcAnimationAssetTools::CreateBodyAnimation(bool bReplaceGraph)
             else
             {
                 auto* Evaluator=AddAnimationNode<UAnimGraphNode_SequenceEvaluator>(Graph,200,Y,Labels[Index]);
-                // Evaluator 加入同步组会强制推进时间，因此这三个节点明确不参与步态同步
+                // Evaluator 加入同步组会强制推进时间，这些节点按服务器时间显示，不参与步态同步
                 Evaluator->Node.SetGroupName(NAME_None);
                 Evaluator->Node.SetGroupMethod(EAnimSyncMethod::DoNotSync);
                 Evaluator->Node.SetShouldUseExplicitFrame(false);
@@ -313,6 +313,8 @@ FString UDeliveryNpcAnimationAssetTools::CreateBodyAnimation(bool bReplaceGraph)
         if (!ConnectPose(Graph,Blend,Output)) return TEXT("Could not connect body animation output");
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
     }
+    const FString GraphCheck=CheckBodyAnimation();
+    if (!GraphCheck.StartsWith(TEXT("NPC body graph checked;"))) return GraphCheck;
     FKismetEditorUtilities::CompileBlueprint(Blueprint,EBlueprintCompileOptions::SkipSave);
     if (Blueprint->Status==BS_Error || !Blueprint->GeneratedClass) return TEXT("Body animation blueprint compilation failed");
     auto* Defaults=Blueprint->GeneratedClass->GetDefaultObject<UDeliveryNpcBodyAnimInstance>();
@@ -327,6 +329,7 @@ FString UDeliveryNpcAnimationAssetTools::CreateBodyAnimation(bool bReplaceGraph)
     Defaults->AttackAnimation=PreviewSettings->AttackAnimation;
     Defaults->DownAnimation=PreviewSettings->DownAnimation;
     Defaults->GetUpAnimation=PreviewSettings->GetUpAnimation;
+    Defaults->HitAnimation=PreviewSettings->HitAnimation;
     Defaults->SetRootMotionMode(ERootMotionMode::NoRootMotionExtraction);
     if (!SaveNpcAnimationAsset(Blueprint)) return TEXT("Body animation blueprint save failed");
 
@@ -355,6 +358,43 @@ FString UDeliveryNpcAnimationAssetTools::CreateBodyAnimation(bool bReplaceGraph)
             return TEXT("NPC body animation binding or preserved mesh settings did not match");
         if (!SaveNpcAnimationAsset(NpcBP)) return TEXT("NPC blueprint save failed after assigning body animation");
     }
-    return FString::Printf(TEXT("NPC body animation saved; graph=%s; rebuilt=%d; poses=9; locomotion_group=NpcLocomotion"),
+    return FString::Printf(TEXT("NPC body animation saved; graph=%s; rebuilt=%d; poses=10; locomotion_group=NpcLocomotion"),
         *Blueprint->GetPathName(),bReplaceGraph);
+}
+
+FString UDeliveryNpcAnimationAssetTools::CheckBodyAnimation()
+{
+    auto* Blueprint=LoadObject<UAnimBlueprint>(nullptr,TEXT("/Game/NPC/Residents/Animation/ABP_NpcBody.ABP_NpcBody"));
+    if (!Blueprint || Blueprint->ParentClass!=UDeliveryNpcBodyAnimInstance::StaticClass())
+        return TEXT("Body animation blueprint or expected parent is missing");
+    UAnimGraphNode_BlendListByInt* Blend=nullptr;
+    for (UEdGraph* Graph:Blueprint->FunctionGraphs)
+        if (Graph && Graph->GetFName()==TEXT("AnimGraph"))
+            for (UEdGraphNode* Node:Graph->Nodes)
+                if (auto* Candidate=Cast<UAnimGraphNode_BlendListByInt>(Node))
+                {
+                    if (Blend) return TEXT("Body animation has more than one pose selector");
+                    Blend=Candidate;
+                }
+    auto* TimesProperty=FindFProperty<FArrayProperty>(FAnimNode_BlendListBase::StaticStruct(),TEXT("BlendTime"));
+    if (!Blend || !TimesProperty) return TEXT("Body animation pose selector is missing");
+    FScriptArrayHelper Times(TimesProperty,TimesProperty->ContainerPtrToValuePtr<void>(&Blend->Node));
+    if (Times.Num()!=10) return TEXT("Body animation requires ten inputs; rebuild with -ReplaceNpcBodyAnimation");
+    for (int32 Index=0;Index<10;++Index)
+    {
+        const auto* Pin=Blend->FindPin(FName(*FString::Printf(TEXT("BlendPose_%d"),Index)),EGPD_Input);
+        if (!Pin || Pin->LinkedTo.Num()!=1) return TEXT("Body animation pose input is not connected");
+    }
+    const auto* HitPin=Blend->FindPin(TEXT("BlendPose_9"),EGPD_Input);
+    const auto* Hit=Cast<UAnimGraphNode_SequenceEvaluator>(HitPin->LinkedTo[0]->GetOwningNode());
+    if (!Hit) return TEXT("Body animation hit input requires a Sequence Evaluator");
+    for (const auto& Pair:{TPair<FName,FName>(TEXT("Sequence"),TEXT("HitAnimation")),
+        TPair<FName,FName>(TEXT("ExplicitTime"),TEXT("HitTime"))})
+    {
+        const auto* Pin=Hit->FindPin(Pair.Key,EGPD_Input);
+        const auto* Get=Pin && Pin->LinkedTo.Num()==1?Cast<UK2Node_VariableGet>(Pin->LinkedTo[0]->GetOwningNode()):nullptr;
+        if (!Get || Get->VariableReference.GetMemberName()!=Pair.Value)
+            return TEXT("Body animation hit asset or time is not connected to the expected variable");
+    }
+    return TEXT("NPC body graph checked; poses=10; hit_animation=HitAnimation; hit_time=HitTime");
 }

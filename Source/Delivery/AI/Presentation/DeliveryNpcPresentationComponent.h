@@ -113,6 +113,7 @@ public:
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> DownAnimation;
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> TalkAnimation;
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> GetUpAnimation;
+    UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> HitAnimation;
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> HoldAnimation;
     // 在蓝图中填写模型已有的表情名称，播放时调整对应的形态键
     UPROPERTY(EditAnywhere,Category="Delivery|表演") FName MouthMorph;

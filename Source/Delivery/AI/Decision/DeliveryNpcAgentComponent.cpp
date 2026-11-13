@@ -1,6 +1,7 @@
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Conversation/DeliveryNpcConversationTrace.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "AI/Network/DeliveryAiSettings.h"
@@ -155,7 +156,7 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
             const int32 FactIndex=Evidence.FindLastByPredicate([&](const auto& Item){ return Item.SubjectId==Pair.Key; });
             if (FactIndex==INDEX_NONE) continue;
             const auto* Fact=&Evidence[FactIndex];
-            for (auto Action : {EDeliveryNpcAction::LookAt,EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::MoveAside})
+            for (auto Action : {EDeliveryNpcAction::LookAt,EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::MoveAside,EDeliveryNpcAction::Fight})
                 if (Resident->CanExecute(Action,Target)) AddCandidate(Action,Pair.Key,Fact->EventId);
         }
     }
@@ -262,6 +263,16 @@ void UDeliveryNpcAgentComponent::FinishReply(FGuid RequestId, bool bSucceeded, i
     GetOwner()->ForceNetUpdate();
 }
 
+bool UDeliveryNpcAgentComponent::IsRespondingToAttackFrom(const AActor* Attacker) const
+{
+    if (!bDecisionPending || !IsValid(Attacker)) return false;
+    return ActiveRequest.Evidence.ContainsByPredicate([this,Attacker](const auto& Item)
+    {
+        return (Item.Kind==TEXT("FightThreat") || Item.Kind==TEXT("LightMeleeHit") || Item.Kind==TEXT("Hit")) &&
+            KnownSubjects.FindRef(Item.SubjectId).Get()==Attacker;
+    });
+}
+
 bool UDeliveryNpcAgentComponent::CanLookAt(AActor* Target) const
 {
     const auto* Pawn = Cast<APawn>(GetOwner());
@@ -296,6 +307,9 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
         })) return false;
     Reason = TEXT("UnsupportedAction");
     if (!ActiveRequest.AllowedActions.Contains(Proposal.Action)) return false;
+    Reason = TEXT("InvalidDuration");
+    if (Proposal.Action==EDeliveryNpcAction::Fight &&
+        (!FMath::IsFinite(Proposal.Duration) || Proposal.Duration<UDeliveryNpcCombatComponent::StrikeDuration || Proposal.Duration>5.f)) return false;
     Reason = TEXT("InvalidEvidence");
     for (const auto& Id : Proposal.EvidenceIds)
         if (!ActiveRequest.Evidence.ContainsByPredicate([&Id](const auto& Item) { return Item.EventId == Id; }) ||
@@ -303,7 +317,7 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
     AActor* Target = nullptr;
     Reason = TEXT("InvalidTarget");
     if (Proposal.Action == EDeliveryNpcAction::LookAt || Proposal.Action == EDeliveryNpcAction::MoveTo ||
-        Proposal.Action == EDeliveryNpcAction::StrikeOnce || Proposal.Action == EDeliveryNpcAction::HoldVehicle || Proposal.Action == EDeliveryNpcAction::MoveAside)
+        Proposal.Action == EDeliveryNpcAction::StrikeOnce || Proposal.Action == EDeliveryNpcAction::Fight || Proposal.Action == EDeliveryNpcAction::HoldVehicle || Proposal.Action == EDeliveryNpcAction::MoveAside)
     {
         Target = KnownSubjects.FindRef(Proposal.TargetId).Get();
         if (!CanLookAt(Target) || !Evidence.ContainsByPredicate([&Proposal](const auto& Item)
@@ -329,7 +343,7 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
             { return (Item.Kind==TEXT("SelfSpeech") || Item.Kind==TEXT("ActionReply")) && Item.ReplyToEventId==PlayerMessage; })) PlayerMessage.Invalidate();
         // 没有台词时仍要做出玩家能看见的动作，空等不能算作回应
         const bool bVisibleAction=Proposal.Action==EDeliveryNpcAction::LookAt || Proposal.Action==EDeliveryNpcAction::MoveTo ||
-            Proposal.Action==EDeliveryNpcAction::StrikeOnce || Proposal.Action==EDeliveryNpcAction::HoldVehicle ||
+            Proposal.Action==EDeliveryNpcAction::StrikeOnce || Proposal.Action==EDeliveryNpcAction::Fight || Proposal.Action==EDeliveryNpcAction::HoldVehicle ||
             Proposal.Action==EDeliveryNpcAction::ReleaseVehicle || Proposal.Action==EDeliveryNpcAction::LieDown ||
             Proposal.Action==EDeliveryNpcAction::Pace || Proposal.Action==EDeliveryNpcAction::MoveAside;
         if (PlayerMessage.IsValid() && Proposal.Speech.TrimStartAndEnd().IsEmpty() && !bVisibleAction)
@@ -422,6 +436,9 @@ bool UDeliveryNpcAgentComponent::TryFinishAction(FGuid ActionId, EDeliveryNpcAct
     // 先记下动作已经结束，再发送通知，避免通知过程中再次结束同一动作
     PublicState.Status = Result;
     PublicState.Reason = Reason;
+    const auto* FightingNpc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    const FString FightDescription=PublicState.Action==EDeliveryNpcAction::Fight && FightingNpc
+        ?FightingNpc->Combat->DescribeFight(ActionId,Reason):FString();
     // 先停止移动和尚未发生的命中，避免打断后到下一帧仍补出一拳
     if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->StopAction(ActionId);
     UE_LOG(LogDeliveryNpcAgent, Display, TEXT("Action npc=%s action=%s revision=%d result=%s reason=%s"),
@@ -439,6 +456,7 @@ bool UDeliveryNpcAgentComponent::TryFinishAction(FGuid ActionId, EDeliveryNpcAct
     ResultEvent.Addressee = IsValid(FinishedTarget)?FinishedTarget:nullptr;
     ResultEvent.Description = FString::Printf(TEXT("%s %s %s"), *DeliveryNpc::ActionName(PublicState.Action),
         *StaticEnum<EDeliveryNpcActionStatus>()->GetNameStringByValue(static_cast<int64>(Result)), *Reason.ToString());
+    if (!FightDescription.IsEmpty()) ResultEvent.Description=FightDescription;
     ResultEvent.Lifetime = 30.f;
     ObserveEvent(ResultEvent);
     RecordActionReply();

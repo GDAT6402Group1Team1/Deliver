@@ -6,6 +6,8 @@
 
 class UDeliveryNpcAgentComponent;
 class AAIController;
+class ADeliveryNpcCharacter;
+struct FDeliveryNpcPublicState;
 
 // 在行为树中执行 Agent 已检查的动作，并报告成功、失败或取消
 // 等待模型回复由 Agent 处理，这个节点只负责动作执行
@@ -23,6 +25,8 @@ public:
 private:
     void ReleaseFocus();
     bool StartNearbyMove(const FVector& Destination);
+    void TickFight(UBehaviorTreeComponent& OwnerComp,ADeliveryNpcCharacter* Npc,const FDeliveryNpcPublicState& State);
+    void FinishFight(UBehaviorTreeComponent& OwnerComp,FName Reason,bool bFailed);
     // 每个 NPC 使用自己的任务实例，动作编号和计时不会与其他 NPC 共用
     TWeakObjectPtr<UDeliveryNpcAgentComponent> Agent;
     TWeakObjectPtr<AAIController> Controller;
@@ -34,4 +38,6 @@ private:
     FVector WalkOrigin=FVector::ZeroVector;
     FVector WalkDestination=FVector::ZeroVector;
     bool bReturningToOrigin=false;
+    FGuid FightPunchId;
+    bool bFightMoveRequested=false;
 };

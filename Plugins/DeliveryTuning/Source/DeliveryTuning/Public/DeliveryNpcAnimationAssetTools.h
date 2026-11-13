@@ -14,4 +14,7 @@ public:
     // 默认保留已有主图；明确要求重建时才重新生成节点
     UFUNCTION(BlueprintCallable,Category="Delivery|Editor")
     static FString CreateBodyAnimation(bool bReplaceGraph=false);
+    // 检查保存的主图输入和受击时间连接，不修改资源
+    UFUNCTION(BlueprintCallable,Category="Delivery|Editor")
+    static FString CheckBodyAnimation();
 };

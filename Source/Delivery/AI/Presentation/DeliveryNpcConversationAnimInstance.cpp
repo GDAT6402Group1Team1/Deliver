@@ -68,9 +68,9 @@ void UDeliveryNpcConversationAnimInstance::NativeUpdateAnimation(float DeltaSeco
     // 后台完成后，本机可能仍在缓冲声音，等实际开口再结束等待姿态
     const bool bThinking=Npc->Agent->IsDecisionPending() || Npc->Presentation->IsWaitingForSpeechPlayback();
     const bool bBusyAction=State.Status==EDeliveryNpcActionStatus::Running &&
-        (State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::HoldVehicle);
+        (State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight || State.Action==EDeliveryNpcAction::HoldVehicle);
     const bool bCanLookPose=Settings && Settings->bConversationPose && !Npc->IsKnockedDown() &&
-        !Npc->Combat->IsRecovering() && !Npc->Combat->IsStriking() && !Npc->GetHeldVehicle() &&
+        !Npc->Combat->IsRecovering() && !Npc->Combat->IsStriking() && !Npc->Combat->IsReactingToHit() && !Npc->GetHeldVehicle() &&
         !bBusyAction;
     const bool bCanPose=bCanLookPose && Npc->GetVelocity().Size2D()<20;
     const bool bConversing=bListening || bThinking || Speech.bActive;

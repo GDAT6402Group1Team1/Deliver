@@ -13,18 +13,19 @@ class DELIVERY_API UDeliveryNpcBodyAnimInstance : public UAnimInstance
 {
     GENERATED_BODY()
 public:
-    enum class EPose : uint8 { Idle, Talk, Walk, Pace, Hurry, Hold, Strike, Down, GetUp };
+    enum class EPose : uint8 { Idle, Talk, Walk, Pace, Hurry, Hold, Strike, Down, GetUp, Hit };
 
     virtual void NativeInitializeAnimation() override;
     virtual void NativeUpdateAnimation(float DeltaSeconds) override;
     virtual void NativeUninitializeAnimation() override;
 
-    // 索引顺序与 ABP_NpcBody 的九个 Blend Poses 输入一致
+    // 索引顺序与 ABP_NpcBody 的十个 Blend Poses 输入一致
     UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="NPC|动作") int32 PoseIndex=0;
     UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="NPC|动作") float MovePlayRate=1;
     UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="NPC|动作") float StrikeTime=0;
     UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="NPC|动作") float DownTime=0;
     UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="NPC|动作") float GetUpTime=0;
+    UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="NPC|动作") float HitTime=0;
 
     // 起步和停步使用不同门槛，低速时不会反复切换站立与行走
     UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="NPC|步态",meta=(ClampMin="1",Units="cm/s")) float MoveStartSpeed=24;
@@ -40,6 +41,7 @@ public:
     UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="NPC|动画") TObjectPtr<UAnimSequence> AttackAnimation;
     UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="NPC|动画") TObjectPtr<UAnimSequence> DownAnimation;
     UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="NPC|动画") TObjectPtr<UAnimSequence> GetUpAnimation;
+    UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="NPC|动画") TObjectPtr<UAnimSequence> HitAnimation;
 private:
     bool bMoving=false;
 };

@@ -28,6 +28,8 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
     bStrikeStarted=false;
     StrikeFinishAt=0;
     bReturningToOrigin=false;
+    FightPunchId.Invalidate();
+    bFightMoveRequested=false;
     Controller = OwnerComp.GetAIOwner();
     APawn* Pawn = Controller.IsValid() ? Controller->GetPawn() : nullptr;
     Agent = Pawn ? Pawn->FindComponentByClass<UDeliveryNpcAgentComponent>() : nullptr;
@@ -36,7 +38,7 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
     ActionId = Action.ActionId;
     FinishAt = Pawn->GetWorld()->GetTimeSeconds() + Action.Duration;
     Controller->StopMovement();
-    if (Action.Action == EDeliveryNpcAction::LookAt || Action.Action == EDeliveryNpcAction::StrikeOnce)
+    if (Action.Action == EDeliveryNpcAction::LookAt || Action.Action == EDeliveryNpcAction::StrikeOnce || Action.Action == EDeliveryNpcAction::Fight)
     {
         FocusTarget = Action.Target;
         Controller->SetFocus(Action.Target, ResidentActionFocus);
@@ -101,6 +103,11 @@ void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerCom
     if (State.ActionId != ActionId || State.Status != EDeliveryNpcActionStatus::Running)
     {
         FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+        return;
+    }
+    if (State.Action==EDeliveryNpcAction::Fight)
+    {
+        TickFight(OwnerComp,Controller.IsValid()?Cast<ADeliveryNpcCharacter>(Controller->GetPawn()):nullptr,State);
         return;
     }
     if (State.Action==EDeliveryNpcAction::Pace || State.Action==EDeliveryNpcAction::MoveAside)
@@ -189,6 +196,73 @@ void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerCom
     }
 }
 
+void UBTTask_DeliveryExecuteNpcAction::FinishFight(UBehaviorTreeComponent& OwnerComp,FName Reason,bool bFailed)
+{
+    if (Agent.IsValid()) Agent->TryFinishAction(ActionId,
+        bFailed?EDeliveryNpcActionStatus::Failed:EDeliveryNpcActionStatus::Succeeded,Reason);
+    FinishLatentTask(OwnerComp,bFailed?EBTNodeResult::Failed:EBTNodeResult::Succeeded);
+}
+
+void UBTTask_DeliveryExecuteNpcAction::TickFight(UBehaviorTreeComponent& OwnerComp,ADeliveryNpcCharacter* Npc,const FDeliveryNpcPublicState& State)
+{
+    if (!Npc || !Controller.IsValid()) { FinishFight(OwnerComp,TEXT("AttackerUnavailable"),true); return; }
+    auto* Combat=Npc->Combat.Get();
+    const FName Stop=Combat->GetFightStopReason(ActionId);
+    if (!Stop.IsNone())
+    {
+        const bool bFinished=Stop==TEXT("TargetDown") || Stop==TEXT("TargetEscaped") || Stop==TEXT("FightTimeLimit");
+        FinishFight(OwnerComp,Stop,!bFinished);
+        return;
+    }
+    if (Combat->IsReactingToHit())
+    {
+        Controller->StopMovement();
+        bFightMoveRequested=false;
+        return;
+    }
+    const double Now=OwnerComp.GetWorld()->GetTimeSeconds();
+    if (bStrikeStarted)
+    {
+        bool bHit=false;
+        const bool bJudged=Combat->GetStrikeResult(FightPunchId,bHit);
+        // 轻拳打断时已保存未命中结果，后仰结束后可以接下一拳
+        if (Combat->GetStrikeStartTime(ActionId)<0 && !bJudged)
+        { FinishFight(OwnerComp,TEXT("StrikeCancelled"),true); return; }
+        if (Combat->GetStrikeStartTime(ActionId)>=0 && Now<StrikeFinishAt) return;
+        if (!bJudged) { FinishFight(OwnerComp,TEXT("StrikeResultMissing"),true); return; }
+        bStrikeStarted=false;
+        FightPunchId.Invalidate();
+    }
+    if (Combat->GetFightPunchCount()>=Combat->GetFightPunchLimit())
+    { FinishFight(OwnerComp,TEXT("FightPunchLimit"),false); return; }
+    if (!Combat->IsReadyToStrike()) return;
+    if (Now+UDeliveryNpcCombatComponent::StrikeWindup>FinishAt)
+    { FinishFight(OwnerComp,TEXT("FightTimeLimit"),false); return; }
+    if (Combat->CanStrike(State.Target))
+    {
+        Controller->StopMovement(); bFightMoveRequested=false;
+        FightPunchId=FGuid::NewGuid();
+        bStrikeStarted=Combat->StartFightStrike(State.Target,ActionId,FightPunchId);
+        if (!bStrikeStarted) { FinishFight(OwnerComp,TEXT("StrikeStartRejected"),true); return; }
+        StrikeFinishAt=Now+UDeliveryNpcCombatComponent::StrikeDuration;
+        return;
+    }
+    if (Controller->GetMoveStatus()==EPathFollowingStatus::Idle)
+    {
+        if (bFightMoveRequested) { FinishFight(OwnerComp,TEXT("PathInterrupted"),true); return; }
+        FAIMoveRequest Request(State.Target);
+        Request.SetNavigationFilter(Controller->GetDefaultNavigationFilterClass());
+        Request.SetAcceptanceRadius(FMath::Max(10.f,Combat->StrikeRange-25.f));
+        Request.SetReachTestIncludesAgentRadius(false);
+        Request.SetReachTestIncludesGoalRadius(false);
+        Request.SetAllowPartialPath(false);
+        const auto Result=Controller->MoveTo(Request).Code;
+        if (Result!=EPathFollowingRequestResult::RequestSuccessful)
+        { FinishFight(OwnerComp,TEXT("PathUnavailable"),true); return; }
+        bFightMoveRequested=true;
+    }
+}
+
 EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::AbortTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
     if (Agent.IsValid()) Agent->TryFinishAction(ActionId, EDeliveryNpcActionStatus::Cancelled, TEXT("BehaviorTreeAbort"));
@@ -218,5 +292,7 @@ void UBTTask_DeliveryExecuteNpcAction::OnTaskFinished(UBehaviorTreeComponent& Ow
     bStrikeStarted=false;
     StrikeFinishAt=0;
     bReturningToOrigin=false;
+    FightPunchId.Invalidate();
+    bFightMoveRequested=false;
     Super::OnTaskFinished(OwnerComp, NodeMemory, TaskResult);
 }

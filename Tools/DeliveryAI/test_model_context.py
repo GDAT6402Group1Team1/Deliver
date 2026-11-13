@@ -121,6 +121,28 @@ class ModelContextTests(unittest.TestCase):
         self.assertIsNone(compact['last_complete_player_reply_id'])
         self.assertEqual(compact['recent_self_speech_ids'], [own['event_id']])
 
+    def test_fight_result_keeps_the_actual_outcome_and_does_not_complete_player_reply(self):
+        context = dict(make_cases(self.profile))['named_provoke']
+        neighbor = next(item for item in context['subjects']
+                        if item['kind'] == 'npc' and item['subject_id'] != context['self_subject_id'])
+        player = next(item for item in context['evidence'] if item['kind'] == 'PlayerSpeech')
+        result = {'event_id':str(uuid.uuid4()), 'subject_id':context['self_subject_id'],
+                  'addressee_id':neighbor['subject_id'], 'kind':'ActionFinished',
+                  'source':'ActionResult', 'reply_to_event_id':player['event_id'],
+                  'description':'Fight Succeeded；挥拳2次，命中0次；目标离开范围，已停止追赶'}
+        context['evidence'].append(result)
+        original = copy.deepcopy(context)
+        encoded = model_context(context)
+        outcome = encoded['evidence'][-1]
+        names = {item['subject_id']:item['name'] for item in encoded['subjects']}
+        self.assertEqual(outcome['description'], result['description'])
+        self.assertEqual(outcome['source'], 'ActionResult')
+        self.assertEqual(names[outcome['subject_id']], self.profile['display_name'])
+        self.assertEqual(names[outcome['addressee_id']], neighbor['name'])
+        self.assertEqual(encoded['pending_player_message']['event_id'], outcome['reply_to_event_id'])
+        self.assertIsNone(encoded['last_complete_player_reply_id'])
+        self.assertEqual(context, original)
+
     def test_optional_identity_fields_are_checked_without_breaking_old_clients(self):
         context = dict(make_cases(self.profile))['named_provoke']
         validate_context(context)

@@ -147,7 +147,7 @@ bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid
 bool ADeliveryNpcCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target) const
 {
     if (Action==EDeliveryNpcAction::GetUp) return Combat->IsDown();
-    if (IsKnockedDown()) return false;
+    if (IsKnockedDown() || (Combat->IsReactingToHit() && Action!=EDeliveryNpcAction::Fight)) return false;
     if (Action==EDeliveryNpcAction::ReleaseVehicle) return GetHeldVehicle()!=nullptr;
     if (GetHeldVehicle()) return Action==EDeliveryNpcAction::Wait || Action==EDeliveryNpcAction::LookAt;
     if (Action==EDeliveryNpcAction::Pace || Action==EDeliveryNpcAction::MoveAside)
@@ -157,6 +157,8 @@ bool ADeliveryNpcCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target)
     }
     if (Action==EDeliveryNpcAction::StrikeOnce)
         return Cast<AAIController>(GetController()) && Combat->CanApproachStrike(Target);
+    if (Action==EDeliveryNpcAction::Fight)
+        return Cast<AAIController>(GetController()) && Combat->CanBeginFight(Target);
     if (Action==EDeliveryNpcAction::HoldVehicle)
     { const auto* Bike=Cast<ADeliveryMotorbike>(Target); return Bike && Bike->ResidentHold && Bike->ResidentHold->CanHold(this); }
     if (Action==EDeliveryNpcAction::MoveTo)
@@ -256,16 +258,17 @@ bool ADeliveryNpcCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
     if (!HasAuthority() || ExecutingAction.IsValid() || !CanExecute(State.Action,State.Target)) return false;
     ExecutingAction=State.ActionId;
     if (State.Action==EDeliveryNpcAction::Pace || State.Action==EDeliveryNpcAction::MoveAside ||
-        State.Action==EDeliveryNpcAction::MoveTo || State.Action==EDeliveryNpcAction::StrikeOnce)
+        State.Action==EDeliveryNpcAction::MoveTo || State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight)
     {
         PreviousActionWalkSpeed=GetCharacterMovement()->MaxWalkSpeed;
         GetCharacterMovement()->MaxWalkSpeed=State.Action==EDeliveryNpcAction::Pace?PaceSpeed:
-            State.Action==EDeliveryNpcAction::StrikeOnce?AngryApproachSpeed:WalkSpeed;
+            (State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight)?AngryApproachSpeed:WalkSpeed;
     }
     bool bStarted=true;
     // 攻击目标还在远处时，由行为树先靠近；到达前不会启动命中判定
     if (State.Action==EDeliveryNpcAction::StrikeOnce && Combat->CanStrike(State.Target))
         bStarted=Combat->StartStrike(State.Target,State.ActionId);
+    else if (State.Action==EDeliveryNpcAction::Fight) bStarted=Combat->BeginFight(State.Target,State.ActionId,State.Duration);
     else if (State.Action==EDeliveryNpcAction::HoldVehicle) bStarted=CastChecked<ADeliveryMotorbike>(State.Target)->ResidentHold->TryHold(this,State.ActionId);
     else if (State.Action==EDeliveryNpcAction::ReleaseVehicle) { if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("VoluntaryRelease")); }
     else if (State.Action==EDeliveryNpcAction::LieDown) bStarted=Combat->SetDeliberateProne(true);
@@ -287,7 +290,7 @@ void ADeliveryNpcCharacter::StopAction(FGuid Id)
         GetCharacterMovement()->MaxWalkSpeed=IsKnockedDown()?0.f:PreviousActionWalkSpeed;
         PreviousActionWalkSpeed=-1;
     }
-    Combat->CancelStrike(); if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("ActionEnded")); ExecutingAction.Invalidate();
+    Combat->EndFight(Id); Combat->CancelStrike(); if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("ActionEnded")); ExecutingAction.Invalidate();
 }
 void ADeliveryNpcCharacter::SetHeldVehicle(UDeliveryVehicleHoldComponent* Hold)
 {
@@ -327,7 +330,7 @@ void ADeliveryNpcCharacter::Tick(float Dt)
         LastFinishedAction=State.ActionId;
         if (State.Status!=EDeliveryNpcActionStatus::Succeeded || (State.Action!=EDeliveryNpcAction::Wait && State.Action!=EDeliveryNpcAction::LookAt)) bDecisionNeeded=true;
     }
-    if (bDecisionNeeded && !Presentation->HasPendingSpeech() && !IsKnockedDown() && !Agent->HasActiveAction() && !Agent->IsDecisionPending() && GetWorld()->GetTimeSeconds()>=NextDecision)
+    if (bDecisionNeeded && !Presentation->HasPendingSpeech() && !IsKnockedDown() && !Combat->IsReactingToHit() && !Agent->HasActiveAction() && !Agent->IsDecisionPending() && GetWorld()->GetTimeSeconds()>=NextDecision)
     { NextDecision=GetWorld()->GetTimeSeconds()+4; if (Agent->RequestDecision()) bDecisionNeeded=false; }
 }
 void ADeliveryNpcCharacter::EndPlay(const EEndPlayReason::Type Reason)

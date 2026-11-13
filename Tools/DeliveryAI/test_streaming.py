@@ -181,6 +181,26 @@ class ContextTests(unittest.TestCase):
         self.assertEqual(proposal['evidence_ids'],[event])
 
 class SentenceTests(unittest.TestCase):
+    def test_fight_stream_uses_the_offered_action_and_cannot_add_another(self):
+        data=request()
+        evidence=data['evidence'][0]
+        data['allowed_actions'] += ['Fight','StrikeOnce']
+        fight={'action':'Fight','target_id':evidence['subject_id'],'duration':5,
+               'evidence_ids':[evidence['event_id']]}
+        data['candidates'].extend([{**fight,'action':'StrikeOnce','duration':2},fight])
+        validate_context(data)
+        events=[]
+        parser=SentenceParser(data,validate_action,lambda kind,value:events.append((kind,value)))
+        parser.feed('{"candidate_index":2,"speech":"你给我站住！","emotion":"Angry"}')
+        for key,value in fight.items():
+            self.assertEqual(parser.proposal[key],value)
+        self.assertEqual([kind for kind,_ in events],['proposal','sentence'])
+        parser.feed('\n{"speech":"我跟你没完！"}')
+        self.assertEqual(events[-1][1]['sequence'],1)
+        with self.assertRaises(ValueError):
+            parser.feed('\n{"candidate_index":1,"speech":"再来一拳！"}')
+        self.assertEqual(sum(kind=='proposal' for kind,_ in events),1)
+
     def test_silent_action_finishes_without_generating_a_sentence(self):
         for action in ('Wait','LookAt','ReleaseVehicle'):
             with self.subTest(action=action):

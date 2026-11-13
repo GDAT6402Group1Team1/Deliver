@@ -19,6 +19,7 @@ class DELIVERY_API UDeliveryNpcAgentComponent : public UActorComponent
     friend class FDeliveryNpcStrikeApproachTest;
     friend class FDeliveryNpcStrikeNavigationTest;
     friend class FDeliveryNpcBodyAnimationTest;
+    friend class FDeliveryNpcFightTest;
     friend class FDeliveryNpcSpeechStreamTest;
     friend class FDeliveryResidentIntegrationTest;
     friend class FDeliveryResidentPIECommand;
@@ -46,6 +47,8 @@ public:
     UFUNCTION(BlueprintPure, Category="Delivery|AI") FDeliveryNpcPublicState GetPublicState() const { return PublicState; }
     UFUNCTION(BlueprintPure, Category="Delivery|AI") bool HasActiveAction() const;
     UFUNCTION(BlueprintPure, Category="Delivery|AI") bool IsDecisionPending() const { return bDecisionPending; }
+    // 当前模型请求是否已经包含这个人的攻击，避免每次轻拳都重新开始思考
+    bool IsRespondingToAttackFrom(const AActor* Attacker) const;
     // 玩家插话时停止旧交谈，记下说话者并开始倾听
     void BeginListening(AActor* Speaker, FGuid MessageId);
     void EndListening();

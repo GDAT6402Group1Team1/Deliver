@@ -47,6 +47,65 @@ class ContractTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 decide({**request, **mutation}, "fixture")
 
+    def test_fight_requires_an_offered_target_and_keeps_strike_once_separate(self):
+        request = context()
+        evidence = request['evidence'][0]
+        fight = {'action':'Fight', 'target_id':evidence['subject_id'], 'duration':5,
+                 'evidence_ids':[evidence['event_id']]}
+        strike = {**fight, 'action':'StrikeOnce', 'duration':2}
+        request['allowed_actions'] += ['Fight', 'StrikeOnce']
+        request['candidates'] = [fight, strike]
+        validate_context(request)
+        for action in (fight, strike):
+            with self.subTest(action=action['action']):
+                result = validate_action(request, action)
+                self.assertEqual(result['action'], action['action'])
+                self.assertEqual(result['duration'], action['duration'])
+                self.assertEqual(result['target_id'], evidence['subject_id'])
+        for mutation in ({'target_id':''}, {'target_id':str(uuid.uuid4())},
+                         {'evidence_ids':[]}, {'duration':5.1}):
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                validate_action(request, {**fight, **mutation})
+        request['candidates'] = [strike]
+        with self.assertRaisesRegex(ValueError, 'not offered'):
+            validate_action(request, fight)
+
+    def test_duration_cannot_exceed_the_same_action_and_target_candidate(self):
+        request = context()
+        first = request['evidence'][0]
+        second = {**first, 'event_id':str(uuid.uuid4()), 'subject_id':str(uuid.uuid4())}
+        request['evidence'].append(second)
+        request['allowed_actions'] += ['Fight', 'StrikeOnce']
+        fight = {'action':'Fight', 'target_id':first['subject_id'], 'duration':2,
+                 'evidence_ids':[first['event_id']]}
+        request['candidates'] = [fight,
+            {**fight, 'target_id':second['subject_id'], 'evidence_ids':[second['event_id']], 'duration':5},
+            {**fight, 'action':'StrikeOnce', 'duration':4}]
+        validate_context(request)
+        for duration in (1.2, 1.5, 2):
+            self.assertEqual(validate_action(request, {**fight, 'duration':duration})['duration'], duration)
+        for duration in (2.01, 4, 5):
+            with self.subTest(duration=duration), self.assertRaisesRegex(ValueError, 'duration exceeds'):
+                validate_action(request, {**fight, 'duration':duration})
+
+    def test_fight_minimum_duration_matches_game_without_changing_other_actions(self):
+        request = context()
+        evidence = request['evidence'][0]
+        fight = {'action':'Fight', 'target_id':evidence['subject_id'], 'duration':5,
+                 'evidence_ids':[evidence['event_id']]}
+        request['allowed_actions'] += ['Fight', 'StrikeOnce']
+        for duration in (0.1, 1, 1.199):
+            short_fight = {**fight, 'duration':duration}
+            with self.subTest(duration=duration):
+                with self.assertRaisesRegex(ValueError, 'fight duration too short'):
+                    validate_action(request, short_fight)
+                with self.assertRaisesRegex(ValueError, 'fight duration too short'):
+                    validate_context({**request, 'candidates':[short_fight]})
+        self.assertEqual(validate_action(request, {**fight, 'duration':1.2})['duration'], 1.2)
+        self.assertEqual(validate_action(request, {**fight, 'action':'StrikeOnce', 'duration':0.1})['duration'], 0.1)
+        wait = {'action':'Wait', 'target_id':'', 'duration':0.1, 'evidence_ids':[]}
+        self.assertEqual(validate_action(request, wait)['duration'], 0.1)
+
     def test_pacing_has_no_target_and_moving_aside_keeps_the_person_target(self):
         request = context()
         person = request['evidence'][0]

@@ -35,7 +35,7 @@ FString DeliveryNpc::ActionName(EDeliveryNpcAction Action)
 {
     if (Action == EDeliveryNpcAction::Wait) return TEXT("Wait");
     if (Action == EDeliveryNpcAction::LookAt) return TEXT("LookAt");
-    for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp,EDeliveryNpcAction::Pace,EDeliveryNpcAction::MoveAside})
+    for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp,EDeliveryNpcAction::Pace,EDeliveryNpcAction::MoveAside,EDeliveryNpcAction::Fight})
         if (Action==Value) return StaticEnum<EDeliveryNpcAction>()->GetNameStringByValue(int64(Value));
     return TEXT("None");
 }
@@ -96,7 +96,7 @@ FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
         auto Item=MakeShared<FJsonObject>();
         Item->SetStringField(TEXT("action"),ActionName(Entry.Action));
         Item->SetStringField(TEXT("target_id"),Entry.TargetId.IsValid()?Id(Entry.TargetId):TEXT(""));
-        const bool bNeedsMovementTime=Entry.Action==EDeliveryNpcAction::StrikeOnce || Entry.Action==EDeliveryNpcAction::Pace || Entry.Action==EDeliveryNpcAction::MoveAside;
+        const bool bNeedsMovementTime=Entry.Action==EDeliveryNpcAction::StrikeOnce || Entry.Action==EDeliveryNpcAction::Fight || Entry.Action==EDeliveryNpcAction::Pace || Entry.Action==EDeliveryNpcAction::MoveAside;
         Item->SetNumberField(TEXT("duration"),bNeedsMovementTime?5.0:4.0);
         TArray<TSharedPtr<FJsonValue>> Refs;
         for (const auto& Ref : Entry.EvidenceIds) Refs.Add(MakeShared<FJsonValueString>(Id(Ref)));
@@ -130,7 +130,7 @@ bool DeliveryNpc::DecodeProposal(const FString& Json, FDeliveryNpcDecisionPropos
     else if (Action == TEXT("LookAt")) Parsed.Action = EDeliveryNpcAction::LookAt;
     else
     {
-        for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp,EDeliveryNpcAction::Pace,EDeliveryNpcAction::MoveAside})
+        for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp,EDeliveryNpcAction::Pace,EDeliveryNpcAction::MoveAside,EDeliveryNpcAction::Fight})
             if (Action==ActionName(Value)) Parsed.Action=Value;
         if (Parsed.Action==EDeliveryNpcAction::None) { Reason=TEXT("UnsupportedAction"); return false; }
     }

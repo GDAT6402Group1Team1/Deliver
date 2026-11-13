@@ -260,6 +260,33 @@ bool FDeliveryNpcStrikeNavigationTest::RunTest(const FString&)
     TestTrue(TEXT("打断后停止沿旧路径行走"),FVector::Dist2D(CancelledAt,A->GetActorLocation())<5);
     if (AI->BrainComponent) AI->BrainComponent->StopLogic(TEXT("MovementTestFinished"));
 
+    // 同一套导航再执行持续交战，验证身体确实追近，并在一轮结束后停手
+    Tick(6);
+    A->SetActorLocation(FVector(0,0,90)); B->SetActorLocation(FVector(400,0,90));
+    A->GetCharacterMovement()->StopMovementImmediately(); B->GetCharacterMovement()->StopMovementImmediately();
+    const FVector FightOrigin=A->GetActorLocation();
+    if (!TestTrue(TEXT("完整导航允许模型选择持续交战"),StartMove(EDeliveryNpcAction::Fight))) return false;
+    bool bFightOutsideRange=false;
+    FGuid LastPunch;
+    for (int32 Step=0;Step<275;++Step)
+    {
+        Tick(.02f);
+        const FGuid Punch=A->Combat->GetCurrentPunchId();
+        if (Punch.IsValid() && Punch!=LastPunch)
+        {
+            LastPunch=Punch;
+            bFightOutsideRange|=FVector::Dist(A->GetActorLocation(),B->GetActorLocation())>A->Combat->StrikeRange+.1f;
+        }
+        if (DeliveryNpc::IsTerminal(A->Agent->GetPublicState().Status)) break;
+    }
+    if (AI->BrainComponent) AI->BrainComponent->StopLogic(TEXT("FightNavigationFinished"));
+    TestTrue(TEXT("持续交战确实沿导航追近目标"),FVector::Dist2D(FightOrigin,A->GetActorLocation())>200);
+    TestFalse(TEXT("持续交战也不会隔空启动挥拳"),bFightOutsideRange);
+    TestTrue(TEXT("追近后发生真实轻拳命中"),A->Combat->GetFightHitCount()>0);
+    TestTrue(TEXT("导航交战遵守每轮三拳上限"),A->Combat->GetFightPunchCount()<=3);
+    TestFalse(TEXT("这一轮轻拳不会按旧规则一拳击倒"),B->IsKnockedDown());
+    TestEqual(TEXT("交战结束后恢复普通速度"),A->GetCharacterMovement()->MaxWalkSpeed,A->WalkSpeed);
+
     // 用实际碰撞体阻挡两边，完整导航网格也不能绕过落点碰撞检查
     const FVector ToTarget=(B->GetActorLocation()-A->GetActorLocation()).GetSafeNormal2D();
     const FVector Side=FVector::CrossProduct(FVector::UpVector,ToTarget).GetSafeNormal();
