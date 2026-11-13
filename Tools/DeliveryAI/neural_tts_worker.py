@@ -18,6 +18,7 @@ import wave
 
 from neural_tts import (NeuralTtsError, load_voice_config, neural_voice_identities,
                         neural_voice_speakers, project_path)
+from neural_audio_stream import AudioChunkStream
 
 
 VENDOR_HASHES = {
@@ -121,6 +122,10 @@ class WorkerRequests:
                 raise ValueError('invalid_command')
             text = message.get('text')
             voice = message.get('voice')
+            chunk_frames = message.get('chunk_frames', 0)
+            if type(chunk_frames) is not int or chunk_frames not in (0, 4, 8):
+                self.send({'type': 'error', 'task_id': task_id, 'code': 'neural_tts_invalid_chunk_frames'})
+                return
             if (not isinstance(text, str) or not text.strip() or len(text) > 120
                     or not isinstance(voice, str) or voice not in self.speakers
                     or message.get('emotion') not in ('Calm', 'Angry', 'Surprised')):
@@ -130,7 +135,7 @@ class WorkerRequests:
                 self.send({'type': 'error', 'task_id': task_id, 'code': 'neural_tts_busy'})
                 return
             self.current = SimpleNamespace(task_id=task_id, text=text, voice=voice, speaker=self.speakers[voice],
-                                           cancel=threading.Event())
+                                           cancel=threading.Event(), chunk_frames=chunk_frames)
             self.pending.put_nowait(self.current)
 
     def finish(self, task):
@@ -303,32 +308,35 @@ class QwenEngine:
     def synchronize(self):
         self.torch.cuda.synchronize()
 
-    def synthesize(self, task, closed):
+    def synthesize(self, task, closed, on_chunk=None):
         torch, np = self.torch, self.np
         deadline = time.monotonic() + self.config['synthesis_timeout_seconds']
         check_cancel(task.cancel, closed, deadline)
         torch.manual_seed(self.config['seed'])
         torch.cuda.manual_seed_all(self.config['seed'])
-        with generation_controls(self, task.cancel, closed, deadline), torch.inference_mode():
-            wavs, rate = self.model.generate_custom_voice(
-                text=task.text, language='Chinese', speaker=task.speaker, non_streaming_mode=True,
-                max_new_tokens=256, do_sample=True, top_k=50, top_p=1.0, temperature=.9,
-                repetition_penalty=1.05, subtalker_dosample=True, subtalker_top_k=50,
-                subtalker_top_p=1.0, subtalker_temperature=.9)
-        self.synchronize()
-        check_cancel(task.cancel, closed, deadline)
-        if rate != 24000 or len(wavs) != 1:
-            raise NeuralTtsError('neural_tts_invalid_audio_format')
-        values = np.asarray(wavs[0], dtype=np.float32)
-        if values.ndim != 1 or not values.size or not np.isfinite(values).all():
-            raise NeuralTtsError('neural_tts_invalid_pcm')
-        if values.size * 2 > self.config['max_pcm_bytes']:
-            raise NeuralTtsError('neural_tts_audio_too_long')
-        clipped = int(np.count_nonzero(np.abs(values) > 1.0))
-        pcm = np.rint(np.clip(values, -1.0, 1.0) * 32767).astype('<i2').tobytes()
-        return {'type': 'audio', 'task_id': task.task_id, 'pcm': base64.b64encode(pcm).decode('ascii'),
-                'sample_rate': 24000, 'voice_name': task.speaker, 'frames': int(values.size),
-                'clipped_samples': clipped}
+        with AudioChunkStream(self, task, lambda: check_cancel(task.cancel, closed, deadline), on_chunk) as stream:
+            with generation_controls(self, task.cancel, closed, deadline), torch.inference_mode():
+                wavs, rate = self.model.generate_custom_voice(
+                    text=task.text, language='Chinese', speaker=task.speaker, non_streaming_mode=True,
+                    max_new_tokens=256, do_sample=True, top_k=50, top_p=1.0, temperature=.9,
+                    repetition_penalty=1.05, subtalker_dosample=True, subtalker_top_k=50,
+                    subtalker_top_p=1.0, subtalker_temperature=.9)
+            self.synchronize()
+            check_cancel(task.cancel, closed, deadline)
+            if rate != 24000 or len(wavs) != 1:
+                raise NeuralTtsError('neural_tts_invalid_audio_format')
+            values = np.asarray(wavs[0], dtype=np.float32)
+            if values.ndim != 1 or not values.size or not np.isfinite(values).all():
+                raise NeuralTtsError('neural_tts_invalid_pcm')
+            if values.size * 2 > self.config['max_pcm_bytes']:
+                raise NeuralTtsError('neural_tts_audio_too_long')
+            if stream.chunk_frames:
+                return stream.finish(int(values.size) * 2)
+            clipped = int(np.count_nonzero(np.abs(values) > 1.0))
+            pcm = np.rint(np.clip(values, -1.0, 1.0) * 32767).astype('<i2').tobytes()
+            return {'type': 'audio', 'task_id': task.task_id, 'pcm': base64.b64encode(pcm).decode('ascii'),
+                    'sample_rate': 24000, 'voice_name': task.speaker, 'frames': int(values.size),
+                    'clipped_samples': clipped}
 
 
 @contextmanager
@@ -405,7 +413,7 @@ class QwenCloneEngine:
     def synchronize(self):
         self.torch.cuda.synchronize()
 
-    def synthesize(self, task, closed):
+    def synthesize(self, task, closed, on_chunk=None):
         torch, np = self.torch, self.np
         deadline = time.monotonic() + self.config['synthesis_timeout_seconds']
         check_cancel(task.cancel, closed, deadline)
@@ -413,26 +421,29 @@ class QwenCloneEngine:
         torch.cuda.manual_seed_all(self.config['seed'])
         # Graph 只在配置明确选择时使用；取消或异常后，两条路径都会还原模型方法
         controls = generation_controls if self.predictor_mode == 'cuda_graph' else clone_generation_controls
-        with controls(self, task.cancel, closed, deadline), torch.inference_mode():
-            wavs, rate = self.model.generate_voice_clone(
-                text=task.text, language='Chinese', voice_clone_prompt=self.prompt, non_streaming_mode=True,
-                max_new_tokens=256, do_sample=True, top_k=50, top_p=1.0, temperature=.9,
-                repetition_penalty=1.05, subtalker_dosample=True, subtalker_top_k=50,
-                subtalker_top_p=1.0, subtalker_temperature=.9)
-        self.synchronize()
-        check_cancel(task.cancel, closed, deadline)
-        if rate != 24000 or len(wavs) != 1:
-            raise NeuralTtsError('neural_tts_invalid_audio_format')
-        values = np.asarray(wavs[0], dtype=np.float32)
-        if values.ndim != 1 or not values.size or not np.isfinite(values).all():
-            raise NeuralTtsError('neural_tts_invalid_pcm')
-        if values.size * 2 > self.config['max_pcm_bytes']:
-            raise NeuralTtsError('neural_tts_audio_too_long')
-        clipped = int(np.count_nonzero(np.abs(values) > 1.0))
-        pcm = np.rint(np.clip(values, -1.0, 1.0) * 32767).astype('<i2').tobytes()
-        return {'type': 'audio', 'task_id': task.task_id, 'pcm': base64.b64encode(pcm).decode('ascii'),
-                'sample_rate': 24000, 'voice_name': self.entry['speaker'], 'frames': int(values.size),
-                'clipped_samples': clipped}
+        with AudioChunkStream(self, task, lambda: check_cancel(task.cancel, closed, deadline), on_chunk) as stream:
+            with controls(self, task.cancel, closed, deadline), torch.inference_mode():
+                wavs, rate = self.model.generate_voice_clone(
+                    text=task.text, language='Chinese', voice_clone_prompt=self.prompt, non_streaming_mode=True,
+                    max_new_tokens=256, do_sample=True, top_k=50, top_p=1.0, temperature=.9,
+                    repetition_penalty=1.05, subtalker_dosample=True, subtalker_top_k=50,
+                    subtalker_top_p=1.0, subtalker_temperature=.9)
+            self.synchronize()
+            check_cancel(task.cancel, closed, deadline)
+            if rate != 24000 or len(wavs) != 1:
+                raise NeuralTtsError('neural_tts_invalid_audio_format')
+            values = np.asarray(wavs[0], dtype=np.float32)
+            if values.ndim != 1 or not values.size or not np.isfinite(values).all():
+                raise NeuralTtsError('neural_tts_invalid_pcm')
+            if values.size * 2 > self.config['max_pcm_bytes']:
+                raise NeuralTtsError('neural_tts_audio_too_long')
+            if stream.chunk_frames:
+                return stream.finish(int(values.size) * 2)
+            clipped = int(np.count_nonzero(np.abs(values) > 1.0))
+            pcm = np.rint(np.clip(values, -1.0, 1.0) * 32767).astype('<i2').tobytes()
+            return {'type': 'audio', 'task_id': task.task_id, 'pcm': base64.b64encode(pcm).decode('ascii'),
+                    'sample_rate': 24000, 'voice_name': self.entry['speaker'], 'frames': int(values.size),
+                    'clipped_samples': clipped}
 
 
 class QwenVoiceEngines:
@@ -444,11 +455,19 @@ class QwenVoiceEngines:
         if config['voices']['female']['provider'] == 'qwen_base':
             self.engines['female'] = QwenCloneEngine(config, closed, self.custom, check_startup=check_startup)
 
-    def synthesize(self, task, closed):
+    def synthesize(self, task, closed, on_chunk=None):
         engine = self.engines.get(task.voice)
         if engine is None or task.speaker != self.identities[task.voice]['speaker']:
             raise NeuralTtsError('neural_tts_invalid_speech')
-        result = engine.synthesize(task, closed)
+        if getattr(task, 'chunk_frames', 0):
+            def forward_chunk(message):
+                message['voice_identity'] = self.identities[task.voice]
+                on_chunk(message)
+            if not callable(on_chunk):
+                raise NeuralTtsError('neural_tts_stream_callback_missing')
+            result = engine.synthesize(task, closed, forward_chunk)
+        else:
+            result = engine.synthesize(task, closed)
         result['voice_identity'] = self.identities[task.voice]
         return result
 
@@ -503,7 +522,7 @@ def main():
             send({'type': 'startup_checked', 'imports_only': True})
             requests.closed.wait(20)
             return 0
-        send({'type': 'ready', 'protocol_version': 1, 'voice_name': 'Uncle_Fu',
+        send({'type': 'ready', 'protocol_version': 1, 'audio_stream_version': 1, 'voice_name': 'Uncle_Fu',
               'voices': speakers, 'voice_identities': neural_voice_identities(config), 'sample_rate': 24000})
         while not requests.closed.is_set() or not requests.pending.empty():
             try:
@@ -513,7 +532,7 @@ def main():
             started = time.monotonic()
             try:
                 with redirect_stdout(sys.stderr):
-                    message = engine.synthesize(task, requests.closed)
+                    message = engine.synthesize(task, requests.closed, on_chunk=send)
             except Exception as error:
                 code = error.code if isinstance(error, NeuralTtsError) else 'neural_tts_generation_failed'
                 print(f'qwen task={task.task_id} failed={code} exception={type(error).__name__}', file=sys.stderr, flush=True)

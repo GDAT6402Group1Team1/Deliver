@@ -65,6 +65,8 @@ def validate_context(context):
         raise ValueError("context must be an object")
     if context.get('request_source', 'ambient') not in ('player', 'ambient') or context.get('voice', 'male') not in ('male', 'female'):
         raise ValueError('invalid request options')
+    if context.get('speech_transport', 'sentence') not in ('sentence', 'pcm_chunks_v1'):
+        raise ValueError('invalid speech transport')
     for key in ("protocol_version", "capability_version"):
         if type(context.get(key)) is not int or context[key] != 1:
             raise ValueError("unsupported version")

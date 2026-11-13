@@ -467,6 +467,15 @@ def run_job(job, provider, validate, fallback):
     model_finished = False
     job.completion = concurrent.futures.Future()
     first_sentence = True
+    transport_logged = False
+
+    def report_transport(mode, reason):
+        nonlocal transport_logged
+        with completion_lock:
+            if transport_logged:
+                return
+            transport_logged = True
+        print(f"latency request={job.key[2]} stage=transport_selected transport={mode} reason={reason}", flush=True)
 
     def finish_reply(_=None):
         with completion_lock:
@@ -489,11 +498,48 @@ def run_job(job, provider, validate, fallback):
     def synthesize(sentence, queued_at):
         started = time.monotonic()
         queue_ms = int((started-queued_at)*1000)
+        stream_started = False
+        chunk_count = total_bytes = 0
         try:
             if job.cancel.is_set():
                 return
-            synth = (neural_speech_synthesizer() if uses_neural_speech(job.context.get('voice', 'male'))
-                     else speech_synthesizer())
+            neural = uses_neural_speech(job.context.get('voice', 'male'))
+            synth = neural_speech_synthesizer() if neural else speech_synthesizer()
+            stream_requested = (neural and job.context.get('speech_transport') == 'pcm_chunks_v1'
+                                and os.environ.get('DELIVERY_AI_STREAM_AUDIO') == '1')
+            if stream_requested:
+                synth.prepare(job.cancel)
+            if stream_requested and synth.supports_audio_stream:
+                report_transport('pcm_chunks_v1', 'negotiated')
+                job.emit('speech_begin', **sentence, sample_rate=24000, audio_stream_version=1)
+                stream_started = True
+                def on_chunk(pcm):
+                    nonlocal chunk_count, total_bytes
+                    job.emit('audio_chunk', sequence=sentence['sequence'], chunk_index=chunk_count,
+                             offset_bytes=total_bytes, pcm=base64.b64encode(pcm).decode())
+                    if not chunk_count:
+                        print(f"latency request={job.key[2]} stage=first_audio_chunk sentence={sentence['sequence']} "
+                              f"tts_queue_ms={queue_ms} tts_ms={int((time.monotonic()-started)*1000)} "
+                              f"elapsed_ms={int((time.monotonic()-job.created)*1000)}", flush=True)
+                    chunk_count += 1
+                    total_bytes += len(pcm)
+                received_bytes, rate = synth.synthesize_stream(
+                    sentence['text'], job.context.get('voice', 'male'), sentence['emotion'], job.cancel, on_chunk)
+                if received_bytes != total_bytes or rate != 24000:
+                    raise ValueError('speech_stream_size_mismatch')
+                if job.cancel.is_set():
+                    return
+                job.emit('audio_end', sequence=sentence['sequence'], status='completed',
+                         chunk_count=chunk_count, total_pcm_bytes=total_bytes)
+                print(f"latency request={job.key[2]} stage=audio_ready sentence={sentence['sequence']} "
+                      f"tts_queue_ms={queue_ms} tts_ms={int((time.monotonic()-started)*1000)} "
+                      f"elapsed_ms={int((time.monotonic()-job.created)*1000)} "
+                      f"voice_name={json.dumps(getattr(synth,'voice_name',''),ensure_ascii=False)}", flush=True)
+                return
+            reason = ('non_neural' if not neural else 'not_requested' if
+                      job.context.get('speech_transport') != 'pcm_chunks_v1' else
+                      'disabled' if not stream_requested else 'worker_unsupported')
+            report_transport('sentence', reason)
             pcm, rate = synth.synthesize(sentence['text'], job.context.get('voice', 'male'), sentence['emotion'], job.cancel)
             if job.cancel.is_set():
                 return
@@ -504,7 +550,13 @@ def run_job(job, provider, validate, fallback):
                   f"voice_name={json.dumps(getattr(synth,'voice_name',''),ensure_ascii=False)}", flush=True)
         except Exception as error:
             if not job.cancel.is_set():
-                job.emit('sentence', **sentence, pcm='', sample_rate=16000, audio_error=type(error).__name__)
+                if stream_started:
+                    # 同一句出错时通知停止已有声音，不能再补发一条重复的字幕或完整句事件
+                    job.emit('audio_end', sequence=sentence['sequence'], status='failed',
+                             chunk_count=chunk_count, total_pcm_bytes=total_bytes,
+                             audio_error=getattr(error, 'code', type(error).__name__))
+                else:
+                    job.emit('sentence', **sentence, pcm='', sample_rate=16000, audio_error=type(error).__name__)
     def emit(kind, data):
         nonlocal first_sentence
         if job.cancel.is_set():

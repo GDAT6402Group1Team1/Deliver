@@ -23,9 +23,23 @@ class Job:
         if kind == 'error':
             self.fail(data.get('reason', 'reply_failed'))
             return
-        if self.cancel.is_set():
-            return
-        self.events.put({'type': kind, 'request_id': self.key[2], **data}, timeout=2)
+        event = {'type': kind, 'request_id': self.key[2], **data}
+        deadline = time.monotonic() + 2
+        while True:
+            # 和取消共用同一把锁，避免排队等待结束后又塞入已取消的声音
+            with self._terminal_lock:
+                if self.cancel.is_set():
+                    return
+                try:
+                    self.events.put_nowait(event)
+                    return
+                except queue.Full:
+                    pass
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self.fail('reply_queue_full')
+                raise queue.Full('reply_queue_full')
+            self.cancel.wait(min(.05, remaining))
 
     def fail(self, reason):
         """内部失败停止剩余工作，同时保留一次发给游戏的错误通知"""
