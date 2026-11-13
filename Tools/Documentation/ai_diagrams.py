@@ -33,7 +33,7 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'FDeliveryNpcObservation': ('一次观察', ['保存事件来源和对象', '保存位置、内容和有效期'], [('由感知或玩法代码填写', '例如听见发言、受到撞击'), ('交给 ObserveEvent()', '检查后加入 NPC 的记录')]),
         'FDeliveryNpcEvidence': ('NPC 已知事件', ['保存事件编号和描述', '区分亲眼所见与他人转述'], [('由 Agent 保存', '模型只能使用已知信息'), ('超过有效期后移除', '不把旧位置当作当前位置')]),
         'FDeliveryNpcDecisionRequest': ('模型请求数据', ['记录 NPC、请求和世界编号', '包含相关事件及可用动作'], [('BuildDecisionRequest()', '从当前信息中选取请求内容'), ('EncodeRequest()', '转换为后端接收的 JSON')]),
-        'UDeliveryConversationWidget': ('交谈界面', ['显示输入框和快捷按钮', '等待对应发言的回复'], [('SendText()', '提交文字或快捷发言'), ('按发言编号显示回复', '不将 NPC 闲聊当成回答')]),
+        'UDeliveryConversationWidget': ('轻量交谈输入', ['下方显示玩家原话和输入', '例句按需展开，可选中复制'], [('Send() / CommitInput()', '点击发送或输入框回车才提交'), ('按发言编号确认回应', 'NPC 台词显示在人物附近')]),
         'Scheduler': ('后端请求安排', ['队满时玩家替换未开始的闲聊', '玩家交谈期间暂停新闲聊'], [('submit()', '优先接收并安排玩家消息'), ('cancel()', '排队立即移除，运行等实际结束')]),
         'UBlackboardComponent': ('行为树黑板', ['保存倒地、动作与倾听条件', '由 NPC 控制器持续更新'], [('供行为树读取', '决定当前运行哪个分支'), ('由控制器更新', '不重复保存完整动作记录')]),
         'BT_Resident': ('NPC 行为树', ['倒地、执行动作、倾听和空闲', '条件变化时切换分支'], [('读取黑板', '选择当前应执行的行为'), ('条件变化时中止', '例如 NPC 受击或目标离开')]),
@@ -60,7 +60,7 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'FDeliveryNpcProfileRow': ('NPC 人物配置', ['DisplayName / Persona：名字与性格', 'TtsVoice / VoiceSet：两类声音配置'], [('继承 FTableRowBase', 'DT_NpcProfiles 每行对应一名角色'), ('chunlai / xiumei', '分别配置大壮与翠花')]),
         'UDeliveryNpcVoiceSet': ('台词音量与短音配置', ['DialogueVolume：完整台词音量', 'DialogueAttenuation：台词距离衰减', 'ReactionAttenuation：短音距离衰减', 'HeardPlayer / Hit：听见与受击短音', 'StreamingStartBufferSeconds：开播缓冲', 'StreamingResumeBufferSeconds：续播缓冲'], [('GetSound(Reaction)', '查找对应 Sound Wave 或 Sound Cue'), ('Volume / Pitch / MaxDuration', '分别调整短反应音的播放效果')]),
         'UDeliveryAiSettings': ('AI 项目设置', ['保存后端地址和启用开关', '保存请求数量上限和超时'], [('在项目设置中修改', '配置写入 DefaultGame.ini'), ('由网络子系统读取', '不再建立重复的数据表')]),
-        'FDeliveryConversationOptionRow': ('快捷发言配置', ['保存按钮文字和实际台词', '保存意图、排序和启用开关'], [('界面按配置生成按钮', '显示文字使用 FText'), ('服务器按行名读取台词', '仍需检查是否允许交谈')]),
+        'FDeliveryConversationOptionRow': ('旧例句配置设计，未创建', ['目前使用只读建议文字', '不再按表行直接发送'], [('选中复制后编辑', '显示文字使用 FText'), ('提交玩家确认的文字', '仍需检查是否允许交谈')]),
         'UDeliveryNpcPresentationData': ('动画与声音配置', ['保存移动、战斗和说话动画', '保存声音和面部形态键名称'], [('使用 UDataAsset 保存资源', '由 NPC 选择对应资产'), ('资源加载完成后使用', '交给表现组件播放')]),
     }
     title, fields, methods = descriptions[name]
@@ -218,7 +218,7 @@ def diagrams():
         n('UDeliveryNpcAgentComponent','服务器：玩家倾听与请求',[],[]),
         n('UDeliveryAiGatewaySubsystem','玩家请求优先发送',[],[]),
         n('Scheduler','后端：玩家消息优先',[],[],kind='Python classes')
-    ],[(0,1,'发送文字、道歉或拱火台词','dependency'),(1,3,'检查后通过 NPC 开始倾听','dependency'),(3,2,'bPlayerRequest 标记玩家发言','dependency'),(3,4,'加入游戏端请求队列','dependency'),(4,5,'逐句 HTTP 请求与取消通知','dependency')])
+    ],[(0,1,'确认输入后发送，复制建议不发送','dependency'),(1,3,'检查后通过 NPC 开始倾听','dependency'),(3,2,'bPlayerRequest 标记玩家发言','dependency'),(3,4,'加入游戏端请求队列','dependency'),(4,5,'逐句 HTTP 请求与取消通知','dependency')])
     d['behavior']=class_diagram('行为树与交谈动画类图 · 当前代码，效果待本轮检查',[
         controller,n('UBlackboardComponent','服务器：分支条件',[],[]),
         n('BT_Resident','服务器：行为分支',[],[],kind='asset'),
@@ -268,7 +268,7 @@ def diagrams():
     d['conversation-sequence']=sequence('玩家交谈时序图 · 当前代码，效果待本轮检查',[
         '玩家端|Widget','PC 组件|Server RPC','NPC Agent|服务器','Gateway|每个 World','AI 后端|模型与语音','BT / 表现|各端'
     ],[
-        (0,1,'Submit：文字 / 道歉 / 拱火','call'),(1,2,'检查距离与遮挡 → HearSpeech → ObserveEvent','call'),
+        (0,1,'Send / Enter：提交确认后的文字','call'),(1,2,'检查距离与遮挡 → HearSpeech → ObserveEvent','call'),
         (2,5,'设置倾听状态，BT 更新朝向','call'),(2,4,'玩家请求优先；未执行的闲聊往后排','note'),
         (2,3,'RequestDecision / Enqueue','call'),(3,4,'相关事件、最新玩家发言和可用动作','call'),
         (4,3,'第一条完整结果中的动作建议','return'),(3,2,'检查请求与动作条件','return'),
