@@ -8,14 +8,28 @@
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "AI/Presentation/DeliveryNpcBodyAnimInstance.h"
 #include "AI/Presentation/DeliveryNpcVoiceCodec.h"
+#include "AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.h"
+#include "AIController.h"
+#include "BehaviorTree/BehaviorTree.h"
+#include "BehaviorTree/Composites/BTComposite_Sequence.h"
+#include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Async/TaskGraphInterfaces.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "Engine/DataTable.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 #include "GameFramework/WorldSettings.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/Base64.h"
+#include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Misc/Parse.h"
+#include "HAL/FileManager.h"
 #include "Misc/ScopeExit.h"
 #include "Serialization/JsonSerializer.h"
 #include "Sound/SoundWaveProcedural.h"
@@ -92,6 +106,11 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     auto* Agent = ServerNpc->Agent.Get();
     auto* Host = ServerNpc->Presentation.Get();
     auto* Client = ClientNpc->Presentation.Get();
+    // 这里故意用较短缓冲制造缺音，检查读空、补足和续播；不修改正式人物配置
+    Host->VoiceSet=NewObject<UDeliveryNpcVoiceSet>(ServerNpc);
+    Client->VoiceSet=NewObject<UDeliveryNpcVoiceSet>(ClientNpc);
+    Host->VoiceSet->StreamingStartBufferSeconds=.64f;
+    Client->VoiceSet->StreamingStartBufferSeconds=.64f;
     // 使用正式姿势选择代码读取两端各自的播放器，不人为设置动画阶段
     auto* HostBody = NewObject<UDeliveryNpcBodyAnimInstance>(ServerNpc->GetMesh());
     auto* ClientBody = NewObject<UDeliveryNpcBodyAnimInstance>(ClientNpc->GetMesh());
@@ -445,6 +464,418 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     TestEqual(TEXT("旧整句完整进入客户端音频队列"), LegacyClient.Num(), ShortClientHeard.Num());
     Agent->CancelPlan(TEXT("TestFinished"));
     Client->StopStreamSpeech_Implementation(FGuid(), true);
+    return true;
+}
+// 只有明确指定本机地址才访问真实模型；普通自动化继续使用上面的确定性数据
+class FDeliveryNpcLiveAudioCommand final : public IAutomationLatentCommand
+{
+public:
+    FDeliveryNpcLiveAudioCommand(FAutomationTestBase* InTest,bool bInCancelMode) : Test(InTest),bCancelMode(bInCancelMode) {}
+    virtual ~FDeliveryNpcLiveAudioCommand() override { Cleanup(); }
+
+    virtual bool Update() override
+    {
+        if (!bInitialized)
+        {
+            if (!Initialize()) return Finish(false);
+            bInitialized=true;
+        }
+        const double Now=FPlatformTime::Seconds();
+        if (Now-StartedAt>45) { Test->AddError(TEXT("真实语音检查超过45秒，停止本次请求")); return Finish(false); }
+        const float Dt=static_cast<float>(FMath::Clamp(Now-LastTickAt,.001,.05));
+        const double AudioDt=FMath::Max(0.0,Now-LastTickAt);
+        LastTickAt=Now;
+        // latent 命令逐帧返回，引擎继续处理真实 HTTP 回调和后台编码完成通知
+        ServerWorld->Tick(LEVELTICK_All,Dt);
+        ClientWorld->Tick(LEVELTICK_All,Dt);
+        auto* Agent=ServerNpc->Agent.Get();
+        auto* Gateway=ServerWorld->GetSubsystem<UDeliveryAiGatewaySubsystem>();
+        for (const auto& Pair:Gateway->Pending)
+        {
+            ObservedRequests.Add(Pair.Key);
+            if (Pair.Value.Http.IsValid()) Mark(TEXT("http_dispatched"));
+            if (Pair.Value.bHttpFinished) Mark(TEXT("http_completed"));
+        }
+        if (CancelledAt>=0)
+        {
+            // 取消后仍逐帧推进真实回调，检查旧字幕或音频是否重新出现
+            bStayedCancelled&=Gateway->GetPendingCount()==0 && !Agent->IsDecisionPending() &&
+                !Host->GetDisplayedSpeech().bActive && !Client->GetDisplayedSpeech().bActive &&
+                Host->LocalVoices.IsEmpty() && Client->LocalVoices.IsEmpty() && Host->GeneratingSentences.IsEmpty() &&
+                !Host->RecordedWave && !Client->RecordedWave;
+            if (Now-CancelledAt>=.5 && Host->PendingEncodeTasks==0 && Client->PendingEncodeTasks==0)
+            {
+                bool bOk=Test->TestEqual(TEXT("真实打断检查仍只提交一次模型请求"),ObservedRequests.Num(),1);
+                bOk=Test->TestTrue(TEXT("打断后持续半秒没有恢复旧声音、字幕或请求"),bStayedCancelled) && bOk;
+                bOk=Test->TestTrue(TEXT("打断前已开始的UE编码回调全部结束"),Host->PendingEncodeTasks==0 && Client->PendingEncodeTasks==0) && bOk;
+                Mark(TEXT("cancel_callbacks_drained"));
+                return Finish(bOk);
+            }
+            if (Now-CancelledAt>5)
+            { Test->AddError(TEXT("打断后五秒内UE编码回调仍未结束")); return Finish(false); }
+            return false;
+        }
+        const auto PublicState=Agent->GetPublicState();
+        if (PublicState.ActionId.IsValid()) Mark(TEXT("proposal_received"));
+        if (PublicState.Status==EDeliveryNpcActionStatus::Accepted && !bStartedTree)
+        {
+            // 复用正式执行节点，让动作正常开始和结束，不手改成功状态延长语音
+            auto* Controller=Cast<AAIController>(ServerNpc->GetController());
+            auto* Tree=NewObject<UBehaviorTree>(Controller);
+            Tree->RootNode=NewObject<UBTComposite_Sequence>(Tree);
+            FBTCompositeChild Child;
+            Child.ChildTask=NewObject<UBTTask_DeliveryExecuteNpcAction>(Tree);
+            Tree->RootNode->Children.Add(Child);
+            if (!Controller || !Controller->RunBehaviorTree(Tree))
+            { Test->AddError(TEXT("真实模型返回动作后未能启动正式执行节点")); return Finish(false); }
+            bStartedTree=true;
+        }
+        ClientNpc->Agent->PublicState=PublicState;
+        ClientNpc->Agent->PublicState.Target=PublicState.Target==ServerPlayer?ClientPlayer:nullptr;
+        ClientNpc->Agent->PublicState.SpeechTarget=PublicState.SpeechTarget==ServerPlayer?ClientPlayer:nullptr;
+        ClientNpc->Agent->bDecisionPending=Agent->IsDecisionPending();
+        ClientNpc->Agent->ListeningSpeaker=Agent->GetListeningSpeaker()==ServerPlayer?ClientPlayer:nullptr;
+        ClientNpc->Agent->ListeningStartedAt=Agent->GetListeningStartTime();
+        Client->ReplyAction=Host->ReplyAction;
+        if (!Host->GeneratingSentences.IsEmpty()) Mark(TEXT("speech_begin_received"));
+        for (const auto& Pair:Host->GeneratingSentences)
+        {
+            if (Pair.Value.ReceivedPcmBytes>0) Mark(TEXT("pcm_received"));
+            if (Pair.Value.bInputEnded) Mark(TEXT("audio_end_received"));
+        }
+        CopyAudio();
+        Host->PlayRecordedVoice();
+        Client->PlayRecordedVoice();
+        Consume(Host,true,AudioDt);
+        Consume(Client,false,AudioDt);
+        if (bCancelMode)
+        {
+            const auto HostDisplay=Host->GetDisplayedSpeech();
+            const auto ClientDisplay=Client->GetDisplayedSpeech();
+            const auto* First=Turns.Find(HostDisplay.TurnId);
+            if (First && First->State.Sequence==0 && First->bHostNonzero && First->bClientNonzero && !First->bInputEnded &&
+                HostDisplay.bActive && ClientDisplay.bActive && HostDisplay.TurnId==ClientDisplay.TurnId &&
+                Agent->IsDecisionPending() && Gateway->Pending.Contains(RequestId))
+            {
+                CancelledAt=FPlatformTime::Seconds();
+                EncodeTasksAtCancel=Host->PendingEncodeTasks;
+                Mark(TEXT("cancel_requested_before_audio_end"));
+                Agent->CancelPlan(TEXT("LiveAudioTestInterrupted"));
+                Client->StopStreamSpeech_Implementation(HostDisplay.ActionId,true);
+                return false;
+            }
+        }
+        if (!Agent->IsDecisionPending() && Gateway->GetPendingCount()==0) Mark(TEXT("request_finished"));
+        if (!Agent->IsDecisionPending() && Gateway->GetPendingCount()==0 && !Host->HasPendingSpeech() &&
+            Client->LocalVoices.IsEmpty() && !Client->GetDisplayedSpeech().bActive)
+        {
+            if (bCancelMode)
+            {
+                bCancelNotCovered=Host->ExpectedSentences>0 && Host->NextSentence==Host->ExpectedSentences;
+                Test->AddError(bCancelNotCovered?
+                    TEXT("本次回复未出现两端开播且首句仍在生成的时段，真实流式打断未覆盖；没有追加请求或修改文案"):
+                    TEXT("本次真实回复未正常完成，无法检查流式打断；保留失败结果，不追加模型请求"));
+                return Finish(false);
+            }
+            bool bOk=Test->TestEqual(TEXT("真实检查只提交一次模型请求"),ObservedRequests.Num(),1);
+            bOk=Test->TestTrue(TEXT("真实后端返回了可播放的句内分段语音"),!Turns.IsEmpty() && bSawStreaming) && bOk;
+            bOk=Test->TestTrue(TEXT("真实done声明的全部句子已经完成，连接失败未被误当成功"),Host->ExpectedSentences>0 &&
+                Host->NextSentence==Host->ExpectedSentences && Turns.Num()==Host->ExpectedSentences) && bOk;
+            TSet<int32> Sequences;
+            for (const auto& Pair:Turns)
+            {
+                const auto& Turn=Pair.Value;
+                Sequences.Add(Turn.State.Sequence);
+                TArray<uint8> ExpectedHost=Turn.SourcePcm;
+                ExpectedHost.AddZeroed(DeliveryNpcVoice::GetDecodedPcmBytes(Turn.SourcePcm.Num(),24000)-Turn.SourcePcm.Num());
+                FDeliveryNpcVoiceDecoder Decoder;
+                int32 Offset=0;
+                TArray<uint8> ExpectedClient;
+                FString Error;
+                bOk=Test->TestTrue(TEXT("真实句末声明完整，声音和字幕使用同一句编号"),Turn.bEnded &&
+                    Turn.State.ReplyToEventId==MessageId && Turn.bHostNonzero && Turn.bClientNonzero) && bOk;
+                bOk=Test->TestTrue(TEXT("主机程序音频完整读取原始声音和一次尾部补零"),Turn.HostPcm==ExpectedHost) && bOk;
+                const bool bDecoded=Decoder.TryDecodeAvailable(Turn.Encoded,Offset,ExpectedClient,Error);
+                bOk=Test->TestTrue(TEXT("接收端程序音频完整读取真实Opus解码结果"),bDecoded && Turn.ClientPcm==ExpectedClient) && bOk;
+            }
+            bool bCompleteSequence=Sequences.Num()==Host->ExpectedSentences;
+            for (int32 Index=0;Index<Host->ExpectedSentences;++Index) bCompleteSequence&=Sequences.Contains(Index);
+            bOk=Test->TestTrue(TEXT("实际播放句子从零开始且没有重复或缺号"),bCompleteSequence) && bOk;
+            return Finish(bOk);
+        }
+        return false;
+    }
+
+private:
+    struct FTurn
+    {
+        FDeliveryNpcSpeechState State;
+        TArray<uint8> Encoded,SourcePcm,HostPcm,ClientPcm;
+        int32 SentBytes=0;
+        bool bEnded=false,bInputEnded=false,bHostNonzero=false,bClientNonzero=false;
+        bool bConsumedBeforeEnd=false;
+        bool bHostConsumedBeforeEnd=false,bClientConsumedBeforeEnd=false;
+        double HostGapAt=-1,ClientGapAt=-1,HostGapSeconds=0,ClientGapSeconds=0;
+    };
+
+    bool Initialize()
+    {
+        ReportPath=FPaths::ProjectSavedDir()/TEXT("AIResearch/LiveAudioStreaming")/
+            FDateTime::UtcNow().ToString(TEXT("%Y%m%dT%H%M%S"))/TEXT("Report.json");
+        auto* Settings=GetMutableDefault<UDeliveryAiSettings>();
+        OldEnabled=Settings->bEnabled; OldReplies=Settings->bStreamReplies; OldAudio=Settings->bStreamSentenceAudio;
+        OldEndpoint=Settings->DecisionEndpoint; OldTimeout=Settings->RequestTimeout;
+        bChangedSettings=true;
+        Settings->bEnabled=false; Settings->bStreamReplies=true; Settings->bStreamSentenceAudio=true;
+        Settings->DecisionEndpoint=TEXT("http://127.0.0.1:8769/v1/decisions"); Settings->RequestTimeout=30;
+        auto MakeWorld=[&]()
+        {
+            const auto Init=UWorld::InitializationValues().AllowAudioPlayback(false).CreatePhysicsScene(true)
+                .ShouldSimulatePhysics(false).CreateNavigation(false).CreateAISystem(true);
+            auto* World=UWorld::CreateWorld(EWorldType::Game,false,NAME_None,nullptr,true,ERHIFeatureLevel::Num,&Init);
+            Worlds.Add(World);
+            GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
+            World->InitializeActorsForPlay(FURL()); World->GetWorldSettings()->NotifyBeginPlay();
+            return World;
+        };
+        ServerWorld=MakeWorld(); ClientWorld=MakeWorld();
+        ServerNpc=ServerWorld->SpawnActor<ADeliveryNpcCharacter>();
+        ClientNpc=ClientWorld->SpawnActor<ADeliveryNpcCharacter>();
+        auto* Profiles=LoadObject<UDataTable>(nullptr,TEXT("/Game/NPC/Residents/Config/DT_NpcProfiles.DT_NpcProfiles"));
+        if (!Test->TestNotNull(TEXT("真实检查使用正式人物配置表"),Profiles)) return false;
+        for (auto* Npc:{ServerNpc,ClientNpc})
+        {
+            Npc->SetActorTickEnabled(false);
+            Npc->GetCharacterMovement()->DisableMovement();
+            Npc->Profile.DataTable=Profiles; Npc->Profile.RowName=TEXT("xiumei");
+            if (!Test->TestTrue(TEXT("加载翠花正式姓名、人设与B音色"),Npc->ApplyProfile() && Npc->Presentation->TtsVoice==TEXT("female"))) return false;
+        }
+        ClientNpc->SetRole(ROLE_SimulatedProxy);
+        ClientNpc->Agent->SetComponentTickEnabled(false);
+        if (!ServerNpc->GetController()) ServerNpc->SpawnDefaultController();
+        Host=ServerNpc->Presentation.Get(); Client=ClientNpc->Presentation.Get();
+        auto* Pawn=ServerWorld->SpawnActor<APawn>();
+        auto* Root=NewObject<USceneComponent>(Pawn); Pawn->SetRootComponent(Root); Root->RegisterComponent();
+        Pawn->SetActorLocation(FVector(220,0,0));
+        auto* Controller=ServerWorld->SpawnActor<APlayerController>();
+        Controller->PlayerState=ServerWorld->SpawnActor<APlayerState>();
+        Controller->PlayerState->SetIsABot(false); Controller->Possess(Pawn);
+        ServerPlayer=Pawn; ClientPlayer=ClientWorld->SpawnActor<AActor>();
+        StartedAt=LastTickAt=FPlatformTime::Seconds();
+        MessageId=FGuid::NewGuid();
+        Settings->bEnabled=true;
+        const bool bHeard=ServerNpc->HearSpeech(Pawn,TEXT("翠花，早上好！今天过得怎么样？"),MessageId,0);
+        // 请求已入队后关闭新增请求；现有 Gateway 仍负责完成这一次 HTTP
+        Settings->bEnabled=false;
+        const auto& Submitted=ServerNpc->Agent->ActiveRequest;
+        RequestId=Submitted.RequestId; RequestWorldEpoch=Submitted.WorldEpoch; RequestNpcId=Submitted.NpcId;
+        if (!Test->TestTrue(TEXT("固定问候只建立一个真实待处理请求"),bHeard && RequestId.IsValid() &&
+            ServerWorld->GetSubsystem<UDeliveryAiGatewaySubsystem>()->GetPendingCount()==1)) return false;
+        ObservedRequests.Add(RequestId);
+        Mark(TEXT("submitted"));
+        return true;
+    }
+
+    void Mark(FName Stage)
+    {
+        if (Stages.Contains(Stage)) return;
+        const double Ms=(FPlatformTime::Seconds()-StartedAt)*1000;
+        Stages.Add(Stage,Ms);
+        Test->AddInfo(FString::Printf(TEXT("LiveAudio stage=%s elapsed_ms=%.1f request=%s"),*Stage.ToString(),Ms,*RequestId.ToString()));
+    }
+
+    void CopyAudio()
+    {
+        const auto State=Host->GetSpeech();
+        if (State.bActive)
+        {
+            if (!Turns.Contains(State.TurnId))
+            {
+                Turns.Add(State.TurnId);
+                Client->StartStreamSpeech_Implementation(State);
+            }
+            auto& Current=Turns.FindChecked(State.TurnId);
+            Current.State=State;
+            bSawStreaming|=State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion;
+            if (const auto* Generating=Host->GeneratingSentences.Find(State.Sequence)) Current.bInputEnded|=Generating->bInputEnded;
+            Current.bInputEnded|=State.bAudioComplete;
+        }
+        // 继续接收已经切走的上一句，避免同帧切句时漏掉它保留在服务器上的尾音
+        for (auto& Pair:Turns)
+        {
+            auto& Turn=Pair.Value;
+            TArray<uint8> Data; int32 Total=0;
+            while (Host->GetSpeechAudioChunk(Pair.Key,Turn.SentBytes,2048,Data,Total))
+            {
+                Client->ReceiveAudio_Implementation(Pair.Key,Turn.SentBytes,Total,Data);
+                Turn.SentBytes+=Data.Num(); Turn.Encoded.Append(Data);
+            }
+            const auto* Saved=Host->ServerVoices.Find(Pair.Key);
+            if (Saved && Saved->bComplete && !Turn.bEnded)
+            {
+                Turn.SourcePcm=Saved->Pcm;
+                Client->FinishStreamAudio_Implementation(Pair.Key,Saved->Pcm.Num(),Saved->Encoded.Num(),true);
+                Turn.bEnded=true; Turn.bInputEnded=true;
+                Mark(TEXT("audio_encoding_finished"));
+            }
+            else if (Pair.Key==State.TurnId && State.bAudioComplete && !State.bRecordedVoice && !Turn.bEnded)
+            {
+                Client->FinishStreamAudio_Implementation(Pair.Key,State.PcmBytes,State.EncodedBytes,false);
+                Turn.bEnded=true; Turn.bInputEnded=true;
+            }
+        }
+    }
+
+    void Consume(UDeliveryNpcPresentationComponent* Presentation,bool bHost,double Dt)
+    {
+        double& Credit=bHost?HostCredit:ClientCredit;
+        const auto Display=Presentation->GetDisplayedSpeech();
+        auto* Turn=Turns.Find(Display.TurnId);
+        if (!Presentation->RecordedWave || !Display.bActive || !Turn) { Credit=0; return; }
+        const double Now=FPlatformTime::Seconds();
+        double& GapAt=bHost?Turn->HostGapAt:Turn->ClientGapAt;
+        double& GapSeconds=bHost?Turn->HostGapSeconds:Turn->ClientGapSeconds;
+        if (Presentation->IsWaitingForMoreAudio())
+        {
+            if (GapAt<0) GapAt=Now;
+            Credit=0;
+            return;
+        }
+        else if (GapAt>=0) { GapSeconds+=Now-GapAt; GapAt=-1; }
+        Credit+=Dt;
+        // UE 每次至少接收 512 个样本的读取请求，末尾实际返回多少由声音对象决定
+        constexpr int32 SamplesPerRead=512;
+        constexpr double ReadInterval=double(SamplesPerRead)/24000.0;
+        while (Credit>=ReadInterval)
+        {
+            Credit-=ReadInterval;
+            if (Presentation->RecordedWave->GetAvailableAudioByteCount()<=0) { Credit=0; break; }
+            uint8 Bytes[SamplesPerRead*2];
+            const int32 Count=Presentation->RecordedWave->GeneratePCMData(Bytes,SamplesPerRead);
+            if (Count<=0) break;
+            (bHost?Turn->HostPcm:Turn->ClientPcm).Append(Bytes,Count);
+            bool bNonzero=false;
+            for (int32 Index=0;Index<Count;++Index) bNonzero|=Bytes[Index]!=0;
+            if (bNonzero)
+            {
+                (bHost?Turn->bHostNonzero:Turn->bClientNonzero)=true;
+                Mark(bHost?TEXT("host_first_nonzero_pcm"):TEXT("receiver_first_nonzero_pcm"));
+                Turn->bConsumedBeforeEnd|=!Turn->bInputEnded;
+                (bHost?Turn->bHostConsumedBeforeEnd:Turn->bClientConsumedBeforeEnd)|=!Turn->bInputEnded;
+            }
+        }
+    }
+
+    bool Finish(bool bSucceeded)
+    {
+        auto Report=MakeShared<FJsonObject>();
+        Report->SetStringField(TEXT("status"),bCancelNotCovered?TEXT("not_covered"):(bSucceeded?TEXT("passed"):TEXT("failed")));
+        Report->SetStringField(TEXT("mode"),bCancelMode?TEXT("cancel_during_first_sentence"):TEXT("complete_reply"));
+        if (bCancelMode)
+        {
+            Report->SetBoolField(TEXT("cancelled_before_first_audio_end"),CancelledAt>=0);
+            Report->SetNumberField(TEXT("post_cancel_observed_ms"),CancelledAt>=0?(FPlatformTime::Seconds()-CancelledAt)*1000:0);
+            Report->SetNumberField(TEXT("ue_encode_tasks_at_cancel"),EncodeTasksAtCancel);
+            Report->SetBoolField(TEXT("ue_state_stayed_cancelled"),CancelledAt>=0 && bStayedCancelled);
+            Report->SetBoolField(TEXT("backend_worker_termination_verified"),false);
+            Report->SetStringField(TEXT("cancel_coverage"),TEXT("只检查UE请求取消、编码回调与两端本机状态；后端是否真正结束需另按request_id核对后台日志"));
+        }
+        Report->SetStringField(TEXT("request_id"),RequestId.ToString(EGuidFormats::DigitsWithHyphensLower));
+        Report->SetStringField(TEXT("world_epoch"),RequestWorldEpoch.ToString(EGuidFormats::DigitsWithHyphensLower));
+        Report->SetStringField(TEXT("npc_id"),RequestNpcId.ToString(EGuidFormats::DigitsWithHyphensLower));
+        Report->SetStringField(TEXT("message_id"),MessageId.ToString());
+        Report->SetStringField(TEXT("endpoint"),TEXT("http://127.0.0.1:8769/v1/decisions"));
+        Report->SetStringField(TEXT("voice"),TEXT("female"));
+        const auto* Voice=Host && Host->VoiceSet?Host->VoiceSet.Get():GetDefault<UDeliveryNpcVoiceSet>();
+        Report->SetNumberField(TEXT("streaming_start_buffer_seconds"),Voice->StreamingStartBufferSeconds);
+        Report->SetNumberField(TEXT("streaming_resume_buffer_seconds"),Voice->StreamingResumeBufferSeconds);
+        Report->SetNumberField(TEXT("request_count"),ObservedRequests.Num());
+        auto Timing=MakeShared<FJsonObject>();
+        for (const auto& Pair:Stages) Timing->SetNumberField(Pair.Key.ToString(),Pair.Value);
+        Report->SetObjectField(TEXT("observed_stage_ms"),Timing);
+        TArray<TSharedPtr<FJsonValue>> Rows;
+        bool bEarly=false;
+        for (const auto& Pair:Turns)
+        {
+            const auto& Turn=Pair.Value;
+            auto Row=MakeShared<FJsonObject>();
+            Row->SetStringField(TEXT("turn_id"),Pair.Key.ToString()); Row->SetStringField(TEXT("text"),Turn.State.Text);
+            Row->SetNumberField(TEXT("sequence"),Turn.State.Sequence); Row->SetNumberField(TEXT("format_version"),Turn.State.AudioFormatVersion);
+            Row->SetNumberField(TEXT("source_pcm_bytes"),Turn.SourcePcm.Num()); Row->SetNumberField(TEXT("encoded_bytes"),Turn.Encoded.Num());
+            Row->SetNumberField(TEXT("host_consumed_bytes"),Turn.HostPcm.Num()); Row->SetNumberField(TEXT("receiver_consumed_bytes"),Turn.ClientPcm.Num());
+            Row->SetNumberField(TEXT("host_rebuffer_ms"),Turn.HostGapSeconds*1000);
+            Row->SetNumberField(TEXT("receiver_rebuffer_ms"),Turn.ClientGapSeconds*1000);
+            Row->SetBoolField(TEXT("pcm_consumed_before_audio_end_received"),Turn.bConsumedBeforeEnd);
+            Row->SetBoolField(TEXT("host_pcm_before_audio_end_received"),Turn.bHostConsumedBeforeEnd);
+            Row->SetBoolField(TEXT("receiver_pcm_before_audio_end_received"),Turn.bClientConsumedBeforeEnd);
+            Rows.Add(MakeShared<FJsonValueObject>(Row)); bEarly|=Turn.bConsumedBeforeEnd;
+        }
+        Report->SetArrayField(TEXT("sentences"),Rows);
+        Report->SetBoolField(TEXT("early_consumption_observed"),bEarly);
+        Report->SetStringField(TEXT("coverage"),TEXT("真实HTTP/模型/语音，经正式Agent、执行节点、编码、解码和程序音频读取；接收端是独立世界手工传递，可一帧送完现有数据，未模拟实际每帧2KB发送和网络延迟；首PCM时间只反映本机数据处理，没有声卡输出或画面验收"));
+        if (!ReportPath.IsEmpty())
+        {
+            FString Json; FJsonSerializer::Serialize(Report,TJsonWriterFactory<>::Create(&Json));
+            IFileManager::Get().MakeDirectory(*FPaths::GetPath(ReportPath),true);
+            if (!FFileHelper::SaveStringToFile(Json,*ReportPath,FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+                Test->AddError(TEXT("真实语音检查报告保存失败"));
+            else Test->AddInfo(TEXT("LiveAudio report=")+FPaths::ConvertRelativePathToFull(ReportPath));
+        }
+        Test->AddInfo(bEarly?TEXT("本样本在收到句末前已读出非零PCM，未测声卡实际发声时间"):
+            TEXT("本样本未证实句末前已读出非零PCM，不据此声称降低了实际播放延迟"));
+        Cleanup();
+        return true;
+    }
+
+    void Cleanup()
+    {
+        if (ServerNpc) ServerNpc->Agent->CancelPlan(TEXT("LiveAudioTestEnd"));
+        if (Client) Client->StopStreamSpeech_Implementation(FGuid(),true);
+        for (auto* World:Worlds)
+        { World->EndPlay(EEndPlayReason::Quit); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); }
+        Worlds.Reset(); ServerNpc=ClientNpc=nullptr; Host=Client=nullptr;
+        if (bChangedSettings)
+        {
+            auto* Settings=GetMutableDefault<UDeliveryAiSettings>();
+            Settings->bEnabled=OldEnabled; Settings->bStreamReplies=OldReplies; Settings->bStreamSentenceAudio=OldAudio;
+            Settings->DecisionEndpoint=OldEndpoint; Settings->RequestTimeout=OldTimeout; bChangedSettings=false;
+        }
+    }
+
+    FAutomationTestBase* Test;
+    TArray<UWorld*> Worlds;
+    UWorld* ServerWorld=nullptr; UWorld* ClientWorld=nullptr;
+    ADeliveryNpcCharacter* ServerNpc=nullptr; ADeliveryNpcCharacter* ClientNpc=nullptr;
+    AActor* ServerPlayer=nullptr; AActor* ClientPlayer=nullptr;
+    UDeliveryNpcPresentationComponent* Host=nullptr; UDeliveryNpcPresentationComponent* Client=nullptr;
+    TMap<FGuid,FTurn> Turns;
+    TMap<FName,double> Stages;
+    TSet<FGuid> ObservedRequests;
+    FGuid RequestId,MessageId,RequestWorldEpoch,RequestNpcId;
+    FString OldEndpoint,ReportPath;
+    float OldTimeout=0;
+    bool OldEnabled=false,OldReplies=false,OldAudio=false,bChangedSettings=false;
+    bool bInitialized=false,bStartedTree=false,bSawStreaming=false;
+    bool bCancelMode=false,bCancelNotCovered=false,bStayedCancelled=true;
+    int32 EncodeTasksAtCancel=0;
+    double CancelledAt=-1;
+    double StartedAt=0,LastTickAt=0,HostCredit=0,ClientCredit=0;
+};
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcLiveAudioTest,"Delivery.AI.LiveAudioStreaming",
+    EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
+bool FDeliveryNpcLiveAudioTest::RunTest(const FString&)
+{
+    FString Endpoint;
+    if (!FParse::Value(FCommandLine::Get(),TEXT("DeliveryAILiveAudioEndpoint="),Endpoint))
+    {
+        AddInfo(TEXT("未执行真实模型检查：需要显式指定 -DeliveryAILiveAudioEndpoint=http://127.0.0.1:8769/v1/decisions；本条结果不算真实链路已验证"));
+        return true;
+    }
+    if (Endpoint!=TEXT("http://127.0.0.1:8769/v1/decisions"))
+    { AddError(TEXT("真实语音检查仅允许指定本机8769端口，不会请求其他服务")); return false; }
+    const bool bCancel=FParse::Param(FCommandLine::Get(),TEXT("DeliveryAILiveAudioCancel"));
+    ADD_LATENT_AUTOMATION_COMMAND(FDeliveryNpcLiveAudioCommand(this,bCancel));
     return true;
 }
 #endif

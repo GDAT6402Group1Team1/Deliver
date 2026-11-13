@@ -72,5 +72,6 @@ private:
     friend class FDeliveryAiInfrastructureTest;
     friend class FDeliveryAiBehaviorTreeTest;
     friend class FDeliveryNpcAudioStreamingTest;
+    friend class FDeliveryNpcLiveAudioCommand;
     friend class FDeliveryNpcSentenceAudioProtocolTest;
 };

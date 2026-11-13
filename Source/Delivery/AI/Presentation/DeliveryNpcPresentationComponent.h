@@ -95,6 +95,7 @@ class DELIVERY_API UDeliveryNpcPresentationComponent : public UActorComponent
     friend class FDeliveryNpcProfileTest;
     friend class FDeliveryNpcFightTest;
     friend class FDeliveryNpcAudioStreamingTest;
+    friend class FDeliveryNpcLiveAudioCommand;
 public:
     UDeliveryNpcPresentationComponent();
     // 服务器设置台词并通知客户端播放，返回 true 表示已安排播放

@@ -26,6 +26,7 @@ class DELIVERY_API UDeliveryNpcAgentComponent : public UActorComponent
     friend class FDeliveryResidentIntegrationTest;
     friend class FDeliveryResidentPIECommand;
     friend class FDeliveryNpcAudioStreamingTest;
+    friend class FDeliveryNpcLiveAudioCommand;
     friend class FDeliveryNpcSentenceAudioProtocolTest;
 public:
     UDeliveryNpcAgentComponent();
