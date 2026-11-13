@@ -1,0 +1,10 @@
+{
+  "tool": "image_gen (built-in)",
+  "image": "ConversationConcept-v4.png",
+  "status": "实现参考，等待游戏内检查和用户验收",
+  "previous_draft": "ConversationConcept-v3.png",
+  "previous_draft_reason": "用户试玩后反馈面板不美观、内容不清晰，需要一眼看懂如何交谈",
+  "design": "浅色窄条放在下方中央，深色文字和发送键。玩家原话显示在输入区上方，NPC 台词保留在人物附近。按 T 后直接输入，例句默认收起，复制修改后自行发送。",
+  "prompt": "Use case: ui-mockup. Delivery is a cheerful low-poly Chinese delivery game with toy yellow houses, grass, a yellow-helmet courier and bean-eyed elderly villagers. Create a clean in-game conversation UI concept, not a chat app. Warm ivory, charcoal and subtle yellow, crisp Chinese typography, softly rounded fine outlines and minimal shadow. Keep the scene unobstructed. The NPC woman has a small white head bubble saying 谁怕谁？让他过来！ and a small T key with 和翠花说话. Lower center above five inventory slots: compact cream strip, about 46 percent screen width and 100px tall at 1080p. Header 对翠花说 with close ×. Input placeholder 输入你想说的话 and dark button 发送 ↵. Below: 不知道说什么？看看例句. Player's last utterance in a thin dark translucent caption above: 你：大壮就在旁边，你俩到底谁更厉害？ No tall chat log, empty area, multicolour cards, decorative icons or desktop app appearance. Editable Unreal UMG layout, 16:9.",
+  "implementation_note": "效果图用于确定布局、配色和文字层级，正式界面由 WBP_Conversation 控件组成；不把整张效果图铺在游戏中"
+}

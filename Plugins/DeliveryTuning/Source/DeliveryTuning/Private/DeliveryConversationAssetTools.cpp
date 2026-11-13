@@ -14,8 +14,6 @@
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
-#include "Components/ScrollBox.h"
-#include "Components/ScaleBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -35,14 +33,12 @@ FLinearColor Color(uint8 Red,uint8 Green,uint8 Blue)
     return FLinearColor::FromSRGBColor(FColor(Red,Green,Blue));
 }
 
-const FLinearColor Ink=Color(45,48,42);
-const FLinearColor Paper=Color(244,241,232);
-const FLinearColor Sage=Color(128,140,109);
-const FLinearColor Muted=Color(193,198,184);
+const FLinearColor Ink=Color(44,43,39);
+const FLinearColor Paper=Color(251,248,237);
 
 FSlateBrush Rounded(FLinearColor Fill,float Radius=8.f,float Outline=0.f)
 {
-    return FSlateRoundedBoxBrush(Fill,Radius,Color(137,143,127),Outline);
+    return FSlateRoundedBoxBrush(Fill,Radius,Ink,Outline);
 }
 
 UFont* GetConversationFont()
@@ -147,34 +143,43 @@ FString UDeliveryConversationAssetTools::CreateConversationWidget(bool bReplaceL
     auto* Tree=NewObject<UWidgetTree>(Blueprint,TEXT("WidgetTree"),RF_Transactional);
     Blueprint->WidgetTree=Tree;
 
-    // 布局保存到 UMG，运行时只改变文字和例句区的显示状态
+    // 高度由当前内容决定，没有发言时不留一块空白
+    auto* Width=Tree->ConstructWidget<USizeBox>(USizeBox::StaticClass(),TEXT("ConversationWidth"));
+    Width->bIsVariable=true;
+    Width->SetWidthOverride(640);
+    Tree->RootWidget=Width;
+    auto* Stack=Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(),TEXT("ConversationStack"));
+    Width->SetContent(Stack);
+
+    auto* Submitted=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("SubmittedLine"));
+    Submitted->bIsVariable=true;
+    Submitted->SetBrush(Rounded(FLinearColor(Ink.R,Ink.G,Ink.B,.9f),10));
+    Submitted->SetPadding(FMargin(14,9));
+    Submitted->SetVisibility(ESlateVisibility::Collapsed);
+    auto* Reply=MakeText(Tree,Font,TEXT("Reply"),TEXT(""),19,Paper);
+    Reply->bIsVariable=true;
+    Reply->SetAutoWrapText(true);
+    Submitted->SetContent(Reply);
+    AddRow(Stack,Submitted,8);
+
+    // 输入区保存到 UMG，运行时只更新文字、宽度和焦点
     auto* Frame=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("PanelFrame"));
-    Frame->SetBrush(Rounded(FLinearColor(Ink.R,Ink.G,Ink.B,.88f),10));
-    Frame->SetPadding(FMargin(16,12));
-    Tree->RootWidget=Frame;
+    Frame->SetBrush(Rounded(Paper,14,1.5f));
+    Frame->SetPadding(FMargin(16,10));
+    AddRow(Stack,Frame,4);
     auto* Rows=Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(),TEXT("ConversationRows"));
     Frame->SetContent(Rows);
 
     auto* Header=Tree->ConstructWidget<UHorizontalBox>();
-    auto* Speaker=MakeText(Tree,Font,TEXT("SpeakerName"),TEXT("翠花"),18,Muted);
+    auto* Speaker=MakeText(Tree,Font,TEXT("SpeakerName"),TEXT("对 翠花 说"),17,Ink);
     Speaker->bIsVariable=true;
     auto* NameSlot=Header->AddChildToHorizontalBox(Speaker);
     NameSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
     NameSlot->SetVerticalAlignment(VAlign_Center);
-    Header->AddChildToHorizontalBox(MakeButton(Tree,Font,TEXT("CloseButton"),TEXT("收起"),FLinearColor::Transparent,Muted,14));
+    auto* Close=MakeButton(Tree,Font,TEXT("CloseButton"),TEXT("×"),FLinearColor::Transparent,Ink,20);
+    Close->SetToolTipText(FText::FromString(TEXT("结束交谈 · Esc")));
+    Header->AddChildToHorizontalBox(Close);
     AddRow(Rows,Header,4);
-
-    auto* Scroll=Tree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(),TEXT("ReplyScroll"));
-    Scroll->bIsVariable=true;
-    Scroll->SetScrollBarVisibility(ESlateVisibility::Visible);
-    Scroll->SetAllowOverscroll(false);
-    auto* Reply=MakeText(Tree,Font,TEXT("Reply"),TEXT(""),20,Paper);
-    Reply->bIsVariable=true;
-    Reply->SetAutoWrapText(true);
-    Scroll->AddChild(Reply);
-    auto* ReplySlot=Rows->AddChildToVerticalBox(Scroll);
-    ReplySlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-    ReplySlot->SetPadding(FMargin(0,0,0,10));
 
     auto* Suggestions=Tree->ConstructWidget<UMultiLineEditableTextBox>(UMultiLineEditableTextBox::StaticClass(),TEXT("Suggestions"));
     Suggestions->bIsVariable=true;
@@ -182,26 +187,27 @@ FString UDeliveryConversationAssetTools::CreateConversationWidget(bool bReplaceL
     Suggestions->SetAutoWrapText(true);
     Suggestions->SetVisibility(ESlateVisibility::Collapsed);
     FEditableTextBoxStyle SuggestionStyle=Suggestions->WidgetStyle;
-    SuggestionStyle.SetBackgroundImageNormal(Rounded(Color(66,70,61)));
-    SuggestionStyle.SetBackgroundImageHovered(Rounded(Color(66,70,61)));
-    SuggestionStyle.SetBackgroundImageFocused(Rounded(Color(66,70,61),8,1));
-    SuggestionStyle.SetBackgroundImageReadOnly(Rounded(Color(66,70,61)));
-    SuggestionStyle.SetTextStyle(FTextBlockStyle().SetFont(FontInfo(Font,16,Paper)).SetColorAndOpacity(Paper));
-    SuggestionStyle.SetForegroundColor(Paper);
-    SuggestionStyle.SetReadOnlyForegroundColor(Paper);
-    SuggestionStyle.SetFocusedForegroundColor(Paper);
+    SuggestionStyle.SetBackgroundImageNormal(Rounded(Paper,10,1));
+    SuggestionStyle.SetBackgroundImageHovered(Rounded(Paper,10,1));
+    SuggestionStyle.SetBackgroundImageFocused(Rounded(Paper,10,1));
+    SuggestionStyle.SetBackgroundImageReadOnly(Rounded(Paper,10,1));
+    SuggestionStyle.SetTextStyle(FTextBlockStyle().SetFont(FontInfo(Font,16,Ink)).SetColorAndOpacity(Ink));
+    SuggestionStyle.SetForegroundColor(Ink);
+    SuggestionStyle.SetReadOnlyForegroundColor(Ink);
+    SuggestionStyle.SetFocusedForegroundColor(Ink);
     SuggestionStyle.SetPadding(FMargin(10,8));
     Suggestions->WidgetStyle=SuggestionStyle;
-    AddRow(Rows,Suggestions,8);
 
     auto* InputRow=Tree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(),TEXT("InputRow"));
     auto* Input=Tree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(),TEXT("Input"));
     Input->bIsVariable=true;
-    Input->SetHintText(FText::FromString(TEXT("说点什么")));
+    Input->SetHintText(FText::FromString(TEXT("输入你想说的话")));
+    // Enter 发送后继续留在输入区，Esc 和下一句输入仍交给这个界面
+    Input->SetClearKeyboardFocusOnCommit(false);
     FEditableTextBoxStyle InputStyle=Input->GetWidgetStyle();
-    InputStyle.SetBackgroundImageNormal(Rounded(Paper));
-    InputStyle.SetBackgroundImageHovered(Rounded(FLinearColor::White));
-    InputStyle.SetBackgroundImageFocused(Rounded(FLinearColor::White,8,1));
+    InputStyle.SetBackgroundImageNormal(Rounded(FLinearColor::White,8,1));
+    InputStyle.SetBackgroundImageHovered(Rounded(FLinearColor::White,8,1));
+    InputStyle.SetBackgroundImageFocused(Rounded(FLinearColor::White,8,2));
     InputStyle.SetPadding(FMargin(10,8));
     InputStyle.SetTextStyle(FTextBlockStyle().SetFont(FontInfo(Font,18,Ink)).SetColorAndOpacity(Ink));
     InputStyle.SetForegroundColor(Ink);
@@ -210,19 +216,17 @@ FString UDeliveryConversationAssetTools::CreateConversationWidget(bool bReplaceL
     auto* InputSlot=InputRow->AddChildToHorizontalBox(Input);
     InputSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
     InputSlot->SetPadding(FMargin(0,0,8,0));
-    InputRow->AddChildToHorizontalBox(MakeButton(Tree,Font,TEXT("SendButton"),TEXT("发送"),Sage,Paper,18));
-    AddRow(Rows,InputRow,4);
+    InputRow->AddChildToHorizontalBox(MakeButton(Tree,Font,TEXT("SendButton"),TEXT("发送 ↵"),Ink,Paper,18));
+    AddRow(Rows,InputRow,0);
 
     auto* Footer=Tree->ConstructWidget<UHorizontalBox>();
-    auto* Topics=MakeButton(Tree,Font,TEXT("SuggestionToggle"),TEXT("找话题 · 选句复制"),FLinearColor::Transparent,Muted,14);
+    auto* Topics=MakeButton(Tree,Font,TEXT("SuggestionToggle"),TEXT("不知道说什么？看看例句"),FLinearColor(Ink.R,Ink.G,Ink.B,.65f),Paper,14);
     Topics->SetToolTipText(FText::FromString(TEXT("可以挑战、挑拨，也可以劝和。选中例句复制到输入框，改成自己的话再发送")));
     Footer->AddChildToHorizontalBox(Topics);
-    auto* Hint=MakeText(Tree,Font,TEXT("CloseHint"),TEXT("Enter 发送 · Esc 收起"),13,Muted);
-    Hint->SetJustification(ETextJustify::Right);
-    auto* HintSlot=Footer->AddChildToHorizontalBox(Hint);
-    HintSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-    HintSlot->SetVerticalAlignment(VAlign_Center);
-    AddRow(Rows,Footer,0);
+    auto* FooterSlot=Stack->AddChildToVerticalBox(Footer);
+    FooterSlot->SetHorizontalAlignment(HAlign_Center);
+    FooterSlot->SetPadding(FMargin(0,0,0,4));
+    AddRow(Stack,Suggestions,0);
 
     // 新增控件先登记变量编号，保留已有按钮在蓝图中的引用
     Blueprint->ForEachSourceWidget([Blueprint](UWidget* Widget)

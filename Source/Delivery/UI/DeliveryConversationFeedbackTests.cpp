@@ -12,6 +12,7 @@
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/Button.h"
+#include "Components/Border.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -71,6 +72,7 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     auto* Panel=CreateWidget<UDeliveryConversationWidget>(Controller);
     if (!TestNotNull(TEXT("创建交谈窗口"),Panel)) return false;
     Panel->Reply=NewObject<UTextBlock>(Panel);
+    Panel->SubmittedLine=NewObject<UBorder>(Panel);
     Panel->SpeakerName=NewObject<UTextBlock>(Panel);
     Panel->Input=NewObject<UEditableTextBox>(Panel);
     Panel->Suggestions=NewObject<UMultiLineEditableTextBox>(Panel);
@@ -79,6 +81,8 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     Panel->SuggestionToggle=NewObject<UButton>(Panel);
     Panel->NativeConstruct();
     Panel->SetResident(Npc);
+    TestEqual(TEXT("还没发言时不占用原话行的空间"),Panel->SubmittedLine->GetVisibility(),ESlateVisibility::Collapsed);
+    TestEqual(TEXT("输入提示明确当前交谈对象"),Panel->SpeakerName->GetText().ToString(),FString(TEXT("对 翠花 说")));
     TestFalse(TEXT("建议默认折叠"),Panel->IsSuggestionsVisible());
     Panel->SuggestionToggle->OnClicked.Broadcast();
     TestTrue(TEXT("展开建议不会发送消息"),Panel->IsSuggestionsVisible() && !Conversation->GetLastSubmissionId().IsValid());
@@ -95,6 +99,8 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     TestTrue(TEXT("按发送后才通过交谈组件提交建议文字"),ProvokeId.IsValid() && ProvokeId==Conversation->GetLastSubmissionId());
     TestEqual(TEXT("拱火点名在场双方，由玩家明确发起比划挑战"),Provoke,FString(TEXT("翠花，大壮就在旁边。你俩到底谁厉害？敢不敢比划两下，输的当面认怂？")));
     TestTrue(TEXT("输入区保留刚才发送的完整原话"),Panel->Reply->GetText().ToString().Contains(Provoke));
+    TestTrue(TEXT("发言后显示原话行，末尾不留空白段落"),Panel->SubmittedLine->GetVisibility()==ESlateVisibility::Visible &&
+        !Panel->Reply->GetText().ToString().EndsWith(TEXT("\n")));
     TestTrue(TEXT("标题显示当前交谈对象"),Panel->SpeakerName->GetText().ToString().Contains(TEXT("翠花")));
     TestEqual(TEXT("服务器确实收到这次发言"),Conversation->GetSubmissionResult(ProvokeId),FName(TEXT("Heard")));
     TestTrue(TEXT("收到服务器确认后才显示你说"),Panel->Reply->GetText().ToString().StartsWith(TEXT("你说：")));
@@ -151,6 +157,8 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     TestTrue(TEXT("修改文字后可以提交新的一句"),Panel->SubmittedEventId!=ProvokeId);
     TestEqual(TEXT("发送太快的拒绝来自服务器"),Panel->SubmissionResult,FName(TEXT("TooFast")));
     TestTrue(TEXT("被拒绝的文字保留并显示没送到"),Panel->Reply->GetText().ToString().StartsWith(TEXT("没送到：我现在要送货")));
+    TestTrue(TEXT("服务器拒绝时保留原话行，并分行说明原因"),Panel->SubmittedLine->GetVisibility()==ESlateVisibility::Visible &&
+        Panel->Reply->GetText().ToString().Contains(TEXT("我现在要送货\n刚才发得太快")));
     TestFalse(TEXT("被拒绝后不继续等模型回复"),Panel->bAwaitingReply);
 
     Conversation->NextLocalSendAt=0;
@@ -412,6 +420,7 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
         Conversation->GetSubmissionResult(PossessionMessage)==TEXT("ActionReply"));
     TestEqual(TEXT("后来占有原Pawn的人不会收到这次回应"),OtherConversation->GetSubmissionResult(PossessionMessage),FName(TEXT("Heard")));
     Panel->SetResident(Neighbor);
+    TestEqual(TEXT("更换对象后收起旧原话行"),Panel->SubmittedLine->GetVisibility(),ESlateVisibility::Collapsed);
     TestTrue(TEXT("切换对象后不保留上一个人的发送编号"),!Panel->SubmittedEventId.IsValid());
     TestTrue(TEXT("切换对象后不显示旧原话"),Panel->LastSubmittedText.IsEmpty());
     TestTrue(TEXT("新标题使用新交谈对象"),Panel->SpeakerName->GetText().ToString().Contains(TEXT("大壮")));

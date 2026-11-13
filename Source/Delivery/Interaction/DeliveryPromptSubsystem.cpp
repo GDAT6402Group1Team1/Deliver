@@ -70,11 +70,13 @@ bool UDeliveryPromptSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 // 移除提示控件并清理显示状态
 void UDeliveryPromptSubsystem::Deinitialize()
 {
-	if (PromptWidget.IsValid() && GEngine && GEngine->GameViewport)
+	auto* Viewport = PromptViewport.Get();
+	if (PromptWidget.IsValid() && Viewport)
 	{
-		GEngine->GameViewport->RemoveViewportWidgetContent(PromptWidget.ToSharedRef());
+		Viewport->RemoveViewportWidgetContent(PromptWidget.ToSharedRef());
 	}
 	PromptWidget.Reset();
+	PromptViewport.Reset();
 	Super::Deinitialize();
 }
 
@@ -185,7 +187,9 @@ bool UDeliveryPromptSubsystem::ComputeScreenPosition(FVector2D& OutPosition) con
 // 在本机创建提示控件，并连接各项显示数据
 void UDeliveryPromptSubsystem::EnsureWidget()
 {
-	if (PromptWidget.IsValid() || !GEngine || !GEngine->GameViewport)
+	// 双人 PIE 的每个世界都有自己的窗口，提示应加入所属世界的视口
+	auto* Viewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+	if (PromptWidget.IsValid() || !Viewport)
 	{
 		return;
 	}
@@ -450,5 +454,6 @@ void UDeliveryPromptSubsystem::EnsureWidget()
 			                              .ShadowOffset(FVector2D(1.0f, 1.0f))
 			                              .ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.9f))]]]];
 
-	GEngine->GameViewport->AddViewportWidgetContent(PromptWidget.ToSharedRef(), 5);
+	Viewport->AddViewportWidgetContent(PromptWidget.ToSharedRef(), 5);
+	PromptViewport = Viewport;
 }

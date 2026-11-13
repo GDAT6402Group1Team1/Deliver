@@ -9,6 +9,8 @@ class UMultiLineEditableTextBox;
 class UTextBlock;
 class UButton;
 class UScrollBox;
+class UBorder;
+class USizeBox;
 
 // 显示玩家原话和输入，将消息交给交谈组件发送，NPC 台词显示在人物附近
 UCLASS()
@@ -18,6 +20,9 @@ class DELIVERY_API UDeliveryConversationWidget : public UUserWidget
 public:
     void SetResident(ADeliveryNpcCharacter* Value);
     bool IsSuggestionsVisible() const;
+    // HUD 传入已经扣除 DPI 缩放的宽度，高度由蓝图内容决定
+    void SetAvailableWidth(float Width);
+    void FocusInput();
 protected:
     virtual void NativeConstruct() override;
     virtual void NativeDestruct() override;
@@ -28,6 +33,8 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UMultiLineEditableTextBox> Suggestions;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> Reply;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> SpeakerName;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UBorder> SubmittedLine;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<USizeBox> ConversationWidth;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UScrollBox> ReplyScroll;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> SendButton;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> SuggestionToggle;

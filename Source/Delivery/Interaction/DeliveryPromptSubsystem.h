@@ -7,6 +7,7 @@
 #include "DeliveryPromptSubsystem.generated.h"
 
 class SWidget;
+class UGameViewportClient;
 
 /**
  * 创建并显示交互浮窗、左下角操作提示、顶部任务提示和对白字幕
@@ -57,6 +58,8 @@ class DELIVERY_API UDeliveryPromptSubsystem : public UWorldSubsystem
 	bool IsObjectiveFresh() const;
 
 	TSharedPtr<SWidget> PromptWidget;
+	// 记住实际添加提示的视口，结束 PIE 时只移除这个窗口中的控件
+	TWeakObjectPtr<UGameViewportClient> PromptViewport;
 	// 左下角操作提示
 	FText CornerText;
 	bool bCornerDimmed = false;

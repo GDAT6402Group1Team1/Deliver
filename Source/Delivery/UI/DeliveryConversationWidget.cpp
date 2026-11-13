@@ -9,6 +9,8 @@
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/ScrollBox.h"
+#include "Components/Border.h"
+#include "Components/SizeBox.h"
 #include "GameFramework/PlayerController.h"
 #include "Input/Reply.h"
 #include "InputCoreTypes.h"
@@ -91,6 +93,18 @@ bool UDeliveryConversationWidget::IsSuggestionsVisible() const
 {
     return Suggestions && Suggestions->GetVisibility()==ESlateVisibility::Visible;
 }
+void UDeliveryConversationWidget::SetAvailableWidth(float Width)
+{
+    if (!ConversationWidth || !FMath::IsFinite(Width) || Width<=0) return;
+    if (!ConversationWidth->IsWidthOverride() || !FMath::IsNearlyEqual(ConversationWidth->GetWidthOverride(),Width))
+        ConversationWidth->SetWidthOverride(Width);
+}
+void UDeliveryConversationWidget::FocusInput()
+{
+    // 界面加入视口并切换输入模式后，直接把键盘交给输入框
+    if (Input) Input->SetUserFocus(GetOwningPlayer());
+    else SetUserFocus(GetOwningPlayer());
+}
 void UDeliveryConversationWidget::ToggleSuggestions()
 {
     if (Suggestions) Suggestions->SetVisibility(IsSuggestionsVisible()?ESlateVisibility::Collapsed:ESlateVisibility::Visible);
@@ -161,7 +175,7 @@ void UDeliveryConversationWidget::RefreshReply()
         bReplyTimedOut=true;
     }
 
-    const FText TargetName=Resident->DisplayName;
+    const FText TargetName=FText::Format(NSLOCTEXT("DeliveryConversation","SpeakingTo","对 {0} 说"),Resident->DisplayName);
     if (SpeakerName && !SpeakerName->GetText().EqualTo(TargetName)) SpeakerName->SetText(TargetName);
     const bool bCanSend=Conversation->CanSendNow();
     if (SendButton && SendButton->GetIsEnabled()!=bCanSend) SendButton->SetIsEnabled(bCanSend);
@@ -169,16 +183,23 @@ void UDeliveryConversationWidget::RefreshReply()
     if (!LastSubmittedText.IsEmpty())
     {
         const TCHAR* Label=bRejected?TEXT("没送到"):Result==TEXT("Sending")?TEXT("正在发送"):TEXT("你说");
-        Text+=FString::Printf(TEXT("%s：%s\n\n"),Label,*LastSubmittedText);
+        Text=FString::Printf(TEXT("%s：%s"),Label,*LastSubmittedText);
     }
-    if (bReplyTimedOut) Text+=TEXT("暂时没有回应，可以再试一次");
+    auto AppendNotice=[&Text](const FString& Notice)
+    {
+        if (!Text.IsEmpty()) Text+=TEXT("\n");
+        Text+=Notice;
+    };
+    if (bReplyTimedOut) AppendNotice(TEXT("暂时没有回应，可以再试一次"));
     // 下方只保留玩家原话和必要反馈，NPC 台词不在这里重复显示
-    if (Result==TEXT("TooFast")) Text+=TEXT("刚才发得太快，这句话没有送到。稍后可以重试");
-    if (Result==TEXT("Unavailable")) Text+=TEXT("请靠近对方，确认中间没有遮挡且对方没有倒地");
-    if (Result==TEXT("NotHeard")) Text+=TEXT("对方没听到，请换个无遮挡的位置再说");
-    if (Result==TEXT("Empty")) Text+=TEXT("没有发送文字，请重新输入");
-    if (bReplyFailed) Text+=TEXT("\n这次没能回复，可以再试一次");
-    if (FPlatformTime::Seconds()<InputNoticeUntil) Text+=TEXT("\n")+InputNotice;
+    if (Result==TEXT("TooFast")) AppendNotice(TEXT("刚才发得太快，这句话没有送到。稍后可以重试"));
+    if (Result==TEXT("Unavailable")) AppendNotice(TEXT("请靠近对方，确认中间没有遮挡且对方没有倒地"));
+    if (Result==TEXT("NotHeard")) AppendNotice(TEXT("对方没听到，请换个无遮挡的位置再说"));
+    if (Result==TEXT("Empty")) AppendNotice(TEXT("没有发送文字，请重新输入"));
+    if (bReplyFailed) AppendNotice(TEXT("这次没能回复，可以再试一次"));
+    if (FPlatformTime::Seconds()<InputNoticeUntil) AppendNotice(InputNotice);
+    const ESlateVisibility SubmittedVisibility=Text.IsEmpty()?ESlateVisibility::Collapsed:ESlateVisibility::Visible;
+    if (SubmittedLine && SubmittedLine->GetVisibility()!=SubmittedVisibility) SubmittedLine->SetVisibility(SubmittedVisibility);
     if (Reply->GetText().ToString()!=Text)
     {
         Reply->SetText(FText::FromString(Text));
@@ -204,6 +225,7 @@ void UDeliveryConversationWidget::ResetConversation()
     SubmissionResult=NAME_None; InputNotice.Reset(); InputNoticeUntil=0;
     ReplyWaitUntil=0; bAwaitingReply=false; bReplyTimedOut=false;
     if (Reply) Reply->SetText(FText::GetEmpty());
+    if (SubmittedLine) SubmittedLine->SetVisibility(ESlateVisibility::Collapsed);
     if (Input) Input->SetText(FText::GetEmpty());
     if (Suggestions)
     {

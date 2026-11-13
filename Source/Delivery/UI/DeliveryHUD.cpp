@@ -12,6 +12,7 @@
 #include "UI/Controllers/DeliveryPhoneController.h"
 #include "TimerManager.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
+#include "Blueprint/GameViewportSubsystem.h"
 
 ADeliveryHUD::ADeliveryHUD()
 {
@@ -216,9 +217,12 @@ void ADeliveryHUD::OpenResidentConversation(ADeliveryNpcCharacter* Resident)
     if (!ConversationWidget) return;
     ConversationWidget->SetResident(Resident);
     ConversationWidget->AddToViewport(40);
+    // 两轴都设为零时，视口采用 UMG 内容的实际高度，宽度由内部 SizeBox 限制
+    ConversationWidget->SetDesiredSizeInViewport(FVector2D::ZeroVector);
+    ConversationWidget->SetAlignmentInViewport(FVector2D(.5f,1.f));
     RefreshConversationLayout();
     SetPanelOpen(TEXT("ResidentConversation"),true);
-    ConversationWidget->SetKeyboardFocus();
+    ConversationWidget->FocusInput();
 }
 void ADeliveryHUD::RefreshConversationLayout()
 {
@@ -227,15 +231,18 @@ void ADeliveryHUD::RefreshConversationLayout()
     GetOwningPlayerController()->GetViewportSize(Width,Height);
     if (Width<=0 || Height<=0) return;
     const float Scale=FMath::Max(.1f,UWidgetLayoutLibrary::GetViewportScale(this));
-    // 输入区留在左下角，展开例句时只增加高度
-    float PanelWidth=FMath::Clamp(Width*.36f,320.f,480.f);
+    // 窄条居中放在物品栏上方，展开例句时由蓝图内容向上增加高度
+    float PanelWidth=FMath::Clamp(Width*.52f,440.f,720.f);
     PanelWidth=FMath::Min(PanelWidth,FMath::Max(1.f,Width-32.f));
-    const float PanelHeight=FMath::Min(ConversationWidget->IsSuggestionsVisible()?360.f:250.f,
-        FMath::Max(1.f,Height-32.f));
-    ConversationWidget->SetDesiredSizeInViewport(FVector2D(PanelWidth/Scale,PanelHeight/Scale));
-    // 交谈固定在左下角，手机来电和收起时按钮位置保持不变
-    ConversationWidget->SetAlignmentInViewport(FVector2D(0.f,1.f));
-    ConversationWidget->SetPositionInViewport(FVector2D(16.f,Height-16.f));
+    ConversationWidget->SetAvailableWidth(PanelWidth/Scale);
+    // 物品栏也随 DPI 放大，底部间距采用相同缩放，避免高分辨率下压住例句按钮
+    const float BottomGap=FMath::Max(110.f,120.f*Scale);
+    const FVector2D Position(Width*.5f,FMath::Max(16.f,Height-BottomGap));
+    const auto* Viewport=UGameViewportSubsystem::Get();
+    if (!Viewport) return;
+    const FMargin Current=Viewport->GetWidgetSlot(ConversationWidget).Offsets;
+    if (!FMath::IsNearlyEqual(Current.Left,float(Position.X)/Scale) || !FMath::IsNearlyEqual(Current.Top,float(Position.Y)/Scale))
+        ConversationWidget->SetPositionInViewport(Position);
 }
 void ADeliveryHUD::CloseResidentConversation()
 {
