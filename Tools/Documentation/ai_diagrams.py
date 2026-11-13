@@ -48,7 +48,7 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'FDeliveryNpcSentence': ('一句台词及语音', ['保存句子序号、文字和情绪', '保存 PCM 音频及采样率'], [('Sequence / Text / Emotion', '按序播放同一次回复'), ('Pcm / SampleRate', '交给客户端声音播放')]),
         'FDeliveryNpcLocalVoice': ('本机待播语音', ['保存声音、解码器和字幕进度', '同一句积累声音后接续播放'], [('State.bAudioComplete', '句末到达后才能结束本句'), ('QueuedBytes / TotalBytes', '记录已排入声音与最终长度')]),
         'FDeliveryNpcVoiceStreamEncoder': ('句内声音编码', ['每句话保留同一个 Opus 编码器', 'V2 到句末才确定声音总长'], [('Append()', '收到新 PCM 后接着编码'), ('Finish()', '补齐尾音并通知最终长度')]),
-        'UDeliveryNpcExpressionSet': ('表情与交谈姿态配置', ['保存眼睛、眉毛和眨眼曲线', '保存倾听前倾和头部过渡参数'], [('Poses / BlinkCurve', '按情绪选择形态键权重'), ('ListeningLean / HeadTurnLimit', '调整姿态幅度与转头范围')]),
+        'UDeliveryNpcExpressionSet': ('表情与交谈姿态配置', ['保存眼睛、眉毛和眨眼曲线', '保存倾听时长、前倾和头部过渡参数'], [('Poses / BlinkCurve', '按情绪选择形态键权重'), ('ListeningReactionDuration', '短暂倾听后进入等待姿态')]),
         'UDeliveryNpcConversationAnimInstance': ('交谈姿态参数', ['读取倾听、思考与实际播放状态', '平滑视线、胸部和头部旋转'], [('NativeUpdateAnimation()', '在游戏线程准备姿态参数'), ('NativeUninitializeAnimation()', '清除目标并恢复叠加权重')]),
         'UDeliveryNpcLookComponent': ('经过与擦身时的注视', ['服务器选择目标和注视时间', '配置距离、冷却与转头幅度'], [('GetLookTarget()', '读取当前要看的人'), ('IsAfterBrush()', '区分经过与轻微擦碰')]),
         'ADeliveryPedestrian': ('普通路人', ['沿原路线和 Boids 规则行走', '保留程序化步态与受击行为'], [('NpcLook', '短暂关注附近玩家'), ('头部叠加旋转', '走路时看一眼，再恢复')]),
@@ -65,7 +65,7 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
     }
     title, fields, methods = descriptions[name]
     if name == 'UDeliveryNpcAgentComponent' and '倾听' in role:
-        fields = ['记录说话者和玩家发言编号', '保存当前请求及动作状态']
+        fields = ['记录说话者、发言与倾听开始时间', '保存当前请求及动作状态']
         methods = [('BeginListening()', '玩家插话时结束旧交谈'), ('EndListening()', '清除倾听目标和发言编号')]
     if name == 'UDeliveryNpcAgentComponent' and '逐句' in role:
         fields = ['检查请求、动作和回复编号', '只接收本次交谈的有效句子']
@@ -273,7 +273,7 @@ def diagrams():
         (2,3,'RequestDecision / Enqueue','call'),(3,4,'相关事件、最新玩家发言和可用动作','call'),
         (4,3,'第一条完整结果中的动作建议','return'),(3,2,'检查请求与动作条件','return'),
         (5,2,'StartAction：开始前再次检查','call'),(2,5,'执行通过检查的动作','return'),
-        (4,4,'首句合成语音，后续文字继续生成','call'),(4,3,'陆续返回短句、语音与句子序号','return'),
+        (4,4,'首句进入语音队列，后续文字继续生成','call'),(4,3,'陆续返回短句、语音与句子序号','return'),
         (3,2,'检查句子是否属于这次回复','return'),(2,5,'按序同步台词与音频','call'),
         (5,0,'客户端按实际播放更新字幕和情绪','return'),
         (2,5,'受击、目标失效或世界结束：停止相关请求、动作和语音','note')])

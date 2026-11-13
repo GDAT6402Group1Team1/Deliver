@@ -13,10 +13,37 @@
     @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
     @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
     .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
-<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#speech-streaming-comparison">分段对照与停顿表现</a><a href="#sentence-audio-playback">句内语音播放</a><a href="#sentence-audio-integration">分段接口与编码</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
+<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#reply-waiting-feedback">交谈等待与反馈调整</a><a href="#speech-streaming-comparison">分段对照与停顿表现</a><a href="#sentence-audio-playback">句内语音播放</a><a href="#sentence-audio-integration">分段接口与编码</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
 <header><div class="meta">AI / 交谈、语音与表情 / 2026-11-13</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
-<div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、轻拳后仰、翠花眉形和 B 音色短反应已加入。翠花已采用用户认可的 B 加速版；句内音频已接到 UE 接收、编码和播放流程，八项专项通过。新流程默认关闭；十八次真实语音 HTTP 对照已完成，8 帧作为试玩候选。动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
+<div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、轻拳后仰、翠花眉形和 B 音色短反应已加入。翠花已采用用户认可的 B 加速版；句内音频已接到 UE 接收、编码和播放流程，八项专项通过。新流程默认关闭；十八次固定文案语音对照已完成，8 帧作为试玩候选。随后三次真实模型与语音请求，约 5.5–6.3 秒收到第一句音频；倾听和失败反馈已修复并通过六项专项检查。动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
 <div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
+<section id="reply-waiting-feedback"><h2>11 月 13 日：真实交谈等待与反馈调整</h2>
+<p class="meta">三次真实模型与语音请求已完成；倾听、等待与失败反馈已修复，六项专项检查通过</p>
+<h3>倾听姿态与失败提示</h3>
+<p>这次检查发现两个具体问题。其一，表情优先使用“正在倾听”，而倾听目标会一直保留到模型建议到达，因此后面的思考表情始终没有机会显示。其二，请求已经最终失败时，有些情况下仍未结束倾听，人物可能继续保持等待，直到 30 秒超时才停止。它们会放大“点了没反应”的感觉，即使后端实际上已经处理或结束了请求。</p>
+<p>本轮将短暂倾听与后续等待分开：先看向玩家并作出倾听反应，默认持续 0.7 秒，然后保持注视并显示思考姿态。时长放在现有表情配置中；模型已经选择愤怒等情绪时继续保留该情绪，平静回复在声音到来前仍使用统一的等待姿态。最终失败后立即结束等待，通过现有交谈界面提示可以重试；玩家发起新一轮交谈时重新计算重试次数。原来的两次重试及 2 秒、4 秒间隔保留，旁边 NPC 插话不能重置次数或提前重试。</p>
+<p>“听见玩家、生成回答、合成声音、实际播放”是不同步骤，但游戏目前没有每一步的精确后台状态。服务器知道发言已收到，表现组件知道还在等回复或声音，也知道本机是否开始播放；语音服务具体何时开始合成只记在后台日志中。各步骤的耗时保存在后台日志中，人物通过姿态表示等待，正式台词仍由模型生成。</p>
+<h3>模型与语音耗时</h3>
+<p>通过仍在运行的正式后端，分别发送问候、拱火和纠正各一次，使用真实 <code>gpt-6.1-sol</code> 与现有男女 B 音色，共三次调用，没有重试。这一轮保留整句音频传输，与此前十八次预先写好台词的语音比较分开。</p>
+<div class="table-scroll" tabindex="0" aria-label="三次真实模型与语音请求"><table><tr><th>场景</th><th>后台收到请求到完整首句</th><th>首句合成声音</th><th>HTTP 发出到收到首句音频</th></tr>
+<tr><td>问候翠花</td><td>3663 毫秒</td><td>1847 毫秒</td><td>5544 毫秒</td></tr>
+<tr><td>向大壮拱火</td><td>3954 毫秒</td><td>2151 毫秒</td><td>6126 毫秒</td></tr>
+<tr><td>纠正大壮的误解</td><td>2784 毫秒</td><td>3489 毫秒</td><td>6294 毫秒</td></tr></table></div>
+<p>三次首句语音排队均为 2 毫秒，主要等待仍在完整首句和声音生成。后续句子会等前一句合成结束；这里不能把“首句没有积压”扩大为所有句子都没有排队。三次 AppServer 连接启动分别为 274、168、0 毫秒，已经包含在完整首句之前，不再另加。表格分别使用后台和 HTTP 客户端自己的计时，收到音频也不代表声卡或游戏已经开始播放。本轮不继续增加微基准，先解决玩家可见的等待反馈。</p>
+<h3>台词观察与检查限制</h3>
+<p>问候得到“早，没忙啥，出来溜达。”；纠正误解后，大壮回答“是我听岔了。她说归她扫，我听成归她管了。”。拱火得到“我还怕她不成？”和“你这话我得当面问问她。”，模型选择生气地靠近翠花，没有选择打架。五句都有有效的 24 kHz 音频，没有语音错误；这些少量样本接住了提供的上下文，不能据此断言重复、答非所问或玩法趣味已经解决。</p>
+<p>场景和候选动作由检查程序人工提供，没有经过 UE 的感知、导航、冷却和占用判断。其中写了人物相距 120 厘米，却仍提供 <code>MoveTo</code>；正式游戏的到达距离为 140 厘米，并计入双方碰撞范围，在普通平面条件下应排除这个候选。因此本次只记录模型与语音的耗时和台词，不将靠近或互殴写成游戏验证。原始结果保留，审查文件已注明这一限制，没有为了得到预期动作重发请求。</p>
+<p class="evidence">原始结果与审查：<code>Saved/AIResearch/ModelSpeechPipeline_20261113/results.json</code>、<code>review.json</code>。这三次调用期间正式后端未重启，没有打开游戏；分段音频开关仍关闭。</p>
+<div id="reply-waiting-validation"><h3>本轮修改与验证</h3>
+<p>源码提交为 <code>cf4b4da</code>。UE 5.8 的 <code>DeliveryEditor</code> 完整构建成功，用时 24.68 秒。随后六项专项全部通过：<code>ConversationFeedback</code>、<code>SentencePlayback</code>、<code>AudioStreaming</code>、<code>BodyAnimation</code>、<code>AuthorityLifecycle</code>、<code>BehaviorTreeExecution</code>。五项没有测试警告；<code>SentencePlayback</code> 仍包含一条预期的 <code>audio_timeout</code>，用于检查声音超时后的处理。</p>
+<p>新增检查手动填写客户端会收到的说话者和倾听开始时间，模拟远端表情选择，确认先显示倾听，再保留注视并转为思考；平静回复的眼神与头部姿态一致。失败检查覆盖两次重试后结束等待、旁人发言不能继续重置次数、新玩家发言可重新尝试，以及旧通知不能覆盖新消息。交谈界面通过原有结果通知显示“这次没能回复，可以再试一次”，保留玩家原话与已经显示的 NPC 回复；控制权变化后仍向发言玩家的控制器通知。</p>
+<p>这些检查在不渲染画面的独立世界中运行，没有正式关卡试玩或真实双人网络。以上三次 HTTP 请求用于定位等待，发生在本次反馈修改之前，也不能证明模型或声音变快。正式后台仍为进程 <code>60224</code>，本轮没有重启它或启用分段音频。</p>
+<p>启动日志仍有三条角色默认对象（CDO）初始化时的物理材质错误，以及十三条 <code>Condition failed</code>，与此前启动记录一致，本轮没有修复。专项通过不代表整个日志没有错误。</p>
+<p class="evidence">构建：<code>Saved/Logs/NpcListeningStagesBuild.log</code>；专项报告：<code>Saved/Automation/NpcListeningStages/index.json</code>；运行日志：<code>Saved/Logs/NpcListeningStagesTests.log</code>。</p>
+<details><summary>构建与检查命令</summary><pre>&amp; 'D:\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat' DeliveryEditor Win64 Development '-Project=D:/Udev/Delivery/Delivery.uproject' -WaitMutex -NoHotReloadFromIDE
+
+&amp; 'D:\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' 'D:/Udev/Delivery/Delivery.uproject' /Engine/Maps/Entry -unattended -nop4 -NullRHI -nosplash -NoLiveCoding '-ExecCmds=Automation RunTests Delivery.AI.ConversationFeedback+Delivery.AI.SentencePlayback+Delivery.AI.AudioStreaming+Delivery.AI.BodyAnimation+Delivery.AI.AuthorityLifecycle+Delivery.AI.BehaviorTreeExecution' '-TestExit=Automation Test Queue Empty' '-ReportExportPath=D:/Udev/Delivery/Saved/Automation/NpcListeningStages' '-abslog=D:/Udev/Delivery/Saved/Logs/NpcListeningStagesTests.log'</pre></details></div>
+</section>
 <section id="speech-streaming-comparison"><h2>11 月 13 日：句内语音对照与停顿表现</h2>
 <p class="meta">缺音时的身体动作已修复；十八次真实语音 HTTP 对照完成，正式分段开关仍关闭</p>
 <h3>声音停了一下，身体也应暂停说话动作</h3>
