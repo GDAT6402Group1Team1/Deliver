@@ -11,6 +11,7 @@ class UAudioComponent;
 class USoundWaveProcedural;
 class UDeliveryNpcExpressionSet;
 class FDeliveryNpcVoiceDecoder;
+struct FDeliveryNpcVoiceEncodingJob;
 
 USTRUCT(BlueprintType)
 struct FDeliveryNpcSpeechState
@@ -30,6 +31,8 @@ struct FDeliveryNpcSpeechState
     UPROPERTY(BlueprintReadOnly) int32 AudioFormatVersion=0;
     UPROPERTY(BlueprintReadOnly) int32 PcmBytes=0;
     UPROPERTY(BlueprintReadOnly) int32 EncodedBytes=0;
+    // 句内分段时只有收到句末通知才为 true，暂时没有声音不代表说完
+    UPROPERTY(BlueprintReadOnly) bool bAudioComplete=false;
 };
 
 // 保存本机收到的一句语音，前一句播放结束后再开始下一句
@@ -46,6 +49,8 @@ struct FDeliveryNpcLocalVoice
     double FrontSince=0;
     double DrainedAt=0;
     double TextStartedAt=0;
+    float CaptionProgress=0;
+    bool bRebuffering=false;
 };
 
 struct FDeliveryNpcServerVoice
@@ -53,6 +58,7 @@ struct FDeliveryNpcServerVoice
     TArray<uint8> Pcm;
     TArray<uint8> Encoded;
     double ExpiresAt=0;
+    bool bComplete=true;
 };
 
 // 后台只生成压缩数据，播放顺序仍由游戏线程决定
@@ -61,6 +67,20 @@ struct FDeliveryNpcEncodedSentence
     TArray<uint8> Audio;
     FString Error;
     double EncodeMs=0;
+};
+
+// 服务器保存正在生成的一句话，输入检查与复制都在游戏线程执行
+struct FDeliveryNpcGeneratingSentence
+{
+    FDeliveryNpcSentence Sentence;
+    FGuid TurnId;
+    TSharedPtr<FDeliveryNpcVoiceEncodingJob, ESPMode::ThreadSafe> Encoding;
+    TArray<uint8> Encoded;
+    int32 NextChunk=0;
+    int32 ReceivedPcmBytes=0;
+    bool bInputEnded=false;
+    bool bEncodingEnded=false;
+    bool bFailed=false;
 };
 
 // 将 NPC 的台词和播放时间同步给所有玩家，在各自客户端播放声音、字幕和动画
@@ -74,6 +94,7 @@ class DELIVERY_API UDeliveryNpcPresentationComponent : public UActorComponent
     friend class UDeliveryConversationComponent;
     friend class FDeliveryNpcProfileTest;
     friend class FDeliveryNpcFightTest;
+    friend class FDeliveryNpcAudioStreamingTest;
 public:
     UDeliveryNpcPresentationComponent();
     // 服务器设置台词并通知客户端播放，返回 true 表示已安排播放
@@ -82,6 +103,10 @@ public:
     void CancelSpeech();
     void BeginReply(FGuid ActionId, FGuid MessageId);
     void QueueSentence(FGuid ActionId, FGuid MessageId, const FDeliveryNpcSentence& Sentence);
+    // 返回 true 表示本轮接受了数据，声音仍可能正在编码或等待播放
+    bool BeginSentenceAudio(FGuid ActionId, FGuid MessageId, const FDeliveryNpcSpeechBegin& Begin);
+    bool AppendSentenceAudio(FGuid ActionId, FGuid MessageId, const FDeliveryNpcAudioChunk& Chunk);
+    bool EndSentenceAudio(FGuid ActionId, FGuid MessageId, const FDeliveryNpcAudioEnd& End);
     void FinishSentences(FGuid ActionId, int32 Count);
     // 模型已结束这次回复并明确没有台词时返回 true
     bool IsReplyWithoutSpeech(FGuid ActionId) const { return ActionId.IsValid() && ReplyAction==ActionId && ExpectedSentences==0; }
@@ -147,6 +172,7 @@ private:
     UFUNCTION(NetMulticast,Reliable) void ReceiveAudio(FGuid TurnId,int32 Offset,int32 Total,const TArray<uint8>& Data);
     UFUNCTION(NetMulticast,Reliable) void StartStreamSpeech(FDeliveryNpcSpeechState State);
     UFUNCTION(NetMulticast,Reliable) void StopStreamSpeech(FGuid ActionId,bool bStopAll=false);
+    UFUNCTION(NetMulticast,Reliable) void FinishStreamAudio(FGuid TurnId,int32 PcmBytes,int32 EncodedBytes,bool bSucceeded);
     // 后台还在合成首句时也同步本轮编号，客户端据此保留模型已经选定的表情
     UPROPERTY(Replicated) FGuid ReplyAction;
     FGuid ReplyMessage;
@@ -156,6 +182,7 @@ private:
     int32 AudioAttempts=0;
     TMap<int32,FDeliveryNpcSentence> Sentences;
     TMap<int32,FDeliveryNpcEncodedSentence> EncodedSentences;
+    TMap<int32,FDeliveryNpcGeneratingSentence> GeneratingSentences;
     int32 PendingEncodeTasks=0;
     TArray<uint8> SendingAudio;
     TMap<FGuid,FDeliveryNpcServerVoice> ServerVoices;
@@ -168,6 +195,10 @@ private:
     void TickSentences();
     void PlayRecordedVoice();
     void AcceptLocalSpeech(const FDeliveryNpcSpeechState& State,bool bFromReplication);
+    void UseTextForLocalVoice(FDeliveryNpcLocalVoice& Local);
+    void CancelSentenceGeneration();
+    bool TryStartGeneratedSentence();
+    void RefreshGeneratedSentence(int32 Sequence);
     void FinishLocalSentence();
     int32 GetConsumedVoiceBytes() const;
     bool HasFinishedSentence() const;

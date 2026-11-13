@@ -18,6 +18,28 @@ struct FDeliveryNpcStreamBuffer
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 
+namespace
+{
+    bool ReadInteger(const FJsonObject& Json, const TCHAR* Key, int32 Minimum, int32 Maximum, int32& Out)
+    {
+        double Value = 0;
+        if (!Json.TryGetNumberField(Key, Value) || !FMath::IsFinite(Value) ||
+            Value < Minimum || Value > Maximum || FMath::FloorToDouble(Value) != Value) return false;
+        Out = static_cast<int32>(Value);
+        return true;
+    }
+
+    bool ReadSpeechText(const FJsonObject& Json, FString& Text, FName& Emotion)
+    {
+        FString Value;
+        if (!Json.TryGetStringField(TEXT("text"), Text) || Text.Len() > 120 || Text.TrimStartAndEnd().IsEmpty() ||
+            !Json.TryGetStringField(TEXT("emotion"), Value) ||
+            (Value != TEXT("Calm") && Value != TEXT("Angry") && Value != TEXT("Surprised"))) return false;
+        Emotion = FName(Value);
+        return true;
+    }
+}
+
 bool UDeliveryAiGatewaySubsystem::DoesSupportWorldType(EWorldType::Type WorldType) const
 {
     return WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
@@ -177,14 +199,7 @@ void UDeliveryAiGatewaySubsystem::Tick(float DeltaTime)
         FString Line;
         while (Pending.Contains(Id) && Buffer->Lines.Dequeue(Line)) ReadStream(Id, Line);
         Entry = Pending.Find(Id);
-        if (Entry && Entry->bHttpFinished)
-        {
-            const bool bOk = Entry->bHttpSucceeded && Entry->bReplyFinished;
-            const int32 SentenceCount = Entry->SentenceCount;
-            auto Agent = Entry->Agent;
-            Remove(Id);
-            if (Agent.IsValid()) Agent->FinishReply(Id, bOk, SentenceCount);
-        }
+        if (Entry && Entry->bHttpFinished) FinishStreamRequest(Id);
     }
     TArray<FGuid> Expired;
     const double Now = FPlatformTime::Seconds();
@@ -217,47 +232,146 @@ void UDeliveryAiGatewaySubsystem::Tick(float DeltaTime)
     }
 }
 
+void UDeliveryAiGatewaySubsystem::FinishStreamRequest(FGuid RequestId)
+{
+    const auto* Entry = Pending.Find(RequestId);
+    if (!Entry || !Entry->bHttpFinished) return;
+    const bool bSucceeded = Entry->bHttpSucceeded && Entry->bReplyFinished && FPlatformTime::Seconds() < Entry->Deadline;
+    const int32 SentenceCount = Entry->SentenceCount;
+    const auto Agent = Entry->Agent;
+    Remove(RequestId);
+    if (Agent.IsValid()) Agent->FinishReply(RequestId, bSucceeded, SentenceCount);
+}
+
+void UDeliveryAiGatewaySubsystem::RejectStream(FGuid RequestId, const TCHAR* Reason)
+{
+    const auto* Entry = Pending.Find(RequestId);
+    if (!Entry) return;
+    const auto Agent = Entry->Agent;
+    UE_LOG(LogTemp, Log, TEXT("NpcSpeech stream_rejected request=%s reason=%s"), *RequestId.ToString(), Reason);
+    Remove(RequestId);
+    if (Agent.IsValid()) Agent->FinishReply(RequestId, false);
+}
+
 void UDeliveryAiGatewaySubsystem::ReadStream(FGuid RequestId, const FString& Line)
 {
     auto* Entry = Pending.Find(RequestId);
     if (!Entry || !Entry->Agent.IsValid()) return;
+    if (FPlatformTime::Seconds() >= Entry->Deadline) { RejectStream(RequestId, TEXT("RequestTimeout")); return; }
     auto* Agent = Entry->Agent.Get();
     TSharedPtr<FJsonObject> Json;
     FString Type;
-    if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Line), Json) || !Json->TryGetStringField(TEXT("type"), Type)) return;
+    if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Line), Json) || !Json.IsValid() || !Json->TryGetStringField(TEXT("type"), Type))
+    { RejectStream(RequestId, TEXT("InvalidJson")); return; }
     if (Type == TEXT("keepalive")) return;
     FString Id;
     if (!Json->TryGetStringField(TEXT("request_id"), Id) || Id != RequestId.ToString(EGuidFormats::DigitsWithHyphensLower)) return;
-    if (Type == TEXT("proposal") && !Entry->bHasProposal)
+    if (Type == TEXT("error")) { RejectStream(RequestId, TEXT("BackendError")); return; }
+    if (Entry->bReplyFinished) { RejectStream(RequestId, TEXT("EventAfterDone")); return; }
+    if (Type == TEXT("proposal"))
     {
+        if (Entry->bHasProposal) { RejectStream(RequestId, TEXT("DuplicateProposal")); return; }
         const TSharedPtr<FJsonObject>* Object;
-        if (!Json->TryGetObjectField(TEXT("proposal"), Object)) return;
+        if (!Json->TryGetObjectField(TEXT("proposal"), Object)) { RejectStream(RequestId, TEXT("InvalidProposal")); return; }
         FString Body; FJsonSerializer::Serialize(Object->ToSharedRef(), TJsonWriterFactory<>::Create(&Body));
         FDeliveryNpcDecisionProposal Proposal; FName Reason;
         if (!DeliveryNpc::DecodeProposal(Body, Proposal, Reason) || !Agent->ReceiveStreamDecision(RequestId, Proposal))
-        { Remove(RequestId); Agent->FinishReply(RequestId, false); return; }
+        { RejectStream(RequestId, TEXT("RejectedProposal")); return; }
         Entry = Pending.Find(RequestId);
         if (Entry) Entry->bHasProposal = true;
+        return;
     }
-    else if (Type == TEXT("sentence") && Entry->bHasProposal && !Entry->bReplyFinished)
+    if (!Entry->bHasProposal) { RejectStream(RequestId, TEXT("MissingProposal")); return; }
+    if (Type == TEXT("done"))
     {
-        FDeliveryNpcSentence Sentence; FString Pcm, Emotion;
-        if (!Json->TryGetNumberField(TEXT("sequence"), Sentence.Sequence) || Sentence.Sequence < 0 || Sentence.Sequence > 2 ||
-            !Json->TryGetStringField(TEXT("text"), Sentence.Text) || Sentence.Text.IsEmpty() || Sentence.Text.Len() > 120 ||
-            !Json->TryGetStringField(TEXT("emotion"), Emotion) || !Json->TryGetStringField(TEXT("pcm"), Pcm) ||
-            !Json->TryGetNumberField(TEXT("sample_rate"), Sentence.SampleRate) ||
-            (Sentence.SampleRate != 16000 && Sentence.SampleRate != 24000) || Pcm.Len() > 512000 ||
-            (!Pcm.IsEmpty() && !FBase64::Decode(Pcm, Sentence.Pcm)) || Sentence.Pcm.Num() % 2) return;
-        Sentence.Emotion = FName(Emotion);
-        Agent->ReceiveSentence(RequestId, Sentence);
-    }
-    else if (Type == TEXT("done") && Entry->bHasProposal)
-    {
-        if (!Json->TryGetNumberField(TEXT("sentences"), Entry->SentenceCount) || Entry->SentenceCount < 0 || Entry->SentenceCount > 3)
-        { Remove(RequestId); Agent->FinishReply(RequestId, false); return; }
+        int32 Count = 0;
+        if (!ReadInteger(*Json, TEXT("sentences"), 0, 3, Count))
+        { RejectStream(RequestId, TEXT("InvalidSentenceCount")); return; }
+        for (int32 Index = 0; Index < 3; ++Index)
+        {
+            const auto& Sentence = Entry->Sentences[Index];
+            if ((Index < Count && !Sentence.IsFinished()) ||
+                (Index >= Count && Sentence.State != ESentenceReception::Empty))
+            { RejectStream(RequestId, TEXT("IncompleteSentences")); return; }
+        }
+        Entry->SentenceCount = Count;
         Entry->bReplyFinished = true;
+        return;
     }
-    else if (Type == TEXT("error")) { Remove(RequestId); Agent->FinishReply(RequestId, false); }
+    int32 Sequence = 0;
+    if (!ReadInteger(*Json, TEXT("sequence"), 0, 2, Sequence))
+    { RejectStream(RequestId, TEXT("InvalidSequence")); return; }
+    auto& Receipt = Entry->Sentences[Sequence];
+    if (Type == TEXT("sentence"))
+    {
+        FDeliveryNpcSentence Sentence; FString Pcm;
+        Sentence.Sequence = Sequence;
+        if (Receipt.State != ESentenceReception::Empty ||
+            !ReadSpeechText(*Json, Sentence.Text, Sentence.Emotion) || !Json->TryGetStringField(TEXT("pcm"), Pcm) ||
+            !ReadInteger(*Json, TEXT("sample_rate"), 16000, 24000, Sentence.SampleRate) ||
+            (Sentence.SampleRate != 16000 && Sentence.SampleRate != 24000) || Pcm.Len() > 512000 ||
+            (!Pcm.IsEmpty() && !FBase64::Decode(Pcm, Sentence.Pcm)) || Sentence.Pcm.Num() % 2 ||
+            Sentence.Pcm.Num() > 384000)
+        { RejectStream(RequestId, TEXT("InvalidWholeSentence")); return; }
+        Receipt.State = ESentenceReception::Whole;
+        Receipt.PcmBytes = Sentence.Pcm.Num();
+        Agent->ReceiveSentence(RequestId, Sentence);
+        return;
+    }
+    // 新传输只接收本次请求明确协商过的分段，旧后端返回完整句子仍可使用
+    if (!Entry->Request.bStreamSentenceAudio) { RejectStream(RequestId, TEXT("AudioStreamNotRequested")); return; }
+    if (Type == TEXT("speech_begin"))
+    {
+        FDeliveryNpcSpeechBegin Begin;
+        Begin.Sequence = Sequence;
+        if (Receipt.State != ESentenceReception::Empty || !ReadSpeechText(*Json, Begin.Text, Begin.Emotion) ||
+            !ReadInteger(*Json, TEXT("sample_rate"), 24000, 24000, Begin.SampleRate) ||
+            !ReadInteger(*Json, TEXT("audio_stream_version"), 1, 1, Begin.AudioStreamVersion))
+        { RejectStream(RequestId, TEXT("InvalidSpeechBegin")); return; }
+        if (!Agent->ReceiveSpeechBegin(RequestId, Begin)) { RejectStream(RequestId, TEXT("SpeechBeginRejected")); return; }
+        if (auto* Current = Pending.Find(RequestId)) Current->Sentences[Sequence].State = ESentenceReception::Streaming;
+        return;
+    }
+    if (Type == TEXT("audio_chunk"))
+    {
+        FDeliveryNpcAudioChunk Chunk;
+        FString Pcm;
+        Chunk.Sequence = Sequence;
+        if (Receipt.State != ESentenceReception::Streaming ||
+            !ReadInteger(*Json, TEXT("chunk_index"), 0, 31, Chunk.ChunkIndex) || Chunk.ChunkIndex != Receipt.NextChunkIndex ||
+            !ReadInteger(*Json, TEXT("offset_bytes"), 0, 384000, Chunk.OffsetBytes) || Chunk.OffsetBytes != Receipt.PcmBytes ||
+            !Json->TryGetStringField(TEXT("pcm"), Pcm) || Pcm.IsEmpty() || Pcm.Len() > 40960 ||
+            !FBase64::Decode(Pcm, Chunk.Pcm) || Chunk.Pcm.IsEmpty() || Chunk.Pcm.Num() % 2 ||
+            Chunk.Pcm.Num() > 30720 || Chunk.Pcm.Num() > 384000 - Receipt.PcmBytes)
+        { RejectStream(RequestId, TEXT("InvalidAudioChunk")); return; }
+        const int32 Bytes = Chunk.Pcm.Num();
+        if (!Agent->ReceiveAudioChunk(RequestId, Chunk)) { RejectStream(RequestId, TEXT("AudioChunkRejected")); return; }
+        if (auto* Current = Pending.Find(RequestId))
+        {
+            ++Current->Sentences[Sequence].NextChunkIndex;
+            Current->Sentences[Sequence].PcmBytes += Bytes;
+        }
+        return;
+    }
+    if (Type == TEXT("audio_end"))
+    {
+        FDeliveryNpcAudioEnd End;
+        FString Status;
+        End.Sequence = Sequence;
+        if (Receipt.State != ESentenceReception::Streaming || !Json->TryGetStringField(TEXT("status"), Status) ||
+            (Status != TEXT("completed") && Status != TEXT("failed")) ||
+            !ReadInteger(*Json, TEXT("chunk_count"), 0, 32, End.ChunkCount) || End.ChunkCount != Receipt.NextChunkIndex ||
+            !ReadInteger(*Json, TEXT("total_pcm_bytes"), 0, 384000, End.TotalPcmBytes) || End.TotalPcmBytes != Receipt.PcmBytes ||
+            (Status == TEXT("completed") && (End.ChunkCount == 0 || End.TotalPcmBytes == 0)) ||
+            (Json->HasField(TEXT("audio_error")) && (!Json->TryGetStringField(TEXT("audio_error"), End.Error) || End.Error.Len() > 128)))
+        { RejectStream(RequestId, TEXT("InvalidAudioEnd")); return; }
+        End.bSucceeded = Status == TEXT("completed");
+        if (!Agent->ReceiveAudioEnd(RequestId, End)) { RejectStream(RequestId, TEXT("AudioEndRejected")); return; }
+        if (auto* Current = Pending.Find(RequestId))
+            Current->Sentences[Sequence].State = End.bSucceeded ? ESentenceReception::Complete : ESentenceReception::Failed;
+        return;
+    }
+    RejectStream(RequestId, TEXT("UnknownEvent"));
 }
 
 void UDeliveryAiGatewaySubsystem::Shutdown()

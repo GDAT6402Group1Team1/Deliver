@@ -66,6 +66,7 @@ FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
     Root->SetArrayField(TEXT("subjects"), Subjects);
     Root->SetStringField(TEXT("request_source"), Request.bPlayerRequest ? TEXT("player") : TEXT("ambient"));
     Root->SetStringField(TEXT("voice"), Request.Voice);
+    if (Request.bStreamSentenceAudio) Root->SetStringField(TEXT("speech_transport"), TEXT("pcm_chunks_v1"));
     TArray<TSharedPtr<FJsonValue>> Actions;
     for (auto Action : Request.AllowedActions) Actions.Add(MakeShared<FJsonValueString>(ActionName(Action)));
     Root->SetArrayField(TEXT("allowed_actions"), Actions);

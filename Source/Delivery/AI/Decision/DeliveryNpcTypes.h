@@ -107,6 +107,8 @@ struct DELIVERY_API FDeliveryNpcDecisionRequest
     TArray<EDeliveryNpcAction> AllowedActions;
     TArray<FDeliveryNpcCandidate> Candidates;
     bool bPlayerRequest = false;
+    // 只有游戏与后端都启用时，语音才会在一句话生成期间分段返回
+    bool bStreamSentenceAudio = false;
     FString Voice = TEXT("male");
 };
 
@@ -118,6 +120,34 @@ struct FDeliveryNpcSentence
     FName Emotion;
     TArray<uint8> Pcm;
     int32 SampleRate = 16000;
+};
+
+// 同一句台词只发送一次文字，后续音频块沿用这个序号
+struct FDeliveryNpcSpeechBegin
+{
+    int32 Sequence = 0;
+    FString Text;
+    FName Emotion;
+    int32 SampleRate = 24000;
+    int32 AudioStreamVersion = 1;
+};
+
+struct FDeliveryNpcAudioChunk
+{
+    int32 Sequence = 0;
+    int32 ChunkIndex = 0;
+    int32 OffsetBytes = 0;
+    TArray<uint8> Pcm;
+};
+
+// 合成失败也结束当前句子，已有文字由表现层保留
+struct FDeliveryNpcAudioEnd
+{
+    int32 Sequence = 0;
+    int32 ChunkCount = 0;
+    int32 TotalPcmBytes = 0;
+    bool bSucceeded = false;
+    FString Error;
 };
 
 struct DELIVERY_API FDeliveryNpcDecisionProposal

@@ -23,6 +23,8 @@ class DELIVERY_API UDeliveryNpcAgentComponent : public UActorComponent
     friend class FDeliveryNpcSpeechStreamTest;
     friend class FDeliveryResidentIntegrationTest;
     friend class FDeliveryResidentPIECommand;
+    friend class FDeliveryNpcAudioStreamingTest;
+    friend class FDeliveryNpcSentenceAudioProtocolTest;
 public:
     UDeliveryNpcAgentComponent();
 
@@ -56,6 +58,10 @@ public:
     UFUNCTION(BlueprintPure) bool IsListening() const { return IsValid(ListeningSpeaker); }
     bool ReceiveStreamDecision(FGuid RequestId, const FDeliveryNpcDecisionProposal& Proposal);
     void ReceiveSentence(FGuid RequestId, const FDeliveryNpcSentence& Sentence);
+    // 返回 true 表示内容属于当前回复且表现组件已接收，不表示音频已经播放
+    bool ReceiveSpeechBegin(FGuid RequestId, const FDeliveryNpcSpeechBegin& Begin);
+    bool ReceiveAudioChunk(FGuid RequestId, const FDeliveryNpcAudioChunk& Chunk);
+    bool ReceiveAudioEnd(FGuid RequestId, const FDeliveryNpcAudioEnd& End);
     void FinishReply(FGuid RequestId, bool bSucceeded, int32 SentenceCount=0);
 
     // 人设影响模型的语气和选择，可执行的动作仍由游戏决定
@@ -82,6 +88,7 @@ protected:
 private:
     UFUNCTION() void OnRep_PublicState();
     bool IsAuthority() const;
+    bool CanReceiveReply(FGuid RequestId) const;
     void PruneEvidence();
     bool CanLookAt(AActor* Target) const;
     bool TryAcceptProposal(const FDeliveryNpcDecisionProposal& Proposal, FName& Reason);

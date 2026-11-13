@@ -24,6 +24,8 @@ class DELIVERY_API UDeliveryNpcVoiceSet : public UDataAsset
 public:
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="完整台词",meta=(DisplayName="台词音量",ClampMin="0",ClampMax="2",ToolTip="只调整完整台词，1 为原音量，0 为静音，不影响下方的短反应音")) float DialogueVolume=1.f;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="完整台词",meta=(DisplayName="台词距离衰减",ToolTip="设置完整台词的空间声音与距离衰减，留空时使用 600 厘米内保持原音量、再用 1200 厘米逐渐变小的默认配置")) TObjectPtr<USoundAttenuation> DialogueAttenuation;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="分段语音",meta=(DisplayName="开播缓冲",ClampMin="0.16",ClampMax="2",Units="s",ToolTip="声音持续生成时，先准备这段时长再开始播放；短句已经生成完时可直接播放")) float StreamingStartBufferSeconds=.64f;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="分段语音",meta=(DisplayName="续播缓冲",ClampMin="0.08",ClampMax="1",Units="s",ToolTip="播放中暂时缺音时，积累这段时长再继续，减少连续的小停顿")) float StreamingResumeBufferSeconds=.32f;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="短反应音",meta=(DisplayName="听见玩家")) TObjectPtr<USoundBase> HeardPlayer;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="短反应音",meta=(DisplayName="疑问")) TObjectPtr<USoundBase> Question;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="短反应音",meta=(DisplayName="不满")) TObjectPtr<USoundBase> Displeased;

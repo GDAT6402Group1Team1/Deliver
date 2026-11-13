@@ -105,6 +105,8 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
     OutRequest.PlanRevision = ++NextPlanRevision;
     OutRequest.Persona = Persona.Left(1024);
     OutRequest.bPlayerRequest = bPlayerRequest;
+    const auto* Settings = GetDefault<UDeliveryAiSettings>();
+    OutRequest.bStreamSentenceAudio = Settings->bStreamReplies && Settings->bStreamSentenceAudio;
     OutRequest.SelfSubjectId = NpcId;
     OutRequest.SelfName = TEXT("NPC");
     if (const auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner()))
@@ -236,10 +238,37 @@ bool UDeliveryNpcAgentComponent::ReceiveStreamDecision(FGuid RequestId, const FD
 
 void UDeliveryNpcAgentComponent::ReceiveSentence(FGuid RequestId, const FDeliveryNpcSentence& Sentence)
 {
-    if (!IsAuthority() || RequestId != ReplyRequest || PublicState.ActionId != ReplyAction ||
-        PublicState.Status == EDeliveryNpcActionStatus::Failed || PublicState.Status == EDeliveryNpcActionStatus::Cancelled) return;
+    if (!CanReceiveReply(RequestId)) return;
     if (auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner()))
         Npc->Presentation->QueueSentence(ReplyAction, PublicState.ReplyToEventId, Sentence);
+}
+
+bool UDeliveryNpcAgentComponent::CanReceiveReply(FGuid RequestId) const
+{
+    return IsAuthority() && RequestId.IsValid() && RequestId == ReplyRequest && ReplyAction.IsValid() &&
+        PublicState.ActionId == ReplyAction && (PublicState.Status == EDeliveryNpcActionStatus::Accepted ||
+        PublicState.Status == EDeliveryNpcActionStatus::Running || PublicState.Status == EDeliveryNpcActionStatus::Succeeded);
+}
+
+bool UDeliveryNpcAgentComponent::ReceiveSpeechBegin(FGuid RequestId, const FDeliveryNpcSpeechBegin& Begin)
+{
+    if (!CanReceiveReply(RequestId)) return false;
+    auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner());
+    return Npc && Npc->Presentation->BeginSentenceAudio(ReplyAction, PublicState.ReplyToEventId, Begin);
+}
+
+bool UDeliveryNpcAgentComponent::ReceiveAudioChunk(FGuid RequestId, const FDeliveryNpcAudioChunk& Chunk)
+{
+    if (!CanReceiveReply(RequestId)) return false;
+    auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner());
+    return Npc && Npc->Presentation->AppendSentenceAudio(ReplyAction, PublicState.ReplyToEventId, Chunk);
+}
+
+bool UDeliveryNpcAgentComponent::ReceiveAudioEnd(FGuid RequestId, const FDeliveryNpcAudioEnd& End)
+{
+    if (!CanReceiveReply(RequestId)) return false;
+    auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner());
+    return Npc && Npc->Presentation->EndSentenceAudio(ReplyAction, PublicState.ReplyToEventId, End);
 }
 
 void UDeliveryNpcAgentComponent::FinishReply(FGuid RequestId, bool bSucceeded, int32 SentenceCount)

@@ -30,7 +30,7 @@ void UDeliveryNpcPresentationComponent::BeginReply(FGuid ActionId, FGuid Message
 void UDeliveryNpcPresentationComponent::QueueSentence(FGuid ActionId, FGuid MessageId, const FDeliveryNpcSentence& Sentence)
 {
     if (!GetOwner()->HasAuthority() || ActionId!=ReplyAction || MessageId!=ReplyMessage ||
-        Sentence.Sequence<NextSentence || Sentence.Sequence>2 || Sentences.Contains(Sentence.Sequence) ||
+        Sentence.Sequence<NextSentence || Sentence.Sequence>2 || Sentences.Contains(Sentence.Sequence) || GeneratingSentences.Contains(Sentence.Sequence) ||
         Sentence.Pcm.Num()>384000 || Sentence.Pcm.Num()%2 || Sentence.Text.IsEmpty()) return;
     const double SubmitStarted=FPlatformTime::Seconds();
     Sentences.Add(Sentence.Sequence,Sentence);
@@ -70,9 +70,13 @@ void UDeliveryNpcPresentationComponent::FinishSentences(FGuid ActionId, int32 Co
 {
     if (!GetOwner()->HasAuthority() || ActionId!=ReplyAction) return;
     // 检查本次回复是否收齐，缺少句子时取消播放
-    if (Count<NextSentence || Count>3 || Count!=NextSentence+Sentences.Num()) { CancelSpeech(); return; }
+    if (Count<NextSentence || Count>3) { CancelSpeech(); return; }
     for (int32 Index=NextSentence;Index<Count;++Index)
-        if (!Sentences.Contains(Index)) { CancelSpeech(); return; }
+        if (!Sentences.Contains(Index) && !GeneratingSentences.Contains(Index)) { CancelSpeech(); return; }
+    for (const auto& Pair:Sentences)
+        if (Pair.Key>=Count) { CancelSpeech(); return; }
+    for (const auto& Pair:GeneratingSentences)
+        if (Pair.Key>=Count || !Pair.Value.bInputEnded) { CancelSpeech(); return; }
     ExpectedSentences=Count;
 }
 
@@ -99,7 +103,7 @@ void UDeliveryNpcPresentationComponent::TickSentences()
         else if (!Speech.bActive && (State.Status==EDeliveryNpcActionStatus::Running || State.Status==EDeliveryNpcActionStatus::Succeeded))
         {
             FDeliveryNpcSentence Sentence;FDeliveryNpcEncodedSentence Encoded;
-            if (EncodedSentences.Contains(NextSentence) && Sentences.RemoveAndCopyValue(NextSentence,Sentence))
+            if (!TryStartGeneratedSentence() && EncodedSentences.Contains(NextSentence) && Sentences.RemoveAndCopyValue(NextSentence,Sentence))
             {
                 EncodedSentences.RemoveAndCopyValue(NextSentence,Encoded);
                 Speech={}; Speech.TurnId=FGuid::NewGuid(); Speech.ActionId=ReplyAction; Speech.ReplyToEventId=ReplyMessage;
@@ -148,12 +152,15 @@ void UDeliveryNpcPresentationComponent::TickSentences()
     // 网络只传 Opus 压缩数据，主机播放保留的原始声音
     if (GetOwner()->HasAuthority() && Speech.bActive)
     {
-        int32 SendBytes=DeliveryNpcSpeech::GetSendBytes(ServerTime()-Speech.StartTime,Speech.Duration,SendingAudio.Num(),SendingOffset);
+        const bool bGenerating=Speech.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion;
+        // 生成中的声音尽快发出，单帧仍保持 2 KB 上限
+        int32 SendBytes=bGenerating?FMath::Clamp(SendingAudio.Num()-SendingOffset,0,2048):
+            DeliveryNpcSpeech::GetSendBytes(ServerTime()-Speech.StartTime,Speech.Duration,SendingAudio.Num(),SendingOffset);
         while (SendBytes>0)
         {
             const int32 Size=FMath::Min(2048,SendBytes);
             TArray<uint8> Chunk; Chunk.Append(SendingAudio.GetData()+SendingOffset,Size);
-            ReceiveAudio(Speech.TurnId,SendingOffset,SendingAudio.Num(),Chunk);
+            ReceiveAudio(Speech.TurnId,SendingOffset,bGenerating && !Speech.bAudioComplete?0:SendingAudio.Num(),Chunk);
             SendingOffset+=Size;
             SendBytes-=Size;
         }
@@ -166,7 +173,8 @@ void UDeliveryNpcPresentationComponent::TickSentences()
         const double Now=FPlatformTime::Seconds();
         // 收到的声音停在同一位置超过半秒时，请求下一小段内容
         if (Local.State.bRecordedVoice && AudioAttempts<32 && Now>=NextAudioRetry && Now-Local.LastDataAt>.5 &&
-            Local.Encoded.Num()<Local.State.EncodedBytes)
+            ((Local.State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion && !Local.State.bAudioComplete) ||
+             Local.Encoded.Num()<Local.State.EncodedBytes))
             if (const auto* PC=GetWorld()->GetFirstPlayerController())
                 if (auto* Conversation=PC->FindComponentByClass<UDeliveryConversationComponent>())
                 {
@@ -185,7 +193,7 @@ bool UDeliveryNpcPresentationComponent::GetSpeechAudioChunk(FGuid TurnId,int32 O
         (Saved->ExpiresAt>0 && FPlatformTime::Seconds()>Saved->ExpiresAt)) return false;
     const int32 Size=FMath::Min(FMath::Clamp(MaxBytes,0,2048),Saved->Encoded.Num()-Offset);
     if (Size==0) return false;
-    OutTotal=Saved->Encoded.Num();OutData.Append(Saved->Encoded.GetData()+Offset,Size);
+    OutTotal=Saved->bComplete?Saved->Encoded.Num():0;OutData.Append(Saved->Encoded.GetData()+Offset,Size);
     return true;
 }
 
@@ -204,16 +212,26 @@ void UDeliveryNpcPresentationComponent::AcceptLocalSpeech(const FDeliveryNpcSpee
 {
     if (GetNetMode()==NM_DedicatedServer || !State.bActive ||
         !State.ActionId.IsValid() || CancelledVoiceActions.Contains(State.ActionId) || FinishedVoiceTurns.Contains(State.TurnId)) return;
-    if (State.bRecordedVoice && (State.AudioFormatVersion!=DeliveryNpcVoice::FormatVersion ||
-        (State.SampleRate!=16000 && State.SampleRate!=24000) || State.PcmBytes<=0 || State.PcmBytes>DeliveryNpcVoice::MaxPcmBytes || State.PcmBytes%2 ||
-        State.EncodedBytes<=0 || State.EncodedBytes>DeliveryNpcVoice::MaxEncodedBytes))
+    const bool bGenerating=State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion;
+    const bool bUnknownLength=bGenerating && !State.bAudioComplete && State.PcmBytes==0 && State.EncodedBytes==0;
+    const bool bKnownLength=State.PcmBytes>0 && State.PcmBytes<=DeliveryNpcVoice::MaxPcmBytes && State.PcmBytes%2==0 &&
+        State.EncodedBytes>0 && State.EncodedBytes<=DeliveryNpcVoice::MaxEncodedBytes;
+    if (State.bRecordedVoice && ((State.AudioFormatVersion!=DeliveryNpcVoice::FormatVersion && !bGenerating) ||
+        (State.SampleRate!=16000 && State.SampleRate!=24000) ||
+        !(bGenerating?(State.bAudioComplete?bKnownLength:bUnknownLength):bKnownLength)))
     {
         UE_LOG(LogTemp,Warning,TEXT("NpcSpeech invalid_audio_format turn=%s version=%d"),*State.TurnId.ToString(),State.AudioFormatVersion);
         return;
     }
-    if (LocalVoices.ContainsByPredicate([&](const auto& Item){ return Item.State.TurnId==State.TurnId; })) return;
+    if (LocalVoices.ContainsByPredicate([&](const auto& Item){ return Item.State.TurnId==State.TurnId; }))
+    {
+        // 复制与可靠通知的先后可能不同，同一句只补上句末信息，不重新排队
+        if (bGenerating && State.bAudioComplete)
+            FinishStreamAudio_Implementation(State.TurnId,State.PcmBytes,State.EncodedBytes,State.bRecordedVoice);
+        return;
+    }
     // 刚进入附近的玩家略过已经结束的句子，随后接收新的对白
-    if (bFromReplication && ServerTime()>=State.StartTime+State.Duration)
+    if (bFromReplication && !bGenerating && ServerTime()>=State.StartTime+State.Duration)
     {
         UE_LOG(LogTemp,Log,TEXT("NpcSpeech joined_after_sentence turn=%s"),*State.TurnId.ToString());
         return;
@@ -228,6 +246,55 @@ void UDeliveryNpcPresentationComponent::AcceptLocalSpeech(const FDeliveryNpcSpee
     Local.TotalBytes=State.bRecordedVoice?DeliveryNpcVoice::GetDecodedPcmBytes(State.PcmBytes,State.SampleRate):0;
     Local.LastDataAt=FPlatformTime::Seconds();
     if (State.bRecordedVoice && !GetOwner()->HasAuthority()) Local.Decoder=MakeShared<FDeliveryNpcVoiceDecoder>();
+}
+
+void UDeliveryNpcPresentationComponent::FinishStreamAudio_Implementation(FGuid TurnId,int32 PcmBytes,int32 EncodedBytes,bool bSucceeded)
+{
+    auto* Local=LocalVoices.FindByPredicate([&](const auto& Item){ return Item.State.TurnId==TurnId; });
+    if (!Local || Local->State.AudioFormatVersion!=DeliveryNpcVoice::StreamingFormatVersion ||
+        CancelledVoiceActions.Contains(Local->State.ActionId) || !Local->State.bRecordedVoice) return;
+    const bool bValid=bSucceeded && PcmBytes>0 && PcmBytes<=DeliveryNpcVoice::MaxPcmBytes && PcmBytes%2==0 &&
+        EncodedBytes>0 && EncodedBytes<=DeliveryNpcVoice::MaxEncodedBytes && Local->Encoded.Num()<=EncodedBytes;
+    if (!bValid || (Local->State.bAudioComplete &&
+        (Local->State.PcmBytes!=PcmBytes || Local->State.EncodedBytes!=EncodedBytes)))
+    {
+        UseTextForLocalVoice(*Local);
+        return;
+    }
+    if (DisplayedSpeech.bActive && DisplayedSpeech.TurnId==TurnId)
+        Local->CaptionProgress=GetDisplayedSpeechProgress();
+    Local->State.bAudioComplete=true;
+    Local->State.PcmBytes=PcmBytes; Local->State.EncodedBytes=EncodedBytes;
+    Local->TotalBytes=DeliveryNpcVoice::GetDecodedPcmBytes(PcmBytes,Local->State.SampleRate);
+    Local->State.Duration=float(Local->TotalBytes)/(2*Local->State.SampleRate);
+    if (Local->Pcm.Num()>Local->TotalBytes || (Local->Decoder && Local->Decoder->IsComplete() &&
+        (Local->Decoder->GetSourcePcmBytes()!=PcmBytes || Local->Decoder->GetTotalPcmBytes()!=Local->TotalBytes)))
+    {
+        UseTextForLocalVoice(*Local);
+        return;
+    }
+    if (DisplayedSpeech.TurnId==TurnId && DisplayedSpeech.bActive) DisplayedSpeech=Local->State;
+}
+
+void UDeliveryNpcPresentationComponent::UseTextForLocalVoice(FDeliveryNpcLocalVoice& Local)
+{
+    const bool bDisplayed=DisplayedSpeech.bActive && DisplayedSpeech.TurnId==Local.State.TurnId;
+    const float DisplayedProgress=bDisplayed?GetDisplayedSpeechProgress():0.f;
+    // 单句声音失败时保留已经确认的文字，后句继续使用自己的声音
+    Local.State.bRecordedVoice=false; Local.State.bAudioComplete=true;
+    Local.State.Duration=FMath::Clamp(Local.State.Text.Len()*.075f+.5f,1.f,10.f);
+    Local.Pcm.Reset();Local.Encoded.Reset();Local.Decoder.Reset();
+    Local.DecodeOffset=Local.TotalBytes=Local.QueuedBytes=0;
+    Local.FrontSince=Local.DrainedAt=Local.TextStartedAt=0;
+    Local.LastDataAt=FPlatformTime::Seconds();Local.bRebuffering=false;
+    if (bDisplayed)
+    {
+        if (RecordedVoice) RecordedVoice->Stop();
+        if (RecordedWave) RecordedWave->ResetAudio();
+        RecordedWave=nullptr;
+        Local.TextStartedAt=Local.LastDataAt-DisplayedProgress*Local.State.Duration;
+        DisplayedSpeech=Local.State;
+    }
 }
 
 void UDeliveryNpcPresentationComponent::StopStreamSpeech_Implementation(FGuid ActionId,bool bStopAll)
@@ -282,15 +349,18 @@ bool UDeliveryNpcPresentationComponent::IsWaitingForSpeechPlayback() const
     if (Local.State.ActionId!=State.ActionId ||
         Local.State.ReplyToEventId!=State.ReplyToEventId || !Local.State.bActive ||
         FinishedVoiceTurns.Contains(Local.State.TurnId)) return false;
-    const double WaitingSince=Local.FrontSince>0?Local.FrontSince:Local.LastDataAt;
+    const bool bGenerating=Local.State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion && Local.State.bRecordedVoice;
+    const double WaitingSince=bGenerating?FMath::Max(Local.FrontSince,Local.LastDataAt):(Local.FrontSince>0?Local.FrontSince:Local.LastDataAt);
     // 与播放器使用相同的超时范围，音频中断后不继续保持注视
-    return WaitingSince>0 && FPlatformTime::Seconds()-WaitingSince<=Local.State.Duration+5;
+    return WaitingSince>0 && FPlatformTime::Seconds()-WaitingSince<=(bGenerating?5:Local.State.Duration+5);
 }
 
 int32 UDeliveryNpcPresentationComponent::GetConsumedVoiceBytes() const
 {
     if (!RecordedWave || LocalVoices.IsEmpty() || !DisplayedSpeech.bActive || LocalVoices[0].State.TurnId!=DisplayedSpeech.TurnId) return 0;
-    return FMath::Clamp(LocalVoices[0].QueuedBytes-RecordedWave->GetAvailableAudioByteCount(),0,LocalVoices[0].TotalBytes);
+    const auto& Local=LocalVoices[0];
+    const int32 Limit=Local.TotalBytes>0?Local.TotalBytes:Local.Pcm.Num();
+    return FMath::Clamp(Local.QueuedBytes-RecordedWave->GetAvailableAudioByteCount(),0,Limit);
 }
 
 float UDeliveryNpcPresentationComponent::GetDisplayedSpeechProgress() const
@@ -300,6 +370,13 @@ float UDeliveryNpcPresentationComponent::GetDisplayedSpeechProgress() const
         const auto& Local=LocalVoices[0];
         if (!Local.State.bRecordedVoice)
             return FMath::Clamp(float((FPlatformTime::Seconds()-Local.TextStartedAt)/FMath::Max(.01f,Local.State.Duration)),0.f,1.f);
+        if (Local.State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion)
+        {
+            // 声音总长尚未确定时按阅读速度展开字幕，句末到达后保持已显示字数
+            const float Estimate=FMath::Clamp(Local.State.Text.Len()*.075f+.5f,1.f,10.f)*Local.State.SampleRate*2;
+            const float Progress=float(GetConsumedVoiceBytes())/(Local.TotalBytes>0?Local.TotalBytes:FMath::Max(1.f,Estimate));
+            return FMath::Max(Local.CaptionProgress,FMath::Clamp(Progress,0.f,Local.State.bAudioComplete?1.f:.95f));
+        }
         return float(GetConsumedVoiceBytes())/FMath::Max(1,Local.TotalBytes);
     }
     return Speech.bActive?FMath::Clamp(float((ServerTime()-Speech.StartTime)/FMath::Max(.01f,Speech.Duration)),0.f,1.f):0.f;
@@ -321,6 +398,7 @@ void UDeliveryNpcPresentationComponent::FinishLocalSentence()
 bool UDeliveryNpcPresentationComponent::HasFinishedSentence() const
 {
     if (!ReplyAction.IsValid() || Speech.ActionId!=ReplyAction || !Speech.bActive ||
+        (Speech.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion && !Speech.bAudioComplete) ||
         ServerTime()<Speech.StartTime+Speech.Duration || SendingOffset<SendingAudio.Num()) return false;
     // 主机按自己的实际播放进度记录，远端玩家的接收速度不会阻止 NPC 接着行动
     // 专用服务器和关闭音频的世界按安排的播放时间结束
@@ -333,6 +411,8 @@ void UDeliveryNpcPresentationComponent::FinishSentence()
 {
     if (!HasFinishedSentence()) return;
     Speech.bActive=false;
+    if (const auto* Current=GeneratingSentences.Find(Speech.Sequence); Current && Current->bInputEnded)
+        GeneratingSentences.Remove(Speech.Sequence);
     if (auto* VoiceData=ServerVoices.Find(Speech.TurnId)) VoiceData->ExpiresAt=FPlatformTime::Seconds()+5;
     SpokenReply+=Speech.Text;
     GetOwner()->ForceNetUpdate(); OnRep_Speech();
@@ -366,10 +446,15 @@ void UDeliveryNpcPresentationComponent::RecordSpokenReply(bool bCompleteReply)
 
 void UDeliveryNpcPresentationComponent::ReceiveAudio_Implementation(FGuid TurnId,int32 Offset,int32 Total,const TArray<uint8>& Data)
 {
-    if (GetOwner()->HasAuthority() || !TurnId.IsValid() || Total<=0 || Total>DeliveryNpcVoice::MaxEncodedBytes ||
-        Data.IsEmpty() || Data.Num()>2048 || Offset<0 || Offset>Total || Data.Num()>Total-Offset) return;
+    if (GetOwner()->HasAuthority() || !TurnId.IsValid() || Total<0 || Total>DeliveryNpcVoice::MaxEncodedBytes ||
+        Data.IsEmpty() || Data.Num()>2048 || Offset<0 || Offset>DeliveryNpcVoice::MaxEncodedBytes-Data.Num()) return;
     auto* Local=LocalVoices.FindByPredicate([&](const auto& Item){ return Item.State.TurnId==TurnId; });
-    if (!Local || CancelledVoiceActions.Contains(Local->State.ActionId) || !Local->Decoder || Local->State.EncodedBytes!=Total) return;
+    if (!Local || CancelledVoiceActions.Contains(Local->State.ActionId) || !Local->Decoder) return;
+    const bool bGenerating=Local->State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion;
+    if ((!bGenerating && (Total<=0 || Local->State.EncodedBytes!=Total)) ||
+        (Total>0 && (Offset>Total || Data.Num()>Total-Offset)) ||
+        (bGenerating && Local->State.bAudioComplete && (Offset+Data.Num()>Local->State.EncodedBytes ||
+            (Total>0 && Total!=Local->State.EncodedBytes)))) return;
     // 补发内容可能与已收到的部分重叠，只添加后面的新内容
     if (Offset>Local->Encoded.Num() || Offset+Data.Num()<=Local->Encoded.Num()) return;
     const int32 AlreadyReceived=Local->Encoded.Num()-Offset;
@@ -377,37 +462,27 @@ void UDeliveryNpcPresentationComponent::ReceiveAudio_Implementation(FGuid TurnId
     TArray<uint8> Decoded; FString Error; const double DecodeStarted=FPlatformTime::Seconds();
     bool bValid=Local->Decoder->TryDecodeAvailable(Local->Encoded,Local->DecodeOffset,Decoded,Error);
     if (bValid && Local->Decoder->GetSampleRate()>0)
-        bValid=Local->Decoder->GetSampleRate()==Local->State.SampleRate &&
-            Local->Decoder->GetSourcePcmBytes()==Local->State.PcmBytes && Local->Decoder->GetTotalPcmBytes()==Local->TotalBytes;
-    bValid=bValid && Decoded.Num()<=Local->TotalBytes-Local->Pcm.Num();
-    if (bValid && Local->Encoded.Num()==Total)
-        bValid=Local->Decoder->IsComplete() && Local->Pcm.Num()+Decoded.Num()==Local->TotalBytes;
+    {
+        bValid=Local->Decoder->GetSampleRate()==Local->State.SampleRate;
+        if (!bGenerating || (Local->State.bAudioComplete && Local->Decoder->IsComplete()))
+            bValid=bValid && Local->Decoder->GetSourcePcmBytes()==Local->State.PcmBytes &&
+                Local->Decoder->GetTotalPcmBytes()==Local->TotalBytes;
+    }
+    const int32 Limit=bGenerating && !Local->State.bAudioComplete?DeliveryNpcVoice::MaxDecodedPcmBytes:Local->TotalBytes;
+    bValid=bValid && Decoded.Num()<=Limit-Local->Pcm.Num();
+    if (bValid && Total>0 && Local->Encoded.Num()==Total)
+        bValid=Local->Decoder->IsComplete() && Local->Pcm.Num()+Decoded.Num()==Local->Decoder->GetTotalPcmBytes();
     if (!bValid)
     {
         UE_LOG(LogTemp,Warning,TEXT("NpcSpeech decode_failed turn=%s detail=%s"),*TurnId.ToString(),*Error);
-        const bool bDisplayed=DisplayedSpeech.bActive && DisplayedSpeech.TurnId==TurnId;
-        const float DisplayedProgress=bDisplayed?GetDisplayedSpeechProgress():0.f;
-        // 台词已经由服务器确认，单句声音损坏时保留文字，后面的句子仍可播放
-        Local->State.bRecordedVoice=false;
-        Local->State.Duration=FMath::Clamp(Local->State.Text.Len()*.075f+.5f,1.f,10.f);
-        Local->Pcm.Reset();Local->Encoded.Reset();Local->Decoder.Reset();
-        Local->DecodeOffset=Local->TotalBytes=Local->QueuedBytes=0;
-        Local->FrontSince=Local->DrainedAt=Local->TextStartedAt=0;
-        Local->LastDataAt=FPlatformTime::Seconds();
-        // 排队中的坏句子不能停止前一句；正在播放的坏句子则立即停音并继续显示台词
-        if (bDisplayed)
-        {
-            if (RecordedVoice) RecordedVoice->Stop();
-            if (RecordedWave) RecordedWave->ResetAudio();
-            RecordedWave=nullptr;
-            // 保留已经显示的字数，剩下的台词按文字阅读时间继续出现
-            Local->TextStartedAt=Local->LastDataAt-DisplayedProgress*Local->State.Duration;
-            DisplayedSpeech=Local->State;
-        }
+        UseTextForLocalVoice(*Local);
         return;
     }
     Local->Pcm.Append(Decoded);
     Local->LastDataAt=FPlatformTime::Seconds();
+    // 编码数据本身也带句末通知，可靠 RPC 或状态复制较晚到达时仍能确认总长
+    if (bGenerating && Local->Decoder->IsComplete())
+        FinishStreamAudio_Implementation(TurnId,Local->Decoder->GetSourcePcmBytes(),Local->Encoded.Num(),true);
     if (Offset==0 || Local->Encoded.Num()==Total)
         UE_LOG(LogTemp,Log,TEXT("NpcLatency turn=%s stage=audio_receive role=%d encoded=%d total=%d pcm=%d decode_ms=%.2f"),
             *TurnId.ToString(),int32(GetOwner()->GetLocalRole()),Local->Encoded.Num(),Total,Local->Pcm.Num(),(FPlatformTime::Seconds()-DecodeStarted)*1000);
@@ -419,8 +494,15 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
     auto& Local=LocalVoices[0];
     const double Now=FPlatformTime::Seconds();
     if (Local.FrontSince==0) Local.FrontSince=Now;
+    const bool bGenerating=Local.State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion && Local.State.bRecordedVoice;
+    const bool bHasBufferedAudio=RecordedWave && RecordedWave->GetAvailableAudioByteCount()>0;
+    // 后一句可能早已收齐，轮到它播放时重新计算缺音等待时间
+    const double DataWaitingSince=FMath::Max(Local.FrontSince,Local.LastDataAt);
+    const bool bTimedOut=bGenerating?
+        (Now-Local.FrontSince>30 || (!bHasBufferedAudio && Now-DataWaitingSince>5)):
+        Now-Local.FrontSince>Local.State.Duration+5;
     // 网络中断时结束本机播放，界面不会一直保留等待中的句子
-    if (Now-Local.FrontSince>Local.State.Duration+5)
+    if (bTimedOut)
     {
         UE_LOG(LogTemp,Warning,TEXT("NpcSpeech audio_timeout turn=%s received=%d total=%d"),*Local.State.TurnId.ToString(),Local.Pcm.Num(),Local.TotalBytes);
         if (GetOwner()->HasAuthority()) CancelSpeech();
@@ -441,21 +523,35 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
     }
     if (DisplayedSpeech.bActive && DisplayedSpeech.TurnId==Local.State.TurnId)
     {
-        if (RecordedWave && Local.Pcm.Num()>Local.QueuedBytes)
+        Local.CaptionProgress=GetDisplayedSpeechProgress();
+        if (bGenerating && RecordedWave && !bHasBufferedAudio && !Local.State.bAudioComplete)
+            Local.bRebuffering=true;
+        const float ConfiguredResume=VoiceSet?VoiceSet->StreamingResumeBufferSeconds:.32f;
+        const float ResumeSeconds=FMath::IsFinite(ConfiguredResume)?FMath::Clamp(ConfiguredResume,.08f,1.f):.32f;
+        const int32 ResumeBytes=int32(Local.State.SampleRate*ResumeSeconds)*2;
+        const int32 PendingBytes=Local.Pcm.Num()-Local.QueuedBytes;
+        const bool bCanResume=!Local.bRebuffering || PendingBytes>=ResumeBytes || Local.State.bAudioComplete;
+        if (RecordedWave && PendingBytes>0 && bCanResume)
         {
-            RecordedWave->QueueAudio(Local.Pcm.GetData()+Local.QueuedBytes,Local.Pcm.Num()-Local.QueuedBytes);
+            // 短暂缺音后先积累一小段，再沿用同一个声音对象接着播放
+            RecordedWave->QueueAudio(Local.Pcm.GetData()+Local.QueuedBytes,PendingBytes);
             Local.QueuedBytes=Local.Pcm.Num();
+            Local.bRebuffering=false;
         }
-        if (Local.TotalBytes>0 && GetConsumedVoiceBytes()==Local.TotalBytes)
+        if ((!bGenerating || Local.State.bAudioComplete) && Local.TotalBytes>0 && GetConsumedVoiceBytes()==Local.TotalBytes)
         {
             // 最后一段声音进入混音器后，留出一个短缓冲时间再停止组件
             if (Local.DrainedAt==0) Local.DrainedAt=Now;
             if (Now-Local.DrainedAt>=.15) FinishLocalSentence();
         }
+        else Local.DrainedAt=0;
         return;
     }
-    const int32 InitialBuffer=FMath::Min(int32(Local.State.SampleRate*.12)*2,Local.TotalBytes);
-    if (Local.TotalBytes<=0 || Local.Pcm.Num()<InitialBuffer || ServerTime()<Local.State.StartTime) return;
+    const float ConfiguredStart=VoiceSet?VoiceSet->StreamingStartBufferSeconds:.64f;
+    const float StartSeconds=bGenerating?(FMath::IsFinite(ConfiguredStart)?FMath::Clamp(ConfiguredStart,.16f,2.f):.64f):.12f;
+    int32 InitialBuffer=int32(Local.State.SampleRate*StartSeconds)*2;
+    if (Local.TotalBytes>0) InitialBuffer=FMath::Min(InitialBuffer,Local.TotalBytes);
+    if ((!bGenerating && Local.TotalBytes<=0) || Local.Pcm.Num()<InitialBuffer || ServerTime()<Local.State.StartTime) return;
     if (!RecordedVoice)
     {
         RecordedVoice=NewObject<UAudioComponent>(GetOwner());
@@ -490,6 +586,7 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
     // 从这句话的开头播放，字幕按音频组件实际读取的进度显示
     RecordedWave->QueueAudio(Local.Pcm.GetData(),Local.Pcm.Num());
     Local.QueuedBytes=Local.Pcm.Num();
+    Local.bRebuffering=false;
     DisplayedSpeech=Local.State; DisplayedSpeech.bActive=true;
     StopReaction();
     RecordedVoice->SetSound(RecordedWave); RecordedVoice->Play();
@@ -499,7 +596,7 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
 
 float UDeliveryNpcPresentationComponent::GetVoiceAmplitude() const
 {
-    if (!DisplayedSpeech.bActive || !DisplayedSpeech.bRecordedVoice || LocalVoices.IsEmpty()) return 0;
+    if (!DisplayedSpeech.bActive || !DisplayedSpeech.bRecordedVoice || LocalVoices.IsEmpty() || LocalVoices[0].bRebuffering) return 0;
     const auto& Pcm=LocalVoices[0].Pcm;
     const int32 Start=GetConsumedVoiceBytes();
     const int32 End=FMath::Min(Start+640,Pcm.Num());

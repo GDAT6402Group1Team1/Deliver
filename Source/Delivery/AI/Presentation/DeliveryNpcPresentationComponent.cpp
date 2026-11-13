@@ -64,6 +64,7 @@ void UDeliveryNpcPresentationComponent::CancelSpeech()
     // 保留此前已经说完的句子，当前被打断的半句话不写入记忆
     FinishSentence();
     RecordSpokenReply(false);
+    CancelSentenceGeneration();
     StopReaction();
     StopStreamSpeech(ReplyAction.IsValid()?ReplyAction:Speech.ActionId,true);
     ReplyAction.Invalidate(); ReplyMessage.Invalidate(); Sentences.Reset(); EncodedSentences.Reset(); SpokenReply.Reset();
@@ -186,6 +187,7 @@ void UDeliveryNpcPresentationComponent::UpdateLegacyAnimation(ADeliveryNpcCharac
 }
 void UDeliveryNpcPresentationComponent::EndPlay(const EEndPlayReason::Type Reason)
 {
+    CancelSentenceGeneration();
     if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()))
     {
         Npc->GetMesh()->RemoveTickPrerequisiteComponent(this);
