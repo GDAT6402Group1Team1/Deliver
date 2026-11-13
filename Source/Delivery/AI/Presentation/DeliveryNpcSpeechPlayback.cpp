@@ -524,13 +524,15 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
     if (DisplayedSpeech.bActive && DisplayedSpeech.TurnId==Local.State.TurnId)
     {
         Local.CaptionProgress=GetDisplayedSpeechProgress();
-        if (bGenerating && RecordedWave && !bHasBufferedAudio && !Local.State.bAudioComplete)
-            Local.bRebuffering=true;
+        // 句末通知可能先于剩余音频到达，已知总长时也要检查本机是否真正播完
+        if (bGenerating && RecordedWave && !bHasBufferedAudio)
+            Local.bRebuffering=!Local.State.bAudioComplete || GetConsumedVoiceBytes()<Local.TotalBytes;
         const float ConfiguredResume=VoiceSet?VoiceSet->StreamingResumeBufferSeconds:.32f;
         const float ResumeSeconds=FMath::IsFinite(ConfiguredResume)?FMath::Clamp(ConfiguredResume,.08f,1.f):.32f;
         const int32 ResumeBytes=int32(Local.State.SampleRate*ResumeSeconds)*2;
         const int32 PendingBytes=Local.Pcm.Num()-Local.QueuedBytes;
-        const bool bCanResume=!Local.bRebuffering || PendingBytes>=ResumeBytes || Local.State.bAudioComplete;
+        const bool bHasWholeTail=Local.State.bAudioComplete && Local.TotalBytes>0 && Local.Pcm.Num()==Local.TotalBytes;
+        const bool bCanResume=!Local.bRebuffering || PendingBytes>=ResumeBytes || bHasWholeTail;
         if (RecordedWave && PendingBytes>0 && bCanResume)
         {
             // 短暂缺音后先积累一小段，再沿用同一个声音对象接着播放

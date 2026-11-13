@@ -285,6 +285,18 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     TestFalse(TEXT("开始播放时后端尚未结束本句"), FirstState.bAudioComplete);
     TestTrue(TEXT("首次播放时模型请求仍存在"), Agent->IsDecisionPending() && Gateway->Pending.Contains(Request.RequestId));
     CheckBodyPose(EBodyPose::Talk, TEXT("实际开始播放后进入说话动作"));
+    // 模拟句末通知先到客户端，后续声音仍按原顺序逐段传输
+    FDeliveryNpcVoiceStreamEncoder EarlyEndEncoder;
+    TArray<uint8> EarlyEndEncoded, EarlyEndPart; FString EarlyEndError;
+    if (!TestTrue(TEXT("准备提前句末通知的实际连续编码总长"),
+        EarlyEndEncoder.Start(24000,EarlyEndEncoded,EarlyEndError) &&
+        EarlyEndEncoder.Append(Pcm,EarlyEndPart,EarlyEndError))) return false;
+    EarlyEndEncoded.Append(EarlyEndPart);
+    if (!TestTrue(TEXT("提前句末通知包含实际尾音编码"),EarlyEndEncoder.Finish(EarlyEndPart,EarlyEndError))) return false;
+    EarlyEndEncoded.Append(EarlyEndPart);
+    Client->FinishStreamAudio_Implementation(FirstState.TurnId,Pcm.Num(),EarlyEndEncoded.Num(),true);
+    TestTrue(TEXT("客户端已知总长时仍有声音尚未收到"),Client->LocalVoices[0].State.bAudioComplete &&
+        Client->LocalVoices[0].Pcm.Num()<Client->LocalVoices[0].TotalBytes);
     ReadAudio(Host, HostHeard); ReadAudio(Client, ClientHeard);
     TestTrue(TEXT("主机在句未完成时实际读出 PCM"), HostHeard.Num() > 0 && HostHeard.Num() < Pcm.Num());
     TestTrue(TEXT("模拟客户端在句未完成时实际读出解码 PCM"), ClientHeard.Num() > 0 && ClientHeard.Num() < Pcm.Num());
@@ -297,6 +309,8 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     TestTrue(TEXT("暂时读空音频不会结束句子或清字幕"), Client->GetDisplayedSpeech().bActive &&
         Client->GetDisplayedSpeech().TurnId == FirstState.TurnId && !Client->FinishedVoiceTurns.Contains(FirstState.TurnId));
     TestTrue(TEXT("两端读空时等待续播缓冲"), Host->LocalVoices[0].bRebuffering && Client->LocalVoices[0].bRebuffering);
+    TestTrue(TEXT("句末通知先到也不能把客户端缺音当作播完"),Client->LocalVoices[0].State.bAudioComplete &&
+        Client->GetConsumedVoiceBytes()<Client->LocalVoices[0].TotalBytes && Client->IsWaitingForMoreAudio());
     TestTrue(TEXT("两端都能区分暂时缺音与整句结束"), Host->IsWaitingForMoreAudio() && Client->IsWaitingForMoreAudio());
     CheckBodyPose(EBodyPose::Idle, TEXT("音频读空时停止说话动作"));
     TestTrue(TEXT("暂时缺音时两端都闭嘴"), Host->GetVoiceAmplitude()==0 && Client->GetVoiceAmplitude()==0);
@@ -346,6 +360,9 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     TestEqual(TEXT("已收齐的下一句仍在等待前一句说完"), Client->GetDisplayedSpeech().TurnId, FirstState.TurnId);
     ReadAudio(Client, ClientHeard);
     TestTrue(TEXT("客户端实际读取完整声音，没有重复句首或丢尾音"), ClientHeard == ReferencePcm);
+    Client->PlayRecordedVoice();
+    TestTrue(TEXT("全部播完后的短暂收尾不再视为缺音"),!Client->IsWaitingForMoreAudio() &&
+        Client->LocalVoices[0].DrainedAt>0 && Client->GetDisplayedSpeech().bActive);
     FinishLocal(Client);
     Pump();
     if (!TestNotNull(TEXT("排队超过五秒的完整短句仍可实际开播"), Client->RecordedWave.Get())) return false;
