@@ -13,10 +13,39 @@
     @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
     @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
     .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
-<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
+<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#sentence-audio-integration">句内语音接入</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
 <header><div class="meta">AI / 交谈、语音与表情 / 2026-11-13</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
-<div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、轻拳后仰和翠花眉形已加入；本轮修复首句丢失与等待姿态，并接入听见玩家和受击的短音。动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
+<div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、轻拳后仰、翠花眉形和 B 音色短反应已加入。翠花已采用用户认可的 B 加速版；句内音频接口与编码已准备，尚未接到正式游戏。动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
 <div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
+<section id="sentence-audio-integration"><h2>11 月 13 日：句内语音分段与音频失败处理</h2>
+<p class="meta">分段生成与编码接口已准备，六项 UE 声音检查通过；正式游戏仍按完整句播放，新流程默认关闭</p>
+<p>前一轮独立试验已经能够提前取得一句话的前段声音，但游戏还没有使用这些音频段。本轮检查从语音工作进程到 UE 播放的实际代码，再逐步接入。继续保留已经认可的大壮、翠花 B 音色；分段拼接后的声音与完整解码存在差异，8 帧样本已提交试听，尚未获得确认。</p>
+<h3>客户端已经分包播放，为什么还要等整句</h3>
+<p>现有后端把完整文字和整句 PCM 交给游戏。表现组件随后在后台压缩声音，再分包发送。客户端已经用同一个音频队列接续收到的 Opus 包，所以剩下的问题主要在服务器开始发送之前：它必须先拿到整句 PCM，才能知道声音总长度并开始编码。</p>
+<p>旧声音格式还把最终长度写在开头，用它判断包是否完整、何时结束播放。将每个模型音频段分别按旧方法编码，再直接拼起来，会重复创建编码器、重复写文件头，并在每段后补上尾部缓冲。这样不能得到一条连续语音。</p>
+<h3>本轮怎样接入</h3>
+<div class="table-scroll" tabindex="0" aria-label="可横向滚动的数据表"><table><tr><th>部分</th><th>实现方向</th><th>当前范围</th></tr>
+<tr><td>语音生成</td><td>在原 B 生成过程中交出新增 PCM。保持原模型、种子和采样参数，取消时停止后续输出，最后明确通知句末。</td><td>底层代码已写入，CPU 检查已运行；尚未用正式服务验证新路径。</td></tr>
+<tr><td>后端传输</td><td><code>speech_begin</code> 发送句子文字，<code>audio_chunk</code> 追加音频，<code>audio_end</code> 提供最终长度。每句最多 32 段，整轮仍最多 3 句。</td><td>请求须选择 <code>pcm_chunks_v1</code>，服务还须显式启用 <code>DELIVERY_AI_STREAM_AUDIO=1</code>，语音工作进程也须支持分段；默认保留旧方式。</td></tr>
+<tr><td>UE 编码</td><td>同一句持续使用一个 Opus 编码器。开始时允许总长未知，句末再写入总长；40 毫秒尾部只补一次。</td><td>新增编码格式与独立检查，旧格式继续保留；Gateway 与正式播放器接入待后续完成。</td></tr>
+<tr><td>字幕与播放</td><td>音频段属于原句，不重新生成句子编号或重复添加字幕。收到明确句末并播放完剩余声音后，才结束本句。</td><td>需要继续实现开播缓冲、短暂断流、取消后迟到数据和最终播放时序，尚未完成游戏验证。</td></tr></table></div>
+<p>现有等待姿态已经能覆盖“后端结束，但本机音频队列还为空”的阶段。本轮没有重复修改这项逻辑，也没有找到当前界面重新写入省略号的路径。追加音频仍须属于同一请求、同一动作和同一句台词；新轮次不能接上旧音频，重复包也不能重复播放。</p>
+<p>开播缓冲需要实际测量。原有 120 毫秒阈值用于已经生成完整文件后的网络接收，不能直接当作持续生成也足够的证据。前一轮 8 帧样本只有一条台词，尚未覆盖较长句子、网络波动、游戏渲染负载或多人。此处不把独立脚本的首段 PCM 时间写成玩家听见声音的时间。</p>
+<h3>独立修复：坏掉的声音不应带走整段字幕</h3>
+<p>检查发现，客户端解码某句声音失败时会调用整轮停止。这会同时清掉该句文字和后续已经收到的句子，看起来像 NPC 的回答突然消失。音频在本机解码失败，并不表示服务器已经确认的台词或动作也失效。</p>
+<p>修改后仅将坏句子转为文字显示：停止它的声音，保留已显示的字数，余下文字继续显示，之后接下一句。排在队列后面的坏句子不会打断当前正常声音。玩家主动插话、当前动作被取消以及原有播放超时，仍按各自规则停止；没有把真正的取消改成继续显示旧回答。</p>
+<p>新增回归先让一句真实压缩音频进入播放器，再在句末送入非法附加字节，检查文字保留、已显示字数不后退、补发不能恢复坏音频、下一句 PCM 仍完整进入播放队列。最后主动打断，检查文字、音频和晚到通知均停止。这项检查已通过，未在正式关卡试听。</p>
+<div id="sentence-audio-integration-validation"><h3>验证状态</h3>
+<p>后端相关 146 项回归在 11.021 秒内通过。随后对齐父进程与工作进程的块数限制，并细化取消、回调失败与协议错误的处理，再运行 17 项专项，0.999 秒通过。这两批包含重复检查，不能相加当作新增测试数量。日志分别为 <code>Saved/AIResearch/SentenceAudioStreaming_20261113/backend-stream-regression.log</code> 与 <code>parent-http-final-lifetime-tests.log</code>。</p>
+<p>其中一次检查启动临时本机 HTTP 服务，并让替代语音合成函数保持等待。客户端在合成结束前已经收到动作建议、句子开始与两个音频段；允许合成完成后，才收到句末和整轮完成消息。这确认 HTTP 没有重新等到整句才发送，但没有使用真实模型或 GPU，不能用它推断首声耗时。</p>
+<p>每句仍由一个任务处理，不为每块音频另建任务。取消、超时或回调异常后，父进程发送取消并丢弃晚到音频，等待语音工作进程明确结束后才允许下一句使用它；若超过确认时间，才停止本项目的这个工作进程。非法序号、偏移或声音配置被视为协议错误，不继续复用可能已经失去同步的进程。满队列时仍保留一次错误通知，避免只剩空回复。</p>
+<p>底层语音工作进程的 36 项 CPU 检查通过，其中 10 项覆盖新音频分段，另外 26 项复查已有行为；耗时 0.513 秒，没有加载 GPU 模型。命令在 <code>Tools/DeliveryAI</code> 下运行：<code>python -B -X utf8 -m unittest test_neural_audio_stream test_neural_voice_clone test_neural_tts -q</code>。结果保留在终端输出，没有另存报告；其中替代工作进程打印的启动信息不代表运行了真实 Qwen。</p>
+<p>UE 5.8 的 DeliveryEditor 构建成功，耗时 27.87 秒。随后在不渲染画面的独立世界中运行六项声音专项，全部通过。四项编解码检查没有测试警告；<code>CompleteSpeech</code> 有一条预期的 <code>NoSynthesizedAudio</code>，<code>SentencePlayback</code> 有一条预期的 <code>audio_timeout</code>。新增坏包产生的 <code>decode_failed</code> 已在回归中明确预期，没有把真实错误隐藏为正常播放。</p>
+<p>新格式在 16 kHz 与 24 kHz 下，使用不同大小的 PCM 输入和网络片段，解码结果均与旧整句编码一致；检查还覆盖短句、只补一次尾音、最终长度、损坏字段、缺少结束通知、重复结束及取消后重建。这验证的是 UE 编解码器，没有改变前一轮模型提前解码时存在的波形差异，两种对照不能混为一谈。</p>
+<p>启动日志仍有既存的 3 条角色默认对象（CDO）初始化时的物理材质错误和 13 条 <code>Condition failed</code>，本轮没有处理。专项通过不能写成整个日志没有错误。报告为 <code>Saved/Automation/NpcAudioStreamInterfaces/index.json</code>；构建与运行日志分别为 <code>Saved/Logs/NpcAudioStreamInterfacesBuild.log</code>、<code>NpcAudioStreamInterfaces.log</code>。</p>
+<p>正式后端仍使用此前运行的进程，新分段流程尚未启用；UE Gateway 与播放器也尚未接入持续生成的音频。本轮没有新的游戏首声测量、正式关卡或双人播放验证，分段声音听感仍待确认。</p>
+<p class="evidence">新增代码包括 <code>Tools/DeliveryAI/neural_audio_stream.py</code>、语音 worker 的可选分段回调，以及 UE 的持续 Opus 编码接口。文字回退在 <code>DeliveryNpcSpeechPlayback.cpp</code>，回归位于 <code>DeliveryNpcSpeechTests.cpp</code>。研究来源与上一轮原始测量见<a href="#b-voice-streaming-sources">资料与采用范围</a>及下方 B 音色记录。</p></div>
+</section>
 <section id="b-voice-latency-next"><h2>11 月 13 日：保留 B 音色，继续缩短首声等待</h2>
 <p class="meta">用户已认可并启用女声加速版；独立分段试验已运行，尚未接入游戏，完整交谈等待仍待实测</p>
 <p>用户已经选定两个人的声音，后续优化继续以这份听感为准。先重新检查已有慢请求，再决定哪里值得改；不通过替换音色、固定回复或取消模型决策来缩短等待，也不为了性能研究长期推迟试玩。</p>
@@ -57,7 +86,7 @@
 <p>“第一段已经准备好”还不等于“现在播放就能一直不断”。根据这一次各段到达时间计算，4 帧方式至少要到约 0.547 秒再开始，即首段之后再留约 0.111 秒；8 帧方式在本样本中从约 0.773 秒开始即可连续供应。它们只是根据已完成样本计算的播放起点下界，没有网络、UE、混音器或下一次生成波动，不能作为正式缓冲配置或玩家实际听见声音的时间。</p>
 <p>脚本在首块解码完成后触发取消，随后重新生成的完整结果与基线一致；这没有覆盖任意 GPU 执行位置或网络中断。审查又发现两个脚本问题：解码结束后、提交音频前还要检查一次取消；不足整块的尾音应该先处理，再保存完整 WAV。旧报告中 8 帧方式的尾块时间包含了写文件的开销。表格和缓冲分析保留原测量，后续脚本修改不能当作已经重新测过。</p>
 <p>这两处脚本问题已修正，新增检查模拟“PCM 已准备好，但解码期间收到取消”，确认不会继续追加声音。修复后 14 项 CPU 预检通过，记录在 <code>Saved/AIResearch/TtsStreaming/preflight-after-cancel-tail-fix.json</code>，其中 <code>gpu_loaded=false</code>。没有重跑 GPU，也没有修改旧测量结果；旧报告中的首段时间不受保存完整 WAV 的顺序影响。</p>
-<p>当前不采用分段播放：拼接声音尚未试听，正式后端和 UE 仍没有这套分段传输、播放与取消处理。先保留试验文件供听感比较，不继续扩大数值算子研究。</p>
+<p>这轮独立试验结束时尚未采用分段播放：拼接声音没有经过试听，正式后端和 UE 还缺少相应的传输、播放与取消处理。试验文件继续用于听感比较；后续接口接入见本页<a href="#sentence-audio-integration">句内语音分段</a>，没有继续扩大数值算子研究。</p>
 <p class="evidence">结果：<code>Saved/AIResearch/TtsStreaming/20261113T092955946068Z/Manifest.json</code>；按各段生产时间计算的缓冲分析：同目录 <code>buffer-analysis.json</code>。已保存整句基线、每段音频和拼接 WAV；没有通过 HTTP 或 UE 播放。</p>
 <div id="b-voice-streaming-sources"><h3>资料与采用范围</h3>
 <p>本轮核对了 Qwen 官方生成函数的说明与返回方式、技术报告第 3.4 节，以及 faster-qwen 作者仓库的分段生成代码。接口中的“流式”可能指文本怎样输入，也可能指音频何时返回；只有确认声音在生成结束前已经交给调用方，才可作为本项目的句内音频分段依据。</p>
