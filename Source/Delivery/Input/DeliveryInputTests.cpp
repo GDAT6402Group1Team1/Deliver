@@ -9,6 +9,7 @@
 #include "EnhancedInputComponent.h"
 #include "InputMappingContext.h"
 #include "InputAction.h"
+#include "InputActionValue.h"
 #include "UObject/UnrealType.h"
 #include "Character/DeliveryCharacter.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
@@ -85,6 +86,45 @@ bool FDeliveryInputLifecycleTest::RunTest(const FString&)
     TestTrue(TEXT("Chord works after returning to character"), Character->IsGrabChordHeld());
     Input->ResetInput();
     TestFalse(TEXT("Reset releases chord"), Character->IsGrabChordHeld());
+
+    // 右键拖动先转视角，在组合时间内补按左键仍可以抓取
+    Input->MousePressed(false,true);
+    Input->MouseLook(FInputActionValue(FVector2D(10,0)));
+    Input->MousePressed(true);
+    TestTrue(TEXT("右键转视角后及时补按左键仍能抓取"),Character->IsGrabChordHeld());
+    Input->MouseReleased(false);
+    TestTrue(TEXT("松开右手后左手保持按住"),Input->bLeftMouseDown && !Input->bRightMouseDown);
+    TestFalse(TEXT("松开右手后不遗留鼠标点击"),Input->RightMouseGesture.IsActive());
+    Input->MouseReleased(true);
+    TestFalse(TEXT("双手松开后结束抓取输入"),Input->bGrabChordActive);
+
+    Input->MousePressed(true);
+    Input->MousePressed(false,true);
+    TestTrue(TEXT("先左键后右键仍能抓取"),Character->IsGrabChordHeld());
+    Input->MouseCanceled(false);
+    TestTrue(TEXT("取消右键只释放右手"),Input->bLeftMouseDown && !Input->bRightMouseDown);
+    Input->MouseReleased(true);
+    TestFalse(TEXT("抓取取消后的松开不遗留待处理攻击"),Input->bSingleMouseResolved);
+
+    Input->MousePressed(false,true);
+    Input->MouseCanceled(false);
+    TestFalse(TEXT("取消右键清除手势与按住状态"),Input->RightMouseGesture.IsActive() || Input->bRightMouseDown);
+    TestFalse(TEXT("取消右键清除组合计时"),World->GetTimerManager().IsTimerActive(Input->MouseChordTimer));
+    Input->MouseReleased(false);
+    TestFalse(TEXT("取消后迟到的松开不会重新处理攻击"),Input->bSingleMouseResolved);
+
+    Input->MousePressed(false,true);
+    TestTrue(TEXT("鼠标右键记录单独的点击判断"),Input->RightMouseGesture.IsActive());
+    Player->Possess(Bike);
+    TestFalse(TEXT("上车时清除右键点击判断"),Input->RightMouseGesture.IsActive());
+    Input->MouseReleased(false);
+    TestFalse(TEXT("上车后松开右键不会残留单键输入"),Input->bSingleMouseResolved);
+    Player->Possess(Character);
+    Input->MousePressed(false);
+    TestFalse(TEXT("手柄右攻击沿用原规则"),Input->RightMouseGesture.IsActive());
+    Input->ResolveSingleMousePress();
+    TestTrue(TEXT("手柄按住超过组合时间后照常处理攻击"),Input->bSingleMouseResolved);
+    Input->MouseReleased(false);
 
     // 上下车的输入交接。真实流程里引擎会在 UnPossessed 时销毁这具身体的
     // InputComponent，重新占有时再新建一个——而新建的那个有可能复用同一个

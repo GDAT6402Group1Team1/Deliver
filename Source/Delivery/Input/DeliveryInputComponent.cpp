@@ -3,6 +3,8 @@
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
+#include "GameFramework/PlayerController.h"
+#include "InputCoreTypes.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Vehicle/DeliveryVehicleSummonComponent.h"
@@ -124,8 +126,7 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
         EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this,
                                            &UDeliveryInputComponent::JumpStarted);
     }
-    // 左右键先交给组合键判断，松开和取消统一进入释放处理
-    // 单键用于出拳，短时间内双键按下用于抓取
+    // 左右键先判断组合抓取，右键拖动只转视角；输入取消时不补出拳
     if (AttackLeftAction)
     {
         EnhancedInputComponent->BindAction(AttackLeftAction, ETriggerEvent::Started, this,
@@ -133,7 +134,7 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
         EnhancedInputComponent->BindAction(AttackLeftAction, ETriggerEvent::Completed, this,
                                            &UDeliveryInputComponent::AttackLeftEnded);
         EnhancedInputComponent->BindAction(AttackLeftAction, ETriggerEvent::Canceled, this,
-                                           &UDeliveryInputComponent::AttackLeftEnded);
+                                           &UDeliveryInputComponent::AttackLeftCanceled);
     }
     if (AttackRightAction)
     {
@@ -142,7 +143,7 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
         EnhancedInputComponent->BindAction(AttackRightAction, ETriggerEvent::Completed, this,
                                            &UDeliveryInputComponent::AttackRightEnded);
         EnhancedInputComponent->BindAction(AttackRightAction, ETriggerEvent::Canceled, this,
-                                           &UDeliveryInputComponent::AttackRightEnded);
+                                           &UDeliveryInputComponent::AttackRightCanceled);
     }
     // 交互和拾取使用软引用，绑定前确保 IA 已加载；已在内存中则直接使用
     if (UInputAction *Interact = InteractAction.LoadSynchronous())
@@ -206,7 +207,9 @@ void UDeliveryInputComponent::Look(const FInputActionValue &Value)
 void UDeliveryInputComponent::MouseLook(const FInputActionValue &Value)
 {
     if (!IsValid(Character)) return;
-    const FVector2D Axis = Value.Get<FVector2D>() * MouseLookSensitivity;
+    const FVector2D MouseDelta=Value.Get<FVector2D>();
+    RightMouseGesture.AddMovement(MouseDelta,GFrameCounter);
+    const FVector2D Axis = MouseDelta * MouseLookSensitivity;
     Character->DoLook(Axis.X, Axis.Y);
 }
 
@@ -227,7 +230,8 @@ void UDeliveryInputComponent::AttackLeftStarted(const FInputActionValue & /* 未
 void UDeliveryInputComponent::AttackRightStarted(const FInputActionValue & /* 未使用 */)
 {
     if (!IsValid(Character)) return;
-    MousePressed(false);
+    const auto* Player=Cast<APlayerController>(Character->GetController());
+    MousePressed(false,Player && Player->IsInputKeyDown(EKeys::RightMouseButton));
 }
 
 void UDeliveryInputComponent::AttackLeftEnded(const FInputActionValue & /* 未使用 */)
@@ -242,8 +246,18 @@ void UDeliveryInputComponent::AttackRightEnded(const FInputActionValue & /* 未�
     MouseReleased(false);
 }
 
+void UDeliveryInputComponent::AttackLeftCanceled(const FInputActionValue &)
+{
+    MouseCanceled(true);
+}
+
+void UDeliveryInputComponent::AttackRightCanceled(const FInputActionValue &)
+{
+    MouseCanceled(false);
+}
+
 // 等待短暂的组合键窗口，再决定出拳还是抓取
-void UDeliveryInputComponent::MousePressed(bool bLeft)
+void UDeliveryInputComponent::MousePressed(bool bLeft,bool bMouseRight)
 {
     if (!IsValid(Character)) return;
     UDeliveryGrabComponent* GrabComponent = Character->GetGrabComponent();
@@ -253,11 +267,12 @@ void UDeliveryInputComponent::MousePressed(bool bLeft)
         return;
     const bool bWasEmpty = !bLeftMouseDown && !bRightMouseDown;
     ThisDown = true;
+    if (!bLeft && bMouseRight) RightMouseGesture.Begin(FPlatformTime::Seconds());
     if (bWasEmpty)
     {
         bFirstMouseLeft = bLeft;
         bSingleMouseResolved = false;
-        // 先等待另一只鼠标键；等待期间双键按下则抓取，否则按单键出拳
+        // 保留原来的双键组合时间，鼠标右键不会在计时结束时自动出拳
         GetWorld()->GetTimerManager().SetTimer(MouseChordTimer, this, &UDeliveryInputComponent::ResolveSingleMousePress,
                                         0.2f, false);
     }
@@ -266,6 +281,7 @@ void UDeliveryInputComponent::MousePressed(bool bLeft)
         // 第二只键在等待时间内按下，取消单键出拳并开始抓取
         GetWorld()->GetTimerManager().ClearTimer(MouseChordTimer);
         bGrabChordActive = true;
+        RightMouseGesture.BlockClick();
         if (GrabComponent)
             GrabComponent->RequestBegin();
     }
@@ -274,7 +290,7 @@ void UDeliveryInputComponent::MousePressed(bool bLeft)
         // 第一只键已经按单键处理，第二只键继续作为独立出拳
         if (bLeft)
             Character->DoAttackLeft();
-        else
+        else if (!RightMouseGesture.IsActive())
             Character->DoAttackRight();
     }
 }
@@ -288,7 +304,7 @@ void UDeliveryInputComponent::ResolveSingleMousePress()
     bSingleMouseResolved = true;
     if (bFirstMouseLeft && bLeftMouseDown)
         Character->DoAttackLeft();
-    else if (!bFirstMouseLeft && bRightMouseDown)
+    else if (!bFirstMouseLeft && bRightMouseDown && !RightMouseGesture.IsActive())
         Character->DoAttackRight();
 }
 
@@ -300,6 +316,19 @@ void UDeliveryInputComponent::MouseReleased(bool bLeft)
     bool &ThisDown = bLeft ? bLeftMouseDown : bRightMouseDown;
     if (!ThisDown)
         return;
+    EDeliveryRightMouseRelease RightRelease=EDeliveryRightMouseRelease::OtherInput;
+    if (!bLeft)
+    {
+        // 松开与视角输入可能在同一帧到达，补查本帧鼠标移动，避免短拖动被判为点击
+        if (RightMouseGesture.IsActive())
+            if (const auto* Player=Cast<APlayerController>(Character->GetController()))
+            {
+                float MouseX=0,MouseY=0;
+                Player->GetInputMouseDelta(MouseX,MouseY);
+                RightMouseGesture.AddMovement(FVector2D(MouseX,MouseY),GFrameCounter);
+            }
+        RightRelease=RightMouseGesture.Finish(FPlatformTime::Seconds());
+    }
     ThisDown = false;
     if (bGrabChordActive)
     {
@@ -309,7 +338,13 @@ void UDeliveryInputComponent::MouseReleased(bool bLeft)
         if (!bLeftMouseDown && !bRightMouseDown)
             bGrabChordActive = false;
     }
-    // 短按在等待结束前松开，也应执行一次攻击
+    else if (RightRelease!=EDeliveryRightMouseRelease::OtherInput)
+    {
+        GetWorld()->GetTimerManager().ClearTimer(MouseChordTimer);
+        bSingleMouseResolved=true;
+        if (RightRelease==EDeliveryRightMouseRelease::Click) Character->DoAttackRight();
+    }
+    // 左键和手柄保留短按出拳
     else if (!bSingleMouseResolved)
     {
         GetWorld()->GetTimerManager().ClearTimer(MouseChordTimer);
@@ -325,6 +360,15 @@ void UDeliveryInputComponent::MouseReleased(bool bLeft)
         GetWorld()->GetTimerManager().ClearTimer(MouseChordTimer);
         bSingleMouseResolved = false;
     }
+}
+
+void UDeliveryInputComponent::MouseCanceled(bool bLeft)
+{
+    if (!IsValid(Character) || !(bLeft?bLeftMouseDown:bRightMouseDown)) return;
+    GetWorld()->GetTimerManager().ClearTimer(MouseChordTimer);
+    bSingleMouseResolved=true;
+    if (!bLeft) RightMouseGesture.BlockClick();
+    MouseReleased(bLeft);
 }
 
 // 交互与物品栏
@@ -381,6 +425,7 @@ void UDeliveryInputComponent::ResetInput()
     // 先清掉组合键状态，后续松开事件不会再触发短按攻击
     bLeftMouseDown = bRightMouseDown = bGrabChordActive = false;
     bSingleMouseResolved = bFirstMouseLeft = false;
+    RightMouseGesture.Reset();
     // 失去控制权时引擎会销毁这具身体的 InputComponent，绑定记录按定义当场作废。
     // 不清的话，下次重新占有时新建的组件可能复用同一个对象槽位，
     // Bind() 开头那道"已经绑过了"的早退就会误判，结果是一个键都不绑、

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Input/DeliveryRightMouseGesture.h"
 #include "DeliveryInputComponent.generated.h"
 
 class ADeliveryCharacter;
@@ -102,12 +103,16 @@ private:
     void AttackRightStarted(const FInputActionValue &Value);
     void AttackLeftEnded(const FInputActionValue &Value);
     void AttackRightEnded(const FInputActionValue &Value);
-    /** 等待双键组合的时间结束后，将首次按下的鼠标键作为出拳操作 */
+    void AttackLeftCanceled(const FInputActionValue &Value);
+    void AttackRightCanceled(const FInputActionValue &Value);
+    // 组合时间结束后处理左键与手柄，鼠标右键留到松开时判断
     void ResolveSingleMousePress();
     /** 记录鼠标按下状态，区分单键出拳和双键抓取 */
-    void MousePressed(bool bLeft);
+    void MousePressed(bool bLeft,bool bMouseRight=false);
     /** 松开对应的抓取手；短按未触发抓取时执行一次出拳 */
     void MouseReleased(bool bLeft);
+    // 输入被取消时只释放对应的手，不执行短按攻击
+    void MouseCanceled(bool bLeft);
 
     // 交互与物品回调
     void InteractStarted(const FInputActionValue &Value);
@@ -125,5 +130,6 @@ private:
     bool bSingleMouseResolved = false;
     /** 首次按下的是否为左键，用于确定等待结束后打哪一拳 */
     bool bFirstMouseLeft = false;
+    FDeliveryRightMouseGesture RightMouseGesture;
 
 };
