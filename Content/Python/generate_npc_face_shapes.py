@@ -84,12 +84,18 @@ for source,name in models:
         for group in brow_config['groups']:
             vertex_group=mesh.vertex_groups.new(name=group['name'])
             for index in group['vertices']:vertex_group.add([index],brow_weights[index],'REPLACE')
-    skin_loops=set()
+    skin_loops=set();skin_boundary=set()
     if brow_config:
         skin_vertices=set(brow_config.get('skin_mask_vertices',[]))
         for polygon in mesh.data.polygons:
             if all(index in skin_vertices for index in polygon.vertices):
                 skin_loops.update(polygon.loop_indices)
+        if brow_config.get('smooth_skin_mask_boundary',False):
+            brow_vertices={i for group in brow_config['groups'] for i in group['vertices']}
+            for edge in mesh.data.edges:
+                a,b=edge.vertices
+                if a in skin_vertices and b not in skin_vertices|brow_vertices:skin_boundary.add(a)
+                if b in skin_vertices and a not in skin_vertices|brow_vertices:skin_boundary.add(b)
     # 源贴图把眼睛和眉毛的暗色烘焙到了脸上，移动几何体后会留下重影
     # 单独记录脸部遮罩，材质用邻近皮肤色覆盖烘焙痕迹，眼睛本身不受影响
     eye_ids={i for ids,_ in eyes for i in ids}
@@ -106,7 +112,7 @@ for source,name in models:
                 weight=max(weight,max(0,min(1,(1.5-radius)/.45)))
         if source=='中年女' and point.z>.778:
             weight=0
-        if loop.index in skin_loops:
+        if loop.index in skin_loops and index not in skin_boundary:
             # 只覆盖眉下皮肤的旧眉影，连接点在眉毛面上的颜色保持原样
             for region in brow_config['skin_mask_regions']:
                 cy,cz=region['center']
@@ -185,6 +191,7 @@ for source,name in models:
         if protected_mask>1e-7:raise RuntimeError('眉下皮肤以外出现了新遮罩')
         item.update(candidate=True,moved_brow_vertices=len(moved),outside_brows_max_delta=outside,fixed_junction_max_delta=fixed,
                     brow_skin_mask_loops=len(skin_loops),protected_upper_face_mask_max=protected_mask,
+                    skin_mask_boundary_vertices=sorted(skin_boundary),
                     selection_config='Design/Art/NPC/Residents/Appearance/WomanBrowSelection.json',preview_status='not_rendered')
     report.append(item)
 if not CANDIDATE:

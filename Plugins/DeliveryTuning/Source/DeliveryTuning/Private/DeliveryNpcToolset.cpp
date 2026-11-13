@@ -53,6 +53,8 @@
 #include "Engine/SkeletalMesh.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/MorphTarget.h"
+#include "Rendering/SkeletalMeshModel.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
@@ -369,6 +371,55 @@ FString UDeliveryNpcToolset::PlaceResidentPair(FVector Location)
     }
     return CheckNpcNavigation(true);
 }
+FString UDeliveryNpcToolset::GetNpcMorphStats(USkeletalMesh* Mesh, FName MorphName, int32 LODIndex)
+{
+    auto Report = MakeShared<FJsonObject>();
+    auto Finish = [&Report](const TCHAR* Error = nullptr)
+    {
+        Report->SetBoolField(TEXT("valid_data"), Error == nullptr);
+        if (Error) Report->SetStringField(TEXT("error"), Error);
+        FString Json;
+        FJsonSerializer::Serialize(Report, TJsonWriterFactory<>::Create(&Json));
+        return Json;
+    };
+    if (!IsInGameThread() || !IsValid(Mesh)) return Finish(TEXT("需要在游戏线程读取有效模型"));
+    if (Mesh->IsCompiling()) return Finish(TEXT("模型仍在编译，请完成编译后再检查"));
+    const UMorphTarget* Morph = Mesh->FindMorphTarget(MorphName);
+    if (!Morph || !Morph->GetMorphLODModels().IsValidIndex(LODIndex))
+        return Finish(TEXT("模型中没有指定表情或 LOD"));
+    const FSkeletalMeshModel* Imported = Mesh->GetImportedModel();
+    if (!Imported || !Imported->LODModels.IsValidIndex(LODIndex))
+        return Finish(TEXT("模型没有对应的 LOD 顶点数据"));
+    // Morph 的 NumBaseMeshVerts 保存的是生成表情时传入的位移条目数，索引上限应取实际 LOD 顶点数
+    const uint32 VertexCount = Imported->LODModels[LODIndex].NumVertices;
+    const auto Deltas = Morph->GetMorphTargetDeltas(LODIndex);
+    Report->SetStringField(TEXT("mesh"), Mesh->GetPathName());
+    Report->SetStringField(TEXT("morph"), MorphName.ToString());
+    Report->SetNumberField(TEXT("lod"), LODIndex);
+    Report->SetNumberField(TEXT("base_vertex_count"), VertexCount);
+    Report->SetNumberField(TEXT("morph_input_delta_count"), Morph->GetMorphLODModels()[LODIndex].NumBaseMeshVerts);
+    Report->SetNumberField(TEXT("delta_count"), Deltas.Num());
+    int32 MovingVertices = 0;
+    double MaxDistance = 0.0;
+    // 直接读取编辑器保存的位移，不创建渲染组件，也不导出或烘焙材质
+    for (const FMorphTargetDelta& Delta : Deltas)
+    {
+        if (Delta.SourceIdx >= VertexCount)
+        {
+            Report->SetNumberField(TEXT("invalid_vertex_index"), Delta.SourceIdx);
+            return Finish(TEXT("表情顶点编号超出 LOD 范围"));
+        }
+        if (Delta.PositionDelta.ContainsNaN() || Delta.TangentZDelta.ContainsNaN())
+            return Finish(TEXT("表情包含无效数值"));
+        const double Distance = Delta.PositionDelta.Size();
+        if (Distance > 1.e-5) ++MovingVertices;
+        MaxDistance = FMath::Max(MaxDistance, Distance);
+    }
+    Report->SetNumberField(TEXT("nonzero_position_deltas"), MovingVertices);
+    Report->SetNumberField(TEXT("max_position_delta_cm"), MaxDistance);
+    return Finish();
+}
+
 FString UDeliveryNpcToolset::CheckNpcNavigation(bool bRepairEmpty)
 {
     auto Report=MakeShared<FJsonObject>();

@@ -55,6 +55,8 @@
       "FaceListening",
       "FaceThinking"
     ],
-    "vertex_count": 4276
+    "vertex_count": 4276,
+    "brows_angry_vertices": 153,
+    "brow_selection": "Design/Art/NPC/Residents/Appearance/WomanBrowSelection.json"
   }
 ]

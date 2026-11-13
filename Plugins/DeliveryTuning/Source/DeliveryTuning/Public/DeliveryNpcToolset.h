@@ -3,6 +3,8 @@
 #include "ToolsetRegistry/ToolsetDefinition.h"
 #include "DeliveryNpcToolset.generated.h"
 
+class USkeletalMesh;
+
 // 编辑器专用 MCP 入口，创建可编辑居民蓝图与行为树，不进入运行时模块
 UCLASS()
 class UDeliveryNpcToolset : public UToolsetDefinition
@@ -15,6 +17,8 @@ public:
     UFUNCTION(meta=(AICallable)) static FString PlaceResidentPair(FVector Location);
     // 默认只检查导航；修复时只补全空体积，保留已有的有效范围
     UFUNCTION(BlueprintCallable, Category="Delivery|NPC", meta=(AICallable)) static FString CheckNpcNavigation(bool bRepairEmpty = false);
+    // 读取已导入表情的顶点位移，供无渲染的资源检查使用；不修改或保存模型
+    UFUNCTION(BlueprintCallable, Category="Delivery|NPC", meta=(AICallable)) static FString GetNpcMorphStats(USkeletalMesh* Mesh, FName MorphName, int32 LODIndex = 0);
     UFUNCTION(meta=(AICallable)) static FString InspectResidentWorlds();
     UFUNCTION(meta=(AICallable)) static bool ConfigureResidentPIE(int32 Players);
     // 联调入口只发布实际台词，不伪造模型建议或绕过执行校验
