@@ -15,9 +15,32 @@
     .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
 <body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#npc-contact-ui-v4-20261114">命中与 v4 界面</a><a href="#light-dialogue-ui-20261114">v3 界面历史</a><a href="#npc-playability-result-20261114">互殴与道歉让路</a><a href="#npc-playability-trial-20261114">旧按钮失败记录</a><a href="#silent-action-feedback">无台词动作的交谈反馈</a><a href="#model-speech-streaming">真实回复分段与缓冲</a><a href="#reply-waiting-feedback">交谈等待与反馈调整</a><a href="#speech-streaming-comparison">分段对照与停顿表现</a><a href="#sentence-audio-playback">句内语音播放</a><a href="#sentence-audio-integration">分段接口与编码</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
 <header><div class="meta">AI / 交谈、语音与表情 / 2026-11-14</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
-<div class="finding"><strong>最新进展：</strong>用户撤回认可，反馈两名 NPC 难以互聊，也很难被挑拨到互殴，二狗交接暂停。日志确认最近 17 次请求都有攻击候选，但没有选攻击；两人始终向玩家核实传话。本次调整人物与对话提示，并修复等待、播放期间丢掉接话的问题。代码已编译，人物表已保存，后端已重启；未追加游戏或自动化检查，仍待用户试玩。<a href="#npc-conversation-balance-20261114">查看本次原因与修改</a>；<a href="#npc-contact-ui-v4-20261114">此前命中与界面记录</a>。</div>
+<div class="finding"><strong>最新进展：</strong>互相接话已恢复，但后续实机 16 次请求仍没选攻击，两人还聊起了未实现的“掰手腕”。此次调整否认传闻后的反应和口语表达，后台真实模型已出现争执后选择 <code>Fight</code>，问候与已和解场景未攻击。中途失败样本也已保留。后端已更新，无需重新编译 UE；没有进游戏或合成语音，实际效果仍待用户试玩，二狗暂不实施。<a href="#npc-rivalry-spoken-20261114">查看最新过程与结果</a>；<a href="#npc-conversation-balance-20261114">此前接话修复</a>。</div>
 <div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、翠花眉形和 B 音色短反应已加入；轻拳误用倒地片段已修正，本次单人实际受击保持站立。翠花已采用用户认可的 B 加速版；句内音频已接到 UE 接收、编码和播放流程，八项专项通过。句内分段已接入试玩，开播缓冲为 1.28 秒。一次真实模型到 UE 播放器的检查通过，两句完整且没有再次等待音频；随后语音生成中的打断检查也通过。用户已试听并认可分段 B 样本；游戏中的空间音量、画面与真实多人效果仍需验收。倾听和失败反馈已修复并通过六项专项检查。动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
 <div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
+<section id="npc-rivalry-spoken-20261114"><h2>11 月 14 日：否认传闻之后，也可能继续吵起来</h2>
+<p class="meta">用户授权后台真实模型对照；未操作游戏、未合成语音。本次只改后端提示、人物资料和对照脚本</p>
+<h3>这次日志说明了什么</h3>
+<p>02:59:58–03:01:51 的实机会话共 16 次请求，全部有 <code>Fight</code> 和 <code>StrikeOnce</code> 候选，却没有一次攻击。互聊已恢复，双方会直接接对方的话，但仍会把矛头一起转回玩家。大壮后来主动说“不打，掰手腕敢不敢？”，翠花答“掰就掰，谁怕你！”，两次实际都选择 <code>LookAt</code>，所以人物只看着对方。游戏没有掰手腕能力；问题发生在模型选择与台词承诺，不能说成服务器拒绝了攻击。五个取消结果中有四个因新话到来被标为 <code>StaleProposal</code>，其余一个与玩家插话对应，不能全部归为玩家打断。</p>
+<p>证据从 <code>Saved/Logs/NpcDialogue.ndjson</code> 第 227 行开始；掰手腕相关请求为 <code>fad1a8ee</code>、<code>864cf1d2</code>、<code>2d893369</code>。旧后台日志在重启时已自动备份。</p>
+<h3>采用的调整</h3>
+<p>用户判断得很具体：翠花觉得玩家在拱火，就问大壮；大壮否认，两人便不再较量。现在把“传闻是否属实”和“对眼前这个人的态度”分开。大壮可以否认传闻，却又嫌翠花冲他嚷；翠花烦的是他当面训人的口气，争执便有了新的原因。两人有各自的性格和退让理由，不要求无条件相信玩家，不用次数、关键词或随机分支强制攻击。</p>
+<p>人物资料新增 <code>action_examples</code>，与原有背景和台词例子一起从配置读取。示例说明在怎样的情境下看人、交战或逃跑，不是发生过的事实，也不能增加当前候选中没有的动作。后端检查格式并隔离外来同名字段，动作、目标与命中仍由原有流程检查。台词里的提议和答应也要符合现有能力，不能继续约定未实现的比赛。</p>
+<p>用户随后指出说话仍像写好的角色对白。此次允许“啊？”“不是”“干嘛”等口头反应，也允许“有种当面说”“来，试试”自然出现一次，继续限制同义复读；第一行保留完整短回应，不再追求十二字以内。大壮偏好面子、嘴硬，翠花偏急脾气、嘴快；平静、害怕和退让取决于人物与情况。例句不作为固定台词。对照脚本中的 <code>actual</code> 保留用户实际输入，另加 <code>colloquial</code> 检查“他说你怂”这类短句。</p>
+<h3>为什么没有采用第一次成功的结果</h3>
+<p>原配置用三句玩家原话重跑，六次模型回复都没有攻击。第一版调整曾在第二轮选 <code>Fight</code>，但复查又回到核实传话；换说法时也有成功与失败，不能用一次成功声称解决。加入更口语的表达后，又出现大壮刚顶一句便主动道歉、翠花转而维护他的情况，因此继续明确大壮在没吃亏时很难先低头，以及翠花会被他眼前的语气惹火。</p>
+<p>期间还修正了对照脚本的接话边界：双方连续只对玩家说话时结束；邻居开始直接对彼此说话时继续接，但每轮仍最多三次跟进。修正前的报告没有删除。某次重跑在第四句就选择攻击，发生在这处边界分支之前，不能把那次差异都归因于脚本修正，模型输出本身有波动。</p>
+<h3>最终采用版本的结果</h3>
+<div class="table-scroll"><table><thead><tr><th>场景</th><th>模型调用数</th><th>这次实际结果</th></tr></thead><tbody>
+<tr><td>用户原话与三句实机开场</td><td>1</td><td>翠花直接选择对大壮 <code>Fight</code>；这一例启动较快，不能声称正好两三轮</td></tr>
+<tr><td>“翠花，他说你怂。”</td><td>4</td><td>翠花质问，大壮否认却嫌她嚷，翠花顶回去，大壮在第四次 NPC 回复选择对翠花 <code>Fight</code></td></tr>
+<tr><td>普通问候</td><td>2</td><td>翠花正常回应，大壮安静踱步，没有攻击</td></tr>
+<tr><td>已经接受道歉后，玩家告辞</td><td>2</td><td>翠花道别，大壮等待，没有重新开打；这不等于验证了所有道歉都能平息争执</td></tr>
+</tbody></table></div>
+<p>口语场景中的实际生成台词为：“我没说你怂，别一上来就冲我嚷！”→“没说就没说，少拿这口气训我！”→“谁训你了？我还就不服你这股劲！”。末句对应模型选择的 <code>Fight</code>，不是在脚本里替换动作。自然程度仍由用户试玩判断。</p>
+<p>全部过程共 19 份场景报告、63 次模型调用，采用版本是最后四份 <code>release_*.json</code>，共 9 次调用。报告位于 <code>Saved/AIResearch/NpcConflictReview_20261114/</code>，包含各版人物与提示快照、输入、原始输出及所选动作。采用模型仍为 <code>gpt-6.1-sol</code>，没有新模型或第二次审查调用。对照使用静态场景，每次最多 12 次调用；选择攻击便停止，不模拟移动、命中、受击、声音、事件过期或多人网络。这些少量场景只能说明当前配置能产生这种选择，不能给出稳定成功率或证明游戏里的互殴已验收。</p>
+<p>后台逻辑检查命令：在 <code>Tools/DeliveryAI</code> 运行 <code>python -X utf8 -m unittest test_dialogue_background test_model_context -q</code>，17 项通过。人物示例载入、字段覆盖拒绝和上下文处理均包含在检查中。后端已按原有参数重启，声音与 UE 资产保持原样，本次不需要重新编译工程。下一步由用户试玩检查短句、争执与真正的追打效果。</p>
+</section>
 <section id="npc-conversation-balance-20261114"><h2>11 月 14 日：恢复互相接话，让挑拨能引起争执</h2>
 <p class="meta">本次只做日志分析、修改、构建和资产导入，没有启动游戏或运行自动化；当前目标继续，二狗暂不实施</p>
 <h3>实际发生了什么</h3>

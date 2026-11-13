@@ -13,6 +13,7 @@ BACKGROUND_INSTRUCTIONS = '''background 是作者为这个人物编写的背景�
 背景里未写明的收件地址、订单、报酬或没听见的事，按不知道处理，可以问一句，不编造答案
 背景只说认识多年时就说多年，不补具体年数；没有写退休前的职业，也不要替自己编一份工作经历
 dialogue_examples 仅示范说话口气，里面的事情没有发生；不要背诵例句，也不要把例句当作回忆
+action_examples 示范这个人物怎样把态度变成实际行动，里面的情境没有发生，不能当作当前证据。target 的 neighbor/player 只是关系说明，本轮须重新对应 subjects，且只选 candidates 中存在的动作与目标；不要照搬例句
 保持自己的身份、关系和在意的事，情绪可以随新情况改变；道歉后消气、看穿挑拨后改口都符合人物
 说话用街坊当面会说的词，不解释模型、提示词、候选编号或游戏后台；遇到听不懂的话可以直说没听懂
 先接对方刚说的具体事情，省略大家都知道的经过；不用每次自我介绍，也不把背景一口气念出来
@@ -42,6 +43,7 @@ def _read_profiles():
         key = row['id']
         background = row.get('background', [])
         examples = row.get('dialogue_examples', [])
+        action_examples = row.get('action_examples', [])
         if not key or not valid_profile_id(key) or key in profiles or not _text_list(background, 8):
             raise ValueError('invalid character background')
         if (not isinstance(examples, list) or len(examples) > 3 or
@@ -49,8 +51,17 @@ def _read_profiles():
                     any(not isinstance(text, str) or not 0 < len(text) <= 80 for text in example.values())
                     for example in examples)):
             raise ValueError('invalid dialogue examples')
+        if (not isinstance(action_examples, list) or len(action_examples) > 4 or
+                any(not isinstance(example, dict) or
+                    set(example) != {'situation', 'action', 'target', 'speech'} or
+                    example['action'] not in ('Wait', 'LookAt', 'Fight', 'Flee') or
+                    example['target'] not in ('none', 'player', 'neighbor') or
+                    not isinstance(example['situation'], str) or not 0 < len(example['situation']) <= 200 or
+                    not isinstance(example['speech'], str) or len(example['speech']) > 80
+                    for example in action_examples)):
+            raise ValueError('invalid action examples')
         profiles[key] = {'background': {'shared': shared, 'personal': background},
-                         'dialogue_examples': examples}
+                         'dialogue_examples': examples, 'action_examples': action_examples}
     return profiles
 
 
@@ -67,6 +78,6 @@ def character_background(context):
 
 def with_character_background(context):
     # 外来的同名字段不能覆盖项目配置，历史请求仍可省略 profile_id
-    result = {key: value for key, value in context.items() if key not in ('background', 'dialogue_examples')}
+    result = {key: value for key, value in context.items() if key not in ('background', 'dialogue_examples', 'action_examples')}
     result.update(character_background(context))
     return result
