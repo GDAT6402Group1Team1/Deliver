@@ -10,6 +10,8 @@ import threading
 import time
 import urllib.request
 
+from neural_tts import MAX_PCM_BYTES
+
 
 def local_shell():
     override = os.environ.get('DELIVERY_TTS_SHELL')
@@ -108,6 +110,7 @@ class SpeechSynthesizer:
                 try:
                     result = json.loads(self.lines.get(timeout=.05))
                     pcm = base64.b64decode(result['pcm'], validate=True)
+                    # Windows 返回 16 kHz 单声道，384000 字节同样对应 12 秒
                     if not pcm or len(pcm) > 384000 or len(pcm) % 2:
                         raise ValueError('invalid_pcm')
                     self.voice_name = result.get('voice_name', '')
@@ -132,7 +135,7 @@ class SpeechSynthesizer:
                 if not part:
                     break
                 pcm.extend(part)
-                if len(pcm) > 384000:
+                if len(pcm) > MAX_PCM_BYTES:
                     raise ValueError('speech_too_large')
         if cancel.is_set() or not pcm or len(pcm) % 2:
             raise ValueError('invalid_speech')

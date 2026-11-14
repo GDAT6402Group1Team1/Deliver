@@ -3,12 +3,16 @@
 #include "Misc/ScopeExit.h"
 #include "AI/Characters/DeliveryNpcAIController.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Network/DeliveryAiSettings.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Animation/AnimSequence.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -242,6 +246,13 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
     auto* Memory=Dajun->Agent.Get();
     Memory->CancelPlan(TEXT("MemoryRetentionCheck"));
     Memory->Evidence.Reset(); Memory->KnownSubjects.Reset(); Memory->RecentEventIds.Reset();
+    // 提供真实出拳所需的骨架与动画，裸 C++ 角色没有这些蓝图资源
+    auto* StrikeMesh=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/NPC/Residents/Appearance/SK_NpcManFace.SK_NpcManFace"));
+    auto* StrikeAnimation=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/NPC/Residents/Animation/A_ResidentPunch.A_ResidentPunch"));
+    if (!TestNotNull(TEXT("记忆测试使用正式居民骨架"),StrikeMesh) ||
+        !TestNotNull(TEXT("记忆测试使用正式出拳动画"),StrikeAnimation)) return false;
+    Dajun->GetMesh()->SetSkeletalMesh(StrikeMesh);
+    Dajun->Presentation->AttackAnimation=StrikeAnimation;
     Xiaofang->SetActorLocation(FVector(120,0,90));
     FDeliveryNpcObservation Sight;
     Sight.EventId=FGuid::NewGuid(); Sight.Kind=TEXT("VisibleNow"); Sight.Source=EDeliveryNpcEvidenceSource::Seen;
@@ -289,7 +300,9 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
         [](const auto& Item) { return Item.Kind==TEXT("VisibleNow"); }).Num(),1);
     TestEqual(TEXT("四十次视野刷新没有挤掉五条交谈记录"),Memory->Evidence.Num(),6);
     World->TimeSeconds+=90;
-    Xiaofang->SetActorLocation(FVector(140,0,90));
+    // 这个世界没有导航，放到实际可挥拳的位置，避免把无法寻路当成记忆丢失
+    Xiaofang->SetActorLocation(FVector(Dajun->Combat->GetStrikeApproachDistance(Xiaofang)-.5f,0,90));
+    TestTrue(TEXT("近处目标满足真实出拳条件"),Dajun->Combat->CanApproachStrike(Xiaofang));
     TestTrue(TEXT("转头一分半后仍能准备交谈上下文"),Memory->BuildDecisionRequest(Epoch,RememberedRequest));
     for (const FGuid Id : ConversationIds)
         TestTrue(TEXT("几分钟前的原话、旁听和本人答话仍保留"),RememberedRequest.Evidence.ContainsByPredicate(
@@ -312,8 +325,12 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
     TestFalse(TEXT("销毁后的邻居不再作为可操作人物发送"),RememberedRequest.Subjects.ContainsByPredicate(
         [&](const auto& Item) { return Item.SubjectId==NeighborId; }));
     World->TimeSeconds+=211;
+    Memory->PruneEvidence();
+    TestTrue(TEXT("五分钟后结束本段短时记忆"),Memory->Evidence.IsEmpty());
     Memory->BuildDecisionRequest(Epoch,RememberedRequest);
-    TestTrue(TEXT("五分钟后结束本段短时记忆"),RememberedRequest.Evidence.IsEmpty());
+    TestEqual(TEXT("新请求只重新记录当前身体状态"),RememberedRequest.Evidence.Num(),1);
+    TestTrue(TEXT("新身体记录没有恢复已经过期的交谈"),RememberedRequest.Evidence.ContainsByPredicate(
+        [](const auto& Item) { return Item.Kind==TEXT("SelfCombat"); }));
     FDeliveryNpcObservation FullWindow; FullWindow.Kind=TEXT("TestFact"); FullWindow.Lifetime=45;
     for (int32 Index=0; Index<32; ++Index) Memory->ObserveEvent(FullWindow);
     Memory->BuildDecisionRequest(Epoch,RememberedRequest);
@@ -451,7 +468,8 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
     TestEqual(TEXT("新的玩家发言重新从零开始接话"),Observer->GetConversationDepth(),0);
     TestTrue(TEXT("新的玩家发言照常进入倾听"),ObservationMemory->IsListening());
     TestTrue(TEXT("后端关闭时新玩家发言仍安排稍后回复"),Observer->bDecisionNeeded);
-    TestFalse(TEXT("只有新玩家发言才打断原来的台词"),Observer->Presentation->GetSpeech().bActive);
+    TestTrue(TEXT("玩家新发言保留没有玩家归属的环境台词"),Observer->Presentation->GetSpeech().bActive &&
+        Observer->Presentation->GetSpeech().TurnId==SpeakingTurn);
 
     // 请求已经发出时收到最后一句，也不能把正在生成的回复判为过期
     FDeliveryNpcDecisionRequest PendingRequest;
@@ -468,12 +486,129 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
     PendingProposal.RequestId=PendingRequest.RequestId;
     PendingProposal.ContextRevision=PendingRequest.ContextRevision;
     PendingProposal.PlanRevision=PendingRequest.PlanRevision;
-    PendingProposal.Action=EDeliveryNpcAction::Wait;
+    const auto* PendingChoice=PendingRequest.Candidates.FindByPredicate([](const auto& Item)
+        { return Item.Action==EDeliveryNpcAction::Wait; });
+    if (!TestNotNull(TEXT("本次玩家请求提供真实等待候选"),PendingChoice)) return false;
+    PendingProposal.CapabilityVersion=PendingRequest.RequestedCapabilityVersion;
+    PendingProposal.CandidateId=PendingChoice->CandidateId;
+    PendingProposal.Action=PendingChoice->Action;
+    PendingProposal.TargetId=PendingChoice->TargetId;
+    PendingProposal.EvidenceIds=PendingChoice->EvidenceIds;
     PendingProposal.Duration=1;
     PendingProposal.Speech=TEXT("行，你接着说，我听着呢。");
     TestTrue(TEXT("只记住的直接发言不会作废已发出的请求"),ObservationMemory->TryAcceptProposal(PendingProposal,Reason));
     TestFalse(TEXT("记住最后一句后没有额外唤醒请求"),Observer->bDecisionNeeded || ObservationMemory->bDecisionQueued);
     TestFalse(TEXT("当前模型没读过最后一句，不把它记成已经处理"),ObservationMemory->LastDecisionEventIds.Contains(LastHeardMessage));
+
+    // 复现玩家刚开口、邻居上一句才播完的顺序，检查两种回复接口都先完成玩家这轮
+    auto* ReplyNpc=World->SpawnActor<ADeliveryNpcCharacter>(FVector(-3000,-3000,90),FRotator::ZeroRotator,Spawn);
+    auto* ReplyNeighbor=World->SpawnActor<ADeliveryNpcCharacter>(FVector(-2800,-3000,90),FRotator::ZeroRotator,Spawn);
+    Player->SetActorLocation(FVector(-3000,-2800,90));
+    TGuardValue<bool> StreamReplies(Settings->bStreamReplies,true);
+    auto* ReplyMemory=ReplyNpc->Agent.Get();
+    auto PreparePlayerReply=[&](FDeliveryNpcDecisionProposal& Reply)
+    {
+        ReplyMemory->ResetContext(TEXT("NextPlayerReplyCheck"));
+        ReplyNpc->ObserveFact(TEXT("VisibleNow"),ReplyNeighbor,TEXT("邻居站在旁边"),EDeliveryNpcEvidenceSource::Seen);
+        if (!ReplyNpc->HearSpeech(Player,TEXT("他刚才说你不敢，你怎么想？"),FGuid::NewGuid(),0,ReplyNpc)) return false;
+        FDeliveryNpcDecisionRequest Request;
+        if (!ReplyMemory->BuildDecisionRequest(Epoch,Request) || !Request.bPlayerRequest) return false;
+        ReplyMemory->ActiveRequest=Request;
+        ReplyMemory->bDecisionPending=true;
+        ReplyNpc->bDecisionNeeded=false;
+        const auto* Choice=Request.Candidates.FindByPredicate([](const auto& Item){return Item.Action==EDeliveryNpcAction::Wait;});
+        if (!Choice) return false;
+        Reply={};
+        Reply.WorldEpoch=Request.WorldEpoch;Reply.NpcId=Request.NpcId;Reply.RequestId=Request.RequestId;
+        Reply.ContextRevision=Request.ContextRevision;Reply.PlanRevision=Request.PlanRevision;
+        Reply.CapabilityVersion=Request.RequestedCapabilityVersion;
+        Reply.CandidateId=Choice->CandidateId;Reply.Action=Choice->Action;
+        Reply.TargetId=Choice->TargetId;Reply.EvidenceIds=Choice->EvidenceIds;
+        Reply.Duration=1;Reply.Speech=TEXT("他真这么说了？我倒要听听他怎么讲。");
+        return true;
+    };
+    if (!TestTrue(TEXT("准备真实玩家发言对应的流式请求"),PreparePlayerReply(Proposal))) return false;
+    const FGuid DeferredNeighborLine=FGuid::NewGuid();
+    TestTrue(TEXT("玩家等待时邻居此前的闲聊刚好播完"),ReplyNpc->HearSpeech(
+        ReplyNeighbor,TEXT("我一向早起，哪像你还得出来透气！"),DeferredNeighborLine,2,ReplyNpc));
+    TestTrue(TEXT("后来听到的闲聊已安排后续处理"),ReplyMemory->bDecisionQueued);
+    if (!TestTrue(TEXT("邻居的旧闲聊不会作废已经生成的玩家回复"),
+        ReplyMemory->ReceiveStreamDecision(Proposal.RequestId,Proposal))) return false;
+    TestFalse(TEXT("这次玩家回复没有冒充读过后来才听到的话"),ReplyMemory->LastDecisionEventIds.Contains(DeferredNeighborLine));
+    ReplyMemory->FinishReply(Proposal.RequestId,true,0);
+    TestTrue(TEXT("玩家这轮生成结束后仍保留邻居的接话安排"),ReplyNpc->bDecisionNeeded);
+    ReplyMemory->CancelPlan(TEXT("InspectDeferredConversation"));
+    FDeliveryNpcDecisionRequest DeferredRequest;
+    TestTrue(TEXT("下一轮能重新准备现场信息"),ReplyMemory->BuildDecisionRequest(Epoch,DeferredRequest));
+    TestTrue(TEXT("下一轮仍能读到邻居刚才说的完整原话"),DeferredRequest.Evidence.ContainsByPredicate(
+        [&](const auto& Item){return Item.EventId==DeferredNeighborLine && Item.Kind==TEXT("Speech");}));
+    TestFalse(TEXT("后续请求仍区分还没有处理的新话"),DeferredRequest.LastDecisionEventIds.Contains(DeferredNeighborLine));
+
+    if (!TestTrue(TEXT("准备完整返回的玩家回复"),PreparePlayerReply(Proposal))) return false;
+    const FGuid DeferredWholeReplyLine=FGuid::NewGuid();
+    TestTrue(TEXT("完整返回期间同样收到邻居的旧闲聊"),ReplyNpc->HearSpeech(
+        ReplyNeighbor,TEXT("我刚才还没说完呢。"),DeferredWholeReplyLine,2,ReplyNpc));
+    ReplyMemory->ReceiveDecision(Proposal.RequestId,&Proposal,NAME_None);
+    TestEqual(TEXT("完整返回也能先接收玩家回复"),ReplyMemory->GetPublicState().Status,EDeliveryNpcActionStatus::Accepted);
+    TestTrue(TEXT("完整返回后仍会处理邻居的新一句"),ReplyNpc->bDecisionNeeded);
+    TestFalse(TEXT("完整返回没有提前标记邻居的话已处理"),ReplyMemory->LastDecisionEventIds.Contains(DeferredWholeReplyLine));
+
+    if (!TestTrue(TEXT("准备检查排队中的新玩家发言"),PreparePlayerReply(Proposal))) return false;
+    FDeliveryNpcObservation NewPlayerLine;
+    NewPlayerLine.Kind=TEXT("PlayerSpeech");NewPlayerLine.Subject=Player;NewPlayerLine.Addressee=ReplyNpc;
+    NewPlayerLine.Source=EDeliveryNpcEvidenceSource::Heard;NewPlayerLine.bNeedsReply=true;
+    NewPlayerLine.Description=TEXT("等一下，我刚才说错了，先别去找他。");
+    ReplyMemory->ObserveEvent(NewPlayerLine);
+    TestFalse(TEXT("玩家的新一句仍会作废上一句的回复"),ReplyMemory->TryAcceptProposal(Proposal,Reason));
+    TestEqual(TEXT("新玩家发言仍沿用原来的过期重试处理"),Reason,FName(TEXT("StaleProposal")));
+
+    if (!TestTrue(TEXT("准备检查玩家再次开口的正式入口"),PreparePlayerReply(Proposal))) return false;
+    const FGuid InterruptedByPlayer=FGuid::NewGuid();
+    TestTrue(TEXT("玩家可以通过正式入口打断自己的旧问题"),ReplyNpc->HearSpeech(
+        Player,TEXT("先听我说，刚才是我瞎说的。"),InterruptedByPlayer,0,ReplyNpc));
+    TestFalse(TEXT("旧请求在新玩家发言后不能再开始播放"),ReplyMemory->ReceiveStreamDecision(Proposal.RequestId,Proposal));
+    TestEqual(TEXT("倾听仍对应玩家最新的这句话"),ReplyMemory->ListeningMessage,InterruptedByPlayer);
+
+    // 环境台词没有玩家归属；玩家自己的已播放回复由正式请求保存归属后精确取消
+    if (!TestTrue(TEXT("准备玩家已有台词的真实请求"),PreparePlayerReply(Proposal))) return false;
+    if (!TestTrue(TEXT("通过正式流式入口接收玩家回复"),ReplyMemory->ReceiveStreamDecision(Proposal.RequestId,Proposal))) return false;
+    FDeliveryNpcPublicState SpeakingAction;
+    if (!TestTrue(TEXT("玩家回复对应动作真正开始"),ReplyMemory->StartAction(SpeakingAction)) ||
+        !TestTrue(TEXT("执行玩家回复对应动作"),ReplyNpc->ExecuteAction(SpeakingAction))) return false;
+    FDeliveryNpcSentence SpeakingSentence;
+    SpeakingSentence.Sequence=0; SpeakingSentence.Text=Proposal.Speech;
+    ReplyMemory->ReceiveSentence(Proposal.RequestId,SpeakingSentence);
+    ReplyMemory->FinishReply(Proposal.RequestId,true,1);
+    static_cast<UActorComponent*>(ReplyNpc->Presentation.Get())->TickComponent(.02f,LEVELTICK_All,nullptr);
+    if (!TestTrue(TEXT("再次插话前自己的旧回复已经播放"),ReplyNpc->Presentation->GetSpeech().bActive)) return false;
+    TestTrue(TEXT("模型结束后仍保存这名玩家的回复归属"),ReplyMemory->IsPlayerReplyActive(Controller));
+    TestTrue(TEXT("同一玩家可以打断自己的已播放回复"),ReplyNpc->HearSpeech(
+        Player,TEXT("先等一下，我重新说一遍。"),FGuid::NewGuid(),0,ReplyNpc));
+    TestFalse(TEXT("同一玩家新发言确实停止自己的旧台词"),ReplyNpc->Presentation->GetSpeech().bActive);
+    TestTrue(TEXT("取消旧台词保留原来的活动"),ReplyMemory->GetPublicState().ActionId==SpeakingAction.ActionId &&
+        ReplyMemory->GetPublicState().Status==EDeliveryNpcActionStatus::Running);
+
+    if (!TestTrue(TEXT("准备检查动作目标销毁"),PreparePlayerReply(Proposal))) return false;
+    const auto* TargetChoice=ReplyMemory->ActiveRequest.Candidates.FindByPredicate([&](const auto& Item)
+        {return Item.Action==EDeliveryNpcAction::LookAt && ReplyMemory->KnownSubjects.FindRef(Item.TargetId).Get()==ReplyNeighbor;});
+    if (!TestNotNull(TEXT("请求包含看向邻居的真实候选"),TargetChoice)) return false;
+    Proposal.Action=TargetChoice->Action;Proposal.TargetId=TargetChoice->TargetId;
+    Proposal.CandidateId=TargetChoice->CandidateId;Proposal.EvidenceIds=TargetChoice->EvidenceIds;
+    ReplyNeighbor->Destroy();
+    TestFalse(TEXT("玩家优先不会让已经销毁的目标继续执行动作"),ReplyMemory->TryAcceptProposal(Proposal,Reason));
+
+    // 受击仍经正式角色接口取消请求，和普通闲聊区分开
+    ReplyMemory->CancelPlan(TEXT("BeforeHitCheck"));
+    if (!TestTrue(TEXT("受击前仍能接收玩家发言"),ReplyNpc->HearSpeech(
+        Player,TEXT("你先听我把话说完。"),FGuid::NewGuid(),0,ReplyNpc))) return false;
+    FDeliveryNpcDecisionRequest BeforeHit;
+    if (!TestTrue(TEXT("受击前已保存本轮请求"),ReplyMemory->BuildDecisionRequest(Epoch,BeforeHit))) return false;
+    ReplyMemory->ActiveRequest=BeforeHit;ReplyMemory->bDecisionPending=true;
+    Proposal.RequestId=BeforeHit.RequestId;
+    ReplyNpc->ReceiveImpactFrom(FVector(100,0,0),ReplyNpc->GetActorLocation(),Player);
+    TestTrue(TEXT("受击仍会让居民倒地"),ReplyNpc->IsKnockedDown());
+    TestFalse(TEXT("受击已取消等待中的请求"),ReplyMemory->IsDecisionPending());
+    TestFalse(TEXT("受击后旧模型回复仍不能执行"),ReplyMemory->ReceiveStreamDecision(BeforeHit.RequestId,Proposal));
     return true;
 }
 #endif

@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T13:00:19.333167+00:00",
+  "status": "technical_checks_ready_for_disabled_trial_game_validation_pending",
+  "technical_checks_passed": true,
+  "technical_check_errors": 0,
+  "complete_game_integration_passed": false,
+  "game_validation_pending": true,
+  "model": {
+    "path": "Saved/AIResearch/NpcTraining/combat-v7/export-round3/combat-Q8_0.gguf",
+    "sha256": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3",
+    "gpu_layers_tested": 99,
+    "temperature": 0
+  },
+  "frozen40": {
+    "source_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+    "summary": {
+      "cases": 40,
+      "correct": 40,
+      "protocol_valid": 40,
+      "target_valid": 40,
+      "accuracy": 1.0,
+      "first_pass_ms_median": 147.04119999805698,
+      "first_pass_ms_p95": 207.02159999927972,
+      "exact_repeat_ms_p95": null,
+      "unwanted_fight": 0,
+      "acceptance_qualified": true,
+      "integration_checks_required": true
+    },
+    "input_preparation_hash_matches_current": true
+  },
+  "real_http_checks": [
+    {
+      "name": "target_mapping",
+      "method": "real_model_http",
+      "passed": true,
+      "elapsed_ms": 264.98,
+      "fallback_reason": ""
+    },
+    {
+      "name": "cancel_active_inference",
+      "method": "real_model_http_and_slots",
+      "status": "passed",
+      "passed": true,
+      "observed_service_processing": true,
+      "proposal_after_cancel": null,
+      "fallback_reason": "cancelled",
+      "cancel_latency_ms": 61.8,
+      "service_idle_after_return_ms": 0.81
+    },
+    {
+      "name": "after_cancel",
+      "method": "real_model_http",
+      "passed": true,
+      "elapsed_ms": 116.77,
+      "fallback_reason": ""
+    }
+  ],
+  "routing_checks": [
+    {
+      "name": "v6_player_continue",
+      "method": "routing_only_guard_client_not_real_inference",
+      "passed": true,
+      "model_calls": 0,
+      "fallback_reason": "player_or_unknown_request"
+    },
+    {
+      "name": "companion",
+      "method": "routing_only_guard_client_not_real_inference",
+      "passed": true,
+      "model_calls": 0,
+      "fallback_reason": "companion_not_in_training_scope"
+    }
+  ],
+  "backend_cpu": {
+    "full_suite_tests": 319,
+    "full_suite_passed": true,
+    "full_suite_warnings": [],
+    "final_targeted_tests": 12,
+    "final_targeted_passed": true,
+    "note": "319项全套运行在诊断计数字段加入前；12项是随后针对当前源码的检查，不声称重新运行了319项"
+  },
+  "ue_prior_six": {
+    "report": "Saved/Automation/DeliverySpeechFocus/index.json",
+    "report_created_on": "2026.11.14-12.28.11",
+    "passed": 6
+  },
+  "ue_latest_nine": {
+    "report": "Saved/Automation/DeliveryAiInspector/index.json",
+    "report_created_on": "2026.11.14-12.57.09",
+    "tests": [
+      {
+        "name": "Delivery.AI.ConversationContext",
+        "state": "Success",
+        "warnings": [
+          "LogAbilitySystem: No GameplayCueNotifyPaths were specified in DefaultGame.ini under [/Script/GameplayAbilities.AbilitySystemGlobals]. Falling back to using all of /Game/. This may be slow on large projects. Consider specifying which paths are to be searched.",
+          "LogDelivery: [Voice] 音频生成器尚未就绪，跳过字符 0"
+        ],
+        "errors": []
+      },
+      {
+        "name": "Delivery.AI.ConversationFeedback",
+        "state": "Success",
+        "warnings": [],
+        "errors": []
+      },
+      {
+        "name": "Delivery.AI.DecisionTrace",
+        "state": "Success",
+        "warnings": [],
+        "errors": []
+      },
+      {
+        "name": "Delivery.AI.InspectorLifecycle",
+        "state": "Success",
+        "warnings": [],
+        "errors": []
+      },
+      {
+        "name": "Delivery.AI.ModelSpeechSeparation",
+        "state": "Success",
+        "warnings": [],
+        "errors": []
+      },
+      {
+        "name": "Delivery.AI.PlayerInterruption",
+        "state": "Success",
+        "warnings": [],
+        "errors": []
+      },
+      {
+        "name": "Delivery.Speech.Conversation.FinalBoundaries",
+        "state": "Success",
+        "warnings": [],
+        "errors": []
+      },
+      {
+        "name": "Delivery.Speech.Conversation.KeyOwnership",
+        "state": "Success",
+        "warnings": [],
+        "errors": []
+      },
+      {
+        "name": "Delivery.Speech.Conversation.WorldLeases",
+        "state": "Success",
+        "warnings": [],
+        "errors": []
+      }
+    ],
+    "passed": 9,
+    "failed": 0
+  },
+  "known_limitations": [
+    "真实取消探针此次为61.8毫秒；Windows等待响应头仍可能直到1.5秒截止，不能保证每次都立即返回",
+    "ContinueCurrent玩家请求及二狗只验证不进入居民小模型，不代表二狗剧情或游戏效果已验收",
+    "UE记录属于自动化环境，没有实际双人输入、两种B声音播放、玩家对话效果或同机GPU竞争验收",
+    "GPU 99、21、14同机场景比较尚未结束；99仅为草案暂存值，不能据此确定正式档位",
+    "旧真实HTTP探针的streaming哈希早于最后诊断字段；当前12项测试已覆盖诊断字段，模型输入准备代码与验收一致",
+    "新增game_validation和trial字段仅作记录，现有启动器不会强制检查这些附加字段；enabled=false才会阻止草案启动"
+  ],
+  "evidence": [
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v7/final-acceptance-q8-gpu99.json",
+      "sha256": "44c82daebfc78b5b3c918f835cf0d29525d0e574f9f4a1e8bae8aa7c149621b3",
+      "scope": "冻结40条动作验收，不是玩家实际剧情验收"
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v7-integration/real-model/probe.json",
+      "sha256": "d6385caa0392c97557f987f7eed724764031ad3f5d8b815c5d5f3f6a1cc98bb0",
+      "scope": "真实本地HTTP目标映射、取消和取消后的再次请求"
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v7-integration/backend-test-summary.json",
+      "sha256": "41f53fa68656a85ed75c9bfcf9612afed42089a89d43e9b88bd6e37a7823ff90",
+      "scope": "319项CPU测试，早于最后一次诊断计数字段"
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v7-integration/diagnostic-input-count-tests.json",
+      "sha256": "50972dbfd480a93d780f83799b7e7c81954d93ee022669f0e44f5f2bac3b72b4",
+      "scope": "当前诊断计数字段的12项CPU检查"
+    },
+    {
+      "path": "Saved/Automation/DeliverySpeechFocus/index.json",
+      "sha256": "f2a8392836882ce4d59e2582b7d3ba2355989be46b9c1d23d85f616968d4bfe8",
+      "scope": "此前6项UE自动化，保留原有warning"
+    },
+    {
+      "path": "Saved/Automation/DeliveryAiInspector/index.json",
+      "sha256": "e9e169f8dea96e3f1e35ca8d35e53dc9e0deca66feb3e428293ac270f35e3b21",
+      "scope": "当前9项UE自动化，无真实玩家输入或双人播放"
+    }
+  ],
+  "current_source_sha256": {
+    "Tools/DeliveryAI/combat_model.py": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+    "Tools/DeliveryAI/streaming.py": "bb11e8f0bb6241eb1f20406f9c371727a0c2dcc8c9c3121376435972eac2c6e7",
+    "Tools/DeliveryAI/server.py": "c8fee3d8960ccd7a88a19b0ef979d3a78fb08cf82eebbeabafb8bebf152aed0f",
+    "Tools/DeliveryAI/continued_activity.py": "05494d8d893c569a680160e8fbf91c558700a617c5382449dce27b4f34f18ec9",
+    "Tools/DeliveryAI/test_model_completion.py": "e28a039e28b3ad6af44ed1e03478c49ec29ab02ecaedfb0ceb6d2b0b1798656a",
+    "Tools/DeliveryAI/llm_evaluation/start_local_model.py": "d73ba82d9c709c83025b18f05d83f5aebef8750a4fce701d292543a539567e5d",
+    "Tools/DeliveryAI/start_backend.ps1": "1875e3838847ab50dc9a6824668482f74226749e555a226ec05a9f0da7b18689",
+    "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp": "7317066674a0caf8869d41e66f0f356332bafaf7d98f597caf031ea3cd3bee00",
+    "Source/Delivery/AI/Network/DeliveryAiGatewaySubsystem.cpp": "29219d6cbee7829f4f1d6693a969c1c41ce5a278b046f49edd65d2895810ad4b",
+    "Source/Delivery/AI/Presentation/DeliveryNpcPresentationComponent.cpp": "4bb54a61f4959416e0dd225dc74a8fd34e993947f7ff99f974dc7382ff0c086e",
+    "Source/Delivery/AI/Presentation/DeliveryNpcSpeechPlayback.cpp": "6b8ba6e7c755fddc75d975153266105976418a419a29a090af136729a2fd07f9"
+  },
+  "required_before_formal_default": [
+    "完成同机GPU档位与逐帧比较",
+    "完成实际双人小模型续战与两种B语音检查",
+    "记录剩余异常和用户试玩结果"
+  ]
+}

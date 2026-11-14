@@ -332,7 +332,8 @@ void UDeliveryActiveRagdollComponent::UpdateJumpHeight(float DeltaTime)
 void UDeliveryActiveRagdollComponent::UpdateFacingYaw(float DeltaTime, const FVector& Wish,
                                                       bool bCarryingProp)
 {
-	// 转向优先级：出拳、抓取、受击、普通移动；先选目标角，再平滑改变当前朝向
+	// 玩家动作优先；短期对话只在站定时提出目标角，不改变原转向响应
+    bool bTurningToConversation=false;
 	const FVector FacingWish = Movement.WishOnSlope.IsNearlyZero() ? Wish : Movement.WishOnSlope;
 	float DesiredYaw =
 	    FacingWish.IsNearlyZero() ? CurrentFacingYaw : FacingWish.GetSafeNormal2D().Rotation().Yaw;
@@ -360,6 +361,10 @@ void UDeliveryActiveRagdollComponent::UpdateFacingYaw(float DeltaTime, const FVe
 		// 挨打之后转过去面对来拳方向，而不是保持原朝向挨第二拳
 		DesiredYaw = HitFacingYaw;
 	}
+    else if (FacingWish.IsNearlyZero())
+    {
+        bTurningToConversation=GetConversationFacingYaw(DesiredYaw);
+    }
 	const bool bTurningToHit = bHasHitFacing && !Punch.IsActive();
 	const float YawError = FMath::FindDeltaAngleDegrees(CurrentFacingYaw, DesiredYaw);
 	CurrentFacingYaw = FMath::UnwindDegrees(
@@ -367,7 +372,7 @@ void UDeliveryActiveRagdollComponent::UpdateFacingYaw(float DeltaTime, const FVe
 	        ? CurrentFacingYaw + FMath::Clamp(YawError, -CarryTurnRate * DeltaTime, CarryTurnRate * DeltaTime)
 	        : FMath::FInterpTo(CurrentFacingYaw, CurrentFacingYaw + YawError, DeltaTime,
 	                           bTurningToHit ? HitReactionFacingTurnSpeed : TurnResponsiveness));
-	if (!Wish.IsNearlyZero())
+	if (!Wish.IsNearlyZero() || bTurningToConversation)
 	{
 		Movement.LastWishDirection = FRotator(0.0f, CurrentFacingYaw, 0.0f).Vector();
 	}

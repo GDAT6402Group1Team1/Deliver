@@ -1,0 +1,85 @@
+{
+  "started_utc": "2026-11-14T10:22:23.203542+00:00",
+  "mode": "training",
+  "status": "completed",
+  "model_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\model",
+  "model_revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+  "script_sha256": "ad250fc383291b1e33ff9fa319323abc2c629fa8a2030bde4293d54f410fee50",
+  "settings": {
+    "rank": 16,
+    "alpha": 32,
+    "dropout": 0.05,
+    "target_modules": "all-linear",
+    "batch_size": 1,
+    "gradient_accumulation": 4,
+    "learning_rate": 0.0002,
+    "weight_decay": 0.0,
+    "max_grad_norm": 1.0,
+    "seed": 20261114,
+    "dtype": "bfloat16",
+    "gradient_checkpointing": true,
+    "checkpoint_use_reentrant": false,
+    "max_steps": 48,
+    "max_seq_length": 4096
+  },
+  "gpu_loaded": true,
+  "production_configuration_changed": false,
+  "versions": {
+    "torch": "2.7.1+cu128",
+    "transformers": "4.57.3",
+    "peft": "0.17.1",
+    "accelerate": "1.12.0",
+    "tokenizers": "0.22.2"
+  },
+  "adapter_used": false,
+  "model_manifest_sha256": "27ca8095f22561e407ac597d0cddb9e89451699aa3a38a24b5e02d3a94ec7f77",
+  "datasets": {
+    "train": {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v4\\train.jsonl",
+      "sha256": "1e5928fb69c9b3570c0e6dc196594403b159f74385aff4fe9a3099fbe23c649f",
+      "samples": 128,
+      "groups": 123,
+      "max_prompt_tokens": 1164,
+      "max_sequence_tokens": 1177,
+      "supervised_tokens": 1475
+    },
+    "validation": {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v4\\validation.jsonl",
+      "sha256": "477418702a2edd65b6a0cb5513153d4433ca3a7f64baf5f390af5a15e38cbb33",
+      "samples": 15,
+      "groups": 15,
+      "max_prompt_tokens": 742,
+      "max_sequence_tokens": 755,
+      "supervised_tokens": 174
+    }
+  },
+  "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+  "device_total_memory_bytes": 12820480000,
+  "model_load_seconds": 4.967980500005069,
+  "trainable_parameters": 17432576,
+  "total_parameters": 1738007552,
+  "validation_before": {
+    "assistant_token_loss": 0.6192704161894026,
+    "samples": 15,
+    "supervised_tokens": 174
+  },
+  "last_training_step": {
+    "step": 48,
+    "epoch_started": 2,
+    "loss": 0.022080663591623306,
+    "gradient_norm": 0.6288118958473206,
+    "step_seconds": 2.6699599000057788,
+    "elapsed_seconds": 115.44072379999852
+  },
+  "training_seconds": 115.44092309999542,
+  "validation_after": {
+    "assistant_token_loss": 0.018085473975546867,
+    "samples": 15,
+    "supervised_tokens": 174
+  },
+  "adapter_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v4\\round1\\adapter",
+  "tokenizer_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v4\\round1\\tokenizer",
+  "peak_gpu_allocated_bytes": 6079958016,
+  "peak_gpu_reserved_bytes": 10791944192,
+  "elapsed_seconds": 131.2925299999988
+}

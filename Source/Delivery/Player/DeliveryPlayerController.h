@@ -3,16 +3,19 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/NetSerialization.h"
 #include "GameFramework/PlayerController.h"
 #include "Interaction/DeliveryInteractionComponent.h"
 #include "DeliveryPlayerController.generated.h"
 
 class ADeliveryCharacter;
+class ADeliveryCompanionCharacter;
 class UDeliveryConversationComponent;
 class UInputAction;
 class UInputMappingContext;
 class UPostProcessComponent;
 class UDeliveryDialogueVoiceComponent;
+class UDeliverySpeechInputComponent;
 class UDeliveryMusicComponent;
 class UDeliveryGroundArrowComponent;
 class UDeliveryObjectiveRingComponent;
@@ -39,7 +42,24 @@ class ADeliveryPlayerController : public APlayerController
     // 客户端加载完成只通过自己拥有的控制器报告，不直接向世界对象发 RPC
     UFUNCTION(Server, Reliable)
     void ServerReportStartupReady(ADeliveryStartupFlow* Flow);
+
+    // 补位只查询本机实际视锥，客户端报告不能直接移动同伴
+    UFUNCTION(Client, Unreliable)
+    void ClientCheckCompanionCatchUp(ADeliveryCompanionCharacter* Companion, FGuid RequestId,
+                                    FVector_NetQuantize StartCenter, FVector_NetQuantize EndCenter,
+                                    FVector_NetQuantize Extent);
+    UFUNCTION(Server, Unreliable)
+    void ServerReportCompanionCatchUpView(ADeliveryCompanionCharacter* Companion, FGuid RequestId,
+                                        APawn* ViewPawn, AActor* ViewTarget, bool bUnseen);
+
+    // 服务器记录查询发出时的版本，控制对象或视角变化后拒绝旧回答
+    uint64 GetCompanionViewRevision() const { return CompanionViewRevision; }
+    virtual void SetViewTarget(AActor* NewViewTarget,
+                               FViewTargetTransitionParams TransitionParams = FViewTargetTransitionParams()) override;
     virtual bool InputKey(const FInputKeyEventArgs& Params) override;
+    virtual void FlushPressedKeys() override;
+    virtual void PreProcessInput(float DeltaTime, bool bGamePaused) override;
+    bool CanAcceptWalkingInput() const { return bWalkingInputAllowed; }
     FText GetPhoneKeyText() const;
     UFUNCTION(BlueprintPure, Category="Phone")
     UDeliveryPhoneController* GetPhoneController() const;
@@ -74,6 +94,10 @@ class ADeliveryPlayerController : public APlayerController
     {
         return DialogueVoice;
     }
+
+    // 麦克风模式由本机界面显式开启，控制器只保存跨步行和驾驶的组件
+    UFUNCTION(BlueprintPure, Category = "Delivery|Speech")
+    UDeliverySpeechInputComponent* GetSpeechInput() const { return SpeechInput; }
 
     /** 背景音乐；和语音组件同一个位置：跨 Possess（上下摩托车）不断 */
     UDeliveryMusicComponent *GetMusic() const
@@ -134,6 +158,8 @@ class ADeliveryPlayerController : public APlayerController
 
   protected:
     virtual void BeginPlay() override;
+    virtual void OnPossess(APawn* InPawn) override;
+    virtual void OnUnPossess() override;
 
     // 服务器电话请求
     UFUNCTION(Server, Reliable)
@@ -169,6 +195,8 @@ class ADeliveryPlayerController : public APlayerController
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Delivery|Voice",
               meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UDeliveryDialogueVoiceComponent> DialogueVoice;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|Speech")
+    TObjectPtr<UDeliverySpeechInputComponent> SpeechInput;
     UPROPERTY(VisibleAnywhere, Category="Delivery|居民") TObjectPtr<UDeliveryConversationComponent> ResidentConversation;
 
     /** 背景音乐；轨道插槽填在 BP_DeliveryManPC 上，电话期间自动闪避 */
@@ -186,6 +214,20 @@ class ADeliveryPlayerController : public APlayerController
     void HandleTogglePhonePressed();
 
   private:
+    friend class FDeliveryMoveInputSafetyTest;
+    // 本机焦点进入 UI 或离开游戏窗口后，旧步行输入不能继续驱动身体
+    bool HasWalkingInputFocus() const;
+    void UpdateWalkingInputFocus(bool bAllowed);
+    bool bWalkingInputAllowed = true;
+    bool AreCompanionCatchUpBoxesUnseen(APawn* ViewPawn, AActor* ViewTarget,
+                                       const FVector& StartCenter, const FVector& EndCenter,
+                                       const FVector& Extent) const;
+    void InvalidateCompanionView();
+    // 版本只在服务器修改，不向客户端复制；查询凭服务器持有的版本核验
+    uint64 CompanionViewRevision = 1;
+    // 本机切换视角后至少等一次相机更新，避免新 ViewTarget 沿用旧镜头缓存
+    float LocalCompanionViewChangedAt = -1.0f;
+
     // 旧资源缺少交互映射时补充临时映射
     void EnsureInteractMapping(class UEnhancedInputLocalPlayerSubsystem* Subsystem);
     UPROPERTY(Transient)

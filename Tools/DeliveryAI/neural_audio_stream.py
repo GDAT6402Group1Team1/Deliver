@@ -2,7 +2,7 @@
 import time
 
 from neural_audio_sender import AudioChunkSender
-from neural_tts import NeuralTtsError
+from neural_tts import MAX_STREAM_CHUNKS, NeuralTtsError
 
 
 class AudioStreamComplete(Exception):
@@ -169,7 +169,7 @@ class AudioChunkStream:
 
     def send_pcm(self, pcm):
         self.check()
-        if (self.finished or not pcm or len(pcm) % 2 or self.chunk_count >= 32
+        if (self.finished or not pcm or len(pcm) % 2 or self.chunk_count >= MAX_STREAM_CHUNKS
                 or len(pcm) > self.chunk_frames * 3840):
             raise NeuralTtsError('neural_tts_invalid_pcm')
         if self.total_bytes + len(pcm) > self.engine.config['max_pcm_bytes']:

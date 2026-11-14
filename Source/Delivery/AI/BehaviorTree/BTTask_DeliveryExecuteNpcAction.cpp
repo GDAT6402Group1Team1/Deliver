@@ -55,6 +55,14 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
         { Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,TEXT("StrikeDurationTooShort")); return EBTNodeResult::Failed; }
         if (!Resident->ExecuteAction(Action))
         { Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,TEXT("StartRejected")); return EBTNodeResult::Failed; }
+        if (DeliveryNpc::IsCompanionCommand(Action.Action))
+        {
+            // 这里只确认安排已接收，实际跑腿、家居和跟随由持续分支执行
+            Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Succeeded,
+                Action.Action==EDeliveryNpcAction::HomeAction?TEXT("HomeArrangementAccepted"):
+                DeliveryNpc::IsCompanionErrand(Action.Action)?TEXT("CompanionErrandAccepted"):TEXT("CompanionModeChanged"));
+            return EBTNodeResult::Succeeded;
+        }
         if (Action.Action==EDeliveryNpcAction::MoveTo)
         {
             const auto Result=Controller->MoveToActor(Action.Target,ADeliveryNpcCharacter::MoveAcceptanceRadius,true,true,true,nullptr,false);
@@ -185,7 +193,7 @@ void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerCom
         else if (Npc->Combat->CanStrike(State.Target))
         {
             Controller->StopMovement();
-            bStrikeStarted=Npc->Combat->StartStrike(State.Target,ActionId);
+            bStrikeStarted=Npc->RequestStrike(State.Target,ActionId);
             if (bStrikeStarted) StrikeFinishAt=FMath::Min(FinishAt,Now+UDeliveryNpcCombatComponent::StrikeDuration);
             else Failure=TEXT("StrikeStartRejected");
         }
@@ -224,7 +232,12 @@ void UBTTask_DeliveryExecuteNpcAction::FinishFight(UBehaviorTreeComponent& Owner
 void UBTTask_DeliveryExecuteNpcAction::TickFight(UBehaviorTreeComponent& OwnerComp,ADeliveryNpcCharacter* Npc,const FDeliveryNpcPublicState& State)
 {
     if (!Npc || !Controller.IsValid()) { FinishFight(OwnerComp,TEXT("AttackerUnavailable"),true); return; }
+    if (State.Origin==EDeliveryNpcActionOrigin::GameplayRule &&
+        !Npc->CanExecuteGameplayRule(State.Action,State.Target,State.RuleRevision))
+    { FinishFight(OwnerComp,TEXT("GameplayRuleExpired"),true); return; }
     auto* Combat=Npc->Combat.Get();
+    if (State.Origin==EDeliveryNpcActionOrigin::Model)
+        FinishAt=OwnerComp.GetWorld()->GetTimeSeconds()+Agent->GetActionTimeRemaining();
     const FName Stop=Combat->GetFightStopReason(ActionId);
     if (!Stop.IsNone())
     {
@@ -243,7 +256,7 @@ void UBTTask_DeliveryExecuteNpcAction::TickFight(UBehaviorTreeComponent& OwnerCo
     {
         bool bHit=false;
         const bool bJudged=Combat->GetStrikeResult(FightPunchId,bHit);
-        // 这一拳已有结果后再继续；受击结束整轮动作时会由上方状态检查退出
+        // 被轻拳打断的挥拳也有未命中的结果，后仰结束后继续当前交战
         if (Combat->GetStrikeStartTime(ActionId)<0 && !bJudged)
         { FinishFight(OwnerComp,TEXT("StrikeCancelled"),true); return; }
         if (Combat->GetStrikeStartTime(ActionId)>=0 && Now<StrikeFinishAt) return;
@@ -251,16 +264,17 @@ void UBTTask_DeliveryExecuteNpcAction::TickFight(UBehaviorTreeComponent& OwnerCo
         bStrikeStarted=false;
         FightPunchId.Invalidate();
     }
-    if (Combat->GetFightPunchCount()>=Combat->GetFightPunchLimit())
+    if (State.Origin==EDeliveryNpcActionOrigin::GameplayRule && Combat->GetFightPunchCount()>=Combat->GetFightPunchLimit())
     { FinishFight(OwnerComp,TEXT("FightPunchLimit"),false); return; }
-    if (!Combat->IsReadyToStrike()) return;
     if (Now+UDeliveryNpcCombatComponent::StrikeWindup>FinishAt)
     { FinishFight(OwnerComp,TEXT("FightTimeLimit"),false); return; }
     if (Combat->CanStrike(State.Target))
     {
         Controller->StopMovement(); bFightMoveRequested=false;
+        // 收拳后可以继续追赶，只有下一次出拳需要等待攻击间隔
+        if (!Combat->IsReadyToStrike()) return;
         FightPunchId=FGuid::NewGuid();
-        bStrikeStarted=Combat->StartFightStrike(State.Target,ActionId,FightPunchId);
+        bStrikeStarted=Npc->RequestFightStrike(State.Target,ActionId,FightPunchId);
         if (!bStrikeStarted) { FinishFight(OwnerComp,TEXT("StrikeStartRejected"),true); return; }
         StrikeFinishAt=Now+UDeliveryNpcCombatComponent::StrikeDuration;
         return;
@@ -292,6 +306,7 @@ void UBTTask_DeliveryExecuteNpcAction::TickFlee(UBehaviorTreeComponent& OwnerCom
     if (!IsValid(State.Target) || State.Target->GetWorld()!=Npc->GetWorld()) { Finish(TEXT("FleeTargetLost"),true); return; }
     const double Now=OwnerComp.GetWorld()->GetTimeSeconds();
     const FVector Position=Npc->GetNavAgentLocation();
+    if (State.Origin==EDeliveryNpcActionOrigin::Model) FinishAt=Now+Agent->GetActionTimeRemaining();
     FleeTravelled+=FVector::Dist2D(Position,PreviousFleePosition);
     PreviousFleePosition=Position;
     const float Remaining=FMath::Clamp(Npc->FleeTravelLimit,200.f,1200.f)-FleeTravelled;

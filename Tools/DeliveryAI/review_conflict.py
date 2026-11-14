@@ -26,7 +26,7 @@ class ConversationScene:
 
     def __init__(self, profiles, scenario):
         self.scenario = scenario
-        self.profiles = {row['id']: row for row in profiles['characters']}
+        self.profiles = {row['id']: row for row in dialogue_background.select_resident_profiles(profiles)}
         if set(self.profiles) != {'chunlai', 'xiumei'}:
             raise ValueError('This review requires the chunlai and xiumei profiles')
         self.ids = {key: self.identity(key) for key in (*self.profiles, 'player')}

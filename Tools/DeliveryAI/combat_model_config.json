@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "model_path": "Saved/AIResearch/NpcTraining/combat-v5/export-round2/combat-Q8_0.gguf",
+  "model_sha256": "c213093220ba95c146c84560a96a14be01281e9c3e89dc213e5662db2455fc0e",
+  "device": "cuda",
+  "gpu_layers": 99,
+  "context_tokens": 4096,
+  "output_tokens": 64,
+  "parallel_slots": 1,
+  "host": "127.0.0.1",
+  "port": 8771,
+  "timeout_seconds": 1.5,
+  "temperature": 0,
+  "profile_ids": [
+    "chunlai",
+    "xiumei"
+  ],
+  "evaluation_path": "Saved/AIResearch/NpcTraining/combat-v5/final-acceptance-q8-gpu99.json",
+  "evaluation_sha256": "8e374b4102c5b7dc182d49edeae8487a7cf12ade8e869f4073025c97f7a20b23",
+  "integration_checks": {
+    "passed": false,
+    "critical_errors": null,
+    "evidence": []
+  }
+}

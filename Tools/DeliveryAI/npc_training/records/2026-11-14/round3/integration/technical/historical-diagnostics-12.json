@@ -1,0 +1,17 @@
+{
+  "recorded_utc": "2026-11-14T12:53:49.976667+00:00",
+  "command": "C:/Python314/python.exe -B -X utf8 -m unittest test_model_completion",
+  "working_directory": "Tools/DeliveryAI",
+  "passed": true,
+  "tests": 12,
+  "errors": 0,
+  "failures": 0,
+  "scope": "After adding actual model-input counts to optional diagnostics; counts use prepared context, not original request; unknown provider omits counts",
+  "evidence": "Command output observed: Ran 12 tests in 0.024s / OK",
+  "source_hashes": {
+    "Tools/DeliveryAI/streaming.py": "bb11e8f0bb6241eb1f20406f9c371727a0c2dcc8c9c3121376435972eac2c6e7",
+    "Tools/DeliveryAI/test_model_completion.py": "e28a039e28b3ad6af44ed1e03478c49ec29ab02ecaedfb0ceb6d2b0b1798656a"
+  },
+  "prior_full_backend_run": "backend-test-summary.json",
+  "note": "Previous 319-test run predates these metadata count fields; this record covers the final 12 targeted checks, not a new full-suite run"
+}

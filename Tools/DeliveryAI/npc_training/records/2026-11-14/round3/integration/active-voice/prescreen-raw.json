@@ -1,0 +1,428 @@
+{
+  "backend": "native",
+  "runtime": "Saved/AIResearch/NativeQwen/runtime-q8_0-kv1024-active.json",
+  "status": "completed",
+  "utterances": [
+    {
+      "name": "male_short_round1",
+      "voice": "male",
+      "text": "你先听我说完，我刚才真没看见你。",
+      "first_audio_ms": 176.67,
+      "elapsed_ms": 1063.94,
+      "audio_seconds": 4.4,
+      "generation_rtf": 0.2418,
+      "chunk_times_ms": [
+        176.67,
+        265.99,
+        355.71,
+        493.48,
+        626.51,
+        749.4,
+        848.25,
+        937.6,
+        1057.16
+      ],
+      "chunk_bytes": [
+        3840,
+        7680,
+        15360,
+        30720,
+        30720,
+        30720,
+        30720,
+        30720,
+        30720
+      ],
+      "chunk_duration_ms": [
+        80.0,
+        160.0,
+        320.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0
+      ],
+      "audio_onset": {
+        "first_chunk_samples": 1920,
+        "first_chunk_rms": 1.1e-05,
+        "first_chunk_peak": 6.103515625e-05,
+        "audible_rms_threshold": 0.01,
+        "audible_window_ms": 20,
+        "first_audible_audio_offset_ms": 540.0,
+        "first_audible_delivered_ms": 355.71,
+        "pcm_sha256": "8a38f7b92898ae2faa696704da1584759b3345137c3d495a43259fb1fb6695a9"
+      },
+      "wav": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NativeQwen\\active-voice-prescreen\\male_short_round1.wav"
+    },
+    {
+      "name": "female_short_round1",
+      "voice": "female",
+      "text": "我就在旁边站着呢，你怎么能没看见呀？",
+      "first_audio_ms": 1404.03,
+      "elapsed_ms": 2002.06,
+      "audio_seconds": 3.28,
+      "generation_rtf": 0.6104,
+      "chunk_times_ms": [
+        1404.03,
+        1472.06,
+        1523.07,
+        1636.9,
+        1740.94,
+        1848.14,
+        1963.41,
+        2001.53
+      ],
+      "chunk_bytes": [
+        3840,
+        7680,
+        15360,
+        30720,
+        30720,
+        30720,
+        30720,
+        7680
+      ],
+      "chunk_duration_ms": [
+        80.0,
+        160.0,
+        320.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        160.0
+      ],
+      "audio_onset": {
+        "first_chunk_samples": 1920,
+        "first_chunk_rms": 1.6e-05,
+        "first_chunk_peak": 6.103515625e-05,
+        "audible_rms_threshold": 0.01,
+        "audible_window_ms": 20,
+        "first_audible_audio_offset_ms": 160.0,
+        "first_audible_delivered_ms": 1472.06,
+        "pcm_sha256": "21fd5635507b76d3db1e762afa2fec5ae5e7a364c9a65d18e94acf3ba458e1c3"
+      },
+      "wav": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NativeQwen\\active-voice-prescreen\\female_short_round1.wav"
+    },
+    {
+      "name": "male_long_round1",
+      "voice": "male",
+      "text": "刚才是我没看清楚。你拿好东西，我把车挪开，别挡着大家。",
+      "first_audio_ms": 1210.42,
+      "elapsed_ms": 2342.99,
+      "audio_seconds": 6.16,
+      "generation_rtf": 0.3804,
+      "chunk_times_ms": [
+        1210.42,
+        1273.12,
+        1331.86,
+        1447.68,
+        1556.62,
+        1643.68,
+        1746.96,
+        1860.81,
+        1994.67,
+        2135.59,
+        2244.96,
+        2328.81,
+        2342.34
+      ],
+      "chunk_bytes": [
+        3840,
+        7680,
+        15360,
+        30720,
+        30720,
+        30720,
+        30720,
+        30720,
+        30720,
+        30720,
+        30720,
+        15360,
+        7680
+      ],
+      "chunk_duration_ms": [
+        80.0,
+        160.0,
+        320.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        320.0,
+        160.0
+      ],
+      "audio_onset": {
+        "first_chunk_samples": 1920,
+        "first_chunk_rms": 8.3e-05,
+        "first_chunk_peak": 0.000274658203125,
+        "audible_rms_threshold": 0.01,
+        "audible_window_ms": 20,
+        "first_audible_audio_offset_ms": 220.0,
+        "first_audible_delivered_ms": 1273.12,
+        "pcm_sha256": "1a0a3710635f799a294ebc726e127bfc01f26eeb4faa1104971eda3f2f8e2586"
+      },
+      "wav": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NativeQwen\\active-voice-prescreen\\male_long_round1.wav"
+    },
+    {
+      "name": "female_long_round1",
+      "voice": "female",
+      "text": "你别急着走呀。我刚才声音大了点，咱们好好说嘛。",
+      "first_audio_ms": 1418.83,
+      "elapsed_ms": 2406.58,
+      "audio_seconds": 5.28,
+      "generation_rtf": 0.4558,
+      "chunk_times_ms": [
+        1418.83,
+        1474.12,
+        1537.34,
+        1649.94,
+        1751.0,
+        1856.85,
+        1965.43,
+        2069.08,
+        2223.84,
+        2343.6,
+        2399.52,
+        2405.72
+      ],
+      "chunk_bytes": [
+        3840,
+        7680,
+        15360,
+        30720,
+        30720,
+        30720,
+        30720,
+        30720,
+        30720,
+        30720,
+        7680,
+        3840
+      ],
+      "chunk_duration_ms": [
+        80.0,
+        160.0,
+        320.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        640.0,
+        160.0,
+        80.0
+      ],
+      "audio_onset": {
+        "first_chunk_samples": 1920,
+        "first_chunk_rms": 1.4e-05,
+        "first_chunk_peak": 6.103515625e-05,
+        "audible_rms_threshold": 0.01,
+        "audible_window_ms": 20,
+        "first_audible_audio_offset_ms": 540.0,
+        "first_audible_delivered_ms": 1537.34,
+        "pcm_sha256": "487bb770bb810f6a1486006c368185d8e38f658a360e4b9c66c4c8105b6771e2"
+      },
+      "wav": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NativeQwen\\active-voice-prescreen\\female_long_round1.wav"
+    }
+  ],
+  "utc_started": "2026-11-14T13:51:22.909465+00:00",
+  "clock": {
+    "implementation": "QueryPerformanceCounter()",
+    "monotonic": true,
+    "adjustable": false,
+    "resolution": 1e-07
+  },
+  "config": {
+    "schema_version": 1,
+    "talker_mode": "cuda_graph",
+    "python_path": "Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe",
+    "model_path": "Saved/AIResearch/TtsEvaluation/qwen/model",
+    "installation_path": "Saved/AIResearch/TtsEvaluation/qwen/installation.json",
+    "model_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+    "voices": {
+      "male": {
+        "provider": "qwen",
+        "speaker": "Uncle_Fu"
+      },
+      "female": {
+        "provider": "qwen_base",
+        "speaker": "Xiaofang_B",
+        "predictor_mode": "cuda_graph",
+        "model_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model",
+        "model_revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+        "model_manifest_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model-downloads.json",
+        "model_manifest_sha256": "004284ecfa9008b58a7d6332e3d91583f608b74b9f5a947921f2d7be8850868d",
+        "reference_path": "Design/Art/NPC/Residents/Voice/Generated/Xiaofang_B_Reference.wav",
+        "reference_sha256": "35d6e6f5fda0189495782df45c7d13c45edd835066e84456a25760b409d5ca65",
+        "reference_text": "大军，你少在这儿瞎嚷嚷。"
+      }
+    },
+    "packages": {
+      "torch": "2.7.1+cu128",
+      "qwen-tts": "0.1.1",
+      "transformers": "4.57.3"
+    },
+    "sample_rate": 24000,
+    "max_pcm_bytes": 576000,
+    "max_text_chars": 120,
+    "max_new_tokens": 256,
+    "cpu_threads": 4,
+    "seed": 20261113,
+    "startup_timeout_seconds": 60,
+    "synthesis_timeout_seconds": 20,
+    "cancel_grace_seconds": 2,
+    "process_exit_timeout_seconds": 5
+  },
+  "config_sha256": "9e18115bf583dbca2e070edeacc0ec00a63cb853a8e69f63f24dbc4b88476c6b",
+  "sampling": {
+    "seed": 20261113,
+    "do_sample": true,
+    "temperature": 0.9,
+    "top_k": 50,
+    "top_p": 1,
+    "repetition_penalty": 1.05,
+    "subtalker_temperature": 0.9,
+    "subtalker_top_k": 50,
+    "subtalker_top_p": 1,
+    "max_new_tokens": 256
+  },
+  "sampling_sha256": "4a8e4949a014c25781e26b8443176594d1c6c8992bc15f7d82d44ae4d14ef2c5",
+  "voice_identities": {
+    "male": {
+      "provider": "qwen",
+      "speaker": "Uncle_Fu",
+      "model_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+      "runtime": "qwentts_cpp",
+      "source_commit": "f1a6924789883bd92eeb59176793a94af55730b3",
+      "gguf_sha256": "4eb38675c736ed6ac72012846ac8d6ef80e5af8bc05726870f0b3a6569588519",
+      "codec_sha256": "1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94",
+      "quantization": "Q8_0"
+    },
+    "female": {
+      "provider": "qwen_base",
+      "speaker": "Xiaofang_B",
+      "model_revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+      "reference_sha256": "35d6e6f5fda0189495782df45c7d13c45edd835066e84456a25760b409d5ca65",
+      "reference_text_sha256": "2bd10a8b5c09b3d8bb4ba66d5c9ef6912aa577df2759ae58a62d008ff51c6ff7",
+      "runtime": "qwentts_cpp",
+      "source_commit": "f1a6924789883bd92eeb59176793a94af55730b3",
+      "gguf_sha256": "d54dbaf10591421fa764ed630d764efa717ae40cd959bd48c66d4eb1af226426",
+      "codec_sha256": "1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94",
+      "quantization": "Q8_0"
+    }
+  },
+  "hardware": "name, driver_version, memory.total [MiB]\nNVIDIA GeForce RTX 5070 Ti Laptop GPU, 610.74, 12227 MiB",
+  "ue_processes_before": "\"UnrealEditor.exe\",\"66036\",\"Console\",\"1\",\"9,074,108 K\"",
+  "runtime_sha256": "f7468d1f989edbf171a39136afd995f2c1c2a655fbd590ad6b421ba35fe00170",
+  "prepare_ms": 7179.05,
+  "cancel_check": {
+    "delivered_chunks": 1,
+    "next_female_completed": true,
+    "cancel_requested_ms": 1382.24,
+    "cancel_confirmed_ms": 1415.32,
+    "cancel_latency_ms": 33.08,
+    "elapsed_with_next_ms": 3479.31
+  },
+  "gpu_samples": [
+    {
+      "elapsed_ms": 0.17,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "9293, 29, 41.23, 1650"
+    },
+    {
+      "elapsed_ms": 1065.07,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "9293, 21, 40.23, 1462"
+    },
+    {
+      "elapsed_ms": 2165.65,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "9293, 22, 40.76, 1657"
+    },
+    {
+      "elapsed_ms": 3242.7,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "9389, 30, 34.94, 1222"
+    },
+    {
+      "elapsed_ms": 4328.32,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10546, 29, 40.13, 1905"
+    },
+    {
+      "elapsed_ms": 5404.9,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11126, 28, 45.01, 2235"
+    },
+    {
+      "elapsed_ms": 6486.56,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10402, 35, 46.09, 2332"
+    },
+    {
+      "elapsed_ms": 7582.26,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11057, 43, 45.05, 2407"
+    },
+    {
+      "elapsed_ms": 8663.06,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10340, 20, 61.47, 2017"
+    },
+    {
+      "elapsed_ms": 9737.2,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11024, 20, 45.97, 2197"
+    },
+    {
+      "elapsed_ms": 10806.85,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10393, 25, 61.71, 1702"
+    },
+    {
+      "elapsed_ms": 11874.95,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11019, 24, 41.10, 1485"
+    },
+    {
+      "elapsed_ms": 12930.86,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10251, 22, 55.51, 1515"
+    },
+    {
+      "elapsed_ms": 14004.93,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10997, 25, 41.88, 1582"
+    },
+    {
+      "elapsed_ms": 15064.59,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "9618, 91, 66.36, 1770"
+    },
+    {
+      "elapsed_ms": 16124.9,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10968, 32, 43.24, 1777"
+    },
+    {
+      "elapsed_ms": 17195.8,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10430, 33, 43.56, 1545"
+    },
+    {
+      "elapsed_ms": 18265.47,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11076, 62, 48.47, 1957"
+    }
+  ],
+  "ue_processes_after": "\"UnrealEditor.exe\",\"66036\",\"Console\",\"1\",\"9,100,844 K\""
+}

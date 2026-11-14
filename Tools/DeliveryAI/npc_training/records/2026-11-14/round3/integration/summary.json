@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T14:14:34.818780+00:00",
+  "status": "小模型同机接入仍未达标，保留原10%帧耗时门槛",
+  "quality": "第三轮原40题40/40，属于独立模型质量结果，不等于游戏接入完成",
+  "current_backend_tests": {
+    "passed": true,
+    "tests": 70,
+    "scope": "当前45项决策/取消/HTTP与25项原生语音/12秒检查，非重新跑全套319项"
+  },
+  "separate_ue_automation": {
+    "tests": 12,
+    "passed": true,
+    "scope": "声音编码与协议；不代替玩家输入和实际听感"
+  },
+  "cpu8_12": {
+    "valid_within_1500ms": 7,
+    "requests": 19,
+    "frame_p95_increase_percent": 98.24569469972147,
+    "qualified": false,
+    "note": "单轮先后对照、行人动态变化，不把98.25%全部归因于CPU推理"
+  },
+  "active_voice_short_test": {
+    "pcm_identical": 4,
+    "cases": 4,
+    "switch_first_chunk_ms": [
+      1210.42,
+      1404.03,
+      1418.83
+    ],
+    "qualified_for_production": false,
+    "scope": "双PIE存在，无小模型；没有通过UE播放器播放"
+  },
+  "active21": {
+    "valid_and_label_matching": 38,
+    "requests": 38,
+    "uncovered_frozen_cases": 2,
+    "median_ms": 468.80125,
+    "p95_ms": 944.545245,
+    "frame_p95_ms": [
+      112.89943,
+      134.280335
+    ],
+    "frame_p95_increase_percent": 18.93800969588597,
+    "frame_limit_percent": 10,
+    "speech_complete": 8,
+    "speech_rtf_median": 0.5124926685612357,
+    "speech_max_rtf": 0.8337556136360613,
+    "qualified": false,
+    "luna_comparison": "未继续运行，不使用历史Luna成绩补足条件"
+  },
+  "twelve_second_fix": {
+    "old_failure": "实际客户端道歉回复约8.08秒超过8秒限制，中途停止",
+    "backend_config_seconds": 12,
+    "original_eight_second_config_preserved": true,
+    "backend_71_targeted_passed": true,
+    "actual_over_eight_second_two_player_playback": {
+      "passed": true,
+      "source_seconds": 8.64,
+      "decoded_pcm_seconds": 8.68,
+      "both_consumed_bytes": 416640,
+      "evidence": "tts12/actual-playback/summary.json",
+      "limit": "12秒满边界仍为自动化；Luna/both，不属于本地小模型验收"
+    }
+  },
+  "runtime_after_trial": "试玩已恢复Luna + 原生Q8 KV1024双声音常驻、12秒配置；小模型仍关闭",
+  "next_candidate": "Q4导出后按原40题重新验收；本归档尚无结果",
+  "excluded_large_files": [
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7-integration\\CombatCpuWarm.csv",
+      "sha256_from_source_report": "11458c1bc66f824a14183cff8b85c2ea573201710416ec1e1b4d65bbd7e4a6c2",
+      "not_rehashed_here": true,
+      "reason": "大型CSV留在Saved，归档仅复制统计与原报告校验值"
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7-integration\\CombatActive21.csv",
+      "sha256_from_source_report": "97faa9fbec464d6b16b2ed9b3439517a03e1dc53a90e22496b0233c5fce2db12",
+      "not_rehashed_here": true,
+      "reason": "大型CSV留在Saved，归档仅复制统计与原报告校验值"
+    }
+  ],
+  "not_archived": [
+    "模型权重、LoRA参数和模型缓存",
+    "WAV录音",
+    "完整UE日志及整场玩家聊天日志",
+    "凭据和服务环境变量"
+  ],
+  "original_round3_manifest_sha256": "3d16302b5a45cf81c627cdcae6ff7955454ad61ec30716a3a29ee54505097472",
+  "updated_utc": "2026-11-14T14:19:29.519121+00:00"
+}

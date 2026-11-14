@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app_server import AppServer
+from dialogue_background import select_resident_profiles
 from dialogue_prompt_experiment import ROOT, build_bundle
 from server import validate_action
 from streaming import SentenceParser
@@ -23,7 +24,7 @@ def main():
     args.add_argument('--check-only', action='store_true')
     args.add_argument('--persona-only', action='store_true', help='只用正式提示词，比较简化人物设定的独立一批')
     options = args.parse_args()
-    profiles = json.loads((ROOT/'Design/AI/NpcProfiles.json').read_text(encoding='utf-8'))['characters']
+    profiles = select_resident_profiles(json.loads((ROOT / 'Design/AI/NpcProfiles.json').read_text(encoding='utf-8')))
     bundle = build_bundle(profiles)
     selected = [row for row in bundle['cases'] if row['case_id'] in CASES]
     assert len(profiles) == 2 and len(selected) == 8

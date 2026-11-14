@@ -1,0 +1,20 @@
+{
+  "authored_training_situations": 120,
+  "internal_validation_situations": 15,
+  "acceptance_situations": 40,
+  "log_derived_samples": 8,
+  "log_episode_groups": 3,
+  "usage_counts": {
+    "train": 128,
+    "validation": 15
+  },
+  "sources": {
+    "authored_ue_event_scenario": 135,
+    "game_log_with_reconstructed_running_action": 8
+  },
+  "teacher_reviewed": false,
+  "student_trajectory_corrections": 0,
+  "note": "人工情境用于覆盖独立决策变化；日志补充不算作纯真实持续动作轨迹，也不声称完成 DAgger",
+  "acceptance_file": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\acceptance-reviewed.json",
+  "acceptance_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced"
+}

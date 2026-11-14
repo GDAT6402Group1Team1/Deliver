@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T14:19:29.519121+00:00",
+  "scope": "实际客户端按T、输入原话并点击Send，由UI任务操作；此记录只核对日志，不代替听感判断",
+  "runtime": {
+    "decision": "gpt-6-luna",
+    "speech": "native Q8 KV1024",
+    "voice_residency": "both",
+    "max_pcm_bytes": 576000,
+    "local_combat_enabled": false
+  },
+  "ids": {
+    "speech_id": "9176AEB14ED9B0F844FA43A4C54C2B5C",
+    "turn_id": "FE31B4EE428426C47ED0078AEB29D76D",
+    "request_id": "bf0cc448-408e-bf8b-abcb-8f9a02f6f994"
+  },
+  "player_message": "翠花，我刚来没听全。请用一句完整的话，详细说说你刚才看见了什么、为什么生气、准备怎么把误会说开，我认真听着。",
+  "npc_response": [
+    "我没看见什么新事，气的是大壮以前总拿“让着我”压人；刚才他答应以后好好说，我也不打算再较劲了。"
+  ],
+  "model_chosen": "LookAt:p2",
+  "accepted_utc": "2026-11-14T14:15:20.631Z",
+  "server": {
+    "role": 3,
+    "audio_play_utc": "2026-11-14T14:15:24.162Z",
+    "accepted_to_play_ms": 3531,
+    "audio_finish_utc": "2026-11-14T14:15:33.086Z",
+    "consumed_bytes": 416640,
+    "total_bytes": 416640
+  },
+  "client": {
+    "role": 1,
+    "audio_play_utc": "2026-11-14T14:15:24.195Z",
+    "accepted_to_play_ms": 3564,
+    "audio_finish_utc": "2026-11-14T14:15:33.126Z",
+    "consumed_bytes": 416640,
+    "total_bytes": 416640
+  },
+  "reply_completed_utc": "2026-11-14T14:15:33.178Z",
+  "native_audio": {
+    "frames": 108,
+    "frames_per_second": 12.5,
+    "source_seconds": 8.64,
+    "total_generation_ms": 1541.6,
+    "rtf": 0.178,
+    "association_limit": "原生日志没有请求编号或时间戳，按当时唯一最新长句、108帧及UE播放长度关联；请求与玩家发言的映射由后端和UE共同确认"
+  },
+  "ue_audio": {
+    "sample_rate": 24000,
+    "channels": 1,
+    "bytes_per_sample": 2,
+    "decoded_pcm_seconds": 8.68,
+    "codec_tail_seconds": 0.04,
+    "both_endpoints_finished": true,
+    "associated_buffer_empty_timeout_invalid_format": 0
+  },
+  "conclusion": "两端实际播完超过8秒的句子，原8秒截断问题已得到实机验证；满12秒边界仍只有自动化检查",
+  "limits": [
+    "本次使用Luna，不是小模型游戏验收",
+    "录音当时仍在导出，本文件不宣称已检查声卡录音",
+    "本次只核对一条超过8秒的长句，不代表所有长度和取消场景均已实机覆盖"
+  ],
+  "excerpts": [
+    {
+      "path": "backend.log",
+      "sha256": "45d10f6dc576c495a94741c0a43ca736ba8711c0dcc642eec7aa8e8855fd118b"
+    },
+    {
+      "path": "dialogue-selection.json",
+      "sha256": "c61bb575539e01baafac026315fb558f63eb8531dccc30c919ddde212358b79a"
+    },
+    {
+      "path": "native.log",
+      "sha256": "a83905cece0d49c579cc39b60aad1b80b228419e10cd36501e00d9285c18355a"
+    },
+    {
+      "path": "ue.log",
+      "sha256": "a081cbffef503a3143bea333cbb2594bc9aefabc59f0de277f4c4fcc05e58a76"
+    }
+  ]
+}

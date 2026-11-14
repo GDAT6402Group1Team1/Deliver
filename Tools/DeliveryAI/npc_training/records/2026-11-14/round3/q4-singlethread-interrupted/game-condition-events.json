@@ -1,0 +1,46 @@
+{
+  "source_log": "Saved/Logs/DeliveryOpenMicPlay.log",
+  "captured_utc": "2026-11-14T15:47:40.316670+00:00",
+  "events": [
+    {
+      "line": 7847,
+      "text": "[2026.11.14-15.41.19:725][725]LogWorld: BeginTearingDown for /Game/Level/UEDPIE_1_TestForCharacter"
+    },
+    {
+      "line": 7857,
+      "text": "[2026.11.14-15.41.19:819][725]LogWorld: BeginTearingDown for /Game/Level/UEDPIE_0_TestForCharacter"
+    },
+    {
+      "line": 7882,
+      "text": "[2026.11.14-15.41.19:902][725]LogPlayLevel: Display: Shutting down PIE online subsystems"
+    },
+    {
+      "line": 8087,
+      "text": "[2026.11.14-15.41.30:602][739]LogWorld: BeginTearingDown for /Temp/Untitled_2"
+    },
+    {
+      "line": 9190,
+      "text": "[2026.11.14-15.42.35:263][391]LogCsvProfiler: Display: Capture started. CSV ID: D600EF324456B242FBEA4CBE9E3581FD"
+    },
+    {
+      "line": 10096,
+      "text": "[2026.11.14-15.43.33:960][  6]LogCsvProfiler: Display: CSVEvent \"GC\" [Frame 615]"
+    },
+    {
+      "line": 10429,
+      "text": "[2026.11.14-15.43.57:836][248]LogWorld: BeginTearingDown for /Game/Level/UEDPIE_1_TestForCharacter"
+    },
+    {
+      "line": 10439,
+      "text": "[2026.11.14-15.43.57:917][248]LogWorld: BeginTearingDown for /Game/Level/UEDPIE_0_TestForCharacter"
+    },
+    {
+      "line": 10462,
+      "text": "[2026.11.14-15.43.57:994][248]LogPlayLevel: Display: Shutting down PIE online subsystems"
+    },
+    {
+      "line": 10464,
+      "text": "[2026.11.14-15.43.58:024][248]LogCsvProfiler: Display: CSVEvent \"GC\" [Frame 857]"
+    }
+  ]
+}

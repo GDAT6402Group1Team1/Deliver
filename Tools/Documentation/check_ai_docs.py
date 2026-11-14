@@ -11,15 +11,24 @@ OUT = ROOT / 'Saved/Documentation/AI'
 def check():
     OUT.mkdir(parents=True, exist_ok=True)
     files = list((ROOT / 'Document/Diagrams/AI').glob('*.svg'))
-    assert len(files) == 11
+    assert files, '没有可检查的 SVG'
+    source_names = {file.stem for file in files}
     for file in files: ET.parse(file)
     errors, result = [], {'diagrams':len(files), 'viewports':[]}
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path='C:/Program Files/Google/Chrome/Application/chrome.exe', headless=True)
+        browser = p.chromium.launch(executable_path='C:/Program Files/Google/Chrome/Application/chrome.exe', headless=True,
+                                    args=['--disable-gpu'])
         page = browser.new_page(viewport={'width':1440,'height':1000}, device_scale_factor=1)
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto((ROOT / 'Document/DeliveryAIPlan.html').as_uri())
-        assert page.locator('figure.uml').count() == 11
+        # 截图时直接定位，避免长文档的平滑滚动让元素一直处于移动状态
+        page.add_style_tag(content='html { scroll-behavior: auto !important; }')
+        figure_ids = page.locator('figure.uml').evaluate_all('(els)=>els.map(e=>e.id)')
+        assert figure_ids, '正文未引用 UML 图'
+        assert all(name.startswith('diagram-') and name.removeprefix('diagram-') in source_names
+                   for name in figure_ids), '正文引用缺少对应 SVG 文件'
+        result['diagrams'] = len(figure_ids)
+        result['sourceSvgFiles'] = len(files)
         assert not page.locator('script[src]').count()
         assert not page.locator('img').count(), '图形应内嵌'
         assert page.locator('#chapter-10').inner_text().startswith('问题记录')
@@ -39,7 +48,8 @@ def check():
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'), f'{width}px 页面溢出'
             page.screenshot(path=str(OUT / f'page-{width}.png'))
             result['viewports'].append({'width':width,'overflow':False})
-        page.set_viewport_size({'width':1440,'height':1000})
+        # 长类图需要足够的截图高度，避免软件渲染下截图器反复调整视口
+        page.set_viewport_size({'width':1440,'height':2400})
         for name in ['overview','conversation-sequence','configuration','combat','stream','body-animation','companion']:
             figure=page.locator(f'#diagram-{name}')
             figure.locator('button[data-size="actual"]').click()

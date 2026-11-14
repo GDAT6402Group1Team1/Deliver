@@ -1,6 +1,8 @@
 ﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Inventory/DeliveryHandheldItem.h"
+#include "Carry/DeliveryHandheldCarrierInterface.h"
+#include "Grab/DeliveryGrabbableComponent.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -43,6 +45,7 @@ void ADeliveryHandheldItem::BeginPlay()
     // 将目标行为接入通用长按流程
     InteractableComponent->CanUse.BindUObject(this, &ADeliveryHandheldItem::CanPickup);
     InteractableComponent->Use.BindUObject(this, &ADeliveryHandheldItem::Pickup);
+    RefreshCarrierPresentation();
 }
 
 void ADeliveryHandheldItem::Tick(float DeltaSeconds)
@@ -218,6 +221,11 @@ void ADeliveryHandheldItem::SetInventoryPresentation(bool bInHand, bool bInInven
 // 把物品固定到车辆货架，并停用自由物理
 void ADeliveryHandheldItem::SetVehicleCargoPresentation(USceneComponent *CargoParent)
 {
+    SetAttachedCarryPresentation(CargoParent);
+}
+
+void ADeliveryHandheldItem::SetAttachedCarryPresentation(USceneComponent *CargoParent)
+{
     if (!CargoParent)
     {
         return;
@@ -275,7 +283,9 @@ void ADeliveryHandheldItem::DropFromInventory(const FVector &WorldLocation, cons
 bool ADeliveryHandheldItem::CanPickup(APawn *Interactor, bool bCheckTaskAvailability) const
 {
     const ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(Interactor);
-    if (!Character || GetOwner())
+    const auto* Grabbable=FindComponentByClass<UDeliveryGrabbableComponent>();
+    if (!Character || GetOwner() || !ItemComponent->CanTransferTo(Character) ||
+        (Grabbable && Grabbable->HasAnyCarrier()))
         return false;
     if (const UDeliveryItemComponent *TaskItem = FindComponentByClass<UDeliveryItemComponent>())
     {
@@ -295,4 +305,25 @@ bool ADeliveryHandheldItem::Pickup(APawn *Interactor)
     }
     Character->ClientPickupSucceeded();
     return true;
+}
+
+void ADeliveryHandheldItem::RefreshCarrierPresentation()
+{
+    if (auto* Carrier=Cast<IDeliveryHandheldCarrierInterface>(GetOwner()))
+    {
+        bHadHandheldCarrierPresentation=true;
+        Carrier->ApplyHandheldItemPresentation(this);
+    }
+    else if (!GetOwner() && bHadHandheldCarrierPresentation)
+    {
+        bHadHandheldCarrierPresentation=false;
+        DropFromInventory(GetActorLocation(),FVector::ZeroVector);
+    }
+    else if (GetOwner()) bHadHandheldCarrierPresentation=false;
+}
+
+void ADeliveryHandheldItem::OnRep_Owner()
+{
+    Super::OnRep_Owner();
+    RefreshCarrierPresentation();
 }

@@ -32,6 +32,24 @@ class DELIVERY_API UDeliveryLocationComponent : public USceneComponent
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Delivery|Location")
 	FText DisplayName;
 
+	// 只有作者明确公开的地点才进入 NPC 本次观察，原调试名字不用于台词
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Delivery|Location|NPC")
+	bool bDescribeToNpcs = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Delivery|Location|NPC",
+	          meta = (EditCondition = "bDescribeToNpcs"))
+	FText NpcDisplayName;
+
+	// 只写公开用途，不写屋内现状或住户私事；公开观察点须在可见空处
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Delivery|Location|NPC",
+	          meta = (EditCondition = "bDescribeToNpcs", MultiLine = "true"))
+	FText NpcDescription;
+
+	// 公开观察点相对本组件的本地厘米偏移，随组件变换；只查视觉，不改任务距离或导航
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Delivery|Location|NPC",
+	          meta = (EditCondition = "bDescribeToNpcs", MakeEditWidget = "true", Units = "cm"))
+	FVector NpcObservationOffset = FVector::ZeroVector;
+
   protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

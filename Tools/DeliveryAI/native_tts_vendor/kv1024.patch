@@ -1,0 +1,35 @@
+--- a/src/pipeline-tts.cpp
++++ b/src/pipeline-tts.cpp
+@@ -249,12 +249,10 @@
+         return false;
+     }
+ 
+-    // KV caches, one set per slot: the talker holds the LM context up
+-    // to 4096 positions (the longest ICL prompt observed is ~250 +
+-    // max_new_tokens ~ 1500, so 4096 has 60% headroom). Predictor holds
+-    // one frame of 16 sub-steps per slot.
++    // 游戏每句最多生成 256 个音频 token，缩小常驻缓存，给渲染保留显存
++    // 实际提示与生成上限在开始这句前检查，超出时拒绝，不截断台词
+     if (!kv_cache_init(&pt->talker_kv, pt->talker.num_hidden_layers, pt->talker.num_key_value_heads,
+-                       pt->talker.head_dim, 4096, pt->max_batch, pt->backend)) {
++                       pt->talker.head_dim, 1024, pt->max_batch, pt->backend)) {
+         ggml_backend_sched_free(pt->sched);
+         pt->sched = NULL;
+         pipeline_codec_free(&pt->codec);
+@@ -877,6 +875,16 @@
+         return tts_admit_fail(job, QT_STATUS_GENERATE_FAILED);
+     }
+     s.perf.build_ms = t_build.ms();
++
++    // 先检查完整提示和本句生成上限，再使用任何解码状态
++    // 用减法避免两个外部长度相加溢出，不通过截断音频满足容量
++    if (s.prompt.T_ctx <= 0 || s.prompt.T_ctx > pt->talker_kv.max_seq_len ||
++        params->max_new_tokens <= 0 || params->max_new_tokens > pt->talker_kv.max_seq_len - s.prompt.T_ctx) {
++        qt_set_error("tts_engine_admit: context capacity exceeded (prompt=%d, generation=%d, capacity=%d)",
++                     s.prompt.T_ctx, params->max_new_tokens, pt->talker_kv.max_seq_len);
++        e->slots.pop_back();
++        return tts_admit_fail(job, QT_STATUS_INVALID_PARAMS);
++    }
+ 
+     if (params->dump_dir) {
+         DebugDumper d;

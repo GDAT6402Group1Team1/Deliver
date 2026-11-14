@@ -1,0 +1,1946 @@
+{
+  "model": "gpt-6.1-sol",
+  "service_tier": "default",
+  "results": [
+    {
+      "id": "combat-001",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方挑衅并已冲来追打，自己未受击且能行动"
+    },
+    {
+      "id": "combat-002",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "近身互有命中，仅挨一拳仍站立，交战未结束"
+    },
+    {
+      "id": "combat-003",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方仍冲来动手，自己未受击，挥空不代表结束"
+    },
+    {
+      "id": "combat-004",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方近距离冲来追打，自己未受击且能行动"
+    },
+    {
+      "id": "combat-005",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "刚挨一拳正在后仰，先拉开距离避打"
+    },
+    {
+      "id": "combat-006",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方挑衅并冲来动手，自己未受击且能行动"
+    },
+    {
+      "id": "combat-007",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方仍冲来追打，自己仅挨一拳且可行动"
+    },
+    {
+      "id": "combat-008",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方已冲来动手，自己未受击且仍可行动"
+    },
+    {
+      "id": "combat-009",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "刚挨一拳仍站着，对方未停手，交战未结束"
+    },
+    {
+      "id": "combat-010",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方仍冲来动手，自己未受击且已还击命中"
+    },
+    {
+      "id": "combat-011",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "连挨三拳未命中，已喊疼且对方仍在打"
+    },
+    {
+      "id": "combat-012",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已表示身体吃不消，挨三拳未命中又遭打"
+    },
+    {
+      "id": "combat-013",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且还手未中，劝停后对方仍冲来"
+    },
+    {
+      "id": "combat-014",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已喊疼仍遭拳击后仰，三次还手均未中"
+    },
+    {
+      "id": "combat-015",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳、眼镜快掉，对方仍冲来追打"
+    },
+    {
+      "id": "combat-016",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已表示不争仍被打，累计挨三拳且正后仰"
+    },
+    {
+      "id": "combat-017",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "挨三拳且三次还手未中，对方仍冲来"
+    },
+    {
+      "id": "combat-018",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "认错后仍遭拳击，已挨三拳且正在后仰"
+    },
+    {
+      "id": "combat-019",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且喊疼，对方仍冲来追打，先远离。"
+    },
+    {
+      "id": "combat-020",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已求缓和却再挨拳，累计三拳且正后仰，避开。"
+    },
+    {
+      "id": "combat-021",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方承认认错帽子并道歉，相距三米多，停手。"
+    },
+    {
+      "id": "combat-022",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方承认说错并当众赔不是，距离较远，停手。"
+    },
+    {
+      "id": "combat-023",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方愿拿称核查并认错，相距四米多，无需追打。"
+    },
+    {
+      "id": "combat-024",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方表示松手并提议停打，相距三米多，停手。"
+    },
+    {
+      "id": "combat-025",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "双方已澄清说的是老王，误会解除"
+    },
+    {
+      "id": "combat-026",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方依约喊停并退出比试，应停止交战"
+    },
+    {
+      "id": "combat-027",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方明确认错并礼让，已有停手台阶"
+    },
+    {
+      "id": "combat-028",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方明确认输不闹了，无继续追打依据"
+    },
+    {
+      "id": "combat-029",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方称已赔偿道歉，未见继续攻击"
+    },
+    {
+      "id": "combat-030",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方已收回辱骂并求停战，距离五米，可罢手"
+    },
+    {
+      "id": "combat-031",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且还手未中，道歉后对方仍冲来追打"
+    },
+    {
+      "id": "combat-032",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳、还手未中，逃离时又被打得后仰"
+    },
+    {
+      "id": "combat-033",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且还手未中，对方仍近距离冲来"
+    },
+    {
+      "id": "combat-034",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳，要求喘气后对方仍冲来追打"
+    },
+    {
+      "id": "combat-035",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "三次挥拳均未中，又被近距离打得后仰"
+    },
+    {
+      "id": "combat-036",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨两拳且还手未中，劝停后对方仍冲来"
+    },
+    {
+      "id": "combat-037",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且还手未中，对方仍冲来追打"
+    },
+    {
+      "id": "combat-038",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且刚被打得后仰，对方未停手"
+    },
+    {
+      "id": "combat-039",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳，劝停后对方仍近距离冲来"
+    },
+    {
+      "id": "combat-040",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且还手未中，对方仍冲来动手"
+    },
+    {
+      "id": "combat-041",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已拉开六米多，对方表示不追，可停止逃离"
+    },
+    {
+      "id": "combat-042",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已相距七米多，对方答应停战并认错"
+    },
+    {
+      "id": "combat-043",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "相距680厘米，对方已为误会道歉，无继续追打迹象"
+    },
+    {
+      "id": "combat-044",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已相距800厘米，对方明确说不再追赶"
+    },
+    {
+      "id": "combat-045",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方说已进屋关门且已离开视野，无须继续逃"
+    },
+    {
+      "id": "combat-046",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "相距900厘米，对方认错道歉并表示不打了"
+    },
+    {
+      "id": "combat-047",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已拉开约650厘米，对方明确不追，可停手"
+    },
+    {
+      "id": "combat-048",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "相距820厘米，对方表示累了就此结束"
+    },
+    {
+      "id": "combat-049",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方已澄清误会并道歉，相距760厘米"
+    },
+    {
+      "id": "combat-050",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已相隔八米多，对方答应不过来"
+    },
+    {
+      "id": "combat-051",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方近距离挑衅并冲来，自己未受击"
+    },
+    {
+      "id": "combat-052",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方仍追打且已冲近，自己未受击"
+    },
+    {
+      "id": "combat-053",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方挑衅并实际出拳，仅挨一拳仍站着"
+    },
+    {
+      "id": "combat-054",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方挑衅并冲来动手，自己未受击"
+    },
+    {
+      "id": "combat-055",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "虽挨一记轻拳仍能行动，对方仍冲来追打"
+    },
+    {
+      "id": "combat-056",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "未受击，对方继续挑衅并冲来，交战未结束"
+    },
+    {
+      "id": "combat-057",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "未受击且此前打中，对方仍挑衅冲来"
+    },
+    {
+      "id": "combat-058",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "刚被打中正在后仰，继续拉开距离避击"
+    },
+    {
+      "id": "combat-059",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "未受击且能行动，对方已冲来追打"
+    },
+    {
+      "id": "combat-060",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "未受击，对方嘲讽并冲来，尚未停战"
+    },
+    {
+      "id": "combat-061",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "仅挨一记轻拳，双方未示意停手，交战仍在继续"
+    },
+    {
+      "id": "combat-062",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方仍冲来追打，轻伤尚能行动，继续还击"
+    },
+    {
+      "id": "combat-063",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方提出歇战，已有一定距离，可顺势停手"
+    },
+    {
+      "id": "combat-064",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已拉开五米多距离，对方表示站着不追"
+    },
+    {
+      "id": "combat-065",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "挨过拳且仍在撤离，对方仅口头保证不碰，继续拉开距离"
+    },
+    {
+      "id": "combat-066",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "双方只是打空，自己未受伤，也无停战信号"
+    },
+    {
+      "id": "combat-067",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方愿意听说，自己已挨两拳且未命中，先停手"
+    },
+    {
+      "id": "combat-068",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "此前相距九米且已失去视野，无新增追打事实"
+    },
+    {
+      "id": "combat-069",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "近身交战仍在继续，仅挨一记轻拳，尚无退让"
+    },
+    {
+      "id": "combat-070",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方以热身继续挑衅，自己未受击，好胜心未消"
+    },
+    {
+      "id": "combat-071",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方澄清骂的不是自己，未受击，也无继续挑衅"
+    },
+    {
+      "id": "combat-072",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已承认疼痛，连挨三拳未命中，对方仍在打"
+    },
+    {
+      "id": "combat-073",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方反悔并已冲来追打，仅挨一拳，交战未止"
+    },
+    {
+      "id": "combat-074",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已拉开近八米，对方明确消气不追，可停下"
+    },
+    {
+      "id": "combat-075",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "对方近身再次打中，已挨三拳且还手未中，继续远离"
+    },
+    {
+      "id": "combat-076",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方明确不再比试，相隔三米多且无继续攻击"
+    },
+    {
+      "id": "combat-077",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳、两次还手未中，刚被打得后仰应远离"
+    },
+    {
+      "id": "combat-078",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方承认吹牛并表示不打，已有近四米间距"
+    },
+    {
+      "id": "combat-079",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且还击未中，对方仍冲来追打"
+    },
+    {
+      "id": "combat-080",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "自己未受击，对方挑衅并继续冲来动手"
+    },
+    {
+      "id": "combat-081",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方提出别闹了，距离三米多且无追打"
+    },
+    {
+      "id": "combat-082",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "近处已挨三拳且未打中，对方仍冲来"
+    },
+    {
+      "id": "combat-083",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方已离远并失去视线，没有继续追打"
+    },
+    {
+      "id": "combat-084",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方仍挑衅并冲来动手，自己尚未受击"
+    },
+    {
+      "id": "combat-085",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且还击未中，对方仍冲来，继续远离"
+    },
+    {
+      "id": "combat-086",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方同意结束争执，转去帮助摔倒的人"
+    },
+    {
+      "id": "combat-087",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳正在后仰，身后台阶增加危险"
+    },
+    {
+      "id": "combat-088",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已相距七米，对方明确说不再追赶"
+    },
+    {
+      "id": "combat-089",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方同意今天到此为止，双方让路搬货"
+    },
+    {
+      "id": "combat-090",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方近距离再次冲来动手，交战尚未结束"
+    },
+    {
+      "id": "combat-091",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方已为认错人道歉，距离四米且未继续攻击"
+    },
+    {
+      "id": "combat-092",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方继续挑衅并冲来动手，自己尚未受击"
+    },
+    {
+      "id": "combat-093",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨两拳并喊疼，刚受击后仰，先远离对手"
+    },
+    {
+      "id": "combat-094",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方明确认输要求停比，双方相距四米多"
+    },
+    {
+      "id": "combat-095",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方叫阵并冲来动手，自己未受击且仍能行动"
+    },
+    {
+      "id": "combat-096",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且正在逃离，对方仍近距离追打"
+    },
+    {
+      "id": "combat-097",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "自己已承认听清误会，对方也解释，无新攻击"
+    },
+    {
+      "id": "combat-098",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方解释抬手是捡帽子，相距七米且未挨打"
+    },
+    {
+      "id": "combat-099",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "近距离刚挨一拳，对方仍争执，交战未结束"
+    },
+    {
+      "id": "combat-100",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且还击未中，对方仍冲来，应拉开距离"
+    },
+    {
+      "id": "combat-101",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方明确说不比了，相距四米半，无继续攻击迹象"
+    },
+    {
+      "id": "combat-102",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已有八米距离，对方道歉并表示不过来"
+    },
+    {
+      "id": "combat-103",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方仍冲来动手，自己未受击且交战未结束"
+    },
+    {
+      "id": "combat-104",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方明确喊停退出，且双方事先约定喊停就停"
+    },
+    {
+      "id": "combat-105",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已喊不玩仍遭击打，累计挨三拳且正在后仰"
+    },
+    {
+      "id": "combat-106",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方近距离堵路挑衅并冲来，未受伤可还击"
+    },
+    {
+      "id": "combat-107",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "双方言语已缓和，相距五米且无继续攻击事件"
+    },
+    {
+      "id": "combat-108",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨两拳且正在撤离，对方仍明确追打"
+    },
+    {
+      "id": "combat-109",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方挑衅并已冲来追打，自己未受伤"
+    },
+    {
+      "id": "combat-110",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "相距九米，对方明确说不过来，无新攻击"
+    },
+    {
+      "id": "combat-111",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且反击全落空，刚受击后仰"
+    },
+    {
+      "id": "combat-112",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已相距八米半，对方明确不再追赶"
+    },
+    {
+      "id": "combat-113",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方表示帮捡帽子并求和，未继续攻击"
+    },
+    {
+      "id": "combat-114",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方近身出拳还嘲讽，双方交战未结束"
+    },
+    {
+      "id": "combat-115",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且还击未中，对方仍近身追打"
+    },
+    {
+      "id": "combat-116",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "双方语气缓和，对方劝停，距离四米多"
+    },
+    {
+      "id": "combat-117",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "虽挨疼但仍能还击，对方近身继续追打"
+    },
+    {
+      "id": "combat-118",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨两拳，此前被追打，失去视野未确认停战"
+    },
+    {
+      "id": "combat-119",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方服软要求到此为止，距离也已拉开"
+    },
+    {
+      "id": "combat-120",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且还击未中，对方仍追近动手"
+    },
+    {
+      "id": "combat-121",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方已说明听岔并道歉，未继续攻击"
+    },
+    {
+      "id": "combat-122",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳且正在后仰，对方仍在攻击"
+    },
+    {
+      "id": "combat-123",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳，逃离时对方仍冲来追打"
+    },
+    {
+      "id": "combat-124",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "尚未受击，对方近距离冲来继续动手"
+    },
+    {
+      "id": "combat-125",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方明确认错求和，距离四米且无追打"
+    },
+    {
+      "id": "combat-126",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已拉开八米多并脱离视线，对方表示不追"
+    },
+    {
+      "id": "combat-127",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "刚又挨了一拳，双方未停手，交战仍在继续"
+    },
+    {
+      "id": "combat-128",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方说不闹了，距离六米多且未受击"
+    },
+    {
+      "id": "combat-129",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已相隔七米八，对方承诺不追，无新攻击"
+    },
+    {
+      "id": "combat-130",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "手已打抖，挨三拳且未命中，近处又遭打击"
+    },
+    {
+      "id": "combat-131",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "误会已澄清，对方明确道歉，也未实际受击"
+    },
+    {
+      "id": "combat-132",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨三拳，对方仍从近处冲来追打"
+    },
+    {
+      "id": "combat-133",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方再次挑战并冲来动手，自己尚未受击"
+    },
+    {
+      "id": "combat-134",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方已认输不争，相距480厘米且无继续攻击"
+    },
+    {
+      "id": "combat-135",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "已相距600厘米，对方缓手腕，未见继续追打"
+    },
+    {
+      "id": "log-3641fec4-4fe6-d4df-e988-219e7f0f959d",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "虽上一轮已停拳，对方仍近身冲来，自己未受击"
+    },
+    {
+      "id": "log-e01428d0-404d-b5bf-d1ca-1ea8b9fe9957",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "此前挨疼已退避，对方仍冲来，需继续拉开距离"
+    },
+    {
+      "id": "log-ae281560-4a16-193c-629a-00b76a54ca37",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "退避后又遭追打并实际挨两拳，继续远离"
+    },
+    {
+      "id": "log-bf8f4920-48bf-51e0-a388-5a96c70cfd4a",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方仍冲来追打，自己未受击，交战未结束"
+    },
+    {
+      "id": "log-7ade3889-4bc0-b303-1c26-43a3816c18ed",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "实际挨了三拳仍站立，己方也命中三拳，对方未停手"
+    },
+    {
+      "id": "log-93bdcb86-456f-b41d-6194-4ab770433c9f",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "本轮出拳结束但对方又冲来，未受击且能行动"
+    },
+    {
+      "id": "log-f0e042ef-462d-655b-c9e8-a293da50617a",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方被打倒后已跑开，无继续进攻迹象，停止追打"
+    },
+    {
+      "id": "log-c06566f0-4772-194f-cee5-4a8d0d57b8ab",
+      "input_ok": true,
+      "action": "Wait",
+      "target_id": "",
+      "reason": "对方已跑开并表示不再耗下去，停手不追"
+    }
+  ],
+  "calls": [
+    {
+      "ids": [
+        "combat-001",
+        "combat-002",
+        "combat-003",
+        "combat-004",
+        "combat-005",
+        "combat-006"
+      ],
+      "prompt_sha256": "a46d5c1faf4e3ba165bc83b71231fea5ba29ee69b50e21c1a8176e7ba06e606a",
+      "output": "[\n  {\"id\":\"combat-001\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方挑衅并已冲来追打，自己未受击且能行动\"},\n  {\"id\":\"combat-002\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"刚挨一记轻拳仍站着，交战未结束且对方未停手\"},\n  {\"id\":\"combat-003\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方仍冲来动手，自己未受击，挥空不代表结束\"},\n  {\"id\":\"combat-004\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方近距离冲来追打，自己未受击且能行动\"},\n  {\"id\":\"combat-005\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方刚出拳打中，赔钱不等于停战，自己仍站着\"},\n  {\"id\":\"combat-006\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方挑衅并冲来动手，自己未受击且能行动\"}\n]",
+      "timing": {
+        "startup": 275.15959999436745,
+        "thread_start": 339.84049999708077,
+        "turn_start": 349.5781999954488,
+        "first_delta": 4962.963799996942,
+        "model_terminal": 9044.265199998335
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 10103,
+          "cachedInputTokens": 0,
+          "outputTokens": 317,
+          "reasoningOutputTokens": 41,
+          "totalTokens": 10420,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 10103,
+          "cachedInputTokens": 0,
+          "outputTokens": 317,
+          "reasoningOutputTokens": 41,
+          "totalTokens": 10420,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 9.04436859999987
+    },
+    {
+      "ids": [
+        "combat-007",
+        "combat-008",
+        "combat-009",
+        "combat-010",
+        "combat-011",
+        "combat-012"
+      ],
+      "prompt_sha256": "91dbddcb9ca75019f25d293324aa8654a28d3db12e84b9c92eb64d8d73c35e36",
+      "output": "[\n  {\"id\":\"combat-007\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方仍冲来追打，自己仅挨一拳且可行动\"},\n  {\"id\":\"combat-008\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方已冲来动手，自己未受击且仍可行动\"},\n  {\"id\":\"combat-009\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"刚挨一拳仍站着，对方未停手，交战未结束\"},\n  {\"id\":\"combat-010\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方仍冲来动手，自己未受击且已还击命中\"},\n  {\"id\":\"combat-011\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"连挨三拳未命中，已喊疼且对方仍在打\"},\n  {\"id\":\"combat-012\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已表示身体吃不消，挨三拳未命中又遭打\"}\n]",
+      "timing": {
+        "startup": 0.016199999663513154,
+        "thread_start": 54.01509999501286,
+        "turn_start": 58.397799999511335,
+        "first_delta": 4474.211099994136,
+        "model_terminal": 9505.397699998866
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 10041,
+          "cachedInputTokens": 4096,
+          "outputTokens": 317,
+          "reasoningOutputTokens": 47,
+          "totalTokens": 10358,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 10041,
+          "cachedInputTokens": 4096,
+          "outputTokens": 317,
+          "reasoningOutputTokens": 47,
+          "totalTokens": 10358,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 9.505560400000832
+    },
+    {
+      "ids": [
+        "combat-013",
+        "combat-014",
+        "combat-015",
+        "combat-016",
+        "combat-017",
+        "combat-018"
+      ],
+      "prompt_sha256": "de0262bb32240eecba8a352596555d67745ebc8410b4423ff221c6451159f3e2",
+      "output": "[\n  {\"id\":\"combat-013\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且还手未中，劝停后对方仍冲来\"},\n  {\"id\":\"combat-014\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已喊疼仍遭拳击后仰，三次还手均未中\"},\n  {\"id\":\"combat-015\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳、眼镜快掉，对方仍冲来追打\"},\n  {\"id\":\"combat-016\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已表示不争仍被打，累计挨三拳且正后仰\"},\n  {\"id\":\"combat-017\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"挨三拳且三次还手未中，对方仍冲来\"},\n  {\"id\":\"combat-018\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"认错后仍遭拳击，已挨三拳且正在后仰\"}\n]",
+      "timing": {
+        "startup": 0.014299999747890979,
+        "thread_start": 48.637500003678724,
+        "turn_start": 53.77769999904558,
+        "first_delta": 4667.145200000959,
+        "model_terminal": 10661.672100002761
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 10038,
+          "cachedInputTokens": 3200,
+          "outputTokens": 316,
+          "reasoningOutputTokens": 39,
+          "totalTokens": 10354,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 10038,
+          "cachedInputTokens": 3200,
+          "outputTokens": 316,
+          "reasoningOutputTokens": 39,
+          "totalTokens": 10354,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 10.661827200005064
+    },
+    {
+      "ids": [
+        "combat-019",
+        "combat-020",
+        "combat-021",
+        "combat-022",
+        "combat-023",
+        "combat-024"
+      ],
+      "prompt_sha256": "fdeccd85b4823af70bbf746b66d9a30d1aa4964e1e1d0ab401b6a1c99b49d1f3",
+      "output": "[\n  {\"id\":\"combat-019\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且喊疼，对方仍冲来追打，先远离。\"},\n  {\"id\":\"combat-020\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已求缓和却再挨拳，累计三拳且正后仰，避开。\"},\n  {\"id\":\"combat-021\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方承认认错帽子并道歉，相距三米多，停手。\"},\n  {\"id\":\"combat-022\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方承认说错并当众赔不是，距离较远，停手。\"},\n  {\"id\":\"combat-023\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方愿拿称核查并认错，相距四米多，无需追打。\"},\n  {\"id\":\"combat-024\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方表示松手并提议停打，相距三米多，停手。\"}\n]",
+      "timing": {
+        "startup": 0.022499996703118086,
+        "thread_start": 48.23039999610046,
+        "turn_start": 56.3793999972404,
+        "first_delta": 5341.95219999674,
+        "model_terminal": 10654.766299994662
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9873,
+          "cachedInputTokens": 0,
+          "outputTokens": 321,
+          "reasoningOutputTokens": 47,
+          "totalTokens": 10194,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9873,
+          "cachedInputTokens": 0,
+          "outputTokens": 321,
+          "reasoningOutputTokens": 47,
+          "totalTokens": 10194,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 10.65490470000077
+    },
+    {
+      "ids": [
+        "combat-025",
+        "combat-026",
+        "combat-027",
+        "combat-028",
+        "combat-029",
+        "combat-030"
+      ],
+      "prompt_sha256": "74822de3ab0c017fd8d531f82c4521836b9cfb3544d03f0af55ecbcaada08ede",
+      "output": "[\n  {\"id\":\"combat-025\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"双方已澄清说的是老王，误会解除\"},\n  {\"id\":\"combat-026\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方依约喊停并退出比试，应停止交战\"},\n  {\"id\":\"combat-027\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方明确认错并礼让，已有停手台阶\"},\n  {\"id\":\"combat-028\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方明确认输不闹了，无继续追打依据\"},\n  {\"id\":\"combat-029\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方称已赔偿道歉，未见继续攻击\"},\n  {\"id\":\"combat-030\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方收回辱骂并认错求停，可以罢手\"}\n]",
+      "timing": {
+        "startup": 0.017400001524947584,
+        "thread_start": 52.068600001803134,
+        "turn_start": 59.86890000349376,
+        "first_delta": 4355.5449999985285,
+        "model_terminal": 8298.333600003389
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9789,
+          "cachedInputTokens": 4096,
+          "outputTokens": 271,
+          "reasoningOutputTokens": 41,
+          "totalTokens": 10060,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9789,
+          "cachedInputTokens": 4096,
+          "outputTokens": 271,
+          "reasoningOutputTokens": 41,
+          "totalTokens": 10060,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 8.298460699996212
+    },
+    {
+      "ids": [
+        "combat-031",
+        "combat-032",
+        "combat-033",
+        "combat-034",
+        "combat-035",
+        "combat-036"
+      ],
+      "prompt_sha256": "1020d3f56762f7dd3152ed88e3925fa0ce2076e18f047038c8abfdf7bde7eecc",
+      "output": "[\n  {\"id\":\"combat-031\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且还手未中，道歉后对方仍冲来追打\"},\n  {\"id\":\"combat-032\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳、还手未中，逃离时又被打得后仰\"},\n  {\"id\":\"combat-033\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且还手未中，对方仍近距离冲来\"},\n  {\"id\":\"combat-034\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳，要求喘气后对方仍冲来追打\"},\n  {\"id\":\"combat-035\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"三次挥拳均未中，又被近距离打得后仰\"},\n  {\"id\":\"combat-036\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨两拳且还手未中，劝停后对方仍冲来\"}\n]",
+      "timing": {
+        "startup": 0.018300001102034003,
+        "thread_start": 57.529099998646416,
+        "turn_start": 64.7804999971413,
+        "first_delta": 2998.131199994532,
+        "model_terminal": 8712.39290000085
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 10024,
+          "cachedInputTokens": 4096,
+          "outputTokens": 299,
+          "reasoningOutputTokens": 18,
+          "totalTokens": 10323,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 10024,
+          "cachedInputTokens": 4096,
+          "outputTokens": 299,
+          "reasoningOutputTokens": 18,
+          "totalTokens": 10323,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 8.71255719999317
+    },
+    {
+      "ids": [
+        "combat-037",
+        "combat-038",
+        "combat-039",
+        "combat-040",
+        "combat-041",
+        "combat-042"
+      ],
+      "prompt_sha256": "03e868c18776aeda5aba17e543862edcb1905fb4f7016b915ebf97904dfb66b0",
+      "output": "[\n  {\"id\":\"combat-037\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且还手未中，对方仍冲来追打\"},\n  {\"id\":\"combat-038\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且刚被打得后仰，对方未停手\"},\n  {\"id\":\"combat-039\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳，劝停后对方仍近距离冲来\"},\n  {\"id\":\"combat-040\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且还手未中，对方仍冲来动手\"},\n  {\"id\":\"combat-041\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已相距六米多，对方说不追了且无新攻击\"},\n  {\"id\":\"combat-042\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已相距七米多，对方答应停战并认错\"}\n]",
+      "timing": {
+        "startup": 0.01720000000204891,
+        "thread_start": 60.377399997378234,
+        "turn_start": 66.79609999991953,
+        "first_delta": 3551.6943000038736,
+        "model_terminal": 8011.511299999256
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 10016,
+          "cachedInputTokens": 0,
+          "outputTokens": 287,
+          "reasoningOutputTokens": 25,
+          "totalTokens": 10303,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 10016,
+          "cachedInputTokens": 0,
+          "outputTokens": 287,
+          "reasoningOutputTokens": 25,
+          "totalTokens": 10303,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 8.011619199998677
+    },
+    {
+      "ids": [
+        "combat-043",
+        "combat-044",
+        "combat-045",
+        "combat-046",
+        "combat-047",
+        "combat-048"
+      ],
+      "prompt_sha256": "2854d0afeefcfd4b727a3434c66af84c419126669764794c1c09283bb03d243c",
+      "output": "[\n  {\"id\":\"combat-043\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"相距680厘米，对方已为误会道歉，无继续追打迹象\"},\n  {\"id\":\"combat-044\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已相距800厘米，对方明确说不再追赶\"},\n  {\"id\":\"combat-045\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方说已进屋关门且已离开视野，无须继续逃\"},\n  {\"id\":\"combat-046\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"相距900厘米，对方认错道歉并表示不打了\"},\n  {\"id\":\"combat-047\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"相距650厘米，对方明确说不追，无继续逃离必要\"},\n  {\"id\":\"combat-048\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"相距820厘米，对方表示累了就此结束\"}\n]",
+      "timing": {
+        "startup": 0.01750000228639692,
+        "thread_start": 61.67249999998603,
+        "turn_start": 67.47539999923902,
+        "first_delta": 4244.275800003379,
+        "model_terminal": 8310.600000004342
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9817,
+          "cachedInputTokens": 4096,
+          "outputTokens": 275,
+          "reasoningOutputTokens": 38,
+          "totalTokens": 10092,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9817,
+          "cachedInputTokens": 4096,
+          "outputTokens": 275,
+          "reasoningOutputTokens": 38,
+          "totalTokens": 10092,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 8.310720900000888
+    },
+    {
+      "ids": [
+        "combat-049",
+        "combat-050",
+        "combat-051",
+        "combat-052",
+        "combat-053",
+        "combat-054"
+      ],
+      "prompt_sha256": "53fb2f5479ca6d54d33b43f31153712a333b52cdab3d324b4f708abeff82b3b6",
+      "output": "[\n  {\"id\":\"combat-049\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方已澄清误会并道歉，相距760厘米\"},\n  {\"id\":\"combat-050\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已相距850厘米，对方答应不过来\"},\n  {\"id\":\"combat-051\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方近距离挑衅并冲来，自己未受击\"},\n  {\"id\":\"combat-052\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方仍追打且已冲近，自己未受击\"},\n  {\"id\":\"combat-053\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方挑衅并实际出拳，仅挨一拳仍站着\"},\n  {\"id\":\"combat-054\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方挑衅并冲来动手，自己未受击\"}\n]",
+      "timing": {
+        "startup": 0.017899998056236655,
+        "thread_start": 52.15209999732906,
+        "turn_start": 57.2835999992094,
+        "first_delta": 3751.5067999993335,
+        "model_terminal": 8341.640599996026
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9939,
+          "cachedInputTokens": 4096,
+          "outputTokens": 283,
+          "reasoningOutputTokens": 38,
+          "totalTokens": 10222,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9939,
+          "cachedInputTokens": 4096,
+          "outputTokens": 283,
+          "reasoningOutputTokens": 38,
+          "totalTokens": 10222,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 8.341759299997648
+    },
+    {
+      "ids": [
+        "combat-055",
+        "combat-056",
+        "combat-057",
+        "combat-058",
+        "combat-059",
+        "combat-060"
+      ],
+      "prompt_sha256": "8c2e10948d0c774a5386ec3d84896be727e35a1febd32d07d2898bb763ba3bd3",
+      "output": "[\n  {\"id\":\"combat-055\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"虽挨一记轻拳仍能行动，对方仍冲来追打\"},\n  {\"id\":\"combat-056\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"未受击，对方继续挑衅并冲来，交战未结束\"},\n  {\"id\":\"combat-057\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"未受击且此前打中，对方仍挑衅冲来\"},\n  {\"id\":\"combat-058\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"刚被打中正在后仰，继续拉开距离避击\"},\n  {\"id\":\"combat-059\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"未受击且能行动，对方已冲来追打\"},\n  {\"id\":\"combat-060\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"未受击，对方嘲讽并冲来，尚未停战\"}\n]",
+      "timing": {
+        "startup": 0.01930000144056976,
+        "thread_start": 56.05639999703271,
+        "turn_start": 62.42979999660747,
+        "first_delta": 7775.784500001464,
+        "model_terminal": 12026.613000001817
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 10005,
+          "cachedInputTokens": 0,
+          "outputTokens": 383,
+          "reasoningOutputTokens": 124,
+          "totalTokens": 10388,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 10005,
+          "cachedInputTokens": 0,
+          "outputTokens": 383,
+          "reasoningOutputTokens": 124,
+          "totalTokens": 10388,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 12.026820600003703
+    },
+    {
+      "ids": [
+        "combat-061",
+        "combat-062",
+        "combat-063",
+        "combat-064",
+        "combat-065",
+        "combat-066"
+      ],
+      "prompt_sha256": "b48b36c873ccfbda7f33a1ee14a122d5f0f98e8c59d334589eb922496102b5f6",
+      "output": "[\n  {\"id\":\"combat-061\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"仅挨一记轻拳，双方未示意停手，交战仍在继续\"},\n  {\"id\":\"combat-062\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方仍冲来追打，轻伤尚能行动，继续还击\"},\n  {\"id\":\"combat-063\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方提出歇战，已有一定距离，可顺势停手\"},\n  {\"id\":\"combat-064\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已拉开五米多距离，对方表示站着不追\"},\n  {\"id\":\"combat-065\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"挨过拳且仍在撤离，对方仅口头保证不碰，继续拉开距离\"},\n  {\"id\":\"combat-066\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"双方只是确认打空，未提出停战，当前交战尚未结束\"}\n]",
+      "timing": {
+        "startup": 0.018300001102034003,
+        "thread_start": 47.85730000003241,
+        "turn_start": 52.28489999717567,
+        "first_delta": 8540.072999996482,
+        "model_terminal": 13279.013399995165
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9806,
+          "cachedInputTokens": 0,
+          "outputTokens": 381,
+          "reasoningOutputTokens": 117,
+          "totalTokens": 10187,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9806,
+          "cachedInputTokens": 0,
+          "outputTokens": 381,
+          "reasoningOutputTokens": 117,
+          "totalTokens": 10187,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 13.279216999995697
+    },
+    {
+      "ids": [
+        "combat-067",
+        "combat-068",
+        "combat-069",
+        "combat-070",
+        "combat-071",
+        "combat-072"
+      ],
+      "prompt_sha256": "a1b5de6887a69c93fb52afccdb689d55cb66bede0dbbac664e38ed2d7e0591d6",
+      "output": "[\n  {\"id\":\"combat-067\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方愿意听说，自己已挨两拳且未命中，先停手\"},\n  {\"id\":\"combat-068\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已拉开约九米且失去对方踪影，暂无追打迹象\"},\n  {\"id\":\"combat-069\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"近距离刚遭一拳，交战未止，仅挨一拳仍可还击\"},\n  {\"id\":\"combat-070\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方以热身继续挑衅，自己未受击，好胜心未消\"},\n  {\"id\":\"combat-071\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方具体澄清骂的不是自己，也无实际受击\"},\n  {\"id\":\"combat-072\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已承认疼痛，连挨三拳未命中，对方仍在打\"}\n]",
+      "timing": {
+        "startup": 0.018300001102034003,
+        "thread_start": 53.08060000243131,
+        "turn_start": 60.754099999030586,
+        "first_delta": 5913.127899999381,
+        "model_terminal": 11598.277299999609
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9969,
+          "cachedInputTokens": 4224,
+          "outputTokens": 358,
+          "reasoningOutputTokens": 88,
+          "totalTokens": 10327,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9969,
+          "cachedInputTokens": 4224,
+          "outputTokens": 358,
+          "reasoningOutputTokens": 88,
+          "totalTokens": 10327,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 11.598442500006058
+    },
+    {
+      "ids": [
+        "combat-073",
+        "combat-074",
+        "combat-075",
+        "combat-076",
+        "combat-077",
+        "combat-078"
+      ],
+      "prompt_sha256": "92d634ade39c8a7c7e9e89811aa08d9ff3047ca31cee0ddac2d14acce8eb0bdc",
+      "output": "[\n  {\"id\":\"combat-073\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方反悔并已冲来追打，仅挨一拳，交战未止\"},\n  {\"id\":\"combat-074\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已拉开近八米，对方明确消气不追，可停下\"},\n  {\"id\":\"combat-075\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"对方近身再次打中，已挨三拳且还手未中，继续远离\"},\n  {\"id\":\"combat-076\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方明确不再比试，相隔三米多且无继续攻击\"},\n  {\"id\":\"combat-077\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳、两次还手未中，刚被打得后仰应远离\"},\n  {\"id\":\"combat-078\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方承认吹牛并表示不打，已有近四米间距\"}\n]",
+      "timing": {
+        "startup": 0.014699995517730713,
+        "thread_start": 43.88739999558311,
+        "turn_start": 48.68559999886202,
+        "first_delta": 3123.5890999960247,
+        "model_terminal": 8706.483499998285
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9921,
+          "cachedInputTokens": 4096,
+          "outputTokens": 308,
+          "reasoningOutputTokens": 36,
+          "totalTokens": 10229,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9921,
+          "cachedInputTokens": 4096,
+          "outputTokens": 308,
+          "reasoningOutputTokens": 36,
+          "totalTokens": 10229,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 8.706615299997793
+    },
+    {
+      "ids": [
+        "combat-079",
+        "combat-080",
+        "combat-081",
+        "combat-082",
+        "combat-083",
+        "combat-084"
+      ],
+      "prompt_sha256": "49143e407576b391ad5f093188251e4a68831b8dddcd92054dd6a1fada0ba3f0",
+      "output": "[\n  {\"id\":\"combat-079\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且还击未中，对方仍冲来追打\"},\n  {\"id\":\"combat-080\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"自己未受击，对方挑衅并继续冲来动手\"},\n  {\"id\":\"combat-081\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方提出别闹了，距离三米多且无追打\"},\n  {\"id\":\"combat-082\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"近处已挨三拳且未打中，对方仍冲来\"},\n  {\"id\":\"combat-083\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方已离远并失去视线，没有继续追打\"},\n  {\"id\":\"combat-084\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方仍挑衅并冲来动手，自己尚未受击\"}\n]",
+      "timing": {
+        "startup": 0.017400001524947584,
+        "thread_start": 61.77970000135247,
+        "turn_start": 68.43980000121519,
+        "first_delta": 4356.371000001673,
+        "model_terminal": 9210.085999999137
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9957,
+          "cachedInputTokens": 4096,
+          "outputTokens": 288,
+          "reasoningOutputTokens": 33,
+          "totalTokens": 10245,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9957,
+          "cachedInputTokens": 4096,
+          "outputTokens": 288,
+          "reasoningOutputTokens": 33,
+          "totalTokens": 10245,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 9.21023409999907
+    },
+    {
+      "ids": [
+        "combat-085",
+        "combat-086",
+        "combat-087",
+        "combat-088",
+        "combat-089",
+        "combat-090"
+      ],
+      "prompt_sha256": "af9659ae7cb4a969282819313c1952507645cd68deb969fd11b5ca847934e889",
+      "output": "[\n  {\"id\":\"combat-085\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且还手未中，对方仍冲来追打\"},\n  {\"id\":\"combat-086\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方同意结束争执，转去帮助摔倒的人\"},\n  {\"id\":\"combat-087\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳正在后仰，身后台阶增加危险\"},\n  {\"id\":\"combat-088\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已相距七米，对方明确说不再追赶\"},\n  {\"id\":\"combat-089\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方同意今天到此为止，双方让路搬货\"},\n  {\"id\":\"combat-090\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方近距离再次冲来动手，交战尚未结束\"}\n]",
+      "timing": {
+        "startup": 0.017599995771888644,
+        "thread_start": 64.2874999975902,
+        "turn_start": 71.01979999424657,
+        "first_delta": 3628.9901999989524,
+        "model_terminal": 8356.845399997837
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9984,
+          "cachedInputTokens": 0,
+          "outputTokens": 288,
+          "reasoningOutputTokens": 41,
+          "totalTokens": 10272,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9984,
+          "cachedInputTokens": 0,
+          "outputTokens": 288,
+          "reasoningOutputTokens": 41,
+          "totalTokens": 10272,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 8.356962800004112
+    },
+    {
+      "ids": [
+        "combat-091",
+        "combat-092",
+        "combat-093",
+        "combat-094",
+        "combat-095",
+        "combat-096"
+      ],
+      "prompt_sha256": "b59c3400d2b3c0f1463e65d704ae37999c515d114cd011ad1537aac43564fe74",
+      "output": "[\n  {\"id\":\"combat-091\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方已为认错人道歉，距离四米且未继续攻击\"},\n  {\"id\":\"combat-092\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方继续挑衅并冲来动手，自己尚未受击\"},\n  {\"id\":\"combat-093\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨两拳并喊疼，刚受击后仰，先远离对手\"},\n  {\"id\":\"combat-094\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方明确认输要求停比，双方相距四米多\"},\n  {\"id\":\"combat-095\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方叫阵并冲来动手，自己未受击且仍能行动\"},\n  {\"id\":\"combat-096\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且正在逃离，对方仍近距离追打\"}\n]",
+      "timing": {
+        "startup": 0.012799995602108538,
+        "thread_start": 55.148699997516815,
+        "turn_start": 60.25429999863263,
+        "first_delta": 4833.8521999976365,
+        "model_terminal": 9818.769799996517
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9927,
+          "cachedInputTokens": 4096,
+          "outputTokens": 307,
+          "reasoningOutputTokens": 43,
+          "totalTokens": 10234,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9927,
+          "cachedInputTokens": 4096,
+          "outputTokens": 307,
+          "reasoningOutputTokens": 43,
+          "totalTokens": 10234,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 9.81889930000034
+    },
+    {
+      "ids": [
+        "combat-097",
+        "combat-098",
+        "combat-099",
+        "combat-100",
+        "combat-101",
+        "combat-102"
+      ],
+      "prompt_sha256": "824b6da893d2c6b4508e6efb09db544d054a76183c5651d42870caafe758a604",
+      "output": "[\n  {\"id\":\"combat-097\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已听清是误会，对方也确认，无继续攻击迹象\"},\n  {\"id\":\"combat-098\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方解释抬手是捡帽子，相距七米且未挨打\"},\n  {\"id\":\"combat-099\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"近距离刚挨一拳，对方仍争执，交战未结束\"},\n  {\"id\":\"combat-100\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且未命中，对方仍冲来攻击，先拉开距离\"},\n  {\"id\":\"combat-101\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方明确说不比了，相距四米半，无继续攻击迹象\"},\n  {\"id\":\"combat-102\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已有八米距离，对方道歉并表示不过来\"}\n]",
+      "timing": {
+        "startup": 0.015599995094817132,
+        "thread_start": 61.320699998759665,
+        "turn_start": 67.96939999912865,
+        "first_delta": 3633.5298999983934,
+        "model_terminal": 8168.3131999961915
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9878,
+          "cachedInputTokens": 0,
+          "outputTokens": 297,
+          "reasoningOutputTokens": 43,
+          "totalTokens": 10175,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9878,
+          "cachedInputTokens": 0,
+          "outputTokens": 297,
+          "reasoningOutputTokens": 43,
+          "totalTokens": 10175,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 8.168450700002722
+    },
+    {
+      "ids": [
+        "combat-103",
+        "combat-104",
+        "combat-105",
+        "combat-106",
+        "combat-107",
+        "combat-108"
+      ],
+      "prompt_sha256": "8b20f43357219f186c411655af8d8e474f3e2b91562296a9b5fad71210f63b0e",
+      "output": "[\n  {\"id\":\"combat-103\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方仍冲来动手，自己未受击且交战未结束\"},\n  {\"id\":\"combat-104\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方明确喊停退出，且双方事先约定喊停就停\"},\n  {\"id\":\"combat-105\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已喊不玩仍遭击打，累计挨三拳且正在后仰\"},\n  {\"id\":\"combat-106\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"正在撤离，对方近距离堵路并冲来动手\"},\n  {\"id\":\"combat-107\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"双方言语已缓和，相距五米且无继续攻击事件\"},\n  {\"id\":\"combat-108\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨两拳且正在撤离，对方仍明确追打\"}\n]",
+      "timing": {
+        "startup": 0.016999998479150236,
+        "thread_start": 60.55999999807682,
+        "turn_start": 66.74259999999776,
+        "first_delta": 3681.0725000032107,
+        "model_terminal": 8614.88939999981
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9930,
+          "cachedInputTokens": 4096,
+          "outputTokens": 299,
+          "reasoningOutputTokens": 41,
+          "totalTokens": 10229,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9930,
+          "cachedInputTokens": 4096,
+          "outputTokens": 299,
+          "reasoningOutputTokens": 41,
+          "totalTokens": 10229,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 8.615001300000586
+    },
+    {
+      "ids": [
+        "combat-109",
+        "combat-110",
+        "combat-111",
+        "combat-112",
+        "combat-113",
+        "combat-114"
+      ],
+      "prompt_sha256": "546b76d6833b37c8c105c649137a9a43b9d4cdf1ce3db79e64b7442d51a4565a",
+      "output": "[\n  {\"id\":\"combat-109\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方挑衅并已冲来追打，自己未受伤\"},\n  {\"id\":\"combat-110\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"相距九米，对方明确说不过来，无新攻击\"},\n  {\"id\":\"combat-111\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且反击全落空，刚受击后仰\"},\n  {\"id\":\"combat-112\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已相距八米半，对方明确不再追赶\"},\n  {\"id\":\"combat-113\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方表示帮捡帽子并求和，未继续攻击\"},\n  {\"id\":\"combat-114\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方近身出拳还嘲讽，双方交战未结束\"}\n]",
+      "timing": {
+        "startup": 0.017100006516557187,
+        "thread_start": 56.64910000632517,
+        "turn_start": 62.341400000150315,
+        "first_delta": 5078.272800004925,
+        "model_terminal": 9409.756700006255
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9916,
+          "cachedInputTokens": 4096,
+          "outputTokens": 299,
+          "reasoningOutputTokens": 51,
+          "totalTokens": 10215,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9916,
+          "cachedInputTokens": 4096,
+          "outputTokens": 299,
+          "reasoningOutputTokens": 51,
+          "totalTokens": 10215,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 9.409902999999758
+    },
+    {
+      "ids": [
+        "combat-115",
+        "combat-116",
+        "combat-117",
+        "combat-118",
+        "combat-119",
+        "combat-120"
+      ],
+      "prompt_sha256": "4c7b93a64203a31cf635193816e0171bb11b648c44ee3d325b4897bd496e87c4",
+      "output": "[\n  {\"id\":\"combat-115\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且还击未中，对方仍近身追打\"},\n  {\"id\":\"combat-116\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"双方语气缓和，对方劝停且已相隔四米多\"},\n  {\"id\":\"combat-117\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"虽挨疼但仍能还击，对方近身继续追打\"},\n  {\"id\":\"combat-118\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已拉开八米且对方脱离视线，可停止逃跑\"},\n  {\"id\":\"combat-119\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方服软要求到此为止，距离也已拉开\"},\n  {\"id\":\"combat-120\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且还击未中，对方仍追近动手\"}\n]",
+      "timing": {
+        "startup": 0.01809999957913533,
+        "thread_start": 51.918199998908676,
+        "turn_start": 58.89819999720203,
+        "first_delta": 8338.432299999113,
+        "model_terminal": 12912.223300001642
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9922,
+          "cachedInputTokens": 0,
+          "outputTokens": 293,
+          "reasoningOutputTokens": 38,
+          "totalTokens": 10215,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9922,
+          "cachedInputTokens": 0,
+          "outputTokens": 293,
+          "reasoningOutputTokens": 38,
+          "totalTokens": 10215,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 12.912364499999967
+    },
+    {
+      "ids": [
+        "combat-121",
+        "combat-122",
+        "combat-123",
+        "combat-124",
+        "combat-125",
+        "combat-126"
+      ],
+      "prompt_sha256": "4b0a2ab09e909990f21a2d8abfdbc76e65660efae9c9931d33e182dabfc04f3a",
+      "output": "[\n  {\"id\":\"combat-121\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方已说明听岔并道歉，未继续攻击\"},\n  {\"id\":\"combat-122\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳且正在后仰，对方仍在攻击\"},\n  {\"id\":\"combat-123\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳，逃离时对方仍冲来追打\"},\n  {\"id\":\"combat-124\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"尚未受击，对方近距离冲来继续动手\"},\n  {\"id\":\"combat-125\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方明确认错求和，距离四米且无追打\"},\n  {\"id\":\"combat-126\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已拉开八米多并脱离视线，对方表示不追\"}\n]",
+      "timing": {
+        "startup": 0.0242000023717992,
+        "thread_start": 55.78870000317693,
+        "turn_start": 67.5868000034825,
+        "first_delta": 4051.3522000037483,
+        "model_terminal": 8559.202100004768
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9943,
+          "cachedInputTokens": 4096,
+          "outputTokens": 290,
+          "reasoningOutputTokens": 44,
+          "totalTokens": 10233,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9943,
+          "cachedInputTokens": 4096,
+          "outputTokens": 290,
+          "reasoningOutputTokens": 44,
+          "totalTokens": 10233,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 8.559346399997594
+    },
+    {
+      "ids": [
+        "combat-127",
+        "combat-128",
+        "combat-129",
+        "combat-130",
+        "combat-131",
+        "combat-132"
+      ],
+      "prompt_sha256": "e131ba5c4e0a051a974bb3cc703f8c2112da3bac45673c4af10d704bbe99ab79",
+      "output": "[\n  {\"id\":\"combat-127\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"刚又挨了一拳，双方未停手，交战仍在继续\"},\n  {\"id\":\"combat-128\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方明确不闹了，距离六米半且无继续攻击\"},\n  {\"id\":\"combat-129\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已相隔七米八，对方承诺不追，无新攻击\"},\n  {\"id\":\"combat-130\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"手已打抖，挨三拳且未命中，近处又遭打击\"},\n  {\"id\":\"combat-131\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"误会已澄清，对方明确道歉，也未实际受击\"},\n  {\"id\":\"combat-132\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"已挨三拳，对方仍从近处冲来追打\"}\n]",
+      "timing": {
+        "startup": 0.014700002793688327,
+        "thread_start": 51.65390000183834,
+        "turn_start": 58.73040000005858,
+        "first_delta": 4741.247100006149,
+        "model_terminal": 10318.846699999995
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 9926,
+          "cachedInputTokens": 3200,
+          "outputTokens": 295,
+          "reasoningOutputTokens": 38,
+          "totalTokens": 10221,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 9926,
+          "cachedInputTokens": 3200,
+          "outputTokens": 295,
+          "reasoningOutputTokens": 38,
+          "totalTokens": 10221,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 10.31896310000593
+    },
+    {
+      "ids": [
+        "combat-133",
+        "combat-134",
+        "combat-135",
+        "log-3641fec4-4fe6-d4df-e988-219e7f0f959d",
+        "log-e01428d0-404d-b5bf-d1ca-1ea8b9fe9957",
+        "log-ae281560-4a16-193c-629a-00b76a54ca37"
+      ],
+      "prompt_sha256": "51709ca862f7eaf997d6bfef8e485c08dc29a19821b2890907af8d481bcd06e2",
+      "output": "[\n  {\"id\":\"combat-133\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方再次挑战并冲来动手，自己尚未受击\"},\n  {\"id\":\"combat-134\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方已认输不争，相距480厘米且无继续攻击\"},\n  {\"id\":\"combat-135\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"已相距600厘米，对方缓手腕，未见继续追打\"},\n  {\"id\":\"log-3641fec4-4fe6-d4df-e988-219e7f0f959d\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"虽上一轮已停拳，对方仍近身冲来，自己未受击\"},\n  {\"id\":\"log-e01428d0-404d-b5bf-d1ca-1ea8b9fe9957\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"此前挨疼已退避，对方仍冲来，需继续拉开距离\"},\n  {\"id\":\"log-ae281560-4a16-193c-629a-00b76a54ca37\",\"input_ok\":true,\"action\":\"Flee\",\"target_id\":\"opponent\",\"reason\":\"退避后又遭追打并实际挨两拳，继续远离\"}\n]",
+      "timing": {
+        "startup": 0.014300007023848593,
+        "thread_start": 53.0951000037021,
+        "turn_start": 59.66370000533061,
+        "first_delta": 5659.895600001619,
+        "model_terminal": 11867.920300006517
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 11364,
+          "cachedInputTokens": 4096,
+          "outputTokens": 394,
+          "reasoningOutputTokens": 73,
+          "totalTokens": 11758,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 11364,
+          "cachedInputTokens": 4096,
+          "outputTokens": 394,
+          "reasoningOutputTokens": 73,
+          "totalTokens": 11758,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 11.868042699999933
+    },
+    {
+      "ids": [
+        "log-bf8f4920-48bf-51e0-a388-5a96c70cfd4a",
+        "log-7ade3889-4bc0-b303-1c26-43a3816c18ed",
+        "log-93bdcb86-456f-b41d-6194-4ab770433c9f",
+        "log-f0e042ef-462d-655b-c9e8-a293da50617a",
+        "log-c06566f0-4772-194f-cee5-4a8d0d57b8ab"
+      ],
+      "prompt_sha256": "9ee747372a064dba154072500cb0d5501d97652711d081323d8f63d37ab58f03",
+      "output": "[\n  {\"id\":\"log-bf8f4920-48bf-51e0-a388-5a96c70cfd4a\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"对方仍冲来追打，自己未受击，交战未结束\"},\n  {\"id\":\"log-7ade3889-4bc0-b303-1c26-43a3816c18ed\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"实际挨了三拳仍站立，己方也命中三拳，对方未停手\"},\n  {\"id\":\"log-93bdcb86-456f-b41d-6194-4ab770433c9f\",\"input_ok\":true,\"action\":\"Fight\",\"target_id\":\"opponent\",\"reason\":\"本轮出拳结束但对方又冲来，未受击且能行动\"},\n  {\"id\":\"log-f0e042ef-462d-655b-c9e8-a293da50617a\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方被打倒后已跑开，无继续进攻迹象，停止追打\"},\n  {\"id\":\"log-c06566f0-4772-194f-cee5-4a8d0d57b8ab\",\"input_ok\":true,\"action\":\"Wait\",\"target_id\":\"\",\"reason\":\"对方已跑开并表示不再耗下去，停手不追\"}\n]",
+      "timing": {
+        "startup": 0.014099998224992305,
+        "thread_start": 52.37040000065463,
+        "turn_start": 58.58319999970263,
+        "first_delta": 7212.241100001847,
+        "model_terminal": 12510.346100003517
+      },
+      "usage": {
+        "last": {
+          "inputTokens": 11570,
+          "cachedInputTokens": 4096,
+          "outputTokens": 441,
+          "reasoningOutputTokens": 110,
+          "totalTokens": 12011,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 11570,
+          "cachedInputTokens": 4096,
+          "outputTokens": 441,
+          "reasoningOutputTokens": 110,
+          "totalTokens": 12011,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "status": "completed",
+      "elapsed_seconds": 12.51046619999397
+    }
+  ],
+  "situations_sha256": "2bead50bef8edba5c4257629a60c804dac22c96f8f6c9af95e47e5a6ef48453a",
+  "acceptance_used": false
+}

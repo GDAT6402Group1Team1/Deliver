@@ -7,6 +7,7 @@ import time
 import uuid
 from pathlib import Path
 from app_server import AppServer
+from dialogue_background import RESIDENT_PROFILE_IDS, select_resident_profiles
 from server import validate_action, validate_context
 from streaming import SentenceParser, STREAM_INSTRUCTIONS, compact_context, model_context
 
@@ -15,7 +16,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def make_cases(profile, profiles=None):
     if profiles is None:
-        profiles = json.loads((ROOT / 'Design/AI/NpcProfiles.json').read_text(encoding='utf-8'))['characters']
+        profiles = select_resident_profiles(json.loads((ROOT / 'Design/AI/NpcProfiles.json').read_text(encoding='utf-8')))
+    else:
+        profiles = select_resident_profiles({'version': 1, 'characters': profiles})
+    if profile.get('id') not in RESIDENT_PROFILE_IDS:
+        raise ValueError('This dialogue review only accepts the two resident profiles')
     # 用人物编号找到另一位街坊，改名后场景中的称呼也随配置更新
     neighbors = [row for row in profiles if row['id'] != profile['id']]
     if sum(row['id'] == profile['id'] for row in profiles) != 1 or len(neighbors) != 1:
@@ -119,7 +124,7 @@ def main():
     args.add_argument('--context-format', choices=('original', 'short'), default='short')
     args = args.parse_args()
     os.environ['DELIVERY_CODEX_MODEL'] = args.model
-    profiles = json.loads((ROOT / 'Design/AI/NpcProfiles.json').read_text(encoding='utf-8'))['characters']
+    profiles = select_resident_profiles(json.loads((ROOT / 'Design/AI/NpcProfiles.json').read_text(encoding='utf-8')))
     folder = ROOT / 'Saved/AIResearch'
     folder.mkdir(parents=True, exist_ok=True)
     output = folder / Path(args.output).name

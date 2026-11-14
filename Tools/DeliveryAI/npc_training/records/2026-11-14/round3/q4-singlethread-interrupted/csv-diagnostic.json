@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-11-14T15:53:58.174510+00:00",
+  "usage": "只有中断后的文件完整性和异常窗口诊断，不属于性能验收",
+  "csv": {
+    "path": "Saved/Profiling/CSV/CombatQ4SingleThread.csv",
+    "sha256": "afa8723b1530a780228246a88b8f583e234bbe3d3a79d87e6dfd3245b8513fc2",
+    "bytes": 5063727,
+    "capture_id": "D600EF324456B242FBEA4CBE9E3581FD",
+    "capture_start_utc": "2026-11-14T15:42:35.263000+00:00",
+    "capture_end_utc": "2026-11-14T15:51:41.045000+00:00",
+    "log_duration_seconds": 545.782,
+    "sum_frame_time_seconds": 545.6512366000006,
+    "footer_capture_duration_seconds": 545.572521,
+    "sum_vs_log_difference_seconds": 0.13076339999940956,
+    "final_header_used": true,
+    "header_rows": 2,
+    "columns": 457,
+    "integrity": {
+      "data_rows": 2736,
+      "valid_frames": 2736,
+      "missing_frame_indices": [],
+      "zero_frame_indices": [],
+      "capture_duration_seconds": 545.6512366000006,
+      "ue_completion_footer_present": true,
+      "frame_column": "FrameTime",
+      "unit": "ms",
+      "metadata": {
+        "platform": "Windows",
+        "buildversion": "++UE5+Release-5.8-CL-56057345",
+        "systemresolution.resx": "960",
+        "systemresolution.resy": "720",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "deviceprofile": "WindowsEditor",
+        "endtimestamp": "1794671500",
+        "captureduration": "545.572521",
+        "csvmaxfilebytesreached": "0"
+      }
+    },
+    "log": "Saved/Logs/DeliveryOpenMicPlay.log",
+    "log_evidence": [
+      {
+        "line": 9190,
+        "text": "[2026.11.14-15.42.35:263][391]LogCsvProfiler: Display: Capture started. CSV ID: D600EF324456B242FBEA4CBE9E3581FD"
+      },
+      {
+        "line": 11922,
+        "text": "[2026.11.14-15.51.41:045][127]LogCsvProfiler: Display: Capture Ended. Writing CSV to file : ../../../../../Udev/Delivery/Saved/Profiling/CSV/CombatQ4SingleThread.csv"
+      },
+      {
+        "line": 11923,
+        "text": "[2026.11.14-15.51.41:045][128]LogCsvProfiler: Display:   Frames : 2736"
+      }
+    ]
+  },
+  "groups": {
+    "baseline-q4single70": {
+      "diagnostic_only": true,
+      "valid_performance_comparison": false,
+      "window_start_seconds": 63.652422,
+      "window_end_seconds": 133.663736,
+      "requested_seconds": 70,
+      "actual_load_seconds": 70.01133480000135,
+      "frames": 341,
+      "statistics": {
+        "FrameTime": {
+          "count": 341,
+          "sum_ms": 70056.6246,
+          "median_ms": 110.0348,
+          "p95_ms": 333.3384,
+          "max_ms": 1047.6188,
+          "nonzero_frames": 341
+        },
+        "GameThreadTime": {
+          "count": 341,
+          "sum_ms": 146268.4514,
+          "median_ms": 92.7859,
+          "p95_ms": 862.8362,
+          "max_ms": 862.8362,
+          "nonzero_frames": 341
+        },
+        "GPUTime": {
+          "count": 341,
+          "sum_ms": 3369.7237,
+          "median_ms": 15.4851,
+          "p95_ms": 20.557,
+          "max_ms": 22.9616,
+          "nonzero_frames": 341
+        },
+        "RenderThreadTime": {
+          "count": 341,
+          "sum_ms": 12.2749,
+          "median_ms": 0.0007,
+          "p95_ms": 0.0021,
+          "max_ms": 1.9949,
+          "nonzero_frames": 341
+        },
+        "Exclusive/GameThread/EventWait/EndPhysics": {
+          "count": 341,
+          "sum_ms": 2752.7843,
+          "median_ms": 11.3835,
+          "p95_ms": 18.3589,
+          "max_ms": 32.4128,
+          "nonzero_frames": 189
+        },
+        "Exclusive/GameThread/TimerManager": {
+          "count": 341,
+          "sum_ms": 4317.5903,
+          "median_ms": 17.7828,
+          "p95_ms": 28.2583,
+          "max_ms": 40.0754,
+          "nonzero_frames": 341
+        },
+        "Exclusive/GameThread/GarbageCollection": {
+          "count": 341,
+          "sum_ms": 44.7141,
+          "median_ms": 0.0,
+          "p95_ms": 0.0,
+          "max_ms": 44.7141,
+          "nonzero_frames": 1
+        },
+        "Exclusive/GameThread/GarbageCollectionFull": {
+          "count": 341,
+          "sum_ms": 18.4799,
+          "median_ms": 0.0,
+          "p95_ms": 0.0,
+          "max_ms": 18.4799,
+          "nonzero_frames": 1
+        }
+      },
+      "gc_event_count": 1,
+      "gc_count_column_sum": 1.0,
+      "gc_events": [
+        {
+          "capture_seconds": 82.764029,
+          "utc": "2026-11-14T15:43:58.027029+00:00",
+          "frame": 857,
+          "trigger_frame_gc_ms": 44.7141,
+          "trigger_frame_gc_full_ms": 18.4799,
+          "count": 1.0,
+          "csv_event_cell": "FlushAsyncLoading##82.494394;GC##82.764029"
+        }
+      ],
+      "gc_note": "baseline 中的 GC 与 PIE 退出清理重叠，不能认作稳定运行下自然周期；Q4 窗口没有自然 GC，且负载只持续55.83秒",
+      "frame_warning": "这些数值包含游戏已结束或第二个编辑器启动时段，不作为同一场景对照，不计算提升百分比"
+    },
+    "local99-q4single70": {
+      "diagnostic_only": true,
+      "valid_performance_comparison": false,
+      "window_start_seconds": 163.51943,
+      "window_end_seconds": 219.350777,
+      "requested_seconds": 70,
+      "actual_load_seconds": 55.83136020000529,
+      "frames": 165,
+      "statistics": {
+        "FrameTime": {
+          "count": 165,
+          "sum_ms": 55805.7752,
+          "median_ms": 333.3336,
+          "p95_ms": 333.3512,
+          "max_ms": 1136.4324,
+          "nonzero_frames": 165
+        },
+        "GameThreadTime": {
+          "count": 165,
+          "sum_ms": 142367.973,
+          "median_ms": 862.8362,
+          "p95_ms": 862.8362,
+          "max_ms": 862.8362,
+          "nonzero_frames": 165
+        },
+        "GPUTime": {
+          "count": 165,
+          "sum_ms": 50.0398,
+          "median_ms": 0.2566,
+          "p95_ms": 0.5660199999999997,
+          "max_ms": 1.4516,
+          "nonzero_frames": 165
+        },
+        "RenderThreadTime": {
+          "count": 165,
+          "sum_ms": 21.3982,
+          "median_ms": 0.0015,
+          "p95_ms": 1.2026399999999744,
+          "max_ms": 4.1107,
+          "nonzero_frames": 165
+        },
+        "Exclusive/GameThread/EventWait/EndPhysics": {
+          "count": 165,
+          "sum_ms": 0.0,
+          "median_ms": 0.0,
+          "p95_ms": 0.0,
+          "max_ms": 0.0,
+          "nonzero_frames": 0
+        },
+        "Exclusive/GameThread/TimerManager": {
+          "count": 165,
+          "sum_ms": 32.8225,
+          "median_ms": 0.0099,
+          "p95_ms": 0.45446,
+          "max_ms": 8.4487,
+          "nonzero_frames": 165
+        },
+        "Exclusive/GameThread/GarbageCollection": {
+          "count": 165,
+          "sum_ms": 0.0,
+          "median_ms": 0.0,
+          "p95_ms": 0.0,
+          "max_ms": 0.0,
+          "nonzero_frames": 0
+        },
+        "Exclusive/GameThread/GarbageCollectionFull": {
+          "count": 165,
+          "sum_ms": 0.0,
+          "median_ms": 0.0,
+          "p95_ms": 0.0,
+          "max_ms": 0.0,
+          "nonzero_frames": 0
+        }
+      },
+      "gc_event_count": 0,
+      "gc_count_column_sum": 0.0,
+      "gc_events": [],
+      "gc_note": "baseline 中的 GC 与 PIE 退出清理重叠，不能认作稳定运行下自然周期；Q4 窗口没有自然 GC，且负载只持续55.83秒",
+      "frame_warning": "这些数值包含游戏已结束或第二个编辑器启动时段，不作为同一场景对照，不计算提升百分比"
+    }
+  },
+  "all_gc_events": [
+    {
+      "capture_seconds": 58.699625,
+      "utc": "2026-11-14T15:43:33.962625+00:00",
+      "frame": 615,
+      "trigger_frame_gc_ms": 25.0321,
+      "trigger_frame_gc_full_ms": 0.0,
+      "count": 1.0,
+      "csv_event_cell": "GC##58.699625"
+    },
+    {
+      "capture_seconds": 82.764029,
+      "utc": "2026-11-14T15:43:58.027029+00:00",
+      "frame": 857,
+      "trigger_frame_gc_ms": 44.7141,
+      "trigger_frame_gc_full_ms": 18.4799,
+      "count": 1.0,
+      "csv_event_cell": "FlushAsyncLoading##82.494394;GC##82.764029"
+    },
+    {
+      "capture_seconds": 469.015106,
+      "utc": "2026-11-14T15:50:24.278106+00:00",
+      "frame": 1995,
+      "trigger_frame_gc_ms": 6.39,
+      "trigger_frame_gc_full_ms": 69.8207,
+      "count": 1.0,
+      "csv_event_cell": "FlushAsyncLoading##463.216579;GC##469.015106;ledstart##469.710219"
+    },
+    {
+      "capture_seconds": 471.425153,
+      "utc": "2026-11-14T15:50:26.688153+00:00",
+      "frame": 1998,
+      "trigger_frame_gc_ms": 73.2426,
+      "trigger_frame_gc_full_ms": 21.5343,
+      "count": 1.0,
+      "csv_event_cell": "FlushAsyncLoading##471.123395;GC##471.425153"
+    },
+    {
+      "capture_seconds": 532.201469,
+      "utc": "2026-11-14T15:51:27.464469+00:00",
+      "frame": 2590,
+      "trigger_frame_gc_ms": 26.0087,
+      "trigger_frame_gc_full_ms": 0.0,
+      "count": 1.0,
+      "csv_event_cell": "GC##532.201469"
+    }
+  ],
+  "gc_scope_warning": "GC scope 包含触发帧和分帧清理；非零帧数不是 GC 次数，且分帧清理可能跨窗口边界",
+  "qualified_comparison": false,
+  "p95_increase_fraction": null,
+  "acceptance_passed": false,
+  "all_later_idle_or_ui_activity_excluded_after": "2026-11-14T15:46:14.613777+00:00"
+}

@@ -2,6 +2,7 @@
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
+#include "AI/Companion/DeliveryCompanionComponent.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
 #include "Perception/AISenseConfig_Hearing.h"
@@ -11,9 +12,12 @@
 #include "Engine/World.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "BehaviorTree/BehaviorTree.h"
+#include "Navigation/PathFollowingComponent.h"
+#include "Engine/OverlapResult.h"
 
 ADeliveryNpcAIController::ADeliveryNpcAIController()
 {
+    PrimaryActorTick.bCanEverTick=true;
     auto* Senses=CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("ResidentPerception")); SetPerceptionComponent(*Senses);
     Sight=CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("Sight"));
     Sight->SightRadius=1200; Sight->LoseSightRadius=1400; Sight->PeripheralVisionAngleDegrees=100; Sight->SetMaxAge(6);
@@ -21,6 +25,109 @@ ADeliveryNpcAIController::ADeliveryNpcAIController()
     Hearing=CreateDefaultSubobject<UAISenseConfig_Hearing>(TEXT("Hearing")); Hearing->HearingRange=900; Hearing->SetMaxAge(6);
     Hearing->DetectionByAffiliation=Sight->DetectionByAffiliation;
     Senses->ConfigureSense(*Sight); Senses->ConfigureSense(*Hearing); Senses->SetDominantSense(Sight->GetSenseImplementation());
+}
+void ADeliveryNpcAIController::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    if (HasAuthority()) UpdateStandingSpace();
+}
+void ADeliveryNpcAIController::StopSpacingMove()
+{
+    const FAIRequestID OldId=SpacingMoveId;
+    SpacingMoveId=FAIRequestID::InvalidRequest;
+    SpacingNeighbor.Reset();
+    SpacingMoveEndsAt=0;
+    auto* Path=GetPathFollowingComponent();
+    // 新动作可能已经替换这条路径，只取消自己发起的那一次移动
+    if (OldId.IsValid() && Path && Path->GetCurrentRequestId()==OldId)
+        Path->AbortMove(*this,FPathFollowingResultFlags::UserAbort,OldId);
+}
+bool ADeliveryNpcAIController::HasRoomToStand(const ADeliveryNpcCharacter* Npc,const FVector& Destination) const
+{
+    const float Gap=FMath::Clamp(MinStandingGap,20.f,150.f);
+    TArray<FOverlapResult> Nearby;
+    const FVector Center=Destination+FVector(0,0,Npc->GetSimpleCollisionHalfHeight());
+    GetWorld()->OverlapMultiByObjectType(Nearby,Center,FQuat::Identity,FCollisionObjectQueryParams(ECC_Pawn),
+        FCollisionShape::MakeSphere(Npc->GetSimpleCollisionRadius()+Gap),FCollisionQueryParams(SCENE_QUERY_STAT(NpcStandingSpace),false,Npc));
+    for (const auto& Hit:Nearby)
+    {
+        const auto* Other=Cast<ADeliveryNpcCharacter>(Hit.GetActor());
+        if (IsValid(Other) && Other!=Npc && !Other->IsHidden() &&
+            FMath::Abs(Center.Z-Other->GetActorLocation().Z)<Npc->GetSimpleCollisionHalfHeight()+Other->GetSimpleCollisionHalfHeight() &&
+            FVector::Dist2D(Center,Other->GetActorLocation())<Npc->GetSimpleCollisionRadius()+Other->GetSimpleCollisionRadius()+Gap)
+            return false;
+    }
+    return true;
+}
+void ADeliveryNpcAIController::UpdateStandingSpace()
+{
+    auto* Npc=Cast<ADeliveryNpcCharacter>(GetPawn());
+    auto* Path=GetPathFollowingComponent();
+    const double Now=GetWorld()->GetTimeSeconds();
+    if (!bKeepDistanceWhenIdle || !Npc || !Path || Npc->IsHidden() || !Npc->CanAdjustStandingPosition())
+    { StopSpacingMove(); return; }
+    const float StartGap=FMath::Clamp(MinStandingGap,20.f,150.f);
+    const float StopGap=FMath::Max(StartGap+30.f,FMath::Clamp(ComfortableStandingGap,40.f,200.f));
+    if (SpacingMoveId.IsValid())
+    {
+        const auto* Other=SpacingNeighbor.Get();
+        const bool bFinished=Path->GetCurrentRequestId()!=SpacingMoveId || GetMoveStatus()==EPathFollowingStatus::Idle;
+        const bool bOtherBusy=Other && !Other->IsKnockedDown() && !Other->CanAdjustStandingPosition();
+        const bool bFarEnough=Other && FVector::Dist2D(Npc->GetActorLocation(),Other->GetActorLocation())>=
+            Npc->GetSimpleCollisionRadius()+Other->GetSimpleCollisionRadius()+StopGap-8.f;
+        if (bFinished || !Other || bOtherBusy || bFarEnough || Now>=SpacingMoveEndsAt)
+        {
+            StopSpacingMove();
+            NextSpacingCheck=Now+1.2;
+        }
+        return;
+    }
+    if (Now<NextSpacingCheck || GetMoveStatus()!=EPathFollowingStatus::Idle || Npc->GetVelocity().SizeSquared2D()>FMath::Square(20.f)) return;
+    NextSpacingCheck=Now+.4;
+    TArray<FOverlapResult> Nearby;
+    GetWorld()->OverlapMultiByObjectType(Nearby,Npc->GetActorLocation(),FQuat::Identity,FCollisionObjectQueryParams(ECC_Pawn),
+        FCollisionShape::MakeSphere(Npc->GetSimpleCollisionRadius()+StartGap),FCollisionQueryParams(SCENE_QUERY_STAT(NpcStandingNeighbors),false,Npc));
+    ADeliveryNpcCharacter* Neighbor=nullptr;
+    float NearestGap=StartGap;
+    for (const auto& Hit:Nearby)
+    {
+        auto* Other=Cast<ADeliveryNpcCharacter>(Hit.GetActor());
+        if (!IsValid(Other) || Other==Npc || Other->IsHidden()) continue;
+        const auto& Action=Other->Agent->GetPublicState();
+        // 对方还在向自己出拳或追打时，不用空闲避让替模型决定逃跑
+        if (Other->Agent->HasActiveAction() && Action.Target==Npc &&
+            (Action.Action==EDeliveryNpcAction::Fight || Action.Action==EDeliveryNpcAction::StrikeOnce)) return;
+        if (!Other->IsKnockedDown() && !Other->CanAdjustStandingPosition()) continue;
+        const auto* OtherController=Cast<AAIController>(Other->GetController());
+        if (Other->GetVelocity().SizeSquared2D()>FMath::Square(20.f) ||
+            (OtherController && OtherController->GetMoveStatus()!=EPathFollowingStatus::Idle)) continue;
+        const float Gap=FVector::Dist2D(Npc->GetActorLocation(),Other->GetActorLocation())-
+            Npc->GetSimpleCollisionRadius()-Other->GetSimpleCollisionRadius();
+        if (Gap>=NearestGap || FMath::Abs(Npc->GetActorLocation().Z-Other->GetActorLocation().Z)>=
+            Npc->GetSimpleCollisionHalfHeight()+Other->GetSimpleCollisionHalfHeight()) continue;
+        FHitResult Obstacle;
+        if (GetWorld()->LineTraceSingleByChannel(Obstacle,Npc->GetActorLocation(),Other->GetActorLocation(),ECC_Visibility,
+            FCollisionQueryParams(SCENE_QUERY_STAT(NpcStandingSight),false,Npc)) && Obstacle.GetActor()!=Other) continue;
+        NearestGap=Gap; Neighbor=Other;
+    }
+    if (!Neighbor) return;
+    FVector Destination;
+    if (!Npc->FindStandingSpace(Neighbor,StopGap,Destination) || !HasRoomToStand(Npc,Destination))
+    { NextSpacingCheck=Now+1.5; return; }
+    FAIMoveRequest Request(Destination);
+    Request.SetNavigationFilter(GetDefaultNavigationFilterClass());
+    Request.SetAcceptanceRadius(8.f);
+    Request.SetReachTestIncludesAgentRadius(false);
+    Request.SetReachTestIncludesGoalRadius(false);
+    Request.SetAllowPartialPath(false);
+    const auto Result=MoveTo(Request);
+    if (Result.Code==EPathFollowingRequestResult::RequestSuccessful)
+    {
+        SpacingMoveId=Result.MoveId;
+        SpacingNeighbor=Neighbor;
+        SpacingMoveEndsAt=Now+3;
+    }
+    else NextSpacingCheck=Now+1.5;
 }
 void ADeliveryNpcAIController::OnPossess(APawn* InPawn)
 {
@@ -33,9 +140,16 @@ void ADeliveryNpcAIController::OnPossess(APawn* InPawn)
 }
 void ADeliveryNpcAIController::OnUnPossess()
 {
+    if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetPawn()); Npc && Npc->Combat) Npc->Combat->ResetHitFacing();
+    StopSpacingMove();
     GetPerceptionComponent()->OnTargetPerceptionUpdated.RemoveDynamic(this,&ADeliveryNpcAIController::OnTargetSeenOrHeard);
     if (auto* Resident=Cast<ADeliveryNpcCharacter>(GetPawn())) Resident->Agent->CancelPlan(TEXT("ControllerLost"));
     Super::OnUnPossess();
+}
+void ADeliveryNpcAIController::EndPlay(const EEndPlayReason::Type Reason)
+{
+    StopSpacingMove();
+    Super::EndPlay(Reason);
 }
 void ADeliveryNpcAIController::OnTargetSeenOrHeard(AActor* Target,FAIStimulus Stimulus)
 {
@@ -77,9 +191,15 @@ void ADeliveryNpcAIController::RefreshBlackboard()
     const auto State=Resident->Agent->GetPublicState();
     BB->SetValueAsBool(TEXT("Unavailable"),Resident->IsKnockedDown() && !Resident->Combat->IsDeliberatelyProne());
     if (BB->GetKeyID(TEXT("Listening"))!=FBlackboard::InvalidKey)
-        BB->SetValueAsBool(TEXT("Listening"),Resident->Agent->IsListening());
+        BB->SetValueAsBool(TEXT("Listening"),Resident->Agent->ShouldPauseForConversation());
     // 旧黑板资产仍使用这个键名，函数重命名时保留它以兼容已有行为树
     BB->SetValueAsBool(TEXT("HasApprovedAction"),Resident->Agent->HasActiveAction());
+    // 二狗使用独立黑板，普通居民不增加同伴状态；暂停不抹掉已经确认的委托
+    if (BB->GetKeyID(TEXT("HasCompanionErrand"))!=FBlackboard::InvalidKey)
+    {
+        const auto* Companion=Resident->FindComponentByClass<UDeliveryCompanionComponent>();
+        BB->SetValueAsBool(TEXT("HasCompanionErrand"),Companion && Companion->HasActiveErrand());
+    }
     BB->SetValueAsObject(TEXT("ActionTarget"),State.Target);
     BB->SetValueAsInt(TEXT("PlanRevision"),State.PlanRevision);
     // 定时更新视野内的角色，让 NPC 记得仍在眼前的人

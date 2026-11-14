@@ -16,6 +16,8 @@ class Job:
         self._cancelled_by_request = False
         self.created = time.monotonic()
         self.finished = False
+        # 模型返回后即可接下一次决定，旧回复仍保留到语音任务退出
+        self.model_finished = False
         # 模型调用结束后，由这个 Future 通知本轮语音任务已结束；不表示游戏已播放
         self.completion = None
 
@@ -145,10 +147,22 @@ class Scheduler:
                 job.fail(type(error).__name__)
             finally:
                 # 模型函数已返回，工作线程可以接下一项；原回复等语音真正结束后再移除
+                self._finish_model(job)
                 if job.completion is None:
                     self._finish(job)
                 else:
                     job.completion.add_done_callback(lambda _, current=job: self._finish(current))
+
+    def _finish_model(self, job):
+        with self.condition:
+            if job.model_finished:
+                return
+            job.model_finished = True
+            if job.priority == 1:
+                self.running_ambient -= 1
+            else:
+                self.running_players -= 1
+            self.condition.notify_all()
 
     def _finish(self, job):
         with self.condition:
@@ -156,10 +170,6 @@ class Scheduler:
                 return
             job.finished = True
             self.jobs.pop(job.key)
-            if job.priority == 1:
-                self.running_ambient -= 1
-            else:
-                self.running_players -= 1
             self.condition.notify_all()
 
     def close(self):

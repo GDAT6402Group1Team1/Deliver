@@ -1,0 +1,695 @@
+{
+  "source": "Saved\\AIResearch\\NpcTraining\\combat-v6\\validation-new.json",
+  "source_sha256": "ddfbbf6ae39f91393ba5f81f8aba3de00af8fdcdf15bbc5c9829ff4b047faa67",
+  "split": "validation",
+  "samples": 16,
+  "timeout_seconds": 1.5,
+  "results": [
+    {
+      "id": "change-032-branch-1",
+      "group_id": "change-032",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "追着滚动的线轴",
+        "branch": 1,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": false,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 524,
+        "prompt_n": 256,
+        "prompt_ms": 224.88,
+        "prompt_per_token_ms": 0.8784375,
+        "prompt_per_second": 1138.3849163998577,
+        "predicted_n": 13,
+        "predicted_ms": 82.536,
+        "predicted_per_token_ms": 6.348923076923077,
+        "predicted_per_second": 157.50702723659978
+      },
+      "complete_ms": 361.340299998119,
+      "timing": {
+        "combat_prompt_ready": 30.41310000116937,
+        "combat_model_done": 361.09059999580495
+      }
+    },
+    {
+      "id": "change-015-branch-1",
+      "group_id": "change-015",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "手绢花展示",
+        "branch": 1,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 524,
+        "prompt_n": 252,
+        "prompt_ms": 32.899,
+        "prompt_per_token_ms": 0.1305515873015873,
+        "prompt_per_second": 7659.8072889753485,
+        "predicted_n": 10,
+        "predicted_ms": 60.191,
+        "predicted_per_token_ms": 6.0191,
+        "predicted_per_second": 166.1377946869133
+      },
+      "complete_ms": 155.82370000629453,
+      "timing": {
+        "combat_prompt_ready": 29.99909999925876,
+        "combat_model_done": 155.62689999933355
+      }
+    },
+    {
+      "id": "change-024-branch-1",
+      "group_id": "change-024",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "躲开挂着的彩带",
+        "branch": 1,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 600,
+        "prompt_n": 177,
+        "prompt_ms": 31.696,
+        "prompt_per_token_ms": 0.17907344632768363,
+        "prompt_per_second": 5584.300858152448,
+        "predicted_n": 10,
+        "predicted_ms": 65.309,
+        "predicted_per_token_ms": 6.5309,
+        "predicted_per_second": 153.1182532269672
+      },
+      "complete_ms": 157.36749999632593,
+      "timing": {
+        "combat_prompt_ready": 28.770999997504987,
+        "combat_model_done": 157.16860000247834
+      }
+    },
+    {
+      "id": "change-015-branch-2",
+      "group_id": "change-015",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "手绢花展示",
+        "branch": 2,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 600,
+        "prompt_n": 170,
+        "prompt_ms": 32.199,
+        "prompt_per_token_ms": 0.18940588235294117,
+        "prompt_per_second": 5279.667070405913,
+        "predicted_n": 12,
+        "predicted_ms": 67.591,
+        "predicted_per_token_ms": 5.632583333333333,
+        "predicted_per_second": 177.53842967258956
+      },
+      "complete_ms": 174.5846999983769,
+      "timing": {
+        "combat_prompt_ready": 52.54119999881368,
+        "combat_model_done": 174.38599999877624
+      }
+    },
+    {
+      "id": "change-016-branch-1",
+      "group_id": "change-016",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "拔河口角结束",
+        "branch": 1,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 212,
+        "prompt_n": 564,
+        "prompt_ms": 81.37,
+        "prompt_per_token_ms": 0.1442730496453901,
+        "prompt_per_second": 6931.30146245545,
+        "predicted_n": 13,
+        "predicted_ms": 73.838,
+        "predicted_per_token_ms": 5.679846153846153,
+        "predicted_per_second": 176.06110674720335
+      },
+      "complete_ms": 217.30489999754354,
+      "timing": {
+        "combat_prompt_ready": 20.017200004076585,
+        "combat_model_done": 217.1033000049647
+      }
+    },
+    {
+      "id": "change-007-branch-2",
+      "group_id": "change-007",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "合唱照片裁切",
+        "branch": 2,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 527,
+        "prompt_n": 252,
+        "prompt_ms": 33.007,
+        "prompt_per_token_ms": 0.13098015873015872,
+        "prompt_per_second": 7634.7441451813265,
+        "predicted_n": 12,
+        "predicted_ms": 62.841,
+        "predicted_per_token_ms": 5.23675,
+        "predicted_per_second": 190.95813242946485
+      },
+      "complete_ms": 124.60210000426741,
+      "timing": {
+        "combat_prompt_ready": 19.623400003183633,
+        "combat_model_done": 124.4038000004366
+      }
+    },
+    {
+      "id": "change-040-branch-1",
+      "group_id": "change-040",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "把争论留给排练",
+        "branch": 1,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": false,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 603,
+        "prompt_n": 200,
+        "prompt_ms": 31.541,
+        "prompt_per_token_ms": 0.157705,
+        "prompt_per_second": 6340.9530452427,
+        "predicted_n": 13,
+        "predicted_ms": 69.48,
+        "predicted_per_token_ms": 5.344615384615385,
+        "predicted_per_second": 187.1042026482441
+      },
+      "complete_ms": 157.18990000459598,
+      "timing": {
+        "combat_prompt_ready": 33.854200002679136,
+        "combat_model_done": 156.97050000017043
+      }
+    },
+    {
+      "id": "change-007-branch-1",
+      "group_id": "change-007",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "合唱照片裁切",
+        "branch": 1,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": false,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 603,
+        "prompt_n": 181,
+        "prompt_ms": 31.338,
+        "prompt_per_token_ms": 0.17313812154696134,
+        "prompt_per_second": 5775.735528751037,
+        "predicted_n": 12,
+        "predicted_ms": 62.231,
+        "predicted_per_token_ms": 5.1859166666666665,
+        "predicted_per_second": 192.82994006202696
+      },
+      "complete_ms": 165.9635000032722,
+      "timing": {
+        "combat_prompt_ready": 48.97950000304263,
+        "combat_model_done": 165.78900000604335
+      }
+    },
+    {
+      "id": "change-024-branch-2",
+      "group_id": "change-024",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "躲开挂着的彩带",
+        "branch": 2,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 600,
+        "prompt_n": 169,
+        "prompt_ms": 29.465,
+        "prompt_per_token_ms": 0.1743491124260355,
+        "prompt_per_second": 5735.6185304598675,
+        "predicted_n": 12,
+        "predicted_ms": 63.189,
+        "predicted_per_token_ms": 5.26575,
+        "predicted_per_second": 189.90647106300148
+      },
+      "complete_ms": 197.85560000309488,
+      "timing": {
+        "combat_prompt_ready": 53.19210000016028,
+        "combat_model_done": 197.699600001215
+      }
+    },
+    {
+      "id": "change-040-branch-2",
+      "group_id": "change-040",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "把争论留给排练",
+        "branch": 2,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 603,
+        "prompt_n": 177,
+        "prompt_ms": 29.305,
+        "prompt_per_token_ms": 0.16556497175141244,
+        "prompt_per_second": 6039.924927486777,
+        "predicted_n": 10,
+        "predicted_ms": 51.619,
+        "predicted_per_token_ms": 5.1619,
+        "predicted_per_second": 193.72711598442436
+      },
+      "complete_ms": 147.36310000444064,
+      "timing": {
+        "combat_prompt_ready": 30.721899995114654,
+        "combat_model_done": 147.20600000146078
+      }
+    },
+    {
+      "id": "change-032-branch-2",
+      "group_id": "change-032",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "追着滚动的线轴",
+        "branch": 2,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": false,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 524,
+        "prompt_n": 245,
+        "prompt_ms": 33.754,
+        "prompt_per_token_ms": 0.13777142857142857,
+        "prompt_per_second": 7258.399004562422,
+        "predicted_n": 13,
+        "predicted_ms": 69.046,
+        "predicted_per_token_ms": 5.31123076923077,
+        "predicted_per_second": 188.28027691683803
+      },
+      "complete_ms": 201.8205000058515,
+      "timing": {
+        "combat_prompt_ready": 48.492699999769684,
+        "combat_model_done": 201.61889999872074
+      }
+    },
+    {
+      "id": "change-016-branch-2",
+      "group_id": "change-016",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "拔河口角结束",
+        "branch": 2,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 527,
+        "prompt_n": 262,
+        "prompt_ms": 45.615,
+        "prompt_per_token_ms": 0.1741030534351145,
+        "prompt_per_second": 5743.724651978516,
+        "predicted_n": 10,
+        "predicted_ms": 55.973,
+        "predicted_per_token_ms": 5.5973,
+        "predicted_per_second": 178.65756704125204
+      },
+      "complete_ms": 199.10510000045178,
+      "timing": {
+        "combat_prompt_ready": 48.86550000082934,
+        "combat_model_done": 198.91410000127507
+      }
+    },
+    {
+      "id": "change-023-branch-2",
+      "group_id": "change-023",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "临时漏水管",
+        "branch": 2,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": false,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 604,
+        "prompt_n": 178,
+        "prompt_ms": 31.751,
+        "prompt_per_token_ms": 0.17837640449438202,
+        "prompt_per_second": 5606.122641806557,
+        "predicted_n": 13,
+        "predicted_ms": 69.744,
+        "predicted_per_token_ms": 5.364923076923077,
+        "predicted_per_second": 186.3959623766919
+      },
+      "complete_ms": 145.10940000036499,
+      "timing": {
+        "combat_prompt_ready": 19.673399998282548,
+        "combat_model_done": 144.89509999839356
+      }
+    },
+    {
+      "id": "change-023-branch-1",
+      "group_id": "change-023",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "临时漏水管",
+        "branch": 1,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": false,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 639,
+        "prompt_n": 175,
+        "prompt_ms": 31.209,
+        "prompt_per_token_ms": 0.17833714285714286,
+        "prompt_per_second": 5607.356852190073,
+        "predicted_n": 13,
+        "predicted_ms": 68.855,
+        "predicted_per_token_ms": 5.296538461538462,
+        "predicted_per_second": 188.80255609614406
+      },
+      "complete_ms": 152.10559999832185,
+      "timing": {
+        "combat_prompt_ready": 28.780699998605996,
+        "combat_model_done": 151.86759999778587
+      }
+    },
+    {
+      "id": "change-008-branch-2",
+      "group_id": "change-008",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "认错同色雨披",
+        "branch": 2,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": false,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 601,
+        "prompt_n": 189,
+        "prompt_ms": 31.762,
+        "prompt_per_token_ms": 0.16805291005291007,
+        "prompt_per_second": 5950.506895031799,
+        "predicted_n": 13,
+        "predicted_ms": 70.037,
+        "predicted_per_token_ms": 5.3874615384615385,
+        "predicted_per_second": 185.61617430786583
+      },
+      "complete_ms": 184.36629999632714,
+      "timing": {
+        "combat_prompt_ready": 33.765599997423124,
+        "combat_model_done": 184.1978000011295
+      }
+    },
+    {
+      "id": "change-008-branch-1",
+      "group_id": "change-008",
+      "source": {
+        "kind": "authored_round3_state_change",
+        "gameplay_recording": false,
+        "topic": "认错同色雨披",
+        "branch": 1,
+        "basis": "general state-change failure categories; not a rewritten acceptance case",
+        "branches_are_alternatives_not_executed_trajectories": true
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 638,
+        "prompt_n": 136,
+        "prompt_ms": 28.145,
+        "prompt_per_token_ms": 0.2069485294117647,
+        "prompt_per_second": 4832.119381772962,
+        "predicted_n": 13,
+        "predicted_ms": 72.767,
+        "predicted_per_token_ms": 5.5974615384615385,
+        "predicted_per_second": 178.65241112042548
+      },
+      "complete_ms": 161.23179999704007,
+      "timing": {
+        "combat_prompt_ready": 51.310900002135895,
+        "combat_model_done": 160.98159999819472
+      }
+    }
+  ],
+  "status": "completed",
+  "context_tokens": 4096,
+  "max_output_tokens": 64,
+  "sampling": {
+    "temperature": 0.0,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0,
+    "seed": 20261114
+  },
+  "repeated_identical_prompt_is_separate_metric": true,
+  "scoring_definition": "v2: reasonable action >=90%, 40+ cases, all outputs and targets legal; technical cancellation checks are separate",
+  "scoring_changed_before_round2_inference": true,
+  "model_runtime": {
+    "pid": 49796,
+    "device": "cuda",
+    "started_utc": "2026-11-14T12:23:16.856827+00:00",
+    "log": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\logs\\llama-cuda-20261114-202315.log",
+    "command": [
+      "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-server.exe",
+      "--model",
+      "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v5\\export-round2\\combat-Q8_0.gguf",
+      "--alias",
+      "delivery-npc-qwen3",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8771",
+      "--ctx-size",
+      "4096",
+      "--parallel",
+      "1",
+      "--n-predict",
+      "64",
+      "--threads",
+      "4",
+      "--threads-batch",
+      "8",
+      "--batch-size",
+      "256",
+      "--ubatch-size",
+      "128",
+      "--cache-type-k",
+      "f16",
+      "--cache-type-v",
+      "f16",
+      "--no-context-shift",
+      "--jinja",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--temp",
+      "0.0",
+      "--top-p",
+      "0.8",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0",
+      "--metrics",
+      "--slots",
+      "--no-ui",
+      "--n-gpu-layers",
+      "99",
+      "--flash-attn",
+      "on"
+    ],
+    "health": "http://127.0.0.1:8771/health",
+    "environment_example_only": {
+      "DELIVERY_AI_MODEL_URL": "http://127.0.0.1:8771/v1/chat/completions",
+      "DELIVERY_AI_MODEL": "delivery-npc-qwen3"
+    },
+    "gpu_layers": 99,
+    "model_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v5\\export-round2\\combat-Q8_0.gguf",
+    "model_sha256": "c213093220ba95c146c84560a96a14be01281e9c3e89dc213e5662db2455fc0e",
+    "context_tokens": 4096,
+    "output_tokens": 64,
+    "temperature": 0.0,
+    "slots": "http://127.0.0.1:8771/slots"
+  },
+  "summary": {
+    "cases": 16,
+    "correct": 9,
+    "protocol_valid": 16,
+    "target_valid": 16,
+    "accuracy": 0.5625,
+    "first_pass_ms_median": 163.59765000015614,
+    "first_pass_ms_p95": 361.340299998119,
+    "exact_repeat_ms_p95": null,
+    "unwanted_fight": 1,
+    "acceptance_qualified": false,
+    "integration_checks_required": true
+  }
+}

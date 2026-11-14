@@ -1,0 +1,41 @@
+{
+  "training_only": true,
+  "acceptance_used": false,
+  "counts": {
+    "0 hits / Fight": {
+      "Fight": 18,
+      "Wait": 23
+    },
+    "1 hits / Fight": {
+      "Fight": 9,
+      "Flee": 1,
+      "Wait": 8
+    },
+    "3 hits / Fight": {
+      "Flee": 17
+    },
+    "2 hits / Fight": {
+      "Wait": 2,
+      "Fight": 2,
+      "Flee": 1
+    },
+    "3 hits / Flee": {
+      "Flee": 13,
+      "Wait": 10
+    },
+    "2 hits / Flee": {
+      "Flee": 4,
+      "Wait": 5
+    },
+    "0 hits / Flee": {
+      "Fight": 8,
+      "Wait": 2,
+      "Flee": 1
+    },
+    "1 hits / Flee": {
+      "Fight": 2,
+      "Flee": 2
+    }
+  },
+  "all_authored_training_have_self_speech": true
+}

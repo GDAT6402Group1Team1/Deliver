@@ -4,7 +4,9 @@
 #include "InputAction.h"
 #include "InputActionValue.h"
 #include "GameFramework/PlayerController.h"
+#include "Player/DeliveryPlayerController.h"
 #include "InputCoreTypes.h"
+#include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Vehicle/DeliveryVehicleSummonComponent.h"
@@ -112,13 +114,15 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
         EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this,
                                            &UDeliveryInputComponent::MouseLook);
     }
-    // 松开移动键时也调用 Move，将移动方向清零
+    // 松开和取消都显式清零，不沿用结束事件可能携带的旧轴值
     if (MoveAction)
     {
         EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this,
                                            &UDeliveryInputComponent::Move);
         EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this,
-                                           &UDeliveryInputComponent::Move);
+                                           &UDeliveryInputComponent::MoveEnded);
+        EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Canceled, this,
+                                           &UDeliveryInputComponent::MoveEnded);
     }
     // 跳跃只处理按下，不随持续按住重复发起
     if (JumpAction)
@@ -192,9 +196,21 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
 
 void UDeliveryInputComponent::Move(const FInputActionValue &Value)
 {
-    if (!IsValid(Character)) return;
+    // 交接控制权当帧仍可能收到旧输入栈的 Triggered
+    if (!IsValid(Character) || !Character->IsLocallyControlled()) return;
+    const auto* Player = Cast<ADeliveryPlayerController>(Character->GetController());
+    if (Player && (!Player->CanAcceptWalkingInput() || Player->IsMoveInputIgnored()))
+    {
+        MoveEnded(Value);
+        return;
+    }
     const FVector2D Axis = Value.Get<FVector2D>();
     Character->DoMove(Axis.X, Axis.Y);
+}
+
+void UDeliveryInputComponent::MoveEnded(const FInputActionValue &)
+{
+    if (IsValid(Character)) Character->DoMove(0.0f, 0.0f);
 }
 
 void UDeliveryInputComponent::Look(const FInputActionValue &Value)
@@ -260,6 +276,7 @@ void UDeliveryInputComponent::AttackRightCanceled(const FInputActionValue &)
 void UDeliveryInputComponent::MousePressed(bool bLeft,bool bMouseRight)
 {
     if (!IsValid(Character)) return;
+    if (auto* Body=Character->GetActiveRagdoll()) Body->CancelConversationFacing();
     UDeliveryGrabComponent* GrabComponent = Character->GetGrabComponent();
     bool &ThisDown = bLeft ? bLeftMouseDown : bRightMouseDown;
     // 同一只键已经按住时忽略重复通知

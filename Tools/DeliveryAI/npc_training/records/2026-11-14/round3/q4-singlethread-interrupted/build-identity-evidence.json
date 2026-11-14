@@ -1,0 +1,479 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T15:36:51.303387+00:00",
+  "scope": "第三次增量构建与失败两项的复测结果；仅读取既有文件，没有运行编译、测试、模型或UI",
+  "previous_snapshot": {
+    "path": "Saved/AIResearch/NpcTraining/combat-v7-integration/build-followup-20261114.json",
+    "sha256": "9127d26aea5e0907ac10b51991d59012e28c82f83657459a8d669251d84aaaa3",
+    "retained_unchanged": true
+  },
+  "build3": {
+    "log": {
+      "path": "Saved/Logs/DeliveryOpenMicBuild3.log",
+      "bytes": 6453,
+      "sha256": "bf1744efc1f4bc9e9b30fb2959a873eecc2b19d31a9a61a975f163acacb22f2a",
+      "last_write_utc": "2026-11-14T15:33:31.994387+00:00"
+    },
+    "command_from_log": "Running UnrealBuildTool: dotnet \"..\\..\\Engine\\Binaries\\DotNET\\UnrealBuildTool\\UnrealBuildTool.dll\" DeliveryEditor Win64 Development -Project=D:/Udev/Delivery/Delivery.uproject -WaitMutex -NoHotReloadFromIDE -MaxParallelActions=2",
+    "result": "Result: Succeeded",
+    "actions": [
+      {
+        "line": 19,
+        "text": "[1/5] Compile [x64] DeliveryInputTests.cpp"
+      },
+      {
+        "line": 20,
+        "text": "[2/5] Compile [x64] DeliveryConversationTurnTests.cpp"
+      },
+      {
+        "line": 21,
+        "text": "[3/5] Link [x64] UnrealEditor-Delivery.lib"
+      },
+      {
+        "line": 23,
+        "text": "[4/5] Link [x64] UnrealEditor-Delivery.dll"
+      },
+      {
+        "line": 24,
+        "text": "[5/5] WriteMetadata DeliveryEditor.target [NoUba]"
+      }
+    ],
+    "planned_and_reported_actions": 5,
+    "total_execution_seconds": 8.18,
+    "uba_execution_seconds": 7.06,
+    "errors": [],
+    "warnings": [],
+    "compiled_translation_units": [
+      "DeliveryInputTests.cpp",
+      "DeliveryConversationTurnTests.cpp"
+    ],
+    "note": "编译日志只列出两份UI/输入测试文件，然后重新链接Delivery；四份NPC修复文件与上一份成功构建快照一致"
+  },
+  "root_four_sources": [
+    {
+      "path": "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp",
+      "bytes": 105418,
+      "sha256": "ea334b9b0243d7942ddbd6ceb6156f5d313aa706cbb503b557d99afbd309381c",
+      "last_write_utc": "2026-11-14T15:07:33.938750+00:00",
+      "previous_sha256": "ea334b9b0243d7942ddbd6ceb6156f5d313aa706cbb503b557d99afbd309381c",
+      "unchanged_from_build2_snapshot": true
+    },
+    {
+      "path": "Source/Delivery/AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.cpp",
+      "bytes": 20131,
+      "sha256": "1729f4386612acb685ff51c1e0d5b378c2c5398e0bf97377f525902d54b3d732",
+      "last_write_utc": "2026-11-14T15:05:58.373648+00:00",
+      "previous_sha256": "1729f4386612acb685ff51c1e0d5b378c2c5398e0bf97377f525902d54b3d732",
+      "unchanged_from_build2_snapshot": true
+    },
+    {
+      "path": "Source/Delivery/AI/Tests/DeliveryNpcPlayerInterruptionTests.cpp",
+      "bytes": 15492,
+      "sha256": "0d9ab8497b84b362de3de6a155c824fc778d202bcfe5be272bcbd122ab4f41d0",
+      "last_write_utc": "2026-11-14T15:25:06.280613+00:00",
+      "previous_sha256": "0d9ab8497b84b362de3de6a155c824fc778d202bcfe5be272bcbd122ab4f41d0",
+      "unchanged_from_build2_snapshot": true
+    },
+    {
+      "path": "Source/Delivery/AI/Tests/DeliveryNpcStrikeNavigationTests.cpp",
+      "bytes": 26893,
+      "sha256": "c01c733078ef42e74f27fbe87181402de30ee37cbd37ed3c4e2a5262c184830b",
+      "last_write_utc": "2026-11-14T15:05:58.378823+00:00",
+      "previous_sha256": "c01c733078ef42e74f27fbe87181402de30ee37cbd37ed3c4e2a5262c184830b",
+      "unchanged_from_build2_snapshot": true
+    }
+  ],
+  "target": {
+    "file": {
+      "path": "Binaries/Win64/DeliveryEditor.target",
+      "bytes": 1088158,
+      "sha256": "0cc0ecd1d06931948c39021cc0906297ce82f44cb59519bded882db17bc294f6",
+      "last_write_utc": "2026-11-14T15:33:31.819562+00:00"
+    },
+    "identity": {
+      "TargetName": "DeliveryEditor",
+      "Platform": "Win64",
+      "Configuration": "Development",
+      "BuildSettingsVersion": "V7",
+      "TargetType": "Editor",
+      "Architecture": "x64",
+      "Project": "../../Delivery.uproject",
+      "Launch": "$(EngineDir)/Binaries/Win64/UnrealEditor.exe",
+      "LaunchCmd": "$(EngineDir)/Binaries/Win64/UnrealEditor-Cmd.exe",
+      "Version": {
+        "MajorVersion": 5,
+        "MinorVersion": 8,
+        "PatchVersion": 1,
+        "Changelist": 56057345,
+        "CompatibleChangelist": 55116800,
+        "IsLicenseeVersion": 0,
+        "IsPromotedBuild": 0,
+        "BranchName": "++UE5+Release-5.8",
+        "BuildId": "55116800"
+      }
+    },
+    "module_metadata": [
+      {
+        "path": "Binaries/Win64/UnrealEditor.modules",
+        "bytes": 94,
+        "sha256": "1a29d9d499cdc0c814e1441ffde18d92971e34243fab8fef36304195731c6913",
+        "last_write_utc": "2026-11-14T15:33:31.796268+00:00",
+        "content": {
+          "BuildId": "55116800",
+          "Modules": {
+            "Delivery": "UnrealEditor-Delivery.dll"
+          }
+        }
+      },
+      {
+        "path": "Plugins/DeliveryTuning/Binaries/Win64/UnrealEditor.modules",
+        "bytes": 106,
+        "sha256": "7409a9527a419025736967f04e0d83badaa23d560cb74b20b4fa0e9e8baa8b1c",
+        "last_write_utc": "2026-11-14T15:33:31.796268+00:00",
+        "content": {
+          "BuildId": "55116800",
+          "Modules": {
+            "DeliveryTuning": "UnrealEditor-DeliveryTuning.dll"
+          }
+        }
+      }
+    ],
+    "module_buildids_match_target": true
+  },
+  "dll_outputs": [
+    {
+      "path": "Binaries/Win64/UnrealEditor-Delivery.dll",
+      "bytes": 7670272,
+      "sha256": "be03119b83c153d9fb802ade95da392123d9bc14647347988c78a841f80d9a02",
+      "last_write_utc": "2026-11-14T15:33:31.357904+00:00",
+      "previous_sha256": "0320379a6eda30dbf5971da4b5cb838aec19cd9e5743f7645452dbf085dda09b",
+      "unchanged_from_build2": false,
+      "listed_in_target_products": true
+    },
+    {
+      "path": "Plugins/DeliveryTuning/Binaries/Win64/UnrealEditor-DeliveryTuning.dll",
+      "bytes": 1312768,
+      "sha256": "d43eb4487b418498ed2d70d03e6c143f9c6e08b3425c2c305afb7310b10767cc",
+      "last_write_utc": "2026-11-14T15:30:21.788072+00:00",
+      "previous_sha256": "d43eb4487b418498ed2d70d03e6c143f9c6e08b3425c2c305afb7310b10767cc",
+      "unchanged_from_build2": true,
+      "listed_in_target_products": true
+    }
+  ],
+  "automation": {
+    "initial_report": {
+      "path": "Saved/Automation/DeliveryOpenMic/index.json",
+      "bytes": 22347,
+      "sha256": "57fe68da6e8b698a5194f2dae8cad4e95773e4216727477e996bde7608ddaf6c",
+      "last_write_utc": "2026-11-14T15:32:07.353943+00:00"
+    },
+    "initial_counts": {
+      "completed": 27,
+      "passed": 25,
+      "failed": 2
+    },
+    "retest_report": {
+      "path": "Saved/Automation/DeliveryOpenMicRetest/index.json",
+      "bytes": 2824,
+      "sha256": "0a4a88a59bdd208af9f2fdfd0fcd63ada595fd1bc4d44ac2a40984494227ca7e",
+      "last_write_utc": "2026-11-14T15:33:59.987082+00:00"
+    },
+    "retest_log": {
+      "path": "Saved/Logs/DeliveryOpenMicRetest.log",
+      "bytes": 277500,
+      "sha256": "a8d171a481366ff651669e3ca756e56ccb0c36c7b1e1a78c6e5ca61c642793c9",
+      "last_write_utc": "2026-11-14T15:34:00.008236+00:00"
+    },
+    "retest_command": "LogInit: Command Line: -Unattended -NoSplash -NullRHI -NoSound -NoLiveCoding -ExecCmds=\"Automation RunTests Delivery.Speech.Conversation.KeyOwnership+Delivery.Systems.MoveInputSafety\" -TestExit=\"Automation Test Queue Empty\" -ReportExportPath=D:/Udev/Delivery/Saved/Automation/DeliveryOpenMicRetest -abslog=D:/Udev/Delivery/Saved/Logs/DeliveryOpenMicRetest.log -UTF8Output",
+    "retest_counts": {
+      "completed": 2,
+      "passed": 2,
+      "failed": 0,
+      "succeeded_without_warnings": 1,
+      "succeeded_with_warnings": 1
+    },
+    "retest_completion_lines": [
+      {
+        "line": 2036,
+        "text": "[2026.11.14-15.33.59:952][294]LogAutomationController: Display: Test Completed. Result={Success} Name={KeyOwnership} Path={Delivery.Speech.Conversation.KeyOwnership}"
+      },
+      {
+        "line": 2053,
+        "text": "[2026.11.14-15.33.59:985][296]LogAutomationController: Display: Test Completed. Result={Success} Name={MoveInputSafety} Path={Delivery.Systems.MoveInputSafety}"
+      }
+    ],
+    "retest_cases": [
+      {
+        "testDisplayName": "KeyOwnership",
+        "fullTestPath": "Delivery.Speech.Conversation.KeyOwnership",
+        "tags": [],
+        "state": "Success",
+        "deviceInstance": [
+          "E3C200464F163E11A763A381A373508A"
+        ],
+        "duration": 0.0187964029610157,
+        "dateTime": "2026.11.14-15.33.59",
+        "entries": [],
+        "warnings": 0,
+        "errors": 0,
+        "artifacts": []
+      },
+      {
+        "testDisplayName": "MoveInputSafety",
+        "fullTestPath": "Delivery.Systems.MoveInputSafety",
+        "tags": [],
+        "state": "Success",
+        "deviceInstance": [
+          "E3C200464F163E11A763A381A373508A"
+        ],
+        "duration": 0.019505999982357025,
+        "dateTime": "2026.11.14-15.33.59",
+        "entries": [
+          {
+            "event": {
+              "type": "Warning",
+              "message": "LogSkinnedMeshComp: GetSocketInfoByName(RightHand): No SkeletalMesh for Component(CharacterMesh0) Actor(DeliveryCharacter /Temp/Untitled_2.Untitled:PersistentLevel.DeliveryCharacter_0)",
+              "context": "log",
+              "artifact": "00000000000000000000000000000000"
+            },
+            "filename": "",
+            "lineNumber": -1,
+            "timestamp": "2026.11.14-15.33.59"
+          },
+          {
+            "event": {
+              "type": "Warning",
+              "message": "LogSkinnedMeshComp: GetSocketInfoByName(RightHand): No SkeletalMesh for Component(CharacterMesh0) Actor(DeliveryCharacter /Temp/Untitled_2.Untitled:PersistentLevel.DeliveryCharacter_0)",
+              "context": "log",
+              "artifact": "00000000000000000000000000000000"
+            },
+            "filename": "",
+            "lineNumber": -1,
+            "timestamp": "2026.11.14-15.33.59"
+          },
+          {
+            "event": {
+              "type": "Warning",
+              "message": "LogSkinnedMeshComp: GetSocketInfoByName(RightHand): No SkeletalMesh for Component(CharacterMesh0) Actor(DeliveryCharacter /Temp/Untitled_2.Untitled:PersistentLevel.DeliveryCharacter_0)",
+              "context": "log",
+              "artifact": "00000000000000000000000000000000"
+            },
+            "filename": "",
+            "lineNumber": -1,
+            "timestamp": "2026.11.14-15.33.59"
+          }
+        ],
+        "warnings": 3,
+        "errors": 0,
+        "artifacts": []
+      }
+    ],
+    "combined_latest_results": [
+      {
+        "test": "Delivery.AI.ConversationFeedback",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.AI.Fight",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.AI.PlayerInterruption",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.AI.SentenceAudioProtocol",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.AI.SentencePlayback",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.AI.StrikeNavigation",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.AI.VoiceLink",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Audio.Cancellation",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Audio.ContinuousFixture",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Audio.ContinuousSilence",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Audio.DeviceFormatChange",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Audio.FinishDiscontinuity",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Audio.StartupDiscontinuity",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Audio.TurnBoundaries",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Continuous.Boundaries",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Continuous.CancelAndOverload",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Continuous.LongSegment",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Continuous.PendingFinal",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Conversation.FinalBoundaries",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Conversation.KeyOwnership",
+        "initial_result": "Fail",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMicRetest",
+        "rerun_after_build3": true
+      },
+      {
+        "test": "Delivery.Speech.Conversation.VoiceTarget",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Conversation.WorldLeases",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Turn.Boundaries",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Turn.Cancellation",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Speech.Turn.Completion",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Systems.InputLifecycle",
+        "initial_result": "Success",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMic",
+        "rerun_after_build3": false
+      },
+      {
+        "test": "Delivery.Systems.MoveInputSafety",
+        "initial_result": "Fail",
+        "latest_observed_result": "Success",
+        "result_source": "DeliveryOpenMicRetest",
+        "rerun_after_build3": true
+      }
+    ],
+    "combined_unique_tests": 27,
+    "combined_success": 27,
+    "single_run_27_all_passed": false,
+    "meaning": "首次27项中25项通过，修正测试前提并增量构建后，仅复跑此前失败的KeyOwnership和MoveInputSafety，两项通过；不能写成第三次DLL已重新跑全部27项"
+  },
+  "gameplay_and_performance": {
+    "real_playback_or_combat_acceptance_claimed": false,
+    "new_gpu_or_model_benchmark_run": false,
+    "q4_enabled": false,
+    "max_frame_p95_increase_percent": 10
+  },
+  "limits": [
+    "本记录保留第三次构建的当前DLL身份，不改写15:30的第二次构建快照",
+    "MoveInputSafety复测仍有3条测试角色无骨骼网格的RightHand查询警告，按报告原样保留",
+    "NullRHI/NoSound自动化不是玩家实际输入、人物追赶或双人听感验收",
+    "首次失败和两项复测分别保存，不将失败记录覆盖成成功"
+  ]
+}

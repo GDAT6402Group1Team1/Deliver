@@ -1,0 +1,116 @@
+{
+  "csv": {
+    "source_path": "Saved/Profiling/CSV/CombatQ4FullGpu.csv",
+    "archive_path": "Saved\\AIResearch\\NpcTraining\\combat-v7-integration\\CombatQ4FullGpu.csv",
+    "sha256": "239371acc77e3d3ac494f963f96c39548293c76a9d5758a4a135524912d69f00",
+    "bytes": 8157350,
+    "capture_id": "352877C449AA76D70238A492059E5992",
+    "capture_start_utc": "2026-11-14T14:26:20.938000+00:00",
+    "capture_end_utc": "2026-11-14T14:32:35.729000+00:00",
+    "frames": 3891,
+    "missing": [],
+    "zero": [],
+    "completion_footer": true,
+    "summed_frame_seconds": 374.6206660000003,
+    "log_duration_seconds": 374.791,
+    "log_vs_frame_sum_difference_seconds": 0.17033399999968424,
+    "log_path": "Saved\\Logs\\DeliveryQ4CoexistPlaytest.log",
+    "log_evidence": [
+      {
+        "line": 3039,
+        "text": "[2026.11.14-14.26.20:938][306]LogCsvProfiler: Display: Capture started. CSV ID: 352877C449AA76D70238A492059E5992"
+      },
+      {
+        "line": 8688,
+        "text": "[2026.11.14-14.32.35:729][197]LogCsvProfiler: Display: Capture Ended. Writing CSV to file : ../../../../../Udev/Delivery/Saved/Profiling/CSV/CombatQ4FullGpu.csv"
+      }
+    ],
+    "tail_excluded_after_utc": "2026-11-14T14:31:22.745408+00:00"
+  },
+  "comparison": {
+    "window_seconds": 40,
+    "baseline_samples": 416,
+    "candidate_samples": 401,
+    "baseline_p95_ms": 109.08055,
+    "candidate_p95_ms": 122.2127,
+    "p95_increase_fraction": 0.1203894736504354,
+    "within_10_percent_limit": false,
+    "median_view_positions": {
+      "baseline-q4active": [
+        11992.9287,
+        11826.8447,
+        1948.6838
+      ],
+      "local99-q4active": [
+        11992.9287,
+        11826.8447,
+        1948.6838
+      ],
+      "luna-q4active": [
+        11992.9287,
+        11826.8457,
+        1948.684
+      ]
+    },
+    "median_view_delta_vs_baseline_cm": {
+      "baseline-q4active": 0.0,
+      "local99-q4active": 0.0,
+      "luna-q4active": 0.0010198039029084816
+    },
+    "actor_ranges": {
+      "baseline-q4active": {
+        "total": [
+          9608.0,
+          10143.0
+        ],
+        "pedestrians": [
+          416.0,
+          942.0
+        ],
+        "NPCs": [
+          6.0,
+          6.0
+        ]
+      },
+      "local99-q4active": {
+        "total": [
+          9384.0,
+          10167.0
+        ],
+        "pedestrians": [
+          202.0,
+          970.0
+        ],
+        "NPCs": [
+          6.0,
+          6.0
+        ]
+      },
+      "luna-q4active": {
+        "total": [
+          9375.0,
+          10168.0
+        ],
+        "pedestrians": [
+          190.0,
+          966.0
+        ],
+        "NPCs": [
+          6.0,
+          6.0
+        ]
+      }
+    },
+    "single_ordered_trial": true,
+    "no_trimmed_window_substitution": true
+  },
+  "primary_window_seconds": [
+    0,
+    40
+  ],
+  "auxiliary_window_seconds": [
+    5,
+    35
+  ],
+  "auxiliary_does_not_replace_primary": true
+}

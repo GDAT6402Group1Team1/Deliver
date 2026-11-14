@@ -1,0 +1,110 @@
+{
+  "round": 3,
+  "authorization": "new user instruction after two-round failure; earlier results retained",
+  "status": "rejected_misleading_runtime_summary",
+  "frozen_acceptance_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+  "acceptance_content_read_by_generator": false,
+  "acceptance_labels_changed": false,
+  "new_stories": 40,
+  "new_training_groups": 32,
+  "new_validation_groups": 8,
+  "new_training_rows": 64,
+  "new_validation_rows": 16,
+  "replay_training_rows": 160,
+  "total_training_rows": 224,
+  "total_training_groups": 187,
+  "legacy_validation_rows": 15,
+  "validation_scored_separately": true,
+  "new_validation_coverage": {
+    "('大壮', 'Fight')": 4,
+    "('翠花', 'Flee')": 4,
+    "('翠花', 'Fight')": 4,
+    "('大壮', 'Flee')": 4
+  },
+  "new_draft_actions": {
+    "Wait": 37,
+    "Fight": 31,
+    "Flee": 12
+  },
+  "role_change_coverage": {
+    "change": 10,
+    "continue": 6
+  },
+  "replay_input_change": "append exact current-action description from UE, keeping original files and labels",
+  "source_cpp": [
+    "Source/Delivery/AI/Actions/DeliveryNpcCombatComponent.cpp:217",
+    "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp:217"
+  ],
+  "fixed_training": {
+    "initial_adapter": "Saved/AIResearch/NpcTraining/combat-v5/round2/adapter",
+    "learning_rate": 2e-05,
+    "optimizer_steps": 56,
+    "gradient_accumulation": 4,
+    "micro_batches": 224,
+    "epochs": 1,
+    "max_seq_length": 4096,
+    "max_output_tokens": 64,
+    "seed": 20261114,
+    "selection": "one predeclared candidate; no acceptance-based parameter search",
+    "initial_adapter_sha256": "c6762d92d8eaa5802a526b80e521dcb5a61f98cb7a1b91258c8386cd7ed77611"
+  },
+  "why_not_use_loss_as_success": [
+    "13-token answer contains mostly fixed JSON text; low average token loss is not action accuracy",
+    "old 15 validation cases all used one character, while all five final errors continued current action",
+    "new branch pairs keep body counters fixed where possible while later observable facts change"
+  ],
+  "validation_rule": "report legacy15 and new16 separately, with role/current-action/continue-change breakdown; independent review before final40",
+  "final_rule_unchanged": {
+    "reasonable_action_minimum": 0.9,
+    "cases": 40,
+    "protocol_target_valid_required": true,
+    "critical_technical_errors": 0
+  },
+  "previous_data_sha256": "9e7cfd68274a498ab50f2e77463a408988fa7c56244ec0f06d52f62c13718108",
+  "new_data_sha256": "12e34e07030f7e05d1fe176da5f4037269a94c0b957b15e30def65f114a62076",
+  "measured_round2_input_format_comparison": [
+    {
+      "path": "Saved/AIResearch/NpcTraining/round3-baseline/round2-old-validation-original-format.json",
+      "sha256": "f3a903fb730fd0d6713031ef372e1eaaa62554832f576216745d0471e631cdc2",
+      "summary": {
+        "cases": 15,
+        "correct": 14,
+        "protocol_valid": 15,
+        "target_valid": 15,
+        "accuracy": 0.9333333333333333,
+        "first_pass_ms_median": 151.42199999536388,
+        "first_pass_ms_p95": 183.5099999952945,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 0,
+        "acceptance_qualified": false,
+        "integration_checks_required": true
+      }
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/round3-baseline/round2-old-validation-game-format.json",
+      "sha256": "a2b1e3b4d7361124d05a9ef04a4d3b25ecfda5bf3817eddf5b261e65eb8cae50",
+      "summary": {
+        "cases": 15,
+        "correct": 9,
+        "protocol_valid": 15,
+        "target_valid": 15,
+        "accuracy": 0.6,
+        "first_pass_ms_median": 160.70430000399938,
+        "first_pass_ms_p95": 468.39819999877363,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 1,
+        "acceptance_qualified": false,
+        "integration_checks_required": true
+      }
+    }
+  ],
+  "rejection": {
+    "reason": "Unconditional runtime status asserts ongoing punches/hits even during Flee or after peace; teacher explanations in 004b2/016b2 directly cite it",
+    "teacher_finished": true,
+    "teacher_disagreements": 10,
+    "prepared_train": 216,
+    "prepared_validation": 29,
+    "training_started": false,
+    "replacement": "combat-v7"
+  }
+}

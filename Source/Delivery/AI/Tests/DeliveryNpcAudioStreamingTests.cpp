@@ -159,9 +159,14 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
         Request = Agent->ActiveRequest;
         // 直接向正式 NDJSON 解析入口送数据，不向正在运行的 AI 后台发请求
         Gateway->Queue.Remove(Request.RequestId);
+        const auto* WaitCandidate=Request.Candidates.FindByPredicate([](const auto& Candidate)
+            { return Candidate.Action==EDeliveryNpcAction::Wait && !Candidate.TargetId.IsValid() && Candidate.EvidenceIds.IsEmpty(); });
+        if (!WaitCandidate) return false;
         auto Proposal = MakeShared<FJsonObject>();
         Proposal->SetNumberField(TEXT("protocol_version"), FDeliveryNpcDecisionRequest::ProtocolVersion);
-        Proposal->SetNumberField(TEXT("capability_version"), FDeliveryNpcDecisionRequest::CapabilityVersion);
+        Proposal->SetNumberField(TEXT("capability_version"), Request.RequestedCapabilityVersion);
+        if (Request.RequestedCapabilityVersion>=5)
+            Proposal->SetStringField(TEXT("candidate_id"),WaitCandidate->CandidateId.ToString(EGuidFormats::DigitsWithHyphensLower));
         Proposal->SetStringField(TEXT("request_id"), Request.RequestId.ToString(EGuidFormats::DigitsWithHyphensLower));
         Proposal->SetStringField(TEXT("npc_id"), Request.NpcId.ToString(EGuidFormats::DigitsWithHyphensLower));
         Proposal->SetStringField(TEXT("world_epoch"), Request.WorldEpoch.ToString(EGuidFormats::DigitsWithHyphensLower));
@@ -379,7 +384,12 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     TestEqual(TEXT("已收齐的下一句仍在等待前一句说完"), Client->GetDisplayedSpeech().TurnId, FirstState.TurnId);
     ReadAudio(Client, ClientHeard);
     TestTrue(TEXT("客户端实际读取完整声音，没有重复句首或丢尾音"), ClientHeard == ReferencePcm);
+    // 完整声音可能很早就已到达，最后一帧排空时不能把无新数据误判成断网
+    Client->LocalVoices[0].FrontSince = FPlatformTime::Seconds() - 8;
+    Client->LocalVoices[0].LastDataAt = FPlatformTime::Seconds() - 6;
     Client->PlayRecordedVoice();
+    if (!TestEqual(TEXT("完整句排空时没有取消它和待播的下一句"), Client->LocalVoices.Num(), 2)) return false;
+    TestFalse(TEXT("正常尾音不会把当前回复标成取消"), Client->CancelledVoiceActions.Contains(FirstState.ActionId));
     TestTrue(TEXT("全部播完后的短暂收尾不再视为缺音"),!Client->IsWaitingForMoreAudio() &&
         Client->LocalVoices[0].DrainedAt>0 && Client->GetDisplayedSpeech().bActive);
     FinishLocal(Client);
@@ -464,6 +474,73 @@ bool FDeliveryNpcAudioStreamingTest::RunTest(const FString&)
     TestEqual(TEXT("旧整句完整进入客户端音频队列"), LegacyClient.Num(), ShortClientHeard.Num());
     Agent->CancelPlan(TEXT("TestFinished"));
     Client->StopStreamSpeech_Implementation(FGuid(), true);
+    FDeliveryNpcSpeechState Missing = FirstState;
+    Missing.ActionId = FGuid::NewGuid(); Missing.TurnId = FGuid::NewGuid();
+    Missing.bAudioComplete = false; Missing.PcmBytes = Missing.EncodedBytes = 0;
+    Client->StartStreamSpeech_Implementation(Missing);
+    if (!TestEqual(TEXT("缺音检查通过正式入口等待新句"), Client->LocalVoices.Num(), 1)) return false;
+    Client->LocalVoices[0].FrontSince = Client->LocalVoices[0].LastDataAt = FPlatformTime::Seconds() - 6;
+    AddExpectedError(TEXT("NpcSpeech audio_timeout"), EAutomationExpectedErrorFlags::Contains, 1);
+    Client->PlayRecordedVoice();
+    TestTrue(TEXT("真正缺少音频时仍在五秒后取消"), Client->LocalVoices.IsEmpty() &&
+        Client->CancelledVoiceActions.Contains(Missing.ActionId));
+
+    // 上句和新句都在复制时已经完成，服务器不会重发值未变化的完成标记
+    FDeliveryNpcSpeechState PreviousComplete=FirstState;
+    PreviousComplete.ActionId=FGuid::NewGuid(); PreviousComplete.TurnId=FGuid::NewGuid();
+    PreviousComplete.bAudioComplete=true;
+    PreviousComplete.PcmBytes=ShortPcm.Num(); PreviousComplete.EncodedBytes=ReferenceEncoded.Num();
+    Client->Speech=PreviousComplete;
+    FDeliveryNpcSpeechState InitialNotice=FirstState;
+    InitialNotice.ActionId=FGuid::NewGuid(); InitialNotice.TurnId=FGuid::NewGuid();
+    InitialNotice.bAudioComplete=false; InitialNotice.PcmBytes=InitialNotice.EncodedBytes=0;
+    Client->StartStreamSpeech_Implementation(InitialNotice);
+    TestEqual(TEXT("开始通知没有覆盖上一份服务器复制状态"),Client->Speech.TurnId,PreviousComplete.TurnId);
+    TestTrue(TEXT("开始通知没有改掉服务器已复制的完成标记"),Client->Speech.bAudioComplete);
+    // 按实际差量只写发生变化的字段，保留上次复制时已经为 true 的 bAudioComplete
+    Client->Speech.TurnId=InitialNotice.TurnId;
+    Client->Speech.ActionId=InitialNotice.ActionId;
+    Client->Speech.PcmBytes=Pcm.Num(); Client->Speech.EncodedBytes=EarlyEndEncoded.Num();
+    Client->OnRep_Speech();
+    if (!TestEqual(TEXT("差量到达后同一句仍只有一个本机记录"),Client->LocalVoices.Num(),1)) return false;
+    TestTrue(TEXT("完成标记与长度一起用于本机播放"),Client->LocalVoices[0].State.bAudioComplete &&
+        Client->LocalVoices[0].State.PcmBytes==Pcm.Num() &&
+        Client->LocalVoices[0].TotalBytes==DeliveryNpcVoice::GetDecodedPcmBytes(Pcm.Num(),24000));
+    Client->StartStreamSpeech_Implementation(InitialNotice);
+    Client->OnRep_Speech();
+    TestTrue(TEXT("迟到的重复开始通知不能倒退复制状态或本机完成状态"),Client->Speech.bAudioComplete &&
+        Client->Speech.PcmBytes==Pcm.Num() && Client->LocalVoices.Num()==1 && Client->LocalVoices[0].State.bAudioComplete);
+
+    Client->StopStreamSpeech_Implementation(PreviousComplete.ActionId,false);
+    TestTrue(TEXT("上一轮的停止通知不会移除新句"),Client->Speech.bActive && Client->LocalVoices.Num()==1 &&
+        Client->LocalVoices[0].State.TurnId==InitialNotice.TurnId);
+    Client->FinishReplyAfterSentence_Implementation(InitialNotice.ActionId);
+    Client->OnRep_Speech();
+    TestTrue(TEXT("播完当前句的通知和取消过滤均不修改复制字段"),Client->Speech.bActive &&
+        Client->Speech.bAudioComplete && Client->LocalVoices.Num()==1 && Client->LocalVoices[0].ReceiveUntil>0);
+
+    FDeliveryNpcSpeechState NextComplete=Client->Speech;
+    NextComplete.TurnId=FGuid::NewGuid(); NextComplete.ActionId=FGuid::NewGuid();
+    Client->Speech=NextComplete; Client->OnRep_Speech();
+    Client->StopStreamSpeech_Implementation(InitialNotice.ActionId,false);
+    TestTrue(TEXT("旧句的取消只移除旧句，保留新句的服务器状态与本机队列"),Client->Speech.bActive &&
+        Client->Speech.TurnId==NextComplete.TurnId && Client->LocalVoices.Num()==1 &&
+        Client->LocalVoices[0].State.TurnId==NextComplete.TurnId);
+    Client->StopStreamSpeech_Implementation(NextComplete.ActionId,true);
+    Client->OnRep_Speech();
+    TestTrue(TEXT("停止全部声音后字幕立即消失，客户端仍保留服务器复制值"),Client->Speech.bActive &&
+        Client->LocalVoices.IsEmpty() && !Client->GetDisplayedSpeech().bActive);
+
+    // 旧整句文字没有 ActionId，仍通过取消编号过滤显示，不在客户端修改复制值
+    FDeliveryNpcSpeechState LegacyText=NextComplete;
+    LegacyText.ActionId.Invalidate(); LegacyText.TurnId=FGuid::NewGuid(); LegacyText.bRecordedVoice=false;
+    Client->Speech=LegacyText;
+    Client->StopStreamSpeech_Implementation(LegacyText.TurnId,false);
+    Client->OnRep_Speech();
+    TestTrue(TEXT("旧整句取消后也不会恢复字幕或覆盖复制值"),Client->Speech.bActive && !Client->GetDisplayedSpeech().bActive);
+    LegacyText.TurnId=FGuid::NewGuid(); Client->Speech=LegacyText;
+    Client->StopStreamSpeech_Implementation(FGuid(),true); Client->OnRep_Speech();
+    TestTrue(TEXT("停止全部声音也能过滤没有动作编号的旧整句"),Client->Speech.bActive && !Client->GetDisplayedSpeech().bActive);
     return true;
 }
 // 只有明确指定本机地址才访问真实模型；普通自动化继续使用上面的确定性数据

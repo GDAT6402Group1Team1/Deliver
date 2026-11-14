@@ -59,3 +59,35 @@ void UDeliveryInventoryItemComponent::OnRep_Durability()
 {
 	Durability = bUsesDurability ? FMath::Clamp(Durability, 0.0f, FMath::Max(0.0f, MaxDurability)) : 0.0f;
 }
+
+FGuid UDeliveryInventoryItemComponent::BeginTransfer(AActor* Receiver)
+{
+    if (!IsInGameThread() || !GetOwner() || !GetWorld() || !GetOwner()->HasAuthority() || ActiveTransferId.IsValid() ||
+        !IsValid(Receiver) || Receiver->IsActorBeingDestroyed() || !Receiver->HasAuthority() ||
+        Receiver->GetWorld()!=GetWorld()) return FGuid();
+    ActiveTransferId=FGuid::NewGuid();
+    TransferReceiver=Receiver;
+    return ActiveTransferId;
+}
+
+bool UDeliveryInventoryItemComponent::RetargetTransfer(FGuid TransferId,AActor* Receiver)
+{
+    if (!TransferId.IsValid() || TransferId!=ActiveTransferId || !IsInGameThread() ||
+        !GetOwner() || !GetOwner()->HasAuthority() || !IsValid(Receiver) ||
+        Receiver->IsActorBeingDestroyed() || !Receiver->HasAuthority() || Receiver->GetWorld()!=GetWorld()) return false;
+    TransferReceiver=Receiver;
+    return true;
+}
+
+void UDeliveryInventoryItemComponent::EndTransfer(FGuid TransferId)
+{
+    if (!TransferId.IsValid() || TransferId!=ActiveTransferId || !GetOwner() || !GetOwner()->HasAuthority()) return;
+    ActiveTransferId.Invalidate();
+    TransferReceiver.Reset();
+}
+
+bool UDeliveryInventoryItemComponent::CanTransferTo(const AActor* Receiver) const
+{
+    return IsValid(Receiver) && !Receiver->IsActorBeingDestroyed() && GetWorld() && Receiver->GetWorld()==GetWorld() &&
+        (!ActiveTransferId.IsValid() || TransferReceiver.Get()==Receiver);
+}

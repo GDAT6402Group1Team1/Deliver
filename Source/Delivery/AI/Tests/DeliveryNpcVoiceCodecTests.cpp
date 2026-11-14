@@ -21,9 +21,9 @@ namespace
         bool bRanOnWorker = false;
     };
 
-    TArray<uint8> MakeVoiceSignal(int32 SampleRate)
+    TArray<uint8> MakeVoiceSignal(int32 SampleRate, int32 SampleCount = 0)
     {
-        const int32 Samples = SampleRate + 73;
+        const int32 Samples = SampleCount > 0 ? SampleCount : SampleRate + 73;
         TArray<uint8> Pcm;
         Pcm.SetNumUninitialized(Samples * 2);
         for (int32 Index = 0; Index < Samples; ++Index)
@@ -100,6 +100,70 @@ bool FDeliveryNpcVoiceCodecRoundTripTest::RunTest(const FString&)
         TestTrue(TEXT("编码器延后的尾音没有被原 PCM 长度裁掉"), DelayedTail > SourceTail * .05);
         AddInfo(FString::Printf(TEXT("NpcVoiceCodec rate=%d pcm=%d wire=%d decoded=%d tail_energy_ratio=%.3f"),
             Rate, Pcm.Num(), Encoded.Num(), Decoded.Num(), DelayedTail / SourceTail));
+    }
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcVoiceCodecLongSentenceTest, "Delivery.AI.VoiceCodec.LongSentence",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDeliveryNpcVoiceCodecLongSentenceTest::RunTest(const FString&)
+{
+    // 101 个 80 ms 模型帧复现实际 8.08 秒回复，并检查恰好 12 秒的完整尾音
+    for (const int32 Rate : {16000, 24000})
+    for (const int32 DurationMs : {8080, 12000})
+    {
+        const TArray<uint8> Pcm = MakeVoiceSignal(Rate, Rate * DurationMs / 1000);
+        FString Error;
+        TArray<uint8> Whole, WholePcm;
+        FDeliveryNpcVoiceDecoder WholeDecoder;
+        int32 WholeOffset = 0;
+        if (!TestTrue(TEXT("长句使用实际 UE 整句编码器"), DeliveryNpcVoice::Encode(Pcm, Rate, Whole, Error)) ||
+            !TestTrue(TEXT("长句整包可完整解码"), WholeDecoder.TryDecodeAvailable(Whole, WholeOffset, WholePcm, Error)) ||
+            !TestTrue(TEXT("整包真实收齐"), WholeDecoder.FinishInput(Error))) { AddError(Error); return false; }
+        TestEqual(TEXT("整句保存全部原始采样"), WholeDecoder.GetSourcePcmBytes(), Pcm.Num());
+        TestEqual(TEXT("整句包含一次 40 ms 尾音"), WholePcm.Num(), Pcm.Num() + Rate * 2 / 25);
+
+        FDeliveryNpcVoiceStreamEncoder Encoder;
+        FDeliveryNpcVoiceDecoder Decoder;
+        TArray<uint8> Wire, Part, Decoded;
+        int32 Offset = 0;
+        auto Receive = [&]()
+        {
+            TArray<uint8> Added;
+            if (!Decoder.TryDecodeAvailable(Wire, Offset, Added, Error)) { AddError(Error); return false; }
+            Decoded.Append(Added);
+            return true;
+        };
+        if (!TestTrue(TEXT("开始长句流式编码"), Encoder.Start(Rate, Part, Error))) return false;
+        Wire.Append(Part);
+        for (int32 InputOffset = 0; InputOffset < Pcm.Num();)
+        {
+            const int32 Size = FMath::Min(15360, Pcm.Num() - InputOffset);
+            TArray<uint8> Chunk; Chunk.Append(Pcm.GetData() + InputOffset, Size);
+            if (!TestTrue(TEXT("四帧一块的长句不会在八秒中止"), Encoder.Append(Chunk, Part, Error))) return false;
+            Wire.Append(Part); InputOffset += Size;
+            if (!Receive()) return false;
+        }
+        TestFalse(TEXT("收完源 PCM 仍等待尾部结束通知"), Decoder.IsComplete());
+        if (!TestTrue(TEXT("长句可发送完整尾音"), Encoder.Finish(Part, Error))) return false;
+        Wire.Append(Part);
+        if (!Receive() || !TestTrue(TEXT("长句流式结束完整"), Decoder.FinishInput(Error))) return false;
+        TestEqual(TEXT("分段保持原始长句长度"), Decoder.GetSourcePcmBytes(), Pcm.Num());
+        TestTrue(TEXT("整包和分段解码的全部声音相同"), Decoded == WholePcm);
+        if (Decoded.Num() >= Pcm.Num() + Rate * 2 / 100)
+            TestTrue(TEXT("长句末尾延后的实际声音仍保留"),
+                MeanEnergy(Decoded, Pcm.Num() / 2, Rate / 100) > MeanEnergy(Pcm, Pcm.Num() / 2 - Rate / 100, Rate / 100) * .05);
+
+        if (DurationMs == 12000)
+        {
+            TArray<uint8> TooLong = Pcm; TooLong.AddZeroed(2);
+            TestFalse(TEXT("超过十二秒一个采样的整句仍拒绝"), DeliveryNpcVoice::Encode(TooLong, Rate, Part, Error));
+            Encoder.Reset();
+            if (!Encoder.Start(Rate, Part, Error) || !Encoder.Append(Pcm, Part, Error)) { AddError(Error); return false; }
+            TArray<uint8> ExtraSample; ExtraSample.AddZeroed(2);
+            TestFalse(TEXT("累计超过十二秒一个采样的分段仍拒绝"), Encoder.Append(ExtraSample, Part, Error));
+            TestTrue(TEXT("越界分段不输出部分包"), Part.IsEmpty());
+        }
     }
     return true;
 }

@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T15:15:23.541424+00:00",
+  "scope": "独立试玩跟进记录，不修改其他归档清单",
+  "secret_scan": {
+    "scope": "全部三份待归档文本",
+    "credential_like_values_found": false,
+    "checks": [
+      "常见sk密钥格式",
+      "Bearer长凭据",
+      "API key、access/refresh token、client secret、password等显式赋值"
+    ],
+    "limit": "模式检查用于发现常见明文凭据；没有复制服务环境或完整模型输入日志"
+  },
+  "file_count": 4,
+  "total_bytes": 81542,
+  "files": [
+    {
+      "path": "playtest-1457-speech-audit.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/playtest-1457-speech-audit.json",
+      "source_sha256": "cb8a320c4a98891c46dd5ca2146423f42afd71300da50ddae234f242d624bbc9",
+      "archive_sha256": "cb8a320c4a98891c46dd5ca2146423f42afd71300da50ddae234f242d624bbc9",
+      "bytes": 22321,
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "latest-decision-review.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/latest-decision-review-20261114/summary.json",
+      "source_sha256": "ffc6e0cab8285455642cceb1e4d59a3a1c1b435e36aad9803cc616186a361f7e",
+      "archive_sha256": "ffc6e0cab8285455642cceb1e4d59a3a1c1b435e36aad9803cc616186a361f7e",
+      "bytes": 55561,
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "scheduler-regression-26-20261114.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/scheduler-regression-26-20261114.json",
+      "source_sha256": "f308d3b01e8dcc3cc38083d167e121435769b664fa63c6cccc1dc9c62c4061e3",
+      "archive_sha256": "f308d3b01e8dcc3cc38083d167e121435769b664fa63c6cccc1dc9c62c4061e3",
+      "bytes": 1196,
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "summary.json",
+      "archive_sha256": "1103ee28d621e23ab838691952a2cf8867732e6ff609cd9ee7857d61bca6bacb",
+      "bytes": 2464,
+      "kind": "authored_summary_of_archived_records_and_parent_patch_status"
+    }
+  ],
+  "prior_manifest_sha256": {
+    "Tools\\DeliveryAI\\npc_training\\records\\2026-11-14\\round3\\round3-manifest.json": "3d16302b5a45cf81c627cdcae6ff7955454ad61ec30716a3a29ee54505097472",
+    "Tools\\DeliveryAI\\npc_training\\records\\2026-11-14\\round3\\integration\\manifest.json": "a852f8edece45a2befe90eb3e8137b1a87f144f7ec90de325244a4b0f77dfedf"
+  }
+}

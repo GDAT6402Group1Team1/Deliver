@@ -1,0 +1,258 @@
+{
+  "schema_version": 1,
+  "started_utc": "2026-11-14T14:20:00.485947+00:00",
+  "status": "exported_pending_acceptance",
+  "training_performed": false,
+  "production_configuration_changed": false,
+  "device": "cpu",
+  "quantization": "Q4_K_M",
+  "plan_sha256": "f579e0b7c7c1d6e196b811beca008c5aae5159302c954d86dd8972d6b9659597",
+  "frozen_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+  "input_preparation_sha256": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+  "evaluation_script_sha256": "e7c9569caca7049434cf9c93fa9e432aca5b2c95aca6a61414cd01ae9bce6b75",
+  "runtime_files_verified": [
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\cublas64_13.dll",
+      "sha256": "f1d500d0cd892f5b8c6b6cdbffd82d0c55d5f5427215668e7ceb55aeeccc1b63"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\cublasLt64_13.dll",
+      "sha256": "b592cd016d7673e9cb97716a22b27c4010ee635377a3ba28f37070a9bdb76a68"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\cudart64_13.dll",
+      "sha256": "b00ca6f53699120da815bf3e06e2e4285fae2f201235b883dcbb50eec51e2a2a"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-base.dll",
+      "sha256": "558c53121398e0d541d939dc222769721ca63f3285ba0f4a953095e2eee3c1bf"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-alderlake.dll",
+      "sha256": "1a2ac0a361cc9ad52ae410807e9b2306ae790396c7fc0b43f5c505710395619d"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-cannonlake.dll",
+      "sha256": "7aa433f1f0a67c6c9c3999f674bb36be9251a1e624db3a002dc86c2ae116d73a"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-cascadelake.dll",
+      "sha256": "373d21f0dcb4dc24f59b0fdd92faf7a0d3a3dd9eff082e45cef35c8060d11d62"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-cooperlake.dll",
+      "sha256": "bcba73a43486d0893ba69596d118bd9c2aea004327939e326bd9fce7f33fa355"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-haswell.dll",
+      "sha256": "d3119193990278444f6df6e4dcfb1858ee34d352f13cf51afc16d98321fe9967"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-icelake.dll",
+      "sha256": "cf0128fb280a2f9ecc93514954da098b477c8f91005274d0fbabd192ef9dedd3"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-ivybridge.dll",
+      "sha256": "ba1f6d1c83ebfc5f7501b0d9c9e99601d2b78960684947390b3b494d0350597c"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-piledriver.dll",
+      "sha256": "00ef547cc0c41ef9202e06f25d5f92b4c6b27db6d2d943f7cb43ab9b9d69bf77"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-sandybridge.dll",
+      "sha256": "5a663373835aaa4c01ccc548e5ae0ac7baf666fbf54a453b8b064379f57ec3a1"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-sapphirerapids.dll",
+      "sha256": "f40e8fb372d97e4cac3f961709419a412f0d193e2bb91fe6323f5e186b75824b"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-skylakex.dll",
+      "sha256": "5c1bdba9e49ada156f78a9d5b1c1af8069011657e7c3d4dfa836286850adb60a"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-sse42.dll",
+      "sha256": "4e756bd5684696ea5dcca9088d45d99cc61f11002b22bca7f830aa472527db68"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-x64.dll",
+      "sha256": "9d9358acaaa6e84d453382a787abcb030e42d43b109598556be1a361a6dd6115"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cpu-zen4.dll",
+      "sha256": "21b1bbee0110772f4926b4b8b9d9c51a2b181380a934a93ebc0d24f9a8907ec8"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-cuda.dll",
+      "sha256": "b175cf6bf18031183c243ccf87707a2d7c39968f6522f384a17e978f103ab548"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-rpc-server.exe",
+      "sha256": "f728c6b9f111f81f6aa973523376aceafb4bde82d3a62ffc9a8a94f9101afb75"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml-rpc.dll",
+      "sha256": "6848c5da3b93d4cea9c08fa6cd4e64aebdb4a19709c1778eda8b9c4d46d6351c"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\ggml.dll",
+      "sha256": "46887d7644ca2ae2b24cb23d38652646dec858d7bc99439b8ce05d139c4a6307"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\libomp140.x86_64.dll",
+      "sha256": "4a20c1e5c115c29771a12324513eb109badac72180f79481527ad79d996ffb33"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-batched-bench-impl.dll",
+      "sha256": "379a69c77e4fd9be0b3611473a6e2911bfd1188ce3e118aecd686722326fa5e5"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-batched-bench.exe",
+      "sha256": "46b43d1804a463d732597b143881851a5f6c8e3944c97a09a766ffe419292fa7"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-bench-impl.dll",
+      "sha256": "7245c41beb990ee19d33fab87312ce3c40024ce013c47345eb53cedbbebafd98"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-bench.exe",
+      "sha256": "d3b61e78274e84a918b36adb6a75fe3ab63989123d4e8c2b5ee01521d39fd3d2"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-cli-impl.dll",
+      "sha256": "a19dd19f1ead4c238cd4278c88e32c7c686612461e37b48697bf519b5b603fb8"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-cli.exe",
+      "sha256": "a70f60db514b994bed5fbd06b6004c16f4378d29738e26e4713d3a32f8485831"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-common.dll",
+      "sha256": "94ec867756f24a5f647cbf5e112369d25d4926d26ea907f3eef2befa9baaece8"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-completion-impl.dll",
+      "sha256": "2d9d0470308c8ffa5ef02cc5e1ec153e89a013b886baf9c2bae29c52bd85229a"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-completion.exe",
+      "sha256": "99ab483f19521a37a585df4b804bd6cdd9b1a2ee24b3e39c8dc921b10fc933fd"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-fit-params-impl.dll",
+      "sha256": "5fa41f3185a0b5d8fbf375f0c8d714fd1ab5ae79f0f398df3fdf0edd3503276e"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-fit-params.exe",
+      "sha256": "cde7de3489781d6bc737b67350ba5360c04ce0ef345f29ae0820d6de28701129"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-gemma3-cli.exe",
+      "sha256": "7cc22b18f4275206439a52e0064cf023678f0e72fac92cd5a94676459e5209b1"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-gguf-split.exe",
+      "sha256": "a21888aa3533b9ef962d0f52347af027ea8463ddd9b69f1193561cc7f6abfe03"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-imatrix.exe",
+      "sha256": "607c6d723de8b59a0d44bdd8a8feb46bc6fd2304172853074a8537923d4b0ffa"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-llava-cli.exe",
+      "sha256": "7cc22b18f4275206439a52e0064cf023678f0e72fac92cd5a94676459e5209b1"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-minicpmv-cli.exe",
+      "sha256": "7cc22b18f4275206439a52e0064cf023678f0e72fac92cd5a94676459e5209b1"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-mtmd-cli.exe",
+      "sha256": "8e9a241267e54fadfe293c02aa69cec2a4104b1494fbc1bb90a794c863ba7e4b"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-mtmd-debug.exe",
+      "sha256": "fa6926198f8b306401ff296dffd44c6b4a29ac6c9090df4114396702702e81c3"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-perplexity-impl.dll",
+      "sha256": "f979c7dfe5a84dd82c29e9b040eb6cd38682d73219f29d58f9bcfe936f0a71d7"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-perplexity.exe",
+      "sha256": "16de9832922b1a7efb6e5718731192db774922166eb98b712fdda87987a8d93b"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-quantize-impl.dll",
+      "sha256": "1b5e8982538cd46ea7f7c312b10b0bf7b2c822e745fc60191f6fed576cebbb2b"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-quantize.exe",
+      "sha256": "04db194aec78507819726ea29aaedabb6a901daf37631cf185a3abef5b0be905"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-qwen2vl-cli.exe",
+      "sha256": "7cc22b18f4275206439a52e0064cf023678f0e72fac92cd5a94676459e5209b1"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-results.exe",
+      "sha256": "f3553744f38c30b18baa0590dde42374765410080e8b1bbf761e2a7c5f0f9b45"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-server-impl.dll",
+      "sha256": "219b5c71f53ca31e60aac180e1b9f345657188010e490e9b0bb2815fc641bd50"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-server.exe",
+      "sha256": "bdbbfbed461789d93488ae3a6073d52c38e2f4ec2b46bc64558ff86875c4b524"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-template-analysis.exe",
+      "sha256": "eb9383270510e49c76ea198c28e7d7d3ba67fa78c13228ee4b2f7edf9399413d"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-tokenize.exe",
+      "sha256": "81a731c2bac2cc9f059ee9e2547fa9882498819c07f0e0cbe451ec10b5d2e8d7"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-tts.exe",
+      "sha256": "99193cc5d19899ec53f7a0e99ff26b5b635ac6d45b0c2265926b9a383b01a026"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama.dll",
+      "sha256": "4097490d34ae45aca233107470dfc6652b04880fef7daac4f0486dc0985c0e8d"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama.exe",
+      "sha256": "bd995631fd11e6cd469c72c338e93f05c5904332e6ba915f747d28b5b62d4b03"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\mtmd.dll",
+      "sha256": "f5552ab28851ac7e29236485756020996fa963df4b45a8eed9710d2b4d06dab7"
+    }
+  ],
+  "input_bf16": {
+    "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3\\combat-bf16.gguf",
+    "bytes": 3447348960,
+    "sha256": "649e6019ac6a281f5c78d96ec080fa02e66944641a3254469af9faf8725b61cb",
+    "hash_recorded_now_not_during_original_export": true
+  },
+  "command": [
+    "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-quantize.exe",
+    "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3\\combat-bf16.gguf",
+    "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3-q4\\combat-Q4_K_M.gguf",
+    "Q4_K_M"
+  ],
+  "quantizer_sha256": "04db194aec78507819726ea29aaedabb6a901daf37631cf185a3abef5b0be905",
+  "quantize_started_utc": "2026-11-14T14:20:03.338802+00:00",
+  "quantizer_pid": 65612,
+  "exit_code": 0,
+  "quantize_elapsed_seconds": 10.37,
+  "quantize_finished_utc": "2026-11-14T14:20:13.709187+00:00",
+  "model_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3-q4\\combat-Q4_K_M.gguf",
+  "model_bytes": 1107408608,
+  "model_sha256": "da5a022325ba2fc89377e2cc5d2ba759aa97bce5e0ed5931c62ec29c176d0b31",
+  "quantize_log_sha256": "8651fb483b422b317c36c66ab978ec4f1aa66b3bb4fe537f5575d099315b5a8c",
+  "finished_utc": "2026-11-14T14:20:14.475200+00:00"
+}

@@ -4,6 +4,7 @@
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Characters/DeliveryNpcAIController.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
 #include "AI/Network/DeliveryAiSettings.h"
@@ -46,8 +47,11 @@ bool FDeliveryNpcStrikeApproachTest::RunTest(const FString&)
     auto* B=World->SpawnActor<ADeliveryNpcCharacter>(WomanClass,FVector(208,0,90),FRotator(0,180,0),Spawn);
     A->SetActorTickEnabled(false); B->SetActorTickEnabled(false);
     for (auto* Npc:{A,B})
-        if (auto* AI=Cast<AAIController>(Npc->GetController()); AI && AI->BrainComponent)
-            AI->BrainComponent->StopLogic(TEXT("IsolatedContactTest"));
+        if (auto* AI=Cast<AAIController>(Npc->GetController()))
+        {
+            if (auto* NpcController=Cast<ADeliveryNpcAIController>(AI)) NpcController->bKeepDistanceWhenIdle=false;
+            if (AI->BrainComponent) AI->BrainComponent->StopLogic(TEXT("IsolatedContactTest"));
+        }
     const auto Tick=[&](float Seconds)
     {
         for (int32 Index=0;Index<FMath::CeilToInt(Seconds/.02f);++Index)

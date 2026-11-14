@@ -1,0 +1,369 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T14:14:34.818780+00:00",
+  "scope": "第三轮训练之后的接入、失败对照和语音修复记录；与原52文件清单分开",
+  "original_round3_manifest_path": "Tools/DeliveryAI/npc_training/records/2026-11-14/round3/round3-manifest.json",
+  "original_round3_manifest_sha256": "3d16302b5a45cf81c627cdcae6ff7955454ad61ec30716a3a29ee54505097472",
+  "file_count": 40,
+  "total_bytes": 805875,
+  "files": [
+    {
+      "path": "technical/early-technical-checks.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/trial-technical-checks.json",
+      "source_sha256": "73a3e62dab98bc1f0872441596f8535fd452a06587a1833b6eb650a95236f3b2",
+      "archive_sha256": "73a3e62dab98bc1f0872441596f8535fd452a06587a1833b6eb650a95236f3b2",
+      "bytes": 8670,
+      "purpose": "此前独立模型、取消和UE检查，保留时间范围",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "technical/real-http-probe.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/real-model/probe.json",
+      "source_sha256": "d6385caa0392c97557f987f7eed724764031ad3f5d8b815c5d5f3f6a1cc98bb0",
+      "archive_sha256": "d6385caa0392c97557f987f7eed724764031ad3f5d8b815c5d5f3f6a1cc98bb0",
+      "bytes": 30024,
+      "purpose": "实际HTTP取消、恢复及目标映射原始记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "technical/historical-backend-319.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/backend-test-summary.json",
+      "source_sha256": "41f53fa68656a85ed75c9bfcf9612afed42089a89d43e9b88bd6e37a7823ff90",
+      "archive_sha256": "41f53fa68656a85ed75c9bfcf9612afed42089a89d43e9b88bd6e37a7823ff90",
+      "bytes": 38567,
+      "purpose": "历史319项结果，不当作当前全套通过",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "technical/historical-diagnostics-12.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/diagnostic-input-count-tests.json",
+      "source_sha256": "50972dbfd480a93d780f83799b7e7c81954d93ee022669f0e44f5f2bac3b72b4",
+      "archive_sha256": "50972dbfd480a93d780f83799b7e7c81954d93ee022669f0e44f5f2bac3b72b4",
+      "bytes": 945,
+      "purpose": "此前诊断输入计数专项",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "technical/current-backend-70.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/backend-current-minimal-tests.json",
+      "source_sha256": "7f30af2f5a1dacabfd1a3810bb7ab5570c6b4ad0a7e44399f0bbe83eb746bb20",
+      "archive_sha256": "7f30af2f5a1dacabfd1a3810bb7ab5570c6b4ad0a7e44399f0bbe83eb746bb20",
+      "bytes": 17606,
+      "purpose": "本轮45+25共70项实际测试与范围",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "technical/current-decision-tests.log",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/backend-decision-final.log",
+      "source_sha256": "d70f938658e62a550bf0b094e31e0d7f3b2e4bcb414ca9f593d5612734193d9e",
+      "archive_sha256": "d70f938658e62a550bf0b094e31e0d7f3b2e4bcb414ca9f593d5612734193d9e",
+      "bytes": 29296,
+      "purpose": "当前45项后端测试实际输出",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "technical/current-native-tests.log",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/backend-native-final.log",
+      "source_sha256": "fe46e1f83baf8bcc81a9f199c862f9ac3d4d237c661d423829bd94139edc91fa",
+      "archive_sha256": "fe46e1f83baf8bcc81a9f199c862f9ac3d4d237c661d423829bd94139edc91fa",
+      "bytes": 1775,
+      "purpose": "当前25项原生语音测试实际输出",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "technical/current-backend-plan.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/backend-regression-plan.json",
+      "source_sha256": "68b3934aa19125f1b79276ed91a025318e6bd38c8ed2e838663f84d2cc3b5a1d",
+      "archive_sha256": "68b3934aa19125f1b79276ed91a025318e6bd38c8ed2e838663f84d2cc3b5a1d",
+      "bytes": 5775,
+      "purpose": "运行命令及前置源码校验",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "technical/ue-twelve-second-tests.json",
+      "source_path": "Saved/Automation/DeliverySpeechTwelveSecond/index.json",
+      "source_sha256": "b13908980594b516c09335f47f004f2ae34de007f511f31658b79cc58aac614e",
+      "archive_sha256": "b13908980594b516c09335f47f004f2ae34de007f511f31658b79cc58aac614e",
+      "bytes": 7367,
+      "purpose": "UI任务单独执行的12项UE自动化，不代替实机",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "coexist-first/summary.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-comparison-summary.json",
+      "source_sha256": "2f1e899c421285163f04a4f5d613f7f21e9715f91081014d1b3f72d244e6cd2f",
+      "archive_sha256": "2f1e899c421285163f04a4f5d613f7f21e9715f91081014d1b3f72d244e6cd2f",
+      "bytes": 125118,
+      "purpose": "保留原六组失败及比较限制",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "cpu/summary.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/cpu8-12-summary.json",
+      "source_sha256": "2dedf9bcc49d45b2d61ab69200df980540916b0700138f1c11140c7bcd2537bf",
+      "archive_sha256": "2dedf9bcc49d45b2d61ab69200df980540916b0700138f1c11140c7bcd2537bf",
+      "bytes": 57169,
+      "purpose": "CPU线程对照完整结论",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "cpu/baseline-raw.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-tts8/summary.json",
+      "source_sha256": "1a21ce475c3aec7004004c33dddbabd8c755b8239d96e78be41e770afb9bfeec",
+      "archive_sha256": "1a21ce475c3aec7004004c33dddbabd8c755b8239d96e78be41e770afb9bfeec",
+      "bytes": 55366,
+      "purpose": "无小模型40秒原始PCM及采样记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "cpu/candidate-raw.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-localCPU8-12/summary.json",
+      "source_sha256": "35b75bfb357b0dd6c6364477cb65242806d539943240ed8e3ebb432a46988722",
+      "archive_sha256": "35b75bfb357b0dd6c6364477cb65242806d539943240ed8e3ebb432a46988722",
+      "bytes": 80342,
+      "purpose": "CPU8/12正式40秒全部请求和采样记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "cpu/baseline-frames.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-tts8/frames-primary.json",
+      "source_sha256": "91fbaf0554c76efd6f61d7504467fee2b8cab6874a35d5468cef5c8d00630ccd",
+      "archive_sha256": "91fbaf0554c76efd6f61d7504467fee2b8cab6874a35d5468cef5c8d00630ccd",
+      "bytes": 7964,
+      "purpose": "完整40秒帧统计",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "cpu/candidate-frames.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-localCPU8-12/frames-primary.json",
+      "source_sha256": "05944cb966b2b148c884a3c8d281ad7883733c908bdc0aeb75d2daf3ac5a2dab",
+      "archive_sha256": "05944cb966b2b148c884a3c8d281ad7883733c908bdc0aeb75d2daf3ac5a2dab",
+      "bytes": 8009,
+      "purpose": "完整40秒帧统计",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "cpu/plan.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/cpu8-12-plan/execution-plan.json",
+      "source_sha256": "bbe53f1fea0e92fa072dbf46aadd1e0c173754af778923206951434544fbe9ef",
+      "archive_sha256": "bbe53f1fea0e92fa072dbf46aadd1e0c173754af778923206951434544fbe9ef",
+      "bytes": 6741,
+      "purpose": "CPU对照预定条件",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "cpu/execution.ndjson",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-cpu8-12-execution.ndjson",
+      "source_sha256": "8ac64dd23a67a79ba5726c2922b47447eca38121512b15a6ef995d9df37a3ee1",
+      "archive_sha256": "8ac64dd23a67a79ba5726c2922b47447eca38121512b15a6ef995d9df37a3ee1",
+      "bytes": 2420,
+      "purpose": "实际进程启动结束记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "active-voice/implementation.json",
+      "source_path": "Saved/AIResearch/NativeQwen/active-voice-plan/implementation.json",
+      "source_sha256": "90065dd00321db34126d2e2ea8971edf164d8450916af865403bad12ddb039ab",
+      "archive_sha256": "90065dd00321db34126d2e2ea8971edf164d8450916af865403bad12ddb039ab",
+      "bytes": 3153,
+      "purpose": "单活跃语音实现与CPU检查",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "active-voice/cpu-tests.log",
+      "source_path": "Saved/AIResearch/NativeQwen/active-voice-plan/cpu-tests.log",
+      "source_sha256": "5640036d7fb6484aa5b75f2603c879e91594b2456fdb32a61f1308199ffb554e",
+      "archive_sha256": "5640036d7fb6484aa5b75f2603c879e91594b2456fdb32a61f1308199ffb554e",
+      "bytes": 1779,
+      "purpose": "首次生命周期测试输出",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "active-voice/prescreen-review.json",
+      "source_path": "Saved/AIResearch/NativeQwen/active-voice-prescreen/prescreen-review.json",
+      "source_sha256": "51fa71cd45892637d2b3ee4138d7d79b3fdaab1e50b98847c01024a11db9bb5c",
+      "archive_sha256": "51fa71cd45892637d2b3ee4138d7d79b3fdaab1e50b98847c01024a11db9bb5c",
+      "bytes": 5982,
+      "purpose": "四句PCM对照与限制",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "active-voice/prescreen-raw.json",
+      "source_path": "Saved/AIResearch/NativeQwen/active-voice-prescreen/summary.json",
+      "source_sha256": "9190155af4fb70d0794db38118b30e445a66c493caad646b14f9875d2acb0ccd",
+      "archive_sha256": "9190155af4fb70d0794db38118b30e445a66c493caad646b14f9875d2acb0ccd",
+      "bytes": 13148,
+      "purpose": "四句声音合成时序原始记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "active21/summary.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/active21-summary.json",
+      "source_sha256": "d1d164b9cd1e88418f71f02931378878e98f1c6ffcf747e27cc70b04bb1228a0",
+      "archive_sha256": "d1d164b9cd1e88418f71f02931378878e98f1c6ffcf747e27cc70b04bb1228a0",
+      "bytes": 48709,
+      "purpose": "GPU21与单活跃语音不合格结论",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "active21/baseline-raw.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-active/summary.json",
+      "source_sha256": "b0695338afa339fd7abccebbaa7574f2058c2d9edcfdfb36881dad9fc4ea32a9",
+      "archive_sha256": "b0695338afa339fd7abccebbaa7574f2058c2d9edcfdfb36881dad9fc4ea32a9",
+      "bytes": 54922,
+      "purpose": "对应无小模型40秒原始记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "active21/candidate-raw.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-local21-active/summary.json",
+      "source_sha256": "29a7ee98ada9657337813d24442620c66112092e82f3eb66283c78264db47f5a",
+      "archive_sha256": "29a7ee98ada9657337813d24442620c66112092e82f3eb66283c78264db47f5a",
+      "bytes": 112772,
+      "purpose": "38次请求及8句声音原始记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "active21/baseline-frames.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-active/frames-primary.json",
+      "source_sha256": "8c3a38cf58e040255a463f62a1727b507639c5424232efd5429d04da326545ad",
+      "archive_sha256": "8c3a38cf58e040255a463f62a1727b507639c5424232efd5429d04da326545ad",
+      "bytes": 6417,
+      "purpose": "完整40秒基线帧统计",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "active21/candidate-frames.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-local21-active/frames-primary.json",
+      "source_sha256": "eb615ecb51e2ced1ee0315ae9dc8e5651e64751f65e41154e001658bb814d91b",
+      "archive_sha256": "eb615ecb51e2ced1ee0315ae9dc8e5651e64751f65e41154e001658bb814d91b",
+      "bytes": 6382,
+      "purpose": "完整40秒候选帧统计",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "active21/plan.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/active21-plan.json",
+      "source_sha256": "5a044b508b101f5aaf143f7fbe51dff5eb7f35896929b5f0cfebd78f3847ca15",
+      "archive_sha256": "5a044b508b101f5aaf143f7fbe51dff5eb7f35896929b5f0cfebd78f3847ca15",
+      "bytes": 8021,
+      "purpose": "预定条件及已说明的旧字段记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "active21/execution.ndjson",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-active21-execution.ndjson",
+      "source_sha256": "549f063a9bdf54af32623f742548e3bd68b4ee312f0f44481ba8eb4e495b0f2b",
+      "archive_sha256": "549f063a9bdf54af32623f742548e3bd68b4ee312f0f44481ba8eb4e495b0f2b",
+      "bytes": 2435,
+      "purpose": "实际启动结束记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "tts12/summary.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/summary.json",
+      "source_sha256": "8efaf58437060e10fd1dd8aff2665f3fcfaad0019296ef85afeff346d6adb8c7",
+      "archive_sha256": "8efaf58437060e10fd1dd8aff2665f3fcfaad0019296ef85afeff346d6adb8c7",
+      "bytes": 2456,
+      "purpose": "8/12秒协议修改与71项检查范围",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "tts12/actual-failure.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/actual-long-sentence.json",
+      "source_sha256": "f43dac9547044fa9fa479e6e315fba80a1bf2e66c190ce7f8d259206179c1eca",
+      "archive_sha256": "f43dac9547044fa9fa479e6e315fba80a1bf2e66c190ce7f8d259206179c1eca",
+      "bytes": 855,
+      "purpose": "真实客户端道歉被8秒限制打断",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "tts12/actual-failure.log",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/actual-long-sentence.log",
+      "source_sha256": "853f009909ac72b652a076ecb788f1aa2cfecd8e5e099855242ce74e1b7edc08",
+      "archive_sha256": "853f009909ac72b652a076ecb788f1aa2cfecd8e5e099855242ce74e1b7edc08",
+      "bytes": 8137,
+      "purpose": "该句失败的截取日志，不含整场聊天",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "tts12/targeted-tests.log",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/targeted-tests.log",
+      "source_sha256": "fa6b51488acb974439d23e7fce03b6efb4205f9e9ca94879493b5b2ebc8ea2ae",
+      "archive_sha256": "fa6b51488acb974439d23e7fce03b6efb4205f9e9ca94879493b5b2ebc8ea2ae",
+      "bytes": 21204,
+      "purpose": "12秒修复时71项定向测试输出",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "tts12/old-eight-second-config.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/tts8-config.json",
+      "source_sha256": "19cdeaa143c0238a3d47a95fc91a1094d30a18eb1f95841739f49c3862bb6216",
+      "archive_sha256": "19cdeaa143c0238a3d47a95fc91a1094d30a18eb1f95841739f49c3862bb6216",
+      "bytes": 1573,
+      "purpose": "保存旧条件，未包含密钥",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "preview-scalability-review.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/preview-scalability-review.json",
+      "source_sha256": "a219691c6c7cbbc5de155e9050592ae5a01c0bc02abd35bf487b1c055238e09f",
+      "archive_sha256": "a219691c6c7cbbc5de155e9050592ae5a01c0bc02abd35bf487b1c055238e09f",
+      "bytes": 6553,
+      "purpose": "未执行的临时画质备用建议与引擎源码依据",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "summary.json",
+      "source": "generated_from_copied_reports",
+      "archive_sha256": "bfeaee6bcf2b3ee96a0cdd09552450d1669427d44664d9345930b93759a92a8d",
+      "bytes": 3522
+    },
+    {
+      "path": "tts12/actual-playback/ue.log",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/actual-playback/ue.log",
+      "source_sha256": "a081cbffef503a3143bea333cbb2594bc9aefabc59f0de277f4c4fcc05e58a76",
+      "archive_sha256": "a081cbffef503a3143bea333cbb2594bc9aefabc59f0de277f4c4fcc05e58a76",
+      "bytes": 6268,
+      "purpose": "12秒修复后，实际客户端输入与两端8.64秒源语音完整播放的关联记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "tts12/actual-playback/backend.log",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/actual-playback/backend.log",
+      "source_sha256": "45d10f6dc576c495a94741c0a43ca736ba8711c0dcc642eec7aa8e8855fd118b",
+      "archive_sha256": "45d10f6dc576c495a94741c0a43ca736ba8711c0dcc642eec7aa8e8855fd118b",
+      "bytes": 2474,
+      "purpose": "12秒修复后，实际客户端输入与两端8.64秒源语音完整播放的关联记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "tts12/actual-playback/native.log",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/actual-playback/native.log",
+      "source_sha256": "a83905cece0d49c579cc39b60aad1b80b228419e10cd36501e00d9285c18355a",
+      "archive_sha256": "a83905cece0d49c579cc39b60aad1b80b228419e10cd36501e00d9285c18355a",
+      "bytes": 1869,
+      "purpose": "12秒修复后，实际客户端输入与两端8.64秒源语音完整播放的关联记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "tts12/actual-playback/dialogue-selection.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/actual-playback/dialogue-selection.json",
+      "source_sha256": "c61bb575539e01baafac026315fb558f63eb8531dccc30c919ddde212358b79a",
+      "archive_sha256": "c61bb575539e01baafac026315fb558f63eb8531dccc30c919ddde212358b79a",
+      "bytes": 986,
+      "purpose": "12秒修复后，实际客户端输入与两端8.64秒源语音完整播放的关联记录",
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "tts12/actual-playback/summary.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/actual-playback/summary.json",
+      "source_sha256": "7f05341135f401ccd2f1600286fd7051cdfbe86bfe684f60ef6e0dc2feb8ff3f",
+      "archive_sha256": "7f05341135f401ccd2f1600286fd7051cdfbe86bfe684f60ef6e0dc2feb8ff3f",
+      "bytes": 3104,
+      "purpose": "12秒修复后，实际客户端输入与两端8.64秒源语音完整播放的关联记录",
+      "copy": "unaltered_bytes"
+    }
+  ],
+  "updated_utc": "2026-11-14T14:19:29.519121+00:00"
+}

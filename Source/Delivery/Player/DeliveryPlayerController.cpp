@@ -2,14 +2,19 @@
 
 #include "Player/DeliveryPlayerController.h"
 #include "AI/Conversation/DeliveryConversationComponent.h"
+#include "AI/Companion/DeliveryCompanionCharacter.h"
+#include "AI/Companion/DeliveryCompanionComponent.h"
 #include "Game/DeliveryStartupFlow.h"
 #include "Character/DeliveryCharacter.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Blueprint/UserWidget.h"
 #include "Audio/DeliveryDialogueVoiceComponent.h"
 #include "Audio/DeliveryMusicComponent.h"
+#include "Speech/DeliverySpeechInputComponent.h"
 #include "Delivery.h"
 #include "Components/PostProcessComponent.h"
+#include "Camera/PlayerCameraManager.h"
+#include "ConvexVolume.h"
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
 #include "InputKeyEventArgs.h"
@@ -18,6 +23,13 @@
 #include "UI/Controllers/DeliveryPhoneController.h"
 #include "Audio/DeliveryPhoneAudioComponent.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Framework/Application/SlateUser.h"
+#include "GenericPlatform/GenericWindow.h"
+#include "Widgets/SViewport.h"
+#include "Widgets/SWindow.h"
 #include "InputAction.h"
 #include "InputCoreTypes.h"
 #include "InputMappingContext.h"
@@ -26,12 +38,14 @@
 #include "Task/Tracking/DeliveryGroundArrowComponent.h"
 #include "Task/Tracking/DeliveryObjectiveRingComponent.h"
 #include "Task/DeliverySettlementComponent.h"
+#include "SceneView.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 ADeliveryPlayerController::ADeliveryPlayerController()
 {
     ResidentConversation=CreateDefaultSubobject<UDeliveryConversationComponent>(TEXT("ResidentConversation"));
+    SpeechInput=CreateDefaultSubobject<UDeliverySpeechInputComponent>(TEXT("SpeechInput"));
     DialogueVoice = CreateDefaultSubobject<UDeliveryDialogueVoiceComponent>(TEXT("DialogueVoice"));
     GroundArrow = CreateDefaultSubobject<UDeliveryGroundArrowComponent>(TEXT("GroundArrow"));
     ObjectiveRing = CreateDefaultSubobject<UDeliveryObjectiveRingComponent>(TEXT("ObjectiveRing"));
@@ -83,6 +97,84 @@ void ADeliveryPlayerController::ServerReportStartupReady_Implementation(ADeliver
 {
     if (Flow && Flow == ADeliveryStartupFlow::GetDeliveryStartupFlow(this))
         Flow->ReportPlayerReady(this);
+}
+
+void ADeliveryPlayerController::InvalidateCompanionView()
+{
+    if (HasAuthority()) ++CompanionViewRevision;
+    if (IsLocalController() && GetWorld())
+        LocalCompanionViewChangedAt = static_cast<float>(GetWorld()->GetTimeSeconds());
+}
+
+void ADeliveryPlayerController::OnPossess(APawn* InPawn)
+{
+    InvalidateCompanionView();
+    Super::OnPossess(InPawn);
+}
+
+void ADeliveryPlayerController::OnUnPossess()
+{
+    InvalidateCompanionView();
+    Super::OnUnPossess();
+}
+
+void ADeliveryPlayerController::SetViewTarget(AActor* NewViewTarget, FViewTargetTransitionParams TransitionParams)
+{
+    InvalidateCompanionView();
+    Super::SetViewTarget(NewViewTarget, TransitionParams);
+}
+
+bool ADeliveryPlayerController::AreCompanionCatchUpBoxesUnseen(APawn* ViewPawn, AActor* ViewTarget,
+    const FVector& StartCenter, const FVector& EndCenter, const FVector& Extent) const
+{
+    // 旁观、调试、过渡和尚未初始化的镜头均视为未知，不能默认无人看见
+    if (!IsLocalPlayerController() || !IsValid(ViewPawn) || ViewPawn != GetPawn() ||
+        ViewPawn->GetController() != this || ViewTarget != ViewPawn || ViewTarget != GetViewTarget() ||
+        (!ViewPawn->IsA<ADeliveryCharacter>() && !ViewPawn->IsA<ADeliveryMotorbike>()) ||
+        !PlayerCameraManager || PlayerCameraManager->ViewTarget.Target != ViewTarget ||
+        PlayerCameraManager->PendingViewTarget.Target || PlayerCameraManager->CameraStyle != NAME_Default ||
+        PlayerCameraManager->bClientSimulatingViewTarget || PlayerCameraManager->GetCameraCacheTime() <= 0.0f ||
+        PlayerCameraManager->GetCameraCacheTime() <= LocalCompanionViewChangedAt ||
+        StartCenter.ContainsNaN() || EndCenter.ContainsNaN() || Extent.ContainsNaN() || Extent.GetMin() <= 0.0)
+        return false;
+
+    ULocalPlayer* LocalPlayer = GetLocalPlayer();
+    FViewport* Viewport = LocalPlayer && LocalPlayer->ViewportClient ? LocalPlayer->ViewportClient->Viewport : nullptr;
+    if (!Viewport || !GEngine || GEngine->IsStereoscopic3D(Viewport)) return false;
+
+    FSceneViewProjectionData Projection;
+    if (!LocalPlayer->GetProjectionData(Viewport, Projection) || !Projection.IsValidViewRectangle() ||
+        !Projection.IsPerspectiveProjection() || Projection.ViewOrigin.ContainsNaN()) return false;
+    const FMatrix ViewProjection = Projection.ComputeViewProjectionMatrix();
+    if (ViewProjection.ContainsNaN()) return false;
+
+    // 使用本机实际宽高比和投影，不把近远裁剪或遮挡当作安全补位依据
+    FConvexVolume Frustum;
+    GetViewFrustumBounds(Frustum, ViewProjection, false, false);
+    if (Frustum.Planes.Num() != 4) return false;
+
+    // 服务器传入身体及安全余量，再补两厘米覆盖网络量化误差
+    const FVector PaddedExtent = Extent + FVector(2.0);
+    return !Frustum.IntersectBox(StartCenter, PaddedExtent) && !Frustum.IntersectBox(EndCenter, PaddedExtent);
+}
+
+void ADeliveryPlayerController::ClientCheckCompanionCatchUp_Implementation(ADeliveryCompanionCharacter* Companion,
+    FGuid RequestId, FVector_NetQuantize StartCenter, FVector_NetQuantize EndCenter, FVector_NetQuantize Extent)
+{
+    APawn* ViewPawn = GetPawn();
+    AActor* ViewTarget = GetViewTarget();
+    const bool bUnseen = IsValid(Companion) && Companion->GetWorld() == GetWorld() && RequestId.IsValid() &&
+        AreCompanionCatchUpBoxesUnseen(ViewPawn, ViewTarget, StartCenter, EndCenter, Extent);
+    ServerReportCompanionCatchUpView(Companion, RequestId, ViewPawn, ViewTarget, bUnseen);
+}
+
+void ADeliveryPlayerController::ServerReportCompanionCatchUpView_Implementation(ADeliveryCompanionCharacter* Companion,
+    FGuid RequestId, APawn* ViewPawn, AActor* ViewTarget, bool bUnseen)
+{
+    if (!HasAuthority() || !IsValid(Companion) || Companion->GetWorld() != GetWorld() ||
+        !RequestId.IsValid() || !IsValid(Companion->Companion)) return;
+    // 同伴组件核验挑战、全部观察者、超时和版本，单个客户端回答不代表可补位
+    Companion->Companion->AcceptCatchUpVisibility(this, RequestId, ViewPawn, ViewTarget, bUnseen);
 }
 
 // 本机启用交互物高亮，界面和电话由各自处理器管理
@@ -149,6 +241,45 @@ void ADeliveryPlayerController::EnsureInteractMapping(UEnhancedInputLocalPlayerS
 }
 
 // 控制器输入
+
+bool ADeliveryPlayerController::HasWalkingInputFocus() const
+{
+    const ULocalPlayer* LocalPlayer = GetLocalPlayer();
+    // 没有本机视口的服务器和独立逻辑测试不读取 Slate 的全局焦点
+    if (!LocalPlayer) return true;
+    UGameViewportClient* ViewportClient = LocalPlayer->ViewportClient.Get();
+    const auto Viewport = ViewportClient ? ViewportClient->GetGameViewportWidget() : nullptr;
+    if (!Viewport || !FSlateApplication::IsInitialized()) return false;
+    const auto& Slate = FSlateApplication::Get();
+    const auto Window = Slate.FindWidgetWindow(Viewport.ToSharedRef());
+    const auto NativeWindow = Window.IsValid() ? Window->GetNativeWindow() : nullptr;
+    const auto SlateUser = LocalPlayer->GetSlateUser();
+    // 输入框或按钮取得焦点后，只允许界面操作，不能沿用此前的移动键
+    return Slate.IsActive() && Window == Slate.GetActiveTopLevelWindow() &&
+        NativeWindow.IsValid() && NativeWindow->IsForegroundWindow() && SlateUser.IsValid() &&
+        SlateUser->GetFocusedWidget() == Viewport;
+}
+
+void ADeliveryPlayerController::PreProcessInput(float DeltaTime, bool bGamePaused)
+{
+    Super::PreProcessInput(DeltaTime, bGamePaused);
+    if (!IsLocalController() || !Cast<ADeliveryCharacter>(GetPawn())) return;
+    UpdateWalkingInputFocus(!bGamePaused && HasWalkingInputFocus());
+}
+
+void ADeliveryPlayerController::UpdateWalkingInputFocus(bool bAllowed)
+{
+    const bool bLostFocus = bWalkingInputAllowed && !bAllowed;
+    bWalkingInputAllowed = bAllowed;
+    if (bLostFocus) FlushPressedKeys();
+}
+
+void ADeliveryPlayerController::FlushPressedKeys()
+{
+    // 引擎失焦清键不会清理布娃娃中独立保存的移动意图
+    if (auto* ControlledCharacter = Cast<ADeliveryCharacter>(GetPawn())) ControlledCharacter->DoMove(0.0f, 0.0f);
+    Super::FlushPressedKeys();
+}
 
 // 绑定手机、交互和本机界面相关按键
 void ADeliveryPlayerController::SetupInputComponent()

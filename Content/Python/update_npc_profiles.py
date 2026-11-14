@@ -3,11 +3,26 @@ import json
 from pathlib import Path
 import unreal
 
+
+def resident_profiles(source):
+    # 先检查全部人物编号，再只取原居民，二狗不进入居民表和声音配置
+    if source.get('version') != 1 or not isinstance(source.get('characters'), list):
+        raise RuntimeError('Unsupported NPC profile source')
+    profiles = {}
+    for row in source['characters']:
+        key = row.get('id') if isinstance(row, dict) else None
+        if not isinstance(key, str) or not key or key in profiles:
+            raise RuntimeError('Invalid or duplicate NPC profile id')
+        profiles[key] = row
+    required = {'chunlai', 'xiumei'}
+    if not required.issubset(profiles):
+        raise RuntimeError('Missing required resident NPC profiles')
+    return [row for row in source['characters'] if row['id'] in required]
+
+
 root = Path(unreal.Paths.project_dir())
 source = json.loads((root / 'Design/AI/NpcProfiles.json').read_text(encoding='utf-8'))
-if source.get('version') != 1 or len(source.get('characters', [])) != 2:
-    raise RuntimeError('Unsupported NPC profile source')
-rows = source['characters']
+rows = resident_profiles(source)
 seen = set()
 for row in rows:
     if row['id'] in seen or not row['display_name'] or not 1 <= len(row['persona']) <= 1024 or row['tts_voice'] not in ('', 'male', 'female'):

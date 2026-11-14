@@ -2,6 +2,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Inventory/DeliveryPackageItem.h"
+#include "Carry/DeliveryPackageCarrierInterface.h"
+#include "Vehicle/DeliveryMotorbike.h"
 #include "Inventory/DeliveryCaterpillarItem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "AbilitySystem/DeliverGameplayTags.h"
@@ -89,6 +91,38 @@ void ADeliveryPackageItem::BeginPlay()
 {
     Super::BeginPlay();
     OnRep_Caterpillar();
+    RefreshCarrierPresentation();
+}
+
+void ADeliveryPackageItem::RefreshCarrierPresentation()
+{
+    if (auto* Carrier = Cast<IDeliveryPackageCarrierInterface>(GetOwner()))
+    {
+        bHadCarrierPresentation = true;
+        Carrier->ApplyTaskPackagePresentation(this);
+    }
+    else if (!GetOwner() && bHadCarrierPresentation)
+    {
+        bHadCarrierPresentation = false;
+        // 掉落恢复物理；服务器后续的移动复制继续提供实际落点
+        DropFromInventory(GetActorLocation(), FVector::ZeroVector);
+    }
+    else if (auto* Bike = Cast<ADeliveryMotorbike>(GetOwner()))
+    {
+        // 车辆装卸沿用原来的Cargo复制，不让旧携带者重新改附着
+        bHadCarrierPresentation = false;
+        Bike->RefreshCargoPresentation(this);
+    }
+    else if (GetOwner())
+    {
+        bHadCarrierPresentation = false;
+    }
+}
+
+void ADeliveryPackageItem::OnRep_Owner()
+{
+    // 基类按虚函数选择包裹原有表现，避免普通持物与任务持物重复刷新
+    Super::OnRep_Owner();
 }
 
 void ADeliveryPackageItem::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

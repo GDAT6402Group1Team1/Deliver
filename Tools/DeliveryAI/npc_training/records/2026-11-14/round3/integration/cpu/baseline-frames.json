@@ -1,0 +1,306 @@
+{
+  "schema_version": 1,
+  "label": "baseline-tts8-primary",
+  "configuration": {
+    "pie": "dual",
+    "resolution": "960x720",
+    "ue_pid": "56396",
+    "group": "baseline-tts8",
+    "capture_id": "5CB7C65444C5A8409F7D688C1D38FF72"
+  },
+  "source_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7-integration\\CombatCpuWarm.csv",
+  "source_sha256": "11458c1bc66f824a14183cff8b85c2ea573201710416ec1e1b4d65bbd7e4a6c2",
+  "analyzed_at_utc": "2026-11-14T13:48:37.904991+00:00",
+  "source": {
+    "data_rows": 5731,
+    "valid_frames": 5731,
+    "missing_frame_indices": [],
+    "zero_frame_indices": [],
+    "capture_duration_seconds": 541.2981472000009,
+    "ue_completion_footer_present": true,
+    "frame_column": "FrameTime",
+    "unit": "ms",
+    "metadata": {
+      "platform": "Windows",
+      "buildversion": "++UE5+Release-5.8-CL-56057345",
+      "systemresolution.resx": "960",
+      "systemresolution.resy": "720",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "deviceprofile": "WindowsEditor",
+      "endtimestamp": "1794663857",
+      "captureduration": "541.217791",
+      "csvmaxfilebytesreached": "0"
+    }
+  },
+  "interval": {
+    "selection": "frame_start_in_half_open_interval",
+    "requested_start_seconds": 123.41119,
+    "requested_end_seconds": 163.41119,
+    "first_frame_index": 1318,
+    "last_frame_index": 1746,
+    "measured_start_seconds": 123.49183600000012,
+    "measured_end_seconds": 163.43061450000016,
+    "measured_duration_seconds": 39.9387785,
+    "capture_start_utc": "2026-11-14T13:35:16.662000+00:00",
+    "estimated_start_utc": "2026-11-14T13:37:20.153836+00:00",
+    "estimated_end_utc": "2026-11-14T13:38:00.092615+00:00"
+  },
+  "sample_count": 429,
+  "frame_time_ms": {
+    "median": 91.4803,
+    "p95": 103.52588,
+    "p99": 131.78833599999962,
+    "maximum": 151.7208,
+    "mean": 93.09738578088579
+  },
+  "percentile_method": "linear_interpolation_at_(N-1)*p",
+  "frames_over_33_333ms": 429,
+  "frames_over_50ms": 429,
+  "warnings": [],
+  "extra_csv_columns": {
+    "GameThreadTime": {
+      "available": true,
+      "count": 429,
+      "median": 65.2323,
+      "p95": 81.1,
+      "min": 56.3244,
+      "max": 114.7613,
+      "first": 64.3871,
+      "last": 69.2417
+    },
+    "RenderThreadTime": {
+      "available": true,
+      "count": 429,
+      "median": 0.0004,
+      "p95": 0.0007,
+      "min": 0.0001,
+      "max": 0.0017,
+      "first": 0.0004,
+      "last": 0.0006
+    },
+    "GPUTime": {
+      "available": true,
+      "count": 429,
+      "median": 16.5818,
+      "p95": 21.310679999999998,
+      "min": 14.5191,
+      "max": 22.9808,
+      "first": 15.9739,
+      "last": 21.1482
+    },
+    "RHIThreadTime": {
+      "available": true,
+      "count": 429,
+      "median": 0.1577,
+      "p95": 0.28375999999999996,
+      "min": 0.09,
+      "max": 0.4302,
+      "first": 0.15,
+      "last": 0.22
+    },
+    "GameThreadTime_CriticalPath": {
+      "available": true,
+      "count": 429,
+      "median": 65.2402,
+      "p95": 81.10933999999999,
+      "min": 56.3244,
+      "max": 114.7635,
+      "first": 64.3888,
+      "last": 69.2427
+    },
+    "RenderThreadTime_CriticalPath": {
+      "available": true,
+      "count": 429,
+      "median": 0.0004,
+      "p95": 0.0007,
+      "min": 0.0001,
+      "max": 0.0017,
+      "first": 0.0004,
+      "last": 0.0006
+    },
+    "GPUMem/LocalBudgetMB": {
+      "available": true,
+      "count": 429,
+      "median": 8814.7832,
+      "p95": 8834.9707,
+      "min": 8731.3887,
+      "max": 8834.9707,
+      "first": 8796.2832,
+      "last": 8814.7793
+    },
+    "GPUMem/LocalUsedMB": {
+      "available": true,
+      "count": 429,
+      "median": 6498.8008,
+      "p95": 6594.8008,
+      "min": 6498.8008,
+      "max": 6594.8008,
+      "first": 6498.8008,
+      "last": 6498.8008
+    },
+    "GPUMem/SystemBudgetMB": {
+      "available": true,
+      "count": 429,
+      "median": 15512.2637,
+      "p95": 15512.2637,
+      "min": 15512.2637,
+      "max": 15512.2637,
+      "first": 15512.2637,
+      "last": 15512.2637
+    },
+    "GPUMem/SystemUsedMB": {
+      "available": true,
+      "count": 429,
+      "median": 589.9062,
+      "p95": 589.9062,
+      "min": 589.9062,
+      "max": 589.9062,
+      "first": 589.9062,
+      "last": 589.9062
+    },
+    "PhysicalUsedMB": {
+      "available": true,
+      "count": 429,
+      "median": 6683.7695,
+      "p95": 6700.8203,
+      "min": 6666.0195,
+      "max": 6749.8633,
+      "first": 6666.0195,
+      "last": 6701.0078
+    },
+    "VirtualUsedMB": {
+      "available": true,
+      "count": 429,
+      "median": 16891.6406,
+      "p95": 16925.2344,
+      "min": 16791.3711,
+      "max": 16936.1367,
+      "first": 16791.3711,
+      "last": 16925.2344
+    },
+    "MemoryFreeMB": {
+      "available": true,
+      "count": 429,
+      "median": 4690.5117,
+      "p95": 4722.80778,
+      "min": 4333.3086,
+      "max": 4736.5117,
+      "first": 4726.832,
+      "last": 4657.2148
+    },
+    "CPUUsage_Process": {
+      "available": true,
+      "count": 429,
+      "median": 3.4393,
+      "p95": 3.70116,
+      "min": 2.5997,
+      "max": 6.0853,
+      "first": 3.2981,
+      "last": 3.5796
+    },
+    "ActorCount/TotalActorCount": {
+      "available": true,
+      "count": 429,
+      "median": 9883.0,
+      "p95": 10110.0,
+      "min": 9372.0,
+      "max": 10114.0,
+      "first": 9653.0,
+      "last": 9439.0
+    },
+    "ActorCount/DeliveryPedestrian": {
+      "available": true,
+      "count": 429,
+      "median": 692.0,
+      "p95": 916.0,
+      "min": 192.0,
+      "max": 920.0,
+      "first": 464.0,
+      "last": 258.0
+    },
+    "ActorCount/DeliveryNpcCharacter": {
+      "available": true,
+      "count": 429,
+      "median": 6.0,
+      "p95": 6.0,
+      "min": 6.0,
+      "max": 6.0,
+      "first": 6.0,
+      "last": 6.0
+    },
+    "Exclusive/GameThread/TickActors": {
+      "available": true,
+      "count": 429,
+      "median": 12.6329,
+      "p95": 14.87622,
+      "min": 10.7519,
+      "max": 19.6472,
+      "first": 11.4845,
+      "last": 13.1693
+    },
+    "Exclusive/GameThread/Physics": {
+      "available": true,
+      "count": 429,
+      "median": 0.3627,
+      "p95": 0.47165999999999997,
+      "min": 0.2767,
+      "max": 0.6171,
+      "first": 0.3607,
+      "last": 0.3549
+    },
+    "Exclusive/GameThread/ActorSpawning": {
+      "available": true,
+      "count": 429,
+      "median": 0.0,
+      "p95": 1.67136,
+      "min": 0.0,
+      "max": 2.7889,
+      "first": 0.0,
+      "last": 0.0
+    },
+    "Exclusive/GameThread/ActorDestroying": {
+      "available": true,
+      "count": 429,
+      "median": 0.0,
+      "p95": 1.833059999999999,
+      "min": 0.0,
+      "max": 3.4756,
+      "first": 1.4287,
+      "last": 1.1825
+    },
+    "View/PosX": {
+      "available": true,
+      "count": 429,
+      "median": 11882.2686,
+      "p95": 11882.2715,
+      "min": 11882.2637,
+      "max": 11882.2734,
+      "first": 11882.2666,
+      "last": 11882.2676
+    },
+    "View/PosY": {
+      "available": true,
+      "count": 429,
+      "median": 11854.8018,
+      "p95": 11854.8096,
+      "min": 11854.792,
+      "max": 11854.8115,
+      "first": 11854.8047,
+      "last": 11854.8027
+    },
+    "View/PosZ": {
+      "available": true,
+      "count": 429,
+      "median": 1953.1461,
+      "p95": 1953.151,
+      "min": 1953.1396,
+      "max": 1953.1527,
+      "first": 1953.1483,
+      "last": 1953.1467
+    }
+  },
+  "eligible_for_full_40_second_gate": true,
+  "measurement_utc_started": "2026-11-14T13:37:20.073190+00:00",
+  "measurement_utc_finished": "2026-11-14T13:38:00.082927+00:00",
+  "boundary_note": "完整40秒为主结果，后续录制空闲尾段全部排除"
+}

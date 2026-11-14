@@ -4,7 +4,7 @@ import queue
 import threading
 import unittest
 
-from neural_tts import NeuralTtsError, QwenSpeechSynthesizer
+from neural_tts import MAX_STREAM_CHUNKS, NeuralTtsError, QwenSpeechSynthesizer
 from test_neural_tts import FakeProcess
 
 
@@ -14,6 +14,7 @@ class NeuralStreamTests(unittest.TestCase):
         process = FakeProcess(client)
         client.process, client.ready, client.audio_stream_version = process, True, 1
         client.config = {**client.config, 'cancel_grace_seconds':1, 'process_exit_timeout_seconds':.1}
+        client.config['max_pcm_bytes'] = 384000
         self.addCleanup(client.close)
         return client, process
 
@@ -98,7 +99,7 @@ class NeuralStreamTests(unittest.TestCase):
                     self.assertTrue(process.cancel_received.is_set())
 
     def test_total_audio_and_chunk_count_are_bounded(self):
-        for count,size in ((13,30720),(33,2)):
+        for count,size in ((13,30720),(MAX_STREAM_CHUNKS+1,2)):
             with self.subTest(count=count,size=size):
                 client,process=self.client()
                 def reply(task):
@@ -110,7 +111,7 @@ class NeuralStreamTests(unittest.TestCase):
                 with self.assertRaisesRegex(NeuralTtsError,'invalid_stream_(size|order)'):
                     self.stream(client,chunks.append)
                 self.assertLessEqual(sum(map(len,chunks)),384000)
-                self.assertLessEqual(len(chunks),32)
+                self.assertLessEqual(len(chunks),MAX_STREAM_CHUNKS)
 
     def test_cancel_timeout_and_callback_error_wait_for_worker_to_stop(self):
         for reason in ('cancel','timeout','callback'):

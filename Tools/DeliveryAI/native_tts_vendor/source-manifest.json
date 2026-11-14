@@ -1,0 +1,28 @@
+{
+  "ggml_commit": "0d403add5cb6329935290f02462e1072045aacd2",
+  "commit": "f1a6924789883bd92eeb59176793a94af55730b3",
+  "build_script": "Tools/DeliveryAI/tts_evaluation/build_native_qwen.ps1",
+  "repository": "https://github.com/ServeurpersoCom/qwentts.cpp",
+  "remove": "Remove native provider selection and its Saved/AIResearch/NativeQwen directory; official Qwen remains independent",
+  "source_location": "Saved/AIResearch/NativeQwen/source",
+  "status": "experimental_not_default",
+  "license": "MIT",
+  "files": {
+    "convert.py": "a7aac7eb205150d2f38a1c9b9d144c4e86cbed96684b8749907321db4b976afa",
+    "CMakeLists.txt": "a71a14a18cb8a0d69faf744668149b9de5bcff702f343dc892a6635b74ab15d9",
+    "src/qwen.h": "08841d6299809754b2f6e4dbfce0bd1035ea351fcc51a0b437aeb39b48d79a97",
+    "src/pipeline-codec.cpp": "bc18d126e3a1021518cfc4def499d24bc3dd37faadad0a0f895f6ba518170973",
+    "src/qwen.cpp": "6dda5498d5bd1224aa921b518b191f5af9fbb1faac1a276aa0121c42e55537f3",
+    "LICENSE": "cddbecd5db98ec5bd44af3e7221b6d44c3e9fed1c92940a3be5b0080c9b86475",
+    "src/pipeline-tts.cpp": "a897cca5165bc901a679819fd9594aa2617a8243cb7771572d88b8e25eb1fc85"
+  },
+  "patches": {
+    "kv1024": {
+      "path": "kv1024.patch",
+      "sha256": "626c39683af6ebf184bcb15dc09404852a9fda1da49c2eb1d151d2a4379913da",
+      "patched_source_sha256": "e1c43c4d4f934c1e535801b9d11cd03bea7168d6470ddb4e5d2fc02ae5568418",
+      "capacity": 1024,
+      "purpose": "减少游戏短句语音的常驻显存；超出完整提示与生成上限时明确拒绝，不截断"
+    }
+  }
+}

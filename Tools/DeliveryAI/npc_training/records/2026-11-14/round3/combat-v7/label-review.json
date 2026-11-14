@@ -1,0 +1,53 @@
+{
+  "reviewer": "independent_speech_measurement_agent",
+  "teacher_sha256": "158748299e8c2db25273da7e5876da0b73febc19a38f5c8e17e46040f3b86661",
+  "validation_labels_changed": false,
+  "training_disagreements": [
+    {
+      "id": "change-003-branch-2",
+      "use_teacher_label": true,
+      "reason": "已在退避，对方仍辱骂并冲来；继续远离是合理选择，记录没有说明自己愿意回身",
+      "unique_correct_answer": false
+    },
+    {
+      "id": "change-022-branch-1",
+      "use_teacher_label": true,
+      "reason": "已经挨拳，环境变安静不代表追打威胁消失",
+      "unique_correct_answer": false
+    },
+    {
+      "id": "change-026-branch-1",
+      "use_teacher_label": true,
+      "reason": "自己刚说受惊后退，随后对手真正冲来，继续逃离合理",
+      "unique_correct_answer": false
+    },
+    {
+      "id": "change-029-branch-1",
+      "use_teacher_label": true,
+      "reason": "抬拳威胁变成冲来，继续远离也符合性格和经过",
+      "unique_correct_answer": false
+    },
+    {
+      "id": "change-034-branch-1",
+      "use_teacher_label": true,
+      "reason": "仍站立且此前有命中，对方假和解后再次出拳，反击符合暴躁人物；不规定挨三拳必须逃",
+      "unique_correct_answer": false
+    },
+    {
+      "id": "change-036-branch-1",
+      "use_teacher_label": true,
+      "reason": "刚说和好又被追，选择避开是一种合理回应",
+      "unique_correct_answer": false
+    }
+  ],
+  "validation_disagreements": [
+    {
+      "id": "change-032-branch-2",
+      "fixed_label": "Fight",
+      "teacher_label": "Flee",
+      "scoring": "Keep the original draft label as the fixed main comparison; report teacher disagreement separately"
+    }
+  ],
+  "events_or_personas_changed": false,
+  "frozen_acceptance_used_for_labels": false
+}

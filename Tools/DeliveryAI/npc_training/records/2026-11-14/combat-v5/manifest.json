@@ -1,0 +1,10 @@
+{
+  "round": 2,
+  "new_independent_training_stories": 32,
+  "total_training_rows": 160,
+  "total_training_groups": 155,
+  "validation_groups": 15,
+  "acceptance_used_for_refinement": false,
+  "acceptance_second_evaluation_planned": true,
+  "previous_data_sha256": "2bead50bef8edba5c4257629a60c804dac22c96f8f6c9af95e47e5a6ef48453a"
+}

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T15:36:51.303387+00:00",
+  "scope": "本轮两次成功构建快照及首次失败、UI复测；独立归档，不覆盖旧清单",
+  "files": [
+    {
+      "path": "build-followup-20261114.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/build-followup-20261114.json",
+      "source_sha256": "9127d26aea5e0907ac10b51991d59012e28c82f83657459a8d669251d84aaaa3",
+      "archive_sha256": "9127d26aea5e0907ac10b51991d59012e28c82f83657459a8d669251d84aaaa3",
+      "bytes": 22672,
+      "copy": "unaltered_bytes"
+    },
+    {
+      "path": "final-build-followup-20261114.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/final-build-followup-20261114.json",
+      "source_sha256": "2acc809334a16a13c6bd6a01b5fd7f4a7daf1136db7feba55e86f0fdb880607f",
+      "archive_sha256": "2acc809334a16a13c6bd6a01b5fd7f4a7daf1136db7feba55e86f0fdb880607f",
+      "bytes": 18414,
+      "copy": "unaltered_bytes"
+    }
+  ],
+  "file_count": 2,
+  "total_bytes": 41086,
+  "credential_pattern_scan_found_matches": false,
+  "previous_manifests_sha256": {
+    "Tools/DeliveryAI/npc_training/records/2026-11-14/round3/round3-manifest.json": "3d16302b5a45cf81c627cdcae6ff7955454ad61ec30716a3a29ee54505097472",
+    "Tools/DeliveryAI/npc_training/records/2026-11-14/round3/integration/manifest.json": "a852f8edece45a2befe90eb3e8137b1a87f144f7ec90de325244a4b0f77dfedf",
+    "Tools/DeliveryAI/npc_training/records/2026-11-14/round3/playtest-followup/manifest.json": "b31804f12e027e75130eca87b4eed4ad30a83cd74d6c49584087027dfd7ee687"
+  },
+  "excluded": [
+    "DLL本体",
+    "模型权重",
+    "音频",
+    "原始长日志"
+  ]
+}

@@ -77,6 +77,9 @@ class DELIVERY_API UDeliveryPickupPointComponent : public UActorComponent
     UFUNCTION(BlueprintCallable, Category = "Delivery|Pickup")
     bool TryDispense(ADeliveryCharacter *Receiver);
 
+    /** 服务器向持件者发出指定任务的实物，true 表示已经接收；任务已被别人取走时拒绝 */
+    bool TryDispenseToCarrier(APawn* Receiver, UDeliveryTaskDefinition* ExpectedTask);
+
     // 地点查询与组件配置
     /** 取 Actor 身上第一个取货点组件；服务器复核客户端请求时用 */
     static UDeliveryPickupPointComponent *FindOn(const AActor *Actor);

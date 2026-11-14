@@ -1,0 +1,541 @@
+{
+  "source": "Saved\\AIResearch\\NpcTraining\\combat-v4\\situations.json",
+  "source_sha256": "2bead50bef8edba5c4257629a60c804dac22c96f8f6c9af95e47e5a6ef48453a",
+  "split": "validation",
+  "samples": 15,
+  "timeout_seconds": 10.0,
+  "results": [
+    {
+      "id": "combat-040",
+      "group_id": "combat-040",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": false,
+      "protocol_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 0,
+        "prompt_n": 729,
+        "prompt_ms": 108.384,
+        "prompt_per_token_ms": 0.14867489711934156,
+        "prompt_per_second": 6726.0850310008855,
+        "predicted_n": 12,
+        "predicted_ms": 54.883,
+        "predicted_per_token_ms": 4.573583333333334,
+        "predicted_per_second": 218.64693985387095
+      },
+      "complete_ms": 210.17160000337753,
+      "timing": {
+        "combat_prompt_ready": 25.09039999858942,
+        "combat_model_done": 210.0085999991279
+      }
+    },
+    {
+      "id": "combat-056",
+      "group_id": "combat-056",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 575,
+        "prompt_n": 156,
+        "prompt_ms": 31.896,
+        "prompt_per_token_ms": 0.20446153846153847,
+        "prompt_per_second": 4890.895410082769,
+        "predicted_n": 12,
+        "predicted_ms": 49.255,
+        "predicted_per_token_ms": 4.104583333333333,
+        "predicted_per_second": 243.63008831590702
+      },
+      "complete_ms": 132.2610999995959,
+      "timing": {
+        "combat_prompt_ready": 29.83420000236947,
+        "combat_model_done": 132.093200001691
+      }
+    },
+    {
+      "id": "combat-096",
+      "group_id": "combat-096",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": false,
+      "protocol_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 575,
+        "prompt_n": 157,
+        "prompt_ms": 25.719,
+        "prompt_per_token_ms": 0.16381528662420383,
+        "prompt_per_second": 6104.436408880593,
+        "predicted_n": 12,
+        "predicted_ms": 43.792,
+        "predicted_per_token_ms": 3.6493333333333333,
+        "predicted_per_second": 274.0226525392766
+      },
+      "complete_ms": 112.35959999612533,
+      "timing": {
+        "combat_prompt_ready": 8.904799993615597,
+        "combat_model_done": 112.21519999526208
+      }
+    },
+    {
+      "id": "combat-048",
+      "group_id": "combat-048",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 575,
+        "prompt_n": 128,
+        "prompt_ms": 15.213,
+        "prompt_per_token_ms": 0.1188515625,
+        "prompt_per_second": 8413.856570038783,
+        "predicted_n": 10,
+        "predicted_ms": 34.524,
+        "predicted_per_token_ms": 3.4524,
+        "predicted_per_second": 289.6535743251072
+      },
+      "complete_ms": 87.11449999827892,
+      "timing": {
+        "combat_prompt_ready": 8.565999996790197,
+        "combat_model_done": 86.9622000027448
+      }
+    },
+    {
+      "id": "combat-120",
+      "group_id": "combat-120",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 575,
+        "prompt_n": 154,
+        "prompt_ms": 26.846,
+        "prompt_per_token_ms": 0.17432467532467533,
+        "prompt_per_second": 5736.422558295463,
+        "predicted_n": 13,
+        "predicted_ms": 49.494,
+        "predicted_per_token_ms": 3.8072307692307694,
+        "predicted_per_second": 262.65809997171374
+      },
+      "complete_ms": 105.33829999621958,
+      "timing": {
+        "combat_prompt_ready": 20.672900005592965,
+        "combat_model_done": 105.1627000051667
+      }
+    },
+    {
+      "id": "combat-112",
+      "group_id": "combat-112",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 575,
+        "prompt_n": 136,
+        "prompt_ms": 31.525,
+        "prompt_per_token_ms": 0.23180147058823528,
+        "prompt_per_second": 4314.036478984933,
+        "predicted_n": 10,
+        "predicted_ms": 41.031,
+        "predicted_per_token_ms": 4.1030999999999995,
+        "predicted_per_second": 243.71816431478638
+      },
+      "complete_ms": 134.36179999553133,
+      "timing": {
+        "combat_prompt_ready": 30.394200002774596,
+        "combat_model_done": 134.17800000024727
+      }
+    },
+    {
+      "id": "combat-008",
+      "group_id": "combat-008",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 524,
+        "prompt_n": 208,
+        "prompt_ms": 27.674,
+        "prompt_per_token_ms": 0.1330480769230769,
+        "prompt_per_second": 7516.0800751608,
+        "predicted_n": 12,
+        "predicted_ms": 47.479,
+        "predicted_per_token_ms": 3.956583333333333,
+        "predicted_per_second": 252.74331809852777
+      },
+      "complete_ms": 127.76260000100592,
+      "timing": {
+        "combat_prompt_ready": 44.27690000011353,
+        "combat_model_done": 127.6194999954896
+      }
+    },
+    {
+      "id": "combat-088",
+      "group_id": "combat-088",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 524,
+        "prompt_n": 180,
+        "prompt_ms": 44.446,
+        "prompt_per_token_ms": 0.2469222222222222,
+        "prompt_per_second": 4049.8582549610765,
+        "predicted_n": 10,
+        "predicted_ms": 40.398,
+        "predicted_per_token_ms": 4.0398000000000005,
+        "predicted_per_second": 247.53700678251394
+      },
+      "complete_ms": 114.83399999997346,
+      "timing": {
+        "combat_prompt_ready": 8.867700002156198,
+        "combat_model_done": 114.66099999961443
+      }
+    },
+    {
+      "id": "combat-024",
+      "group_id": "combat-024",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 524,
+        "prompt_n": 183,
+        "prompt_ms": 25.741,
+        "prompt_per_token_ms": 0.14066120218579234,
+        "prompt_per_second": 7109.280913717415,
+        "predicted_n": 10,
+        "predicted_ms": 37.77,
+        "predicted_per_token_ms": 3.777,
+        "predicted_per_second": 264.7603918453799
+      },
+      "complete_ms": 118.97509999835165,
+      "timing": {
+        "combat_prompt_ready": 23.010899996734224,
+        "combat_model_done": 118.7489000003552
+      }
+    },
+    {
+      "id": "combat-104",
+      "group_id": "combat-104",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 574,
+        "prompt_n": 130,
+        "prompt_ms": 22.696,
+        "prompt_per_token_ms": 0.1745846153846154,
+        "prompt_per_second": 5727.8815650334855,
+        "predicted_n": 10,
+        "predicted_ms": 36.259,
+        "predicted_per_token_ms": 3.6259,
+        "predicted_per_second": 275.7935960726992
+      },
+      "complete_ms": 133.09180000214837,
+      "timing": {
+        "combat_prompt_ready": 51.83060000126716,
+        "combat_model_done": 132.92640000145184
+      }
+    },
+    {
+      "id": "combat-064",
+      "group_id": "combat-064",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 524,
+        "prompt_n": 180,
+        "prompt_ms": 25.725,
+        "prompt_per_token_ms": 0.14291666666666666,
+        "prompt_per_second": 6997.0845481049555,
+        "predicted_n": 10,
+        "predicted_ms": 37.406,
+        "predicted_per_token_ms": 3.7405999999999997,
+        "predicted_per_second": 267.3367908891622
+      },
+      "complete_ms": 111.34350000065751,
+      "timing": {
+        "combat_prompt_ready": 25.60020000237273,
+        "combat_model_done": 111.15710000012768
+      }
+    },
+    {
+      "id": "combat-080",
+      "group_id": "combat-080",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 524,
+        "prompt_n": 201,
+        "prompt_ms": 26.209,
+        "prompt_per_token_ms": 0.13039303482587064,
+        "prompt_per_second": 7669.121294211913,
+        "predicted_n": 12,
+        "predicted_ms": 39.262,
+        "predicted_per_token_ms": 3.2718333333333334,
+        "predicted_per_second": 305.6390402934135
+      },
+      "complete_ms": 142.95940000010887,
+      "timing": {
+        "combat_prompt_ready": 55.86089999997057,
+        "combat_model_done": 142.82180000009248
+      }
+    },
+    {
+      "id": "combat-072",
+      "group_id": "combat-072",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 600,
+        "prompt_n": 135,
+        "prompt_ms": 23.457,
+        "prompt_per_token_ms": 0.17375555555555555,
+        "prompt_per_second": 5755.211663895639,
+        "predicted_n": 13,
+        "predicted_ms": 49.142,
+        "predicted_per_token_ms": 3.7801538461538464,
+        "predicted_per_second": 264.53949778193805
+      },
+      "complete_ms": 108.14349999418482,
+      "timing": {
+        "combat_prompt_ready": 27.890700002899393,
+        "combat_model_done": 107.98430000431836
+      }
+    },
+    {
+      "id": "combat-032",
+      "group_id": "combat-032",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 524,
+        "prompt_n": 218,
+        "prompt_ms": 30.374,
+        "prompt_per_token_ms": 0.1393302752293578,
+        "prompt_per_second": 7177.191018634358,
+        "predicted_n": 13,
+        "predicted_ms": 51.844,
+        "predicted_per_token_ms": 3.988,
+        "predicted_per_second": 250.75225677031094
+      },
+      "complete_ms": 118.9349000051152,
+      "timing": {
+        "combat_prompt_ready": 27.95279999554623,
+        "combat_model_done": 118.75599999621045
+      }
+    },
+    {
+      "id": "combat-016",
+      "group_id": "combat-016",
+      "source": {
+        "kind": "authored_ue_event_scenario",
+        "gameplay_recording": false,
+        "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+        "event_formats": "DescribeCombatState / ObserveFact / Speech"
+      },
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": false,
+      "protocol_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 524,
+        "prompt_n": 214,
+        "prompt_ms": 37.88,
+        "prompt_per_token_ms": 0.17700934579439254,
+        "prompt_per_second": 5649.419218585005,
+        "predicted_n": 12,
+        "predicted_ms": 52.639,
+        "predicted_per_token_ms": 4.386583333333333,
+        "predicted_per_second": 227.96785653222895
+      },
+      "complete_ms": 121.88890000106767,
+      "timing": {
+        "combat_prompt_ready": 8.319500004290603,
+        "combat_model_done": 121.71710000257008
+      }
+    }
+  ],
+  "status": "completed",
+  "context_tokens": 4096,
+  "max_output_tokens": 64,
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0,
+    "seed": 20261114
+  },
+  "repeated_identical_prompt_is_separate_metric": true,
+  "summary": {
+    "cases": 15,
+    "correct": 12,
+    "protocol_valid": 15,
+    "accuracy": 0.8,
+    "first_pass_ms_median": 118.97509999835165,
+    "first_pass_ms_p95": 210.17160000337753,
+    "exact_repeat_ms_p95": null,
+    "unwanted_fight": 3,
+    "acceptance_qualified": false
+  }
+}

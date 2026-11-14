@@ -5,6 +5,7 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "BrainComponent.h"
 #include "Character/DeliveryCharacter.h"
+#include "Carry/DeliveryPackageCarrierInterface.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -65,6 +66,7 @@ void ADeliveryGrandpa::BeginPlay()
     HomeLocation = GetActorLocation();
     StrollLocation = HomeLocation + GetActorRightVector() * StrollDistance;
     DeliveryTarget->DeliveryGate.BindUObject(this, &ADeliveryGrandpa::CanReceive);
+    if (HasAuthority()) DeliveryTarget->OnDeliveryConfirmed.AddUObject(this,&ADeliveryGrandpa::HandleDeliveryConfirmed);
     OnRep_FrontDoor();
     if (HasAuthority())
     {
@@ -124,6 +126,9 @@ void ADeliveryGrandpa::BindTaskManager()
 
 void ADeliveryGrandpa::EndPlay(const EEndPlayReason::Type Reason)
 {
+    bMoveOutActive=false;
+    bMotionActive=false;
+    bWalking=false;
     GetWorldTimerManager().ClearTimer(BindTimer);
     if (IsValid(TaskManager)) TaskManager->OnTaskStatusChanged.RemoveDynamic(this, &ADeliveryGrandpa::HandleTaskChanged);
     if (IsValid(FrontDoor)) FrontDoor->OnDoorBroken.RemoveDynamic(this, &ADeliveryGrandpa::HandleDoorBroken);
@@ -135,6 +140,7 @@ void ADeliveryGrandpa::EndPlay(const EEndPlayReason::Type Reason)
     }
     if (IsValid(KnockAnchor)) KnockAnchor->DestroyComponent();
     DeliveryTarget->DeliveryGate.Unbind();
+    DeliveryTarget->OnDeliveryConfirmed.RemoveAll(this);
     if (AAIController* AI = Cast<AAIController>(GetController()))
         if (AI->GetBrainComponent()) AI->GetBrainComponent()->StopLogic(TEXT("Grandpa EndPlay"));
     Super::EndPlay(Reason);
@@ -148,6 +154,9 @@ void ADeliveryGrandpa::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
     DOREPLIFETIME(ADeliveryGrandpa, bDelivered);
     DOREPLIFETIME(ADeliveryGrandpa, CurrentAction);
     DOREPLIFETIME(ADeliveryGrandpa, bWalking);
+    DOREPLIFETIME(ADeliveryGrandpa, bHomeDeliveryConfirmed);
+    DOREPLIFETIME(ADeliveryGrandpa, MoveOutState);
+    DOREPLIFETIME(ADeliveryGrandpa, MoveOutWaitReason);
 }
 
 bool ADeliveryGrandpa::IsDoorBroken() const { return IsValid(FrontDoor) && FrontDoor->IsBroken(); }
@@ -179,10 +188,12 @@ bool ADeliveryGrandpa::Knock(APawn* Interactor)
 
 bool ADeliveryGrandpa::CanReceive(AActor* Package, APlayerState* Player) const
 {
-    if (!IsDoorBroken() || bDelivered || !IsValid(Package) || !Player || Player->GetWorld() != GetWorld()) return false;
-    const auto* Holder = Cast<ADeliveryCharacter>(Package->GetOwner());
-    if (!Holder || Holder->GetTaskPlayerState() != Player || Holder->GetWorld() != GetWorld() ||
-        Holder->IsIncapacitated() || Holder->IsRidingVehicle() || Holder->GetCarriedTaskPackage() != Package) return false;
+    if (!IsDoorBroken() || bDelivered || !IsValid(Package) || Package->GetWorld() != GetWorld() ||
+        !IsValid(Player) || Player->GetWorld() != GetWorld() || Player->IsInactive()) return false;
+    const AActor* Holder = Package->GetOwner();
+    const auto* Carrier = Cast<IDeliveryPackageCarrierInterface>(Holder);
+    if (!IsValid(Holder) || !Carrier || Carrier->GetTaskPlayerState() != Player || Holder->GetWorld() != GetWorld() ||
+        !Carrier->CanHandleTaskPackage() || Carrier->GetCarriedTaskPackage() != Package) return false;
     if (FVector::Dist(Holder->GetActorLocation(), GetActorLocation()) > DeliveryTarget->InteractRadius + 30.f) return false;
     // 即使门已破，也不能在外墙另一边隔墙完成交付
     FCollisionQueryParams Params(SCENE_QUERY_STAT(GrandpaDelivery), false, this);
@@ -241,6 +252,8 @@ void ADeliveryGrandpa::OnRep_State() { UpdateBlackboard(); RefreshInteractions()
 void ADeliveryGrandpa::ApplyBehaviorAction(EDeliveryGrandpaAction Action)
 {
     if (!HasAuthority()) return;
+    if (HasMovedOut() && Action!=EDeliveryGrandpaAction::Finished) return;
+    if (bMoveOutActive && Action!=EDeliveryGrandpaAction::MoveOut) CancelMoveOut();
     if (Action == EDeliveryGrandpaAction::FinishReply)
     {
         bReplyPending = false;
@@ -282,7 +295,12 @@ void ADeliveryGrandpa::OnRep_Action()
     case EDeliveryGrandpaAction::Thanks:
         Clip = ReceiveAnimation; bLoop = false; Line = NSLOCTEXT("Grandpa", "Thanks", "Finally! Thank you."); break;
     case EDeliveryGrandpaAction::Finished:
-        Line = NSLOCTEXT("Grandpa", "Done", "Delivery received"); break;
+        if (!HasMovedOut()) Line = NSLOCTEXT("Grandpa", "Done", "Delivery received"); break;
+    case EDeliveryGrandpaAction::MoveOut:
+        Clip=bWalking && WalkAnimation?WalkAnimation.Get():IdleAnimation.Get();
+        if (MoveOutState==EDeliveryGrandpaMoveOutState::Waiting)
+            Line=NSLOCTEXT("Grandpa","MoveOutWaiting","我先在这儿等等。");
+        break;
     default: break;
     }
     if (Clip)

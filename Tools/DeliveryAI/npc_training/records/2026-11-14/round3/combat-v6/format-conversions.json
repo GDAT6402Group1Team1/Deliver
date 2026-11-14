@@ -1,0 +1,1122 @@
+[
+  {
+    "id": "combat-001",
+    "before_prompt_sha256": "4f513fec72784b5cb1f823f685fa3ba7a2b9839e3d902ceccb3408501246ab89",
+    "after_prompt_sha256": "0d003dabd7180a821827fd26de3cdf64ac80d8038411fdda0467dc3b7a808403",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-002",
+    "before_prompt_sha256": "53864f366f75cd6b4fc8b1759a355fc5c2f817e77b9837e23e2c4f3d79ce8cc3",
+    "after_prompt_sha256": "9a48a8c1aa6810b783d7bedce373251fda187c31aa5df406c70e43ff0d9f691c",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 1 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 1 次。现在刚挨打，正在后仰。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-003",
+    "before_prompt_sha256": "0193c0238c2115b8757ca5516fcc0dbcb680400627838eb062d47ba58d8fb029",
+    "after_prompt_sha256": "d9a16ec3381932236e372218bed47b8e41adefb178fdd2d858fc8f8c5930f40b",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-004",
+    "before_prompt_sha256": "d2623f941d101db4f67d9cb85b9a7e5c021c1105f22414a3a7d817eb28d39572",
+    "after_prompt_sha256": "577e27293691acc9eaec9f0060a87e388ae256921fb9c631ea6c421afdbbb39f",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-005",
+    "before_prompt_sha256": "fd15c619c9445dcc7609c4c5ab2305991388623a28087dfe3858983ac4ec04be",
+    "after_prompt_sha256": "75ac4230e8f8d925b5ab05c6da99cf5c85dc8621dddd8ea12dfaaa246e6d166e",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-006",
+    "before_prompt_sha256": "621a247a07e9e25a45f20625ac2c9535f7191d63d56d469f1a16197bbdb0becd",
+    "after_prompt_sha256": "e0e3e3763765b01162631844547fb43341d89f899b34c62e2a97a77f37f75490",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-007",
+    "before_prompt_sha256": "b6e6def1f744fe22e61aa8fc6cbdba05c59ebcfc688f3a82290ae000417f906f",
+    "after_prompt_sha256": "944b766769a44bdb040cdb0b97eaf94b7e2b8d127e286da1441444940e56cca3",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-009",
+    "before_prompt_sha256": "f4d78d91f39f7b96c88037d8ca240fffaaafeb2e5312f6caeeb551a0dcda3ad0",
+    "after_prompt_sha256": "40487526c31b24cff83a1ace0be9459c2214bbd4f3016d95a4d733d85d76af20",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-010",
+    "before_prompt_sha256": "76be3e15b50bee6a0c33c4d45d6081eefedf5ecd6d7ad37a1a4668133e58b266",
+    "after_prompt_sha256": "8d8886ee380b80f8e1eab8a03407fd917894809fb5915f51616e4953680dafa6",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-011",
+    "before_prompt_sha256": "f9f14b95684820b1a17fa6f93fbb460bdbe492fae1f810a76ca6d75d758716cd",
+    "after_prompt_sha256": "98384c7f565c6f1f78e2150ff500e45e14517ec722e16b8bfe0380563aaf2ac7",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-012",
+    "before_prompt_sha256": "7c0842132bcef33e8d00680351ea062570b1cbbdaf3b75c624deaae3bdc723e9",
+    "after_prompt_sha256": "e1db8bf1d8e56cac2a97a273deb9c6c8163fdc9c50eb2c6a1ea40d9ee618cafe",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-013",
+    "before_prompt_sha256": "8744c9668bd11e8ef2fa4f564910ff7d263b26714de8126ed7b590cc542c1c04",
+    "after_prompt_sha256": "46968f14e26ed1058a8580dc46b34a3023a2ea097cd35426fc61d83e89a0a494",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-014",
+    "before_prompt_sha256": "fd774063ca145078850f7bc4c7ae20cb88d5d05111a3835e3bbbd3bfee440ca8",
+    "after_prompt_sha256": "27e320dc734859c3ad8fd7c188a7d056499cb753a956b07d2ce2c7ee28cc936f",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 3 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 3 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-015",
+    "before_prompt_sha256": "6ca811c457cff2d4049b4d5a1e4c34bb5a45cdb7c228fc4bfd3c157398660c36",
+    "after_prompt_sha256": "3c0505880d3550afb93de8e19d7fb76c869cd459fdb7d1862517ad05004806fa",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-017",
+    "before_prompt_sha256": "9b3f36b6e358fee13f5565c7b8e2328470b34655fc2c3689b9ac971ac39dedc5",
+    "after_prompt_sha256": "fcf3b7d582c4f0271a5f4b0c578d6dbdfd57883be508063f18b6619bc9b22eab",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 3 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 3 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-018",
+    "before_prompt_sha256": "b0cbbc1ae37ab001be6b5765b27cff67d632c7fa2d9734649eefc5f9fafe76e7",
+    "after_prompt_sha256": "8f576529e38c84858cca19a8a18e9c2e1ff548504c6e5289f9ebe621f78d432a",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-019",
+    "before_prompt_sha256": "e486555a175a82fd6384ed95459c439238a3928c6f27a2fe57f0a41f5e9a0c05",
+    "after_prompt_sha256": "d0dcf6d246b7a53b92a865adfd52a2dcaff79516ad502e45a1383939ae64bfcb",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-020",
+    "before_prompt_sha256": "f7634c746328109d654cd3e467ce6699322a94d997098d2ae2364940ec601636",
+    "after_prompt_sha256": "68cba1d128288585fefd7494360cf81f5c77124d2104c9fa0390c7408150a3f8",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-021",
+    "before_prompt_sha256": "ba32a9c97c086b3960ef4e0608c5c0ca17c3a2369b10f96ba9fc02bf744520dc",
+    "after_prompt_sha256": "34e8b3ef9830dd8c2b8252a773495167571485851c61acc03de5c358babb3638",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-022",
+    "before_prompt_sha256": "283d48663685c3563704df17373dc5c45566ed96ba069d5fd83446353a5d7d8b",
+    "after_prompt_sha256": "6f743a855ead3c6c12e13be01c89c5955b8db33b0d473a890c5799c736b33773",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-023",
+    "before_prompt_sha256": "ee04ede418920abf2f7efd705bfdbd1643da16debc341f7147f1db117bec747e",
+    "after_prompt_sha256": "72debfa47f0e8f6eaa0ea618478e52154ebc33ccd09b58985b74e54402f5a409",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-025",
+    "before_prompt_sha256": "52c458c6bf9377da4043b16fd8ab5b9eb05b34470e12fc126650d0694a9c3c9f",
+    "after_prompt_sha256": "ca235872391d7075f804bd6186db604b598a3d2bf1b00602c19c4b58b446b1e9",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-026",
+    "before_prompt_sha256": "6977074d4821b6e45623a4356c6b7e8ef808290737d0d112238c0a8c7bb00943",
+    "after_prompt_sha256": "b302f97e2baab335a81983e63087cf9e1c235b121c7222af41df33f487fb2611",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-027",
+    "before_prompt_sha256": "8fa7dd566e7bd01de06601841524649a7e5d3d564d9992583add29c2b96929a1",
+    "after_prompt_sha256": "54c305fe2ab2c5bcdfdf19d49bd1981c43d920af15b7bc1b064dd4782ccae57a",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-028",
+    "before_prompt_sha256": "cac520f055d40a182cb8cc3c5aec490fb0a1def7b244f0bcda1994eafaf9f8ce",
+    "after_prompt_sha256": "e1813abb2d96aef32b4f34f56889b414c63dac43516eeb3497b7674ffc119898",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 3 次，实际命中 2 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 3 次，实际命中 2 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-029",
+    "before_prompt_sha256": "22a50091ff03bdf072451fc51d5cd13288787de03c4d8b34dbe4ba0b48a192ba",
+    "after_prompt_sha256": "b780a076143bf2d2369f05e1e0498d1d1026eba29e540e6fe5c3cbb9aab00cfb",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-030",
+    "before_prompt_sha256": "ab6093018b395558b5b335f1390c0476fe4fb6793d43efe32999f2c5f11fc634",
+    "after_prompt_sha256": "2c5df44dc0bc7dc29baf434310c9ad5d5a00563a9cf7dbed308cc050cc6b5748",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-031",
+    "before_prompt_sha256": "62657e68e3c3de926525b203bc8ed5fe24cebe974c740cb86941868027646361",
+    "after_prompt_sha256": "6c0dff6cde5a08f5fb08f0d60ea963fc929fd49e8313b40f9ae63a3c97b4c1a1",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-033",
+    "before_prompt_sha256": "b360e04d57c314f359a4141c715ba041d3ab2bdb00d2409ee37da4735c083284",
+    "after_prompt_sha256": "44ba251b91d2a5df7cec898e2f7907c27639c0cfbfc61c028d4359a79179c8e9",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-034",
+    "before_prompt_sha256": "29070ae026ab488ed51feb587b59d6569e6f7694f4d22869e47d75fa5cc6ac6b",
+    "after_prompt_sha256": "485e16f2de45c3b5cb473e837ef5c6cdc0efb9dad5be83a6516bb96313b7d63f",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-035",
+    "before_prompt_sha256": "b7162bdeedb4213614fe2760a3d0fa584677147465630a75d7657c90712cadd7",
+    "after_prompt_sha256": "c38f179ebed4bf2d41f3dad9b254bbef30ddd09cee4cebdd2b84b420f3ce27a2",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 3 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 3 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-036",
+    "before_prompt_sha256": "0e0b0f31978bf7cfe31d53d2a34c5a4510d15f9ffeb4408ad585e7c3b6346ca3",
+    "after_prompt_sha256": "081e493b0fb6470ca86312fd5faa2dd4419652e0dd60f56a8e098e1e3512d767",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-037",
+    "before_prompt_sha256": "bb5b9deabdb94f6c1ae92a3e996260ebaaf496176812b38194d53582f050edc9",
+    "after_prompt_sha256": "1e127e50c88cdeb7f5aa00ecae2769a8a902d00450282567b643d640c541f542",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-038",
+    "before_prompt_sha256": "78d826ae6b28893be1772665d97cc66286253afe5443d3fe1444847681be40b0",
+    "after_prompt_sha256": "64b957187024c1175dd64fd137c2d3836e0e1831cad5a24eac4ffe62e189214c",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-039",
+    "before_prompt_sha256": "11e594770eacc7ebd4a280fe9382bd0c253096d78b19701d6b2c11e8a9107c94",
+    "after_prompt_sha256": "1515e3eca69f0ce37fe2ddde179172064a395fa1b57d172f2f379594a52f1e9f",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-041",
+    "before_prompt_sha256": "1bc985650904768ea99fe7a969594409d0f090ea7cfff17953737348b73c0529",
+    "after_prompt_sha256": "685296ab726326f2bb4d7964f5484aeda0ef390438216707fa402efcde257854",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-042",
+    "before_prompt_sha256": "b4e4ee2ef5b7900546c316917ec821fd6258cd5eb28fb7754ae8a0f8aa441766",
+    "after_prompt_sha256": "2dbdc9fa46f382114691f5fd8b72b4906bf3069095f8b168ebb624fdc455310c",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-043",
+    "before_prompt_sha256": "5be2ee828e176b7ea053fd97f7880331f0fad1bb99c23a7b14c705aaa60b8ee9",
+    "after_prompt_sha256": "6264d19ec952213ed385f23acf331356cb9d048a0e2579d644ea2e9aba7d94c4",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-044",
+    "before_prompt_sha256": "55b0c9c5d86260ec360f58852574028af2a858c6e317ef530e33c48f6f4a302b",
+    "after_prompt_sha256": "60de821caf8cf92a371ffd07076d0cc496195f2404cd975117ae587592fcd0a3",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-045",
+    "before_prompt_sha256": "0f544d9ff92b38019334c34aa95e01156676c29e536b6b8355c43bff1ad2676e",
+    "after_prompt_sha256": "72cd1a8f719bcd125903b15ad8212532945638a19c9a993a0342049b729bcfd9",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-046",
+    "before_prompt_sha256": "56919e35f41eebd95a834456764866c30d3f814fbf94175d993134a3a42da6f4",
+    "after_prompt_sha256": "cacba2577845e1d5061174063a27168dfc2a86eda1fbe1517810e9191943c5c0",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-047",
+    "before_prompt_sha256": "b8fe7b92802d890c7c125d7694833ba256673415eeffe70196f4d9a349d4ed6b",
+    "after_prompt_sha256": "271b305d9214b1ccdc5a9babddec6309b19a2b9507d59765849e07d9fdf15734",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-049",
+    "before_prompt_sha256": "093c72e57f62d353ce173ddcd995203f8f9b9d2f1989dcd7c91d0c7cc107e99b",
+    "after_prompt_sha256": "be545642c9494daccd80391227430112334c61295c6e280ed6548afdb1c7cdae",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-050",
+    "before_prompt_sha256": "d0d20cbc973a44ecf94b988c30896674f571f1453c3034a4e4ddfeb7af81c58d",
+    "after_prompt_sha256": "ddae9e54782a89f0baa5b50193d1363a3bc79700a82a365a4f2874a7eb193421",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-051",
+    "before_prompt_sha256": "adfc7ed42b1926d4baff124d62c2de4f8ef3cef03faf8e37a9421721bdd04423",
+    "after_prompt_sha256": "ef30d8dbfb9b93a327c70812efca50ca4d322f73a2638a3a125565b11abcaea3",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-052",
+    "before_prompt_sha256": "e57847fdc034a91e7d9685988a98c5dcf0795734f99fd7452ddda5c42654ad60",
+    "after_prompt_sha256": "b9a0fb35d23b78405373bc713921b0bb85eff64e8eb834612663062bafc8daf6",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-053",
+    "before_prompt_sha256": "405dcc6cce1f9f9c0aeedc16cbdcb6f6e11ee3f4926a49234a1897325a317f22",
+    "after_prompt_sha256": "ffa3321ded52bf55eb7e477078316435aa6c9d9eba8630cc031e1d8513d90268",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-054",
+    "before_prompt_sha256": "a15f0724f805f2d3473b2c508048866390b9c63f18db1bbd21182c54803e1df0",
+    "after_prompt_sha256": "b86149658871eec0279cd94b3207c5e6b4afba91961d256c3b153d5a1ded96a8",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-055",
+    "before_prompt_sha256": "a4bcf2809a063bfe76295a24e42f8cccbdbdf104188179e13fb24bcdca94abda",
+    "after_prompt_sha256": "4148ad7ad9fa1c3ef023e846c49175e0d040596c74183034cdbef4a22b6c99c4",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-057",
+    "before_prompt_sha256": "2838f21ac38c3199a954f9a5963d9bfab8e2e0e0f522e0ac6e32cd2c1e31917f",
+    "after_prompt_sha256": "6b69b43c743327b8aa6e84309252aa69c801f3bc3d4192f21840c0368792a50b",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-058",
+    "before_prompt_sha256": "60512c4591386135ce3b87e3dc44b51b0eba3fb12347e338f341ddeda8a4198b",
+    "after_prompt_sha256": "7f23f3298da40d189de3c4828ef3e7fd1d39a558996a463c6279c0c9882bd68c",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-059",
+    "before_prompt_sha256": "8b10ed2e86b53e6ad965e1fc0684b94279f716d9b2a9b9c3d57397db267f334e",
+    "after_prompt_sha256": "0c7769710f8f45b02c8700c5983dcfa6a9cdd668de2816a45c3f84e61da23574",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-060",
+    "before_prompt_sha256": "6b781bf9c8a6eb0866e3a763958aa2c883c404322172a578d4c29c71a7c31cc7",
+    "after_prompt_sha256": "037df26502280ff80393962d2f63af59ce42c9ae83310e2b9fdfbd2461f201e9",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-061",
+    "before_prompt_sha256": "a5b87f6f805f62b40c27053fc42724ee04c2ab9c2854b14952c91df82a52cc93",
+    "after_prompt_sha256": "a465e1484d0795f79a7c31f73d91c4cd639c52ba7e1c33f41fc77ee9cec5241f",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-062",
+    "before_prompt_sha256": "5b4aee966c8dd08e9d298f8f1204dd9e1decfa5d76d38f2cf413764f6923af9c",
+    "after_prompt_sha256": "3481d044ee4d751995d5a8542997f6a6cffaf49ec71befa4525bb5fbba30ff31",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-063",
+    "before_prompt_sha256": "3005d83f02a03ed9b41badd2913e8668a8ab12d9310b0459fbb222bf56818dca",
+    "after_prompt_sha256": "fc3220a0897c680daaa29edf9a7aaa7e72200546bd1e99aeea6b2527a10ddf6c",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-065",
+    "before_prompt_sha256": "38e36df2393924b862f9e464ba0b13766d8c665a2f74b7400651e24002147205",
+    "after_prompt_sha256": "ac5733ee03098f8baef1ccc058d370d1dac14150652435a84b1e58fbbd40778f",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-066",
+    "before_prompt_sha256": "b8e27d75ac91d959987e3d025c3df71884d94affd1c33f81f07b80534b55f412",
+    "after_prompt_sha256": "a6c190358ff1a8fac662c943118d49ad0006197f2af4149e0a9762d31ce1f78f",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-067",
+    "before_prompt_sha256": "da0b44f5eb7d8078eb8a365e7069698c35a135944f77a220a48b0be9690879ae",
+    "after_prompt_sha256": "ce800e2828ef130457742809b713de4171b5c926ebd7eac5006569be55529efa",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-068",
+    "before_prompt_sha256": "90fc20d8405f664172fafe2a0253c6151e42c0385026ccc39df375ecf041832a",
+    "after_prompt_sha256": "4fb6cfae8ffce3db9e8039a893234f62d1494f732236815b2eedd9fdaabe7912",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-069",
+    "before_prompt_sha256": "8fca4a7abe911a1c5e8e8c0da6905932ff9e6e0ee64bd4e91e42dab27149b655",
+    "after_prompt_sha256": "7e118536ea1792150cc0b66f62c0bcc12056087a4938504179cd4c7cb27a8726",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 3 次，实际命中 1 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 3 次，实际命中 1 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-070",
+    "before_prompt_sha256": "81a268ba886fb6f88d406407dbb667665728c3ee28739a7b88087d792afd28ed",
+    "after_prompt_sha256": "229794e5b5276be17847bf27718baae44ab7dcbc99471becd829f8f297392068",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-071",
+    "before_prompt_sha256": "08646270d8f2bb42d5012e979555ea8b66c158e5dbe65bf15935d185645a3513",
+    "after_prompt_sha256": "42e1384ec592e6de91ceb898e4539b512654324bf53a684c951e3965a0c7d071",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-073",
+    "before_prompt_sha256": "5400cf30fb3f1e7c7cd1b8eb037fe4b887191f00416ecb5128ccab328cabee4d",
+    "after_prompt_sha256": "66b2fa3eff6256e30f40db93f7f826bf081c456ab4f99a15033ef886f7122ada",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-074",
+    "before_prompt_sha256": "2f33dd3fc42ed0c2782ec70a75f085ce7a54a5696af8aaad1fe43f58d9f20aa8",
+    "after_prompt_sha256": "eb3fd90df0dc5d3c9f82e7728b700274ccddc77ddbe910679e60ceaec57dae20",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-075",
+    "before_prompt_sha256": "79764d656f2695e9e960ea7d684013447eba785cd065ec4f1e07b33f1bfe3d87",
+    "after_prompt_sha256": "96cea99afa550b35033d52292a919d2e80ee0c973dda205caf2e8f616de951fa",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-076",
+    "before_prompt_sha256": "91d4040af6fb29cd4bf54eba76a2ed0a5276ddc65e5ef1e3a623b396eaea0928",
+    "after_prompt_sha256": "8c3c900c72f4b5dad9113334037aa73df04419cdc4c38faff59fa2ffc6475ad3",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-077",
+    "before_prompt_sha256": "347eb45c4bf1260ec56f025006190feda12dbddbfc2a4593cbdcdf4e6dd2def3",
+    "after_prompt_sha256": "9dd363714b59888d3dc87dfd555a3f887cfc6c322e2e5113f94edb408f75eead",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-078",
+    "before_prompt_sha256": "643f815a33258a1d75c7ae98d55479a925ed5c363b081bb8e903417406056286",
+    "after_prompt_sha256": "949a662a7b2e52a068c17156f85cd20334879d709948a05e067852750ba4c252",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-079",
+    "before_prompt_sha256": "30b949a49b6bb1dd5c582852b54aaf9bd30cfb510eaddf9c3870d296f5b8335e",
+    "after_prompt_sha256": "657cf3d466ed5845f29ba04af9a14f2ebc394d9bd83c52537829595d68e42359",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-081",
+    "before_prompt_sha256": "4dc2117d1342fdf0596344a8ac5c0951bad2008010c78a324757940f95a82ae7",
+    "after_prompt_sha256": "0d301e7921761fffffdf45c9bec3b3951727ca8d1f001e5af684e96a8e825834",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-082",
+    "before_prompt_sha256": "8590deeb2827fa2ac8c6e28d21b6404d6cd9343ebbc2ef8d1f6412e099033cea",
+    "after_prompt_sha256": "bbac75d04fc01b5435b67a9da6338bf1c0e03bc2c2761456f867e5bf6239d6f9",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-083",
+    "before_prompt_sha256": "b96906cfb7450918b60f8b8714e9d373feca448bc3a2fc52e38c8b84a83e15dd",
+    "after_prompt_sha256": "10e5ea6965f5d2b1a52e841c3516771fd32bb1a5a95c369ad0199be3a971c381",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-084",
+    "before_prompt_sha256": "cbe5797181bccf104691e7c108a88dad9e4dc301212d726b831ca6f016468b8d",
+    "after_prompt_sha256": "f5367e10ee0600ea4a527b73a189ad077d8616fe94a7fc8fedd977fc83070c99",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-085",
+    "before_prompt_sha256": "c4f0f6ef371a1dab0e11362eb9a21b6955e2a0b780d3ecef24b1f65934abb23f",
+    "after_prompt_sha256": "97c4cccbcce5dcdb8da9a5cb2efbd70e0f94682d4d9ca93a099414b01c42bc42",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-086",
+    "before_prompt_sha256": "9c346067ed529ae159a997e2b42a46093f9a656c9f538b6238bc4dbffe077039",
+    "after_prompt_sha256": "769a585fa0154c19a24b618e0c21853512e04860632a90277804207165731147",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-087",
+    "before_prompt_sha256": "378f147b337331cabf36c365ea81acfbc0fd314b15597d022c1ff31e6c4de5dc",
+    "after_prompt_sha256": "2f6b5ce45c0f37c7e458a459aefa0a2bcd53fd05ab344b9a3a016b99ec46d4ce",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-089",
+    "before_prompt_sha256": "86f36753c7a0e03831c7aeb892688e03e3abc5919a4df3e28dce3d9bd0023a5b",
+    "after_prompt_sha256": "9c4137cd186bfb9910c7c1138906a757d5017d6f40d26d590f3e8a66c567f44c",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-090",
+    "before_prompt_sha256": "2cee2fd53ca3718238a5ef2480e9f70b0d1a3f3cbc56bb4d64bc00142c643b94",
+    "after_prompt_sha256": "a40e01e25604d7b309e4182681c7689fb68d4e9e1ea9e7ed7b9fa7cae274d3c0",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-091",
+    "before_prompt_sha256": "b0c42d1668ff001c13b6dba7e5b7991d4a416465311d29fd49b88d82ef7820c8",
+    "after_prompt_sha256": "b7966a8a5319eb9321ac94315d22fd2bee3dac978a4f877e66b395a3eff980e0",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-092",
+    "before_prompt_sha256": "6bd16cc58fa188a2f88004280265fe4a559c1469061d65a267a2493c4fe9deb9",
+    "after_prompt_sha256": "8a661e83d9a57bfcfb0b5098dd349f33bb4b628db7486b462463d322c7d19633",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-093",
+    "before_prompt_sha256": "abbb24f46c82b21339617ffcf5b41c56c6b6190fff2b3e9ed888f2fa53d5c167",
+    "after_prompt_sha256": "47ddae41f9fc8da301e28f2e497afd89bc53f5d5800f81e3812e1e81f0f554fb",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-094",
+    "before_prompt_sha256": "34fb7567f39c55d46743488f7dbd1c47c9a76bfb33a4cfec91b6e2289f23a012",
+    "after_prompt_sha256": "d797617fad41dddfe84ae8955d92b7e857451557b2bcb43ef3db1fffb74f2627",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-095",
+    "before_prompt_sha256": "2af32b31725eff67fcba7437efe53eee08ce85d5f40d0168fea00d378ac23cb3",
+    "after_prompt_sha256": "410f22b100a9fe463c8494d6d331cbe46d6830f742a93f3106572f8db5488a10",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-097",
+    "before_prompt_sha256": "65856a8f5e8604931ca9f6ac5d476aafbce1f953a01e16c835ef89fc0e194ab5",
+    "after_prompt_sha256": "1500639c616aaffc702d6d40a1f82516f363ed8fa73e2676c609d6dc6fb6cf6f",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-098",
+    "before_prompt_sha256": "26d22134de54ef50704712e7de4403f77feae050eab3c2b172d1bd0fe456a522",
+    "after_prompt_sha256": "bb0400bc3b093ff450beb499250801f6d23d04880e7cb5d244fdfdbd9648d9c2",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-099",
+    "before_prompt_sha256": "f5927bd3694ed687befad5b83b0e892feca511816730771eee2cd3f72bbc0013",
+    "after_prompt_sha256": "9f31aae9c9ef1d860c3af827a6aa8238978a16867f1a9c380182f601bd706899",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-100",
+    "before_prompt_sha256": "585674fb468f8f7601622aaaf30dec9bdbb4b4a393060cac1ebf695dcdfccc38",
+    "after_prompt_sha256": "b61bf5769e12f5d54bef661e3160c52a95c47d0bb8ad83c5f157dd84d54c0503",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-101",
+    "before_prompt_sha256": "c998d1c97942a995b38d1c486e2d5759b051b0d939f3523a6fe791d76f6d1080",
+    "after_prompt_sha256": "2281266b0c83f6b7c56123ea89cc7bb98dd78c0a34e69c07fb06023f6a97b27b",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-102",
+    "before_prompt_sha256": "8e3b87d2292f4fe2d395742d49f03bb7809c8c8b644565a2c0eff16175ed0117",
+    "after_prompt_sha256": "1a9e01d2ad36c0d5e8f81669b0efce6dc9c2a4d2924e05da0d1998bfe3ffd0e3",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-103",
+    "before_prompt_sha256": "b7735f5e3c3acd8b1fb6e4dfa3f4a584afd58c50bbed204d56fc2318bd719750",
+    "after_prompt_sha256": "3fe54e4c4e5e4bee2640fe5fda17abb0a63e148b0372daf5f35ea3a04d57bbe1",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-105",
+    "before_prompt_sha256": "156a2f7cb76e534febee7e4bcd8652a54e79dc0b663b747928338a981b21bb89",
+    "after_prompt_sha256": "b8029fa02eeb80e3754c3930a4c62513180d3f68750baca39e09312e01748cc1",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-106",
+    "before_prompt_sha256": "9abb0012bf2a9091b443b7103c925519f4ac0182bf0952c0779ffa5c618a42b3",
+    "after_prompt_sha256": "8812377d19d544418b90735ab6d9cb5f387ecdf2487f763dcb30ccfddf4e998a",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-107",
+    "before_prompt_sha256": "d56384a22fec9440e6dfc5cb0132673ddbaffe38b95948ab1b30d7ebc7b2987e",
+    "after_prompt_sha256": "2d19e2b56def6781c4022c220df64354f6c8205330815d108abe00be99f1ef35",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-108",
+    "before_prompt_sha256": "67fbc5533c9e3e6d23eea065b14a6c483adb2c725415b306bd5e8692aae7c8d3",
+    "after_prompt_sha256": "4819b36f6386da2ad9bb79048f7420956c5be7dbd33297a1171e8b6bd2abbd79",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-109",
+    "before_prompt_sha256": "7352bfe4a60fc15245e53dd8202c0e6d897c1b97e0593aa236635cdf171f6ae7",
+    "after_prompt_sha256": "bc1712d4392d63cca17be90b805840273b7d43a2cf7cc2ab98d89b3b6cb585d8",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-110",
+    "before_prompt_sha256": "e454a0c182713cdf1faf1b91601891e37989c57f46acca8a3f29d5249fba266c",
+    "after_prompt_sha256": "960429fce6c496125462302c3032bacad6f0f522111f9e3c0c3fa2fb3402e491",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-111",
+    "before_prompt_sha256": "197ef32f083a4a4e2b5f1b614080bfb5e30787c778bc3d1b3fc52e82e21fa7ec",
+    "after_prompt_sha256": "e37cfd12c3d188c4aca734f2e9a4e4982f4fba50d7f030cbed57b0c92917a0bb",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 3 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 3 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-113",
+    "before_prompt_sha256": "8896fa04675bd20033480de77b780c40fd7efdc3623c618c1e6591d0f29c54ad",
+    "after_prompt_sha256": "0fb28025d235642445f08bfa7800dfd14a5e5b98c7e2989b42a74a0991112762",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-114",
+    "before_prompt_sha256": "a0a1be796d771073b6d418d4ce773de254414dbaab3a78699fbdace906d6796a",
+    "after_prompt_sha256": "b1dd8d238f7d288366fcb35579579d13db1ed4bb8dd114eb47a613a13fab3f74",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-115",
+    "before_prompt_sha256": "953acda1899f1da0adb426777775371015cb40d0716a7830610eec1f2bf4b6a6",
+    "after_prompt_sha256": "ca65e06cdac2f2f5c8a5ec341e8691b96dff4285d521549d11ef2e6bbfc64067",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-116",
+    "before_prompt_sha256": "fb0b2e9df63c9bfb79d286be7cfbe1653a7b8f285854cdbdc916c495bfc79983",
+    "after_prompt_sha256": "5ee40aaded591ccca479debe204190fbe4df75047f1bdf116a20ba0eb32d2b28",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-117",
+    "before_prompt_sha256": "3930784a97750c5c85f797a3db1ee33b8b660844394d1b8940f41d5315647b11",
+    "after_prompt_sha256": "47cc5068d974eb10593fab8b82afcd93f85e3f8418268451107fcebf06d56fc9",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-118",
+    "before_prompt_sha256": "1b68bab3961a5da2c679645b71884e1b14d43271778d7aab19ee5fc8090936ea",
+    "after_prompt_sha256": "3a7bd4d7451b7f935a962a41104426e8983a7f51cd6232b0afe38a9333d28fbe",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-119",
+    "before_prompt_sha256": "7ea4e8f29be61b8541d2db540e4e6da390c881d6f44b0f292bc669695d8c2128",
+    "after_prompt_sha256": "327adab68f6ae016e9fa96c066c1a79931bca926c106574f6fe81c76e8fd7b64",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-121",
+    "before_prompt_sha256": "ca3bf34365a2a9839be606486bb2c67a5eb4b22ec2b0b8b74ddcd4c2b4559798",
+    "after_prompt_sha256": "a9a1ddfa13d5ab51d2ef6063590b983bbb0e3775099a9bb8e1511d3d26ab5570",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-122",
+    "before_prompt_sha256": "695abb357058f897f7067cb97fde328df3905481c50d8056b823cebce70a4145",
+    "after_prompt_sha256": "585b8cb6c9f9e8b9e744fa869534f9ce933e2df75cb7fbe4f2d17fbc904cef1f",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-123",
+    "before_prompt_sha256": "b03a7b8c918d4824abc531e1e3230274deb73b4590abd6e7729e2ce368602f65",
+    "after_prompt_sha256": "4c102bc7735fb736db449d7568328d9dc35058a1aa6f236d58db9bc5bfab1660",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-124",
+    "before_prompt_sha256": "2e29c07e768dfcfee36e37beb7d5ea59af7771f616fb882e9118d85bf7df2245",
+    "after_prompt_sha256": "84a05c15dae1d697bad1e33ad3089aa936f0bb5e56db401bac15d6f52e79b10c",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-125",
+    "before_prompt_sha256": "eed2a8620eae5339d74fa374d9bb55a2d83ee210a3775b66d159baaac7740abf",
+    "after_prompt_sha256": "5b0868e32eb55e9d2fc7f1b92acb64232613991e2df2c0ccfcc69d55b7c29d64",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-126",
+    "before_prompt_sha256": "802ac4d35a4eaefac0d30b9d39b20c0924149594389d03ded0157a2b1b411efd",
+    "after_prompt_sha256": "b99727008bbaaead5607b6a1e43f6daee8cf34751413e063dc5dda11db2ae860",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-127",
+    "before_prompt_sha256": "22d5be64998f97b9a426a256f9b4b3e476212715d3c2b381b60bb64c44932f5d",
+    "after_prompt_sha256": "eb9e7ed51f14d67491d18e644d18c78c72eda5acbd384ba634d133d12b2dbde3",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-128",
+    "before_prompt_sha256": "c4230baaf6dee3cee2fd2cd48fdb1753dcded76d52b3a2ba0f893be4942a7812",
+    "after_prompt_sha256": "d6678a8ed36252b83392169470050d9c0c275f51aa6bdf3c58c9bb011bd117b8",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-129",
+    "before_prompt_sha256": "589f62b1643a2b1eaf46e8fa3bc1ad41c345f43483d87d32172410edef5b4d01",
+    "after_prompt_sha256": "2a079dca583c3562ffe87c32c9695fb63d98a222922c9124f2218ae2c372fa66",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-130",
+    "before_prompt_sha256": "8a4b87f3301a24ba72eb23489572693afcea801539f92d532db4967d29362f0b",
+    "after_prompt_sha256": "309944f0b2c5563a53f05f0c906674738eb21e3453f8a2f3918a79341cc3940e",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-131",
+    "before_prompt_sha256": "2ea991b7ea790c54e5f680fafce676d8c97f1b86c344d888b1ff02c0f9e03f72",
+    "after_prompt_sha256": "bf2a0a8b91a7b4405c15e06266cbb6196e10fe2433d2156446f2c19ab6665e7a",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-132",
+    "before_prompt_sha256": "984005dee41f4f2d56f328eaa7fe45cf3f23fbe97b782451d79d5f9dcf8a272f",
+    "after_prompt_sha256": "822a3381ac77ec2050f06c94286d13a2a7a5f0a197c4655ab48e61f02bb8c95a",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-133",
+    "before_prompt_sha256": "89e0e649c4614a11a266ee5f8dfdff9d5028e747ce115ce65e05f3520abf3772",
+    "after_prompt_sha256": "78a75114514ab6752e89efa4f793c101912b27b500a21eddba46c81fa004a5ad",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-134",
+    "before_prompt_sha256": "6ff80d173caa52bd90f672ea5908422dd6deb952e0982c4a1acd2d47f965d018",
+    "after_prompt_sha256": "b1e87674bea02dd7892548312745026b29afbc13d1992e1bb5dfd1c1cb181dfd",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "combat-135",
+    "before_prompt_sha256": "52a940603fbd9537e2a2d7a4f05461e5cda643ed695ab072e448b60f43f4be46",
+    "after_prompt_sha256": "cf309d4adaf3f365d480731d6c1eca9273d54b633be505a42be4ae9fce10d9ea",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "log-3641fec4-4fe6-d4df-e988-219e7f0f959d",
+    "before_prompt_sha256": "1584deb9653c9a2fd338c0c6c0c0c24ca19ef7988e8b669bb6982a6d7b660e6c",
+    "after_prompt_sha256": "059804dd2c8ac516d3f627f1f6884b1f20367937c920c9ca93570f9b7f8014ca",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 3 次，实际命中 3 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 3 次，实际命中 3 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "log-e01428d0-404d-b5bf-d1ca-1ea8b9fe9957",
+    "before_prompt_sha256": "65463b86e559d5f5c30fb40753f3507ce11318cd74679eab7ab70182f5bf2035",
+    "after_prompt_sha256": "22b605af0d86d54a983209c59a0a5ff17bc93dcdb4fcdd13550fc207b12945ac",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "log-ae281560-4a16-193c-629a-00b76a54ca37",
+    "before_prompt_sha256": "68eaa0ada5782fcbe00828e403d8359fb89d863524dea8949f90b35b5aa9dd46",
+    "after_prompt_sha256": "39d81206065aca1e457cc0632dbf8e361e786c7bebcf3fa83a205a4cbc67b4f2",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "log-bf8f4920-48bf-51e0-a388-5a96c70cfd4a",
+    "before_prompt_sha256": "93a9e14606d0e4ca8842266082a84d310d9b04b50b0103a4902ec9c84dcd2a31",
+    "after_prompt_sha256": "b7350a5bfbc6a28625c749af69f6dccdf11c4e6aec36b14275e241bd77ffb157",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 3 次，实际命中 3 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 3 次，实际命中 3 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "log-7ade3889-4bc0-b303-1c26-43a3816c18ed",
+    "before_prompt_sha256": "ed33836299a336204afe0b4039348fb2856799819c2cf0d167e328925d3542d8",
+    "after_prompt_sha256": "cb377e3881fb6b4ecff95d3f8466a90983792a4cbdfcebc95f24c760e3c2d631",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 3 次，实际命中 3 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 3 次，实际命中 3 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "log-93bdcb86-456f-b41d-6194-4ab770433c9f",
+    "before_prompt_sha256": "64a323ec6093b4082170bbb4a786f060e691fb129fff455c2495c9495feed0ff",
+    "after_prompt_sha256": "69b4127447c876715c7c6eaa77b44ddd507ac9877463e9794a35a4e81fcac2dc",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 3 次，实际命中 3 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 3 次，实际命中 3 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "log-f0e042ef-462d-655b-c9e8-a293da50617a",
+    "before_prompt_sha256": "c98dd24f38c930d89961fa3a56128cddaf046bf17be287a737c76dee05db5b14",
+    "after_prompt_sha256": "028b173aee7a9e9706c9fe99def939c6c98924acc922c09971ce338504d4aaa8",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 4 次，实际命中 4 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 4 次，实际命中 4 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "log-c06566f0-4772-194f-cee5-4a8d0d57b8ab",
+    "before_prompt_sha256": "fd2d466bb24f7253481a29645bec506be866bb017548f3eb45abd36e5af0bf66",
+    "after_prompt_sha256": "992685f86db54448a7ab4b881be2aaa3ee8a93f19b1d30ff31170faaa9ab2974",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 4 次，实际命中 4 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 4 次，实际命中 4 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-001",
+    "before_prompt_sha256": "6067cf1a1dcaa702e62e8978eb046de7e1e204b4e16bb55ec489be93ec867499",
+    "after_prompt_sha256": "d7e216cbed26cce6fff858c7b38f653c3ad54eb2f5bbc6d35f01e0adbea04ec2",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-002",
+    "before_prompt_sha256": "a9362dc2612fcb5894b954681f8e4282e6fbb6a4e4155fdb06ce6da7422e6576",
+    "after_prompt_sha256": "c597cb3535e07e4209cd4f5e7d31e700d3d49715bace5addde9fc9f09a926612",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 4 次，实际命中 2 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 4 次，实际命中 2 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-003",
+    "before_prompt_sha256": "852aaddf41be59630b60e38d3df987a1c292db38034c924199e5f35a0d0a0900",
+    "after_prompt_sha256": "cca1bac09d83478400b0f424ddbf53ae163c4fde883978776c748f1da73e879a",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-004",
+    "before_prompt_sha256": "0ca66e4104f5c166f303c5d3a6e008015d09a1bc7aee7324b313a5865817562e",
+    "after_prompt_sha256": "7738fba009c7e6d80e22cd513dfbd288bf465c3eb4f12820f7236b186a318c6c",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 8 次，实际命中 6 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 8 次，实际命中 6 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-005",
+    "before_prompt_sha256": "3614f7263c0aadcf4effab51ca84f6e9aacb0510d71a12a08620c868fac1d8a0",
+    "after_prompt_sha256": "22376399e4f8b46f62f23bf839df93becf070c8dac5cbf46738ad2a94e4eb02a",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 7 次，实际命中 5 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 7 次，实际命中 5 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-006",
+    "before_prompt_sha256": "3d131236bd81673273a6ed99f7578d7ed95d8d72e52dc188f7acc964cf93153f",
+    "after_prompt_sha256": "a0d7ed84bec1ecee6387157fce20491320dda627f12aa0134e9034378d8a00e6",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 5 次，实际命中 4 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 5 次，实际命中 4 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-007",
+    "before_prompt_sha256": "98d4b461f4a61ead3de9d4f8b27febbc4e74f723673527264934e5ae0f32ae7a",
+    "after_prompt_sha256": "c24aeaf01f4bbfdf1ab37c6d851a525b4b175c8ee53199ea53923de9c40613c2",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 3 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-008",
+    "before_prompt_sha256": "f91bbd7167f11fb69fcdce448da6538cf3fb73750f50a648742af837e8355c6c",
+    "after_prompt_sha256": "658f53c06f02c68d5f0fae2dda9c1b2c484b72ce153ac722c929299afd23d965",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在刚挨打，正在后仰。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-009",
+    "before_prompt_sha256": "5273717b3456f841f97c2679f3fd391c0cd496439d43a926a98a015ad31931e8",
+    "after_prompt_sha256": "3f3e33d4057288d653cc7cb9959b160352131616b0c1288841fa53a72149272b",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在刚挨打，正在后仰。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-010",
+    "before_prompt_sha256": "74a2014be6b27bb0d80882a3cd086509bc7f52a0f4db9ff27396b811a807f98b",
+    "after_prompt_sha256": "60b8785fb90a10b2c7b3fb018d374014fc29a7c93c8c53c2f2cd59a762ff91e6",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-011",
+    "before_prompt_sha256": "3dd6c708ee40d4162d40d16abc8c2592db0f44db2ab648fd62759a87156b7053",
+    "after_prompt_sha256": "b2b2adeceac24bb65500947e0e8ff3542c1cb494e5de2bb3a4bce24f9eaa684a",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-012",
+    "before_prompt_sha256": "282891b0e18127c0093ea0ced8f63a6dbc05037ffb601bd0affd2067816212b5",
+    "after_prompt_sha256": "fcb9a422417b07dce8c609b3f9129d81280153b96f6daccd7ea849c69d15a586",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-013",
+    "before_prompt_sha256": "f15c736d60d5f8752761369cd057eaf21e1b828f68be45c65c0dd7e47fe225f5",
+    "after_prompt_sha256": "b5072939f40d4dc82357c67ccb7ff99ba3727dd6c5823825408182e713c300e9",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-014",
+    "before_prompt_sha256": "56f706d51014637a4ea2224a2338f14b07e862e5715bcad521b4737e0a8d64c7",
+    "after_prompt_sha256": "597ae049bc953946547847d72f23a395cc0450c264be72ae3710f9730f6e086c",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-015",
+    "before_prompt_sha256": "354cb43ac2235892af1aaca589421d8800d1d716f9d156f2396b850f7345db3a",
+    "after_prompt_sha256": "392a34ab0da5fe4389482ca85f11c3ed1e9f1deba246e10a73b7813c240e589b",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 3 次，实际命中 2 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 3 次，实际命中 2 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-016",
+    "before_prompt_sha256": "e6960bd6b240a5fa44d7c604e2fe74143c1df3e6fc64a9678a0c44e28c71a99c",
+    "after_prompt_sha256": "50f69c175fa4a376ec00b790b123c2557c7a7eb95bc5c07f06bf01d87de70c1b",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 4 次，实际命中 2 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；本轮交战挥拳 4 次，实际命中 2 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-017",
+    "before_prompt_sha256": "2a8bae47ef79988b61e7bf2bde09411aa9c21f77c45c9396faa5330adbc0fce2",
+    "after_prompt_sha256": "3f5b77abed28657cc49e2bc22fdacc258444fcd10cfda300078049661c78ced7",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 3 次，实际命中 2 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 3 次，实际命中 2 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-018",
+    "before_prompt_sha256": "68ec65aafa94f912b753641c4bd4d080514377a6cbbfee0e01c71acf787ef950",
+    "after_prompt_sha256": "1845a6ad8a062bb4b21bd6e83b2fcb2f4de8a6739166815f4452e681b7f3f824",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-019",
+    "before_prompt_sha256": "cb04c32bf38fd8dd4c95ab5f0057a095c515642e1c9e2102bea5068673f78aae",
+    "after_prompt_sha256": "210d1a0412b5c0fbc608cd52e9851c960ee3ffc126d2ec6aab97159fd1673252",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 4 次，实际命中 3 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 4 次，实际命中 3 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-020",
+    "before_prompt_sha256": "d5611011173f707e8e79ee389a5b313abc550a6513137535defed5604a2d0485",
+    "after_prompt_sha256": "5d6d287054100479392743f3c597882681ad55b6e27f86041a1bfa4a9e517392",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-021",
+    "before_prompt_sha256": "a9aab2a52f9534941bab7c15755163c07d97f305e673c7a4dcf74f48870f5a7f",
+    "after_prompt_sha256": "09608fd41d4b883ad5013dd238a3bb0c2e051533913176654bd65fe364088023",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-022",
+    "before_prompt_sha256": "077677abb2202433530ce505552b9f934d5638cb7690a758b7cb001386464e8e",
+    "after_prompt_sha256": "3448b540582980622205916e563422f1937c8bcb001c40015147c90557b29db7",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-023",
+    "before_prompt_sha256": "742cc1735cce06b402ff5dd95aaecd6a8bee371e6b275cd7c1a22b01b81e4cf9",
+    "after_prompt_sha256": "d253e8292eb45223a466eeddd05a4e150719fe324fbdf40a3855a83899e7a692",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-024",
+    "before_prompt_sha256": "08d6410deb9a78df2ebb32e11082f5692e8abca3430a7e0941a6334c0c53a6df",
+    "after_prompt_sha256": "71dda9932898aec5587e16c1123418e339af813b28e8055f51b52c2fccd29142",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-025",
+    "before_prompt_sha256": "328a98f1c6858fb4bccdb044c85d297b5a17f4d38a1c0c23a2ebd569b80b520f",
+    "after_prompt_sha256": "f7cb4bfd6042a54408f919840840313ed8726a53387e3bacada58570d6ae62db",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-026",
+    "before_prompt_sha256": "31d3e00f990401fc76587771d8e89171b53ff8ec0db66969565c8ad86672662e",
+    "after_prompt_sha256": "d37ce89697269d9d15c258e66fa807595ed5446e2e23af9bde13cae7666b58d0",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 6 次，实际命中 4 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 6 次，实际命中 4 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-027",
+    "before_prompt_sha256": "7cb51753fde632f7b35fdb575efa8576c490c924300ece737bf20e8903d44bca",
+    "after_prompt_sha256": "8b9d17a98ca3a5d73487f79e208ccbccf714d188521b5c80bbc8c9df04f2deb8",
+    "before_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-028",
+    "before_prompt_sha256": "b0e83aa68df789e68af3b695954c89d4b05aabec20ec7973ff9f4d9a9d5d3c77",
+    "after_prompt_sha256": "241056025b9689a017e9f0b629b4bcd1aaa497cae0e73377ee927d7853f1789d",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-029",
+    "before_prompt_sha256": "c2d93787bc387b478fd85954b6d04f9499a0c23ffe5ce820efba5f1d1856cad1",
+    "after_prompt_sha256": "52e1ed0aaeba5f98be2aa58a7a05a913b021de8182930a05aad08fa959c3433b",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-030",
+    "before_prompt_sha256": "062adc962c8a2ecba51222f2c8faa1a51bbbe78ba453d56756ae3063adec1e27",
+    "after_prompt_sha256": "0997a8ce4237030e0c3e6588d959496b477984ea6517dc65103595f7da4628b3",
+    "before_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 4 次，实际命中 1 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 4 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-031",
+    "before_prompt_sha256": "5d40cc308ed19420e7621e6fdb90268fa0db140451ce267a33086ab32c732b57",
+    "after_prompt_sha256": "b7bea1d461144540b997c7322ac24b047db6250c3fd510e1e268df38e4bebe26",
+    "before_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  },
+  {
+    "id": "refinement-032",
+    "before_prompt_sha256": "ba71e3566f9807539efdd30654f4351d409b886415238dc043b18077adb18909",
+    "after_prompt_sha256": "f9312374f967576803142afb8854f2c0fb75eab2566632cb515010a17183fc72",
+    "before_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。",
+    "after_self_combat": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手"
+  }
+]

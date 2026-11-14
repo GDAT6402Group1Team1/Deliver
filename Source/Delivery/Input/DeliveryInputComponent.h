@@ -86,6 +86,7 @@ public:
 
 private:
     friend class FDeliveryInputLifecycleTest;
+    friend class FDeliveryMoveInputSafetyTest;
 
     // 当前绑定对象
     TWeakObjectPtr<UInputComponent> BoundInput;
@@ -94,6 +95,7 @@ private:
 
     // 移动输入回调
     void Move(const FInputActionValue &Value);
+    void MoveEnded(const FInputActionValue &Value);
     void Look(const FInputActionValue &Value);
     void MouseLook(const FInputActionValue &Value);
     void JumpStarted(const FInputActionValue &Value);

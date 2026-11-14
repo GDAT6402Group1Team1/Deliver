@@ -61,6 +61,12 @@ class DELIVERY_API UDeliveryInventoryComponent : public UActorComponent
 	/** 服务器拾取接口，检查物品和槽位条件后更新背包 */
 	bool TryPickup(ADeliveryHandheldItem* Item);
 
+    // 普通交还沿用原容量规则，查询不会挤掉旧手持物或改变槽位
+    bool CanReceiveFetchedItem(ADeliveryHandheldItem* Item) const;
+    bool ContainsItem(const ADeliveryHandheldItem* Item) const;
+    bool ReleaseFetchedItem(ADeliveryHandheldItem* Item);
+    void RefreshItemPresentation(ADeliveryHandheldItem* Item);
+
 	/** 本机输入入口，索引从 0 开始，0 对应数字键 1 */
 	void RequestSlotAction(int32 SlotIndex);
 

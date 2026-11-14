@@ -19,6 +19,7 @@ public:
     // 返回 true 表示请求已加入队列，每个 NPC 最多保留一个等待中的请求
     bool Enqueue(UDeliveryNpcAgentComponent* Agent, const FDeliveryNpcDecisionRequest& Request);
     void Cancel(UDeliveryNpcAgentComponent* Agent);
+    void CancelRequest(UDeliveryNpcAgentComponent* Agent, FGuid RequestId);
     FGuid GetWorldEpoch() const { return WorldEpoch; }
     int32 GetPendingCount() const { return Pending.Num(); }
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
@@ -54,6 +55,7 @@ private:
         bool bHttpSucceeded = false;
         bool bReplyFinished = false;
         bool bHasProposal = false;
+        bool bModelFinished = false;
         int32 SentenceCount = 0;
         // 只保存接收进度，文字与声音交给 NPC 的表现组件
         FSentenceReceipt Sentences[3];
@@ -74,4 +76,6 @@ private:
     friend class FDeliveryNpcAudioStreamingTest;
     friend class FDeliveryNpcLiveAudioCommand;
     friend class FDeliveryNpcSentenceAudioProtocolTest;
+    friend class FDeliveryNpcModelSpeechSeparationTest;
+    friend class FDeliveryNpcDecisionTraceTest;
 };

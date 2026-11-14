@@ -1,0 +1,88 @@
+[
+  {
+    "event": "STARTED",
+    "utc": "2026-11-14T15:43:13.957615+00:00",
+    "model_sha256": "da5a022325ba2fc89377e2cc5d2ba759aa97bce5e0ed5931c62ec29c176d0b31",
+    "ue_pid": 65440,
+    "csv_start_utc": "2026-11-14T15:42:35.263Z"
+  },
+  {
+    "event": "GROUP_PREPARING",
+    "utc": "2026-11-14T15:43:15.784411+00:00",
+    "label": "baseline-q4single70"
+  },
+  {
+    "event": "GROUP_FINISHED",
+    "utc": "2026-11-14T15:44:50.926278+00:00",
+    "label": "baseline-q4single70",
+    "exit_code": 0,
+    "status": "completed",
+    "summary": {
+      "attempted_unique_cases": 0,
+      "completed_unique_cases": 0,
+      "all_40_cases_completed": false,
+      "protocol_valid_calls": 0,
+      "matched_label_calls": 0,
+      "illegal_target_calls": 0,
+      "complete_ms_median": null,
+      "complete_ms_p95": null,
+      "speech_completed": 15,
+      "speech_partial_or_failed": 0,
+      "rtf_median": 0.3798821590912253,
+      "simulated_stall_ms": 0,
+      "quality_acceptance_claimed": false,
+      "ue_audio_measured": false
+    },
+    "error": null
+  },
+  {
+    "event": "GROUP_PREPARING",
+    "utc": "2026-11-14T15:44:51.945317+00:00",
+    "label": "local99-q4single70"
+  },
+  {
+    "event": "MODEL_READY",
+    "utc": "2026-11-14T15:44:58.701734+00:00",
+    "label": "local99-q4single70",
+    "pid": 56836,
+    "device": "cuda",
+    "gpu_layers": 99
+  },
+  {
+    "event": "GROUP_FINISHED",
+    "utc": "2026-11-14T15:46:17.731610+00:00",
+    "label": "local99-q4single70",
+    "exit_code": 0,
+    "status": "failed",
+    "summary": {
+      "attempted_unique_cases": 40,
+      "completed_unique_cases": 40,
+      "all_40_cases_completed": true,
+      "protocol_valid_calls": 46,
+      "matched_label_calls": 45,
+      "illegal_target_calls": 0,
+      "complete_ms_median": 201.54799999727402,
+      "complete_ms_p95": 1414.0940999990546,
+      "speech_completed": 7,
+      "speech_partial_or_failed": 1,
+      "rtf_median": 0.5895324999996912,
+      "simulated_stall_ms": 0,
+      "quality_acceptance_claimed": false,
+      "ue_audio_measured": false
+    },
+    "error": null
+  },
+  {
+    "event": "MODEL_STOPPED",
+    "utc": "2026-11-14T15:46:20.115314+00:00",
+    "label": "local99-q4single70",
+    "pid": 56836,
+    "identity_verified": true
+  },
+  {
+    "event": "EXECUTION_FAILED",
+    "utc": "2026-11-14T15:46:21.012341+00:00",
+    "type": "RuntimeError",
+    "error": "UE进程与授权条件不符"
+  }
+]

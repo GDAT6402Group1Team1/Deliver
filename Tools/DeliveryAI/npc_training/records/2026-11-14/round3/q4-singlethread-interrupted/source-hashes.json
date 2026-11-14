@@ -1,0 +1,118 @@
+{
+  "benchmark_source_hashes": {
+    "Tools/DeliveryAI/llm_evaluation/start_local_model.py": "608fb818cb8c9a9cde96ad57112ee8dfa4d7c74eafc0aa462d72c3b8bba41bcb",
+    "Tools/DeliveryAI/llm_evaluation/prepare_local_model.py": "dee599d235d96c86c72b6e26625de60b35c1b807186e3d2a4c14a47c2751559a",
+    "Tools/DeliveryAI/llm_evaluation/benchmark_combat_coexist.py": "cf65e9af9a6d6a28642793a410605549996d10c7f180b1566ae9905af1e9e5e2",
+    "Tools/DeliveryAI/llm_evaluation/analyze_game_frames.py": "72cd584a28aa30fed2613532d28660538feeeffc5ce17011d5b6799ae6efa00c",
+    "Tools/DeliveryAI/combat_model.py": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+    "Tools/DeliveryAI/app_server.py": "c2ece2a304a6c7aab73ba6055fef0e20d0d57afedf22c51b053724d5f8bf19d2",
+    "Tools/DeliveryAI/native_tts.py": "c4a1355a389a4b3b187365857e496101cb5f4ce6427090247a6407842b0978a4",
+    "Tools/DeliveryAI/native_tts_worker.py": "f9989a31ba9afa61aa06c4d97b3096fa3e4ae5ee1b5ceab3c63d9f8018835af7",
+    "Tools/DeliveryAI/native_tts_engine.py": "1ca4a1ee526eb3682483dbfbef9e3e090e8ad4af0830837dd29a5b8aaa869725",
+    "Tools/DeliveryAI/native_tts_abi.py": "adcb8a36b485341f9439765a33ed82740d5fa72fcdfcf732824f31201d3561e5",
+    "Tools/DeliveryAI/neural_tts.py": "5f1460b32734b741a93898e953583e93e088d369b48e07d1986a74975612f4e2",
+    "Tools/DeliveryAI/neural_tts_worker.py": "452438c7677f96f376edeb7a0f7e4513237a25c23de35236278622aa3ce1c6fb",
+    "Tools/DeliveryAI/tts_evaluation/compare_native_qwen.py": "b8556f9545d9680a202fe255d6190a23704ca80cbc6426fa1b3a9bddca2651ff",
+    "Tools/DeliveryAI/tts_evaluation/probe_http_speech.py": "a1870f1e81730e6c78a6760daf7f0c6f60792d43d285bfb3b9101b71c196dd05"
+  },
+  "small_file_hashes": {
+    "Tools/DeliveryAI/neural_voice_config.json": "3dc88958701a23b5840a4b3820a057ee13de7e509dfec394681399a38fde278d",
+    "Saved/AIResearch/NativeQwen/runtime-q8_0-kv1024-active.json": "9c189b08c108def672a15a07565fed49ba4c18a8edfbea614b9a759380646f21",
+    "Saved/AIResearch/NpcTraining/acceptance-reviewed.json": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced"
+  },
+  "build_identity_at_execution": {
+    "verified_utc": "2026-11-14T15:38:17.850242+00:00",
+    "evidence_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/final-build-followup-20261114.json",
+    "evidence_sha256": "2acc809334a16a13c6bd6a01b5fd7f4a7daf1136db7feba55e86f0fdb880607f",
+    "sha256": {
+      "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp": "ea334b9b0243d7942ddbd6ceb6156f5d313aa706cbb503b557d99afbd309381c",
+      "Source/Delivery/AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.cpp": "1729f4386612acb685ff51c1e0d5b378c2c5398e0bf97377f525902d54b3d732",
+      "Source/Delivery/AI/Tests/DeliveryNpcPlayerInterruptionTests.cpp": "0d9ab8497b84b362de3de6a155c824fc778d202bcfe5be272bcbd122ab4f41d0",
+      "Source/Delivery/AI/Tests/DeliveryNpcStrikeNavigationTests.cpp": "c01c733078ef42e74f27fbe87181402de30ee37cbd37ed3c4e2a5262c184830b",
+      "Binaries/Win64/UnrealEditor-Delivery.dll": "be03119b83c153d9fb802ade95da392123d9bc14647347988c78a841f80d9a02",
+      "Plugins/DeliveryTuning/Binaries/Win64/UnrealEditor-DeliveryTuning.dll": "d43eb4487b418498ed2d70d03e6c143f9c6e08b3425c2c305afb7310b10767cc",
+      "Binaries/Win64/DeliveryEditor.target": "0cc0ecd1d06931948c39021cc0906297ce82f44cb59519bded882db17bc294f6",
+      "Binaries/Win64/UnrealEditor.modules": "1a29d9d499cdc0c814e1441ffde18d92971e34243fab8fef36304195731c6913",
+      "Plugins/DeliveryTuning/Binaries/Win64/UnrealEditor.modules": "7409a9527a419025736967f04e0d83badaa23d560cb74b20b4fa0e9e8baa8b1c"
+    },
+    "target_identity": {
+      "TargetName": "DeliveryEditor",
+      "Platform": "Win64",
+      "Configuration": "Development",
+      "BuildSettingsVersion": "V7",
+      "TargetType": "Editor",
+      "Architecture": "x64",
+      "Project": "../../Delivery.uproject",
+      "Launch": "$(EngineDir)/Binaries/Win64/UnrealEditor.exe",
+      "LaunchCmd": "$(EngineDir)/Binaries/Win64/UnrealEditor-Cmd.exe",
+      "Version": {
+        "MajorVersion": 5,
+        "MinorVersion": 8,
+        "PatchVersion": 1,
+        "Changelist": 56057345,
+        "CompatibleChangelist": 55116800,
+        "IsLicenseeVersion": 0,
+        "IsPromotedBuild": 0,
+        "BranchName": "++UE5+Release-5.8",
+        "BuildId": "55116800"
+      }
+    },
+    "module_buildids_match_target": true,
+    "root_four_sources_unchanged_from_build2": true,
+    "root_four_sources": [
+      {
+        "path": "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp",
+        "bytes": 105418,
+        "sha256": "ea334b9b0243d7942ddbd6ceb6156f5d313aa706cbb503b557d99afbd309381c",
+        "last_write_utc": "2026-11-14T15:07:33.938750+00:00",
+        "previous_sha256": "ea334b9b0243d7942ddbd6ceb6156f5d313aa706cbb503b557d99afbd309381c",
+        "unchanged_from_build2_snapshot": true
+      },
+      {
+        "path": "Source/Delivery/AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.cpp",
+        "bytes": 20131,
+        "sha256": "1729f4386612acb685ff51c1e0d5b378c2c5398e0bf97377f525902d54b3d732",
+        "last_write_utc": "2026-11-14T15:05:58.373648+00:00",
+        "previous_sha256": "1729f4386612acb685ff51c1e0d5b378c2c5398e0bf97377f525902d54b3d732",
+        "unchanged_from_build2_snapshot": true
+      },
+      {
+        "path": "Source/Delivery/AI/Tests/DeliveryNpcPlayerInterruptionTests.cpp",
+        "bytes": 15492,
+        "sha256": "0d9ab8497b84b362de3de6a155c824fc778d202bcfe5be272bcbd122ab4f41d0",
+        "last_write_utc": "2026-11-14T15:25:06.280613+00:00",
+        "previous_sha256": "0d9ab8497b84b362de3de6a155c824fc778d202bcfe5be272bcbd122ab4f41d0",
+        "unchanged_from_build2_snapshot": true
+      },
+      {
+        "path": "Source/Delivery/AI/Tests/DeliveryNpcStrikeNavigationTests.cpp",
+        "bytes": 26893,
+        "sha256": "c01c733078ef42e74f27fbe87181402de30ee37cbd37ed3c4e2a5262c184830b",
+        "last_write_utc": "2026-11-14T15:05:58.378823+00:00",
+        "previous_sha256": "c01c733078ef42e74f27fbe87181402de30ee37cbd37ed3c4e2a5262c184830b",
+        "unchanged_from_build2_snapshot": true
+      }
+    ],
+    "build_log": {
+      "path": "Saved/Logs/DeliveryOpenMicBuild3.log",
+      "bytes": 6453,
+      "sha256": "bf1744efc1f4bc9e9b30fb2959a873eecc2b19d31a9a61a975f163acacb22f2a",
+      "last_write_utc": "2026-11-14T15:33:31.994387+00:00"
+    },
+    "build_result": "Result: Succeeded",
+    "build_actions": 5,
+    "build_total_seconds": 8.18,
+    "automation_note": "首次27项中25项通过，修正测试前提并增量构建后，仅复跑此前失败的KeyOwnership和MoveInputSafety，两项通过；不能写成第三次DLL已重新跑全部27项",
+    "single_run_27_all_passed": false,
+    "real_gameplay_acceptance_claimed": false
+  },
+  "model_and_voice_assets": {
+    "model_path": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/combat-Q4_K_M.gguf",
+    "model_sha256": "da5a022325ba2fc89377e2cc5d2ba759aa97bce5e0ed5931c62ec29c176d0b31",
+    "tts_runtime_path": "Saved/AIResearch/NativeQwen/runtime-q8_0-kv1024-active.json",
+    "tts_runtime_file_sha256": "9c189b08c108def672a15a07565fed49ba4c18a8edfbea614b9a759380646f21",
+    "tts_config_path": "Tools/DeliveryAI/neural_voice_config.json",
+    "tts_config_file_sha256": "3dc88958701a23b5840a4b3820a057ee13de7e509dfec394681399a38fde278d"
+  },
+  "note": "全部来自实际执行计划；不把此后工作区修改当作本轮版本"
+}

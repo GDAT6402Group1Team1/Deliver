@@ -1,0 +1,172 @@
+[
+  {
+    "id": "change-003-branch-2",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-003-branch-2",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "正在逃离，对方仍辱骂并冲来，尚未脱险"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-004-branch-2",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-004-branch-2",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "虽已澄清误会，受击仍在继续，先远离"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-005-branch-1",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-005-branch-1",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "误会已解但已挨两拳，交战未止，先避开"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-016-branch-2",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-016-branch-2",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "虽已互相说散，但受击仍继续，先拉开距离"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-022-branch-1",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-022-branch-1",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已挨一拳且对方仍冲来动手，继续拉开距离"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-026-branch-1",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-026-branch-1",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "自己已受惊后退，对方仍冲来追打，继续拉开距离"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-029-branch-1",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-029-branch-1",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "对方威胁后已冲来追打，继续拉开距离"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-032-branch-2",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-032-branch-2",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "对方明确追打且已冲来，继续拉开距离"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-034-branch-1",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-034-branch-1",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方假意退让后又出拳挑衅，交战未结束"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-036-branch-1",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-036-branch-1",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "正在撤离且已挨拳，对方反悔冲来，继续远离"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  }
+]

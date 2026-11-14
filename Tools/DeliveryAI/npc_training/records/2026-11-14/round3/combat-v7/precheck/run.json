@@ -1,0 +1,58 @@
+{
+  "started_utc": "2026-11-14T12:34:49.478702+00:00",
+  "mode": "training",
+  "status": "prepared",
+  "model_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\model",
+  "model_revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+  "script_sha256": "f68da4b85d3b4c4c5bb4e2c4c91ad80a3eb4cd6de0a981255ef86f1abec37e1c",
+  "settings": {
+    "rank": 16,
+    "alpha": 32,
+    "dropout": 0.05,
+    "target_modules": "all-linear",
+    "batch_size": 1,
+    "gradient_accumulation": 4,
+    "learning_rate": 2e-05,
+    "weight_decay": 0.0,
+    "max_grad_norm": 1.0,
+    "seed": 20261114,
+    "dtype": "bfloat16",
+    "gradient_checkpointing": true,
+    "checkpoint_use_reentrant": false,
+    "max_steps": 56,
+    "max_seq_length": 4096
+  },
+  "gpu_loaded": false,
+  "production_configuration_changed": false,
+  "versions": {
+    "torch": "2.7.1+cu128",
+    "transformers": "4.57.3",
+    "peft": "0.17.1",
+    "accelerate": "1.12.0",
+    "tokenizers": "0.22.2"
+  },
+  "adapter_used": false,
+  "model_manifest_sha256": "27ca8095f22561e407ac597d0cddb9e89451699aa3a38a24b5e02d3a94ec7f77",
+  "datasets": {
+    "train": {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\train.jsonl",
+      "sha256": "ed4c8774663f3b790f8196bb05637789a10b535ef6745b83f1aae2b7bf870675",
+      "samples": 224,
+      "groups": 187,
+      "max_prompt_tokens": 1164,
+      "max_sequence_tokens": 1177,
+      "supervised_tokens": 2554
+    },
+    "validation": {
+      "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\validation.jsonl",
+      "sha256": "42ab811f9953e2fd7244a27361d64a8f52f823239cffa74999fd0e2a1817b36b",
+      "samples": 31,
+      "groups": 23,
+      "max_prompt_tokens": 778,
+      "max_sequence_tokens": 790,
+      "supervised_tokens": 352
+    }
+  },
+  "cuda_initialized": false,
+  "elapsed_seconds": 6.408801000005042
+}

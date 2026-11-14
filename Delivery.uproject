@@ -43,6 +43,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "SmartObjects",
+			"Enabled": true
+		},
+		{
 			"Name": "VisualStudioTools",
 			"Enabled": true,
 			"SupportedTargetPlatforms": [

@@ -1,0 +1,239 @@
+{
+  "cases": [
+    {
+      "id": "independent-25",
+      "selected": "Flee",
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "actual_model_output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "context": {
+        "protocol_version": 1,
+        "capability_version": 1,
+        "world_epoch": "f3a82128-b44a-5e34-8627-367089caa55e",
+        "npc_id": "7583c7ca-7c9e-5490-abc8-e34876e99b7c",
+        "request_id": "b5713e4b-8355-546f-8867-17d18fcd918d",
+        "context_revision": 1,
+        "plan_revision": 1,
+        "request_source": "ambient",
+        "pending_player_message": false,
+        "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+        "self_name": "大壮",
+        "self_subject_id": "7583c7ca-7c9e-5490-abc8-e34876e99b7c",
+        "profile_id": "",
+        "evidence": [
+          {
+            "event_id": "edadb673-2f07-54d7-b76a-a837a07e4ab1",
+            "subject_id": "7583c7ca-7c9e-5490-abc8-e34876e99b7c",
+            "addressee_id": "7265f74c-2741-5e5b-949e-a28bd97d92dc",
+            "kind": "SelfSpeech",
+            "source": "ActionResult",
+            "description": "这儿全是菜，我可不想赔钱。",
+            "reply_to_event_id": ""
+          },
+          {
+            "event_id": "138a3f1a-45c9-5927-9c18-a8d52c40bdb6",
+            "subject_id": "7265f74c-2741-5e5b-949e-a28bd97d92dc",
+            "addressee_id": "7583c7ca-7c9e-5490-abc8-e34876e99b7c",
+            "kind": "Speech",
+            "source": "Heard",
+            "description": "到空地了，你还往哪儿躲？",
+            "reply_to_event_id": ""
+          },
+          {
+            "event_id": "a47988fa-6342-521b-8047-281152bb1675",
+            "subject_id": "7265f74c-2741-5e5b-949e-a28bd97d92dc",
+            "addressee_id": "7583c7ca-7c9e-5490-abc8-e34876e99b7c",
+            "kind": "FightThreat",
+            "source": "Seen",
+            "description": "这个人朝我冲过来，准备动手",
+            "reply_to_event_id": ""
+          },
+          {
+            "event_id": "e1932182-a45f-54e0-ae27-6245eb2eda09",
+            "subject_id": "7583c7ca-7c9e-5490-abc8-e34876e99b7c",
+            "addressee_id": "",
+            "kind": "SelfCombat",
+            "source": "ActionResult",
+            "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手",
+            "reply_to_event_id": ""
+          }
+        ],
+        "subjects": [
+          {
+            "subject_id": "7583c7ca-7c9e-5490-abc8-e34876e99b7c",
+            "name": "大壮",
+            "kind": "npc"
+          },
+          {
+            "subject_id": "7265f74c-2741-5e5b-949e-a28bd97d92dc",
+            "name": "翠花",
+            "kind": "npc"
+          },
+          {
+            "subject_id": "bfd3d281-083e-57ee-9477-463f9a9e36bf",
+            "name": "快递员",
+            "kind": "player"
+          }
+        ],
+        "allowed_actions": [
+          "Wait",
+          "Fight",
+          "Flee"
+        ],
+        "candidates": [
+          {
+            "action": "Wait",
+            "target_id": "",
+            "duration": 2.0,
+            "evidence_ids": []
+          },
+          {
+            "action": "Flee",
+            "target_id": "7265f74c-2741-5e5b-949e-a28bd97d92dc",
+            "duration": 5.0,
+            "evidence_ids": [
+              "138a3f1a-45c9-5927-9c18-a8d52c40bdb6"
+            ]
+          },
+          {
+            "action": "Fight",
+            "target_id": "7265f74c-2741-5e5b-949e-a28bd97d92dc",
+            "duration": 8.0,
+            "evidence_ids": [
+              "138a3f1a-45c9-5927-9c18-a8d52c40bdb6"
+            ]
+          }
+        ],
+        "current_action": {
+          "action": "Flee",
+          "target_id": "7265f74c-2741-5e5b-949e-a28bd97d92dc",
+          "source": "Model",
+          "action_id": "b61a507f-2de7-5ea4-9775-d71830acbd81",
+          "remaining_seconds": 3.0
+        }
+      },
+      "label": {
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "critical_actions": []
+      },
+      "reason": "合法动作与原人工可接受答案不同；保留原标签计为质量错误"
+    },
+    {
+      "id": "independent-02",
+      "selected": "Fight",
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "actual_model_output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "context": {
+        "protocol_version": 1,
+        "capability_version": 1,
+        "world_epoch": "f3a82128-b44a-5e34-8627-367089caa55e",
+        "npc_id": "76c45b98-fcf3-531c-8b67-7a5c1418d5e9",
+        "request_id": "8053bd73-fcb2-57e5-b32c-7af3ad8cb4c4",
+        "context_revision": 1,
+        "plan_revision": 1,
+        "request_source": "ambient",
+        "pending_player_message": false,
+        "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+        "self_name": "翠花",
+        "self_subject_id": "76c45b98-fcf3-531c-8b67-7a5c1418d5e9",
+        "profile_id": "",
+        "evidence": [
+          {
+            "event_id": "b95f713a-a433-59f0-a5f6-f2b2287a4362",
+            "subject_id": "cc343ed7-b545-5e4d-8dc9-14219a422ec1",
+            "addressee_id": "76c45b98-fcf3-531c-8b67-7a5c1418d5e9",
+            "kind": "Speech",
+            "source": "Heard",
+            "description": "不是说你一只手就够了吗？来呀！",
+            "reply_to_event_id": ""
+          },
+          {
+            "event_id": "aae1a0ba-25a7-591a-a058-8c517d78a193",
+            "subject_id": "cc343ed7-b545-5e4d-8dc9-14219a422ec1",
+            "addressee_id": "76c45b98-fcf3-531c-8b67-7a5c1418d5e9",
+            "kind": "LightMeleeHit",
+            "source": "Seen",
+            "description": "这个人打了我一拳，我后仰了一下，仍然站着",
+            "reply_to_event_id": ""
+          },
+          {
+            "event_id": "a4396cdf-ea88-5213-8b6d-a08d9ca792b4",
+            "subject_id": "76c45b98-fcf3-531c-8b67-7a5c1418d5e9",
+            "addressee_id": "",
+            "kind": "SelfCombat",
+            "source": "ActionResult",
+            "description": "这阵子实际挨了 3 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手",
+            "reply_to_event_id": ""
+          }
+        ],
+        "subjects": [
+          {
+            "subject_id": "76c45b98-fcf3-531c-8b67-7a5c1418d5e9",
+            "name": "翠花",
+            "kind": "npc"
+          },
+          {
+            "subject_id": "cc343ed7-b545-5e4d-8dc9-14219a422ec1",
+            "name": "大壮",
+            "kind": "npc"
+          },
+          {
+            "subject_id": "53480356-4a71-5390-945b-9d7d506eea4e",
+            "name": "快递员",
+            "kind": "player"
+          }
+        ],
+        "allowed_actions": [
+          "Wait",
+          "Fight",
+          "Flee"
+        ],
+        "candidates": [
+          {
+            "action": "Wait",
+            "target_id": "",
+            "duration": 2.0,
+            "evidence_ids": []
+          },
+          {
+            "action": "Flee",
+            "target_id": "cc343ed7-b545-5e4d-8dc9-14219a422ec1",
+            "duration": 5.0,
+            "evidence_ids": [
+              "b95f713a-a433-59f0-a5f6-f2b2287a4362"
+            ]
+          },
+          {
+            "action": "Fight",
+            "target_id": "cc343ed7-b545-5e4d-8dc9-14219a422ec1",
+            "duration": 8.0,
+            "evidence_ids": [
+              "b95f713a-a433-59f0-a5f6-f2b2287a4362"
+            ]
+          }
+        ],
+        "current_action": {
+          "action": "Fight",
+          "target_id": "cc343ed7-b545-5e4d-8dc9-14219a422ec1",
+          "source": "Model",
+          "action_id": "f5cb7334-2a8d-5d94-a7a6-bfce05a5dbe7",
+          "remaining_seconds": 3.0
+        }
+      },
+      "label": {
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "critical_actions": []
+      },
+      "reason": "合法动作与原人工可接受答案不同；保留原标签计为质量错误"
+    }
+  ],
+  "labels_changed": false,
+  "training_added": false
+}

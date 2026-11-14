@@ -1,0 +1,20 @@
+{
+  "status": "data_ready_for_training",
+  "teacher_sha256": "158748299e8c2db25273da7e5876da0b73febc19a38f5c8e17e46040f3b86661",
+  "review_sha256": "e54fd38b00f772c398bad51d6e6e70f7a32d6f923d611c261430d11fe82162c5",
+  "situations_sha256": "2e964ac2348a92bc0b660a77ad5bcbace69c5efff61ea2d032473eb28ad091cc",
+  "train_sha256": "ed4c8774663f3b790f8196bb05637789a10b535ef6745b83f1aae2b7bf870675",
+  "validation_sha256": "42ab811f9953e2fd7244a27361d64a8f52f823239cffa74999fd0e2a1817b36b",
+  "train_rows": 224,
+  "train_groups": 187,
+  "legacy_validation_rows": 15,
+  "new_validation_rows": 16,
+  "validation_labels_changed": false,
+  "new_train_teacher_disagreements": 6,
+  "train_actions": {
+    "Fight": 70,
+    "Flee": 58,
+    "Wait": 96
+  },
+  "input_preprocessing_version": "self_combat_actual_facts_v2"
+}

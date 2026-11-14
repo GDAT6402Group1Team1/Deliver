@@ -1,4 +1,5 @@
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
+#include "AI/Presentation/DeliveryNpcVoiceCodec.h"
 #include "Containers/Queue.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
@@ -20,6 +21,64 @@ struct FDeliveryNpcStreamBuffer
 
 namespace
 {
+    // 三句 12 秒 PCM 经 base64 后约 2.31 MB，仍为整轮和单行保留明确上限
+    constexpr int64 MaxStreamResponseBytes = 3 * 1024 * 1024;
+    constexpr int32 MaxStreamLineBytes = DeliveryNpcVoice::MaxPcmBase64Chars + 16 * 1024;
+
+    FString ReadDiagnosticLabel(const FJsonObject& Json, const TCHAR* Key, int32 Limit)
+    {
+        FString Value;
+        if (!Json.TryGetStringField(Key,Value) || Value.Len()>Limit) return {};
+        // 这里只接短标签，地址、文件路径、凭据格式与控制字符不能进入面板
+        for (const TCHAR Character:Value)
+            if (!FChar::IsAlnum(Character) && Character!=TEXT(' ') && Character!=TEXT('_') &&
+                Character!=TEXT('-') && Character!=TEXT('.')) return {};
+        return Value.TrimStartAndEnd();
+    }
+
+    double ReadDiagnosticTime(const FJsonObject& Json, const TCHAR* Key)
+    {
+        double Value=-1;
+        return Json.TryGetNumberField(Key,Value) && FMath::IsFinite(Value) && Value>=0?Value:-1;
+    }
+
+    int32 ReadDiagnosticCount(const FJsonObject& Json, const TCHAR* Key)
+    {
+        const double Value=ReadDiagnosticTime(Json,Key);
+        return Value>=0 && Value<=MAX_int32 && FMath::FloorToDouble(Value)==Value?static_cast<int32>(Value):-1;
+    }
+
+    bool ReadDiagnostics(const FJsonObject& Event, FDeliveryNpcDecisionTrace& Trace)
+    {
+        Trace.InputSummary=TEXT("实际模型输入：未提供");
+        const TSharedPtr<FJsonObject>* Object=nullptr;
+        if (!Event.TryGetObjectField(TEXT("diagnostics"),Object) || !Object || !Object->IsValid()) return false;
+        const auto& Json=**Object;
+        Trace.ModelProvider=ReadDiagnosticLabel(Json,TEXT("model_provider"),64);
+        Trace.ActualModelName=ReadDiagnosticLabel(Json,TEXT("model_name"),96);
+        Trace.FallbackReason=ReadDiagnosticLabel(Json,TEXT("fallback_reason"),64);
+        const FString Source=ReadDiagnosticLabel(Json,TEXT("request_source"),16);
+        if (Source==TEXT("player") || Source==TEXT("ambient")) Trace.RequestSource=Source;
+        const FString Route=ReadDiagnosticLabel(Json,TEXT("decision_route"),32);
+        if (Route==TEXT("local_combat") || Route==TEXT("player_dialogue") ||
+            Route==TEXT("ambient_dialogue") || Route==TEXT("provider_dispatch")) Trace.Route=Route;
+        Trace.BackendQueueMs=ReadDiagnosticTime(Json,TEXT("queue_ms"));
+        Trace.BackendDecisionMs=ReadDiagnosticTime(Json,TEXT("decision_ms"));
+        Trace.BackendElapsedMs=ReadDiagnosticTime(Json,TEXT("backend_elapsed_ms"));
+        Trace.FirstSentenceMs=ReadDiagnosticTime(Json,TEXT("first_sentence_ms"));
+        Trace.InputTokens=ReadDiagnosticCount(Json,TEXT("input_tokens"));
+        Trace.CachedInputTokens=ReadDiagnosticCount(Json,TEXT("cached_input_tokens"));
+        Trace.OutputTokens=ReadDiagnosticCount(Json,TEXT("output_tokens"));
+        const auto CountText=[&Json](const TCHAR* Key)
+        {
+            const int32 Count=ReadDiagnosticCount(Json,Key);
+            return Count>=0?FString::FromInt(Count):FString(TEXT("未提供"));
+        };
+        Trace.InputSummary=FString::Printf(TEXT("实际模型输入：事件 %s、对象 %s、动作候选 %s"),
+            *CountText(TEXT("input_event_count")),*CountText(TEXT("input_subject_count")),*CountText(TEXT("input_candidate_count")));
+        return true;
+    }
+
     bool ReadInteger(const FJsonObject& Json, const TCHAR* Key, int32 Minimum, int32 Maximum, int32& Out)
     {
         double Value = 0;
@@ -58,8 +117,17 @@ bool UDeliveryAiGatewaySubsystem::Enqueue(UDeliveryNpcAgentComponent* Agent, con
     if (bShuttingDown || !Settings->bEnabled || GetWorld()->GetNetMode() == NM_Client || !IsValid(Agent) ||
         Agent->GetWorld() != GetWorld() || !Agent->GetOwner()->HasAuthority() || Request.WorldEpoch != WorldEpoch ||
         Request.NpcId != Agent->GetNpcId() || !Request.RequestId.IsValid() || Pending.Contains(Request.RequestId) ||
-        Pending.Num() >= FMath::Clamp(Settings->MaxPendingRequests, 1, 64)) return false;
-    for (const auto& Pair : Pending) if (Pair.Value.Agent == Agent) return false;
+        Pending.Num() >= 3*FMath::Clamp(Settings->MaxPendingRequests, 1, 64)) return false;
+    int32 WaitingModels=0, NpcRequests=0;
+    for (const auto& Pair : Pending)
+    {
+        if (!Pair.Value.bModelFinished) ++WaitingModels;
+        if (Pair.Value.Agent != Agent) continue;
+        ++NpcRequests;
+        if (!Pair.Value.bModelFinished) return false;
+    }
+    // 同一个 NPC 最多接收正在播放、等待播放和当前模型请求这三份数据
+    if (NpcRequests>=3 || WaitingModels>=FMath::Clamp(Settings->MaxPendingRequests,1,64)) return false;
     FPending Entry;
     Entry.Agent = Agent;
     Entry.Request = Request;
@@ -73,6 +141,7 @@ bool UDeliveryAiGatewaySubsystem::Enqueue(UDeliveryNpcAgentComponent* Agent, con
         Queue.Insert(Request.RequestId, Index);
     }
     else Queue.Add(Request.RequestId);
+    Agent->BeginDecisionTrace(Request);
     return true;
 }
 
@@ -103,7 +172,24 @@ void UDeliveryAiGatewaySubsystem::Cancel(UDeliveryNpcAgentComponent* Agent)
 {
     TArray<FGuid> Ids;
     for (const auto& Pair : Pending) if (Pair.Value.Agent == Agent) Ids.Add(Pair.Key);
-    for (const auto& Id : Ids) Remove(Id);
+    for (const auto& Id : Ids)
+    {
+        if (const auto* Entry=Pending.Find(Id))
+            Agent->TraceRequestEvent(Entry->Request.WorldEpoch,Id,TEXT("Cancelled"),TEXT("RequestCancelled"));
+        Remove(Id);
+    }
+}
+
+void UDeliveryAiGatewaySubsystem::CancelRequest(UDeliveryNpcAgentComponent* Agent, FGuid RequestId)
+{
+    const auto* Entry=Pending.Find(RequestId);
+    if (Entry && Entry->Agent==Agent)
+    {
+        const auto& Trace=Agent->GetDecisionTrace();
+        if (!Entry->bReplyFinished && Trace.Stage!=TEXT("Failed") && Trace.Stage!=TEXT("Cancelled"))
+            Agent->TraceRequestEvent(Entry->Request.WorldEpoch,RequestId,TEXT("Cancelled"),TEXT("RequestCancelled"));
+        Remove(RequestId);
+    }
 }
 
 void UDeliveryAiGatewaySubsystem::Complete(FGuid RequestId, const FString& Body, FName Error)
@@ -112,6 +198,7 @@ void UDeliveryAiGatewaySubsystem::Complete(FGuid RequestId, const FString& Body,
     const FPending* Entry = Pending.Find(RequestId);
     if (bShuttingDown || !Entry) return;
     auto Agent = Entry->Agent;
+    const FGuid RequestWorld=Entry->Request.WorldEpoch;
     const bool bStream = Entry->Stream.IsValid();
     if (FPlatformTime::Seconds() >= Entry->Deadline) Error = TEXT("RequestTimeout");
     FDeliveryNpcDecisionProposal Proposal;
@@ -120,11 +207,19 @@ void UDeliveryAiGatewaySubsystem::Complete(FGuid RequestId, const FString& Body,
     Remove(RequestId);
     if (bStream)
     {
-        if (Agent.IsValid()) Agent->FinishReply(RequestId, false);
+        if (Agent.IsValid() && Agent->GetWorld()==GetWorld())
+        {
+            Agent->TraceRequestEvent(RequestWorld,RequestId,TEXT("Failed"),Error);
+            Agent->FinishReply(RequestId, false);
+        }
         return;
     }
     if (Agent.IsValid() && Agent->GetWorld() == GetWorld())
+    {
+        // 先记录真实响应耗时，ReceiveDecision 可能立即发起下一轮请求
+        Agent->TraceRequestEvent(RequestWorld,RequestId,bDecoded?FName(TEXT("ReplyDone")):FName(TEXT("Failed")),Error);
         Agent->ReceiveDecision(RequestId, bDecoded ? &Proposal : nullptr, Error);
+    }
 }
 
 void UDeliveryAiGatewaySubsystem::Dispatch(FGuid RequestId)
@@ -138,7 +233,9 @@ void UDeliveryAiGatewaySubsystem::Dispatch(FGuid RequestId)
     Http->SetVerb(TEXT("POST"));
     Http->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
     Http->SetContentAsString(DeliveryNpc::EncodeRequest(Entry->Request));
-    Http->SetTimeout(static_cast<float>(FMath::Max(.1, Entry->Deadline - FPlatformTime::Seconds())));
+    // 游戏线程分别检查模型和声音的截止时间，HTTP 连接为后续声音保留有限时间
+    Http->SetTimeout(static_cast<float>(FMath::Max(.1, Entry->Deadline - FPlatformTime::Seconds())+
+        (bStream && Entry->Request.StreamProtocolVersion==2?30:0)));
     Http->SetDelegateThreadPolicy(EHttpRequestDelegateThreadPolicy::CompleteOnGameThread);
     const TWeakObjectPtr<UDeliveryAiGatewaySubsystem> WeakThis(this);
     if (bStream)
@@ -147,19 +244,20 @@ void UDeliveryAiGatewaySubsystem::Dispatch(FGuid RequestId)
         auto Buffer = Entry->Stream;
         Http->SetResponseBodyReceiveStreamDelegateV2(FHttpRequestStreamDelegateV2::CreateLambda([Buffer](void* Data, int64& Size)
         {
-            if (Size < 0 || Buffer->Total + Size > 2 * 1024 * 1024) { Size = 0; return; }
+            if (Size < 0 || Size > MaxStreamResponseBytes - Buffer->Total) { Size = 0; return; }
             Buffer->Total += Size;
             Buffer->Bytes.Append(static_cast<uint8*>(Data), static_cast<int32>(Size));
             int32 Start = 0;
             for (int32 Index = 0; Index < Buffer->Bytes.Num(); ++Index)
                 if (Buffer->Bytes[Index] == '\n')
                 {
+                    if (Index - Start > MaxStreamLineBytes) { Size = 0; return; }
                     FUTF8ToTCHAR Text(reinterpret_cast<const ANSICHAR*>(Buffer->Bytes.GetData() + Start), Index - Start);
                     Buffer->Lines.Enqueue(FString(Text.Length(), Text.Get()));
                     Start = Index + 1;
                 }
             if (Start) Buffer->Bytes.RemoveAt(0, Start, EAllowShrinking::No);
-            if (Buffer->Bytes.Num() > 600000) Size = 0;
+            if (Buffer->Bytes.Num() > MaxStreamLineBytes) Size = 0;
         }));
     }
     UE_LOG(LogTemp, Log, TEXT("NpcLatency request=%s stage=http_start player=%d"), *RequestId.ToString(), Entry->Request.bPlayerRequest);
@@ -182,6 +280,10 @@ void UDeliveryAiGatewaySubsystem::Dispatch(FGuid RequestId)
             Self->Complete(RequestId, {}, TEXT("ResponseTooLarge"));
         else Self->Complete(RequestId, Response->GetContentAsString(), NAME_None);
     });
+    if (Entry->Agent.IsValid() && Entry->Agent->GetWorld()==GetWorld())
+        Entry->Agent->TraceRequestEvent(Entry->Request.WorldEpoch,RequestId,TEXT("Requesting"));
+    // 诊断订阅只读状态，仍防止同步退出后继续启动已经移除的请求
+    if (!Pending.Contains(RequestId)) return;
     if (!Http->ProcessRequest()) Complete(RequestId, {}, TEXT("TransportFailure"));
 }
 
@@ -209,7 +311,7 @@ void UDeliveryAiGatewaySubsystem::Tick(float DeltaTime)
     int32 InFlight = 0;
     int32 AmbientInFlight = 0;
     for (const auto& Pair : Pending)
-        if (Pair.Value.Http)
+        if (Pair.Value.Http && !Pair.Value.bModelFinished)
         {
             ++InFlight;
             if (!Pair.Value.Request.bPlayerRequest) ++AmbientInFlight;
@@ -218,7 +320,7 @@ void UDeliveryAiGatewaySubsystem::Tick(float DeltaTime)
     // 使用请求列表的副本逐个发送，发送失败时可以安全移除原列表中的请求
     const TArray<FGuid> Waiting = Queue;
     bool bPlayerWaiting=false;
-    for (const auto& Pair:Pending) bPlayerWaiting|=Pair.Value.Request.bPlayerRequest;
+    for (const auto& Pair:Pending) bPlayerWaiting|=Pair.Value.Request.bPlayerRequest && !Pair.Value.bModelFinished;
     for (const auto& Id : Waiting)
     {
         if (InFlight >= Limit) break;
@@ -239,8 +341,13 @@ void UDeliveryAiGatewaySubsystem::FinishStreamRequest(FGuid RequestId)
     const bool bSucceeded = Entry->bHttpSucceeded && Entry->bReplyFinished && FPlatformTime::Seconds() < Entry->Deadline;
     const int32 SentenceCount = Entry->SentenceCount;
     const auto Agent = Entry->Agent;
+    const FGuid RequestWorld=Entry->Request.WorldEpoch;
     Remove(RequestId);
-    if (Agent.IsValid()) Agent->FinishReply(RequestId, bSucceeded, SentenceCount);
+    if (Agent.IsValid() && Agent->GetWorld()==GetWorld())
+    {
+        if (!bSucceeded) Agent->TraceRequestEvent(RequestWorld,RequestId,TEXT("Failed"),TEXT("TransportFailure"));
+        Agent->FinishReply(RequestId, bSucceeded, SentenceCount);
+    }
 }
 
 void UDeliveryAiGatewaySubsystem::RejectStream(FGuid RequestId, const TCHAR* Reason)
@@ -248,15 +355,20 @@ void UDeliveryAiGatewaySubsystem::RejectStream(FGuid RequestId, const TCHAR* Rea
     const auto* Entry = Pending.Find(RequestId);
     if (!Entry) return;
     const auto Agent = Entry->Agent;
+    const FGuid RequestWorld=Entry->Request.WorldEpoch;
     UE_LOG(LogTemp, Log, TEXT("NpcSpeech stream_rejected request=%s reason=%s"), *RequestId.ToString(), Reason);
     Remove(RequestId);
-    if (Agent.IsValid()) Agent->FinishReply(RequestId, false);
+    if (Agent.IsValid() && Agent->GetWorld()==GetWorld())
+    {
+        Agent->TraceRequestEvent(RequestWorld,RequestId,TEXT("Failed"),FName(Reason));
+        Agent->FinishReply(RequestId, false);
+    }
 }
 
 void UDeliveryAiGatewaySubsystem::ReadStream(FGuid RequestId, const FString& Line)
 {
     auto* Entry = Pending.Find(RequestId);
-    if (!Entry || !Entry->Agent.IsValid()) return;
+    if (!Entry || !Entry->Agent.IsValid() || Entry->Agent->GetWorld()!=GetWorld() || Entry->Request.WorldEpoch!=WorldEpoch) return;
     if (FPlatformTime::Seconds() >= Entry->Deadline) { RejectStream(RequestId, TEXT("RequestTimeout")); return; }
     auto* Agent = Entry->Agent.Get();
     TSharedPtr<FJsonObject> Json;
@@ -282,11 +394,44 @@ void UDeliveryAiGatewaySubsystem::ReadStream(FGuid RequestId, const FString& Lin
         return;
     }
     if (!Entry->bHasProposal) { RejectStream(RequestId, TEXT("MissingProposal")); return; }
+    if (Type == TEXT("model_done"))
+    {
+        int32 Count=0;
+        if (Entry->Request.StreamProtocolVersion!=2 || Entry->bModelFinished ||
+            !ReadInteger(*Json,TEXT("sentences"),0,3,Count))
+        { RejectStream(RequestId,TEXT("InvalidModelDone")); return; }
+        TOptional<FString> ApprovedText;
+        if (Json->HasField(TEXT("reply_text")))
+        {
+            FString Text;
+            if (!Json->TryGetStringField(TEXT("reply_text"),Text) || !DeliveryNpcMessages::IsValidReplyText(Text) ||
+                ((Count==0)!=Text.IsEmpty()))
+            { RejectStream(RequestId,TEXT("InvalidReplyText")); return; }
+            ApprovedText=MoveTemp(Text);
+        }
+        for (int32 Index=Count;Index<3;++Index)
+            if (Entry->Sentences[Index].State!=ESentenceReception::Empty)
+            { RejectStream(RequestId,TEXT("UnexpectedSentence")); return; }
+        Entry->bModelFinished=true;
+        Entry->SentenceCount=Count;
+        Entry->Deadline=FPlatformTime::Seconds()+30;
+        FDeliveryNpcDecisionTrace Diagnostics;
+        ReadDiagnostics(*Json,Diagnostics);
+        Agent->TraceDiagnostics(Entry->Request.WorldEpoch,RequestId,Diagnostics);
+        Agent->TraceRequestEvent(Entry->Request.WorldEpoch,RequestId,TEXT("ModelDone"));
+        // 先更新请求记录，再通知 NPC，回调中可以开始下一轮模型请求
+        if (!Agent->FinishModelReply(RequestId,Count,MoveTemp(ApprovedText)))
+        { RejectStream(RequestId,TEXT("ModelDoneRejected")); return; }
+        UE_LOG(LogTemp,Log,TEXT("NpcLatency request=%s stage=model_done sentences=%d"),*RequestId.ToString(),Count);
+        return;
+    }
     if (Type == TEXT("done"))
     {
         int32 Count = 0;
         if (!ReadInteger(*Json, TEXT("sentences"), 0, 3, Count))
         { RejectStream(RequestId, TEXT("InvalidSentenceCount")); return; }
+        if (Entry->bModelFinished && Count!=Entry->SentenceCount)
+        { RejectStream(RequestId,TEXT("SentenceCountChanged")); return; }
         for (int32 Index = 0; Index < 3; ++Index)
         {
             const auto& Sentence = Entry->Sentences[Index];
@@ -296,11 +441,14 @@ void UDeliveryAiGatewaySubsystem::ReadStream(FGuid RequestId, const FString& Lin
         }
         Entry->SentenceCount = Count;
         Entry->bReplyFinished = true;
+        Agent->TraceRequestEvent(Entry->Request.WorldEpoch,RequestId,TEXT("ReplyDone"));
         return;
     }
     int32 Sequence = 0;
     if (!ReadInteger(*Json, TEXT("sequence"), 0, 2, Sequence))
     { RejectStream(RequestId, TEXT("InvalidSequence")); return; }
+    if (Entry->bModelFinished && Sequence>=Entry->SentenceCount)
+    { RejectStream(RequestId,TEXT("UnexpectedSentence")); return; }
     auto& Receipt = Entry->Sentences[Sequence];
     if (Type == TEXT("sentence"))
     {
@@ -309,9 +457,9 @@ void UDeliveryAiGatewaySubsystem::ReadStream(FGuid RequestId, const FString& Lin
         if (Receipt.State != ESentenceReception::Empty ||
             !ReadSpeechText(*Json, Sentence.Text, Sentence.Emotion) || !Json->TryGetStringField(TEXT("pcm"), Pcm) ||
             !ReadInteger(*Json, TEXT("sample_rate"), 16000, 24000, Sentence.SampleRate) ||
-            (Sentence.SampleRate != 16000 && Sentence.SampleRate != 24000) || Pcm.Len() > 512000 ||
+            (Sentence.SampleRate != 16000 && Sentence.SampleRate != 24000) || Pcm.Len() > DeliveryNpcVoice::MaxPcmBase64Chars ||
             (!Pcm.IsEmpty() && !FBase64::Decode(Pcm, Sentence.Pcm)) || Sentence.Pcm.Num() % 2 ||
-            Sentence.Pcm.Num() > 384000)
+            Sentence.Pcm.Num() > DeliveryNpcVoice::GetMaxPcmBytes(Sentence.SampleRate))
         { RejectStream(RequestId, TEXT("InvalidWholeSentence")); return; }
         Receipt.State = ESentenceReception::Whole;
         Receipt.PcmBytes = Sentence.Pcm.Num();
@@ -338,11 +486,11 @@ void UDeliveryAiGatewaySubsystem::ReadStream(FGuid RequestId, const FString& Lin
         FString Pcm;
         Chunk.Sequence = Sequence;
         if (Receipt.State != ESentenceReception::Streaming ||
-            !ReadInteger(*Json, TEXT("chunk_index"), 0, 31, Chunk.ChunkIndex) || Chunk.ChunkIndex != Receipt.NextChunkIndex ||
-            !ReadInteger(*Json, TEXT("offset_bytes"), 0, 384000, Chunk.OffsetBytes) || Chunk.OffsetBytes != Receipt.PcmBytes ||
+            !ReadInteger(*Json, TEXT("chunk_index"), 0, DeliveryNpcVoice::MaxAudioChunks - 1, Chunk.ChunkIndex) || Chunk.ChunkIndex != Receipt.NextChunkIndex ||
+            !ReadInteger(*Json, TEXT("offset_bytes"), 0, DeliveryNpcVoice::MaxPcmBytes, Chunk.OffsetBytes) || Chunk.OffsetBytes != Receipt.PcmBytes ||
             !Json->TryGetStringField(TEXT("pcm"), Pcm) || Pcm.IsEmpty() || Pcm.Len() > 40960 ||
             !FBase64::Decode(Pcm, Chunk.Pcm) || Chunk.Pcm.IsEmpty() || Chunk.Pcm.Num() % 2 ||
-            Chunk.Pcm.Num() > 30720 || Chunk.Pcm.Num() > 384000 - Receipt.PcmBytes)
+            Chunk.Pcm.Num() > 30720 || Chunk.Pcm.Num() > DeliveryNpcVoice::MaxPcmBytes - Receipt.PcmBytes)
         { RejectStream(RequestId, TEXT("InvalidAudioChunk")); return; }
         const int32 Bytes = Chunk.Pcm.Num();
         if (!Agent->ReceiveAudioChunk(RequestId, Chunk)) { RejectStream(RequestId, TEXT("AudioChunkRejected")); return; }
@@ -360,8 +508,8 @@ void UDeliveryAiGatewaySubsystem::ReadStream(FGuid RequestId, const FString& Lin
         End.Sequence = Sequence;
         if (Receipt.State != ESentenceReception::Streaming || !Json->TryGetStringField(TEXT("status"), Status) ||
             (Status != TEXT("completed") && Status != TEXT("failed")) ||
-            !ReadInteger(*Json, TEXT("chunk_count"), 0, 32, End.ChunkCount) || End.ChunkCount != Receipt.NextChunkIndex ||
-            !ReadInteger(*Json, TEXT("total_pcm_bytes"), 0, 384000, End.TotalPcmBytes) || End.TotalPcmBytes != Receipt.PcmBytes ||
+            !ReadInteger(*Json, TEXT("chunk_count"), 0, DeliveryNpcVoice::MaxAudioChunks, End.ChunkCount) || End.ChunkCount != Receipt.NextChunkIndex ||
+            !ReadInteger(*Json, TEXT("total_pcm_bytes"), 0, DeliveryNpcVoice::MaxPcmBytes, End.TotalPcmBytes) || End.TotalPcmBytes != Receipt.PcmBytes ||
             (Status == TEXT("completed") && (End.ChunkCount == 0 || End.TotalPcmBytes == 0)) ||
             (Json->HasField(TEXT("audio_error")) && (!Json->TryGetStringField(TEXT("audio_error"), End.Error) || End.Error.Len() > 128)))
         { RejectStream(RequestId, TEXT("InvalidAudioEnd")); return; }
@@ -383,9 +531,17 @@ void UDeliveryAiGatewaySubsystem::Shutdown()
     Pending.GetKeys(Ids);
     for (const auto& Id : Ids)
     {
-        const auto Agent = Pending[Id].Agent;
+        // 取消一条回复时可能同时移除同 NPC 的待播回复
+        const auto* Entry=Pending.Find(Id);
+        if (!Entry) continue;
+        const auto Agent = Entry->Agent;
+        const bool bStream=Entry->Stream.IsValid();
         Remove(Id);
-        if (Agent.IsValid()) Agent->ReceiveDecision(Id, nullptr, TEXT("WorldEnded"));
+        if (Agent.IsValid())
+        {
+            if (bStream) Agent->FinishReply(Id,false);
+            else Agent->ReceiveDecision(Id,nullptr,TEXT("WorldEnded"));
+        }
     }
 }
 

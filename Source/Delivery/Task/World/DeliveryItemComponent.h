@@ -22,9 +22,10 @@ class DELIVERY_API UDeliveryItemComponent : public UActorComponent
 
   public:
 	UDeliveryItemComponent();
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// 关联任务
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Task")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Task")
 	TObjectPtr<UDeliveryTaskDefinition> OwningTask;
 
 	// 领取条件与任务更新
@@ -34,6 +35,12 @@ class DELIVERY_API UDeliveryItemComponent : public UActorComponent
 	 */
 	UFUNCTION(BlueprintPure, Category = "Task")
 	bool CanBeAcquired() const;
+
+    // 同步交接只允许预约的接收者入手，其他拾取入口在整个事务中拒绝
+    bool CanBeAcquiredBy(const AActor* Receiver) const;
+    bool BeginTransfer(AActor* Receiver);
+    void EndTransfer();
+    bool IsTransferInProgress() const;
 
 	/** 允许拾取时返回空文本，否则返回无法拾取的原因 */
 	FText GetPickupBlockedReason() const;
@@ -54,4 +61,8 @@ class DELIVERY_API UDeliveryItemComponent : public UActorComponent
 
   protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+  private:
+    // 只保存任务调用持有的令牌，预约状态唯一保存在物品组件
+    FGuid TaskTransferId;
 };

@@ -12,6 +12,10 @@ class UDeliveryNpcToolset : public UToolsetDefinition
     GENERATED_BODY()
 public:
     UFUNCTION(meta=(AICallable)) static FString CreateResidentAssets();
+    // 独立同伴黑板与持续委托分支，保留已有图节点、配置和居民资产
+    UFUNCTION(BlueprintCallable,Category="Delivery|NPC",meta=(AICallable)) static FString CreateCompanionBehaviorAsset();
+    // 只读导出同伴树、黑板与编辑图，供资源接线前后核对，不创建运行世界
+    UFUNCTION(BlueprintCallable,Category="Delivery|NPC",meta=(AICallable)) static FString DescribeCompanionBehaviorAsset();
     // 只补充倾听分支，保留居民模型、关卡位置与已有配置
     UFUNCTION(meta=(AICallable)) static FString UpdateNpcConversationAssets();
     // 将聊天布局保存到正式 UMG 资产，仅在退出 PIE 后按明确请求重建

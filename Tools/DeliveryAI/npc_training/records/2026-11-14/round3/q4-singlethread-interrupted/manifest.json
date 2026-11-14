@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-11-14T15:54:30.599442+00:00",
+  "scope": "Q4 GPU99 单线程候选，70 秒对照因游戏条件变化和语音超时中断",
+  "status": "interrupted_not_qualified",
+  "qualified_comparison": false,
+  "frame_gate_passed": false,
+  "real_gameplay_acceptance_passed": false,
+  "raw_csv_reference": {
+    "path": "Saved/Profiling/CSV/CombatQ4SingleThread.csv",
+    "sha256": "afa8723b1530a780228246a88b8f583e234bbe3d3a79d87e6dfd3245b8513fc2",
+    "bytes": 5063727,
+    "capture_id": "D600EF324456B242FBEA4CBE9E3581FD",
+    "capture_start_utc": "2026-11-14T15:42:35.263000+00:00",
+    "capture_end_utc": "2026-11-14T15:51:41.045000+00:00",
+    "log_duration_seconds": 545.782,
+    "sum_frame_time_seconds": 545.6512366000006,
+    "footer_capture_duration_seconds": 545.572521,
+    "sum_vs_log_difference_seconds": 0.13076339999940956,
+    "final_header_used": true,
+    "header_rows": 2,
+    "columns": 457,
+    "integrity": {
+      "data_rows": 2736,
+      "valid_frames": 2736,
+      "missing_frame_indices": [],
+      "zero_frame_indices": [],
+      "capture_duration_seconds": 545.6512366000006,
+      "ue_completion_footer_present": true,
+      "frame_column": "FrameTime",
+      "unit": "ms",
+      "metadata": {
+        "platform": "Windows",
+        "buildversion": "++UE5+Release-5.8-CL-56057345",
+        "systemresolution.resx": "960",
+        "systemresolution.resy": "720",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "deviceprofile": "WindowsEditor",
+        "endtimestamp": "1794671500",
+        "captureduration": "545.572521",
+        "csvmaxfilebytesreached": "0"
+      }
+    },
+    "log": "Saved/Logs/DeliveryOpenMicPlay.log",
+    "log_evidence": [
+      {
+        "line": 9190,
+        "text": "[2026.11.14-15.42.35:263][391]LogCsvProfiler: Display: Capture started. CSV ID: D600EF324456B242FBEA4CBE9E3581FD"
+      },
+      {
+        "line": 11922,
+        "text": "[2026.11.14-15.51.41:045][127]LogCsvProfiler: Display: Capture Ended. Writing CSV to file : ../../../../../Udev/Delivery/Saved/Profiling/CSV/CombatQ4SingleThread.csv"
+      },
+      {
+        "line": 11923,
+        "text": "[2026.11.14-15.51.41:045][128]LogCsvProfiler: Display:   Frames : 2736"
+      }
+    ],
+    "diagnostic_report": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-csv-diagnostic.json",
+    "diagnostic_report_sha256": "2a367bef26104831cdb6086466d3e5952435cb017a145c19558537221f290df2",
+    "capture_end_pending": false
+  },
+  "excluded_files": [
+    "模型权重",
+    "CSV 本体",
+    "WAV/音频",
+    "无关完整日志",
+    "二进制构建文件"
+  ],
+  "previous_manifests_unchanged": {
+    "round3-manifest.json": "3d16302b5a45cf81c627cdcae6ff7955454ad61ec30716a3a29ee54505097472",
+    "build-followup/manifest.json": "130f8ec5dd649db567d2396c5a15bb9c54964b4df77a55f6ed48896ccf4ced2c",
+    "integration/manifest.json": "a852f8edece45a2befe90eb3e8137b1a87f144f7ec90de325244a4b0f77dfedf",
+    "playtest-followup/manifest.json": "b31804f12e027e75130eca87b4eed4ad30a83cd74d6c49584087027dfd7ee687",
+    "q4/manifest.json": "eaa151f4539d26bb42d1335293c191a65d7476fa335140750d49ae0529a6380f",
+    "q4-coexist/manifest.json": "0e23ae5656df6ae267d2a551c7bd902945b9bd8ebd024955bfd64b6a031d8619"
+  },
+  "files": [
+    {
+      "path": "baseline/process-evidence.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-q4single70-process-evidence.json",
+      "kind": "exact_copy",
+      "bytes": 5698,
+      "sha256": "118ad35dcb5817878d4e1af26cbd2d7b8d0192edfa27c2a2eafe45f16fcb0d97"
+    },
+    {
+      "path": "baseline/summary.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-q4single70/summary.json",
+      "kind": "exact_copy",
+      "bytes": 81451,
+      "sha256": "2fa5a153ae3d5dc8792babac5033056b4e3b9fe111b09abac8a077b08d181b5e"
+    },
+    {
+      "path": "build-identity-evidence.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/final-build-followup-20261114.json",
+      "kind": "exact_copy",
+      "bytes": 18414,
+      "sha256": "2acc809334a16a13c6bd6a01b5fd7f4a7daf1136db7feba55e86f0fdb880607f"
+    },
+    {
+      "path": "closed-plan.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-buildrefresh-plan.json",
+      "kind": "exact_copy",
+      "bytes": 23843,
+      "sha256": "de1907962704eff951b0e99121df7b6a71f5153bb31f50264c983c666d595e87"
+    },
+    {
+      "path": "commands.json",
+      "source_path": "两个实际 process-evidence.json；Luna 只有计划命令，没有执行",
+      "kind": "extracted_metadata",
+      "bytes": 7306,
+      "sha256": "3f351363bc91be5c00c928d4c72f7615b3ff60db8be282c3b1b5be8a897d85c5"
+    },
+    {
+      "path": "csv-diagnostic.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-csv-diagnostic.json",
+      "kind": "exact_copy",
+      "bytes": 9484,
+      "sha256": "2a367bef26104831cdb6086466d3e5952435cb017a145c19558537221f290df2"
+    },
+    {
+      "path": "executed-plan.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-executed-plan.json",
+      "kind": "exact_copy",
+      "bytes": 23639,
+      "sha256": "4d8bf6b1eacddcfac9a5ea186636b6183ba9f73f1c0150b0413ade1ba92ad7b6"
+    },
+    {
+      "path": "execution-events.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-q4-singlethread70-execution.ndjson",
+      "kind": "extracted_metadata",
+      "bytes": 2506,
+      "sha256": "d0428e30c49810f9fb3b5436d473c76fb77b0016d984c49ec3114d1b8b79cc33"
+    },
+    {
+      "path": "game-condition-events.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-game-condition-events.json",
+      "kind": "exact_copy",
+      "bytes": 1601,
+      "sha256": "22c4757348c3784a6dcd5ba3808e9c3643f8f74eb9e16cf136fa67a3698330ec"
+    },
+    {
+      "path": "preparation-review.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-revalidation.json",
+      "kind": "exact_copy",
+      "bytes": 11297,
+      "sha256": "6aee75083f26038d9ad38679336a4150dd061d1d78808e5be060b2e1184e0325"
+    },
+    {
+      "path": "q4-singlethread/process-evidence.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-local99-q4single70-process-evidence.json",
+      "kind": "exact_copy",
+      "bytes": 12261,
+      "sha256": "c2cf28c2727494b2ee5928d9dfeff2d07a872aa34f9d7fadf72e67cbdb297e2d"
+    },
+    {
+      "path": "q4-singlethread/summary.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-local99-q4single70/summary.json",
+      "kind": "exact_copy",
+      "bytes": 130790,
+      "sha256": "419c3777c4526e8c0ed836da79e2547bba44ec46a9f31355941896e7dca01726"
+    },
+    {
+      "path": "source-hashes.json",
+      "source_path": "executed-plan.json",
+      "kind": "extracted_metadata",
+      "bytes": 7538,
+      "sha256": "3d4a92f70336e12707775c771e208658f60517296b598206e5180cce5c31ca5b"
+    },
+    {
+      "path": "summary-before-csv.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-summary-before-csv.json",
+      "kind": "exact_copy",
+      "bytes": 19289,
+      "sha256": "ef00e87d3e1386b41e6103ae762ebeef154d41043ee236d071372b14f73b6e62"
+    },
+    {
+      "path": "summary.json",
+      "source_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-summary.json",
+      "kind": "exact_copy",
+      "bytes": 21774,
+      "sha256": "97ed95c66f2449eec997e7f3c728d63bff732785378a78a366264483db117a06"
+    }
+  ],
+  "limitations": [
+    "baseline 开始约19秒后 PIE 结束",
+    "Q4 窗前出现第二个编辑器，语音超时导致负载55.83秒结束",
+    "Luna 没有执行",
+    "没有计算帧改善或降低验收标准",
+    "恢复稳定试玩来自根任务记录，本归档任务没有修改运行配置"
+  ]
+}

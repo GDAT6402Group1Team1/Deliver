@@ -5,6 +5,7 @@
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Characters/DeliveryNpcAIController.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
 #include "AI/Network/DeliveryAiSettings.h"
@@ -83,8 +84,11 @@ bool FDeliveryNpcStrikeNavigationTest::RunTest(const FString&)
     auto* B=World->SpawnActor<ADeliveryNpcCharacter>(WomanClass,FVector(400,0,90),FRotator(0,180,0),Spawn);
     A->SetActorTickEnabled(false); B->SetActorTickEnabled(false);
     for (auto* Npc:{A,B})
-        if (auto* AI=Cast<AAIController>(Npc->GetController()); AI && AI->BrainComponent)
-            AI->BrainComponent->StopLogic(TEXT("IsolatedContactTest"));
+        if (auto* AI=Cast<AAIController>(Npc->GetController()))
+        {
+            if (auto* NpcController=Cast<ADeliveryNpcAIController>(AI)) NpcController->bKeepDistanceWhenIdle=false;
+            if (AI->BrainComponent) AI->BrainComponent->StopLogic(TEXT("IsolatedContactTest"));
+        }
     const auto DescribeNavigation=[&](const TCHAR* Stage)
     {
         const FVector StartPosition=A->GetNavAgentLocation();
@@ -280,6 +284,8 @@ bool FDeliveryNpcStrikeNavigationTest::RunTest(const FString&)
     FVector AttackerAtFirstPunch=FVector::ZeroVector;
     FVector TargetAtFirstPunch=FVector::ZeroVector;
     bool bStoppedTarget=false;
+    bool bChasedDuringStrikeCooldown=false;
+    bool bNextPunchStartedTooSoon=false;
     for (int32 Step=0;Step<275;++Step)
     {
         Tick(.02f);
@@ -293,7 +299,12 @@ bool FDeliveryNpcStrikeNavigationTest::RunTest(const FString&)
                 FirstPunchAt=World->GetTimeSeconds();
                 AttackerAtFirstPunch=A->GetActorLocation(); TargetAtFirstPunch=B->GetActorLocation();
             }
+            else if (World->GetTimeSeconds()-FirstPunchAt<UDeliveryNpcCombatComponent::StrikeWindup+1-.04)
+                bNextPunchStartedTooSoon=true;
         }
+        if (FirstPunchAt>=0 && !A->Combat->IsStriking() && !A->Combat->IsReadyToStrike() &&
+            A->GetVelocity().Size2D()>5 && FVector::Dist2D(AttackerAtFirstPunch,A->GetActorLocation())>2)
+            bChasedDuringStrikeCooldown=true;
         // 对方后仰结束后实际走开一小段，追赶必须跟随移动对象，而非停在旧目标位置
         if (FirstPunchAt>=0 && World->GetTimeSeconds()-FirstPunchAt>=.8 && World->GetTimeSeconds()-FirstPunchAt<1.25)
             B->AddMovementInput(FVector::YAxisVector);
@@ -307,10 +318,51 @@ bool FDeliveryNpcStrikeNavigationTest::RunTest(const FString&)
     TestTrue(TEXT("追近后发生真实轻拳命中"),A->Combat->GetFightHitCount()>0);
     TestTrue(TEXT("目标在第一拳之后确实自行走开"),FirstPunchAt>=0 && FVector::Dist2D(TargetAtFirstPunch,B->GetActorLocation())>30);
     TestTrue(TEXT("攻击者重新追向已经移动的目标"),FirstPunchAt>=0 && FVector::Dist2D(AttackerAtFirstPunch,A->GetActorLocation())>20);
+    TestTrue(TEXT("收拳后在攻击冷却期间已经实际追赶"),bChasedDuringStrikeCooldown);
+    TestFalse(TEXT("开始追赶不会提前下一拳"),bNextPunchStartedTooSoon);
     TestTrue(TEXT("重新靠近后拳头再次接触目标"),A->Combat->GetFightHitCount()>=2);
-    TestTrue(TEXT("导航交战遵守每轮三拳上限"),A->Combat->GetFightPunchCount()<=3);
+    TestTrue(TEXT("五秒追近样本中的出拳保留收拳间隔"),A->Combat->GetFightPunchCount()<=3);
     TestFalse(TEXT("这一轮轻拳不会按旧规则一拳击倒"),B->IsKnockedDown());
     TestEqual(TEXT("交战结束后恢复普通速度"),A->GetCharacterMovement()->MaxWalkSpeed,A->WalkSpeed);
+
+    // 同一条正在运行的树接收逃跑决定，验证旧拳取消后确实沿新路径离开
+    Tick(6);
+    A->SetActorLocation(FVector(0,0,90)); A->SetActorRotation(FRotator::ZeroRotator);
+    B->SetActorLocation(FVector(A->Combat->GetStrikeApproachDistance(B)-.5f,0,90)); B->SetActorRotation(FRotator(0,180,0));
+    A->GetCharacterMovement()->StopMovementImmediately(); B->GetCharacterMovement()->StopMovementImmediately();
+    Tick(.2f);
+    if (!TestTrue(TEXT("准备交战中改为逃跑"),StartMove(EDeliveryNpcAction::Fight))) return false;
+    for (int32 Step=0;Step<30 && !A->Combat->IsStriking();++Step) Tick(.02f);
+    if (!TestTrue(TEXT("逃跑决定到来时确实处于挥拳准备阶段"),A->Combat->IsStriking())) return false;
+    const FGuid FightingAction=A->Agent->GetPublicState().ActionId;
+    const int32 HitsBeforeFlee=A->Combat->GetFightHitCount();
+    const double CombatLimit=A->Agent->CombatDeadline;
+    FDeliveryNpcDecisionRequest FleeRequest;
+    if (!TestTrue(TEXT("交战中的请求包含可执行逃跑路线"),A->Agent->BuildDecisionRequest(
+        World->GetSubsystem<UDeliveryAiGatewaySubsystem>()->GetWorldEpoch(),FleeRequest))) return false;
+    const auto* FleeCandidate=FleeRequest.Candidates.FindByPredicate([](const auto& Item){return Item.Action==EDeliveryNpcAction::Flee;});
+    if (!TestNotNull(TEXT("真实导航提供逃跑候选"),FleeCandidate)) return false;
+    A->Agent->ActiveRequest=FleeRequest; A->Agent->bDecisionPending=true;
+    FDeliveryNpcDecisionProposal Flee;
+    Flee.WorldEpoch=FleeRequest.WorldEpoch; Flee.NpcId=FleeRequest.NpcId; Flee.RequestId=FleeRequest.RequestId;
+    Flee.ContextRevision=FleeRequest.ContextRevision; Flee.PlanRevision=FleeRequest.PlanRevision;
+    Flee.Action=EDeliveryNpcAction::Flee; Flee.TargetId=FleeCandidate->TargetId; Flee.EvidenceIds=FleeCandidate->EvidenceIds; Flee.Duration=5;
+    A->Agent->ReceiveDecision(Flee.RequestId,&Flee,NAME_None);
+    const FGuid FleeAction=A->Agent->GetPublicState().ActionId;
+    TestNotEqual(TEXT("逃跑决定替换旧交战编号"),FleeAction,FightingAction);
+    TestFalse(TEXT("决定逃跑时立即取消尚未命中的拳"),A->Combat->IsStriking());
+    TestEqual(TEXT("从追打改为逃跑不会重置整场期限"),A->Agent->CombatDeadline,CombatLimit);
+    const FVector BeforeFlee=A->GetActorLocation();
+    const double BeforeFleeDistance=FVector::Dist2D(BeforeFlee,B->GetActorLocation());
+    Tick(1.2f);
+    TestEqual(TEXT("执行的是模型选择的逃跑"),A->Agent->GetPublicState().Action,EDeliveryNpcAction::Flee);
+    TestTrue(TEXT("角色实际沿逃跑路线移动"),FVector::Dist2D(BeforeFlee,A->GetActorLocation())>60);
+    TestTrue(TEXT("逃跑确实拉开双方距离"),FVector::Dist2D(A->GetActorLocation(),B->GetActorLocation())>BeforeFleeDistance+60);
+    TestEqual(TEXT("旧拳不会在逃跑途中补一次命中"),A->Combat->GetFightHitCount(),HitsBeforeFlee);
+    A->Agent->ReceiveDecision(Flee.RequestId,&Flee,NAME_None);
+    TestEqual(TEXT("旧决定重放不会重新开始逃跑"),A->Agent->GetPublicState().ActionId,FleeAction);
+    if (AI->BrainComponent) AI->BrainComponent->StopLogic(TEXT("FightToFleeFinished"));
+    A->Agent->CancelPlan(TEXT("FightToFleeFinished"));
 
     // 用实际碰撞体阻挡两边，完整导航网格也不能绕过落点碰撞检查
     const FVector ToTarget=(B->GetActorLocation()-A->GetActorLocation()).GetSafeNormal2D();

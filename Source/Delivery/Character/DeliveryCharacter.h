@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "AbilitySystemInterface.h"
 #include "Combat/DeliveryCombatInterface.h"
+#include "Carry/DeliveryPackageCarrierInterface.h"
+#include "Carry/DeliveryHandheldCarrierInterface.h"
 #include "GameFramework/Pawn.h"
 #include "DeliveryCharacter.generated.h"
 
@@ -42,7 +44,8 @@ class UDeliveryCameraComponent;
 /** 组装角色组件，提供移动、战斗、抓取和快递交付的操作入口 */
 UCLASS()
 
-class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public IDeliveryCombatInterface
+class ADeliveryCharacter : public APawn, public IAbilitySystemInterface, public IDeliveryCombatInterface,
+    public IDeliveryPackageCarrierInterface, public IDeliveryHandheldCarrierInterface
 {
     GENERATED_BODY()
 
@@ -249,13 +252,28 @@ private:
     UFUNCTION(BlueprintCallable, Category = "Delivery|Carry")
     bool ReceiveTaskPackage(ADeliveryPackageItem *Package, bool bPlayFeedback = true);
 
+    virtual ADeliveryHandheldItem* GetCarriedHandheldItem() const override;
+    virtual APlayerState* GetHandheldOwnerPlayerState() const override;
+    virtual bool CanHandleHandheldItem() const override;
+    virtual bool OwnsHandheldItem(const ADeliveryHandheldItem* Item) const override;
+    virtual bool CanReceiveHandheldItem(ADeliveryHandheldItem* Item) const override;
+    virtual bool TryReceiveHandheldItem(ADeliveryHandheldItem* Item) override;
+    virtual bool ReleaseHandheldItem(ADeliveryHandheldItem* Item) override;
+    virtual void ApplyHandheldItemPresentation(ADeliveryHandheldItem* Item) override;
+
     /** 取得当前携带的任务快递，包括手上的快递和车上的快递；没有时返回空指针 */
     UFUNCTION(BlueprintPure, Category = "Delivery|Carry")
-    ADeliveryPackageItem *GetCarriedTaskPackage() const;
+    virtual ADeliveryPackageItem *GetCarriedTaskPackage() const override;
 
     /** 取得用于任务结算的玩家状态；骑车后控制器改为控制车辆，因此需要从车辆取得玩家状态 */
     UFUNCTION(BlueprintPure, Category = "Delivery|Carry")
-    APlayerState *GetTaskPlayerState() const;
+    virtual APlayerState *GetTaskPlayerState() const override;
+
+    virtual bool CanHandleTaskPackage() const override;
+    virtual bool CanReceiveTaskPackage(ADeliveryPackageItem* Package) const override;
+    virtual bool TryReceiveTaskPackage(ADeliveryPackageItem* Package) override;
+    virtual bool ReleaseTaskPackage(ADeliveryPackageItem* Package) override;
+    virtual void ApplyTaskPackagePresentation(ADeliveryPackageItem* Package) override;
 
     /** 取得角色正在驾驶的车辆；根据角色的附着关系和车辆驾驶员判断，没有驾驶车辆时返回空指针 */
     UFUNCTION(BlueprintPure, Category = "Delivery|Carry")
@@ -279,6 +297,12 @@ private:
     /** 服务器接收移动输入和镜头水平角度，过滤无效数值 */
     UFUNCTION(Server, Unreliable)
     void ServerSetMoveInput(FVector2D Input, float AimYaw);
+
+    // 持续输入带序号，可靠停止迟到时不能覆盖更新的移动
+    UFUNCTION(Server, Unreliable)
+    void ServerSetMoveInputSequenced(FVector2D Input, float AimYaw, uint32 Sequence);
+    UFUNCTION(Server, Reliable)
+    void ServerStopMoveInput(uint32 Sequence);
 
     /** 服务器检查请求间隔，再尝试起跳 */
     UFUNCTION(Server, Reliable)
@@ -403,6 +427,21 @@ private:
     }
 
   private:
+    friend class FDeliveryMoveInputSafetyTest;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    bool AcceptMoveInputSequence(uint32 Sequence);
+    void ApplyServerMoveInput(FVector2D Input, float AimYaw);
+    void ExpireServerMoveInput();
+    void ClearMoveInput();
+    // 序号按本机角色递增；服务器按当前控制器隔离旧请求
+    uint32 LocalMoveInputSequence = 0;
+    uint32 LastServerMoveInputSequence = 0;
+    bool bLocalMoveInputActive = false;
+    bool bHasServerMoveInputSequence = false;
+    TWeakObjectPtr<AController> ServerMoveInputController;
+    double LastServerMoveInputTime = 0.0;
+    FTimerHandle MoveInputExpiryTimer;
+
     /** 取得当前拾取目标，根据目标配置选择立即拾取或长按 */
     void BeginPickupInteraction();
     /** 停止本机长按计时，并按需通知服务器 */

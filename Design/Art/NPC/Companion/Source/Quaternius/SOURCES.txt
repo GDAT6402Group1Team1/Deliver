@@ -1,0 +1,34 @@
+Quaternius adult character source record — acquired 2026-11-14
+
+Author: Quaternius
+Author website: https://quaternius.com/
+Author itch profile: https://quaternius.itch.io/
+
+Acquired author-distributed free Standard archives without account or purchase:
+1. https://quaternius.itch.io/universal-base-characters
+   Official pack page: https://quaternius.com/packs/universalbasecharacters.html
+   Archive: UniversalBaseCharacters/Universal Base Characters[Standard].zip
+   SHA256: fdbf1804c90dfc1ea03e992bff7da2dfd1a79318e13270a660180f9308455f40
+   Bytes: 128968391; free upload id: 15861669
+2. https://quaternius.itch.io/modular-character-outfits-fantasy
+   Archive: ModularCharacterOutfitsFantasy/Modular Character Outfits - Fantasy[Standard].zip
+   SHA256: c3468b18871cc8c8f05ab14df7712baf22cb9f389cbd870babf130e595187f70
+   Bytes: 294347394; free upload id: 16289385
+
+Both archives contain original License_Standard.txt explicitly naming CC0 1.0 Universal and Models by @Quaternius. Those exact files are retained in each package folder and Extracted tree. These pack licenses are the recorded basis; we do not infer all current Quaternius web assets are CC0. Site-wide QAL v1.0 can be read at https://quaternius.com/license.html and was separately archived with the unsuccessful Ultimate Modular Men acquisition.
+
+Only required male glTF/bin, selected male hair/eyebrow options, their textures, original readmes and author previews were extracted. Absolute paths, parent traversal, drive syntax and symlinks were rejected; extraction refused to overwrite files. Original ZIPs and glTF remain unchanged. DownloadRecord.json records acquisition/manifest and SHA256; ExtractionAudit.json records actual selected model paths, mesh names, bones, animation names and missing external references.
+
+Selection:
+- Universal Base Standard supplies Superhero_Male_FullBody and Superhero_Female_FullBody, not the paid package's Regular or Teen variants. The male is an adult. Use only its head with the outfits as the author's original Readme.txt directs; hidden whole-body geometry clips through the outfit.
+- Outfit Standard supplies Male_Peasant and Male_Ranger as complete outfits and modular parts. They are fantasy/peasant source garments, not a ready-made modern helper or noodle-shop chef. ErGou's plain green jacket/long trousers and the boss's kitchen clothing/apron need local adaptations. Remove Ranger hood, pauldron, bracers, excess belts and other adventure details; an apron is a project-created addition.
+- Selected head-bound options: Hair_Buzzed, Hair_SimpleParted, Hair_Beard, Eyebrows_Regular.
+- All selected assets use 65 UE-style bone names including uppercase Head. Names alone do not imply identical bind poses. Base and outfits differ in shoulder/arm/hip proportions; root-to-Head chain local transforms match exactly. Peasant and Ranger local transforms match exactly. RigCompatibilityAudit.json contains the comparison. Actual animated assembly/retargeting has not been verified by source acquisition.
+- Base glTF references T_Hair_1_Normal_png.png and T_Eye_Normal_png.png which are absent from the original archive. T_Hair_1_Normal.png and T_Eye_Normal.png exist beside it; remap only in a derived working asset, retaining original source. Selected hair and outfit references resolve.
+- Original Unreal-Engine-README recommends glTF export/import due to Blender FBX unit/scale issues. Re-export should validate units explicitly.
+
+Sources considered but not acquired:
+- https://quaternius.com/packs/ultimatemodularcharacters.html : official public Google Drive returned a quota exceeded HTML response for the tried model/license downloads; no returned HTML was stored as a model. DownloadRecord.json preserves the failure, with official source/QAL pages. Do not repeatedly retry quota-limited downloads.
+- https://quaternius.com/packs/sushirestaurantkit.html : inspected official public file inventory contained Panda/Rabbit character variants, not the desired adult human chef; excluded.
+
+These sources are distinct from the project's resident DaZhuang character asset. Final silhouettes, face differentiation, materials, animation, UE scale and game appearance require asset work and review. No UE import, PIE, model inference or TTS was performed in the acquisition task. The downloaded preview images have not been visually inspected by this acquisition task.

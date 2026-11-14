@@ -40,6 +40,24 @@ def valid_profile_id(value):
     return isinstance(value, str) and (not value or re.fullmatch(r'[a-z][a-z0-9_]{0,47}', value) is not None)
 
 
+RESIDENT_PROFILE_IDS = ('chunlai', 'xiumei')
+
+
+def select_resident_profiles(source):
+    """居民专用工具只取原两人，额外人物不能混入居民争执样本"""
+    if source.get('version') != 1 or not isinstance(source.get('characters'), list):
+        raise ValueError('invalid NPC profile source')
+    seen = set()
+    for row in source['characters']:
+        key = row.get('id') if isinstance(row, dict) else None
+        if not key or not valid_profile_id(key) or key in seen:
+            raise ValueError('invalid or duplicate NPC profile id')
+        seen.add(key)
+    if not set(RESIDENT_PROFILE_IDS).issubset(seen):
+        raise ValueError('missing required resident NPC profiles')
+    return [row for row in source['characters'] if row['id'] in RESIDENT_PROFILE_IDS]
+
+
 def _text_list(value, maximum):
     return (isinstance(value, list) and len(value) <= maximum and
             all(isinstance(item, str) and 0 < len(item) <= 200 for item in value))

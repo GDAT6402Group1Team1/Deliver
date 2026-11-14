@@ -1,0 +1,2155 @@
+{
+  "schema_version": 1,
+  "captured_utc": "2026-11-14T15:08:34.890371+00:00",
+  "scope": "Read-only existing logs and configuration. No model requests, GPU work, UE control, compilation, or tests. Source may include uncompiled work from other active tasks.",
+  "sources": [
+    {
+      "path": "Saved/Logs/AIResidentBackend.log",
+      "sha256": "6fce8cdaf1c2944876243674dbebbb5d3813afce7084d912fb73bf38d302f689",
+      "bytes": 24022
+    },
+    {
+      "path": "Saved/Logs/Delivery.log",
+      "sha256": "4ddd54183219abcd7ebd35962db8f9240fe54a37d27ef813eace5da60b215243",
+      "bytes": 562359
+    },
+    {
+      "path": "Saved/Logs/NpcDialogue.ndjson",
+      "sha256": "1a1f7a3b0317fcaecea4655209cefba7674ac5ca4a77558675ce6744cad6c9ee",
+      "bytes": 2511101
+    },
+    {
+      "path": "Saved/Logs/AIResidentBackend.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  ],
+  "source_code_at_review": [
+    {
+      "path": "Tools/DeliveryAI/start_backend.ps1",
+      "sha256": "1875e3838847ab50dc9a6824668482f74226749e555a226ec05a9f0da7b18689",
+      "bytes": 10038
+    },
+    {
+      "path": "Tools/DeliveryAI/streaming.py",
+      "sha256": "848c6da27b98025fb043c112bd1862a75c3bf2d160213cfac09fe77c97672252",
+      "bytes": 47658
+    },
+    {
+      "path": "Tools/DeliveryAI/combat_model.py",
+      "sha256": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+      "bytes": 15490
+    },
+    {
+      "path": "Tools/DeliveryAI/combat_model_config.json",
+      "sha256": "e2499641b31016969d7cf8b63047184fa4eaae26dbb1e128300b9304d518e0ee",
+      "bytes": 781
+    },
+    {
+      "path": "Tools/DeliveryAI/native_tts.py",
+      "sha256": "c4a1355a389a4b3b187365857e496101cb5f4ce6427090247a6407842b0978a4",
+      "bytes": 2755
+    },
+    {
+      "path": "Tools/DeliveryAI/llm_evaluation/start_local_model.py",
+      "sha256": "608fb818cb8c9a9cde96ad57112ee8dfa4d7c74eafc0aa462d72c3b8bba41bcb",
+      "bytes": 13440
+    },
+    {
+      "path": "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp",
+      "sha256": "ea334b9b0243d7942ddbd6ceb6156f5d313aa706cbb503b557d99afbd309381c",
+      "bytes": 105418
+    },
+    {
+      "path": "Source/Delivery/AI/Network/DeliveryAiGatewaySubsystem.cpp",
+      "sha256": "33428776f1f8a5e7e178113ffb47da34e84a3c751222349ad38847d59c4001c1",
+      "bytes": 27950
+    },
+    {
+      "path": "Source/Delivery/UI/DeliveryAiInspectorWidget.cpp",
+      "sha256": "9cf1504dce781a407b359b381f0274ec12c4709a31464880132eda6b4a96e371",
+      "bytes": 17268
+    }
+  ],
+  "request_count": 11,
+  "completed_count": 7,
+  "cancelled_count": 4,
+  "metrics": {
+    "model_connection_startup": {
+      "n": 7,
+      "min": 1,
+      "median": 2,
+      "p95_linear": 395.9,
+      "max": 437
+    },
+    "model_connection_turn_start": {
+      "n": 7,
+      "min": 64,
+      "median": 68,
+      "p95_linear": 481.0,
+      "max": 529
+    },
+    "model_connection_first_delta": {
+      "n": 7,
+      "min": 1580,
+      "median": 1766,
+      "p95_linear": 2671.9,
+      "max": 2740
+    },
+    "first_sentence": {
+      "n": 7,
+      "min": 2254,
+      "median": 2475,
+      "p95_linear": 3267.1,
+      "max": 3331
+    },
+    "model_completed": {
+      "n": 7,
+      "min": 2377,
+      "median": 2548,
+      "p95_linear": 3342.1,
+      "max": 3400
+    },
+    "first_audio_chunk": {
+      "n": 8,
+      "min": 2308,
+      "median": 2570.5,
+      "p95_linear": 3843.35,
+      "max": 4032
+    },
+    "audio_ready": {
+      "n": 8,
+      "min": 2806,
+      "median": 3527.0,
+      "p95_linear": 4338.2,
+      "max": 4411
+    },
+    "reply_finished": {
+      "n": 7,
+      "min": 2942,
+      "median": 3674,
+      "p95_linear": 4352.4,
+      "max": 4416
+    },
+    "turn_to_first_delta_ms": {
+      "n": 7,
+      "min": 1516,
+      "median": 1696,
+      "p95_linear": 2254.9,
+      "max": 2371
+    },
+    "first_delta_to_sentence_ms": {
+      "n": 7,
+      "min": 591,
+      "median": 628,
+      "p95_linear": 716.0,
+      "max": 734
+    },
+    "queue_ms": {
+      "n": 11,
+      "min": 0,
+      "median": 0,
+      "p95_linear": 0.0,
+      "max": 0
+    },
+    "model_slot_wait_ms": {
+      "n": 11,
+      "min": 0,
+      "median": 0,
+      "p95_linear": 0.0,
+      "max": 0
+    },
+    "input_tokens": {
+      "n": 7,
+      "min": 10559,
+      "median": 11080,
+      "p95_linear": 11300.5,
+      "max": 11359
+    },
+    "cached_input_tokens": {
+      "n": 7,
+      "min": 0,
+      "median": 0,
+      "p95_linear": 0.0,
+      "max": 0
+    },
+    "tts_queue_ms": {
+      "n": 8,
+      "min": 3,
+      "median": 4.0,
+      "p95_linear": 1125.9,
+      "max": 1730
+    },
+    "first_audio_chunk_per_request": {
+      "n": 7,
+      "min": 2308,
+      "median": 2508,
+      "max": 3493,
+      "p95_linear": 3442.6
+    },
+    "first_sentence_to_first_audio_ms": {
+      "n": 7,
+      "min": 33,
+      "median": 54,
+      "max": 207,
+      "p95_linear": 193.5
+    }
+  },
+  "cancellations": [
+    {
+      "request": "0cb4f974-49b6-1d9e-865f-8d909bd48923",
+      "requested_ms": 2343,
+      "terminal_ms": 2346,
+      "after_cancel_ms": 3
+    },
+    {
+      "request": "da40c126-4484-5dc7-cc28-389db26963fb",
+      "requested_ms": 2327,
+      "terminal_ms": 2336,
+      "after_cancel_ms": 9
+    },
+    {
+      "request": "60ddd25a-46cb-d12e-310e-568aa83dcf50",
+      "requested_ms": 683,
+      "terminal_ms": 685,
+      "after_cancel_ms": 2
+    },
+    {
+      "request": "98ee7f1b-4980-a248-3d0f-719e4f5f49d2",
+      "requested_ms": 1623,
+      "terminal_ms": 1625,
+      "after_cancel_ms": 2
+    }
+  ],
+  "requests": {
+    "819e7c03-43a9-d116-32f7-778e8fb7f3fe": {
+      "stages": {
+        "worker_started": [
+          {
+            "scheduler_queue_ms": 0
+          }
+        ],
+        "model_slot_acquired": [
+          {
+            "slot_wait_ms": 0
+          }
+        ],
+        "context_ready": [
+          {
+            "player_message": "none",
+            "player_answered": 0,
+            "candidates": 8
+          }
+        ],
+        "prompt_ready": [
+          {
+            "chars": 2682,
+            "bytes": 4844
+          }
+        ],
+        "model_selected": [
+          {
+            "source": "ambient",
+            "model": "gpt-6-luna"
+          }
+        ],
+        "model_connection_startup": [
+          {
+            "connection_ms": 434,
+            "elapsed_ms": 437
+          }
+        ],
+        "model_connection_thread_start": [
+          {
+            "connection_ms": 507,
+            "elapsed_ms": 509
+          }
+        ],
+        "model_connection_turn_start": [
+          {
+            "connection_ms": 527,
+            "elapsed_ms": 529
+          }
+        ],
+        "model_connection_first_delta": [
+          {
+            "connection_ms": 2510,
+            "elapsed_ms": 2513
+          }
+        ],
+        "first_sentence": [
+          {
+            "elapsed_ms": 3118
+          }
+        ],
+        "transport_selected": [
+          {
+            "transport": "pcm_chunks_v1",
+            "reason": "negotiated"
+          }
+        ],
+        "model_connection_model_terminal": [
+          {
+            "connection_ms": 3203,
+            "elapsed_ms": 3206
+          }
+        ],
+        "model_token_usage": [
+          {
+            "last_input_tokens": 10559,
+            "last_cached_input_tokens": 0,
+            "last_output_tokens": 39,
+            "last_reasoning_output_tokens": 0,
+            "last_total_tokens": 10598,
+            "last_cache_write_input_tokens": 0,
+            "thread_total_input_tokens": 10559,
+            "thread_total_cached_input_tokens": 0,
+            "thread_total_output_tokens": 39,
+            "thread_total_reasoning_output_tokens": 0,
+            "thread_total_total_tokens": 10598,
+            "thread_total_cache_write_input_tokens": 0
+          }
+        ],
+        "model_completed": [
+          {
+            "elapsed_ms": 3207
+          }
+        ],
+        "first_audio_chunk": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 3,
+            "tts_ms": 202,
+            "elapsed_ms": 3325
+          }
+        ],
+        "audio_ready": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 3,
+            "tts_ms": 1032,
+            "elapsed_ms": 4155,
+            "voice_name": "Uncle_Fu"
+          }
+        ],
+        "reply_finished": [
+          {
+            "elapsed_ms": 4156
+          }
+        ]
+      },
+      "backend_lines": {
+        "worker_started": [
+          6
+        ],
+        "model_slot_acquired": [
+          7
+        ],
+        "context_ready": [
+          8
+        ],
+        "prompt_ready": [
+          9
+        ],
+        "model_selected": [
+          10
+        ],
+        "model_connection_startup": [
+          11
+        ],
+        "model_connection_thread_start": [
+          13
+        ],
+        "model_connection_turn_start": [
+          14
+        ],
+        "model_connection_first_delta": [
+          15
+        ],
+        "first_sentence": [
+          16
+        ],
+        "transport_selected": [
+          17
+        ],
+        "model_connection_model_terminal": [
+          18
+        ],
+        "model_token_usage": [
+          19
+        ],
+        "model_completed": [
+          20
+        ],
+        "first_audio_chunk": [
+          31
+        ],
+        "audio_ready": [
+          32
+        ],
+        "reply_finished": [
+          33
+        ]
+      },
+      "dialogue": {
+        "time": "22:57:30",
+        "source": "ambient",
+        "model": "gpt-6-luna",
+        "npc_id": "aeae4d1e-40fc-f654-d099-bc9ba5aa6e3e",
+        "profile_id": "chunlai",
+        "current_action": null,
+        "error": null,
+        "chosen": "LookAt:p0",
+        "line": 444
+      },
+      "ue": {
+        "http_start": {
+          "line": 2962,
+          "utc": "2026-11-14T14:57:27.151000+00:00"
+        },
+        "approved": {
+          "line": 3027,
+          "utc": "2026-11-14T14:57:30.274000+00:00"
+        },
+        "model_done": {
+          "line": 3029,
+          "utc": "2026-11-14T14:57:30.386000+00:00"
+        }
+      }
+    },
+    "0cb4f974-49b6-1d9e-865f-8d909bd48923": {
+      "stages": {
+        "worker_started": [
+          {
+            "scheduler_queue_ms": 0
+          }
+        ],
+        "model_slot_acquired": [
+          {
+            "slot_wait_ms": 0
+          }
+        ],
+        "context_ready": [
+          {
+            "player_message": "none",
+            "player_answered": 0,
+            "candidates": 14
+          }
+        ],
+        "prompt_ready": [
+          {
+            "chars": 3333,
+            "bytes": 5549
+          }
+        ],
+        "model_selected": [
+          {
+            "source": "ambient",
+            "model": "gpt-6-luna"
+          }
+        ],
+        "model_connection_startup": [
+          {
+            "connection_ms": 0,
+            "elapsed_ms": 2
+          }
+        ],
+        "model_connection_thread_start": [
+          {
+            "connection_ms": 57,
+            "elapsed_ms": 59
+          }
+        ],
+        "model_connection_turn_start": [
+          {
+            "connection_ms": 66,
+            "elapsed_ms": 69
+          }
+        ],
+        "model_connection_first_delta": [
+          {
+            "connection_ms": 1957,
+            "elapsed_ms": 1960
+          }
+        ],
+        "model_connection_cancel_requested": [
+          {
+            "connection_ms": 2341,
+            "elapsed_ms": 2343
+          }
+        ],
+        "model_connection_model_terminal": [
+          {
+            "connection_ms": 2343,
+            "elapsed_ms": 2346
+          }
+        ],
+        "model_connection_cancel_terminal_interrupted": [
+          {
+            "connection_ms": 2343,
+            "elapsed_ms": 2346
+          }
+        ]
+      },
+      "backend_lines": {
+        "worker_started": [
+          21
+        ],
+        "model_slot_acquired": [
+          23
+        ],
+        "context_ready": [
+          24
+        ],
+        "prompt_ready": [
+          25
+        ],
+        "model_selected": [
+          26
+        ],
+        "model_connection_startup": [
+          27
+        ],
+        "model_connection_thread_start": [
+          29
+        ],
+        "model_connection_turn_start": [
+          30
+        ],
+        "model_connection_first_delta": [
+          34
+        ],
+        "model_connection_cancel_requested": [
+          36
+        ],
+        "model_connection_model_terminal": [
+          37
+        ],
+        "model_connection_cancel_terminal_interrupted": [
+          38
+        ]
+      },
+      "dialogue": {
+        "time": "22:57:32",
+        "source": "ambient",
+        "model": "gpt-6-luna",
+        "npc_id": "eec701c9-445d-f978-55fa-7fb761120c45",
+        "profile_id": "xiumei",
+        "current_action": null,
+        "error": "RuntimeError",
+        "chosen": "Wait:-",
+        "line": 445
+      },
+      "ue": {
+        "http_start": {
+          "line": 3030,
+          "utc": "2026-11-14T14:57:30.386000+00:00"
+        }
+      }
+    },
+    "01ba9561-46ea-4a67-499a-2ab0d35cfa72": {
+      "stages": {
+        "worker_started": [
+          {
+            "scheduler_queue_ms": 0
+          }
+        ],
+        "model_slot_acquired": [
+          {
+            "slot_wait_ms": 0
+          }
+        ],
+        "context_ready": [
+          {
+            "player_message": "none",
+            "player_answered": 0,
+            "candidates": 14
+          }
+        ],
+        "prompt_ready": [
+          {
+            "chars": 3506,
+            "bytes": 5752
+          }
+        ],
+        "model_selected": [
+          {
+            "source": "ambient",
+            "model": "gpt-6-luna"
+          }
+        ],
+        "model_connection_startup": [
+          {
+            "connection_ms": 298,
+            "elapsed_ms": 300
+          }
+        ],
+        "model_connection_thread_start": [
+          {
+            "connection_ms": 356,
+            "elapsed_ms": 358
+          }
+        ],
+        "model_connection_turn_start": [
+          {
+            "connection_ms": 367,
+            "elapsed_ms": 369
+          }
+        ],
+        "model_connection_first_delta": [
+          {
+            "connection_ms": 2739,
+            "elapsed_ms": 2740
+          }
+        ],
+        "first_sentence": [
+          {
+            "elapsed_ms": 3331
+          }
+        ],
+        "transport_selected": [
+          {
+            "transport": "pcm_chunks_v1",
+            "reason": "negotiated"
+          }
+        ],
+        "model_connection_model_terminal": [
+          {
+            "connection_ms": 3397,
+            "elapsed_ms": 3399
+          }
+        ],
+        "model_token_usage": [
+          {
+            "last_input_tokens": 10815,
+            "last_cached_input_tokens": 0,
+            "last_output_tokens": 39,
+            "last_reasoning_output_tokens": 0,
+            "last_total_tokens": 10854,
+            "last_cache_write_input_tokens": 0,
+            "thread_total_input_tokens": 10815,
+            "thread_total_cached_input_tokens": 0,
+            "thread_total_output_tokens": 39,
+            "thread_total_reasoning_output_tokens": 0,
+            "thread_total_total_tokens": 10854,
+            "thread_total_cache_write_input_tokens": 0
+          }
+        ],
+        "model_completed": [
+          {
+            "elapsed_ms": 3400
+          }
+        ],
+        "first_audio_chunk": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 4,
+            "tts_ms": 156,
+            "elapsed_ms": 3493
+          }
+        ],
+        "audio_ready": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 4,
+            "tts_ms": 867,
+            "elapsed_ms": 4203,
+            "voice_name": "Xiaofang_B"
+          }
+        ],
+        "reply_finished": [
+          {
+            "elapsed_ms": 4204
+          }
+        ]
+      },
+      "backend_lines": {
+        "worker_started": [
+          39
+        ],
+        "model_slot_acquired": [
+          41
+        ],
+        "context_ready": [
+          42
+        ],
+        "prompt_ready": [
+          43
+        ],
+        "model_selected": [
+          44
+        ],
+        "model_connection_startup": [
+          45
+        ],
+        "model_connection_thread_start": [
+          47
+        ],
+        "model_connection_turn_start": [
+          48
+        ],
+        "model_connection_first_delta": [
+          49
+        ],
+        "first_sentence": [
+          50
+        ],
+        "transport_selected": [
+          51
+        ],
+        "model_connection_model_terminal": [
+          52
+        ],
+        "model_token_usage": [
+          53
+        ],
+        "model_completed": [
+          54
+        ],
+        "first_audio_chunk": [
+          62
+        ],
+        "audio_ready": [
+          66
+        ],
+        "reply_finished": [
+          67
+        ]
+      },
+      "dialogue": {
+        "time": "22:57:38",
+        "source": "ambient",
+        "model": "gpt-6-luna",
+        "npc_id": "eec701c9-445d-f978-55fa-7fb761120c45",
+        "profile_id": "xiumei",
+        "current_action": null,
+        "error": null,
+        "chosen": "LookAt:p0",
+        "line": 446
+      },
+      "ue": {
+        "http_start": {
+          "line": 3071,
+          "utc": "2026-11-14T14:57:34.740000+00:00"
+        },
+        "approved": {
+          "line": 3086,
+          "utc": "2026-11-14T14:57:38.107000+00:00"
+        },
+        "model_done": {
+          "line": 3088,
+          "utc": "2026-11-14T14:57:38.178000+00:00"
+        }
+      }
+    },
+    "f9b7e7be-4437-b234-8359-1d8a33c55d6a": {
+      "stages": {
+        "worker_started": [
+          {
+            "scheduler_queue_ms": 0
+          }
+        ],
+        "model_slot_acquired": [
+          {
+            "slot_wait_ms": 0
+          }
+        ],
+        "context_ready": [
+          {
+            "player_message": "none",
+            "player_answered": 0,
+            "candidates": 8
+          }
+        ],
+        "prompt_ready": [
+          {
+            "chars": 3359,
+            "bytes": 5609
+          }
+        ],
+        "model_selected": [
+          {
+            "source": "ambient",
+            "model": "gpt-6-luna"
+          }
+        ],
+        "model_connection_startup": [
+          {
+            "connection_ms": 0,
+            "elapsed_ms": 1
+          }
+        ],
+        "model_connection_thread_start": [
+          {
+            "connection_ms": 58,
+            "elapsed_ms": 59
+          }
+        ],
+        "model_connection_turn_start": [
+          {
+            "connection_ms": 65,
+            "elapsed_ms": 67
+          }
+        ],
+        "model_connection_first_delta": [
+          {
+            "connection_ms": 1949,
+            "elapsed_ms": 1950
+          }
+        ],
+        "first_sentence": [
+          {
+            "elapsed_ms": 2578
+          }
+        ],
+        "transport_selected": [
+          {
+            "transport": "pcm_chunks_v1",
+            "reason": "negotiated"
+          }
+        ],
+        "first_audio_chunk": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 4,
+            "tts_ms": 49,
+            "elapsed_ms": 2633
+          }
+        ],
+        "model_connection_model_terminal": [
+          {
+            "connection_ms": 2771,
+            "elapsed_ms": 2773
+          }
+        ],
+        "model_token_usage": [
+          {
+            "last_input_tokens": 10781,
+            "last_cached_input_tokens": 0,
+            "last_output_tokens": 40,
+            "last_reasoning_output_tokens": 0,
+            "last_total_tokens": 10821,
+            "last_cache_write_input_tokens": 0,
+            "thread_total_input_tokens": 10781,
+            "thread_total_cached_input_tokens": 0,
+            "thread_total_output_tokens": 40,
+            "thread_total_reasoning_output_tokens": 0,
+            "thread_total_total_tokens": 10821,
+            "thread_total_cache_write_input_tokens": 0
+          }
+        ],
+        "model_completed": [
+          {
+            "elapsed_ms": 2774
+          }
+        ],
+        "audio_ready": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 4,
+            "tts_ms": 1090,
+            "elapsed_ms": 3673,
+            "voice_name": "Uncle_Fu"
+          }
+        ],
+        "reply_finished": [
+          {
+            "elapsed_ms": 3674
+          }
+        ]
+      },
+      "backend_lines": {
+        "worker_started": [
+          55
+        ],
+        "model_slot_acquired": [
+          57
+        ],
+        "context_ready": [
+          58
+        ],
+        "prompt_ready": [
+          59
+        ],
+        "model_selected": [
+          60
+        ],
+        "model_connection_startup": [
+          61
+        ],
+        "model_connection_thread_start": [
+          64
+        ],
+        "model_connection_turn_start": [
+          65
+        ],
+        "model_connection_first_delta": [
+          68
+        ],
+        "first_sentence": [
+          69
+        ],
+        "transport_selected": [
+          70
+        ],
+        "first_audio_chunk": [
+          71
+        ],
+        "model_connection_model_terminal": [
+          72
+        ],
+        "model_token_usage": [
+          73
+        ],
+        "model_completed": [
+          74
+        ],
+        "audio_ready": [
+          75
+        ],
+        "reply_finished": [
+          76
+        ]
+      },
+      "dialogue": {
+        "time": "22:57:40",
+        "source": "ambient",
+        "model": "gpt-6-luna",
+        "npc_id": "aeae4d1e-40fc-f654-d099-bc9ba5aa6e3e",
+        "profile_id": "chunlai",
+        "current_action": null,
+        "error": null,
+        "chosen": "LookAt:p0",
+        "line": 447
+      },
+      "ue": {
+        "http_start": {
+          "line": 3090,
+          "utc": "2026-11-14T14:57:38.209000+00:00"
+        },
+        "approved": {
+          "line": 3128,
+          "utc": "2026-11-14T14:57:40.805000+00:00"
+        },
+        "model_done": {
+          "line": 3131,
+          "utc": "2026-11-14T14:57:41.023000+00:00"
+        }
+      }
+    },
+    "473cdca1-48ac-f6ce-4990-f599aa1e5744": {
+      "stages": {
+        "worker_started": [
+          {
+            "scheduler_queue_ms": 0
+          }
+        ],
+        "model_slot_acquired": [
+          {
+            "slot_wait_ms": 0
+          }
+        ],
+        "context_ready": [
+          {
+            "player_message": "none",
+            "player_answered": 0,
+            "candidates": 13
+          }
+        ],
+        "prompt_ready": [
+          {
+            "chars": 4445,
+            "bytes": 6801
+          }
+        ],
+        "model_selected": [
+          {
+            "source": "ambient",
+            "model": "gpt-6-luna"
+          }
+        ],
+        "model_connection_startup": [
+          {
+            "connection_ms": 0,
+            "elapsed_ms": 1
+          }
+        ],
+        "model_connection_thread_start": [
+          {
+            "connection_ms": 57,
+            "elapsed_ms": 59
+          }
+        ],
+        "model_connection_turn_start": [
+          {
+            "connection_ms": 65,
+            "elapsed_ms": 67
+          }
+        ],
+        "model_connection_first_delta": [
+          {
+            "connection_ms": 1709,
+            "elapsed_ms": 1711
+          }
+        ],
+        "first_sentence": [
+          {
+            "elapsed_ms": 2384
+          }
+        ],
+        "transport_selected": [
+          {
+            "transport": "pcm_chunks_v1",
+            "reason": "negotiated"
+          }
+        ],
+        "first_audio_chunk": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 3,
+            "tts_ms": 45,
+            "elapsed_ms": 2438
+          }
+        ],
+        "model_connection_model_terminal": [
+          {
+            "connection_ms": 2478,
+            "elapsed_ms": 2480
+          }
+        ],
+        "model_token_usage": [
+          {
+            "last_input_tokens": 11136,
+            "last_cached_input_tokens": 0,
+            "last_output_tokens": 43,
+            "last_reasoning_output_tokens": 0,
+            "last_total_tokens": 11179,
+            "last_cache_write_input_tokens": 0,
+            "thread_total_input_tokens": 11136,
+            "thread_total_cached_input_tokens": 0,
+            "thread_total_output_tokens": 43,
+            "thread_total_reasoning_output_tokens": 0,
+            "thread_total_total_tokens": 11179,
+            "thread_total_cache_write_input_tokens": 0
+          }
+        ],
+        "model_completed": [
+          {
+            "elapsed_ms": 2480
+          }
+        ],
+        "audio_ready": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 3,
+            "tts_ms": 988,
+            "elapsed_ms": 3381,
+            "voice_name": "Uncle_Fu"
+          }
+        ],
+        "reply_finished": [
+          {
+            "elapsed_ms": 3381
+          }
+        ]
+      },
+      "backend_lines": {
+        "worker_started": [
+          77
+        ],
+        "model_slot_acquired": [
+          79
+        ],
+        "context_ready": [
+          80
+        ],
+        "prompt_ready": [
+          81
+        ],
+        "model_selected": [
+          82
+        ],
+        "model_connection_startup": [
+          83
+        ],
+        "model_connection_thread_start": [
+          85
+        ],
+        "model_connection_turn_start": [
+          86
+        ],
+        "model_connection_first_delta": [
+          87
+        ],
+        "first_sentence": [
+          88
+        ],
+        "transport_selected": [
+          89
+        ],
+        "first_audio_chunk": [
+          90
+        ],
+        "model_connection_model_terminal": [
+          91
+        ],
+        "model_token_usage": [
+          92
+        ],
+        "model_completed": [
+          93
+        ],
+        "audio_ready": [
+          104
+        ],
+        "reply_finished": [
+          105
+        ]
+      },
+      "dialogue": {
+        "time": "22:58:06",
+        "source": "ambient",
+        "model": "gpt-6-luna",
+        "npc_id": "aeae4d1e-40fc-f654-d099-bc9ba5aa6e3e",
+        "profile_id": "chunlai",
+        "current_action": null,
+        "error": null,
+        "chosen": "LookAt:p1",
+        "line": 448
+      },
+      "ue": {
+        "http_start": {
+          "line": 3340,
+          "utc": "2026-11-14T14:58:03.770000+00:00"
+        },
+        "approved": {
+          "line": 3360,
+          "utc": "2026-11-14T14:58:06.190000+00:00"
+        },
+        "model_done": {
+          "line": 3362,
+          "utc": "2026-11-14T14:58:06.296000+00:00"
+        }
+      }
+    },
+    "da40c126-4484-5dc7-cc28-389db26963fb": {
+      "stages": {
+        "worker_started": [
+          {
+            "scheduler_queue_ms": 0
+          }
+        ],
+        "model_slot_acquired": [
+          {
+            "slot_wait_ms": 0
+          }
+        ],
+        "context_ready": [
+          {
+            "player_message": "none",
+            "player_answered": 0,
+            "candidates": 8
+          }
+        ],
+        "prompt_ready": [
+          {
+            "chars": 3778,
+            "bytes": 6172
+          }
+        ],
+        "model_selected": [
+          {
+            "source": "ambient",
+            "model": "gpt-6-luna"
+          }
+        ],
+        "model_connection_startup": [
+          {
+            "connection_ms": 0,
+            "elapsed_ms": 2
+          }
+        ],
+        "model_connection_thread_start": [
+          {
+            "connection_ms": 66,
+            "elapsed_ms": 68
+          }
+        ],
+        "model_connection_turn_start": [
+          {
+            "connection_ms": 75,
+            "elapsed_ms": 77
+          }
+        ],
+        "model_connection_first_delta": [
+          {
+            "connection_ms": 1952,
+            "elapsed_ms": 1954
+          }
+        ],
+        "model_connection_cancel_requested": [
+          {
+            "connection_ms": 2325,
+            "elapsed_ms": 2327
+          }
+        ],
+        "model_connection_model_terminal": [
+          {
+            "connection_ms": 2333,
+            "elapsed_ms": 2335
+          }
+        ],
+        "model_connection_cancel_terminal_interrupted": [
+          {
+            "connection_ms": 2333,
+            "elapsed_ms": 2336
+          }
+        ]
+      },
+      "backend_lines": {
+        "worker_started": [
+          94
+        ],
+        "model_slot_acquired": [
+          96
+        ],
+        "context_ready": [
+          97
+        ],
+        "prompt_ready": [
+          98
+        ],
+        "model_selected": [
+          99
+        ],
+        "model_connection_startup": [
+          100
+        ],
+        "model_connection_thread_start": [
+          102
+        ],
+        "model_connection_turn_start": [
+          103
+        ],
+        "model_connection_first_delta": [
+          106
+        ],
+        "model_connection_cancel_requested": [
+          108
+        ],
+        "model_connection_model_terminal": [
+          109
+        ],
+        "model_connection_cancel_terminal_interrupted": [
+          110
+        ]
+      },
+      "dialogue": {
+        "time": "22:58:08",
+        "source": "ambient",
+        "model": "gpt-6-luna",
+        "npc_id": "eec701c9-445d-f978-55fa-7fb761120c45",
+        "profile_id": "xiumei",
+        "current_action": null,
+        "error": "RuntimeError",
+        "chosen": "Wait:-",
+        "line": 449
+      },
+      "ue": {
+        "http_start": {
+          "line": 3363,
+          "utc": "2026-11-14T14:58:06.296000+00:00"
+        }
+      }
+    },
+    "6b30f8bb-4b90-2d60-382f-ee82736f9520": {
+      "stages": {
+        "worker_started": [
+          {
+            "scheduler_queue_ms": 0
+          }
+        ],
+        "model_slot_acquired": [
+          {
+            "slot_wait_ms": 0
+          }
+        ],
+        "context_ready": [
+          {
+            "player_message": "none",
+            "player_answered": 0,
+            "candidates": 12
+          }
+        ],
+        "prompt_ready": [
+          {
+            "chars": 4248,
+            "bytes": 6690
+          }
+        ],
+        "model_selected": [
+          {
+            "source": "ambient",
+            "model": "gpt-6-luna"
+          }
+        ],
+        "model_connection_startup": [
+          {
+            "connection_ms": 0,
+            "elapsed_ms": 2
+          }
+        ],
+        "model_connection_thread_start": [
+          {
+            "connection_ms": 59,
+            "elapsed_ms": 61
+          }
+        ],
+        "model_connection_turn_start": [
+          {
+            "connection_ms": 68,
+            "elapsed_ms": 70
+          }
+        ],
+        "model_connection_first_delta": [
+          {
+            "connection_ms": 1763,
+            "elapsed_ms": 1766
+          }
+        ],
+        "first_sentence": [
+          {
+            "elapsed_ms": 2370
+          }
+        ],
+        "transport_selected": [
+          {
+            "transport": "pcm_chunks_v1",
+            "reason": "negotiated"
+          }
+        ],
+        "first_audio_chunk": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 4,
+            "tts_ms": 48,
+            "elapsed_ms": 2424
+          }
+        ],
+        "model_connection_model_terminal": [
+          {
+            "connection_ms": 2466,
+            "elapsed_ms": 2468
+          }
+        ],
+        "model_token_usage": [
+          {
+            "last_input_tokens": 11080,
+            "last_cached_input_tokens": 0,
+            "last_output_tokens": 39,
+            "last_reasoning_output_tokens": 0,
+            "last_total_tokens": 11119,
+            "last_cache_write_input_tokens": 0,
+            "thread_total_input_tokens": 11080,
+            "thread_total_cached_input_tokens": 0,
+            "thread_total_output_tokens": 39,
+            "thread_total_reasoning_output_tokens": 0,
+            "thread_total_total_tokens": 11119,
+            "thread_total_cache_write_input_tokens": 0
+          }
+        ],
+        "model_completed": [
+          {
+            "elapsed_ms": 2468
+          }
+        ],
+        "audio_ready": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 4,
+            "tts_ms": 566,
+            "elapsed_ms": 2941,
+            "voice_name": "Xiaofang_B"
+          }
+        ],
+        "reply_finished": [
+          {
+            "elapsed_ms": 2942
+          }
+        ]
+      },
+      "backend_lines": {
+        "worker_started": [
+          111
+        ],
+        "model_slot_acquired": [
+          113
+        ],
+        "context_ready": [
+          114
+        ],
+        "prompt_ready": [
+          115
+        ],
+        "model_selected": [
+          116
+        ],
+        "model_connection_startup": [
+          117
+        ],
+        "model_connection_thread_start": [
+          119
+        ],
+        "model_connection_turn_start": [
+          120
+        ],
+        "model_connection_first_delta": [
+          121
+        ],
+        "first_sentence": [
+          122
+        ],
+        "transport_selected": [
+          123
+        ],
+        "first_audio_chunk": [
+          124
+        ],
+        "model_connection_model_terminal": [
+          125
+        ],
+        "model_token_usage": [
+          126
+        ],
+        "model_completed": [
+          127
+        ],
+        "audio_ready": [
+          138
+        ],
+        "reply_finished": [
+          139
+        ]
+      },
+      "dialogue": {
+        "time": "22:58:13",
+        "source": "ambient",
+        "model": "gpt-6-luna",
+        "npc_id": "eec701c9-445d-f978-55fa-7fb761120c45",
+        "profile_id": "xiumei",
+        "current_action": null,
+        "error": null,
+        "chosen": "LookAt:p0",
+        "line": 450
+      },
+      "ue": {
+        "http_start": {
+          "line": 3413,
+          "utc": "2026-11-14T14:58:10.614000+00:00"
+        },
+        "approved": {
+          "line": 3452,
+          "utc": "2026-11-14T14:58:13.024000+00:00"
+        },
+        "model_done": {
+          "line": 3456,
+          "utc": "2026-11-14T14:58:13.131000+00:00"
+        }
+      }
+    },
+    "60ddd25a-46cb-d12e-310e-568aa83dcf50": {
+      "stages": {
+        "worker_started": [
+          {
+            "scheduler_queue_ms": 0
+          }
+        ],
+        "model_slot_acquired": [
+          {
+            "slot_wait_ms": 0
+          }
+        ],
+        "context_ready": [
+          {
+            "player_message": "none",
+            "player_answered": 0,
+            "candidates": 14
+          }
+        ],
+        "prompt_ready": [
+          {
+            "chars": 5052,
+            "bytes": 7512
+          }
+        ],
+        "model_selected": [
+          {
+            "source": "ambient",
+            "model": "gpt-6-luna"
+          }
+        ],
+        "model_connection_startup": [
+          {
+            "connection_ms": 0,
+            "elapsed_ms": 2
+          }
+        ],
+        "model_connection_thread_start": [
+          {
+            "connection_ms": 56,
+            "elapsed_ms": 59
+          }
+        ],
+        "model_connection_turn_start": [
+          {
+            "connection_ms": 65,
+            "elapsed_ms": 67
+          }
+        ],
+        "model_connection_cancel_requested": [
+          {
+            "connection_ms": 680,
+            "elapsed_ms": 683
+          }
+        ],
+        "model_connection_model_terminal": [
+          {
+            "connection_ms": 682,
+            "elapsed_ms": 685
+          }
+        ],
+        "model_connection_cancel_terminal_interrupted": [
+          {
+            "connection_ms": 683,
+            "elapsed_ms": 685
+          }
+        ]
+      },
+      "backend_lines": {
+        "worker_started": [
+          129
+        ],
+        "model_slot_acquired": [
+          130
+        ],
+        "context_ready": [
+          131
+        ],
+        "prompt_ready": [
+          132
+        ],
+        "model_selected": [
+          133
+        ],
+        "model_connection_startup": [
+          134
+        ],
+        "model_connection_thread_start": [
+          136
+        ],
+        "model_connection_turn_start": [
+          137
+        ],
+        "model_connection_cancel_requested": [
+          141
+        ],
+        "model_connection_model_terminal": [
+          142
+        ],
+        "model_connection_cancel_terminal_interrupted": [
+          143
+        ]
+      },
+      "dialogue": {
+        "time": "22:58:13",
+        "source": "ambient",
+        "model": "gpt-6-luna",
+        "npc_id": "aeae4d1e-40fc-f654-d099-bc9ba5aa6e3e",
+        "profile_id": "chunlai",
+        "current_action": null,
+        "error": "RuntimeError",
+        "chosen": null,
+        "line": 451
+      },
+      "ue": {
+        "http_start": {
+          "line": 3457,
+          "utc": "2026-11-14T14:58:13.187000+00:00"
+        }
+      }
+    },
+    "90991ffa-440b-0f51-49ef-5d910a5ad4a0": {
+      "stages": {
+        "worker_started": [
+          {
+            "scheduler_queue_ms": 0
+          }
+        ],
+        "model_slot_acquired": [
+          {
+            "slot_wait_ms": 0
+          }
+        ],
+        "context_ready": [
+          {
+            "player_message": "none",
+            "player_answered": 0,
+            "candidates": 13
+          }
+        ],
+        "prompt_ready": [
+          {
+            "chars": 4507,
+            "bytes": 6977
+          }
+        ],
+        "model_selected": [
+          {
+            "source": "ambient",
+            "model": "gpt-6-luna"
+          }
+        ],
+        "model_connection_startup": [
+          {
+            "connection_ms": 0,
+            "elapsed_ms": 3
+          }
+        ],
+        "model_connection_thread_start": [
+          {
+            "connection_ms": 56,
+            "elapsed_ms": 59
+          }
+        ],
+        "model_connection_turn_start": [
+          {
+            "connection_ms": 65,
+            "elapsed_ms": 68
+          }
+        ],
+        "model_connection_first_delta": [
+          {
+            "connection_ms": 1738,
+            "elapsed_ms": 1741
+          }
+        ],
+        "first_sentence": [
+          {
+            "elapsed_ms": 2475
+          }
+        ],
+        "transport_selected": [
+          {
+            "transport": "pcm_chunks_v1",
+            "reason": "negotiated"
+          }
+        ],
+        "first_audio_chunk": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 4,
+            "tts_ms": 28,
+            "elapsed_ms": 2508
+          }
+        ],
+        "model_connection_model_terminal": [
+          {
+            "connection_ms": 2544,
+            "elapsed_ms": 2547
+          }
+        ],
+        "model_token_usage": [
+          {
+            "last_input_tokens": 11164,
+            "last_cached_input_tokens": 0,
+            "last_output_tokens": 47,
+            "last_reasoning_output_tokens": 0,
+            "last_total_tokens": 11211,
+            "last_cache_write_input_tokens": 0,
+            "thread_total_input_tokens": 11164,
+            "thread_total_cached_input_tokens": 0,
+            "thread_total_output_tokens": 47,
+            "thread_total_reasoning_output_tokens": 0,
+            "thread_total_total_tokens": 11211,
+            "thread_total_cache_write_input_tokens": 0
+          }
+        ],
+        "model_completed": [
+          {
+            "elapsed_ms": 2548
+          }
+        ],
+        "audio_ready": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 4,
+            "tts_ms": 848,
+            "elapsed_ms": 3328,
+            "voice_name": "Xiaofang_B"
+          }
+        ],
+        "reply_finished": [
+          {
+            "elapsed_ms": 3329
+          }
+        ]
+      },
+      "backend_lines": {
+        "worker_started": [
+          144
+        ],
+        "model_slot_acquired": [
+          146
+        ],
+        "context_ready": [
+          147
+        ],
+        "prompt_ready": [
+          148
+        ],
+        "model_selected": [
+          149
+        ],
+        "model_connection_startup": [
+          150
+        ],
+        "model_connection_thread_start": [
+          152
+        ],
+        "model_connection_turn_start": [
+          153
+        ],
+        "model_connection_first_delta": [
+          154
+        ],
+        "first_sentence": [
+          155
+        ],
+        "transport_selected": [
+          156
+        ],
+        "first_audio_chunk": [
+          157
+        ],
+        "model_connection_model_terminal": [
+          158
+        ],
+        "model_token_usage": [
+          159
+        ],
+        "model_completed": [
+          160
+        ],
+        "audio_ready": [
+          171
+        ],
+        "reply_finished": [
+          172
+        ]
+      },
+      "dialogue": {
+        "time": "22:58:21",
+        "source": "ambient",
+        "model": "gpt-6-luna",
+        "npc_id": "eec701c9-445d-f978-55fa-7fb761120c45",
+        "profile_id": "xiumei",
+        "current_action": null,
+        "error": null,
+        "chosen": "LookAt:p0",
+        "line": 452
+      },
+      "ue": {
+        "http_start": {
+          "line": 3529,
+          "utc": "2026-11-14T14:58:18.682000+00:00"
+        },
+        "approved": {
+          "line": 3546,
+          "utc": "2026-11-14T14:58:21.161000+00:00"
+        },
+        "model_done": {
+          "line": 3549,
+          "utc": "2026-11-14T14:58:21.272000+00:00"
+        }
+      }
+    },
+    "eb960e44-46c5-3205-c43a-8181d776cb01": {
+      "stages": {
+        "worker_started": [
+          {
+            "scheduler_queue_ms": 0
+          }
+        ],
+        "model_slot_acquired": [
+          {
+            "slot_wait_ms": 0
+          }
+        ],
+        "context_ready": [
+          {
+            "player_message": "none",
+            "player_answered": 0,
+            "candidates": 14
+          }
+        ],
+        "prompt_ready": [
+          {
+            "chars": 5058,
+            "bytes": 7564
+          }
+        ],
+        "model_selected": [
+          {
+            "source": "ambient",
+            "model": "gpt-6-luna"
+          }
+        ],
+        "model_connection_startup": [
+          {
+            "connection_ms": 0,
+            "elapsed_ms": 2
+          }
+        ],
+        "model_connection_thread_start": [
+          {
+            "connection_ms": 53,
+            "elapsed_ms": 55
+          }
+        ],
+        "model_connection_turn_start": [
+          {
+            "connection_ms": 62,
+            "elapsed_ms": 64
+          }
+        ],
+        "model_connection_first_delta": [
+          {
+            "connection_ms": 1578,
+            "elapsed_ms": 1580
+          }
+        ],
+        "first_sentence": [
+          {
+            "elapsed_ms": 2254
+          }
+        ],
+        "transport_selected": [
+          {
+            "transport": "pcm_chunks_v1",
+            "reason": "negotiated"
+          }
+        ],
+        "first_audio_chunk": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 4,
+            "tts_ms": 49,
+            "elapsed_ms": 2308
+          },
+          {
+            "sentence": 1,
+            "tts_queue_ms": 1730,
+            "tts_ms": 43,
+            "elapsed_ms": 4032
+          }
+        ],
+        "model_connection_model_terminal": [
+          {
+            "connection_ms": 2375,
+            "elapsed_ms": 2377
+          }
+        ],
+        "model_token_usage": [
+          {
+            "last_input_tokens": 11359,
+            "last_cached_input_tokens": 0,
+            "last_output_tokens": 43,
+            "last_reasoning_output_tokens": 0,
+            "last_total_tokens": 11402,
+            "last_cache_write_input_tokens": 0,
+            "thread_total_input_tokens": 11359,
+            "thread_total_cached_input_tokens": 0,
+            "thread_total_output_tokens": 43,
+            "thread_total_reasoning_output_tokens": 0,
+            "thread_total_total_tokens": 11402,
+            "thread_total_cache_write_input_tokens": 0
+          }
+        ],
+        "model_completed": [
+          {
+            "elapsed_ms": 2377
+          }
+        ],
+        "audio_ready": [
+          {
+            "sentence": 0,
+            "tts_queue_ms": 4,
+            "tts_ms": 548,
+            "elapsed_ms": 2806,
+            "voice_name": "Uncle_Fu"
+          },
+          {
+            "sentence": 1,
+            "tts_queue_ms": 1730,
+            "tts_ms": 422,
+            "elapsed_ms": 4411,
+            "voice_name": "Uncle_Fu"
+          }
+        ],
+        "reply_finished": [
+          {
+            "elapsed_ms": 4416
+          }
+        ]
+      },
+      "backend_lines": {
+        "worker_started": [
+          161
+        ],
+        "model_slot_acquired": [
+          163
+        ],
+        "context_ready": [
+          164
+        ],
+        "prompt_ready": [
+          165
+        ],
+        "model_selected": [
+          166
+        ],
+        "model_connection_startup": [
+          167
+        ],
+        "model_connection_thread_start": [
+          169
+        ],
+        "model_connection_turn_start": [
+          170
+        ],
+        "model_connection_first_delta": [
+          173
+        ],
+        "first_sentence": [
+          174
+        ],
+        "transport_selected": [
+          175
+        ],
+        "first_audio_chunk": [
+          176,
+          196
+        ],
+        "model_connection_model_terminal": [
+          185
+        ],
+        "model_token_usage": [
+          186
+        ],
+        "model_completed": [
+          187
+        ],
+        "audio_ready": [
+          191,
+          197
+        ],
+        "reply_finished": [
+          198
+        ]
+      },
+      "dialogue": {
+        "time": "22:58:23",
+        "source": "ambient",
+        "model": "gpt-6-luna",
+        "npc_id": "aeae4d1e-40fc-f654-d099-bc9ba5aa6e3e",
+        "profile_id": "chunlai",
+        "current_action": null,
+        "error": null,
+        "chosen": "LookAt:p1",
+        "line": 453
+      },
+      "ue": {
+        "http_start": {
+          "line": 3552,
+          "utc": "2026-11-14T14:58:21.323000+00:00"
+        },
+        "approved": {
+          "line": 3583,
+          "utc": "2026-11-14T14:58:23.583000+00:00"
+        },
+        "model_done": {
+          "line": 3588,
+          "utc": "2026-11-14T14:58:23.746000+00:00"
+        }
+      }
+    },
+    "98ee7f1b-4980-a248-3d0f-719e4f5f49d2": {
+      "stages": {
+        "worker_started": [
+          {
+            "scheduler_queue_ms": 0
+          }
+        ],
+        "model_slot_acquired": [
+          {
+            "slot_wait_ms": 0
+          }
+        ],
+        "context_ready": [
+          {
+            "player_message": "5d845482-45de-512d-4d86-1199b8ae5f6c",
+            "player_answered": 0,
+            "candidates": 14
+          }
+        ],
+        "prompt_ready": [
+          {
+            "chars": 6022,
+            "bytes": 8554
+          }
+        ],
+        "combat_route": [
+          {
+            "result": "player_or_unknown_request"
+          }
+        ],
+        "model_selected": [
+          {
+            "source": "player",
+            "model": "gpt-6-luna"
+          }
+        ],
+        "model_connection_startup": [
+          {
+            "connection_ms": 0,
+            "elapsed_ms": 10
+          }
+        ],
+        "model_connection_thread_start": [
+          {
+            "connection_ms": 58,
+            "elapsed_ms": 68
+          }
+        ],
+        "model_connection_turn_start": [
+          {
+            "connection_ms": 69,
+            "elapsed_ms": 79
+          }
+        ],
+        "model_connection_cancel_requested": [
+          {
+            "connection_ms": 1612,
+            "elapsed_ms": 1623
+          }
+        ],
+        "model_connection_model_terminal": [
+          {
+            "connection_ms": 1614,
+            "elapsed_ms": 1624
+          }
+        ],
+        "model_connection_cancel_terminal_interrupted": [
+          {
+            "connection_ms": 1614,
+            "elapsed_ms": 1625
+          }
+        ]
+      },
+      "backend_lines": {
+        "worker_started": [
+          177
+        ],
+        "model_slot_acquired": [
+          179
+        ],
+        "context_ready": [
+          180
+        ],
+        "prompt_ready": [
+          181
+        ],
+        "combat_route": [
+          182
+        ],
+        "model_selected": [
+          183
+        ],
+        "model_connection_startup": [
+          184
+        ],
+        "model_connection_thread_start": [
+          189
+        ],
+        "model_connection_turn_start": [
+          190
+        ],
+        "model_connection_cancel_requested": [
+          193
+        ],
+        "model_connection_model_terminal": [
+          194
+        ],
+        "model_connection_cancel_terminal_interrupted": [
+          195
+        ]
+      },
+      "dialogue": {
+        "time": "22:58:25",
+        "source": "player",
+        "model": "gpt-6-luna",
+        "npc_id": "eec701c9-445d-f978-55fa-7fb761120c45",
+        "profile_id": "xiumei",
+        "current_action": {
+          "action": "LookAt",
+          "target_id": "eead0d7e-40f2-682e-3e8a-cca45f89ecff",
+          "source": "Model",
+          "remaining_seconds": 1.5844039991497993,
+          "action_id": "87de741d-4821-c022-3486-66887de6abf0",
+          "plan_revision": 7
+        },
+        "error": "RuntimeError",
+        "chosen": null,
+        "line": 454
+      },
+      "ue": {
+        "http_start": {
+          "line": 3587,
+          "utc": "2026-11-14T14:58:23.688000+00:00"
+        }
+      }
+    }
+  },
+  "conclusions": [
+    "All 11 requests selected gpt-6-luna. Ten ambient, one player. No combat route was selected.",
+    "Seven completed requests chose LookAt. No Fight/Flee continuation was present, so this session does not verify sustained combat execution.",
+    "Scheduler and model-slot waits were zero. First-delta wait dominates successful decisions; available metrics do not separate network transport from remote model processing.",
+    "Cross-NPC model requests started 0-56 ms after model_done while previous speech remained in synthesis/playback. This confirms model/speech overlap, not same-NPC Fight continuation.",
+    "Two ambient decisions were invalidated by NewNpcSpeech after about 2.3 seconds. This is observed wasted inference, not proven a scheduling defect.",
+    "Player request 98ee7f1b-4980-a248-3d0f-719e4f5f49d2 carried LookAt action 87de741d-4821-c022-3486-66887de6abf0 with 1.584404 seconds remaining. The old action finished 1.582 seconds after request start; backend cancellation arrived at 1.623 seconds, before any model delta. Current TryFinishAction code has a matching cancellation path. Parent owns its fix.",
+    "Earlier TransportFailure lines in Delivery.log belong to the prior session before this backend launch and are excluded.",
+    "Q4 remains disabled. Prior quality 38/40 passed, but coexist frame P95 +12.04% exceeded the unchanged +10% threshold. This log review is not a new performance measurement."
+  ],
+  "required_before_q4_default": [
+    "Pass controlled Q4 GPU99 plus active B voices coexistence and actual player Send. Candidate threads=1, threads_batch=1 is supported but not yet measured.",
+    "Set formal combat config to the round3 Q4 artifact and versioned quality/probe/integration records only after real game checks pass; do not retain old round2 Q8 paths.",
+    "Record game_validation separately. Current launcher validates quality and technical integration but does not enforce game_validation; enabled must remain false until parent completes game checks.",
+    "Save the accepted active runtime configuration in the versioned native_tts_vendor directory; make start_backend default SpeechEngine/native runtime consistent with native_tts.DEFAULT_RUNTIME only after acceptance.",
+    "Startup currently returns early if a backend already owns the port. Apply new settings via a coordinated restart; -DisableLocalCombat only disables routing and does not free a separately running llama process.",
+    "Existing diagnostics already populate actual model name and route. Local model name is the generic delivery-npc-qwen3, so it does not distinguish Q4/Q8 or checkpoint. Derive a safe version label from validated launch metadata if that distinction is needed; do not display paths or infer model from configured preference."
+  ],
+  "limits": [
+    "Only one player request and it was cancelled before answer. No completed player reply latency can be computed.",
+    "Only role=3 audio-play logs occur in the examined session; this is not a host/client comparison.",
+    "All seven reported cached-input counts are zero; this does not prove the provider cannot cache.",
+    "Formal gameplay quality/performance gates remain unchanged; no production configuration was edited."
+  ],
+  "metric_notes": {
+    "first_audio_chunk": "All 8 sentence chunks; use first_audio_chunk_per_request for the first audio of each of the 7 completed requests.",
+    "tts_queue_ms": "Eight sentences; the 1730 ms outlier is sequence 1 of the final two-sentence ambient reply. Do not treat it as model request queueing."
+  },
+  "patch_review": {
+    "scope": "Read-only parent-owned TryFinishAction retry block, TickFight cooldown relocation, PlayerInterruption and StrikeNavigation assertions. No build or tests by this reviewer.",
+    "conclusion": "No concrete new compilation/API or lifecycle defect identified. WakeDecision schedules a future tick and does not issue a synchronous request inside bChangingPlan. Old RequestId is removed before cancel; retry retains only the matching pending player message on normal action completion. The test rebuilds the next request directly; actual input and tick-driven retry remain to verify."
+  }
+}

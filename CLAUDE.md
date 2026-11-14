@@ -122,6 +122,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - AI 分别评估状态机 / StateTree 的阶段管理、行为树的动作执行、Utility 的选择评分、GOAP 的多步规划、群集 / 导航的移动以及 LLM 的语言理解；明确谁最终选择动作，避免多个系统同时控制角色
 - 强化学习或模仿学习优先评估本机 UE 的 Learning Agents，并核查版本、实验状态、训练依赖、数据和运行成本；先在独立可重复场景比较现有规则与训练结果，不把插件可用当作效果已验证
 - 动画按需求评估 Animation Blueprint 状态机、Blend Space、Montage、Motion Matching / Pose Search、Chooser、Motion Warping、IK / Control Rig 与已有 PhysicsControl；检查动画库覆盖、骨架、Root Motion、多人同步和性能，不能只因方案更新就替换现有实现
+- 二狗及 NPC 新增动作采用下载的现成动画素材，保留作者与许可，优先复用项目已下载的原包；在 UE 中导入、重定向并接可编辑动画蓝图，不自行用代码生成动作或骨骼轨道。编辑器批量导入与 UE 原生重定向工具只处理已有素材，运行时播放保存的动画资产
 - 上述技术只是候选示例，不是封闭清单；结合 GAMES104、UE 官方文档与实际引擎版本，从动画制作、蒙皮与变形、混合与过渡、程序化修正、物理与学习控制、性能与多人同步继续查找适合的方法
 - UE 已提供编辑器功能时优先使用可编辑资产与节点，例如行为树、StateTree、Anim Blueprint、Chooser、曲线、数据表、Control Rig 和材质；优先通过 UE MCP 创建和检查，不用 C++ 重写同等配置能力。C++ 保留服务器规则、网络、生命周期及确有必要的底层扩展；工具脚本负责复建资产，不将美术参数隐藏在生成代码里
 - 主角持续物理驱动与普通动画 NPC 分别设计；动画姿势选择不能直接代替物理控制，不让 Root Motion、CharacterMovement 和布娃娃同时修改同一身体的位移
@@ -2181,3 +2182,9 @@ TestForCharacter 的 ROAD-CREATE、POLE-CREATE、GRASSBED-CREATE1 的 PCG BrushC
 - 估算加载条：`DeliveryStartupFlow` 与 `DeliveryStartupWidget` 提供 `GetLoadingProgress` 和 `OnLoadingProgressChanged(float)`，数值 0～1，直接接 UMG `Set Percent`。`EstimatedLoadSeconds` 默认 20 秒，缓动到最多 90%，真实就绪立即到 100%；失败停止、加载重试归零、各端独立，不改变开局门控。原状态事件签名保持不变，Widget 初次同步并在退出时解绑
 
 - 后台加载入口：`/Game/Level/L_MainMenu` 内的 `DeliveryStartupFlow` 异步加载现有 `TestForCharacter` 子关卡，等待关卡可见、出生点阻挡 Pawn 的地面碰撞和各连接玩家就绪。主机的开始请求可提前提交；GameMode 延后生成角色，TaskManager 的 `StartGameplay` 在正式开局才释放任务解锁与关卡时钟。直接打开原测试地图仍自动开始。开始界面继承 `DeliveryStartupWidget`，通过 `RequestStartGame`、`RetryLoading` 与 `OnStartupStateChanged` 接入；HUD 负责创建、移除和 UI 输入。菜单类填在启动关卡 `StartupFlow.MenuWidgetClass`，不另建 UI 框架。接口和接线见 `Document/Architecture.md` 的后台加载入口章节
+
+## 同伴二狗（分阶段持续实施）
+
+`AI/Companion` 复用居民 Agent、GAS、表现与 BT。CompanionComponent 保存主人 PlayerState、持续安排、委托、实物、护主目标和当局关系；模型选择语言与安排，服务器校验实际命中、物品与奖励。同伴能力版本 6 兼容旧版本，沿用家居能力与 ContinueCurrent 接续交谈；访客不能改主人或安排跑腿。Errand/Follow/ReturnToStay/GoHome 共用地图绑定的二狗专属车，交付结算与返程分开，保留原等候点；上下车不改归属，不征用玩家车辆。
+
+结识后真实倒地可由当前主人长按同一 E 辅助起身，完成站立才增加关系；同一入口站立时才接小绿。记忆保留首次结识和真实累计经历，模型最多读取 24 条事实；编号去重上限、退出清理、门洞智能连接、爷爷真实搬离与共用 Home 详见主文档。保留已认可声音、分段播放与轻量 UI。源码构建与静态资产检查不能代替实际 E/T、驾驶、初遇和多人验收；未完成范围及本批结果统一写在 `Document/Architecture.md` 二狗章节与 `Document/AIIteration.html`，不沿用历史测试结论。

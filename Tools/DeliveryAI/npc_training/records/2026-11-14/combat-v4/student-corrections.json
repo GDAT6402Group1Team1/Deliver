@@ -1,0 +1,875 @@
+{
+  "kind": "offline_teacher_correction_of_student_outputs",
+  "on_policy_gameplay": false,
+  "student_results": "Saved\\AIResearch\\NpcTraining\\combat-v4\\baseline-training.json",
+  "corrections": [
+    {
+      "id": "combat-030",
+      "student": {
+        "id": "combat-030",
+        "group_id": "combat-030",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Flee",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 0,
+          "prompt_n": 703,
+          "prompt_ms": 292.045,
+          "prompt_per_token_ms": 0.41542674253200573,
+          "prompt_per_second": 2407.1632796315635,
+          "predicted_n": 13,
+          "predicted_ms": 60.358,
+          "predicted_per_token_ms": 4.6429230769230765,
+          "predicted_per_second": 215.38155671162068
+        },
+        "complete_ms": 374.1147999971872,
+        "timing": {
+          "combat_prompt_ready": 13.520900000003166,
+          "combat_model_done": 373.7494000015431
+        }
+      },
+      "original_teacher": {
+        "id": "combat-030",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "对方收回辱骂并认错求停，可以罢手"
+      },
+      "teacher_correction": {
+        "id": "combat-030",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "对方已收回辱骂并求停战，距离五米，可罢手"
+      }
+    },
+    {
+      "id": "combat-041",
+      "student": {
+        "id": "combat-041",
+        "group_id": "combat-041",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Flee",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 212,
+          "prompt_n": 503,
+          "prompt_ms": 64.735,
+          "prompt_per_token_ms": 0.12869781312127238,
+          "prompt_per_second": 7770.139800726038,
+          "predicted_n": 13,
+          "predicted_ms": 56.212,
+          "predicted_per_token_ms": 4.324,
+          "predicted_per_second": 231.2673450508788
+        },
+        "complete_ms": 165.8891000042786,
+        "timing": {
+          "combat_prompt_ready": 20.956399996066466,
+          "combat_model_done": 165.7405000005383
+        }
+      },
+      "original_teacher": {
+        "id": "combat-041",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "已相距六米多，对方说不追了且无新攻击"
+      },
+      "teacher_correction": {
+        "id": "combat-041",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "已拉开六米多，对方表示不追，可停止逃离"
+      }
+    },
+    {
+      "id": "combat-068",
+      "student": {
+        "id": "combat-068",
+        "group_id": "combat-068",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Flee",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 524,
+          "prompt_n": 199,
+          "prompt_ms": 28.292,
+          "prompt_per_token_ms": 0.14217085427135678,
+          "prompt_per_second": 7033.790470804467,
+          "predicted_n": 13,
+          "predicted_ms": 55.862,
+          "predicted_per_token_ms": 4.297076923076923,
+          "predicted_per_second": 232.71633668683538
+        },
+        "complete_ms": 181.11429999407846,
+        "timing": {
+          "combat_prompt_ready": 48.758600001747254,
+          "combat_model_done": 180.9729000015068
+        }
+      },
+      "original_teacher": {
+        "id": "combat-068",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "已拉开约九米且失去对方踪影，暂无追打迹象"
+      },
+      "teacher_correction": {
+        "id": "combat-068",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "此前相距九米且已失去视野，无新增追打事实"
+      }
+    },
+    {
+      "id": "combat-002",
+      "student": {
+        "id": "combat-002",
+        "group_id": "combat-002",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Flee",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 517,
+          "prompt_n": 221,
+          "prompt_ms": 35.196,
+          "prompt_per_token_ms": 0.1592579185520362,
+          "prompt_per_second": 6279.122627571315,
+          "predicted_n": 13,
+          "predicted_ms": 49.909,
+          "predicted_per_token_ms": 3.839153846153846,
+          "predicted_per_second": 260.4740627942856
+        },
+        "complete_ms": 165.42769999796292,
+        "timing": {
+          "combat_prompt_ready": 37.95669999817619,
+          "combat_model_done": 165.24889999709558
+        }
+      },
+      "original_teacher": {
+        "id": "combat-002",
+        "input_ok": true,
+        "action": "Fight",
+        "target_id": "opponent",
+        "reason": "刚挨一记轻拳仍站着，交战未结束且对方未停手"
+      },
+      "teacher_correction": {
+        "id": "combat-002",
+        "input_ok": true,
+        "action": "Fight",
+        "target_id": "opponent",
+        "reason": "近身互有命中，仅挨一拳仍站立，交战未结束"
+      }
+    },
+    {
+      "id": "combat-100",
+      "student": {
+        "id": "combat-100",
+        "group_id": "combat-100",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Fight",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 575,
+          "prompt_n": 152,
+          "prompt_ms": 27.92,
+          "prompt_per_token_ms": 0.1836842105263158,
+          "prompt_per_second": 5444.1260744985675,
+          "predicted_n": 12,
+          "predicted_ms": 49.29,
+          "predicted_per_token_ms": 4.1075,
+          "predicted_per_second": 243.45709068776628
+        },
+        "complete_ms": 119.84419999498641,
+        "timing": {
+          "combat_prompt_ready": 33.20669999811798,
+          "combat_model_done": 119.66459999530343
+        }
+      },
+      "original_teacher": {
+        "id": "combat-100",
+        "input_ok": true,
+        "action": "Flee",
+        "target_id": "opponent",
+        "reason": "已挨三拳且未命中，对方仍冲来攻击，先拉开距离"
+      },
+      "teacher_correction": {
+        "id": "combat-100",
+        "input_ok": true,
+        "action": "Flee",
+        "target_id": "opponent",
+        "reason": "已挨三拳且还击未中，对方仍冲来，应拉开距离"
+      }
+    },
+    {
+      "id": "combat-005",
+      "student": {
+        "id": "combat-005",
+        "group_id": "combat-005",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Flee",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 527,
+          "prompt_n": 215,
+          "prompt_ms": 32.954,
+          "prompt_per_token_ms": 0.15327441860465116,
+          "prompt_per_second": 6524.245918553134,
+          "predicted_n": 13,
+          "predicted_ms": 47.503,
+          "predicted_per_token_ms": 3.6540769230769232,
+          "predicted_per_second": 273.6669262993916
+        },
+        "complete_ms": 169.50119999819435,
+        "timing": {
+          "combat_prompt_ready": 52.78099999850383,
+          "combat_model_done": 169.29179999715416
+        }
+      },
+      "original_teacher": {
+        "id": "combat-005",
+        "input_ok": true,
+        "action": "Fight",
+        "target_id": "opponent",
+        "reason": "对方刚出拳打中，赔钱不等于停战，自己仍站着"
+      },
+      "teacher_correction": {
+        "id": "combat-005",
+        "input_ok": true,
+        "action": "Flee",
+        "target_id": "opponent",
+        "reason": "刚挨一拳正在后仰，先拉开距离避打"
+      }
+    },
+    {
+      "id": "combat-116",
+      "student": {
+        "id": "combat-116",
+        "group_id": "combat-116",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Fight",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 574,
+          "prompt_n": 128,
+          "prompt_ms": 18.807,
+          "prompt_per_token_ms": 0.1469296875,
+          "prompt_per_second": 6805.976498112405,
+          "predicted_n": 12,
+          "predicted_ms": 49.471,
+          "predicted_per_token_ms": 4.122583333333333,
+          "predicted_per_second": 242.56635200420453
+        },
+        "complete_ms": 128.82769999851007,
+        "timing": {
+          "combat_prompt_ready": 22.584800004551653,
+          "combat_model_done": 128.66130000475096
+        }
+      },
+      "original_teacher": {
+        "id": "combat-116",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "双方语气缓和，对方劝停且已相隔四米多"
+      },
+      "teacher_correction": {
+        "id": "combat-116",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "双方语气缓和，对方劝停，距离四米多"
+      }
+    },
+    {
+      "id": "combat-050",
+      "student": {
+        "id": "combat-050",
+        "group_id": "combat-050",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Flee",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 524,
+          "prompt_n": 180,
+          "prompt_ms": 29.882,
+          "prompt_per_token_ms": 0.1660111111111111,
+          "prompt_per_second": 6023.693193226691,
+          "predicted_n": 13,
+          "predicted_ms": 49.456,
+          "predicted_per_token_ms": 3.8043076923076926,
+          "predicted_per_second": 262.8599158848269
+        },
+        "complete_ms": 115.63140000362182,
+        "timing": {
+          "combat_prompt_ready": 24.115600004734006,
+          "combat_model_done": 115.49250000098255
+        }
+      },
+      "original_teacher": {
+        "id": "combat-050",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "已相距850厘米，对方答应不过来"
+      },
+      "teacher_correction": {
+        "id": "combat-050",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "已相隔八米多，对方答应不过来"
+      }
+    },
+    {
+      "id": "combat-128",
+      "student": {
+        "id": "combat-128",
+        "group_id": "combat-128",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Flee",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 524,
+          "prompt_n": 177,
+          "prompt_ms": 29.925,
+          "prompt_per_token_ms": 0.1690677966101695,
+          "prompt_per_second": 5914.786967418547,
+          "predicted_n": 13,
+          "predicted_ms": 47.976,
+          "predicted_per_token_ms": 3.6904615384615385,
+          "predicted_per_second": 270.9688177422044
+        },
+        "complete_ms": 95.95880000415491,
+        "timing": {
+          "combat_prompt_ready": 9.110099999816157,
+          "combat_model_done": 95.80270000151359
+        }
+      },
+      "original_teacher": {
+        "id": "combat-128",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "对方明确不闹了，距离六米半且无继续攻击"
+      },
+      "teacher_correction": {
+        "id": "combat-128",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "对方说不闹了，距离六米多且未受击"
+      }
+    },
+    {
+      "id": "combat-118",
+      "student": {
+        "id": "combat-118",
+        "group_id": "combat-118",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Flee",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 524,
+          "prompt_n": 203,
+          "prompt_ms": 32.516,
+          "prompt_per_token_ms": 0.1601773399014778,
+          "prompt_per_second": 6243.0803296838485,
+          "predicted_n": 13,
+          "predicted_ms": 57.107,
+          "predicted_per_token_ms": 4.392846153846154,
+          "predicted_per_second": 227.64284588579335
+        },
+        "complete_ms": 140.03819999925327,
+        "timing": {
+          "combat_prompt_ready": 10.818900002050214,
+          "combat_model_done": 139.8124999977881
+        }
+      },
+      "original_teacher": {
+        "id": "combat-118",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "已拉开八米且对方脱离视线，可停止逃跑"
+      },
+      "teacher_correction": {
+        "id": "combat-118",
+        "input_ok": true,
+        "action": "Flee",
+        "target_id": "opponent",
+        "reason": "已挨两拳，此前被追打，失去视野未确认停战"
+      }
+    },
+    {
+      "id": "combat-047",
+      "student": {
+        "id": "combat-047",
+        "group_id": "combat-047",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Fight",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 527,
+          "prompt_n": 179,
+          "prompt_ms": 31.92,
+          "prompt_per_token_ms": 0.17832402234636874,
+          "prompt_per_second": 5607.769423558897,
+          "predicted_n": 12,
+          "predicted_ms": 48.601,
+          "predicted_per_token_ms": 4.050083333333333,
+          "predicted_per_second": 246.9084998251065
+        },
+        "complete_ms": 164.76550000516,
+        "timing": {
+          "combat_prompt_ready": 31.512499997916166,
+          "combat_model_done": 164.5977000007406
+        }
+      },
+      "original_teacher": {
+        "id": "combat-047",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "相距650厘米，对方明确说不追，无继续逃离必要"
+      },
+      "teacher_correction": {
+        "id": "combat-047",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "已拉开约650厘米，对方明确不追，可停手"
+      }
+    },
+    {
+      "id": "combat-085",
+      "student": {
+        "id": "combat-085",
+        "group_id": "combat-085",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Fight",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 578,
+          "prompt_n": 156,
+          "prompt_ms": 31.498,
+          "prompt_per_token_ms": 0.20191025641025642,
+          "prompt_per_second": 4952.695409232332,
+          "predicted_n": 12,
+          "predicted_ms": 49.68,
+          "predicted_per_token_ms": 4.14,
+          "predicted_per_second": 241.54589371980677
+        },
+        "complete_ms": 111.78089999884833,
+        "timing": {
+          "combat_prompt_ready": 21.44639999460196,
+          "combat_model_done": 111.6418999954476
+        }
+      },
+      "original_teacher": {
+        "id": "combat-085",
+        "input_ok": true,
+        "action": "Flee",
+        "target_id": "opponent",
+        "reason": "已挨三拳且还手未中，对方仍冲来追打"
+      },
+      "teacher_correction": {
+        "id": "combat-085",
+        "input_ok": true,
+        "action": "Flee",
+        "target_id": "opponent",
+        "reason": "已挨三拳且还击未中，对方仍冲来，继续远离"
+      }
+    },
+    {
+      "id": "combat-097",
+      "student": {
+        "id": "combat-097",
+        "group_id": "combat-097",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Fight",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 527,
+          "prompt_n": 182,
+          "prompt_ms": 32.418,
+          "prompt_per_token_ms": 0.17812087912087912,
+          "prompt_per_second": 5614.164970078352,
+          "predicted_n": 12,
+          "predicted_ms": 47.443,
+          "predicted_per_token_ms": 3.953583333333333,
+          "predicted_per_second": 252.9351010686508
+        },
+        "complete_ms": 138.19499999954132,
+        "timing": {
+          "combat_prompt_ready": 49.392100001568906,
+          "combat_model_done": 138.04099999833852
+        }
+      },
+      "original_teacher": {
+        "id": "combat-097",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "已听清是误会，对方也确认，无继续攻击迹象"
+      },
+      "teacher_correction": {
+        "id": "combat-097",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "自己已承认听清误会，对方也解释，无新攻击"
+      }
+    },
+    {
+      "id": "combat-106",
+      "student": {
+        "id": "combat-106",
+        "group_id": "combat-106",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Fight",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 524,
+          "prompt_n": 207,
+          "prompt_ms": 32.627,
+          "prompt_per_token_ms": 0.15761835748792272,
+          "prompt_per_second": 6344.438655101602,
+          "predicted_n": 12,
+          "predicted_ms": 52.521,
+          "predicted_per_token_ms": 4.37675,
+          "predicted_per_second": 228.48003655680583
+        },
+        "complete_ms": 127.13889999577077,
+        "timing": {
+          "combat_prompt_ready": 19.690100001753308,
+          "combat_model_done": 126.93000000581378
+        }
+      },
+      "original_teacher": {
+        "id": "combat-106",
+        "input_ok": true,
+        "action": "Flee",
+        "target_id": "opponent",
+        "reason": "正在撤离，对方近距离堵路并冲来动手"
+      },
+      "teacher_correction": {
+        "id": "combat-106",
+        "input_ok": true,
+        "action": "Fight",
+        "target_id": "opponent",
+        "reason": "对方近距离堵路挑衅并冲来，未受伤可还击"
+      }
+    },
+    {
+      "id": "combat-069",
+      "student": {
+        "id": "combat-069",
+        "group_id": "combat-069",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Flee",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 578,
+          "prompt_n": 157,
+          "prompt_ms": 29.526,
+          "prompt_per_token_ms": 0.18806369426751593,
+          "prompt_per_second": 5317.347422610581,
+          "predicted_n": 13,
+          "predicted_ms": 55.972,
+          "predicted_per_token_ms": 4.305538461538462,
+          "predicted_per_second": 232.2589866361752
+        },
+        "complete_ms": 163.65599999699043,
+        "timing": {
+          "combat_prompt_ready": 30.61600000364706,
+          "combat_model_done": 163.48890000517713
+        }
+      },
+      "original_teacher": {
+        "id": "combat-069",
+        "input_ok": true,
+        "action": "Fight",
+        "target_id": "opponent",
+        "reason": "近距离刚遭一拳，交战未止，仅挨一拳仍可还击"
+      },
+      "teacher_correction": {
+        "id": "combat-069",
+        "input_ok": true,
+        "action": "Fight",
+        "target_id": "opponent",
+        "reason": "近身交战仍在继续，仅挨一记轻拳，尚无退让"
+      }
+    },
+    {
+      "id": "combat-066",
+      "student": {
+        "id": "combat-066",
+        "group_id": "combat-066",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Flee",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 524,
+          "prompt_n": 179,
+          "prompt_ms": 31.417,
+          "prompt_per_token_ms": 0.17551396648044693,
+          "prompt_per_second": 5697.552280612406,
+          "predicted_n": 13,
+          "predicted_ms": 54.633,
+          "predicted_per_token_ms": 4.202538461538461,
+          "predicted_per_second": 237.9514213021434
+        },
+        "complete_ms": 144.70599999913247,
+        "timing": {
+          "combat_prompt_ready": 23.28750000015134,
+          "combat_model_done": 144.56229999632342
+        }
+      },
+      "original_teacher": {
+        "id": "combat-066",
+        "input_ok": true,
+        "action": "Fight",
+        "target_id": "opponent",
+        "reason": "双方只是确认打空，未提出停战，当前交战尚未结束"
+      },
+      "teacher_correction": {
+        "id": "combat-066",
+        "input_ok": true,
+        "action": "Fight",
+        "target_id": "opponent",
+        "reason": "双方只是打空，自己未受伤，也无停战信号"
+      }
+    },
+    {
+      "id": "combat-071",
+      "student": {
+        "id": "combat-071",
+        "group_id": "combat-071",
+        "source": {
+          "kind": "authored_ue_event_scenario",
+          "gameplay_recording": false,
+          "persona_source": "Saved\\Logs\\NpcDialogue.ndjson",
+          "event_formats": "DescribeCombatState / ObserveFact / Speech"
+        },
+        "repeat": 0,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "correct": false,
+        "protocol_valid": true,
+        "action": "Fight",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "model_usage": {
+          "cache_n": 577,
+          "prompt_n": 130,
+          "prompt_ms": 28.297,
+          "prompt_per_token_ms": 0.21766923076923078,
+          "prompt_per_second": 4594.126585857158,
+          "predicted_n": 12,
+          "predicted_ms": 55.648,
+          "predicted_per_token_ms": 4.637333333333333,
+          "predicted_per_second": 215.6411730879816
+        },
+        "complete_ms": 164.100399997551,
+        "timing": {
+          "combat_prompt_ready": 31.911600002786145,
+          "combat_model_done": 163.75750000588596
+        }
+      },
+      "original_teacher": {
+        "id": "combat-071",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "对方具体澄清骂的不是自己，也无实际受击"
+      },
+      "teacher_correction": {
+        "id": "combat-071",
+        "input_ok": true,
+        "action": "Wait",
+        "target_id": "",
+        "reason": "对方澄清骂的不是自己，未受击，也无继续挑衅"
+      }
+    }
+  ],
+  "acceptance_used": false
+}

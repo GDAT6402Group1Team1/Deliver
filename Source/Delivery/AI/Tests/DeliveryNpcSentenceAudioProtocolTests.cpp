@@ -52,8 +52,16 @@ bool FDeliveryNpcSentenceAudioProtocolTest::RunTest(const FString&)
     FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(DeliveryNpc::EncodeRequest(Plain)), Encoded);
     if (!TestTrue(TEXT("默认请求可编码且不启用句内分段"), Encoded.IsValid() && !Encoded->HasField(TEXT("speech_transport")))) return false;
     Plain.bStreamSentenceAudio = true;
+    Plain.StreamProtocolVersion=2;
     FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(DeliveryNpc::EncodeRequest(Plain)), Encoded);
     TestEqual(TEXT("显式启用后才请求分段协议"), Encoded->GetStringField(TEXT("speech_transport")), FString(TEXT("pcm_chunks_v1")));
+    TestEqual(TEXT("模型与声音分开完成使用独立协议版本"),Encoded->GetIntegerField(TEXT("stream_protocol_version")),2);
+    TestFalse(TEXT("普通请求不会携带不存在的执行中动作"),Encoded->HasField(TEXT("current_action")));
+    Plain.RunningActionId=FGuid::NewGuid(); Plain.RunningTargetId=FGuid::NewGuid();
+    Plain.RunningAction=EDeliveryNpcAction::Fight; Plain.RunningSecondsRemaining=4; Plain.bPendingPlayerMessage=true;
+    FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(DeliveryNpc::EncodeRequest(Plain)),Encoded);
+    TestEqual(TEXT("执行中动作发送真实动作名"),Encoded->GetObjectField(TEXT("current_action"))->GetStringField(TEXT("action")),FString(TEXT("Fight")));
+    TestTrue(TEXT("玩家是否仍在等待由服务器显式提供"),Encoded->GetBoolField(TEXT("pending_player_message")));
     Settings->bStreamReplies = false;
     Agent->BuildDecisionRequest(Gateway->GetWorldEpoch(), Plain);
     TestFalse(TEXT("关闭流式回复时不会单独请求音频块"), Plain.bStreamSentenceAudio);
@@ -72,9 +80,10 @@ bool FDeliveryNpcSentenceAudioProtocolTest::RunTest(const FString&)
         TestTrue(TEXT("协议夹具创建真实待处理请求"), Accepted);
         const auto Id = Agent->ActiveRequest.RequestId;
         if (auto* Pending = Gateway->Pending.Find(Id)) Pending->bHasProposal = true;
-        Agent->ReplyRequest = Id;
-        Agent->ReplyAction = FGuid::NewGuid();
-        Agent->PublicState.ActionId = Agent->ReplyAction;
+        auto& Reply=Agent->Replies.Add(Id);
+        Reply.ReplyId=FGuid::NewGuid();
+        Reply.ActionId=Reply.ReplyId;
+        Agent->PublicState.ActionId=Reply.ActionId;
         Agent->PublicState.Status = EDeliveryNpcActionStatus::Accepted;
         return Id;
     };
@@ -132,15 +141,15 @@ bool FDeliveryNpcSentenceAudioProtocolTest::RunTest(const FString&)
         TArray<uint8> Pcm; Pcm.SetNumZeroed(30722);
         Json.SetStringField(TEXT("pcm"), FBase64::Encode(Pcm));
     });
-    Reject(TEXT("累计音频不能超过八秒"), TEXT("audio_chunk"), [](auto& Json, auto& Pending)
+    Reject(TEXT("累计音频不能超过十二秒"), TEXT("audio_chunk"), [](auto& Json, auto& Pending)
     {
-        Pending.Sentences[0].State = EState::Streaming; Pending.Sentences[0].PcmBytes = 384000;
-        Json.SetNumberField(TEXT("offset_bytes"), 384000);
+        Pending.Sentences[0].State = EState::Streaming; Pending.Sentences[0].PcmBytes = 24000 * 2 * 12;
+        Json.SetNumberField(TEXT("offset_bytes"), 24000 * 2 * 12);
     });
-    Reject(TEXT("单句不能接受第三十三块"), TEXT("audio_chunk"), [](auto& Json, auto& Pending)
+    Reject(TEXT("单句不能接受第四十九块"), TEXT("audio_chunk"), [](auto& Json, auto& Pending)
     {
-        Pending.Sentences[0].State = EState::Streaming; Pending.Sentences[0].NextChunkIndex = 32;
-        Json.SetNumberField(TEXT("chunk_index"), 32);
+        Pending.Sentences[0].State = EState::Streaming; Pending.Sentences[0].NextChunkIndex = 48;
+        Json.SetNumberField(TEXT("chunk_index"), 48);
     });
     Reject(TEXT("结束通知必须符合已收到的长度"), TEXT("audio_end"), [](auto&, auto& Pending)
     { Pending.Sentences[0].State = EState::Streaming; Pending.Sentences[0].NextChunkIndex = 1; Pending.Sentences[0].PcmBytes = 4; });
@@ -148,6 +157,12 @@ bool FDeliveryNpcSentenceAudioProtocolTest::RunTest(const FString&)
     Reject(TEXT("完成通知不能跳过缺失的句子"), TEXT("done"), [](auto& Json, auto& Pending)
     { Json.SetNumberField(TEXT("sentences"), 2); Pending.Sentences[1].State = EState::Complete; });
     Reject(TEXT("超过截止时间的已缓冲内容也不转交"), TEXT("sentence"), [](auto&, auto& Pending) { Pending.Deadline = 0; });
+    Reject(TEXT("未协商版本二不接受模型提前完成"),TEXT("model_done"),[](auto&,auto& Pending) { Pending.Request.StreamProtocolVersion=0; });
+    Reject(TEXT("模型句数不接受小数"),TEXT("model_done"),[](auto& Json,auto&) { Json.SetNumberField(TEXT("sentences"),1.5); });
+    Reject(TEXT("模型完成后不能追加未声明的句子"),TEXT("sentence"),[](auto&,auto& Pending)
+        { Pending.bModelFinished=true; Pending.SentenceCount=0; });
+    Reject(TEXT("声音完成不能改变模型声明的句数"),TEXT("done"),[](auto&,auto& Pending)
+        { Pending.bModelFinished=true; Pending.SentenceCount=2; });
 
     auto Id = StartRequest();
     Send(Id, Event(FGuid::NewGuid(), TEXT("audio_chunk")));
@@ -164,7 +179,7 @@ bool FDeliveryNpcSentenceAudioProtocolTest::RunTest(const FString&)
     Gateway->FinishStreamRequest(Id);
     TestFalse(TEXT("HTTP 完成后释放请求"), Agent->IsDecisionPending());
 
-    // 旧 Windows 语音采用 16 kHz，沿用原来的字节上限；新分段才固定为 24 kHz、八秒
+    // 旧 Windows 语音采用 16 kHz，保持十二秒上限；新分段固定为 24 kHz
     Id = StartRequest();
     Whole = Event(Id, TEXT("sentence"));
     TArray<uint8> LegacyPcm;
@@ -172,10 +187,31 @@ bool FDeliveryNpcSentenceAudioProtocolTest::RunTest(const FString&)
     Whole->SetNumberField(TEXT("sample_rate"), 16000);
     Whole->SetStringField(TEXT("pcm"), FBase64::Encode(LegacyPcm));
     Send(Id, Whole);
-    TestTrue(TEXT("16 kHz 的十秒旧整句不会被新增的八秒规则拒绝"), Gateway->Pending.Contains(Id) &&
+    TestTrue(TEXT("16 kHz 的十秒旧整句继续兼容"), Gateway->Pending.Contains(Id) &&
         Gateway->Pending[Id].Sentences[0].State == EState::Whole && Gateway->Pending[Id].Sentences[0].PcmBytes == LegacyPcm.Num());
     Send(Id, Event(Id, TEXT("done")));
     TestTrue(TEXT("较长的旧整句仍可以正常结束"), Gateway->Pending.Contains(Id) && Gateway->Pending[Id].bReplyFinished);
+
+    // 使用实际 base64 编解码经过 Gateway，覆盖尾部一个或两个等号以及每句最大长度
+    for (const int32 Rate : {16000, 24000})
+    for (const int32 TrimBytes : {0, 2, 4})
+    {
+        Id = StartRequest();
+        Whole = Event(Id, TEXT("sentence"));
+        TArray<uint8> LongPcm; LongPcm.SetNumZeroed(Rate * 2 * 12 - TrimBytes);
+        Whole->SetNumberField(TEXT("sample_rate"), Rate);
+        Whole->SetStringField(TEXT("pcm"), FBase64::Encode(LongPcm));
+        Send(Id, Whole);
+        TestTrue(TEXT("十二秒内完整句与 base64 尾填充正常解析"), Gateway->Pending.Contains(Id) &&
+            Gateway->Pending[Id].Sentences[0].State == EState::Whole && Gateway->Pending[Id].Sentences[0].PcmBytes == LongPcm.Num());
+    }
+    for (const int32 Rate : {16000, 24000})
+        Reject(TEXT("完整句超过十二秒一个采样仍拒绝"), TEXT("sentence"), [Rate](auto& Json, auto&)
+        {
+            TArray<uint8> TooLong; TooLong.SetNumZeroed(Rate * 2 * 12 + 2);
+            Json.SetNumberField(TEXT("sample_rate"), Rate);
+            Json.SetStringField(TEXT("pcm"), FBase64::Encode(TooLong));
+        });
 
     Id = StartRequest();
     Gateway->Pending[Id].Sentences[0].State = EState::Failed;

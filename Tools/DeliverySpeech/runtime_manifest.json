@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "abi_version": 1,
+  "runtime": {
+    "version": "2.0.1",
+    "onnxruntime_version": "1.28.2",
+    "directory": "sherpa-onnx-v2.0.1-win-x64-static-MD-Release-no-tts",
+    "name": "sherpa-onnx-v2.0.1-win-x64-static-MD-Release-no-tts.tar.bz2",
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-win-x64-static-MD-Release-no-tts.tar.bz2",
+    "size": 209536378,
+    "sha256": "cecd53f51db9e7a7dc2119691ce0655e6b580e21cba37dc3e89f59f953f96513"
+  },
+  "model": {
+    "id": "k2-fsa/icefall-asr-zipformer-wenetspeech-streaming-small",
+    "revision": "26e0e0501af3b8b32da2e2a600ae350e114111d2",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "name": "encoder.int8.onnx",
+        "source_path": "exp/encoder-epoch-12-avg-2-chunk-16-left-256.int8.onnx",
+        "url": "https://huggingface.co/k2-fsa/icefall-asr-zipformer-wenetspeech-streaming-small/resolve/26e0e0501af3b8b32da2e2a600ae350e114111d2/exp/encoder-epoch-12-avg-2-chunk-16-left-256.int8.onnx",
+        "size": 26246290,
+        "sha256": "da5009f42dd5af5a26cca798cd9365aafcd5fd85e377df1fcc8a75624ebc2108"
+      },
+      {
+        "name": "decoder.onnx",
+        "source_path": "exp/decoder-epoch-12-avg-2-chunk-16-left-256.onnx",
+        "url": "https://huggingface.co/k2-fsa/icefall-asr-zipformer-wenetspeech-streaming-small/resolve/26e0e0501af3b8b32da2e2a600ae350e114111d2/exp/decoder-epoch-12-avg-2-chunk-16-left-256.onnx",
+        "size": 12408860,
+        "sha256": "53aee85802b4d57237457382aa92ceb18811b3333650ef008e3864be59abf7ff"
+      },
+      {
+        "name": "joiner.int8.onnx",
+        "source_path": "exp/joiner-epoch-12-avg-2-chunk-16-left-256.int8.onnx",
+        "url": "https://huggingface.co/k2-fsa/icefall-asr-zipformer-wenetspeech-streaming-small/resolve/26e0e0501af3b8b32da2e2a600ae350e114111d2/exp/joiner-epoch-12-avg-2-chunk-16-left-256.int8.onnx",
+        "size": 2858478,
+        "sha256": "478a56c0d7bc25eaee4f70af5909f836a910da1bae19d41c669a0863e5fee05a"
+      },
+      {
+        "name": "tokens.txt",
+        "source_path": "data/lang_char/tokens.txt",
+        "url": "https://huggingface.co/k2-fsa/icefall-asr-zipformer-wenetspeech-streaming-small/resolve/26e0e0501af3b8b32da2e2a600ae350e114111d2/data/lang_char/tokens.txt",
+        "size": 48697,
+        "sha256": "8b294db9045d6e5f94647f4c1eec1af4da143a75053c399611444b378ff966ac"
+      }
+    ]
+  },
+  "licenses": [
+    {
+      "name": "sherpa-onnx-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v2.0.1/LICENSE",
+      "size": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "name": "onnxruntime-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.2/LICENSE",
+      "size": 1073,
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+    },
+    {
+      "name": "onnxruntime-ThirdPartyNotices.txt",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.2/ThirdPartyNotices.txt",
+      "size": 325054,
+      "sha256": "0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2"
+    },
+    {
+      "name": "kaldi-native-fbank-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/csukuangfj/kaldi-native-fbank/v1.22.4/LICENSE",
+      "size": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "name": "kissfft-COPYING.txt",
+      "url": "https://raw.githubusercontent.com/mborgerding/kissfft/febd4caeed32e33ad8b2e0bb5ea77542c40f18ec/COPYING",
+      "size": 246,
+      "sha256": "a2840585f8411be8e6826a31ef15ae65c950bd74a2437a73b013398a934ad0c6"
+    },
+    {
+      "name": "openfst-COPYING.txt",
+      "url": "https://raw.githubusercontent.com/csukuangfj/openfst/v1.8.5-2026-07-09/COPYING",
+      "size": 559,
+      "sha256": "4300529197035fd3452350718a0b8cee984e9412c9932d7f35fcde849fc97a4b"
+    },
+    {
+      "name": "kaldi-decoder-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/k2-fsa/kaldi-decoder/v0.3.0/LICENSE",
+      "size": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "name": "simple-sentencepiece-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/pkufool/simple-sentencepiece/v0.7/LICENSE",
+      "size": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "name": "utf8proc-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/JuliaStrings/utf8proc/v2.12.0/LICENSE.md",
+      "size": 5125,
+      "sha256": "3b510150d34f248a221bb88e1d811238d6c6c18b51231822c42974c39bb07256"
+    },
+    {
+      "name": "model-card.txt",
+      "url": "https://huggingface.co/k2-fsa/icefall-asr-zipformer-wenetspeech-streaming-small/resolve/26e0e0501af3b8b32da2e2a600ae350e114111d2/README.md",
+      "size": 31,
+      "sha256": "4bcf87ecfbbb8e07a01b21415a970c8b53a5283bf6872b657040d3f45c9241f7"
+    },
+    {
+      "name": "kissfft-BSD-3-Clause.txt",
+      "url": "https://raw.githubusercontent.com/mborgerding/kissfft/febd4caeed32e33ad8b2e0bb5ea77542c40f18ec/LICENSES/BSD-3-Clause",
+      "size": 1830,
+      "sha256": "4d6bcab46f27d6d0c878e8305d4bdcfe040d52bf6656b9771f04c9fb9902c0ed"
+    }
+  ],
+  "fixtures": [
+    {
+      "name": "3.wav",
+      "url": "https://huggingface.co/k2-fsa/icefall-asr-zipformer-wenetspeech-streaming-small/resolve/26e0e0501af3b8b32da2e2a600ae350e114111d2/test_wavs/3.wav",
+      "size": 257006,
+      "sha256": "710e79fb3450042be50bb2f6432a2a549b53577aea041a577e53a926fcabb614",
+      "source": "Model repository test_wavs/3.wav; upstream model card declares Apache-2.0; development-only, excluded from game package"
+    }
+  ]
+}

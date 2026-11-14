@@ -16,12 +16,16 @@ class UDeliveryTaskManagerComponent;
 class USkeletalMeshComponent;
 class USceneComponent;
 class UTextRenderComponent;
+class ADeliveryHome;
 
 UENUM(BlueprintType)
 enum class EDeliveryGrandpaAction : uint8
 {
-    Idle, Reply, Startled, Receive, Thanks, FinishReply, Finished, StrollOut, StrollHome, LookAround
+    Idle, Reply, Startled, Receive, Thanks, FinishReply, Finished, StrollOut, StrollHome, LookAround, MoveOut
 };
+
+UENUM(BlueprintType)
+enum class EDeliveryGrandpaMoveOutState : uint8 { NotStarted, Walking, Waiting, Departed };
 
 /** 第一单的收件人，服务器维护敲门与收件条件，行为树蓝图选择动作并复制表现 */
 UCLASS()
@@ -62,6 +66,18 @@ public:
     float StrollDistance = 70.f;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Grandpa|Movement", meta=(ClampMin="10", ClampMax="100", Units="cm/s"))
     float StrollSpeed = 35.f;
+    UPROPERTY(EditInstanceOnly,BlueprintReadOnly,Category="Grandpa|Home") TObjectPtr<ADeliveryHome> SharedHome;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Grandpa|Home",meta=(ClampMin="10",ClampMax="200",Units="cm/s"))
+    float MoveOutSpeed=70.f;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Grandpa|Home",meta=(ClampMin="1",ClampMax="30",Units="cm"))
+    float MoveOutArrivalRadius=12.f;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Grandpa|Home",meta=(ClampMin="0.2",ClampMax="5",Units="s"))
+    float MoveOutRetrySeconds=1.f;
+    // 搬离时按真实支撑面走，超过台阶范围就等候，不越过落差或悬空完成
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Grandpa|Home",meta=(ClampMin="0",ClampMax="40",Units="cm"))
+    float MoveOutMaxStepUp=20.f;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Grandpa|Home",meta=(ClampMin="0",ClampMax="80",Units="cm"))
+    float MoveOutMaxStepDown=60.f;
 
     /** 防止连续重复包被当成第二次敲门，不影响原任务计时 */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Grandpa|Task", meta=(ClampMin="0.2", Units="s"))
@@ -71,6 +87,15 @@ public:
     UFUNCTION(BlueprintPure, Category="Grandpa") bool IsDoorBroken() const;
     UFUNCTION(BlueprintPure, Category="Grandpa") bool HasReceivedDelivery() const { return bDelivered; }
     UFUNCTION(BlueprintPure, Category="Grandpa") EDeliveryGrandpaAction GetCurrentAction() const { return CurrentAction; }
+    UFUNCTION(BlueprintPure,Category="Grandpa|Home") bool HasConfirmedHomeDelivery() const { return bHomeDeliveryConfirmed; }
+    UFUNCTION(BlueprintPure,Category="Grandpa|Home") bool HasMovedOut() const { return MoveOutState==EDeliveryGrandpaMoveOutState::Departed; }
+    UFUNCTION(BlueprintPure,Category="Grandpa|Home") EDeliveryGrandpaMoveOutState GetMoveOutState() const { return MoveOutState; }
+    UFUNCTION(BlueprintPure,Category="Grandpa|Home") FName GetMoveOutWaitReason() const { return MoveOutWaitReason; }
+    FGuid GetConfirmedDeliveryId() const { return ConfirmedDeliveryId; }
+    // 只由行为树驱动，取消后停止走动，保留已经走到的位置与路点
+    bool BeginMoveOut();
+    void UpdateMoveOut(float DeltaSeconds);
+    void CancelMoveOut();
 
     /** 只能由权威交互调用，返回本次敲门是否被接受 */
     bool Knock(APawn* Interactor);
@@ -91,6 +116,13 @@ private:
     UPROPERTY(ReplicatedUsing=OnRep_State) bool bDelivered = false;
     UPROPERTY(ReplicatedUsing=OnRep_Action) EDeliveryGrandpaAction CurrentAction = EDeliveryGrandpaAction::Idle;
     UPROPERTY(ReplicatedUsing=OnRep_Action) bool bWalking = false;
+    UPROPERTY(ReplicatedUsing=OnRep_State) bool bHomeDeliveryConfirmed=false;
+    UPROPERTY(ReplicatedUsing=OnRep_Action) EDeliveryGrandpaMoveOutState MoveOutState=EDeliveryGrandpaMoveOutState::NotStarted;
+    UPROPERTY(ReplicatedUsing=OnRep_Action) FName MoveOutWaitReason;
+    FGuid ConfirmedDeliveryId;
+    int32 DeparturePointIndex=0;
+    bool bMoveOutActive=false;
+    double NextMoveOutRetry=0;
     FVector HomeLocation, StrollLocation, MotionTarget;
     bool bMotionActive = false;
     bool bReplyPending = false;
@@ -100,6 +132,10 @@ private:
     void BindTaskManager();
     void UpdateBlackboard();
     void RefreshInteractions();
+    void HandleDeliveryConfirmed(UDeliveryTaskDefinition* Task,AActor* Package,APlayerState* Player);
+    void SetMoveOutWaiting(FName Reason);
+    bool FindMoveOutSupport(const FVector& Position,FVector& OutSupportedPosition) const;
+    void SetMoveOutWalking();
     UFUNCTION() void OnRep_FrontDoor();
     UFUNCTION() void HandleDoorBroken();
     UFUNCTION() void HandleTaskChanged(UDeliveryTaskDefinition* Task, EDeliveryTaskStatus Status);

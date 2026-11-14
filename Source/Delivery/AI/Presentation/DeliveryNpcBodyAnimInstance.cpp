@@ -1,5 +1,6 @@
 #include "AI/Presentation/DeliveryNpcBodyAnimInstance.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Companion/DeliveryCompanionCharacter.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
@@ -96,6 +97,20 @@ void UDeliveryNpcBodyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
     // 缺音时暂停说话动作，声音接上后继续，字幕和注视仍保留当前句子
     else if (Npc->Presentation->GetDisplayedSpeech().bActive && !Npc->Presentation->IsWaitingForMoreAudio()) Pose=EPose::Talk;
     PoseIndex=static_cast<int32>(Pose);
+    // 初遇等待扶起独立于战斗倒地，保持原动画蓝图的 Down / GetUp 输入
+    if (const auto* Companion=Cast<ADeliveryCompanionCharacter>(Npc))
+    {
+        if (!Npc->Combat->IsDown() && Companion->IsBeingHelpedUp())
+        {
+            PoseIndex=static_cast<int32>(EPose::GetUp);
+            GetUpTime=ClipTime(GetUpAnimation,Now,Companion->GetHelpStartTime());
+        }
+        else if (!Npc->Combat->IsDown() && (Companion->IsWaitingForHelp() || Companion->IsEncounterAirborne()))
+        {
+            PoseIndex=static_cast<int32>(EPose::Down);
+            DownTime=ClipTime(DownAnimation,Now,Companion->GetEncounterFallStartTime());
+        }
+    }
     if (!FMath::IsFinite(ReferenceSpeed)) ReferenceSpeed=180;
     MovePlayRate=FMath::IsFinite(Speed)?FMath::Clamp(Speed/FMath::Max(10.f,ReferenceSpeed),.2f,2.f):1.f;
 }

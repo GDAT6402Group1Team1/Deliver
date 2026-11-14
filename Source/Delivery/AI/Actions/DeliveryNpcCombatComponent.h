@@ -1,9 +1,16 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Combat/DeliveryNpcStrikeExecutor.h"
 #include "DeliveryNpcCombatComponent.generated.h"
 
 class USkeletalMeshComponent;
+class APawn;
+class AAIController;
+
+DECLARE_DELEGATE_RetVal_TwoParams(bool,FDeliveryNpcCanContinueRecovery,APawn*,FGuid);
+DECLARE_MULTICAST_DELEGATE_OneParam(FDeliveryNpcDownChanged,FGuid);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FDeliveryNpcRecoveryFinished,FGuid,APawn*);
 
 // 在服务器处理 NPC 挥拳、受击和起身，同一拳只判定一次命中
 // 倒地和起身状态同步给客户端，由表现组件播放相应动画
@@ -24,14 +31,17 @@ public:
     bool CanContinueStrikeApproach(AActor* Target) const;
     // 返回 true 表示开始挥拳，只有有效窗口内的拳头扫掠碰到目标才算命中
     bool StartStrike(AActor* Target,FGuid ActionId);
-    // 模型选择持续交战后，由行为树调用；整轮固定目标、时间和最多挥拳次数
+    // 模型选择目标，行为树负责接近和出拳；护主规则仍使用原来的短轮次数限制
     bool CanBeginFight(AActor* Target) const;
-    bool BeginFight(AActor* Target,FGuid ActionId,float Duration);
+    bool CanChooseFightTarget(AActor* Target) const;
+    bool BeginFight(AActor* Target,FGuid ActionId,float Duration,bool bModelDecision=false);
+    // 同目标的新决定只更新结束时间，保留当前拳、起点和累计命中
+    bool ContinueFight(FGuid ActionId,float Duration);
     bool StartFightStrike(AActor* Target,FGuid ActionId,FGuid PunchId);
     // 返回停止原因，空值表示还能继续；收拳与冷却由行为树等待
     FName GetFightStopReason(FGuid ActionId) const;
     bool IsReadyToStrike() const;
-    void EndFight(FGuid ActionId);
+    void EndFight(FGuid ActionId,bool bApplyCooldown=true);
     FString DescribeFight(FGuid ActionId,FName Reason) const;
     // 只介绍自己实际经历的受击与出拳，供模型判断继续交战、逃跑或停手
     FString DescribeCombatState() const;
@@ -53,13 +63,40 @@ public:
     static constexpr float StrikeWindup=.35f;
     // 清除攻击目标和编号，取消后不再判定尚未发生的命中
     void CancelStrike();
+    void CancelStrike(FGuid ActionId,FGuid PunchId);
+    FDeliveryNpcStrikeFinished OnStrikeFinished;
+    void ReceiveMeleeImpact(const FVector& Impulse,const FVector& Point,AActor* Source,FGuid PunchId);
+    UPROPERTY(EditAnywhere,Category="Delivery|攻击效果",meta=(ClampMin="0")) float OutgoingPlayerDamage=10;
+    UPROPERTY(EditAnywhere,Category="Delivery|攻击效果",meta=(ClampMin="0")) float OutgoingPlayerImpulse=900;
+    UPROPERTY(EditAnywhere,Category="Delivery|攻击效果",meta=(ClampMin="0")) float OutgoingImpactImpulse=35000;
+    // 轻拍保留接触事实与短反应，不扣玩家血、不推动身体、不累计居民击倒
+    UPROPERTY(EditAnywhere,Category="Delivery|攻击效果") bool bHarmlessStrikes=false;
+    UPROPERTY(EditAnywhere,Category="Delivery|受击") bool bKnockDownOnAnyPunch=false;
+    UPROPERTY(EditAnywhere,Category="Delivery|受击") bool bReceiveHitsWhileDown=false;
+    UPROPERTY(EditAnywhere,Category="Delivery|受击",meta=(ClampMin="0",ClampMax="10",Units="s")) float DownHitExtensionSeconds=4;
+    UPROPERTY(EditAnywhere,Category="Delivery|受击",meta=(ClampMin="0",ClampMax="2000",Units="cm/s")) float KnockdownHorizontalSpeed=450;
+    UPROPERTY(EditAnywhere,Category="Delivery|受击",meta=(ClampMin="0",ClampMax="2000",Units="cm/s")) float KnockdownUpwardSpeed=100;
+
     // 在服务器处理击退和倒地，不等待模型回复
     void ReceiveImpact(const FVector& Impulse,AActor* Source);
+    // 控制器退出时只清理本组件的受击焦点，不取消模型选择或其他朝向层
+    void ResetHitFacing();
     bool SetDeliberateProne(bool bProne);
     UFUNCTION(BlueprintPure) bool IsDown() const { return bDown; }
     // 主动躺下保留说话能力，被击倒时仍立即停止对白
     bool IsDeliberatelyProne() const { return bDown && bDeliberate; }
     UFUNCTION(BlueprintPure) bool IsRecovering() const { return bRecovering; }
+    // 每次真实击倒有独立编号，倒地重击仍属于同一轮但会撤销正在进行的扶起
+    FGuid GetDownEpisodeId() const { return DownEpisodeId; }
+    bool CanStartAssistedRecovery() const;
+    // true 只表示开始原起身流程，完成事件才表示已经恢复站立
+    bool StartAssistedRecovery(FGuid ExpectedDownEpisode,APawn* Helper);
+    void CancelAssistedRecovery(FGuid ExpectedDownEpisode);
+    bool WasRecoveryAssistedBy(FGuid Episode,APawn* Helper) const;
+    // 接入者复核帮助者权限、距离和遮挡；战斗组件只管理身体状态与起身时序
+    FDeliveryNpcCanContinueRecovery CanContinueAssistedRecovery;
+    FDeliveryNpcDownChanged OnDownChanged;
+    FDeliveryNpcRecoveryFinished OnRecoveryFinished;
     UFUNCTION(BlueprintPure) bool IsStriking() const { return AttackId.IsValid(); }
     UPROPERTY(EditAnywhere,Category="Delivery|居民战斗",meta=(ClampMin="50",ClampMax="250",Units="cm")) float StrikeRange=160;
     UPROPERTY(EditAnywhere,Category="Delivery|拳头接触") FName StrikeHandBone=TEXT("LeftHand");
@@ -72,6 +109,8 @@ public:
     UPROPERTY(EditAnywhere,Category="Delivery|居民战斗",meta=(ClampMin="160",ClampMax="1200",Units="cm")) float StrikeApproachRange=600;
     UPROPERTY(EditAnywhere,Category="Delivery|居民战斗",meta=(ClampMin="1",ClampMax="10",Units="s")) float RecoverySeconds=4;
     UPROPERTY(EditAnywhere,Category="Delivery|交战",meta=(ClampMin="1",ClampMax="5")) int32 FightPunchLimit=3;
+    // 模型交战连挥几拳后短暂收拳，护主规则仍按次数结束短轮动作
+    UPROPERTY(EditAnywhere,Category="Delivery|交战",meta=(ClampMin="0",ClampMax="1.5",Units="s")) float FightBurstPauseSeconds=.75f;
     UPROPERTY(EditAnywhere,Category="Delivery|交战",meta=(ClampMin="160",ClampMax="1200",Units="cm")) float FightTravelRange=600;
     UPROPERTY(EditAnywhere,Category="Delivery|交战",meta=(ClampMin="1",ClampMax="15",Units="s")) float FightCooldown=4;
     // 只累计持续交战中的轻拳，普通重击仍走原来的倒地流程
@@ -89,7 +128,23 @@ private:
     void OnStrikePoseUpdated();
     void FinishStrike(bool bHit,const FVector& ImpactPoint);
     void RestoreMeshTickSettings();
-    void ReceiveFightHit(AActor* Source,FGuid PunchId);
+    void ReceiveFightHit(AActor* Source,FGuid PunchId,bool bHarmless=false);
+    bool RememberPunch(FGuid PunchId);
+    void RequestHitFacing(AActor* Source,FGuid HitId);
+    void UpdateHitFacing(double Now);
+    void RememberRecoveryFacing(AActor* Source);
+    void TryFaceSourceAfterRecovery(FGuid Episode);
+    TWeakObjectPtr<AAIController> HitFacingController;
+    TWeakObjectPtr<AActor> HitFacingSource;
+    TWeakObjectPtr<AActor> HitFacingListener;
+    FGuid HitFacingId;
+    FGuid HitFacingActionId;
+    double HitFacingEndsAt=0;
+    bool bHitFacingApplied=false;
+    TWeakObjectPtr<AActor> RecoveryFacingSource;
+    FGuid RecoveryFacingEpisode;
+    bool bEndingHitFacing=false;
+    void ExtendDownTime(AActor* Source);
     UPROPERTY(ReplicatedUsing=OnRep_Down) bool bDown=false;
     UPROPERTY(Replicated) bool bDeliberate=false;
     UPROPERTY(Replicated) bool bRecovering=false;
@@ -100,6 +155,7 @@ private:
     UPROPERTY(Replicated) double StrikeStartedAt=-1;
     UPROPERTY(Replicated) double DownStartedAt=-1;
     UPROPERTY(Replicated) double RecoveryStartedAt=-1;
+    UPROPERTY(Replicated) FGuid DownEpisodeId;
     UPROPERTY(Replicated) double HitReactionStartedAt=-1;
     FGuid FinishedStrikeId;
     bool bFinishedStrikeHit=false;
@@ -113,6 +169,11 @@ private:
     bool bPreviousUpdateRateOptimization=false;
     bool bOverrideMeshTick=false;
     double RecoverAt=0;
+    bool bAssistedRecovery=false;
+    double UnassistedRecoverAt=0;
+    TWeakObjectPtr<APawn> RecoveryHelper;
+    FGuid CompletedRecoveryEpisode;
+    TWeakObjectPtr<APawn> CompletedRecoveryHelper;
     double NextStrikeAt=0;
     bool bCurrentStrikeIsLight=false;
     FGuid FightActionId;
@@ -122,6 +183,8 @@ private:
     double NextFightAt=0;
     int32 FightPunches=0;
     int32 FightHits=0;
+    bool bModelFight=false;
+    int32 FightBurstPunches=0;
     int32 ReceivedLightHits=0;
     double LastLightHitAt=-100;
     TArray<FGuid> RecentLightHits;

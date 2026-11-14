@@ -1,0 +1,283 @@
+﻿{
+	"devices": [
+		{
+			"deviceName": "RAINBOW",
+			"instance": "3B3CEC6B4B0887C4636913AF2A0EC82B",
+			"instanceName": "RAINBOW-52336",
+			"platform": "WindowsEditor",
+			"oSVersion": "Windows 11 (25H2) [10.0.26200.9974] ",
+			"model": "Default",
+			"gPU": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+			"cPUModel": "AMD Ryzen 9 8945HX with Radeon Graphics        ",
+			"rAMInGB": 32,
+			"renderMode": "SM6",
+			"rHI": "",
+			"appInstanceLog": ""
+		}
+	],
+	"reportCreatedOn": "2026.11.14-13.46.39",
+	"succeeded": 12,
+	"succeededWithWarnings": 0,
+	"failed": 0,
+	"notRun": 0,
+	"inProcess": 0,
+	"totalDuration": 1.5665812492370605,
+	"comparisonExported": false,
+	"comparisonExportDirectory": "",
+	"tests": [
+		{
+			"testDisplayName": "Boundaries",
+			"fullTestPath": "Delivery.AI.VoiceCodec.Boundaries",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 0.048726998269557953,
+			"dateTime": "2026.11.14-13.46.37",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "LongSentence",
+			"fullTestPath": "Delivery.AI.VoiceCodec.LongSentence",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 1.1459096670150757,
+			"dateTime": "2026.11.14-13.46.37",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "RecordedSpeech",
+			"fullTestPath": "Delivery.AI.VoiceCodec.RecordedSpeech",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 0.12509900331497192,
+			"dateTime": "2026.11.14-13.46.38",
+			"entries": [
+				{
+					"event":
+					{
+						"type": "Info",
+						"message": "NpcVoiceCodec voice=male rate=16000 pcm=120172 wire=12184 decoded=121452 encode_ms=27.195 decode_ms=2.578",
+						"context": "",
+						"artifact": "00000000000000000000000000000000"
+					},
+					"filename": "",
+					"lineNumber": -1,
+					"timestamp": "2026.11.14-13.46.39"
+				},
+				{
+					"event":
+					{
+						"type": "Info",
+						"message": "NpcVoiceCodecThreadPool voice=male submit_ms=0.032 encode_ms=27.390 completion_ms=27.479 matches_sync=1",
+						"context": "",
+						"artifact": "00000000000000000000000000000000"
+					},
+					"filename": "",
+					"lineNumber": -1,
+					"timestamp": "2026.11.14-13.46.39"
+				},
+				{
+					"event":
+					{
+						"type": "Info",
+						"message": "NpcVoiceCodec voice=female rate=16000 pcm=136800 wire=13844 decoded=138080 encode_ms=30.049 decode_ms=2.867",
+						"context": "",
+						"artifact": "00000000000000000000000000000000"
+					},
+					"filename": "",
+					"lineNumber": -1,
+					"timestamp": "2026.11.14-13.46.39"
+				},
+				{
+					"event":
+					{
+						"type": "Info",
+						"message": "NpcVoiceCodecThreadPool voice=female submit_ms=0.027 encode_ms=29.228 completion_ms=29.289 matches_sync=1",
+						"context": "",
+						"artifact": "00000000000000000000000000000000"
+					},
+					"filename": "",
+					"lineNumber": -1,
+					"timestamp": "2026.11.14-13.46.39"
+				}
+			],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "RoundTrip",
+			"fullTestPath": "Delivery.AI.VoiceCodec.RoundTrip",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 0.029752101749181747,
+			"dateTime": "2026.11.14-13.46.39",
+			"entries": [
+				{
+					"event":
+					{
+						"type": "Info",
+						"message": "NpcVoiceCodec rate=16000 pcm=32146 wire=3418 decoded=33426 tail_energy_ratio=0.658",
+						"context": "",
+						"artifact": "00000000000000000000000000000000"
+					},
+					"filename": "",
+					"lineNumber": -1,
+					"timestamp": "2026.11.14-13.46.39"
+				},
+				{
+					"event":
+					{
+						"type": "Info",
+						"message": "NpcVoiceCodec rate=24000 pcm=48146 wire=3418 decoded=50066 tail_energy_ratio=0.599",
+						"context": "",
+						"artifact": "00000000000000000000000000000000"
+					},
+					"filename": "",
+					"lineNumber": -1,
+					"timestamp": "2026.11.14-13.46.39"
+				}
+			],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Streaming",
+			"fullTestPath": "Delivery.AI.VoiceCodec.Streaming",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 0.050876900553703308,
+			"dateTime": "2026.11.14-13.46.39",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "StreamingBoundaries",
+			"fullTestPath": "Delivery.AI.VoiceCodec.StreamingBoundaries",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 0.020987499505281448,
+			"dateTime": "2026.11.14-13.46.39",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "SentenceAudioProtocol",
+			"fullTestPath": "Delivery.AI.SentenceAudioProtocol",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 0.063157305121421814,
+			"dateTime": "2026.11.14-13.46.39",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "Cancellation",
+			"fullTestPath": "Delivery.Speech.Audio.Cancellation",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 0.016308899968862534,
+			"dateTime": "2026.11.14-13.46.39",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "DeviceFormatChange",
+			"fullTestPath": "Delivery.Speech.Audio.DeviceFormatChange",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 0.016335900872945786,
+			"dateTime": "2026.11.14-13.46.39",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "FinishDiscontinuity",
+			"fullTestPath": "Delivery.Speech.Audio.FinishDiscontinuity",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 0.016606301069259644,
+			"dateTime": "2026.11.14-13.46.39",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "StartupDiscontinuity",
+			"fullTestPath": "Delivery.Speech.Audio.StartupDiscontinuity",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 0.016250200569629669,
+			"dateTime": "2026.11.14-13.46.39",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		},
+		{
+			"testDisplayName": "TurnBoundaries",
+			"fullTestPath": "Delivery.Speech.Audio.TurnBoundaries",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"3B3CEC6B4B0887C4636913AF2A0EC82B"
+			],
+			"duration": 0.016570299863815308,
+			"dateTime": "2026.11.14-13.46.39",
+			"entries": [],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		}
+	]
+}

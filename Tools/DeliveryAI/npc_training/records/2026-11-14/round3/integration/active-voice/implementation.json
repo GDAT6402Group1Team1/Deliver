@@ -1,0 +1,76 @@
+{
+  "created_at": "2026-11-14T13:47:54.091606+00:00",
+  "mode": "optional_active_voice",
+  "production_default": "both",
+  "gpu_tested": false,
+  "runtime_baseline_sha256": "1aca234e71faa46d06cfe0ccd967f8fa945bef2a88d65f942a2ac1ca3db41fb6",
+  "runtime_trial": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NativeQwen\\runtime-q8_0-kv1024-active.json",
+  "runtime_trial_sha256": "9c189b08c108def672a15a07565fed49ba4c18a8edfbea614b9a759380646f21",
+  "runtime_only_changed": [
+    "voice_residency"
+  ],
+  "source_changes": [
+    {
+      "path": "D:\\Udev\\Delivery\\Tools\\DeliveryAI\\native_tts_engine.py",
+      "before_sha256": "88dc486059dc801c729fe33abea63f11fbf6fca587d41e7e8f9d6a91a392e2d7",
+      "after_sha256": "1ca4a1ee526eb3682483dbfbef9e3e090e8ad4af0830837dd29a5b8aaa869725"
+    },
+    {
+      "path": "D:\\Udev\\Delivery\\Tools\\DeliveryAI\\native_tts.py",
+      "before_sha256": "ad7f7ca01a34486a1c5e1969d86dcffaa2119334e2ee977b50797a4c376645d4",
+      "after_sha256": "c4a1355a389a4b3b187365857e496101cb5f4ce6427090247a6407842b0978a4"
+    }
+  ],
+  "native_library_modified": false,
+  "runtime_settings_preserved": [
+    "model and codec paths/hashes",
+    "library and dependency hashes",
+    "native patch and source revision",
+    "quantization/device"
+  ],
+  "synthesis_settings_preserved": [
+    "seed",
+    "voice reference and metadata",
+    "sampling",
+    "max_new_tokens=256"
+  ],
+  "limits": [
+    "qt_init does not accept cancellation; task is checked immediately when it returns and parent process timeout still applies",
+    "voice switch latency and actual GPU memory savings have not been measured",
+    "engine is owned by the worker synthesis thread; close is not called concurrently with synthesis"
+  ],
+  "cpu_tests": {
+    "command": "python -m unittest test_native_tts_residency test_native_tts test_tts_duration",
+    "cwd": "Tools/DeliveryAI",
+    "passed": 25,
+    "failed": 0,
+    "log": "Saved/AIResearch/NativeQwen/active-voice-plan/cpu-tests.log",
+    "log_sha256": "5640036d7fb6484aa5b75f2603c879e91594b2456fdb32a61f1308199ffb554e",
+    "coverage": [
+      "same voice reuse",
+      "male/female/male switching keeps one context",
+      "reference pointers survive context replacement",
+      "cancel during model loading and next sentence recovery",
+      "closed task does not load or synthesize",
+      "wrong model metadata frees handle and recovers",
+      "reference hash failure frees initial context",
+      "runtime mode validation",
+      "unchanged both mode",
+      "existing stream cancellation and 12 second duration checks"
+    ]
+  },
+  "test_sources": [
+    {
+      "path": "Tools\\DeliveryAI\\test_native_tts_residency.py",
+      "sha256": "1f417693099873a55880b2845a569c65be5025a7b8133e0003a97b9d8b83c8f5"
+    },
+    {
+      "path": "Tools\\DeliveryAI\\test_native_tts.py",
+      "sha256": "121e8e9fd754ba3fb1f7bb9a9ac8b2c97b04a422e0b9b0055a959423f6fa0234"
+    },
+    {
+      "path": "Tools\\DeliveryAI\\test_tts_duration.py",
+      "sha256": "066406ec0c39b6cbff77d85c35041f26c5c5bff2c0ad21a67acc4ae28867f34a"
+    }
+  ]
+}

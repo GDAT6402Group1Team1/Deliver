@@ -1,0 +1,135 @@
+{
+  "round": 3,
+  "authorization": "new user instruction after two-round failure; earlier results retained",
+  "status": "frozen_acceptance_passed_game_and_speech_coexistence_pending",
+  "frozen_acceptance_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+  "acceptance_content_read_by_generator": false,
+  "acceptance_labels_changed": false,
+  "new_stories": 40,
+  "new_training_groups": 32,
+  "new_validation_groups": 8,
+  "new_training_rows": 64,
+  "new_validation_rows": 16,
+  "replay_training_rows": 160,
+  "total_training_rows": 224,
+  "total_training_groups": 187,
+  "legacy_validation_rows": 15,
+  "validation_scored_separately": true,
+  "new_validation_coverage": {
+    "('大壮', 'Fight')": 4,
+    "('翠花', 'Flee')": 4,
+    "('翠花', 'Fight')": 4,
+    "('大壮', 'Flee')": 4
+  },
+  "new_draft_actions": {
+    "Wait": 37,
+    "Fight": 31,
+    "Flee": 12
+  },
+  "role_change_coverage": {
+    "change": 10,
+    "continue": 6
+  },
+  "replay_input_change": "raw context uses neutral UE status suffix; shared prepare_combat_context removes only known redundant SelfCombat suffix, keeping real hit counts and independent current_action; original files and labels retained",
+  "input_preprocessing_version": "self_combat_actual_facts_v2",
+  "input_preprocessing_change": "all production/training/evaluation inputs use the same suffix removal; raw frozen40 and labels unchanged; not comparable as identical prompts to pre-fix reports",
+  "rejected_previous_preparation": {
+    "folder": "Saved/AIResearch/NpcTraining/combat-v6",
+    "reason": "runtime suffix asserted ongoing punching and hits even while fleeing or after agreement; teacher errors confirmed reliance on this false fact",
+    "training_started": false
+  },
+  "source_cpp": [
+    "Source/Delivery/AI/Actions/DeliveryNpcCombatComponent.cpp:217",
+    "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp:217"
+  ],
+  "fixed_training": {
+    "initial_adapter": "Saved/AIResearch/NpcTraining/combat-v5/round2/adapter",
+    "learning_rate": 2e-05,
+    "optimizer_steps": 56,
+    "gradient_accumulation": 4,
+    "micro_batches": 224,
+    "epochs": 1,
+    "max_seq_length": 4096,
+    "max_output_tokens": 64,
+    "seed": 20261114,
+    "selection": "one predeclared candidate; no acceptance-based parameter search",
+    "initial_adapter_sha256": "c6762d92d8eaa5802a526b80e521dcb5a61f98cb7a1b91258c8386cd7ed77611",
+    "command": "Saved/AIResearch/NpcTraining/.venv/Scripts/python.exe Tools/DeliveryAI/npc_training/train_lora.py --run --train Saved/AIResearch/NpcTraining/combat-v7/train.jsonl --validation Saved/AIResearch/NpcTraining/combat-v7/validation.jsonl --resume-adapter Saved/AIResearch/NpcTraining/combat-v5/round2/adapter --learning-rate 0.00002 --max-steps 56 --max-seq-length 4096 --max-new-tokens 64 --output Saved/AIResearch/NpcTraining/combat-v7/round3"
+  },
+  "why_not_use_loss_as_success": [
+    "13-token answer contains mostly fixed JSON text; low average token loss is not action accuracy",
+    "old 15 validation cases all used one character, while all five final errors continued current action",
+    "new branch pairs keep body counters fixed where possible while later observable facts change"
+  ],
+  "validation_rule": "report legacy15 and new16 separately, with role/current-action/continue-change breakdown; independent review before final40",
+  "final_rule_unchanged": {
+    "reasonable_action_minimum": 0.9,
+    "cases": 40,
+    "protocol_target_valid_required": true,
+    "critical_technical_errors": 0
+  },
+  "previous_data_sha256": "9e7cfd68274a498ab50f2e77463a408988fa7c56244ec0f06d52f62c13718108",
+  "new_data_sha256": "2e964ac2348a92bc0b660a77ad5bcbace69c5efff61ea2d032473eb28ad091cc",
+  "source_hashes": {
+    "Tools\\DeliveryAI\\combat_model.py": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+    "Tools\\DeliveryAI\\npc_training\\build_combat_round3.py": "9d8c755d695b3b3573746716a436b71717a1bb78007a703d104e2e9182b77add",
+    "Tools\\DeliveryAI\\npc_training\\combat_round3_stories.py": "97e527dba8230cb18554d53f730954573237d461718335ad10c7fe057b57f992",
+    "Tools\\DeliveryAI\\npc_training\\review_combat_data.py": "42320afa8a3d8c4de23cf5bded71968fd30363a020272825edcaefc977111b46"
+  },
+  "input_fix_comparison": {
+    "reports": [
+      "Saved/AIResearch/NpcTraining/round3-baseline/round2-old-validation-original-format.json",
+      "Saved/AIResearch/NpcTraining/round3-baseline/round2-old-validation-game-format.json"
+    ],
+    "before_fix_original": {
+      "correct": 14,
+      "cases": 15
+    },
+    "before_fix_with_incorrect_runtime_suffix": {
+      "correct": 9,
+      "cases": 15
+    },
+    "comparison_is_not_training_gain": true
+  },
+  "final_datasets": {
+    "status": "data_ready_for_training",
+    "teacher_sha256": "158748299e8c2db25273da7e5876da0b73febc19a38f5c8e17e46040f3b86661",
+    "review_sha256": "e54fd38b00f772c398bad51d6e6e70f7a32d6f923d611c261430d11fe82162c5",
+    "situations_sha256": "2e964ac2348a92bc0b660a77ad5bcbace69c5efff61ea2d032473eb28ad091cc",
+    "train_sha256": "ed4c8774663f3b790f8196bb05637789a10b535ef6745b83f1aae2b7bf870675",
+    "validation_sha256": "42ab811f9953e2fd7244a27361d64a8f52f823239cffa74999fd0e2a1817b36b",
+    "train_rows": 224,
+    "train_groups": 187,
+    "legacy_validation_rows": 15,
+    "new_validation_rows": 16,
+    "validation_labels_changed": false,
+    "new_train_teacher_disagreements": 6,
+    "train_actions": {
+      "Fight": 70,
+      "Flee": 58,
+      "Wait": 96
+    },
+    "input_preprocessing_version": "self_combat_actual_facts_v2"
+  },
+  "validation_teacher_disagreements": {
+    "count": 1,
+    "id": "change-032-branch-2",
+    "fixed_validation_target": "Fight",
+    "teacher_suggested": "Flee",
+    "validation_target_not_changed": true
+  },
+  "sources_sha256_after_review": {
+    "Tools\\DeliveryAI\\npc_training\\finalize_combat_round3.py": "0c73a0c99e0a37ae147358d24de03be446a0add53af16c6aca0ae15e8df03680",
+    "Tools\\DeliveryAI\\npc_training\\train_lora.py": "f68da4b85d3b4c4c5bb4e2c4c91ad80a3eb4cd6de0a981255ef86f1abec37e1c"
+  },
+  "execution": {
+    "gpu_exclusive_from_parent": true,
+    "started_local": "2026-11-14 20:36:07 Asia/Shanghai",
+    "training_process_id": 48456,
+    "training_wrapper_process_id": 67960,
+    "session_id": 18913,
+    "fixed_schedule_changed": false
+  },
+  "final_result_path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\final-acceptance-q8-gpu99.json",
+  "summary_path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\round3-summary.json"
+}

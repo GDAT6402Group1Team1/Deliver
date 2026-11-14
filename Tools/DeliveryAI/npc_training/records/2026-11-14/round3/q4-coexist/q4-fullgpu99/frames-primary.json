@@ -1,0 +1,255 @@
+{
+  "schema_version": 1,
+  "label": "local99-q4active-primary",
+  "configuration": {
+    "pie": "dual",
+    "ue_pid": "50292",
+    "resolution": "960x720",
+    "runtime": "active",
+    "model": "Q4_K_M"
+  },
+  "source_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7-integration\\CombatQ4FullGpu.csv",
+  "source_sha256": "239371acc77e3d3ac494f963f96c39548293c76a9d5758a4a135524912d69f00",
+  "analyzed_at_utc": "2026-11-14T14:33:45.702317+00:00",
+  "source": {
+    "data_rows": 3891,
+    "valid_frames": 3891,
+    "missing_frame_indices": [],
+    "zero_frame_indices": [],
+    "capture_duration_seconds": 374.6206660000003,
+    "ue_completion_footer_present": true,
+    "frame_column": "FrameTime",
+    "unit": "ms",
+    "metadata": {
+      "platform": "Windows",
+      "buildversion": "++UE5+Release-5.8-CL-56057345",
+      "systemresolution.resx": "960",
+      "systemresolution.resy": "720",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "deviceprofile": "WindowsEditor",
+      "endtimestamp": "1794666755",
+      "captureduration": "374.537617",
+      "csvmaxfilebytesreached": "0"
+    }
+  },
+  "interval": {
+    "selection": "frame_start_in_half_open_interval",
+    "requested_start_seconds": 189.864874,
+    "requested_end_seconds": 229.864874,
+    "first_frame_index": 1966,
+    "last_frame_index": 2366,
+    "measured_start_seconds": 189.90815249999986,
+    "measured_end_seconds": 229.9331223,
+    "measured_duration_seconds": 40.0249698,
+    "capture_start_utc": "2026-11-14T14:26:20.938000+00:00",
+    "estimated_start_utc": "2026-11-14T14:29:30.846152+00:00",
+    "estimated_end_utc": "2026-11-14T14:30:10.871122+00:00"
+  },
+  "sample_count": 401,
+  "frame_time_ms": {
+    "median": 97.1082,
+    "p95": 122.2127,
+    "p99": 162.4662,
+    "maximum": 194.4337,
+    "mean": 99.81289226932668
+  },
+  "percentile_method": "linear_interpolation_at_(N-1)*p",
+  "frames_over_33_333ms": 401,
+  "frames_over_50ms": 401,
+  "warnings": [],
+  "primary_40_second_gate": true,
+  "extra_csv_columns": {
+    "GameThreadTime": {
+      "n": 401,
+      "median": 74.3811,
+      "p95": 100.3974,
+      "min": 57.4074,
+      "max": 153.5427,
+      "first": 69.2489,
+      "last": 63.1033
+    },
+    "RenderThreadTime": {
+      "n": 401,
+      "median": 0.0004,
+      "p95": 0.0008,
+      "min": 0.0001,
+      "max": 0.0028,
+      "first": 0.0003,
+      "last": 0.0006
+    },
+    "GPUTime": {
+      "n": 401,
+      "median": 16.7276,
+      "p95": 22.106,
+      "min": 14.5775,
+      "max": 27.3943,
+      "first": 21.8496,
+      "last": 15.9887
+    },
+    "RHIThreadTime": {
+      "n": 401,
+      "median": 0.1667,
+      "p95": 0.3039,
+      "min": 0.0888,
+      "max": 1.1148,
+      "first": 0.1868,
+      "last": 0.1274
+    },
+    "GameThreadTime_CriticalPath": {
+      "n": 401,
+      "median": 74.3826,
+      "p95": 100.3991,
+      "min": 57.4082,
+      "max": 153.5437,
+      "first": 69.2489,
+      "last": 63.1042
+    },
+    "RenderThreadTime_CriticalPath": {
+      "n": 401,
+      "median": 0.0004,
+      "p95": 0.0008,
+      "min": 0.0001,
+      "max": 0.0028,
+      "first": 0.0003,
+      "last": 0.0006
+    },
+    "GPUMem/LocalBudgetMB": {
+      "n": 401,
+      "median": 8816.6543,
+      "p95": 8836.8457,
+      "min": 8646.1426,
+      "max": 8836.8457,
+      "first": 8774.8457,
+      "last": 8706.8301
+    },
+    "GPUMem/LocalUsedMB": {
+      "n": 401,
+      "median": 6579.2188,
+      "p95": 6675.2188,
+      "min": 6557.4062,
+      "max": 6675.2188,
+      "first": 6668.7188,
+      "last": 6557.6562
+    },
+    "GPUMem/SystemBudgetMB": {
+      "n": 401,
+      "median": 15512.2637,
+      "p95": 15512.2637,
+      "min": 15512.2637,
+      "max": 15512.2637,
+      "first": 15512.2637,
+      "last": 15512.2637
+    },
+    "GPUMem/SystemUsedMB": {
+      "n": 401,
+      "median": 674.2969,
+      "p95": 675.0469,
+      "min": 673.7969,
+      "max": 675.0469,
+      "first": 673.7969,
+      "last": 675.0469
+    },
+    "PhysicalUsedMB": {
+      "n": 401,
+      "median": 6958.6172,
+      "p95": 7140.2344,
+      "min": 6909.8516,
+      "max": 7143.6523,
+      "first": 7132.1367,
+      "last": 6957.8047
+    },
+    "MemoryFreeMB": {
+      "n": 401,
+      "median": 1639.3438,
+      "p95": 2479.1758,
+      "min": 1264.3594,
+      "max": 2861.7031,
+      "first": 1689.5039,
+      "last": 2756.3633
+    },
+    "CPUUsage_Process": {
+      "n": 401,
+      "median": 3.4669,
+      "p95": 3.9184,
+      "min": 2.5057,
+      "max": 7.8544,
+      "first": 3.1883,
+      "last": 3.5499
+    },
+    "ActorCount/TotalActorCount": {
+      "n": 401,
+      "median": 9905.0,
+      "p95": 10137.0,
+      "min": 9384.0,
+      "max": 10167.0,
+      "first": 9837.0,
+      "last": 9577.0
+    },
+    "ActorCount/DeliveryPedestrian": {
+      "n": 401,
+      "median": 712.0,
+      "p95": 940.0,
+      "min": 202.0,
+      "max": 970.0,
+      "first": 644.0,
+      "last": 388.0
+    },
+    "ActorCount/DeliveryNpcCharacter": {
+      "n": 401,
+      "median": 6.0,
+      "p95": 6.0,
+      "min": 6.0,
+      "max": 6.0,
+      "first": 6.0,
+      "last": 6.0
+    },
+    "Exclusive/GameThread/TickActors": {
+      "n": 401,
+      "median": 15.0955,
+      "p95": 19.2416,
+      "min": 12.1158,
+      "max": 57.005,
+      "first": 15.059,
+      "last": 13.6931
+    },
+    "Exclusive/GameThread/Physics": {
+      "n": 401,
+      "median": 0.3857,
+      "p95": 0.5626,
+      "min": 0.2698,
+      "max": 0.7804,
+      "first": 0.4018,
+      "last": 0.3104
+    },
+    "View/PosX": {
+      "n": 401,
+      "median": 11992.9287,
+      "p95": 11992.9307,
+      "min": 11992.9258,
+      "max": 11992.9316,
+      "first": 11992.9287,
+      "last": 11992.9277
+    },
+    "View/PosY": {
+      "n": 401,
+      "median": 11826.8447,
+      "p95": 11826.8574,
+      "min": 11826.8223,
+      "max": 11826.8613,
+      "first": 11826.8506,
+      "last": 11826.833
+    },
+    "View/PosZ": {
+      "n": 401,
+      "median": 1948.6838,
+      "p95": 1948.6863,
+      "min": 1948.6816,
+      "max": 1948.6879,
+      "first": 1948.6837,
+      "last": 1948.6853
+    }
+  },
+  "measurement_start_utc": "2026-11-14T14:29:30.802874+00:00",
+  "measurement_end_utc": "2026-11-14T14:30:10.814435+00:00",
+  "boundary_note": "完整40秒主结果"
+}

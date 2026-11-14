@@ -15,7 +15,7 @@ bool ADeliveryMotorbike::HasTrunkPassenger() const { return IsValid(TrunkPasseng
 bool ADeliveryMotorbike::CanUsePassengerTrunk(APawn* Interactor, bool)
 {
     const auto* User = Cast<ADeliveryCharacter>(Interactor);
-    if (!IsValid(User) || User->GetWorld() != GetWorld() || User->IsIncapacitated() ||
+    if (!AllowsPlayerUse() || !IsValid(User) || User->GetWorld() != GetWorld() || User->IsIncapacitated() ||
         Driver || IsTrunkBusy() || HasCargo() || !PassengerInteractable ||
         PassengerInteractable->GetInteractionDistance(User) > TrunkInteractRadius) return false;
     FCollisionQueryParams Params(SCENE_QUERY_STAT(TrunkPassengerUse), false, this);
@@ -107,7 +107,7 @@ void ADeliveryMotorbike::RefreshPassengerPresentation(float DeltaSeconds)
     if (!PassengerInteractable) return;
     PassengerInteractable->InteractAnchor = TrunkAnchor;
     PassengerInteractable->InteractRadius = TrunkInteractRadius;
-    PassengerInteractable->bInteractEnabled = !Driver && !HasCargo();
+    PassengerInteractable->bInteractEnabled = AllowsPlayerUse() && !Driver && !HasCargo();
     PassengerInteractable->PromptText = HasTrunkPassenger()
         ? NSLOCTEXT("Delivery", "UnloadPassenger", "E - Take Player Out")
         : NSLOCTEXT("Delivery", "LoadPassenger", "E - Put Dragged Player In");

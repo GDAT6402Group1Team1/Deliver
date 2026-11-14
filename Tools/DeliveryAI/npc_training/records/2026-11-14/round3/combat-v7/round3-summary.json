@@ -1,0 +1,371 @@
+{
+  "recorded_utc": "2026-11-14T12:43:25.749348+00:00",
+  "round": 3,
+  "authorization": "User explicitly requested another correction round after the two prior failures",
+  "status": "frozen_acceptance_passed_game_and_speech_coexistence_pending",
+  "data": {
+    "status": "data_ready_for_training",
+    "teacher_sha256": "158748299e8c2db25273da7e5876da0b73febc19a38f5c8e17e46040f3b86661",
+    "review_sha256": "e54fd38b00f772c398bad51d6e6e70f7a32d6f923d611c261430d11fe82162c5",
+    "situations_sha256": "2e964ac2348a92bc0b660a77ad5bcbace69c5efff61ea2d032473eb28ad091cc",
+    "train_sha256": "ed4c8774663f3b790f8196bb05637789a10b535ef6745b83f1aae2b7bf870675",
+    "validation_sha256": "42ab811f9953e2fd7244a27361d64a8f52f823239cffa74999fd0e2a1817b36b",
+    "train_rows": 224,
+    "train_groups": 187,
+    "legacy_validation_rows": 15,
+    "new_validation_rows": 16,
+    "validation_labels_changed": false,
+    "new_train_teacher_disagreements": 6,
+    "train_actions": {
+      "Fight": 70,
+      "Flee": 58,
+      "Wait": 96
+    },
+    "input_preprocessing_version": "self_combat_actual_facts_v2"
+  },
+  "new_authored_story_groups": 40,
+  "training_new_story_groups": 32,
+  "validation_new_story_groups": 8,
+  "new_rows_are_alternative_story_developments_not_live_gameplay": true,
+  "input_fix": {
+    "version": "self_combat_actual_facts_v2",
+    "production_prepare_sha256": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+    "reason": "UE summary falsely asserted punches and hits continuing even for Flee or after agreement; neutral raw wording and shared removal of duplicated runtime status preserve actual combat facts",
+    "rejected_v6_not_trained": true,
+    "same_preprocessing_for_production_training_evaluation": true,
+    "not_comparable_as_identical_prompts_to_previous_rounds": true,
+    "old15_before_fix_original": {
+      "cases": 15,
+      "correct": 14,
+      "protocol_valid": 15,
+      "target_valid": 15,
+      "accuracy": 0.9333333333333333,
+      "first_pass_ms_median": 151.42199999536388,
+      "first_pass_ms_p95": 183.5099999952945,
+      "exact_repeat_ms_p95": null,
+      "unwanted_fight": 0,
+      "acceptance_qualified": false,
+      "integration_checks_required": true
+    },
+    "old15_before_fix_misleading_suffix": {
+      "cases": 15,
+      "correct": 9,
+      "protocol_valid": 15,
+      "target_valid": 15,
+      "accuracy": 0.6,
+      "first_pass_ms_median": 160.70430000399938,
+      "first_pass_ms_p95": 468.39819999877363,
+      "exact_repeat_ms_p95": null,
+      "unwanted_fight": 1,
+      "acceptance_qualified": false,
+      "integration_checks_required": true
+    }
+  },
+  "fixed_training": {
+    "optimizer_steps": 56,
+    "gradient_accumulation": 4,
+    "training_rows": 224,
+    "epochs": 1,
+    "learning_rate": 2e-05,
+    "initial_adapter": "combat-v5/round2/adapter",
+    "candidate_count": 1,
+    "training_seconds": 178.28171389999625,
+    "total_seconds": 202.00950269999885,
+    "peak_gpu_allocated_bytes": 6054607872,
+    "peak_gpu_reserved_bytes": 12209618944,
+    "validation_token_loss_before": {
+      "assistant_token_loss": 0.03360398184466104,
+      "samples": 31,
+      "supervised_tokens": 352
+    },
+    "validation_token_loss_after": {
+      "assistant_token_loss": 0.024075921988501715,
+      "samples": 31,
+      "supervised_tokens": 352
+    },
+    "token_loss_is_not_action_accuracy": true
+  },
+  "model": {
+    "format": "Q8_0",
+    "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3\\combat-Q8_0.gguf",
+    "sha256": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3",
+    "bytes": 1834426080,
+    "adapter_sha256": "f177f2d78e93880a9582f68cf9ee5ae2df3c548adfd1f09ab87c410d21286953",
+    "cpu_export_only": true
+  },
+  "internal_validation": {
+    "legacy15_round2": {
+      "cases": 15,
+      "correct": 14,
+      "protocol_valid": 15,
+      "target_valid": 15,
+      "accuracy": 0.9333333333333333,
+      "first_pass_ms_median": 151.42199999536388,
+      "first_pass_ms_p95": 183.5099999952945,
+      "exact_repeat_ms_p95": null,
+      "unwanted_fight": 0,
+      "acceptance_qualified": false,
+      "integration_checks_required": true
+    },
+    "legacy15_round3": {
+      "cases": 15,
+      "correct": 14,
+      "protocol_valid": 15,
+      "target_valid": 15,
+      "accuracy": 0.9333333333333333,
+      "first_pass_ms_median": 132.95970000035595,
+      "first_pass_ms_p95": 426.67989999608835,
+      "exact_repeat_ms_p95": null,
+      "unwanted_fight": 0,
+      "acceptance_qualified": false,
+      "integration_checks_required": true
+    },
+    "new16_round2_fixed_labels": {
+      "cases": 16,
+      "correct": 11,
+      "protocol_valid": 16,
+      "target_valid": 16,
+      "accuracy": 0.6875,
+      "first_pass_ms_median": 156.25650000220048,
+      "first_pass_ms_p95": 215.85359999880893,
+      "exact_repeat_ms_p95": null,
+      "unwanted_fight": 2,
+      "acceptance_qualified": false,
+      "integration_checks_required": true
+    },
+    "new16_round3_fixed_labels": {
+      "cases": 16,
+      "correct": 12,
+      "protocol_valid": 16,
+      "target_valid": 16,
+      "accuracy": 0.75,
+      "first_pass_ms_median": 143.9017500015325,
+      "first_pass_ms_p95": 189.05980000272393,
+      "exact_repeat_ms_p95": null,
+      "unwanted_fight": 2,
+      "acceptance_qualified": false,
+      "integration_checks_required": true
+    },
+    "validation_labels_changed": false,
+    "teacher_disagreement": {
+      "id": "change-032-branch-2",
+      "fixed_label": "Fight",
+      "teacher": "Flee",
+      "student_round3": "Fight",
+      "scored_against_fixed_label": true
+    },
+    "new16_failures": [
+      {
+        "id": "change-040-branch-1",
+        "actual": "Flee",
+        "expected": [
+          "Fight"
+        ]
+      },
+      {
+        "id": "change-007-branch-1",
+        "actual": "Fight",
+        "expected": [
+          "Wait"
+        ]
+      },
+      {
+        "id": "change-023-branch-1",
+        "actual": "Flee",
+        "expected": [
+          "Fight"
+        ]
+      },
+      {
+        "id": "change-008-branch-1",
+        "actual": "Fight",
+        "expected": [
+          "Flee"
+        ]
+      }
+    ]
+  },
+  "final_acceptance": {
+    "summary": {
+      "cases": 40,
+      "correct": 40,
+      "protocol_valid": 40,
+      "target_valid": 40,
+      "accuracy": 1.0,
+      "first_pass_ms_median": 147.04119999805698,
+      "first_pass_ms_p95": 207.02159999927972,
+      "exact_repeat_ms_p95": null,
+      "unwanted_fight": 0,
+      "acceptance_qualified": true,
+      "integration_checks_required": true
+    },
+    "file": "Saved\\AIResearch\\NpcTraining\\combat-v7\\final-acceptance-q8-gpu99.json",
+    "sha256": "44c82daebfc78b5b3c918f835cf0d29525d0e574f9f4a1e8bae8aa7c149621b3",
+    "dataset_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+    "attempt_on_same_frozen40": 3,
+    "new_blind_test": false,
+    "labels_or_scoring_changed": false,
+    "single_candidate_single_final_evaluation_this_round": true,
+    "timeout_seconds": 1.5,
+    "sampling": {
+      "temperature": 0.0,
+      "top_p": 0.8,
+      "top_k": 20,
+      "min_p": 0,
+      "seed": 20261114
+    }
+  },
+  "operational_errors": [
+    {
+      "stage": "legacy15_evaluation",
+      "reason": "First command omitted --teacher; old situations have no labels, so all outputs were scored false",
+      "original_file": "Saved\\AIResearch\\NpcTraining\\combat-v7\\internal-legacy-q8-gpu99.json",
+      "corrected_file": "Saved\\AIResearch\\NpcTraining\\combat-v7\\internal-legacy-scored-q8-gpu99.json",
+      "rerun_outputs_identical": true,
+      "original_record_kept": true
+    }
+  ],
+  "limitations": [
+    "Third use of the same frozen40, not a new unseen test; general failure categories informed new independent stories",
+    "Extra16 remains12/16; one unresolved case attacks after own acknowledgement of misunderstanding",
+    "Independent inference speed without UE or TTS does not prove coexistence speed",
+    "Protocol-valid outputs do not replace cancellation/old-action/illegal-target integration checks",
+    "Production configuration not modified by this task"
+  ],
+  "gpu_service_handoff": {
+    "pid": 63548,
+    "running": true,
+    "port": 8771,
+    "gpu_layers": 99,
+    "context_tokens": 4096,
+    "output_tokens": 64,
+    "root_owns_next_action": true
+  },
+  "files": [
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\experiment-plan.json",
+      "sha256": "530041c33ce511a332a7b2ce541a973e1b3545046a02efe65b7fd2b16ba8bcb3",
+      "bytes": 6653
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\data-ready.json",
+      "sha256": "362a4ec37a7f9393fcd26e2d6af6abbee894cd4ec4324be6c94273c00a836448",
+      "bytes": 824
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\situations.json",
+      "sha256": "2e964ac2348a92bc0b660a77ad5bcbace69c5efff61ea2d032473eb28ad091cc",
+      "bytes": 2183415
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\train.jsonl",
+      "sha256": "ed4c8774663f3b790f8196bb05637789a10b535ef6745b83f1aae2b7bf870675",
+      "bytes": 812332
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\validation.jsonl",
+      "sha256": "42ab811f9953e2fd7244a27361d64a8f52f823239cffa74999fd0e2a1817b36b",
+      "bytes": 112761
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\validation-new.json",
+      "sha256": "1276c27dd3827f38fff741a4e282bb5a75ee19c5bbd952456ab9590e051951e2",
+      "bytes": 132782
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\validation-legacy.json",
+      "sha256": "99643e10075ac9f46015113addfef0c93ce2550256d5826c5a6ec79ea127b825",
+      "bytes": 113415
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\teacher.json",
+      "sha256": "158748299e8c2db25273da7e5876da0b73febc19a38f5c8e17e46040f3b86661",
+      "bytes": 144607
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\label-review.json",
+      "sha256": "e54fd38b00f772c398bad51d6e6e70f7a32d6f923d611c261430d11fe82162c5",
+      "bytes": 1920
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\format-conversions.json",
+      "sha256": "3c7b020bdd2580f6c6b0cbc4c3e3d3cec2a95f8a4b34109f9387912cbbf6bd65",
+      "bytes": 102592
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\precheck\\run.json",
+      "sha256": "615912b1299f41dd3045c8464590ff104f2ec3ba8f2cebd01f30773c2f05c4b8",
+      "bytes": 1919
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\round3\\run.json",
+      "sha256": "0892d9a11a91a430d0edffe46c2d88419dca7229a5ccfe1ca96b465b202216f2",
+      "bytes": 3364
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\round3\\loss.jsonl",
+      "sha256": "978a951c54d29f5b343d5b3fb3182d1f0be20676d77c7df16853f40536c53157",
+      "bytes": 9872
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3\\export.json",
+      "sha256": "2ae84d584b1cd2548fdbe0239a3ddbc5c0fe4d268fd9c92ae6f739348455f16d",
+      "bytes": 1116
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\internal-legacy-q8-gpu99.json",
+      "sha256": "c6af6057294ffcd9ac395d29e154615b2dba582033e7e65bda959bcccf5c83c6",
+      "bytes": 21092
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\internal-legacy-scored-q8-gpu99.json",
+      "sha256": "870205623beb0fd293e4e31acc480444ff6e023f869d2ca0f4aa28dfc03a9dd8",
+      "bytes": 21461
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\internal-new-q8-gpu99.json",
+      "sha256": "8ce68429daa354241d8ecaab325c7a4c15fddc9fcf6949cfe8a320deee78b2de",
+      "bytes": 24283
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\final-acceptance-q8-gpu99.json",
+      "sha256": "44c82daebfc78b5b3c918f835cf0d29525d0e574f9f4a1e8bae8aa7c149621b3",
+      "bytes": 53789
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v6\\experiment-plan.json",
+      "sha256": "d56a82f8f19389c96331d18097bca3ca76248a052dd6f6ca4cca5afa54cf44ec",
+      "bytes": 4310
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v6\\teacher.json",
+      "sha256": "35775191ef7a9adc2f7b588cf919d5351bcf61471ac5c24119bd9b84cbc6eb2a",
+      "bytes": 144156
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v6\\needs_review.json",
+      "sha256": "486a891cecca5a8b4261b97334e49c18d23c75dcdd27c74c0476ad44454c69fa",
+      "bytes": 4545
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\acceptance-reviewed.json",
+      "sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+      "bytes": 297370
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\round3-baseline\\round2-new-validation-fixed-input-draft-labels.json",
+      "sha256": "746d31c3880845fb22b1322777f7fd05ac6d1b3891fe1f233b60f82b3f3e816d",
+      "bytes": 24316
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\round3-baseline\\round2-old-validation-original-format.json",
+      "sha256": "f3a903fb730fd0d6713031ef372e1eaaa62554832f576216745d0471e631cdc2",
+      "bytes": 19823
+    },
+    {
+      "path": "Saved\\AIResearch\\NpcTraining\\round3-baseline\\round2-old-validation-game-format.json",
+      "sha256": "a2b1e3b4d7361124d05a9ef04a4d3b25ecfda5bf3817eddf5b261e65eb8cae50",
+      "bytes": 19894
+    }
+  ]
+}

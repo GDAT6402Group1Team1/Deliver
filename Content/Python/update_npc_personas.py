@@ -23,6 +23,24 @@ NEW_PERSONA_HASHES = {'chunlai': '2a9754476f9736e9abaaf0d94512bbeb2bd3ed262dffd0
 DISPLAY_NAMES = {'chunlai': ('大军', '大壮'), 'xiumei': ('小芳', '翠花')}
 
 
+def resident_profiles(source):
+    # 额外人物保留在背景资料中，居民更新只处理固定的两名街坊
+    if source.get('version') != 1 or not isinstance(source.get('characters'), list):
+        raise RuntimeError('人物 JSON 结构已变化')
+    profiles = {}
+    for row in source['characters']:
+        key = row.get('id') if isinstance(row, dict) else None
+        if not isinstance(key, str) or not key or key in profiles:
+            raise RuntimeError('人物 JSON 存在无效或重复编号')
+        profiles[key] = row
+    if not set(BLUEPRINTS).issubset(profiles):
+        raise RuntimeError('人物 JSON 缺少目标居民')
+    selected = {name: profiles[name] for name in BLUEPRINTS}
+    if any(selected[name]['blueprint'] != path for name, path in BLUEPRINTS.items()):
+        raise RuntimeError('人物 JSON 的蓝图路径已变化')
+    return selected
+
+
 def text_hash(value):
     return hashlib.sha256(value.encode('utf-8')).hexdigest() if isinstance(value, str) else ''
 
@@ -113,11 +131,7 @@ def main(verify_only=False):
 
     root = Path(unreal.Paths.project_dir()).resolve()
     source = json.loads((root/'Design/AI/NpcProfiles.json').read_text(encoding='utf-8'))
-    profiles = {row['id']: row for row in source['characters']}
-    if source.get('version') != 1 or len(source['characters']) != 2 or set(profiles) != set(BLUEPRINTS):
-        raise RuntimeError('人物 JSON 结构已变化')
-    if any(profiles[name]['blueprint'] != path for name, path in BLUEPRINTS.items()):
-        raise RuntimeError('人物 JSON 的蓝图路径已变化')
+    profiles = resident_profiles(source)
     table = unreal.load_asset(TABLE_PATH)
     row_struct = unreal.load_object(None, '/Script/Delivery.DeliveryNpcProfileRow')
     if not isinstance(table, unreal.DataTable) or table.get_editor_property('row_struct') != row_struct:

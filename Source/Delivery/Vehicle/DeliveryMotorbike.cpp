@@ -24,6 +24,7 @@
 #include "Character/DeliveryCharacter.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Inventory/DeliveryPackageItem.h"
+#include "Task/World/DeliveryItemComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
@@ -680,7 +681,7 @@ void ADeliveryMotorbike::ApplyDriverPresentation()
 	if (Interactable)
 	{
 		// 有人骑着的时候别人不该再看到"按 F 驾驶"
-		Interactable->bInteractEnabled = !bHasDriver;
+		Interactable->bInteractEnabled = AllowsPlayerUse() && !bHasDriver;
 	}
 	ApplyTrunkPresentation();
 	ApplyRiderMaterials();
@@ -766,19 +767,24 @@ void ADeliveryMotorbike::OnRep_Cargo()
 // 把当前快递固定到箱内挂点；装好之后整件藏起来
 void ADeliveryMotorbike::ApplyCargoPresentation()
 {
-	if (Cargo && CargoPivot)
+    RefreshCargoPresentation(GetCargo());
+    ApplyTrunkPresentation();
+}
+
+void ADeliveryMotorbike::RefreshCargoPresentation(ADeliveryPackageItem* Package)
+{
+	if (IsValid(Package) && Package->GetOwner() == this && CargoPivot)
 	{
-		Cargo->SetVehicleCargoPresentation(CargoPivot);
+		Package->SetVehicleCargoPresentation(CargoPivot);
 		/**
 		 * 箱子关着的时候把快递藏起来
 		 *
 		 * 它在一个关好的箱子里，看不见才是对的；而且快递比箱子内腔大时
 		 * 不藏就会穿出箱盖。装卸动画期间由 UpdateTrunkAnimation 临时显示。
 		 */
-		Cargo->SetActorHiddenInGame(TrunkPhase == EDeliveryTrunkPhase::Idle);
-		Cargo->SetActorRelativeLocation(FVector::ZeroVector);
+		Package->SetActorHiddenInGame(TrunkPhase == EDeliveryTrunkPhase::Idle);
+		Package->SetActorRelativeLocation(FVector::ZeroVector);
 	}
-	ApplyTrunkPresentation();
 }
 
 // 返回仍然有效的货架快递
@@ -792,10 +798,13 @@ ADeliveryPackageItem* ADeliveryMotorbike::GetCargo() const
 // 在服务器登记货物归属并固定到货架
 bool ADeliveryMotorbike::AttachCargo(ADeliveryPackageItem* Package)
 {
-	if (!HasAuthority() || HasCargo() || HasTrunkPassenger() || !IsValid(Package) || !CargoPivot)
+	if (!HasAuthority() || HasCargo() || HasTrunkPassenger() || !IsValid(Package) || !CargoPivot ||
+        Package->GetWorld() != GetWorld() || Package->GetOwner())
 	{
 		return false;
 	}
+	const auto* Item = Package->GetDeliveryItemComponent();
+    if (Item && Item->IsTransferInProgress() && !Item->CanBeAcquiredBy(this)) return false;
 
 	Cargo = Package;
 	// 将快递归属设为车辆，防止被当作无人持有的地面物品
@@ -911,7 +920,7 @@ bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredY
 	// 不清的话那一帧会算出一段巨大的"路径"，把沿途的路人全部撞飞
 	bHasPedestrianSweepLocation = false;
 	UWorld* World = GetWorld();
-	if (!HasAuthority() || !World || Driver || HasTrunkPassenger() || (ResidentHold && ResidentHold->IsHeld()))
+	if (!AllowsPlayerUse() || !HasAuthority() || !World || Driver || HasTrunkPassenger() || (ResidentHold && ResidentHold->IsHeld()))
 	{
 		return false;
 	}
@@ -1842,15 +1851,19 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 	const bool bSimulate = HasAuthority() || (Driver && IsLocallyControlled());
 	if (bSimulate)
 	{
-		if (Driver)
+		if (Driver || HasAutonomousDriver())
 		{
 			// 先换算镜头方向输入，再更新速度和转向
 			// 服务器使用客户端发送的换算结果
 			
 			
-			if (IsLocallyControlled())
+			if (Driver && IsLocallyControlled())
 			{
 				ApplyCameraRelativeInput();
+			}
+			else if (HasAuthority() && HasAutonomousDriver())
+			{
+				UpdateAutonomousDriveInput(DeltaSeconds, ThrottleInput, SteerInput);
 			}
 			UpdateSpeed(DeltaSeconds);
 			UpdateSteering(DeltaSeconds);
@@ -1878,7 +1891,7 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
     // 远端车辆使用复制的速度，本机和服务器使用当前速度
     const float AudioSpeed = !HasAuthority() && !IsLocallyControlled()
         ? ReplicatedRiderMotion.Speed * MaxSpeed : CurrentSpeed;
-    VehicleAudio->UpdateEngine(Driver != nullptr, AudioSpeed / FMath::Max(MaxSpeed, 1.0f));
+    VehicleAudio->UpdateEngine(Driver != nullptr || HasAutonomousDriver(), AudioSpeed / FMath::Max(MaxSpeed, 1.0f));
 
 	if (Driver && IsLocallyControlled())
 	{
@@ -1923,6 +1936,16 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 }
 
 // 加速与制动
+
+void ADeliveryMotorbike::StopAutonomousMotion()
+{
+	if (!HasAuthority()) return;
+	ThrottleInput = SteerInput = CurrentSpeed = 0.f;
+	MoveInputRaw = FVector2D::ZeroVector;
+	TurnAroundSign = 0.f;
+	bBrakingForTurn = false;
+	ResetRiderMotion();
+}
 
 // 根据油门、刹车和阻力更新车速
 void ADeliveryMotorbike::UpdateSpeed(float DeltaSeconds)

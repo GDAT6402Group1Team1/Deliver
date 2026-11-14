@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "model": "Qwen3-1.7B-Q4_K_M",
+  "model_repository": "ggml-org/Qwen3-1.7B-GGUF",
+  "model_revision": "daeb8e2d528a760970442092f6bf1e55c3b659eb",
+  "original_repository": "Qwen/Qwen3-1.7B",
+  "original_revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+  "model_license": "Apache-2.0",
+  "runtime_license": "MIT",
+  "runtime_release": "b10000",
+  "runtime_commit": "47a39665e7081dc482feec169961acc09750a5c4",
+  "cuda_version": "13.3",
+  "download_limit_bytes": 2000000000,
+  "context_tokens": 4096,
+  "output_tokens": 256,
+  "parallel_slots": 1,
+  "host": "127.0.0.1",
+  "port": 8771,
+  "files": [
+    {
+      "path": "models/Qwen3-1.7B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF/resolve/daeb8e2d528a760970442092f6bf1e55c3b659eb/Qwen3-1.7B-Q4_K_M.gguf",
+      "bytes": 1282439264,
+      "sha256": "d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5"
+    },
+    {
+      "path": "downloads/llama-b10000-bin-win-cuda-13.3-x64.zip",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10000/llama-b10000-bin-win-cuda-13.3-x64.zip",
+      "bytes": 145609300,
+      "sha256": "52612eb890cac41d4bdf35e56b82a45467af74986aff9a5b118f0c63b921ce59",
+      "extract": "runtime"
+    },
+    {
+      "path": "downloads/cudart-llama-bin-win-cuda-13.3-x64.zip",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10000/cudart-llama-bin-win-cuda-13.3-x64.zip",
+      "bytes": 390970417,
+      "sha256": "1462a050eb4c684921ba51dcc4cc488a036674c3e73e9945ee705b854808d03e",
+      "extract": "runtime"
+    },
+    {
+      "path": "sources/llama-LICENSE",
+      "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/47a39665e7081dc482feec169961acc09750a5c4/LICENSE",
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "path": "sources/llama-server-README.md",
+      "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/47a39665e7081dc482feec169961acc09750a5c4/tools/server/README.md",
+      "bytes": 97459,
+      "sha256": "99bf33a25c9693acacc76b98792a8c6c89df91a8f529162ed702ce7975097ff2"
+    },
+    {
+      "path": "sources/qwen-LICENSE",
+      "url": "https://huggingface.co/Qwen/Qwen3-1.7B/resolve/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e/LICENSE",
+      "bytes": 11343,
+      "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e"
+    },
+    {
+      "path": "sources/qwen-README.md",
+      "url": "https://huggingface.co/Qwen/Qwen3-1.7B/resolve/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e/README.md",
+      "bytes": 13963,
+      "sha256": "257e52c419dac2258852643f18af6c974f21f8c6c1b6f371b6cca6201cf29091"
+    },
+    {
+      "path": "sources/qwen-config.json",
+      "url": "https://huggingface.co/Qwen/Qwen3-1.7B/resolve/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e/config.json",
+      "bytes": 726,
+      "sha256": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197"
+    }
+  ]
+}

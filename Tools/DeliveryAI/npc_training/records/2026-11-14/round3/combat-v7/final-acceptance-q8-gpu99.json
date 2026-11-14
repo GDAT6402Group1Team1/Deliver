@@ -1,0 +1,1591 @@
+{
+  "source": "Saved\\AIResearch\\NpcTraining\\acceptance-reviewed.json",
+  "source_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+  "input_preparation_sha256": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+  "split": "acceptance_only",
+  "samples": 40,
+  "timeout_seconds": 1.5,
+  "results": [
+    {
+      "id": "independent-38",
+      "group_id": "independent-38",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "1dca32522c15162d16c7757aea0747be19c31379775d7072e10c80ac6e28e9d5",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 517,
+        "prompt_n": 166,
+        "prompt_ms": 220.422,
+        "prompt_per_token_ms": 1.3278433734939759,
+        "prompt_per_second": 753.1008701490777,
+        "predicted_n": 10,
+        "predicted_ms": 59.557,
+        "predicted_per_token_ms": 5.9557,
+        "predicted_per_second": 167.90637540507413
+      },
+      "complete_ms": 348.4634000051301,
+      "timing": {
+        "combat_prompt_ready": 44.2343000031542,
+        "combat_model_done": 348.3081000013044
+      }
+    },
+    {
+      "id": "independent-12",
+      "group_id": "independent-12",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "d9922a28440fe19b17b080ab288599f4e52d25049f54e9fe9a94fe4f6e1024fd",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 566,
+        "prompt_n": 151,
+        "prompt_ms": 29.84,
+        "prompt_per_token_ms": 0.1976158940397351,
+        "prompt_per_second": 5060.321715817694,
+        "predicted_n": 12,
+        "predicted_ms": 73.003,
+        "predicted_per_token_ms": 6.083583333333333,
+        "predicted_per_second": 164.37680643261237
+      },
+      "complete_ms": 155.43999999499647,
+      "timing": {
+        "combat_prompt_ready": 22.161900000355672,
+        "combat_model_done": 155.29989999777172
+      }
+    },
+    {
+      "id": "independent-37",
+      "group_id": "independent-37",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "ec1f5ddd7c914436f4aa978292e15c37e3fdc6b0bc7d14e3f396f36319187923",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 520,
+        "prompt_n": 194,
+        "prompt_ms": 28.994,
+        "prompt_per_token_ms": 0.14945360824742268,
+        "prompt_per_second": 6691.039525419052,
+        "predicted_n": 12,
+        "predicted_ms": 72.238,
+        "predicted_per_token_ms": 6.019833333333334,
+        "predicted_per_second": 166.11755585702815
+      },
+      "complete_ms": 158.60760000214214,
+      "timing": {
+        "combat_prompt_ready": 23.49099999992177,
+        "combat_model_done": 158.4413000018685
+      }
+    },
+    {
+      "id": "independent-25",
+      "group_id": "independent-25",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "2b09e87d51861f4dd9c20b58c523ae6637289613d4fc18b3f1bb87e5e8370005",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 542,
+        "prompt_n": 176,
+        "prompt_ms": 31.725,
+        "prompt_per_token_ms": 0.18025568181818183,
+        "prompt_per_second": 5547.675334909377,
+        "predicted_n": 12,
+        "predicted_ms": 61.737,
+        "predicted_per_token_ms": 5.14475,
+        "predicted_per_second": 194.37290441712423
+      },
+      "complete_ms": 125.11800000356743,
+      "timing": {
+        "combat_prompt_ready": 23.506099998485297,
+        "combat_model_done": 124.97520000033546
+      }
+    },
+    {
+      "id": "independent-27",
+      "group_id": "independent-27",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "f26fabfd4eb149732b4a505149b8923824c32525f5667919ea8f3345131769e8",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 542,
+        "prompt_n": 174,
+        "prompt_ms": 33.306,
+        "prompt_per_token_ms": 0.19141379310344825,
+        "prompt_per_second": 5224.283912808503,
+        "predicted_n": 12,
+        "predicted_ms": 64.482,
+        "predicted_per_token_ms": 5.3735,
+        "predicted_per_second": 186.09844607797527
+      },
+      "complete_ms": 113.83090000163065,
+      "timing": {
+        "combat_prompt_ready": 7.791199997882359,
+        "combat_model_done": 113.66289999568835
+      }
+    },
+    {
+      "id": "independent-07",
+      "group_id": "independent-07",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "d29c6786e016a837740f81de622dabecaf736958e0e7999dcbb94c7a9245defc",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 569,
+        "prompt_n": 152,
+        "prompt_ms": 29.997,
+        "prompt_per_token_ms": 0.19734868421052632,
+        "prompt_per_second": 5067.173384005067,
+        "predicted_n": 10,
+        "predicted_ms": 51.108,
+        "predicted_per_token_ms": 5.110799999999999,
+        "predicted_per_second": 195.66408390075918
+      },
+      "complete_ms": 161.5111999999499,
+      "timing": {
+        "combat_prompt_ready": 47.374800000397954,
+        "combat_model_done": 161.34150000289083
+      }
+    },
+    {
+      "id": "independent-15",
+      "group_id": "independent-15",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "b90e0e10b0fd1f8969c7960eb59bfd7b6a6cdd6ddf6b0622021cc70f2d115cc2",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 584,
+        "prompt_n": 127,
+        "prompt_ms": 19.419,
+        "prompt_per_token_ms": 0.15290551181102363,
+        "prompt_per_second": 6539.986611051032,
+        "predicted_n": 12,
+        "predicted_ms": 64.263,
+        "predicted_per_token_ms": 5.355250000000001,
+        "predicted_per_second": 186.7326455347556
+      },
+      "complete_ms": 99.18309999920893,
+      "timing": {
+        "combat_prompt_ready": 7.495700003346428,
+        "combat_model_done": 99.02900000452064
+      }
+    },
+    {
+      "id": "independent-19",
+      "group_id": "independent-19",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "c275ec0bd12700c8243a28c92a30c3a2e7e989b4050a402678b79781727e40fd",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 569,
+        "prompt_n": 127,
+        "prompt_ms": 17.423,
+        "prompt_per_token_ms": 0.13718897637795274,
+        "prompt_per_second": 7289.215404924526,
+        "predicted_n": 10,
+        "predicted_ms": 52.591,
+        "predicted_per_token_ms": 5.2591,
+        "predicted_per_second": 190.14660303093683
+      },
+      "complete_ms": 113.76010000094539,
+      "timing": {
+        "combat_prompt_ready": 35.3458999961731,
+        "combat_model_done": 113.57470000075409
+      }
+    },
+    {
+      "id": "independent-06",
+      "group_id": "independent-06",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "45581cc014f670432b3f649738b2b77017dd7536e4f5a1d58b5ff6e0f9522320",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 539,
+        "prompt_n": 172,
+        "prompt_ms": 28.725,
+        "prompt_per_token_ms": 0.16700581395348837,
+        "prompt_per_second": 5987.815491731941,
+        "predicted_n": 12,
+        "predicted_ms": 61.075,
+        "predicted_per_token_ms": 5.089583333333334,
+        "predicted_per_second": 196.47973802701597
+      },
+      "complete_ms": 159.40289999707602,
+      "timing": {
+        "combat_prompt_ready": 36.41349999816157,
+        "combat_model_done": 159.225499999593
+      }
+    },
+    {
+      "id": "independent-04",
+      "group_id": "independent-04",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "5eefc2586d12e2f5499ee0d727826cd81a533998def19faf2dd3718ab67e620c",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 567,
+        "prompt_n": 121,
+        "prompt_ms": 18.095,
+        "prompt_per_token_ms": 0.14954545454545454,
+        "prompt_per_second": 6686.930091185411,
+        "predicted_n": 13,
+        "predicted_ms": 65.402,
+        "predicted_per_token_ms": 5.030923076923077,
+        "predicted_per_second": 198.7706797957249
+      },
+      "complete_ms": 127.6302999976906,
+      "timing": {
+        "combat_prompt_ready": 36.86739999830024,
+        "combat_model_done": 127.50159999995958
+      }
+    },
+    {
+      "id": "independent-10",
+      "group_id": "independent-10",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "2c77ac8a97cb7c13e5d5a6e0a5dae2408356c69841265a927498e11913cde394",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait",
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 582,
+        "prompt_n": 107,
+        "prompt_ms": 17.526,
+        "prompt_per_token_ms": 0.16379439252336447,
+        "prompt_per_second": 6105.215108980943,
+        "predicted_n": 10,
+        "predicted_ms": 51.417,
+        "predicted_per_token_ms": 5.1417,
+        "predicted_per_second": 194.48820429040978
+      },
+      "complete_ms": 123.2774000018253,
+      "timing": {
+        "combat_prompt_ready": 33.17280000192113,
+        "combat_model_done": 123.09310000273399
+      }
+    },
+    {
+      "id": "independent-22",
+      "group_id": "independent-22",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "26b7ba8593b4e6ad522a0c6ad4d8b342d5d60321ae8b7fa6011d80385ae4bede",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight",
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 539,
+        "prompt_n": 178,
+        "prompt_ms": 29.821,
+        "prompt_per_token_ms": 0.16753370786516855,
+        "prompt_per_second": 5968.94805673854,
+        "predicted_n": 12,
+        "predicted_ms": 62.26,
+        "predicted_per_token_ms": 5.1883333333333335,
+        "predicted_per_second": 192.74012206874397
+      },
+      "complete_ms": 130.61480000033043,
+      "timing": {
+        "combat_prompt_ready": 15.141099996981211,
+        "combat_model_done": 130.47240000014426
+      }
+    },
+    {
+      "id": "independent-11",
+      "group_id": "independent-11",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "126a7ba101262a58ab1f56300bec95d1d5c86dfe6dfb9d064b62142d0f564ade",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 569,
+        "prompt_n": 146,
+        "prompt_ms": 28.722,
+        "prompt_per_token_ms": 0.19672602739726028,
+        "prompt_per_second": 5083.211475523988,
+        "predicted_n": 10,
+        "predicted_ms": 49.981,
+        "predicted_per_token_ms": 4.9981,
+        "predicted_per_second": 200.07602889097856
+      },
+      "complete_ms": 162.92719999910332,
+      "timing": {
+        "combat_prompt_ready": 27.870900004927535,
+        "combat_model_done": 162.73410000576405
+      }
+    },
+    {
+      "id": "independent-03",
+      "group_id": "independent-03",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "80b3062585b9b17efd0b1f6275a5a1733ee7cefef358efad3651bb894fa2871e",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 584,
+        "prompt_n": 111,
+        "prompt_ms": 17.779,
+        "prompt_per_token_ms": 0.16017117117117116,
+        "prompt_per_second": 6243.320771696946,
+        "predicted_n": 10,
+        "predicted_ms": 52.053,
+        "predicted_per_token_ms": 5.205299999999999,
+        "predicted_per_second": 192.11188596238452
+      },
+      "complete_ms": 118.2727999985218,
+      "timing": {
+        "combat_prompt_ready": 25.73860000120476,
+        "combat_model_done": 118.12089999875752
+      }
+    },
+    {
+      "id": "independent-39",
+      "group_id": "independent-39",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "6b6c521ddee9964d3a2b6b8155532a2eab8a49ef6f34b86a6254066022de4fd7",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 542,
+        "prompt_n": 166,
+        "prompt_ms": 29.797,
+        "prompt_per_token_ms": 0.1795,
+        "prompt_per_second": 5571.030640668523,
+        "predicted_n": 13,
+        "predicted_ms": 66.758,
+        "predicted_per_token_ms": 5.135230769230769,
+        "predicted_per_second": 194.73321549477217
+      },
+      "complete_ms": 142.63199999550125,
+      "timing": {
+        "combat_prompt_ready": 22.296399998595007,
+        "combat_model_done": 142.43590000114636
+      }
+    },
+    {
+      "id": "independent-17",
+      "group_id": "independent-17",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "6c5cfc5754115303f482a14525734c5ddec76dbb8615890260e48dcb0d8c0320",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 570,
+        "prompt_n": 143,
+        "prompt_ms": 28.177,
+        "prompt_per_token_ms": 0.19704195804195804,
+        "prompt_per_second": 5075.061220144089,
+        "predicted_n": 13,
+        "predicted_ms": 68.376,
+        "predicted_per_token_ms": 5.259692307692308,
+        "predicted_per_second": 190.1251901251901
+      },
+      "complete_ms": 149.0237999969395,
+      "timing": {
+        "combat_prompt_ready": 25.183899997500703,
+        "combat_model_done": 148.8277000025846
+      }
+    },
+    {
+      "id": "independent-34",
+      "group_id": "independent-34",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "cf7995ae3344204c32a3da022ee0fb10ad59d6d0b25cd57389dacd022c2bf753",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 566,
+        "prompt_n": 96,
+        "prompt_ms": 15.531,
+        "prompt_per_token_ms": 0.16178125000000002,
+        "prompt_per_second": 6181.18601506664,
+        "predicted_n": 10,
+        "predicted_ms": 51.49,
+        "predicted_per_token_ms": 5.149,
+        "predicted_per_second": 194.21246844047388
+      },
+      "complete_ms": 164.50270000495948,
+      "timing": {
+        "combat_prompt_ready": 47.988800004532095,
+        "combat_model_done": 164.3171000032453
+      }
+    },
+    {
+      "id": "independent-35",
+      "group_id": "independent-35",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "2dfd9f15d3299fa5d832a6386793896abc02533d2d25f12aa3c712e7242c2a22",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 542,
+        "prompt_n": 180,
+        "prompt_ms": 31.078,
+        "prompt_per_token_ms": 0.17265555555555556,
+        "prompt_per_second": 5791.878499259928,
+        "predicted_n": 13,
+        "predicted_ms": 68.084,
+        "predicted_per_token_ms": 5.237230769230769,
+        "predicted_per_second": 190.94060278479526
+      },
+      "complete_ms": 161.13729999779025,
+      "timing": {
+        "combat_prompt_ready": 25.829099999100436,
+        "combat_model_done": 160.93980000005104
+      }
+    },
+    {
+      "id": "independent-23",
+      "group_id": "independent-23",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "37023e0cf7aef7166f97143f93e49240c3eb320d0c9c60e8a8cf8e05c3ed51c6",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait",
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 542,
+        "prompt_n": 138,
+        "prompt_ms": 28.428,
+        "prompt_per_token_ms": 0.20600000000000002,
+        "prompt_per_second": 4854.368932038835,
+        "predicted_n": 13,
+        "predicted_ms": 68.573,
+        "predicted_per_token_ms": 5.274846153846154,
+        "predicted_per_second": 189.57898881483968
+      },
+      "complete_ms": 161.9857999976375,
+      "timing": {
+        "combat_prompt_ready": 43.51949999545468,
+        "combat_model_done": 161.84110000176588
+      }
+    },
+    {
+      "id": "independent-13",
+      "group_id": "independent-13",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "9acf15bd1730c7337f0924c248e8c854f7d8ea1d4510fea584f1b05a4b4f883d",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 570,
+        "prompt_n": 117,
+        "prompt_ms": 17.737,
+        "prompt_per_token_ms": 0.15159829059829058,
+        "prompt_per_second": 6596.380447651802,
+        "predicted_n": 13,
+        "predicted_ms": 108.73,
+        "predicted_per_token_ms": 8.363846153846154,
+        "predicted_per_second": 119.56221833900486
+      },
+      "complete_ms": 176.05729999922914,
+      "timing": {
+        "combat_prompt_ready": 26.680899994971696,
+        "combat_model_done": 175.7683999967412
+      }
+    },
+    {
+      "id": "independent-18",
+      "group_id": "independent-18",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "031ae224689286cc299d172a5a725be4f431a6fd715c5c86c6d2dc69e74d83bd",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait",
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 539,
+        "prompt_n": 167,
+        "prompt_ms": 30.903,
+        "prompt_per_token_ms": 0.18504790419161676,
+        "prompt_per_second": 5404.006083551759,
+        "predicted_n": 13,
+        "predicted_ms": 69.547,
+        "predicted_per_token_ms": 5.349769230769231,
+        "predicted_per_second": 186.92395070959208
+      },
+      "complete_ms": 180.4212999995798,
+      "timing": {
+        "combat_prompt_ready": 28.95429999625776,
+        "combat_model_done": 180.23990000074264
+      }
+    },
+    {
+      "id": "independent-21",
+      "group_id": "independent-21",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "40a897a9eda67196b1174c77c1083ef14425ab0628faf612d852b9709a6d660f",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 542,
+        "prompt_n": 143,
+        "prompt_ms": 29.932,
+        "prompt_per_token_ms": 0.2093146853146853,
+        "prompt_per_second": 4777.4956568221305,
+        "predicted_n": 10,
+        "predicted_ms": 50.871,
+        "predicted_per_token_ms": 5.0871,
+        "predicted_per_second": 196.57565213972595
+      },
+      "complete_ms": 161.78750000108266,
+      "timing": {
+        "combat_prompt_ready": 31.795100003364496,
+        "combat_model_done": 161.61770000326214
+      }
+    },
+    {
+      "id": "independent-20",
+      "group_id": "independent-20",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "787e525a6b3ceed707fe495c63a6b19a19787d845a64b8811181c95496e54ee2",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 539,
+        "prompt_n": 176,
+        "prompt_ms": 31.443,
+        "prompt_per_token_ms": 0.1786534090909091,
+        "prompt_per_second": 5597.430270648475,
+        "predicted_n": 13,
+        "predicted_ms": 77.699,
+        "predicted_per_token_ms": 5.976846153846154,
+        "predicted_per_second": 167.31232062188704
+      },
+      "complete_ms": 207.02159999927972,
+      "timing": {
+        "combat_prompt_ready": 41.53480000240961,
+        "combat_model_done": 206.87529999850085
+      }
+    },
+    {
+      "id": "independent-30",
+      "group_id": "independent-30",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "6bd169a050f3b0b010cc629eabaeaf14bcf372756535bfe96d2a9ce0b74524bb",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 566,
+        "prompt_n": 114,
+        "prompt_ms": 18.656,
+        "prompt_per_token_ms": 0.16364912280701754,
+        "prompt_per_second": 6110.634648370498,
+        "predicted_n": 10,
+        "predicted_ms": 53.604,
+        "predicted_per_token_ms": 5.3604,
+        "predicted_per_second": 186.5532422953511
+      },
+      "complete_ms": 122.9377999989083,
+      "timing": {
+        "combat_prompt_ready": 29.51559999928577,
+        "combat_model_done": 122.75919999956386
+      }
+    },
+    {
+      "id": "independent-01",
+      "group_id": "independent-01",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "22d1c36bb9f638308c9863ef4b9d697376257a974f91237f31664d9fd03c23bb",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 569,
+        "prompt_n": 148,
+        "prompt_ms": 29.055,
+        "prompt_per_token_ms": 0.19631756756756757,
+        "prompt_per_second": 5093.787644123215,
+        "predicted_n": 12,
+        "predicted_ms": 62.41,
+        "predicted_per_token_ms": 5.200833333333333,
+        "predicted_per_second": 192.2768787053357
+      },
+      "complete_ms": 180.30670000007376,
+      "timing": {
+        "combat_prompt_ready": 36.74969999701716,
+        "combat_model_done": 180.12420000013663
+      }
+    },
+    {
+      "id": "independent-40",
+      "group_id": "independent-40",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "73092642eb57793d8ddb25cf8943fad3ab4a2fe0edbd8633a8ff03f3aeed4fb6",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 566,
+        "prompt_n": 150,
+        "prompt_ms": 29.723,
+        "prompt_per_token_ms": 0.19815333333333332,
+        "prompt_per_second": 5046.59691148269,
+        "predicted_n": 10,
+        "predicted_ms": 53.944,
+        "predicted_per_token_ms": 5.3944,
+        "predicted_per_second": 185.3774284443126
+      },
+      "complete_ms": 164.15359999518842,
+      "timing": {
+        "combat_prompt_ready": 32.6342000043951,
+        "combat_model_done": 163.98170000320533
+      }
+    },
+    {
+      "id": "independent-24",
+      "group_id": "independent-24",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "16400e23f8bf61b4352e5c0fec45ce4f466468a5aef583e5f9c7a398d440a718",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait",
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 566,
+        "prompt_n": 116,
+        "prompt_ms": 18.257,
+        "prompt_per_token_ms": 0.15738793103448276,
+        "prompt_per_second": 6353.727337459603,
+        "predicted_n": 10,
+        "predicted_ms": 57.004,
+        "predicted_per_token_ms": 5.7004,
+        "predicted_per_second": 175.42628587467547
+      },
+      "complete_ms": 115.0061000007554,
+      "timing": {
+        "combat_prompt_ready": 8.831999999529216,
+        "combat_model_done": 114.78850000275997
+      }
+    },
+    {
+      "id": "independent-14",
+      "group_id": "independent-14",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "7a4084e388991b8d36911b080e6036ae7a405cd931e1dc01f008fdcbf3d23716",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 582,
+        "prompt_n": 128,
+        "prompt_ms": 19.313,
+        "prompt_per_token_ms": 0.1508828125,
+        "prompt_per_second": 6627.6601253042,
+        "predicted_n": 10,
+        "predicted_ms": 54.279,
+        "predicted_per_token_ms": 5.4279,
+        "predicted_per_second": 184.23331306766886
+      },
+      "complete_ms": 117.34509999951115,
+      "timing": {
+        "combat_prompt_ready": 34.481899994716514,
+        "combat_model_done": 117.1496999959345
+      }
+    },
+    {
+      "id": "independent-08",
+      "group_id": "independent-08",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "592f93245b9fa61b17e45873c892cdbefe842c58c7ec9b9247a35ea0cad9b9c3",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 582,
+        "prompt_n": 129,
+        "prompt_ms": 26.785,
+        "prompt_per_token_ms": 0.20763565891472868,
+        "prompt_per_second": 4816.128430091469,
+        "predicted_n": 12,
+        "predicted_ms": 61.748,
+        "predicted_per_token_ms": 5.145666666666666,
+        "predicted_per_second": 194.3382781628555
+      },
+      "complete_ms": 135.28669999504928,
+      "timing": {
+        "combat_prompt_ready": 37.08240000560181,
+        "combat_model_done": 135.08269999874756
+      }
+    },
+    {
+      "id": "independent-28",
+      "group_id": "independent-28",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "bcfe5f934c59329636848efa3a8beae0b4deab1e40ace517fc93a7ad0fc7a91f",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 582,
+        "prompt_n": 134,
+        "prompt_ms": 27.954,
+        "prompt_per_token_ms": 0.20861194029850746,
+        "prompt_per_second": 4793.589468412392,
+        "predicted_n": 13,
+        "predicted_ms": 67.837,
+        "predicted_per_token_ms": 5.21823076923077,
+        "predicted_per_second": 191.6358329525185
+      },
+      "complete_ms": 144.13690000219503,
+      "timing": {
+        "combat_prompt_ready": 36.975100003473926,
+        "combat_model_done": 143.96269999997457
+      }
+    },
+    {
+      "id": "independent-26",
+      "group_id": "independent-26",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "d18ad7f814336ea424df162f134718b1451caf718996dd445a6b78f9385428e1",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 566,
+        "prompt_n": 117,
+        "prompt_ms": 17.878,
+        "prompt_per_token_ms": 0.1528034188034188,
+        "prompt_per_second": 6544.356191967781,
+        "predicted_n": 10,
+        "predicted_ms": 51.935,
+        "predicted_per_token_ms": 5.1935,
+        "predicted_per_second": 192.54837777991722
+      },
+      "complete_ms": 138.72650000121212,
+      "timing": {
+        "combat_prompt_ready": 58.54849999741418,
+        "combat_model_done": 138.52329999645008
+      }
+    },
+    {
+      "id": "independent-29",
+      "group_id": "independent-29",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "1290172c124c74f3301a609d8586e3a65c0ceeca489a8c76a0ee52aed3b52734",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait",
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 542,
+        "prompt_n": 151,
+        "prompt_ms": 30.505,
+        "prompt_per_token_ms": 0.20201986754966886,
+        "prompt_per_second": 4950.008195377806,
+        "predicted_n": 10,
+        "predicted_ms": 53.797,
+        "predicted_per_token_ms": 5.3797,
+        "predicted_per_second": 185.88397122516128
+      },
+      "complete_ms": 154.5890999987023,
+      "timing": {
+        "combat_prompt_ready": 32.68319999915548,
+        "combat_model_done": 154.39680000417866
+      }
+    },
+    {
+      "id": "independent-02",
+      "group_id": "independent-02",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "4fb077a34cc56feb8d76ab81b1a42cf0a068243d1c9b9f9de1327c0d4d66f8de",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 581,
+        "prompt_n": 109,
+        "prompt_ms": 17.174,
+        "prompt_per_token_ms": 0.15755963302752293,
+        "prompt_per_second": 6346.803307325026,
+        "predicted_n": 13,
+        "predicted_ms": 67.758,
+        "predicted_per_token_ms": 5.2121538461538455,
+        "predicted_per_second": 191.85926385076303
+      },
+      "complete_ms": 145.05859999917448,
+      "timing": {
+        "combat_prompt_ready": 10.29980000021169,
+        "combat_model_done": 144.88330000313
+      }
+    },
+    {
+      "id": "independent-32",
+      "group_id": "independent-32",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "3d220687bf7bbb69ad606332dda40788abecaf0156032fc8c34fd7bd7449f11e",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 581,
+        "prompt_n": 104,
+        "prompt_ms": 17.104,
+        "prompt_per_token_ms": 0.16446153846153846,
+        "prompt_per_second": 6080.449017773621,
+        "predicted_n": 12,
+        "predicted_ms": 63.71,
+        "predicted_per_token_ms": 5.309166666666667,
+        "predicted_per_second": 188.35347669125724
+      },
+      "complete_ms": 134.74099999439204,
+      "timing": {
+        "combat_prompt_ready": 29.01430000201799,
+        "combat_model_done": 134.53790000494337
+      }
+    },
+    {
+      "id": "independent-09",
+      "group_id": "independent-09",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "1ed262cb0eb4403858a81ad0ffc89da28e692676b0df4cb6c5b2b53aad677cd2",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 542,
+        "prompt_n": 177,
+        "prompt_ms": 31.503,
+        "prompt_per_token_ms": 0.17798305084745764,
+        "prompt_per_second": 5618.512522616894,
+        "predicted_n": 13,
+        "predicted_ms": 79.005,
+        "predicted_per_token_ms": 6.077307692307692,
+        "predicted_per_second": 164.54654768685526
+      },
+      "complete_ms": 208.27830000052927,
+      "timing": {
+        "combat_prompt_ready": 48.09650000242982,
+        "combat_model_done": 208.05319999635685
+      }
+    },
+    {
+      "id": "independent-33",
+      "group_id": "independent-33",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "2c769eba9b4be3be415337bcadbcdac4e2c69dd710559b4c02aa50813f13939f",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Flee",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 542,
+        "prompt_n": 147,
+        "prompt_ms": 32.67,
+        "prompt_per_token_ms": 0.22224489795918367,
+        "prompt_per_second": 4499.540863177227,
+        "predicted_n": 13,
+        "predicted_ms": 67.633,
+        "predicted_per_token_ms": 5.202538461538461,
+        "predicted_per_second": 192.21386009788122
+      },
+      "complete_ms": 156.75650000048336,
+      "timing": {
+        "combat_prompt_ready": 47.34910000115633,
+        "combat_model_done": 156.5887999968254
+      }
+    },
+    {
+      "id": "independent-31",
+      "group_id": "independent-31",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "21f8fbb8d468300d5b66cc1a0df24250898f27ae7d66a1c0d556032ae96f70ba",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Fight",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "model_usage": {
+        "cache_n": 542,
+        "prompt_n": 148,
+        "prompt_ms": 29.49,
+        "prompt_per_token_ms": 0.19925675675675675,
+        "prompt_per_second": 5018.6503899627,
+        "predicted_n": 12,
+        "predicted_ms": 60.62,
+        "predicted_per_token_ms": 5.051666666666667,
+        "predicted_per_second": 197.9544704717915
+      },
+      "complete_ms": 118.23410000215517,
+      "timing": {
+        "combat_prompt_ready": 19.20619999873452,
+        "combat_model_done": 118.0330999995931
+      }
+    },
+    {
+      "id": "independent-36",
+      "group_id": "independent-36",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "4fb36b48687cdc3cb81377b95a7f04a4ac3facb5a7efe6c676044a9eaed2f758",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 539,
+        "prompt_n": 151,
+        "prompt_ms": 29.037,
+        "prompt_per_token_ms": 0.1922980132450331,
+        "prompt_per_second": 5200.261735027723,
+        "predicted_n": 10,
+        "predicted_ms": 52.152,
+        "predicted_per_token_ms": 5.2152,
+        "predicted_per_second": 191.74720049087284
+      },
+      "complete_ms": 136.54959999985294,
+      "timing": {
+        "combat_prompt_ready": 9.450600002310239,
+        "combat_model_done": 136.3707000055001
+      }
+    },
+    {
+      "id": "independent-16",
+      "group_id": "independent-16",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "1401b609b6b6b73709d3833919887326459e3763ccc9e5cde33ae447c3227c27",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 539,
+        "prompt_n": 178,
+        "prompt_ms": 29.861,
+        "prompt_per_token_ms": 0.16775842696629215,
+        "prompt_per_second": 5960.952412846188,
+        "predicted_n": 10,
+        "predicted_ms": 51.019,
+        "predicted_per_token_ms": 5.1019,
+        "predicted_per_second": 196.00540974930908
+      },
+      "complete_ms": 126.80969999928493,
+      "timing": {
+        "combat_prompt_ready": 22.61480000015581,
+        "combat_model_done": 126.62860000273213
+      }
+    },
+    {
+      "id": "independent-05",
+      "group_id": "independent-05",
+      "source": {
+        "kind": "independent_assistant_authored",
+        "gameplay_recording": false,
+        "observable_event_format": "current UE DescribeCombatState/ObserveFact/HearSpeech",
+        "authored_by": "root",
+        "labels_not_in_prompt": true
+      },
+      "prepared_prompt_sha256": "ded116f4351d4694b1b4e30879bf6ded9a3173396fc4c38ff630b8bdf6c57b42",
+      "repeat": 0,
+      "acceptable_actions": [
+        "Wait",
+        "Flee"
+      ],
+      "correct": true,
+      "protocol_valid": true,
+      "target_valid": true,
+      "action": "Wait",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "model_usage": {
+        "cache_n": 542,
+        "prompt_n": 169,
+        "prompt_ms": 30.685,
+        "prompt_per_token_ms": 0.1815680473372781,
+        "prompt_per_second": 5507.576992015644,
+        "predicted_n": 10,
+        "predicted_ms": 50.378,
+        "predicted_per_token_ms": 5.0378,
+        "predicted_per_second": 198.49934495216164
+      },
+      "complete_ms": 177.77689999638824,
+      "timing": {
+        "combat_prompt_ready": 43.247000001429114,
+        "combat_model_done": 177.64109999552602
+      }
+    }
+  ],
+  "status": "completed",
+  "context_tokens": 4096,
+  "max_output_tokens": 64,
+  "sampling": {
+    "temperature": 0.0,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0,
+    "seed": 20261114
+  },
+  "repeated_identical_prompt_is_separate_metric": true,
+  "scoring_definition": "v2: reasonable action >=90%, 40+ cases, all outputs and targets legal; technical cancellation checks are separate",
+  "scoring_changed_before_round2_inference": true,
+  "model_runtime": {
+    "pid": 63548,
+    "device": "cuda",
+    "started_utc": "2026-11-14T12:40:35.532285+00:00",
+    "log": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\logs\\llama-cuda-20261114-204033.log",
+    "command": [
+      "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-server.exe",
+      "--model",
+      "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3\\combat-Q8_0.gguf",
+      "--alias",
+      "delivery-npc-qwen3",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8771",
+      "--ctx-size",
+      "4096",
+      "--parallel",
+      "1",
+      "--n-predict",
+      "64",
+      "--threads",
+      "4",
+      "--threads-batch",
+      "8",
+      "--batch-size",
+      "256",
+      "--ubatch-size",
+      "128",
+      "--cache-type-k",
+      "f16",
+      "--cache-type-v",
+      "f16",
+      "--no-context-shift",
+      "--jinja",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--temp",
+      "0.0",
+      "--top-p",
+      "0.8",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0",
+      "--metrics",
+      "--slots",
+      "--no-ui",
+      "--n-gpu-layers",
+      "99",
+      "--flash-attn",
+      "on"
+    ],
+    "health": "http://127.0.0.1:8771/health",
+    "environment_example_only": {
+      "DELIVERY_AI_MODEL_URL": "http://127.0.0.1:8771/v1/chat/completions",
+      "DELIVERY_AI_MODEL": "delivery-npc-qwen3"
+    },
+    "gpu_layers": 99,
+    "model_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3\\combat-Q8_0.gguf",
+    "model_sha256": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3",
+    "context_tokens": 4096,
+    "output_tokens": 64,
+    "temperature": 0.0,
+    "slots": "http://127.0.0.1:8771/slots"
+  },
+  "summary": {
+    "cases": 40,
+    "correct": 40,
+    "protocol_valid": 40,
+    "target_valid": 40,
+    "accuracy": 1.0,
+    "first_pass_ms_median": 147.04119999805698,
+    "first_pass_ms_p95": 207.02159999927972,
+    "exact_repeat_ms_p95": null,
+    "unwanted_fight": 0,
+    "acceptance_qualified": true,
+    "integration_checks_required": true
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-11-14T14:24:59.356350+00:00",
+  "scope": "第三轮现有BF16的一次Q4量化与相同40情境对照；没有训练，没有运行游戏或语音",
+  "files": [
+    {
+      "path": "plan.json",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/plan.json",
+      "bytes": 5522,
+      "sha256": "f579e0b7c7c1d6e196b811beca008c5aae5159302c954d86dd8972d6b9659597"
+    },
+    {
+      "path": "export.json",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/export.json",
+      "bytes": 13653,
+      "sha256": "28770ae8f67cda1bd3b239fe17cf3549658bfd7cd4709f5a134aaa9557d0799d"
+    },
+    {
+      "path": "quantize.log",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/quantize.log",
+      "bytes": 49403,
+      "sha256": "8651fb483b422b317c36c66ab978ec4f1aa66b3bb4fe537f5575d099315b5a8c"
+    },
+    {
+      "path": "launch.log",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/launch.log",
+      "bytes": 2437,
+      "sha256": "829dd5b1341225fa79361d9ea7c579f0bb693ca242b3ff69363132cd20a354c3"
+    },
+    {
+      "path": "runtime-gpu99.json",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/runtime-gpu99.json",
+      "bytes": 1778,
+      "sha256": "24135e94fbe7c36d58c16e25234d548383852793455371496bee9f8d7345e8be"
+    },
+    {
+      "path": "final-acceptance-q4-gpu99.json",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/final-acceptance-q4-gpu99.json",
+      "bytes": 53827,
+      "sha256": "766e5e6fa4f8f03487bca69ed1ca34728520ce48a7dc96b2e2944b9ed56d2088"
+    },
+    {
+      "path": "evaluation.log",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/evaluation.log",
+      "bytes": 5246,
+      "sha256": "cc257123c444d6b2ace8515af419121aab0b2b2f5983e4965dd2356c676e84e4"
+    },
+    {
+      "path": "input-comparison.json",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/input-comparison.json",
+      "bytes": 11405,
+      "sha256": "17b07878399feafdbae19c9b9bbbb33f69262a7de493fdaedf67ce969f9c263b"
+    },
+    {
+      "path": "quality-errors.json",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/quality-errors.json",
+      "bytes": 10536,
+      "sha256": "3bb3c9f0e577f86fa7dc51d2759a2cf3ab728b60ba2c73361ba82fc8cb2355ee"
+    },
+    {
+      "path": "probe.log",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/probe.log",
+      "bytes": 223,
+      "sha256": "c9ade3f3694bde77a487001df8ff96380746ef5897268ee6f41628c470e41413"
+    },
+    {
+      "path": "shutdown.json",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/shutdown.json",
+      "bytes": 2022,
+      "sha256": "dbaeda5f6a2f57bc55de1afd1ad1280b3abfd0f971908d9b69cb55a16b1d6bce"
+    },
+    {
+      "path": "summary.json",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/summary.json",
+      "bytes": 20430,
+      "sha256": "a293be9eab96b953710e02d4d56827d40104ee9073beabf38877b02fc43bd12d"
+    },
+    {
+      "path": "run_quantize.py",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/run_quantize.py",
+      "bytes": 3629,
+      "sha256": "f7482a32a262696e62b9f4458ba235daf7fa03312327f791eb38bcc830ee02c6"
+    },
+    {
+      "path": "real-model-probe/probe.json",
+      "source": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/real-model-probe/probe.json",
+      "bytes": 29844,
+      "sha256": "992f0e8ca62fea3cb6d3a31582a5a85d27abcf603867472358e9c14a291a10c9"
+    },
+    {
+      "path": "source-snapshots/combat_model.py",
+      "source": "Tools/DeliveryAI/combat_model.py",
+      "bytes": 15490,
+      "sha256": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c"
+    },
+    {
+      "path": "source-snapshots/server.py",
+      "source": "Tools/DeliveryAI/server.py",
+      "bytes": 33087,
+      "sha256": "4db3a98e1e18b0de9e41944b7afd886428477d5d9f26fa20509454b2091ce59c"
+    },
+    {
+      "path": "source-snapshots/streaming.py",
+      "source": "Tools/DeliveryAI/streaming.py",
+      "bytes": 47658,
+      "sha256": "848c6da27b98025fb043c112bd1862a75c3bf2d160213cfac09fe77c97672252"
+    },
+    {
+      "path": "source-snapshots/continued_activity.py",
+      "source": "Tools/DeliveryAI/continued_activity.py",
+      "bytes": 4372,
+      "sha256": "05494d8d893c569a680160e8fbf91c558700a617c5382449dce27b4f34f18ec9"
+    },
+    {
+      "path": "source-snapshots/npc_training/evaluate_combat.py",
+      "source": "Tools/DeliveryAI/npc_training/evaluate_combat.py",
+      "bytes": 7052,
+      "sha256": "e7c9569caca7049434cf9c93fa9e432aca5b2c95aca6a61414cd01ae9bce6b75"
+    },
+    {
+      "path": "source-snapshots/llm_evaluation/start_local_model.py",
+      "source": "Tools/DeliveryAI/llm_evaluation/start_local_model.py",
+      "bytes": 12923,
+      "sha256": "63c3f4a2e4ceab73e2227d3fb324334f3892f9f149fb6128dacf508670774cb5"
+    },
+    {
+      "path": "source-snapshots/llm_evaluation/probe_combat_integration.py",
+      "source": "Tools/DeliveryAI/llm_evaluation/probe_combat_integration.py",
+      "bytes": 14058,
+      "sha256": "6362fb7c9720e64496a0f04e0b70cefc0a0e642759dd178e805c3e9e7a684e4c"
+    },
+    {
+      "path": "provenance/llama-installation.json",
+      "source": "Saved/AIResearch/LocalNpcModel/qwen3-1.7b/installation.json",
+      "bytes": 14430,
+      "sha256": "dce1e70d418dc1cde8ecbe09afefde271934af8a09846e123b7284d8d7dcd18b"
+    },
+    {
+      "path": "provenance/llama-config.json",
+      "source": "Tools/DeliveryAI/llm_evaluation/qwen_local.json",
+      "bytes": 2993,
+      "sha256": "a057b982a294f899db18ba1436fcd42992c6755a6d33a8012ce6d02a1a46d46a"
+    }
+  ],
+  "files_excluding_manifest": 23,
+  "total_bytes_excluding_manifest": 362018,
+  "old_round3_manifest_sha256_before": "3d16302b5a45cf81c627cdcae6ff7955454ad61ec30716a3a29ee54505097472",
+  "old_round3_manifest_sha256_after": "3d16302b5a45cf81c627cdcae6ff7955454ad61ec30716a3a29ee54505097472",
+  "old_manifest_unchanged": true,
+  "weights_caches_binaries_audio_copied": false,
+  "content_review": "结果为虚构NPC情境、工具输出、源码快照和必要本机路径；未复制账户配置、凭据或真实整段用户聊天日志",
+  "frozen_source_reference": "../../acceptance-reviewed.json",
+  "frozen_source_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+  "weights_local_path": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/combat-Q4_K_M.gguf",
+  "weights_sha256": "da5a022325ba2fc89377e2cc5d2ba759aa97bce5e0ed5931c62ec29c176d0b31",
+  "notes": [
+    "source snapshots match the real probe where the probe records them; evaluate_combat matches the unchanged prepared plan",
+    "The original 52-file manifest and integration archive are untouched",
+    "Quality errors retain unchanged original case labels; acceptance criterion is not rewritten"
+  ]
+}

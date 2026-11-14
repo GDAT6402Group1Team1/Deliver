@@ -1,0 +1,329 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T14:11:05.5020429Z",
+  "finished_utc": "2026-11-14T14:10:12.8843959Z",
+  "plan_path": "Saved\\AIResearch\\NpcTraining\\combat-v7-integration\\backend-regression-plan.json",
+  "plan_sha256": "68b3934aa19125f1b79276ed91a025318e6bd38c8ed2e838663f84d2cc3b5a1d",
+  "source_before_recorded_utc": "2026-11-14T14:09:56.7866074Z",
+  "source_note": "Before hashes were collected in the immediately preceding plan; all were compared after both command runs.",
+  "working_directory": "D:/Udev/Delivery/Tools/DeliveryAI",
+  "cpu_only": true,
+  "model_or_gpu_started": false,
+  "groups": [
+    {
+      "name": "decision_completion_diagnostics_and_cancel",
+      "command": [
+        "D:/Udev/Delivery/Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe",
+        "-B",
+        "-X",
+        "utf8",
+        "-m",
+        "unittest",
+        "test_model_completion",
+        "test_combat_model",
+        "test_combat_model_integration",
+        "test_streaming_audio"
+      ],
+      "tests": 45,
+      "passed": true,
+      "defined_test_names": [
+        "test_model_completion.test_old_speech_does_not_hold_model_slot_or_finish_new_request",
+        "test_model_completion.test_v2_model_done_precedes_audio_done_and_v1_stays_compatible",
+        "test_model_completion.test_failed_or_cancelled_model_never_reports_model_done",
+        "test_model_completion.test_transport_version_does_not_change_capability_version",
+        "test_model_completion.test_current_action_requires_actual_model_action_and_finite_time",
+        "test_model_completion.test_local_action_uses_existing_proposal_protocol_without_speech",
+        "test_model_completion.test_local_failure_falls_back_but_cancellation_does_not",
+        "test_model_completion.test_diagnostics_distinguish_queue_model_and_request_time",
+        "test_model_completion.test_token_diagnostics_use_only_valid_last_counts_without_inventing_missing_fields",
+        "test_model_completion.test_unknown_provider_does_not_claim_model_identity",
+        "test_model_completion.test_diagnostics_allow_only_public_model_names_and_never_return_private_values",
+        "test_model_completion.test_logged_local_model_completes_with_real_combat_context",
+        "test_model_completion.test_reply_text_contains_first_and_followup_before_audio",
+        "test_model_completion.test_invalid_followup_keeps_only_approved_prefix",
+        "test_model_completion.test_silent_reply_has_empty_text_without_audio",
+        "test_model_completion.test_cancel_before_or_after_first_sentence_never_finishes_successfully",
+        "test_model_completion.test_model_failure_after_valid_prefix_does_not_publish_reply_text",
+        "test_model_completion.test_tts_failure_keeps_approved_text_separate_from_audio_result",
+        "test_model_completion.test_legacy_stream_has_no_new_completion_event",
+        "test_model_completion.test_existing_python_character_limit_is_preserved",
+        "test_model_completion.test_fallback_uses_same_complete_text_collection",
+        "test_combat_model.test_combat_summary_uses_real_events_and_separate_current_action",
+        "test_combat_model.test_summary_cleanup_does_not_change_speech_hits_or_other_actions",
+        "test_combat_model.test_only_continuing_model_action_is_eligible",
+        "test_combat_model.test_choice_preserves_candidate_and_request_identity_without_mutation",
+        "test_combat_model.test_new_opponent_and_duplicate_pair_are_not_selected",
+        "test_combat_model.test_schema_choice_rejects_wrong_target_extra_text_and_extra_fields",
+        "test_combat_model.test_cancelled_result_does_not_return_late_action",
+        "test_combat_model.test_invalid_original_candidate_is_still_rejected",
+        "test_combat_model.test_connection_close_slow_body_obeys_total_deadline",
+        "test_combat_model.test_disabled_configuration_does_not_contact_a_service",
+        "test_combat_model.test_other_profiles_and_companion_cannot_use_resident_training",
+        "test_combat_model.test_timeout_keeps_local_slot_reserved_until_server_confirms_idle",
+        "test_combat_model_integration.test_v4_actual_http_produces_identity_checked_silent_reply",
+        "test_combat_model_integration.test_player_continue_current_bypasses_local_combat_model",
+        "test_combat_model_integration.test_cancel_during_http_never_publishes_late_attack_and_waits_for_idle",
+        "test_streaming_audio.test_three_sentences_keep_three_sequences_and_one_future_each",
+        "test_streaming_audio.test_feature_requires_both_opt_in_and_capable_neural_worker",
+        "test_streaming_audio.test_speech_failure_ends_same_sentence_without_duplicate_text_event",
+        "test_streaming_audio.test_cancel_during_stream_has_no_success_end_or_done",
+        "test_streaming_audio.test_job_waits_for_stream_function_after_last_chunk",
+        "test_streaming_audio.test_transport_validation_rejects_unknown_and_non_string_values",
+        "test_streaming_audio.test_http_flushes_chunks_before_sentence_synthesis_has_finished",
+        "test_streaming_audio.test_cancel_releases_full_event_queue_without_inserting_late_chunk",
+        "test_streaming_audio.test_full_event_queue_reports_error_even_without_room_for_error_event"
+      ],
+      "scope": [
+        "model_done releases decision before speech finishes; old speech cannot finish the new request",
+        "final reply text and diagnostics use actual input/counts/model identity",
+        "local model legal targets, profile routing, timeout and draining after cancellation",
+        "HTTP cancellation suppresses late attack and streaming success; failed local model uses Luna but cancelled does not"
+      ],
+      "log": "Saved\\AIResearch\\NpcTraining\\combat-v7-integration\\backend-decision-final.log",
+      "log_sha256": "d70f938658e62a550bf0b094e31e0d7f3b2e4bcb414ca9f593d5612734193d9e"
+    },
+    {
+      "name": "native_active_and_twelve_second_speech",
+      "command": [
+        "D:/Udev/Delivery/Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe",
+        "-B",
+        "-X",
+        "utf8",
+        "-m",
+        "unittest",
+        "test_native_tts",
+        "test_native_tts_residency",
+        "test_tts_duration"
+      ],
+      "tests": 25,
+      "passed": true,
+      "defined_test_names": [
+        "test_native_tts.test_stream_is_sent_during_generation_and_preserves_order",
+        "test_native_tts.test_cancel_discards_late_chunks_and_next_task_can_run",
+        "test_native_tts.test_sender_failure_stops_native_generation",
+        "test_native_tts.test_full_audio_and_female_reference",
+        "test_native_tts.test_limit_never_reports_partial_sentence_as_complete",
+        "test_native_tts.test_callback_size_is_checked_before_pointer_read",
+        "test_native_tts.test_native_worker_has_distinct_identity_and_keeps_original_config",
+        "test_native_tts.test_converter_rejects_windows_mojibake_in_vocabulary",
+        "test_native_tts.test_first_silent_callback_is_not_reported_as_audible",
+        "test_native_tts.test_repeated_close_releases_each_model_once",
+        "test_native_tts_residency.test_active_keeps_one_model_and_reuses_independent_reference",
+        "test_native_tts_residency.test_default_both_keeps_both_models",
+        "test_native_tts_residency.test_cancel_during_load_frees_new_handle_and_next_task_recovers",
+        "test_native_tts_residency.test_closed_or_cancelled_task_cannot_start_a_load",
+        "test_native_tts_residency.test_wrong_model_during_switch_is_freed_and_can_recover",
+        "test_native_tts_residency.test_reference_failure_releases_initial_model",
+        "test_native_tts_residency.test_runtime_accepts_only_explicit_residency_modes",
+        "test_tts_duration.test_config_accepts_only_eight_or_twelve_seconds",
+        "test_tts_duration.test_nine_second_native_audio_survives_full_and_chunked_protocol",
+        "test_tts_duration.test_twelve_seconds_keep_first_short_chunk_and_final_tail",
+        "test_tts_duration.test_torch_decoder_twelve_seconds_keeps_reference_separate_and_tail_once",
+        "test_tts_duration.test_http_speech_api_keeps_twelve_seconds_and_rejects_one_extra_sample",
+        "test_tts_duration.test_both_limits_reject_excess_without_reporting_success",
+        "test_tts_duration.test_cancel_discards_long_reply_before_next_sentence",
+        "test_tts_duration.test_http_delivers_three_twelve_second_sentences_with_bounded_queue"
+      ],
+      "scope": [
+        "one active voice model, repeated same voice, male/female/male switch, independent female reference",
+        "cancel while loading, wrong model, close and subsequent request recovery",
+        "native callback/parent/HTTP 12 second PCM, final tail exactly once, excess rejected",
+        "long speech cancellation does not leave output for the next sentence"
+      ],
+      "log": "Saved\\AIResearch\\NpcTraining\\combat-v7-integration\\backend-native-final.log",
+      "log_sha256": "fe46e1f83baf8bcc81a9f199c862f9ac3d4d237c661d423829bd94139edc91fa"
+    }
+  ],
+  "tests": 70,
+  "passed": true,
+  "source_hashes": [
+    {
+      "path": "Tools/DeliveryAI/streaming.py",
+      "before_sha256": "a023e7c116fad60c18426b0588e37ec53f195be45f89c31774c807ded22a9523",
+      "after_sha256": "a023e7c116fad60c18426b0588e37ec53f195be45f89c31774c807ded22a9523",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/server.py",
+      "before_sha256": "c8fee3d8960ccd7a88a19b0ef979d3a78fb08cf82eebbeabafb8bebf152aed0f",
+      "after_sha256": "c8fee3d8960ccd7a88a19b0ef979d3a78fb08cf82eebbeabafb8bebf152aed0f",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/scheduler.py",
+      "before_sha256": "55edcd58c96b259d11a6c219fc62ea888a0cb582a5d5235475db242bef1f9217",
+      "after_sha256": "55edcd58c96b259d11a6c219fc62ea888a0cb582a5d5235475db242bef1f9217",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/combat_model.py",
+      "before_sha256": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+      "after_sha256": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/continued_activity.py",
+      "before_sha256": "05494d8d893c569a680160e8fbf91c558700a617c5382449dce27b4f34f18ec9",
+      "after_sha256": "05494d8d893c569a680160e8fbf91c558700a617c5382449dce27b4f34f18ec9",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/native_tts.py",
+      "before_sha256": "c4a1355a389a4b3b187365857e496101cb5f4ce6427090247a6407842b0978a4",
+      "after_sha256": "c4a1355a389a4b3b187365857e496101cb5f4ce6427090247a6407842b0978a4",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/native_tts_engine.py",
+      "before_sha256": "1ca4a1ee526eb3682483dbfbef9e3e090e8ad4af0830837dd29a5b8aaa869725",
+      "after_sha256": "1ca4a1ee526eb3682483dbfbef9e3e090e8ad4af0830837dd29a5b8aaa869725",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/native_tts_worker.py",
+      "before_sha256": "f9989a31ba9afa61aa06c4d97b3096fa3e4ae5ee1b5ceab3c63d9f8018835af7",
+      "after_sha256": "f9989a31ba9afa61aa06c4d97b3096fa3e4ae5ee1b5ceab3c63d9f8018835af7",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/neural_tts.py",
+      "before_sha256": "5f1460b32734b741a93898e953583e93e088d369b48e07d1986a74975612f4e2",
+      "after_sha256": "5f1460b32734b741a93898e953583e93e088d369b48e07d1986a74975612f4e2",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/neural_audio_stream.py",
+      "before_sha256": "d3249cd198e65fec0818d07d87827db96a9b86a6608a2a6ca4e3db67a3d8ac85",
+      "after_sha256": "d3249cd198e65fec0818d07d87827db96a9b86a6608a2a6ca4e3db67a3d8ac85",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/neural_audio_sender.py",
+      "before_sha256": "ffa720ba7a0ae556a34b9e723ce2e5fd5738da61ce02a020475362e77d2aa942",
+      "after_sha256": "ffa720ba7a0ae556a34b9e723ce2e5fd5738da61ce02a020475362e77d2aa942",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/neural_voice_config.json",
+      "before_sha256": "3dc88958701a23b5840a4b3820a057ee13de7e509dfec394681399a38fde278d",
+      "after_sha256": "3dc88958701a23b5840a4b3820a057ee13de7e509dfec394681399a38fde278d",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/test_model_completion.py",
+      "before_sha256": "7a02388102dbe6000f39f78562d0a15d75098aa4765a044a4f15028e7179619e",
+      "after_sha256": "7a02388102dbe6000f39f78562d0a15d75098aa4765a044a4f15028e7179619e",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/test_combat_model.py",
+      "before_sha256": "e27bd30b8ad71e10efaab71fb4844d9ae82d7b4fad512c92904147fa241211c0",
+      "after_sha256": "e27bd30b8ad71e10efaab71fb4844d9ae82d7b4fad512c92904147fa241211c0",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/test_combat_model_integration.py",
+      "before_sha256": "60bef6ed4ae76c952327cdfbbababd02fac58989ee9cf0e4f22506053d4a2221",
+      "after_sha256": "60bef6ed4ae76c952327cdfbbababd02fac58989ee9cf0e4f22506053d4a2221",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/test_streaming_audio.py",
+      "before_sha256": "6a1f65db71454fb60a4f57d61496145a20cf2a61766d067768630ab4ca1e6d10",
+      "after_sha256": "6a1f65db71454fb60a4f57d61496145a20cf2a61766d067768630ab4ca1e6d10",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/test_native_tts.py",
+      "before_sha256": "121e8e9fd754ba3fb1f7bb9a9ac8b2c97b04a422e0b9b0055a959423f6fa0234",
+      "after_sha256": "121e8e9fd754ba3fb1f7bb9a9ac8b2c97b04a422e0b9b0055a959423f6fa0234",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/test_native_tts_residency.py",
+      "before_sha256": "1f417693099873a55880b2845a569c65be5025a7b8133e0003a97b9d8b83c8f5",
+      "after_sha256": "1f417693099873a55880b2845a569c65be5025a7b8133e0003a97b9d8b83c8f5",
+      "unchanged": true
+    },
+    {
+      "path": "Tools/DeliveryAI/test_tts_duration.py",
+      "before_sha256": "066406ec0c39b6cbff77d85c35041f26c5c5bff2c0ad21a67acc4ae28867f34a",
+      "after_sha256": "066406ec0c39b6cbff77d85c35041f26c5c5bff2c0ad21a67acc4ae28867f34a",
+      "unchanged": true
+    }
+  ],
+  "all_sources_unchanged": true,
+  "ue_report": {
+    "path": "Saved/Automation/DeliverySpeechTwelveSecond/index.json",
+    "sha256": "b13908980594b516c09335f47f004f2ae34de007f511f31658b79cc58aac614e",
+    "report_created_on": "2026.11.14-13.46.39",
+    "succeeded": 12,
+    "failed": 0,
+    "tests": [
+      {
+        "name": "Delivery.AI.VoiceCodec.Boundaries",
+        "state": "Success"
+      },
+      {
+        "name": "Delivery.AI.VoiceCodec.LongSentence",
+        "state": "Success"
+      },
+      {
+        "name": "Delivery.AI.VoiceCodec.RecordedSpeech",
+        "state": "Success"
+      },
+      {
+        "name": "Delivery.AI.VoiceCodec.RoundTrip",
+        "state": "Success"
+      },
+      {
+        "name": "Delivery.AI.VoiceCodec.Streaming",
+        "state": "Success"
+      },
+      {
+        "name": "Delivery.AI.VoiceCodec.StreamingBoundaries",
+        "state": "Success"
+      },
+      {
+        "name": "Delivery.AI.SentenceAudioProtocol",
+        "state": "Success"
+      },
+      {
+        "name": "Delivery.Speech.Audio.Cancellation",
+        "state": "Success"
+      },
+      {
+        "name": "Delivery.Speech.Audio.DeviceFormatChange",
+        "state": "Success"
+      },
+      {
+        "name": "Delivery.Speech.Audio.FinishDiscontinuity",
+        "state": "Success"
+      },
+      {
+        "name": "Delivery.Speech.Audio.StartupDiscontinuity",
+        "state": "Success"
+      },
+      {
+        "name": "Delivery.Speech.Audio.TurnBoundaries",
+        "state": "Success"
+      }
+    ],
+    "scope": "Separate UE report by UI task; this CPU invocation did not run UE and does not claim actual game interaction."
+  },
+  "historical_reports": {
+    "backend_319": "Saved/AIResearch/NpcTraining/combat-v7-integration/backend-test-summary.json",
+    "backend_319_scope": "Historical full backend suite before later diagnostics/reply-text/12-second/active changes; not recounted as a current whole-suite pass.",
+    "diagnostics_12": "Saved/AIResearch/NpcTraining/combat-v7-integration/diagnostic-input-count-tests.json",
+    "diagnostics_12_scope": "Historical narrower module; current test_model_completion has 21 definitions and was executed in the 45-test group.",
+    "trial_technical": "Saved/AIResearch/NpcTraining/combat-v7-integration/trial-technical-checks.json",
+    "trial_technical_scope": "Retained historical runtime/UE evidence. Seven source files changed since that record; this report supplies current Python scope, not a blanket refresh of its evidence."
+  },
+  "not_covered": [
+    "start_local_model CLI thread-option tests were not rerun by these 70 tests; earlier CPU plan records remain separate",
+    "actual GPU voice switching/cancellation, performance and sound quality",
+    "two-player game interaction, input focus/layout and listening presentation",
+    "C++ Agent/Gateway/Presentation/Playback behavior beyond the stated UE 12-test report",
+    "real model decision quality; governed by its independent frozen40 and coexistence reports"
+  ]
+}

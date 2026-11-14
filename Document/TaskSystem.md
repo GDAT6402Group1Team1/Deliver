@@ -22,16 +22,27 @@
 
 | 优先级与条件 | 蓝图任务及表现 |
 | --- | --- |
-| `Delivered` | Thanks → 等待 → Finished |
+| `Delivered` | Thanks → 等待 → MoveOut → Finished |
 | `DoorBroken` | Startled → 等待 → Receive |
 | `ReplyPending` | Reply → 等待 → FinishReply，清除回应标记 |
 | 默认 | LookAround → 等待 → StrollOut → 等待 → LookAround → 等待 → StrollHome → 等待 |
 
-每个 `BTT_Grandpa*` 都是可编辑的 BTTask 蓝图，事件图从 `ReceiveExecuteAI` 获取爷爷，调用
-`ApplyBehaviorAction`。一次性任务结束，Receive、Finished 保持运行直到条件中断，不循环重播动作。
+原有 `BTT_Grandpa*` 是可编辑的 BTTask 蓝图，事件图从 `ReceiveExecuteAI` 获取爷爷并调用
+`ApplyBehaviorAction`。新增 `BTT_GrandpaMoveOut` 继承原生可取消任务，由 Execute/Tick 调用
+`BeginMoveOut/UpdateMoveOut`，中断调用 `CancelMoveOut`。一次性任务结束，Receive、Finished 保持运行直到条件中断，不循环重播动作。
 表现枚举复制到各端，各端播放动画和对白，客户端不重复运行 AI
 较高优先级的黑板条件会中断低优先级分支，收件可中断回复或破门反应。退出 PIE、销毁和切图时解绑门、
-任务事件，注销动态敲门交互，清除查找任务管理器的定时器并停止行为树
+任务与交付确认事件，注销动态敲门交互，清除查找任务管理器的定时器并停止行为树和搬离移动
+
+2026-11-14 新增收件后的搬离与共享房屋：`DeliveryTargetComponent.OnDeliveryConfirmed` 只在服务器真实任务结算成功、解除当前实物持件后且包裹销毁前通知爷爷。单独看到任务 Completed 或模型台词不会触发房屋解锁；TaskManager 仍唯一发放原任务奖励。爷爷锁存本件 Task_001 的交付事实，感谢和等待结束后沿 SharedHome 可编辑地面路线扫掠移动，遇家具、门、玩家、车辆、缺地面或缺配置进入带原因的 Waiting 并重试。取消立即停步；不销毁或瞬移爷爷来代替走完。
+
+`ADeliveryHome` 标记现有房屋，同 World 只保留一个有效地点，不按玩家另造建筑。地图显式连接 `Grandpa.SharedHome`、`Home.FormerResident` 与 `Home.ExistingHouse`；`DepartureRoute` 保存搬离平面路线，运行时按真实地板高度扫掠移动，`ReturnAnchor` 保存二狗回家的等候点。爷爷实际走到屋外终点并落稳后才由 `TryClaimAfterDeparture` 写入并复制 `bClaimed/ClaimEventId/ClaimedServerTime`，随后 BT 进入 Finished，爷爷留在终点且不再执行旧屋内往返。全体和晚加入玩家读取同一房屋状态；二狗通过 `FindSharedHome/IsClaimed/TryGetReturnLocation` 查询已解锁锚点，当前位置为门外等候点，尚无沙发或屋内日常行为。
+
+继续检查发现原三点路线均沿用室内 Z=2010.25，门外实测 Z≈1965.70，旧 20 cm 地板误差检查会让爷爷停在门槛附近。搬离现在沿 XY 路线查询脚下支撑，完整胶囊扫掠处理抬升、前进和分帧下降；默认最多上 20 cm、下 60 cm，超出、缺地板或被门/人/车挡住时等候。底球仍搭在门槛上的下降接触允许继续横移，只有落稳且到达终点才认领，不放宽高度判定让人物悬空完成。该修复仍需实机检查门槛与家具阻挡。
+
+地图使用 Static 导航，完整门在门洞留下不可通行区域。新增 `Home.DoorwayLink` 原生智能连接，编辑器默认禁用，服务器真实 `OnDoorBroken` 才切换可通行区域，门销毁和 Home EndPlay 时关闭并解绑；破门仍不会直接认领房屋。`setup_grandpa_home.py -SetupGrandpaDoorway` 仅备份/保存当前地图及导航，旧完整复建入口也包含导航构建；独立只读检查使用正式二狗配置，核对关闭态、开启后的双向完整路线、实际 LinkId 和最终恢复状态。真实 NPC 穿门、碎片避让及多人仍未验收。
+
+本轮 `CompanionVehicleHomeBuild2` 完整构建成功，47 个 actions、49.82 秒、exit 0；新增爷爷搬离/房屋复制回归仅编译。`setup_grandpa_home.py` 已保存 BT_Grandpa、BTT_GrandpaMoveOut 和地图，15:41 独立重载通过全套脚本断言，`GRANDPA_HOME_OK` 确认唯一 `DeliveryHome_0` 与原 house2/Grandpa 引用、BT/BTT 均正确，默认未 claimed，`changed_packages` 和 `unexpected_changes` 均为空。总结果 `COMPANION_DELIVERY_ASSETS_RELOADED_OK` 记录在 `Saved/Logs/CompanionDeliveryAssetsReload.log`；进程仍因既有 native CDO PhysicalMaterial 错误 exit 1，不能写成干净退出。未运行本轮 PIE、真实交付通行或多人验收。测试已移除固定等待三秒即 Finished 的假设，缺 SharedHome 配置会明确失败，并在有上限的等待内检查实际搬离和客户端 Claim 复制；这项测试尚未执行。下方 2026-11-11 的测试结果是修改前的历史记录。
 
 动画使用 [Quaternius Universal Animation Library Standard](https://quaternius.com/packs/universalanimationlibrary.html)
 以及 [Universal Animation Library 2 Standard](https://quaternius.com/packs/universalanimationlibrary2.html)
@@ -43,6 +54,7 @@
 1. Blender 5 执行 `Content/Python/retarget_grandpa.py`，生成独立网格和八段动画 FBX
 2. 完整编译 DeliveryEditor，UE Python 执行 `Content/Python/setup_grandpa.py` 导入资源并生成蓝图行为树
 3. UE Python 执行 `Content/Python/place_grandpa.py`，在已测量的房屋门洞放置门与爷爷并移除旧房屋交付组件
+4. 使用 `Content/Python/setup_grandpa_home.py` 的 Setup/Inspect 模式接线现有房屋标记、搬离节点与路线；备份后保存并独立重载，保留设计师已配置的锚点和路线
 
 资源生成工具在编辑器模块 DeliveryTuning 中。基础生成保留已存在的任务图；`upgrade_expressive_behavior` 会重建默认活动分支及设置受惊等待时长，复建前保留设计师对此分支的修改
 门的 `HitsToBreak` 默认 3，每次服务器确认命中后多播短促回弹与木击声音，最后一次使用碎裂声。
@@ -229,7 +241,7 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 
 | 接口 | 说明 |
 |---|---|
-| `OwningTask` | 配置：这件快递属于哪个任务 |
+| `OwningTask` | 蓝图默认或服务器取件时指定任务，复制给客户端 |
 | `bool CanBeAcquired() const` | 交互系统在允许拾取前问这句 |
 | `bool NotifyAcquired(APlayerState* Player)` | 服务器：玩家拿到了它。返回是否因此接取了任务（仅首次 true） |
 
@@ -243,6 +255,14 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 | `ExpectedTask` / `DeliveryRadius` | 配置：收哪个任务、判定距离 |
 | `bool CanAcceptDelivery(ItemActor, Player) const` | UI 用它决定要不要显示交付提示 |
 | `bool TryDeliver(ItemActor, Player)` | 服务器：完成交付，成功后销毁快递 Actor |
+
+2026-11-14 二狗持件接口基础：玩家与同伴通过 `IDeliveryPackageCarrierInterface` 查询实物、结算 PlayerState 和可操作状态。玩家沿用 Carry/Inventory；同伴在 CompanionComponent 保存并复制包裹指针。`DeliveryPackageTransfer::TryTransfer` 仅在服务器同世界、同主人、240 cm 内且无遮挡时交接同一实物，复核同步通知后的身份/距离/遮挡，失败尝试归还原持有者；无法回滚时保留实物并返回明确失败原因。交还要求主人空手，不自动丢弃旧物。
+
+`DeliveryItemComponent.BeginTransfer/EndTransfer` 的预约只存在于本次同步调用，普通 `CanBeAcquired` 在预约期间拒绝；`CanBeAcquiredBy` 仅允许指定接收者，防背包通知中途抢件。`NotifyAcquired` 返回 false 可能表示任务已经 InProgress，不能等同于物品换手失败。新 `PickupPoint.TryDispenseToCarrier(Receiver, ExpectedTask)` 锁定本次任务，并在构造和接收后核对身份；原玩家长按取件入口保留。
+
+`CanAcceptDelivery` 对 Carrier 复核实际持件、PlayerState、可操作状态和身体/包裹到锚点的遮挡；爷爷仍额外要求破门、靠近和原门槛。`TryDeliver` 预约后沿原 TaskManager 完成顺序发奖，再通过接口释放并销毁实物，不直接加钱包。包裹 `Owner` 与槽位/车货复制可能先后到达，显示始终按当前 Owner 恢复。断线或同伴销毁会掉出原实物，取消安排不销毁包裹。
+
+本批接口已通过 `CompanionStage2Build2` 构建，新增 `Delivery.Carry.PackageTransfer` 仅编译未执行；未开放模型跑腿候选、未主动运行 Delivery.* 自动化或 PIE；普通编辑器默认启动自检异常另记迭代文档，不能据此宣称取件/帮送/交还已实机可用。问题与验证详见 [本轮迭代](AIIteration.html#ergou-package-foundation-20261114)。
 
 ---
 

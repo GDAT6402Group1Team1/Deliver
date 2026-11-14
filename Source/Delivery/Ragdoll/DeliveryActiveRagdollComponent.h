@@ -20,6 +20,7 @@ class UPhysicsControlComponent;
 class USkeletalMeshComponent;
 class UAnimSequence;
 class ADeliveryHandheldItem;
+class AController;
 
 UENUM(BlueprintType)
 enum class EDeliveryRagdollControlMode : uint8
@@ -115,6 +116,14 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
     TArray<FDeliveryTrunkBodyControl> TrunkControls;
 
 	virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+    // 对话只提出短期朝向，实际转身仍由原髋部电机完成
+    void PrepareConversationFacing(AController* Requester, uint64 Sequence);
+    bool ConfirmConversationFacing(AActor* Target, AController* Requester, uint64 Sequence);
+    void CancelConversationFacing();
+    UPROPERTY(EditDefaultsOnly, Category="Ragdoll|对话", meta=(ClampMin="0.1", ClampMax="2", Units="s"))
+    float ConversationFacingDuration=1.2f;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
 	                           FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void RegisterComponentTickFunctions(bool bRegister) override;
@@ -727,6 +736,22 @@ class DELIVERY_API UDeliveryActiveRagdollComponent : public UActorComponent
 	/** 受击期间身体要转过去的朝向：面对出拳的人 */
 	float HitFacingYaw = 0.0f;
 	bool bHasHitFacing = false;
+    // 与发言轮次分开，输入取消后同一序号的迟到确认不能重新接管身体
+    TWeakObjectPtr<AController> ConversationFacingController;
+    TWeakObjectPtr<AActor> ConversationFacingTarget;
+    uint64 ConversationFacingSequence=0;
+    bool bConversationFacingCancelled=true;
+    bool bConversationFacingStarted=false;
+    double ConversationFacingDeadline=0;
+    bool CanUseConversationFacing(const AController* Requester) const;
+    double ConversationFacingServerTime() const;
+    bool ApplyConversationFacing(AActor* Target, AController* Requester, uint64 Sequence, double ServerDeadline);
+    void UpdateConversationFacing();
+    bool GetConversationFacingYaw(float& OutYaw) const;
+    UFUNCTION(Client,Reliable)
+    void ClientConversationFacing(AActor* Target, AController* Requester, uint64 Sequence, double ServerDeadline);
+    UFUNCTION(Server,Reliable)
+    void ServerCancelConversationFacing(AController* Requester, uint64 Sequence);
 	bool bHitFeetPlanted = false;
 	bool bPunchFeetPlanted = false;
 	bool bPunchSupportInterrupted = false;

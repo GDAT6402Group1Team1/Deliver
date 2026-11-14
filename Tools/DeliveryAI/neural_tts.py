@@ -15,9 +15,11 @@ import uuid
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = Path(__file__).with_name('neural_voice_config.json')
-MAX_PROTOCOL_LINE = 524288
-MAX_STREAM_CHUNKS = 32
-# 一个任务最多 32 块，另留启动和结束通知；父进程一次只提交一句
+MAX_PCM_BYTES = 576000
+# 12 秒单声道 PCM 转成 base64 后有 768000 字符，另外保留消息字段的空间
+MAX_PROTOCOL_LINE = 786432
+MAX_STREAM_CHUNKS = 48
+# 4 帧分块的 12 秒语音需要 38 块，首尾短块也计入上限；父进程一次只提交一句
 MAX_WORKER_MESSAGES = MAX_STREAM_CHUNKS + 2
 
 
@@ -45,7 +47,9 @@ def load_voice_config(config_path=None):
     config = json.loads(project_path(config_path or CONFIG_PATH).read_text(encoding='utf-8-sig'))
     if (not isinstance(config, dict) or type(config.get('schema_version')) is not int
             or config.get('schema_version') != 1 or config.get('sample_rate') != 24000
-            or config.get('max_pcm_bytes') != 384000 or config.get('max_text_chars') != 120):
+            or type(config.get('max_pcm_bytes')) is not int
+            or config.get('max_pcm_bytes') not in (384000, MAX_PCM_BYTES)
+            or config.get('max_text_chars') != 120):
         raise NeuralTtsError('neural_tts_invalid_config')
     talker_mode = os.environ.get('DELIVERY_TTS_TALKER_MODE', config.get('talker_mode', 'official'))
     if talker_mode not in ('official', 'cuda_graph'):
@@ -185,13 +189,12 @@ class QwenSpeechSynthesizer:
         environment.update({'PYTHONIOENCODING': 'utf-8', 'PYTHONUNBUFFERED': '1',
                             'PYTHONDONTWRITEBYTECODE': '1', 'HF_HUB_OFFLINE': '1',
                             'TRANSFORMERS_OFFLINE': '1', 'HF_HUB_DISABLE_TELEMETRY': '1'})
-        log_path = project_path('Saved/Logs/QwenSpeechWorker.log')
+        log_path = self._worker_log_path()
         log_path.parent.mkdir(parents=True, exist_ok=True)
         self.stderr_file = log_path.open('a', encoding='utf-8')
         try:
             self.process = subprocess.Popen(
-                [str(executable), '-B', '-X', 'utf8', '-u', str(Path(__file__).with_name('neural_tts_worker.py')),
-                 '--config', str(self.config_path)],
+                self._worker_command(executable),
                 cwd=str(PROJECT_ROOT), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.stderr_file,
                 text=True, encoding='utf-8', env=environment,
                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
@@ -217,6 +220,13 @@ class QwenSpeechSynthesizer:
                 failed.set()
 
         threading.Thread(target=read_output, name='qwen-speech-output', daemon=True).start()
+
+    def _worker_command(self, executable):
+        return [str(executable), '-B', '-X', 'utf8', '-u',
+                str(Path(__file__).with_name('neural_tts_worker.py')), '--config', str(self.config_path)]
+
+    def _worker_log_path(self):
+        return project_path('Saved/Logs/QwenSpeechWorker.log')
 
     def _receive(self):
         if self.reader_failed.is_set():
@@ -370,7 +380,7 @@ class QwenSpeechSynthesizer:
                     self._completed_voice.name = message['voice_name']
                     return total_bytes, 24000
                 pcm = base64.b64decode(message.get('pcm', ''), validate=True)
-                if not pcm or len(pcm) > 384000 or len(pcm) % 2:
+                if not pcm or len(pcm) > self.config['max_pcm_bytes'] or len(pcm) % 2:
                     raise NeuralTtsError('neural_tts_invalid_pcm')
                 self._completed_voice.name = message['voice_name']
                 return pcm, 24000

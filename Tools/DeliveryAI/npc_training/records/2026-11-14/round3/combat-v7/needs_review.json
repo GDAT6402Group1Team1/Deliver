@@ -1,0 +1,121 @@
+[
+  {
+    "id": "change-003-branch-2",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-003-branch-2",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "正在逃离，对方仍冲来追打，尚未确认安全距离"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-022-branch-1",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-022-branch-1",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已经挨拳且正在远离，对方仍冲来追打"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-026-branch-1",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-026-branch-1",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "自己已受惊退避，对方又冲来追打，继续拉开距离"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-029-branch-1",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-029-branch-1",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "对方威胁后已冲来追打，继续拉开距离"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-032-branch-2",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-032-branch-2",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "正在逃离，对方明确追打且已冲来，危险未解除"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-034-branch-1",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-034-branch-1",
+      "input_ok": true,
+      "action": "Fight",
+      "target_id": "opponent",
+      "reason": "对方假意退让后又出拳挑衅，交战未止"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-036-branch-1",
+    "reason": "teacher_disagrees",
+    "teacher": {
+      "id": "change-036-branch-1",
+      "input_ok": true,
+      "action": "Flee",
+      "target_id": "opponent",
+      "reason": "已在撤离，对方又冲来追打，继续拉开距离"
+    },
+    "draft_label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  }
+]

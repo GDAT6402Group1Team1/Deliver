@@ -3,19 +3,24 @@
 #include "Task/World/DeliveryTargetComponent.h"
 #include "Inventory/DeliveryPackageItem.h"
 #include "Carry/DeliveryCarryComponent.h"
+#include "Carry/DeliveryPackageCarrierInterface.h"
 #include "AbilitySystem/DeliverGameplayTags.h"
 
 #include "Character/DeliveryCharacter.h"
 #include "Delivery.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "World/DeliveryLocationComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerState.h"
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
 #include "Task/DeliveryTaskManagerComponent.h"
+#include "Misc/ScopeExit.h"
 
 UDeliveryTargetComponent::UDeliveryTargetComponent()
 {
@@ -115,9 +120,24 @@ void UDeliveryTargetComponent::EnsureInteractableConfigured()
 // 检查快递任务身份、配送状态和交付距离
 bool UDeliveryTargetComponent::CanAcceptDelivery(AActor *ItemActor, APlayerState *Player) const
 {
-    if (!ExpectedTask || !ItemActor || !GetOwner())
+    if (!ExpectedTask || !IsValid(ItemActor) || !IsValid(GetOwner()))
     {
         return false;
+    }
+
+    // 持件接口同时确认实物和结算玩家，二狗的主人从组件取得，不从AI Pawn取
+    const AActor* Holder = ItemActor->GetOwner();
+    const auto* Carrier = Cast<IDeliveryPackageCarrierInterface>(Holder);
+    if (Carrier)
+    {
+        const auto* Package = Cast<ADeliveryPackageItem>(ItemActor);
+        if (!GetWorld() || !IsValid(Holder) || Holder->GetWorld() != GetWorld() || ItemActor->GetWorld() != GetWorld() ||
+            !IsValid(Player) || Player->GetWorld() != GetWorld() || Player->IsInactive() ||
+            !Package || Carrier->GetCarriedTaskPackage() != Package ||
+            Carrier->GetTaskPlayerState() != Player || !Carrier->CanHandleTaskPackage())
+        {
+            return false;
+        }
     }
 
     if (DeliveryGate.IsBound() && !DeliveryGate.Execute(ItemActor, Player))
@@ -125,7 +145,7 @@ bool UDeliveryTargetComponent::CanAcceptDelivery(AActor *ItemActor, APlayerState
 
     // 必须是这个任务的快递，不能拿别的包裹来交差
     const UDeliveryItemComponent *Item = ItemActor->FindComponentByClass<UDeliveryItemComponent>();
-    if (!Item || Item->OwningTask != ExpectedTask)
+    if (!Item || Item->IsTransferInProgress() || Item->OwningTask != ExpectedTask)
     {
         return false;
     }
@@ -140,7 +160,27 @@ bool UDeliveryTargetComponent::CanAcceptDelivery(AActor *ItemActor, APlayerState
     // 收件点那一侧取 GetDeliveryPoint——和提示/按键判定同一个点，不是 Actor 原点
     const FVector ItemLocation = ItemActor->GetActorLocation();
 
-    return FVector::Dist(ItemLocation, GetDeliveryPoint(ItemLocation)) <= DeliveryRadius;
+    const FVector DeliveryPoint = GetDeliveryPoint(ItemLocation);
+    if (FVector::Dist(ItemLocation, DeliveryPoint) > DeliveryRadius) return false;
+    if (Carrier)
+    {
+        // NPC直接投递也要经过墙门遮挡检查，不能只凭手中包裹的距离结算
+        FCollisionQueryParams Query(SCENE_QUERY_STAT(CarrierDelivery), false, Holder);
+        Query.AddIgnoredActor(ItemActor);
+        // 收件人物自己的身体不挡住其锚点，建筑目标的整栋墙面仍参与射线
+        if (GetOwner()->IsA<APawn>()) Query.AddIgnoredActor(GetOwner());
+        FCollisionObjectQueryParams Objects;
+        for (const auto Channel : {ECC_WorldStatic, ECC_WorldDynamic, ECC_Pawn, ECC_Vehicle, ECC_PhysicsBody})
+            Objects.AddObjectTypesToQuery(Channel);
+        const auto HasClearDeliveryPath = [&](const FVector& Start)
+        {
+            FHitResult Hit;
+            return !GetWorld()->LineTraceSingleByObjectType(Hit, Start, DeliveryPoint, Objects, Query) ||
+                FVector::DistSquared(Hit.ImpactPoint, DeliveryPoint) <= FMath::Square(2.f);
+        };
+        if (!HasClearDeliveryPath(Holder->GetActorLocation()) || !HasClearDeliveryPath(ItemLocation)) return false;
+    }
+    return true;
 }
 
 // 取得交付判定使用的位置，与交互提示保持一致
@@ -175,6 +215,15 @@ bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Playe
 
     UDeliveryTaskManagerComponent *Manager = UDeliveryTaskManagerComponent::Get(this);
     if (!Manager) return false;
+    UDeliveryTaskDefinition* DeliveredTask=ExpectedTask;
+    auto* Carrier = Cast<IDeliveryPackageCarrierInterface>(ItemActor->GetOwner());
+    auto* TransferItem = Carrier ? ItemActor->FindComponentByClass<UDeliveryItemComponent>() : nullptr;
+    if (Carrier && (!TransferItem || !TransferItem->BeginTransfer(ItemActor->GetOwner()))) return false;
+    const TWeakObjectPtr<UDeliveryItemComponent> ReservedItem = TransferItem;
+    ON_SCOPE_EXIT
+    {
+        if (ReservedItem.IsValid()) ReservedItem->EndTransfer();
+    };
     // 只在这份外卖确实通过交付校验后计入事件，丢失或销毁的旧外卖不遗留奖励
     if (const auto* Package = Cast<ADeliveryPackageItem>(ItemActor); Package && Package->ContainsCaterpillar())
         Manager->ReportSpecialEvent(ExpectedTask, TAG_Event_Delivery_Caterpillar);
@@ -183,17 +232,25 @@ bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Playe
         return false;
     }
 
+    bool bPhysicalReleased=true;
     if (ADeliveryPackageItem *Package = Cast<ADeliveryPackageItem>(ItemActor))
     {
-        ADeliveryCharacter *Holder = Cast<ADeliveryCharacter>(Package->GetOwner());
-        if (const ADeliveryMotorbike *Vehicle = Cast<ADeliveryMotorbike>(Package->GetOwner()))
+        if (Carrier)
         {
-            Holder = Vehicle->GetDriver();
+            bPhysicalReleased=Carrier->ReleaseTaskPackage(Package);
         }
-        if (Holder)
-            Holder->GetCarryComponent()->ReleasePackage(Package);
-        else if (ADeliveryMotorbike *Vehicle = Cast<ADeliveryMotorbike>(Package->GetOwner()))
-            Vehicle->ReleaseCargo();
+        else
+        {
+            ADeliveryCharacter *Holder = Cast<ADeliveryCharacter>(Package->GetOwner());
+            if (const ADeliveryMotorbike *Vehicle = Cast<ADeliveryMotorbike>(Package->GetOwner()))
+            {
+                Holder = Vehicle->GetDriver();
+            }
+            if (Holder)
+                Holder->GetCarryComponent()->ReleasePackage(Package);
+            else if (ADeliveryMotorbike *Vehicle = Cast<ADeliveryMotorbike>(Package->GetOwner()))
+                Vehicle->ReleaseCargo();
+        }
     }
     else if (ADeliveryHandheldItem *Handheld = Cast<ADeliveryHandheldItem>(ItemActor))
     {
@@ -213,7 +270,8 @@ bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Playe
         }
     }
 
-    ItemActor->Destroy();
+    if (bPhysicalReleased && IsValid(ItemActor)) OnDeliveryConfirmed.Broadcast(DeliveredTask, ItemActor, Player);
+    if (IsValid(ItemActor)) ItemActor->Destroy();
 
     return true;
 }

@@ -5,6 +5,9 @@
 #include "Vehicle/DeliveryHornReceiver.h"
 #include "AI/Decision/DeliveryNpcTypes.h"
 #include "Engine/DataTable.h"
+#include "AbilitySystemInterface.h"
+#include "GameplayAbilitySpecHandle.h"
+#include "Combat/DeliveryNpcStrikeExecutor.h"
 #include "DeliveryNpcCharacter.generated.h"
 class UDeliveryNpcAgentComponent;
 class UDeliveryNpcCombatComponent;
@@ -14,17 +17,32 @@ class UDeliveryInteractableComponent;
 class UBehaviorTree;
 class UCapsuleComponent;
 class UDeliveryNpcLookComponent;
+class APlayerState;
+class UAbilitySystemComponent;
+class UGA_NpcStrike;
 
 // 创建 NPC 使用的组件，并根据动作类型调用移动、战斗和对白功能
 // 接收玩家发言和附近事件，安排下一次模型请求及失败重试
 UCLASS()
-class DELIVERY_API ADeliveryNpcCharacter : public ACharacter, public IDeliveryImpactReceiver, public IDeliveryHornReceiver
+class DELIVERY_API ADeliveryNpcCharacter : public ACharacter, public IDeliveryImpactReceiver, public IDeliveryHornReceiver, public IAbilitySystemInterface, public IDeliveryNpcStrikeExecutor
 {
     GENERATED_BODY()
     friend class FDeliveryNpcConversationContextTest;
     friend class FDeliveryConversationFeedbackTest;
 public:
     ADeliveryNpcCharacter();
+    UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="Delivery|技能") TObjectPtr<UAbilitySystemComponent> AbilitySystem;
+    UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Delivery|技能") TSubclassOf<UGA_NpcStrike> StrikeAbilityClass;
+    virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+    bool RequestStrike(AActor* Target,FGuid ActionId);
+    bool RequestFightStrike(AActor* Target,FGuid ActionId,FGuid PunchId);
+    void CancelStrikeAbility(FGuid ActionId);
+    virtual bool StartNpcStrike(const UDeliveryNpcStrikeRequest& Request) override;
+    virtual bool GetNpcStrikeResult(FGuid PunchId,bool& bOutHit) const override;
+    virtual void CancelNpcStrike(FGuid ActionId,FGuid PunchId) override;
+    virtual FDeliveryNpcStrikeFinished& GetNpcStrikeFinishedDelegate() override;
+    virtual bool CanExecuteGameplayRule(EDeliveryNpcAction Action,AActor* Target,int32 RuleRevision) const { return false; }
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|居民") TObjectPtr<UCapsuleComponent> ImpactSensor;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|居民") TObjectPtr<UDeliveryNpcAgentComponent> Agent;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|居民") TObjectPtr<UDeliveryNpcCombatComponent> Combat;
@@ -37,7 +55,10 @@ public:
     // 从配置表更新姓名、性格和声音，未选择有效行时保留原设置
     UFUNCTION(BlueprintCallable,CallInEditor,Category="Delivery|人物") bool ApplyProfile();
     // 检查 NPC 当前能否执行这个动作，只返回检查结果
-    bool CanExecute(EDeliveryNpcAction Action, AActor* Target) const;
+    virtual bool CanExecute(EDeliveryNpcAction Action, AActor* Target) const;
+    // 请求者由服务器保存，不能从模型选择的说话对象推导权限
+    virtual bool CanExecuteForRequester(EDeliveryNpcAction Action,AActor* Target,APlayerState* Requester) const;
+    virtual void ExtendDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const {}
     static constexpr float MoveAcceptanceRadius=140.f;
     // 使用 UE 导航的到达判断，同时考虑双方碰撞体和高度
     bool HasReachedMoveTarget(AActor* Target) const;
@@ -46,6 +67,11 @@ public:
     // 找到附近可完整走到的落点，查询本身不移动 NPC
     bool FindPaceDestination(FVector& OutLocation) const;
     bool FindSideStepDestination(AActor* Target,FVector& OutLocation) const;
+    // 复用附近步行的导航、胶囊扫掠和路程上限，查询不启动移动
+    bool FindNearbyWalkDestination(const FVector& Desired,float MaxTravel,FVector& OutLocation) const;
+    // 空闲、聊天或等回复时可以调整站位，正在执行移动或战斗时保持原动作
+    virtual bool CanAdjustStandingPosition() const;
+    bool FindStandingSpace(AActor* Neighbor,float BodyGap,FVector& OutLocation) const;
     // 选取远离威胁、沿导航可达且胶囊能通过的位置，不在查询中移动角色
     bool FindFleeDestination(AActor* Threat,float RemainingTravel,FVector& OutLocation) const;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|步态",meta=(ClampMin="30",ClampMax="400",Units="cm/s")) float WalkSpeed=180;
@@ -57,20 +83,25 @@ public:
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|逃跑",meta=(ClampMin="200",ClampMax="900",Units="cm")) float FleeSafeDistance=500;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|逃跑",meta=(ClampMin="200",ClampMax="1200",Units="cm")) float FleeTravelLimit=700;
     // 返回 true 表示动作已开始；攻击是否命中、移动是否到达要等待执行结果
-    bool ExecuteAction(const FDeliveryNpcPublicState& State);
+    virtual bool ExecuteAction(const FDeliveryNpcPublicState& State);
     // 停止指定编号的动作，较早任务的结束通知不会影响当前动作
-    void StopAction(FGuid ActionId);
+    virtual void StopAction(FGuid ActionId);
     void SetHeldVehicle(UDeliveryVehicleHoldComponent* Hold);
     UDeliveryVehicleHoldComponent* GetHeldVehicle() const { return HeldVehicle.Get(); }
     virtual void ReceiveImpact(const FVector& Impulse,const FVector& Point) override;
     virtual void ReceiveImpactFrom(const FVector& Impulse,const FVector& Point,AActor* Source) override;
     virtual bool IsKnockedDown() const override;
+    virtual bool CanReceiveHitWhileDown() const override;
+    virtual void ReceiveMeleeHitFrom(const FVector& Impulse,const FVector& Point,AActor* Source,FGuid PunchId) override;
     virtual void ReceiveHorn(float Multiplier) override;
     virtual void ReceiveHornFrom(float Multiplier,AActor* Vehicle,AActor* Driver) override;
     // 接收玩家或其他 NPC 的发言，返回 true 表示已听见，还不表示已经回答
     // 玩家发言先经过交谈组件检查，再从服务器调用这里
     // bRequestReply 为 false 时只记住这句话，不安排接话或打断当前回复
     bool HearSpeech(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth,AActor* Addressee=nullptr,FGuid ReplyToEventId=FGuid(),bool bRequestReply=true);
+    // 只接受本人的随从连麦，服务器重新检查归属，远处的语音不伪装成现场听见
+    bool HearCompanionVoice(class APlayerController* Speaker,const FString& Text,FGuid TurnId);
+    virtual bool IsNetRelevantFor(const AActor* RealViewer,const AActor* ViewTarget,const FVector& SrcLocation) const override;
     // 玩家开口从第 0 轮开始，NPC 接话时逐轮增加
     int32 GetConversationDepth() const { return ConversationDepth; }
     void WakeDecision();
@@ -81,7 +112,10 @@ protected:
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     virtual void Tick(float Dt) override;
 private:
-    bool FindNearbyWalkDestination(const FVector& Desired,float MaxTravel,FVector& OutLocation) const;
+    bool HearSpeechInternal(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth,AActor* Addressee,
+        FGuid ReplyToEventId,bool bRequestReply,bool bCompanionVoice);
+    bool RequestStrikeAbility(AActor* Target,FGuid ActionId,FGuid PunchId,bool bFight);
+    FGameplayAbilitySpecHandle StrikeAbilityHandle;
     float PreviousActionWalkSpeed=-1;
     UFUNCTION() void OnDecisionFinished(FName Reason);
     int32 DecisionRetryCount=0;

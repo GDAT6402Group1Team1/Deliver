@@ -21,6 +21,104 @@
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryInputLifecycleTest, "Delivery.Systems.InputLifecycle",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryMoveInputSafetyTest, "Delivery.Systems.MoveInputSafety",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDeliveryMoveInputSafetyTest::RunTest(const FString&)
+{
+    const auto Settings = UWorld::InitializationValues().AllowAudioPlayback(false)
+        .CreatePhysicsScene(true).ShouldSimulatePhysics(false).CreateNavigation(false).CreateAISystem(false);
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false, NAME_None, nullptr, true,
+        ERHIFeatureLevel::Num, &Settings);
+    if (!TestNotNull(TEXT("World"), World)) return false;
+    GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
+    ON_SCOPE_EXIT { GEngine->DestroyWorldContext(World); World->EndPlay(EEndPlayReason::Quit); World->DestroyWorld(false); };
+    FActorSpawnParameters Spawn;
+    Spawn.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    auto* Character = World->SpawnActor<ADeliveryCharacter>(Spawn);
+    auto* Player = World->SpawnActor<ADeliveryPlayerController>(Spawn);
+    auto* Bike = World->SpawnActor<ADeliveryMotorbike>(Spawn);
+    if (!Character || !Player || !Bike) return false;
+    // 独立世界没有 NetDriver/ULocalPlayer，显式建立本机输入的前提
+    Player->SetAsLocalPlayerController();
+    Player->Possess(Character);
+    if (!TestTrue(TEXT("测试角色由本机控制器持有"), Character->IsLocallyControlled())) return false;
+    auto* Input = Character->GetPlayerInput();
+    auto* Body = Character->GetActiveRagdoll();
+    auto* Bindings = NewObject<UEnhancedInputComponent>(Character);
+    Input->Bind(Bindings);
+
+    // 使用正式绑定派发两个结束事件，不能只检查函数存在
+    for (const ETriggerEvent Event : {ETriggerEvent::Completed, ETriggerEvent::Canceled})
+    {
+        Character->DoMove(0.0f, 1.0f);
+        bool bDispatched = false;
+        for (const auto& Binding : Bindings->GetActionEventBindings())
+        {
+            if (Binding->GetAction() == Input->MoveAction && Binding->GetTriggerEvent() == Event)
+            {
+                Binding->Execute(FInputActionInstance(Input->MoveAction));
+                bDispatched = true;
+            }
+        }
+        TestTrue(TEXT("移动结束事件实际绑定并派发"), bDispatched);
+        TestTrue(TEXT("结束和取消均停止移动"), Body->GetMoveInputForDebug().IsNearlyZero());
+    }
+    Character->DoMove(0.0f, 1.0f);
+    Input->MoveEnded(FInputActionValue(FVector2D(0.0f, 1.0f)));
+    TestTrue(TEXT("结束回调即使携带旧轴值也归零"), Body->GetMoveInputForDebug().IsNearlyZero());
+
+    Character->DoMove(0.3f, 0.6f);
+    Player->FlushPressedKeys();
+    TestTrue(TEXT("引擎失焦清键同时停止身体"), Body->GetMoveInputForDebug().IsNearlyZero());
+    TestEqual(TEXT("清键不破坏现有输入绑定"), Input->GetBoundInputForDebug(), static_cast<const UInputComponent*>(Bindings));
+    Player->UpdateWalkingInputFocus(false);
+    Input->Move(FInputActionValue(FVector2D(0.0f, 1.0f)));
+    TestTrue(TEXT("UI取得焦点后旧Triggered不能重新驱动身体"), Body->GetMoveInputForDebug().IsNearlyZero());
+    Player->UpdateWalkingInputFocus(true);
+    Input->Move(FInputActionValue(FVector2D(0.3f, 0.6f)));
+    TestTrue(TEXT("重新输入保持手柄模拟轴幅度"), Body->GetMoveInputForDebug().Equals(FVector2D(0.3f, 0.6f)));
+
+    // 保留旧签名，同时给无松键包的请求设置有界有效期
+    Character->ServerSetMoveInput_Implementation(FVector2D(0.0f, 1.0f), 30.0f);
+    TestFalse(TEXT("旧两参数入口仍接受移动"), Body->GetMoveInputForDebug().IsNearlyZero());
+    TestTrue(TEXT("远端输入设置过期计时器"), World->GetTimerManager().IsTimerActive(Character->MoveInputExpiryTimer));
+    Character->LastServerMoveInputTime = World->GetTimeSeconds() - 2.0;
+    Character->ExpireServerMoveInput();
+    TestTrue(TEXT("丢失松键包后过期归零"), Body->GetMoveInputForDebug().IsNearlyZero());
+
+    Character->ServerSetMoveInputSequenced_Implementation(FVector2D(0.0f, 1.0f), 0.0f, 10);
+    Character->LastServerMoveInputTime = World->GetTimeSeconds() - 2.0;
+    Character->ServerSetMoveInputSequenced_Implementation(FVector2D(0.25f, 0.75f), 0.0f, 11);
+    Character->ExpireServerMoveInput();
+    TestTrue(TEXT("持续新输入续期且保持轴值"), Body->GetMoveInputForDebug().Equals(FVector2D(0.25f, 0.75f)));
+    Character->ServerStopMoveInput_Implementation(12);
+    TestTrue(TEXT("可靠停止立即清零"), Body->GetMoveInputForDebug().IsNearlyZero());
+    Character->ServerSetMoveInputSequenced_Implementation(FVector2D(0.0f, 1.0f), 0.0f, 11);
+    TestTrue(TEXT("迟到移动不能越过较新的停止"), Body->GetMoveInputForDebug().IsNearlyZero());
+    Character->ServerSetMoveInputSequenced_Implementation(FVector2D(0.5f, 0.5f), 0.0f, 14);
+    Character->ServerStopMoveInput_Implementation(13);
+    TestTrue(TEXT("迟到可靠停止不能覆盖更新的移动"), Body->GetMoveInputForDebug().Equals(FVector2D(0.5f, 0.5f)));
+    Character->ServerSetMoveInput_Implementation(FVector2D::ZeroVector, 0.0f);
+    TestTrue(TEXT("启用序号后拒绝混入无序旧请求"), Body->GetMoveInputForDebug().Equals(FVector2D(0.5f, 0.5f)));
+    Character->LastServerMoveInputSequence = MAX_uint32;
+    Character->ServerStopMoveInput_Implementation(0);
+    TestTrue(TEXT("序号绕回仍可停止"), Body->GetMoveInputForDebug().IsNearlyZero());
+    Character->ServerSetMoveInputSequenced_Implementation(FVector2D(0.0f, 1.0f), 0.0f, MAX_uint32);
+    TestTrue(TEXT("绕回前的旧移动仍被拒绝"), Body->GetMoveInputForDebug().IsNearlyZero());
+
+    Player->Possess(Bike);
+    Input->Move(FInputActionValue(FVector2D(0.0f, 1.0f)));
+    Character->ServerSetMoveInputSequenced_Implementation(FVector2D(0.0f, 1.0f), 0.0f, 15);
+    TestTrue(TEXT("上车后的旧本机事件和旧角色请求均不能恢复移动"), Body->GetMoveInputForDebug().IsNearlyZero());
+    TestFalse(TEXT("控制权交接清理移动计时器"), World->GetTimerManager().IsTimerActive(Character->MoveInputExpiryTimer));
+    Player->Possess(Character);
+    Input->Bind(NewObject<UEnhancedInputComponent>(Character));
+    Input->Move(FInputActionValue(FVector2D(-0.5f, 0.4f)));
+    TestTrue(TEXT("下车重新输入仍正常"), Body->GetMoveInputForDebug().Equals(FVector2D(-0.5f, 0.4f)));
+    return true;
+}
+
 bool FDeliveryInputLifecycleTest::RunTest(const FString&)
 {
     const auto Settings = UWorld::InitializationValues().AllowAudioPlayback(false)

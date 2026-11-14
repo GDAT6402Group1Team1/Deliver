@@ -1,0 +1,3795 @@
+{
+  "schema_version": 1,
+  "usage": "evaluation_only_not_training",
+  "status": "failed",
+  "provider": "local",
+  "label": "round3-dual-pie-local99-q4single70",
+  "source_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\acceptance-reviewed.json",
+  "source_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+  "case_order": [
+    "independent-01",
+    "independent-02",
+    "independent-03",
+    "independent-04",
+    "independent-05",
+    "independent-06",
+    "independent-07",
+    "independent-08",
+    "independent-09",
+    "independent-10",
+    "independent-11",
+    "independent-12",
+    "independent-13",
+    "independent-14",
+    "independent-15",
+    "independent-16",
+    "independent-17",
+    "independent-18",
+    "independent-19",
+    "independent-20",
+    "independent-21",
+    "independent-22",
+    "independent-23",
+    "independent-24",
+    "independent-25",
+    "independent-26",
+    "independent-27",
+    "independent-28",
+    "independent-29",
+    "independent-30",
+    "independent-31",
+    "independent-32",
+    "independent-33",
+    "independent-34",
+    "independent-35",
+    "independent-36",
+    "independent-37",
+    "independent-38",
+    "independent-39",
+    "independent-40"
+  ],
+  "labels_sent_to_model": false,
+  "instructions_sha256": "9720d1cfd1156847370e4e4546b11a9b76b514e7a69ece29561e7d72435f4470",
+  "game_state_reported_by_operator": "dual_pie",
+  "ue_before": {
+    "ue": "\"UnrealEditor.exe\",\"65440\",\"Console\",\"1\",\"7,182,880 K\"",
+    "ue_commandlet": "信息: 没有运行的任务匹配指定标准。",
+    "local_model": "\"llama-server.exe\",\"56836\",\"Console\",\"1\",\"1,497,628 K\""
+  },
+  "request_timeout_seconds": 1.5,
+  "seed": 20261114,
+  "chunk_frames": 8,
+  "warmup_timeout_seconds": 1.5,
+  "start_buffer_seconds": 1.28,
+  "wait_seconds": 5.0,
+  "decision_load": "fixed_intervals_single_request_skip_missed_slots",
+  "decision_interval_seconds": 1.0,
+  "sampling_local": {
+    "temperature": 0.0,
+    "mode": "greedy",
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0
+  },
+  "evaluation_profile_routing": {
+    "note": "仅给评测副本补充正式人物编号，模型输入、标签和原始文件均不修改",
+    "name_to_profile": {
+      "大壮": "chunlai",
+      "翠花": "xiumei"
+    },
+    "added_case_ids": [
+      "independent-01",
+      "independent-02",
+      "independent-03",
+      "independent-04",
+      "independent-05",
+      "independent-06",
+      "independent-07",
+      "independent-08",
+      "independent-09",
+      "independent-10",
+      "independent-11",
+      "independent-12",
+      "independent-13",
+      "independent-14",
+      "independent-15",
+      "independent-16",
+      "independent-17",
+      "independent-18",
+      "independent-19",
+      "independent-20",
+      "independent-21",
+      "independent-22",
+      "independent-23",
+      "independent-24",
+      "independent-25",
+      "independent-26",
+      "independent-27",
+      "independent-28",
+      "independent-29",
+      "independent-30",
+      "independent-31",
+      "independent-32",
+      "independent-33",
+      "independent-34",
+      "independent-35",
+      "independent-36",
+      "independent-37",
+      "independent-38",
+      "independent-39",
+      "independent-40"
+    ],
+    "allowed_profile_ids": "chunlai,xiumei"
+  },
+  "luna_sampling_note": "复用 AppServer 实际模型设置，不能假称与本地采样参数相同",
+  "local_service_launch_record": {
+    "pid": 56836,
+    "device": "cuda",
+    "started_utc": "2026-11-14T15:44:57.953662+00:00",
+    "gpu_layers": 99,
+    "model_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3-q4\\combat-Q4_K_M.gguf",
+    "model_sha256": "da5a022325ba2fc89377e2cc5d2ba759aa97bce5e0ed5931c62ec29c176d0b31",
+    "context_tokens": 4096,
+    "output_tokens": 64,
+    "threads": 1,
+    "threads_batch": 1
+  },
+  "launch_record_process_identity_verified": false,
+  "tts_config_sha256": "9e18115bf583dbca2e070edeacc0ec00a63cb853a8e69f63f24dbc4b88476c6b",
+  "tts_runtime_sha256": "f7468d1f989edbf171a39136afd995f2c1c2a655fbd590ad6b421ba35fe00170",
+  "voice_identities": {
+    "male": {
+      "provider": "qwen",
+      "speaker": "Uncle_Fu",
+      "model_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+      "runtime": "qwentts_cpp",
+      "source_commit": "f1a6924789883bd92eeb59176793a94af55730b3",
+      "gguf_sha256": "4eb38675c736ed6ac72012846ac8d6ef80e5af8bc05726870f0b3a6569588519",
+      "codec_sha256": "1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94",
+      "quantization": "Q8_0"
+    },
+    "female": {
+      "provider": "qwen_base",
+      "speaker": "Xiaofang_B",
+      "model_revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+      "reference_sha256": "35d6e6f5fda0189495782df45c7d13c45edd835066e84456a25760b409d5ca65",
+      "reference_text_sha256": "2bd10a8b5c09b3d8bb4ba66d5c9ef6912aa577df2759ae58a62d008ff51c6ff7",
+      "runtime": "qwentts_cpp",
+      "source_commit": "f1a6924789883bd92eeb59176793a94af55730b3",
+      "gguf_sha256": "d54dbaf10591421fa764ed630d764efa717ae40cd959bd48c66d4eb1af226426",
+      "codec_sha256": "1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94",
+      "quantization": "Q8_0"
+    }
+  },
+  "tts_config": {
+    "schema_version": 1,
+    "talker_mode": "cuda_graph",
+    "python_path": "Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe",
+    "model_path": "Saved/AIResearch/TtsEvaluation/qwen/model",
+    "installation_path": "Saved/AIResearch/TtsEvaluation/qwen/installation.json",
+    "model_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+    "voices": {
+      "male": {
+        "provider": "qwen",
+        "speaker": "Uncle_Fu"
+      },
+      "female": {
+        "provider": "qwen_base",
+        "speaker": "Xiaofang_B",
+        "predictor_mode": "cuda_graph",
+        "model_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model",
+        "model_revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+        "model_manifest_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model-downloads.json",
+        "model_manifest_sha256": "004284ecfa9008b58a7d6332e3d91583f608b74b9f5a947921f2d7be8850868d",
+        "reference_path": "Design/Art/NPC/Residents/Voice/Generated/Xiaofang_B_Reference.wav",
+        "reference_sha256": "35d6e6f5fda0189495782df45c7d13c45edd835066e84456a25760b409d5ca65",
+        "reference_text": "大军，你少在这儿瞎嚷嚷。"
+      }
+    },
+    "packages": {
+      "torch": "2.7.1+cu128",
+      "qwen-tts": "0.1.1",
+      "transformers": "4.57.3"
+    },
+    "sample_rate": 24000,
+    "max_pcm_bytes": 576000,
+    "max_text_chars": 120,
+    "max_new_tokens": 256,
+    "cpu_threads": 4,
+    "seed": 20261113,
+    "startup_timeout_seconds": 60,
+    "synthesis_timeout_seconds": 20,
+    "cancel_grace_seconds": 2,
+    "process_exit_timeout_seconds": 5
+  },
+  "tts_worker_pid": 67164,
+  "warmup_speech": [
+    {
+      "case": "male_short",
+      "voice": "male",
+      "text": "你先听我说完，我刚才真没看见你。",
+      "utc_started": "2026-11-14T15:45:06.782405+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T15:45:07.474404+00:00",
+      "complete_ms": 691.9560000023921,
+      "chunks": [
+        {
+          "received_ms": 111.1700000037672,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 181.87980000220705,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 243.90390000189655,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 322.7617000011378,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 396.0603000014089,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 467.75580000394257,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 539.6991000015987,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 612.3210000005201,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 688.6518000028445,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        }
+      ],
+      "chunk_count": 9,
+      "first_chunk_ms": 111.1700000037672,
+      "delivered_audio_seconds": 4.4,
+      "generation_rtf": 0.15726272727327092,
+      "pcm_sha256": "8a38f7b92898ae2faa696704da1584759b3345137c3d495a43259fb1fb6695a9",
+      "buffer_simulation": {
+        "duration_s": 4.4,
+        "retrospective_uninterrupted_start_ms": 111.1700000037672,
+        "buffer_start_ms": 396.0603000014089,
+        "buffer_min_margin_ms": 1768.3044999974666,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    },
+    {
+      "case": "female_short",
+      "voice": "female",
+      "text": "我就在旁边站着呢，你怎么能没看见呀？",
+      "utc_started": "2026-11-14T15:45:07.474444+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T15:45:09.342477+00:00",
+      "complete_ms": 1868.002199997136,
+      "chunks": [
+        {
+          "received_ms": 1438.364100002218,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 1483.571500000835,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 1533.0520999996224,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 1613.4477000014158,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 1691.9903000016348,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 1764.31749999756,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 1838.6587999993935,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 1867.3763999977382,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 149760
+        }
+      ],
+      "chunk_count": 8,
+      "first_chunk_ms": 1438.364100002218,
+      "delivered_audio_seconds": 3.28,
+      "generation_rtf": 0.5695128658527854,
+      "pcm_sha256": "21fd5635507b76d3db1e762afa2fec5ae5e7a364c9a65d18e94acf3ba458e1c3",
+      "buffer_simulation": {
+        "duration_s": 3.2800000000000007,
+        "retrospective_uninterrupted_start_ms": 1438.364100002218,
+        "buffer_start_ms": 1691.9903000016348,
+        "buffer_min_margin_ms": 1767.672800004075,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    },
+    {
+      "case": "male_long",
+      "voice": "male",
+      "text": "刚才是我没看清楚。你拿好东西，我把车挪开，别挡着大家。",
+      "utc_started": "2026-11-14T15:45:09.342509+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T15:45:11.377864+00:00",
+      "complete_ms": 2035.292100001243,
+      "chunks": [
+        {
+          "received_ms": 1195.0843000013265,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 1238.6555999983102,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 1285.857599999872,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 1375.7554000039818,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 1471.617100003641,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 1561.6673000040464,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 1636.6303000031621,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 1713.7546000012662,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 1790.1727999997092,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        },
+        {
+          "received_ms": 1865.8525999999256,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 211200
+        },
+        {
+          "received_ms": 1950.1640000016778,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 241920
+        },
+        {
+          "received_ms": 2029.137500001525,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 272640
+        },
+        {
+          "received_ms": 2034.6415000021807,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 288000
+        }
+      ],
+      "chunk_count": 13,
+      "first_chunk_ms": 1195.0843000013265,
+      "delivered_audio_seconds": 6.16,
+      "generation_rtf": 0.33040456168851345,
+      "pcm_sha256": "1a0a3710635f799a294ebc726e127bfc01f26eeb4faa1104971eda3f2f8e2586",
+      "buffer_simulation": {
+        "duration_s": 6.16,
+        "retrospective_uninterrupted_start_ms": 1195.0843000013265,
+        "buffer_start_ms": 1471.617100003641,
+        "buffer_min_margin_ms": 1749.949799999595,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    },
+    {
+      "case": "female_long",
+      "voice": "female",
+      "text": "你别急着走呀。我刚才声音大了点，咱们好好说嘛。",
+      "utc_started": "2026-11-14T15:45:11.377915+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T15:45:13.568576+00:00",
+      "complete_ms": 2190.6174999967334,
+      "chunks": [
+        {
+          "received_ms": 1495.426999994379,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 1543.8709000009112,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 1594.3530000004102,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 1681.429099997331,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 1760.913399994024,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 1838.1000000008498,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 1919.6958999964409,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 1996.7986999981804,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 2071.744699998817,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        },
+        {
+          "received_ms": 2145.780699996976,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 211200
+        },
+        {
+          "received_ms": 2183.392699997057,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 241920
+        },
+        {
+          "received_ms": 2189.8400999998557,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 249600
+        }
+      ],
+      "chunk_count": 12,
+      "first_chunk_ms": 1495.426999994379,
+      "delivered_audio_seconds": 5.28,
+      "generation_rtf": 0.41488967802968435,
+      "pcm_sha256": "487bb770bb810f6a1486006c368185d8e38f658a360e4b9c66c4c8105b6771e2",
+      "buffer_simulation": {
+        "duration_s": 5.28,
+        "retrospective_uninterrupted_start_ms": 1495.426999994379,
+        "buffer_start_ms": 1760.913399994024,
+        "buffer_min_margin_ms": 1762.8133999931745,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    }
+  ],
+  "cadence_source": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7-integration\\coexist-baseline-q4single70\\summary.json",
+  "speech_cadence": [
+    {
+      "case": "male_short",
+      "text_sha256": "6b31a361f4e5ee5eef59d3360f0ef09117564925cd061af14ab2de07aede6e47",
+      "audio_seconds": 4.4,
+      "interval_seconds": 4.6000000000000005
+    },
+    {
+      "case": "female_short",
+      "text_sha256": "23f1b45f4f2258b3cd72a2dd65263bcbee74e25111a71dee7d911db9fec58f28",
+      "audio_seconds": 3.28,
+      "interval_seconds": 3.48
+    },
+    {
+      "case": "male_long",
+      "text_sha256": "9ae251ba66f57f0436248f70205bee24ea7e6a1f80db541d996bf3cc32a657f6",
+      "audio_seconds": 6.16,
+      "interval_seconds": 6.36
+    },
+    {
+      "case": "female_long",
+      "text_sha256": "abfdc282f1aae0e27aca67a04c9623684fafe5e1864f26fc0cbe3feb43e2e086",
+      "audio_seconds": 5.28,
+      "interval_seconds": 5.48
+    }
+  ],
+  "warmup_model_started_utc": "2026-11-14T15:45:13.583577+00:00",
+  "warmup_model_action": "Wait",
+  "warmup_model_status": "completed",
+  "warmup_model_ms": 197.28749999922002,
+  "warmup_model_finished_utc": "2026-11-14T15:45:13.780869+00:00",
+  "ready_utc": "2026-11-14T15:45:13.780884+00:00",
+  "gpu_sampling_origin_utc": "2026-11-14T15:45:18.782406+00:00",
+  "gpu_sampling_includes_cancellation_cleanup": true,
+  "measurement": {
+    "utc_started": "2026-11-14T15:45:18.782430+00:00",
+    "requested_seconds": 70.0,
+    "decisions": [
+      {
+        "id": "independent-01",
+        "case_index": 0,
+        "cycle": 0,
+        "attempt": 0,
+        "utc_started": "2026-11-14T15:45:18.783010+00:00",
+        "utc_finished": "2026-11-14T15:45:18.984561+00:00",
+        "scheduled_slot": 0,
+        "scheduled_at_seconds": 0.0,
+        "start_late_ms": 0.5774000019300729,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 0.0005774000019300729,
+        "complete_ms": 201.54799999727402,
+        "timing": {
+          "combat_prompt_ready": 59.84790000366047,
+          "combat_model_done": 201.07590000407072
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 212,
+          "prompt_n": 505,
+          "prompt_ms": 65.14,
+          "prompt_per_token_ms": 0.128990099009901,
+          "prompt_per_second": 7752.5330058335885,
+          "predicted_n": 12,
+          "predicted_ms": 54.284,
+          "predicted_per_token_ms": 4.523666666666666,
+          "predicted_per_second": 221.0596124088129
+        },
+        "action": "Fight",
+        "target_id": "ab769e32-0f96-56eb-8590-d15ed75973a0",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-02",
+        "case_index": 1,
+        "cycle": 0,
+        "attempt": 1,
+        "utc_started": "2026-11-14T15:45:19.792422+00:00",
+        "utc_finished": "2026-11-14T15:45:20.126884+00:00",
+        "scheduled_slot": 1,
+        "scheduled_at_seconds": 1.0,
+        "start_late_ms": 9.984600001189392,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 1.0099846000011894,
+        "complete_ms": 334.4634000022779,
+        "timing": {
+          "combat_prompt_ready": 33.87479999946663,
+          "combat_model_done": 333.93149999756133
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 212,
+          "prompt_n": 478,
+          "prompt_ms": 147.685,
+          "prompt_per_token_ms": 0.3089644351464435,
+          "prompt_per_second": 3236.6184785184682,
+          "predicted_n": 13,
+          "predicted_ms": 103.87,
+          "predicted_per_token_ms": 7.99,
+          "predicted_per_second": 125.15644555694618
+        },
+        "action": "Flee",
+        "target_id": "cc343ed7-b545-5e4d-8dc9-14219a422ec1",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-03",
+        "case_index": 2,
+        "cycle": 0,
+        "attempt": 2,
+        "utc_started": "2026-11-14T15:45:20.795519+00:00",
+        "utc_finished": "2026-11-14T15:45:20.958664+00:00",
+        "scheduled_slot": 2,
+        "scheduled_at_seconds": 2.0,
+        "start_late_ms": 13.083700003335252,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 2.0130837000033353,
+        "complete_ms": 163.14389999752166,
+        "timing": {
+          "combat_prompt_ready": 33.26620000007097,
+          "combat_model_done": 162.59039999567904
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 584,
+          "prompt_n": 111,
+          "prompt_ms": 18.64,
+          "prompt_per_token_ms": 0.16792792792792793,
+          "prompt_per_second": 5954.935622317596,
+          "predicted_n": 10,
+          "predicted_ms": 49.426,
+          "predicted_per_token_ms": 4.9426000000000005,
+          "predicted_per_second": 202.32266418484198
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-04",
+        "case_index": 3,
+        "cycle": 0,
+        "attempt": 3,
+        "utc_started": "2026-11-14T15:45:21.787846+00:00",
+        "utc_finished": "2026-11-14T15:45:21.954410+00:00",
+        "scheduled_slot": 3,
+        "scheduled_at_seconds": 3.0,
+        "start_late_ms": 5.410700003267266,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 3.0054107000032673,
+        "complete_ms": 166.5657999983523,
+        "timing": {
+          "combat_prompt_ready": 32.85650000179885,
+          "combat_model_done": 166.1316000027
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 539,
+          "prompt_n": 149,
+          "prompt_ms": 26.732,
+          "prompt_per_token_ms": 0.17940939597315436,
+          "prompt_per_second": 5573.844081999102,
+          "predicted_n": 13,
+          "predicted_ms": 53.495,
+          "predicted_per_token_ms": 4.115,
+          "predicted_per_second": 243.01336573511543
+        },
+        "action": "Flee",
+        "target_id": "074d0bbc-9704-5adb-bb9a-d9635984eb99",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-05",
+        "case_index": 4,
+        "cycle": 0,
+        "attempt": 4,
+        "utc_started": "2026-11-14T15:45:22.784226+00:00",
+        "utc_finished": "2026-11-14T15:45:22.950945+00:00",
+        "scheduled_slot": 4,
+        "scheduled_at_seconds": 4.0,
+        "start_late_ms": 1.7924999992828816,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 4.001792499999283,
+        "complete_ms": 166.7174000031082,
+        "timing": {
+          "combat_prompt_ready": 22.85459999984596,
+          "combat_model_done": 166.34460000204854
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 169,
+          "prompt_ms": 32.3,
+          "prompt_per_token_ms": 0.19112426035502958,
+          "prompt_per_second": 5232.198142414861,
+          "predicted_n": 10,
+          "predicted_ms": 47.82,
+          "predicted_per_token_ms": 4.782,
+          "predicted_per_second": 209.11752404851526
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait",
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-06",
+        "case_index": 5,
+        "cycle": 0,
+        "attempt": 5,
+        "utc_started": "2026-11-14T15:45:23.795094+00:00",
+        "utc_finished": "2026-11-14T15:45:23.992238+00:00",
+        "scheduled_slot": 5,
+        "scheduled_at_seconds": 5.0,
+        "start_late_ms": 12.657700004638173,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 5.012657700004638,
+        "complete_ms": 197.1438999971724,
+        "timing": {
+          "combat_prompt_ready": 47.59340000600787,
+          "combat_model_done": 196.63820000278065
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 567,
+          "prompt_n": 144,
+          "prompt_ms": 40.272,
+          "prompt_per_token_ms": 0.2796666666666667,
+          "prompt_per_second": 3575.6853396901074,
+          "predicted_n": 12,
+          "predicted_ms": 55.669,
+          "predicted_per_token_ms": 4.639083333333333,
+          "predicted_per_second": 215.55982683360577
+        },
+        "action": "Fight",
+        "target_id": "c8c65d55-3f90-5e98-ad5c-e123fe6021df",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-07",
+        "case_index": 6,
+        "cycle": 0,
+        "attempt": 6,
+        "utc_started": "2026-11-14T15:45:24.784854+00:00",
+        "utc_finished": "2026-11-14T15:45:25.031163+00:00",
+        "scheduled_slot": 6,
+        "scheduled_at_seconds": 6.0,
+        "start_late_ms": 2.4189000032492913,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 6.002418900003249,
+        "complete_ms": 246.30769999930635,
+        "timing": {
+          "combat_prompt_ready": 12.728299996524584,
+          "combat_model_done": 245.7250000006752
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 179,
+          "prompt_ms": 65.745,
+          "prompt_per_token_ms": 0.3672905027932961,
+          "prompt_per_second": 2722.6405049813675,
+          "predicted_n": 10,
+          "predicted_ms": 91.323,
+          "predicted_per_token_ms": 9.132299999999999,
+          "predicted_per_second": 109.50143994393527
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-08",
+        "case_index": 7,
+        "cycle": 0,
+        "attempt": 7,
+        "utc_started": "2026-11-14T15:45:25.795308+00:00",
+        "utc_finished": "2026-11-14T15:45:25.976789+00:00",
+        "scheduled_slot": 7,
+        "scheduled_at_seconds": 7.0,
+        "start_late_ms": 12.873300001956522,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 7.0128733000019565,
+        "complete_ms": 181.48179999843705,
+        "timing": {
+          "combat_prompt_ready": 47.41869999998016,
+          "combat_model_done": 181.0258999976213
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 539,
+          "prompt_n": 172,
+          "prompt_ms": 31.026,
+          "prompt_per_token_ms": 0.18038372093023256,
+          "prompt_per_second": 5543.737510475085,
+          "predicted_n": 12,
+          "predicted_ms": 56.548,
+          "predicted_per_token_ms": 4.7123333333333335,
+          "predicted_per_second": 212.2090966966117
+        },
+        "action": "Fight",
+        "target_id": "0135f03d-e10a-518c-aff5-ca00e892e399",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-09",
+        "case_index": 8,
+        "cycle": 0,
+        "attempt": 8,
+        "utc_started": "2026-11-14T15:45:26.793095+00:00",
+        "utc_finished": "2026-11-14T15:45:26.972042+00:00",
+        "scheduled_slot": 8,
+        "scheduled_at_seconds": 8.0,
+        "start_late_ms": 10.658899998816196,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 8.010658899998816,
+        "complete_ms": 178.9470000003348,
+        "timing": {
+          "combat_prompt_ready": 33.56340000027558,
+          "combat_model_done": 178.37169999984326
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 569,
+          "prompt_n": 150,
+          "prompt_ms": 30.934,
+          "prompt_per_token_ms": 0.20622666666666667,
+          "prompt_per_second": 4849.03342600375,
+          "predicted_n": 13,
+          "predicted_ms": 64.788,
+          "predicted_per_token_ms": 4.983692307692308,
+          "predicted_per_second": 200.65444218065076
+        },
+        "action": "Flee",
+        "target_id": "6c7223d0-cfcc-50f3-bb4b-d105566d27f8",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-10",
+        "case_index": 9,
+        "cycle": 0,
+        "attempt": 9,
+        "utc_started": "2026-11-14T15:45:27.788656+00:00",
+        "utc_finished": "2026-11-14T15:45:27.994645+00:00",
+        "scheduled_slot": 9,
+        "scheduled_at_seconds": 9.0,
+        "start_late_ms": 6.2213999990490265,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 9.006221399999049,
+        "complete_ms": 205.98630000313278,
+        "timing": {
+          "combat_prompt_ready": 48.375800004578196,
+          "combat_model_done": 205.48000000417233
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 539,
+          "prompt_n": 150,
+          "prompt_ms": 33.589,
+          "prompt_per_token_ms": 0.22392666666666666,
+          "prompt_per_second": 4465.747715025753,
+          "predicted_n": 10,
+          "predicted_ms": 58.218,
+          "predicted_per_token_ms": 5.8218000000000005,
+          "predicted_per_second": 171.76818166202892
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait",
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-11",
+        "case_index": 10,
+        "cycle": 0,
+        "attempt": 10,
+        "utc_started": "2026-11-14T15:45:28.794160+00:00",
+        "utc_finished": "2026-11-14T15:45:29.044211+00:00",
+        "scheduled_slot": 10,
+        "scheduled_at_seconds": 10.0,
+        "start_late_ms": 11.72460000088904,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 10.011724600000889,
+        "complete_ms": 250.0503999981447,
+        "timing": {
+          "combat_prompt_ready": 9.893099995679222,
+          "combat_model_done": 249.5232000001124
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 569,
+          "prompt_n": 146,
+          "prompt_ms": 66.088,
+          "prompt_per_token_ms": 0.4526575342465753,
+          "prompt_per_second": 2209.1756445950855,
+          "predicted_n": 10,
+          "predicted_ms": 103.426,
+          "predicted_per_token_ms": 10.342600000000001,
+          "predicted_per_second": 96.68748670547058
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-12",
+        "case_index": 11,
+        "cycle": 0,
+        "attempt": 11,
+        "utc_started": "2026-11-14T15:45:29.786239+00:00",
+        "utc_finished": "2026-11-14T15:45:29.962534+00:00",
+        "scheduled_slot": 11,
+        "scheduled_at_seconds": 11.0,
+        "start_late_ms": 3.804400002991315,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 11.003804400002991,
+        "complete_ms": 176.29419999866514,
+        "timing": {
+          "combat_prompt_ready": 48.91140000108862,
+          "combat_model_done": 175.88040000555338
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 539,
+          "prompt_n": 178,
+          "prompt_ms": 29.564,
+          "prompt_per_token_ms": 0.16608988764044944,
+          "prompt_per_second": 6020.83615207685,
+          "predicted_n": 12,
+          "predicted_ms": 45.677,
+          "predicted_per_token_ms": 3.806416666666667,
+          "predicted_per_second": 262.71427633163296
+        },
+        "action": "Fight",
+        "target_id": "fa221ea9-03e3-5cb9-a1bc-69e20d796f09",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-13",
+        "case_index": 12,
+        "cycle": 0,
+        "attempt": 12,
+        "utc_started": "2026-11-14T15:45:30.794323+00:00",
+        "utc_finished": "2026-11-14T15:45:30.984452+00:00",
+        "scheduled_slot": 12,
+        "scheduled_at_seconds": 12.0,
+        "start_late_ms": 11.887900000147056,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 12.011887900000147,
+        "complete_ms": 190.1276999997208,
+        "timing": {
+          "combat_prompt_ready": 32.63629999855766,
+          "combat_model_done": 189.65519999619573
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 145,
+          "prompt_ms": 33.891,
+          "prompt_per_token_ms": 0.23373103448275862,
+          "prompt_per_second": 4278.421999940987,
+          "predicted_n": 13,
+          "predicted_ms": 68.567,
+          "predicted_per_token_ms": 5.274384615384615,
+          "predicted_per_second": 189.59557804774894
+        },
+        "action": "Flee",
+        "target_id": "6d72d924-aab7-56ae-ab7a-052df7dd6145",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-14",
+        "case_index": 13,
+        "cycle": 0,
+        "attempt": 13,
+        "utc_started": "2026-11-14T15:45:31.784848+00:00",
+        "utc_finished": "2026-11-14T15:45:31.983067+00:00",
+        "scheduled_slot": 13,
+        "scheduled_at_seconds": 13.0,
+        "start_late_ms": 2.413200003502425,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 13.002413200003502,
+        "complete_ms": 198.21999999840045,
+        "timing": {
+          "combat_prompt_ready": 48.33610000059707,
+          "combat_model_done": 197.7744000032544
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 566,
+          "prompt_n": 144,
+          "prompt_ms": 28.323,
+          "prompt_per_token_ms": 0.19668750000000002,
+          "prompt_per_second": 5084.207181442644,
+          "predicted_n": 10,
+          "predicted_ms": 44.357,
+          "predicted_per_token_ms": 4.4357,
+          "predicted_per_second": 225.44356020470275
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-15",
+        "case_index": 14,
+        "cycle": 0,
+        "attempt": 14,
+        "utc_started": "2026-11-14T15:45:32.797276+00:00",
+        "utc_finished": "2026-11-14T15:45:32.972666+00:00",
+        "scheduled_slot": 14,
+        "scheduled_at_seconds": 14.0,
+        "start_late_ms": 14.843199998722412,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 14.014843199998722,
+        "complete_ms": 175.38760000024922,
+        "timing": {
+          "combat_prompt_ready": 32.33330000512069,
+          "combat_model_done": 174.93490000197198
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 169,
+          "prompt_ms": 35.331,
+          "prompt_per_token_ms": 0.20905917159763315,
+          "prompt_per_second": 4783.334748521129,
+          "predicted_n": 12,
+          "predicted_ms": 58.536,
+          "predicted_per_token_ms": 4.878,
+          "predicted_per_second": 205.00205002050023
+        },
+        "action": "Fight",
+        "target_id": "904e64e5-c87c-5312-8b1e-5ea269d4b223",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-16",
+        "case_index": 15,
+        "cycle": 0,
+        "attempt": 15,
+        "utc_started": "2026-11-14T15:45:33.784548+00:00",
+        "utc_finished": "2026-11-14T15:45:33.960026+00:00",
+        "scheduled_slot": 15,
+        "scheduled_at_seconds": 15.0,
+        "start_late_ms": 2.112699999997858,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 15.002112699999998,
+        "complete_ms": 175.46730000321986,
+        "timing": {
+          "combat_prompt_ready": 48.57839999749558,
+          "combat_model_done": 175.05979999987176
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 566,
+          "prompt_n": 151,
+          "prompt_ms": 30.748,
+          "prompt_per_token_ms": 0.2036291390728477,
+          "prompt_per_second": 4910.888513074021,
+          "predicted_n": 10,
+          "predicted_ms": 43.981,
+          "predicted_per_token_ms": 4.3981,
+          "predicted_per_second": 227.37091016575337
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-17",
+        "case_index": 16,
+        "cycle": 0,
+        "attempt": 16,
+        "utc_started": "2026-11-14T15:45:34.791379+00:00",
+        "utc_finished": "2026-11-14T15:45:34.986427+00:00",
+        "scheduled_slot": 16,
+        "scheduled_at_seconds": 16.0,
+        "start_late_ms": 8.94450000487268,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 16.008944500004873,
+        "complete_ms": 195.04669999878388,
+        "timing": {
+          "combat_prompt_ready": 47.705999997560866,
+          "combat_model_done": 194.58070000109728
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 171,
+          "prompt_ms": 32.841,
+          "prompt_per_token_ms": 0.19205263157894736,
+          "prompt_per_second": 5206.906001644285,
+          "predicted_n": 13,
+          "predicted_ms": 66.677,
+          "predicted_per_token_ms": 5.1290000000000004,
+          "predicted_per_second": 194.96977968414893
+        },
+        "action": "Flee",
+        "target_id": "ef7ce024-5254-551f-93a6-4021e601d3c9",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-18",
+        "case_index": 17,
+        "cycle": 0,
+        "attempt": 17,
+        "utc_started": "2026-11-14T15:45:35.786694+00:00",
+        "utc_finished": "2026-11-14T15:45:36.094718+00:00",
+        "scheduled_slot": 17,
+        "scheduled_at_seconds": 17.0,
+        "start_late_ms": 4.26030000380706,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 17.004260300003807,
+        "complete_ms": 308.0236999958288,
+        "timing": {
+          "combat_prompt_ready": 48.38059999747202,
+          "combat_model_done": 307.62269999831915
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 539,
+          "prompt_n": 167,
+          "prompt_ms": 77.437,
+          "prompt_per_token_ms": 0.4636946107784431,
+          "prompt_per_second": 2156.591810116611,
+          "predicted_n": 13,
+          "predicted_ms": 118.028,
+          "predicted_per_token_ms": 9.079076923076924,
+          "predicted_per_second": 110.14335581387468
+        },
+        "action": "Flee",
+        "target_id": "e499c3de-184d-5bdc-9713-f4ebed6fd54b",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait",
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-19",
+        "case_index": 18,
+        "cycle": 0,
+        "attempt": 18,
+        "utc_started": "2026-11-14T15:45:36.797563+00:00",
+        "utc_finished": "2026-11-14T15:45:36.930380+00:00",
+        "scheduled_slot": 18,
+        "scheduled_at_seconds": 18.0,
+        "start_late_ms": 15.128300001379102,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 18.01512830000138,
+        "complete_ms": 132.81609999830835,
+        "timing": {
+          "combat_prompt_ready": 8.866299998771865,
+          "combat_model_done": 132.42390000232263
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 154,
+          "prompt_ms": 29.417,
+          "prompt_per_token_ms": 0.19101948051948053,
+          "prompt_per_second": 5235.068157867899,
+          "predicted_n": 10,
+          "predicted_ms": 41.636,
+          "predicted_per_token_ms": 4.163600000000001,
+          "predicted_per_second": 240.17677010279562
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-20",
+        "case_index": 19,
+        "cycle": 0,
+        "attempt": 19,
+        "utc_started": "2026-11-14T15:45:37.792144+00:00",
+        "utc_finished": "2026-11-14T15:45:37.957665+00:00",
+        "scheduled_slot": 19,
+        "scheduled_at_seconds": 19.0,
+        "start_late_ms": 9.709800004202407,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 19.009709800004202,
+        "complete_ms": 165.5213999983971,
+        "timing": {
+          "combat_prompt_ready": 8.407000001170672,
+          "combat_model_done": 165.07540000020526
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 539,
+          "prompt_n": 176,
+          "prompt_ms": 30.711,
+          "prompt_per_token_ms": 0.17449431818181818,
+          "prompt_per_second": 5730.845625345968,
+          "predicted_n": 13,
+          "predicted_ms": 60.908,
+          "predicted_per_token_ms": 4.6852307692307695,
+          "predicted_per_second": 213.4366585670191
+        },
+        "action": "Flee",
+        "target_id": "2a46545c-8cb5-5b67-9988-a01ea7241d62",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-21",
+        "case_index": 20,
+        "cycle": 0,
+        "attempt": 20,
+        "utc_started": "2026-11-14T15:45:38.786730+00:00",
+        "utc_finished": "2026-11-14T15:45:38.952273+00:00",
+        "scheduled_slot": 20,
+        "scheduled_at_seconds": 20.0,
+        "start_late_ms": 4.293900004995521,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 20.004293900004996,
+        "complete_ms": 165.54389999510022,
+        "timing": {
+          "combat_prompt_ready": 25.22039999894332,
+          "combat_model_done": 165.13590000249678
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 585,
+          "prompt_n": 100,
+          "prompt_ms": 19.909,
+          "prompt_per_token_ms": 0.19909,
+          "prompt_per_second": 5022.853985634638,
+          "predicted_n": 10,
+          "predicted_ms": 52.139,
+          "predicted_per_token_ms": 5.213900000000001,
+          "predicted_per_second": 191.79500949385297
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-22",
+        "case_index": 21,
+        "cycle": 0,
+        "attempt": 21,
+        "utc_started": "2026-11-14T15:45:39.794946+00:00",
+        "utc_finished": "2026-11-14T15:45:39.984454+00:00",
+        "scheduled_slot": 21,
+        "scheduled_at_seconds": 21.0,
+        "start_late_ms": 12.510799999290612,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 21.01251079999929,
+        "complete_ms": 189.50840000616154,
+        "timing": {
+          "combat_prompt_ready": 48.05079999641748,
+          "combat_model_done": 189.0346000000136
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 600,
+          "prompt_n": 117,
+          "prompt_ms": 19.935,
+          "prompt_per_token_ms": 0.17038461538461538,
+          "prompt_per_second": 5869.074492099323,
+          "predicted_n": 12,
+          "predicted_ms": 59.401,
+          "predicted_per_token_ms": 4.950083333333334,
+          "predicted_per_second": 202.01680106395514
+        },
+        "action": "Fight",
+        "target_id": "1a9f500d-f7d3-5e1f-b521-e71fd6487f8c",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight",
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-23",
+        "case_index": 22,
+        "cycle": 0,
+        "attempt": 22,
+        "utc_started": "2026-11-14T15:45:40.796179+00:00",
+        "utc_finished": "2026-11-14T15:45:41.035180+00:00",
+        "scheduled_slot": 22,
+        "scheduled_at_seconds": 22.0,
+        "start_late_ms": 13.741300004767254,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 22.013741300004767,
+        "complete_ms": 239.0012999967439,
+        "timing": {
+          "combat_prompt_ready": 12.514599999121856,
+          "combat_model_done": 238.3983999970951
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 138,
+          "prompt_ms": 29.128,
+          "prompt_per_token_ms": 0.21107246376811595,
+          "prompt_per_second": 4737.709420488877,
+          "predicted_n": 13,
+          "predicted_ms": 73.026,
+          "predicted_per_token_ms": 5.617384615384615,
+          "predicted_per_second": 178.01878782899243
+        },
+        "action": "Flee",
+        "target_id": "89cc51d2-9321-511d-9546-aaa3a32399cc",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait",
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-24",
+        "case_index": 23,
+        "cycle": 0,
+        "attempt": 23,
+        "utc_started": "2026-11-14T15:45:41.784374+00:00",
+        "utc_finished": "2026-11-14T15:45:41.982380+00:00",
+        "scheduled_slot": 23,
+        "scheduled_at_seconds": 23.0,
+        "start_late_ms": 1.9358999998075888,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 23.001935899999808,
+        "complete_ms": 198.0072000005748,
+        "timing": {
+          "combat_prompt_ready": 29.327399999601766,
+          "combat_model_done": 197.39040000422392
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 566,
+          "prompt_n": 116,
+          "prompt_ms": 24.079,
+          "prompt_per_token_ms": 0.20757758620689656,
+          "prompt_per_second": 4817.475808796046,
+          "predicted_n": 10,
+          "predicted_ms": 55.967,
+          "predicted_per_token_ms": 5.5967,
+          "predicted_per_second": 178.67672021012382
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait",
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-25",
+        "case_index": 24,
+        "cycle": 0,
+        "attempt": 24,
+        "utc_started": "2026-11-14T15:45:42.791865+00:00",
+        "utc_finished": "2026-11-14T15:45:43.117163+00:00",
+        "scheduled_slot": 24,
+        "scheduled_at_seconds": 24.0,
+        "start_late_ms": 9.429900004761294,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 24.00942990000476,
+        "complete_ms": 325.2973999988171,
+        "timing": {
+          "combat_prompt_ready": 33.76959999877727,
+          "combat_model_done": 324.6330999972997
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 570,
+          "prompt_n": 148,
+          "prompt_ms": 112.675,
+          "prompt_per_token_ms": 0.7613175675675675,
+          "prompt_per_second": 1313.5123141779454,
+          "predicted_n": 13,
+          "predicted_ms": 94.57,
+          "predicted_per_token_ms": 7.274615384615384,
+          "predicted_per_second": 137.46431214973038
+        },
+        "action": "Flee",
+        "target_id": "7265f74c-2741-5e5b-949e-a28bd97d92dc",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": false,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-26",
+        "case_index": 25,
+        "cycle": 0,
+        "attempt": 25,
+        "utc_started": "2026-11-14T15:45:43.797743+00:00",
+        "utc_finished": "2026-11-14T15:45:43.993687+00:00",
+        "scheduled_slot": 25,
+        "scheduled_at_seconds": 25.0,
+        "start_late_ms": 15.308300004107878,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 25.015308300004108,
+        "complete_ms": 195.94050000159768,
+        "timing": {
+          "combat_prompt_ready": 14.665000002423767,
+          "combat_model_done": 195.4113000028883
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 566,
+          "prompt_n": 117,
+          "prompt_ms": 20.258,
+          "prompt_per_token_ms": 0.17314529914529914,
+          "prompt_per_second": 5775.4961003060525,
+          "predicted_n": 10,
+          "predicted_ms": 60.75,
+          "predicted_per_token_ms": 6.075,
+          "predicted_per_second": 164.6090534979424
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-27",
+        "case_index": 26,
+        "cycle": 0,
+        "attempt": 26,
+        "utc_started": "2026-11-14T15:45:44.794110+00:00",
+        "utc_finished": "2026-11-14T15:45:44.987067+00:00",
+        "scheduled_slot": 26,
+        "scheduled_at_seconds": 26.0,
+        "start_late_ms": 11.673400003928691,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 26.01167340000393,
+        "complete_ms": 192.95839999540476,
+        "timing": {
+          "combat_prompt_ready": 33.47080000094138,
+          "combat_model_done": 192.42169999779435
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 174,
+          "prompt_ms": 42.472,
+          "prompt_per_token_ms": 0.2440919540229885,
+          "prompt_per_second": 4096.816726313807,
+          "predicted_n": 12,
+          "predicted_ms": 55.163,
+          "predicted_per_token_ms": 4.596916666666666,
+          "predicted_per_second": 217.53711727063433
+        },
+        "action": "Fight",
+        "target_id": "d49ce605-15bf-54ec-b7a9-67fc0735922e",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-28",
+        "case_index": 27,
+        "cycle": 0,
+        "attempt": 27,
+        "utc_started": "2026-11-14T15:45:45.786686+00:00",
+        "utc_finished": "2026-11-14T15:45:45.973147+00:00",
+        "scheduled_slot": 27,
+        "scheduled_at_seconds": 27.0,
+        "start_late_ms": 4.25109999923734,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 27.004251099999237,
+        "complete_ms": 186.45980000292184,
+        "timing": {
+          "combat_prompt_ready": 33.785099993110634,
+          "combat_model_done": 185.99769999855198
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 566,
+          "prompt_n": 150,
+          "prompt_ms": 33.798,
+          "prompt_per_token_ms": 0.22532000000000002,
+          "prompt_per_second": 4438.132433871827,
+          "predicted_n": 13,
+          "predicted_ms": 59.94,
+          "predicted_per_token_ms": 4.610769230769231,
+          "predicted_per_second": 216.88355021688358
+        },
+        "action": "Flee",
+        "target_id": "e2f4501e-f7af-5b1d-89de-0ce430e16588",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-29",
+        "case_index": 28,
+        "cycle": 0,
+        "attempt": 28,
+        "utc_started": "2026-11-14T15:45:46.797927+00:00",
+        "utc_finished": "2026-11-14T15:45:47.035163+00:00",
+        "scheduled_slot": 28,
+        "scheduled_at_seconds": 28.0,
+        "start_late_ms": 15.490400000999216,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 28.015490400001,
+        "complete_ms": 237.23579999932554,
+        "timing": {
+          "combat_prompt_ready": 33.489200002804864,
+          "combat_model_done": 236.58350000187056
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 151,
+          "prompt_ms": 62.995,
+          "prompt_per_token_ms": 0.41718543046357615,
+          "prompt_per_second": 2397.0156361616005,
+          "predicted_n": 10,
+          "predicted_ms": 60.481,
+          "predicted_per_token_ms": 6.0481,
+          "predicted_per_second": 165.34118152808318
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait",
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-30",
+        "case_index": 29,
+        "cycle": 0,
+        "attempt": 29,
+        "utc_started": "2026-11-14T15:45:47.790991+00:00",
+        "utc_finished": "2026-11-14T15:45:47.964607+00:00",
+        "scheduled_slot": 29,
+        "scheduled_at_seconds": 29.0,
+        "start_late_ms": 8.551800005079713,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 29.00855180000508,
+        "complete_ms": 173.62019999563927,
+        "timing": {
+          "combat_prompt_ready": 34.59389999625273,
+          "combat_model_done": 172.95220000232803
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 566,
+          "prompt_n": 114,
+          "prompt_ms": 20.605,
+          "prompt_per_token_ms": 0.1807456140350877,
+          "prompt_per_second": 5532.63770929386,
+          "predicted_n": 10,
+          "predicted_ms": 46.063,
+          "predicted_per_token_ms": 4.6063,
+          "predicted_per_second": 217.09397998393501
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-31",
+        "case_index": 30,
+        "cycle": 0,
+        "attempt": 30,
+        "utc_started": "2026-11-14T15:45:48.792045+00:00",
+        "utc_finished": "2026-11-14T15:45:49.003751+00:00",
+        "scheduled_slot": 30,
+        "scheduled_at_seconds": 30.0,
+        "start_late_ms": 9.607100000721402,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 30.00960710000072,
+        "complete_ms": 211.70929999789223,
+        "timing": {
+          "combat_prompt_ready": 48.59249999572057,
+          "combat_model_done": 211.0943000006955
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 148,
+          "prompt_ms": 32.936,
+          "prompt_per_token_ms": 0.22254054054054054,
+          "prompt_per_second": 4493.563274228807,
+          "predicted_n": 12,
+          "predicted_ms": 60.581,
+          "predicted_per_token_ms": 5.048416666666667,
+          "predicted_per_second": 198.0819068684901
+        },
+        "action": "Fight",
+        "target_id": "b513b074-ac9f-5ce7-b5f7-441999d08d73",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-32",
+        "case_index": 31,
+        "cycle": 0,
+        "attempt": 31,
+        "utc_started": "2026-11-14T15:45:49.787377+00:00",
+        "utc_finished": "2026-11-14T15:45:50.157086+00:00",
+        "scheduled_slot": 31,
+        "scheduled_at_seconds": 31.0,
+        "start_late_ms": 4.942100000334904,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 31.004942100000335,
+        "complete_ms": 369.70930000097724,
+        "timing": {
+          "combat_prompt_ready": 33.37110000575194,
+          "combat_model_done": 369.1435000000638
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 581,
+          "prompt_n": 104,
+          "prompt_ms": 26.085,
+          "prompt_per_token_ms": 0.2508173076923077,
+          "prompt_per_second": 3986.9656890933484,
+          "predicted_n": 12,
+          "predicted_ms": 55.828,
+          "predicted_per_token_ms": 4.652333333333334,
+          "predicted_per_second": 214.9459052805044
+        },
+        "action": "Fight",
+        "target_id": "d143348e-657d-5c29-b54b-afac6903578f",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-33",
+        "case_index": 32,
+        "cycle": 0,
+        "attempt": 32,
+        "utc_started": "2026-11-14T15:45:50.784597+00:00",
+        "utc_finished": "2026-11-14T15:45:50.997875+00:00",
+        "scheduled_slot": 32,
+        "scheduled_at_seconds": 32.0,
+        "start_late_ms": 2.1611000047414564,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 32.00216110000474,
+        "complete_ms": 213.27609999570996,
+        "timing": {
+          "combat_prompt_ready": 27.276499997242354,
+          "combat_model_done": 212.69179999944754
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 147,
+          "prompt_ms": 29.76,
+          "prompt_per_token_ms": 0.20244897959183675,
+          "prompt_per_second": 4939.516129032258,
+          "predicted_n": 13,
+          "predicted_ms": 100.237,
+          "predicted_per_token_ms": 7.710538461538461,
+          "predicted_per_second": 129.69262847052485
+        },
+        "action": "Flee",
+        "target_id": "01ac2795-d1e7-5537-84d5-3f575467c013",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-34",
+        "case_index": 33,
+        "cycle": 0,
+        "attempt": 33,
+        "utc_started": "2026-11-14T15:45:51.797379+00:00",
+        "utc_finished": "2026-11-14T15:45:51.975024+00:00",
+        "scheduled_slot": 33,
+        "scheduled_at_seconds": 33.0,
+        "start_late_ms": 14.941200002795085,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 33.014941200002795,
+        "complete_ms": 177.64480000187177,
+        "timing": {
+          "combat_prompt_ready": 33.00879999733297,
+          "combat_model_done": 176.94679999840446
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 581,
+          "prompt_n": 81,
+          "prompt_ms": 23.403,
+          "prompt_per_token_ms": 0.2889259259259259,
+          "prompt_per_second": 3461.0947314446867,
+          "predicted_n": 10,
+          "predicted_ms": 45.045,
+          "predicted_per_token_ms": 4.5045,
+          "predicted_per_second": 222.000222000222
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-35",
+        "case_index": 34,
+        "cycle": 0,
+        "attempt": 34,
+        "utc_started": "2026-11-14T15:45:52.785497+00:00",
+        "utc_finished": "2026-11-14T15:45:53.022974+00:00",
+        "scheduled_slot": 34,
+        "scheduled_at_seconds": 34.0,
+        "start_late_ms": 3.0613000053563155,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 34.003061300005356,
+        "complete_ms": 237.4777999939397,
+        "timing": {
+          "combat_prompt_ready": 48.274599997967016,
+          "combat_model_done": 237.0050000026822
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 180,
+          "prompt_ms": 44.947,
+          "prompt_per_token_ms": 0.24970555555555557,
+          "prompt_per_second": 4004.7166662958593,
+          "predicted_n": 13,
+          "predicted_ms": 72.624,
+          "predicted_per_token_ms": 5.586461538461538,
+          "predicted_per_second": 179.00418594404056
+        },
+        "action": "Flee",
+        "target_id": "4cb3a89a-a054-58ae-a101-1578c8af344f",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-36",
+        "case_index": 35,
+        "cycle": 0,
+        "attempt": 35,
+        "utc_started": "2026-11-14T15:45:53.787038+00:00",
+        "utc_finished": "2026-11-14T15:45:53.994559+00:00",
+        "scheduled_slot": 35,
+        "scheduled_at_seconds": 35.0,
+        "start_late_ms": 4.602699998940807,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 35.00460269999894,
+        "complete_ms": 207.51550000568386,
+        "timing": {
+          "combat_prompt_ready": 15.77990000077989,
+          "combat_model_done": 206.83930000086548
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 539,
+          "prompt_n": 151,
+          "prompt_ms": 36.796,
+          "prompt_per_token_ms": 0.243682119205298,
+          "prompt_per_second": 4103.706924665725,
+          "predicted_n": 10,
+          "predicted_ms": 66.695,
+          "predicted_per_token_ms": 6.669499999999999,
+          "predicted_per_second": 149.93627708224005
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-37",
+        "case_index": 36,
+        "cycle": 0,
+        "attempt": 36,
+        "utc_started": "2026-11-14T15:45:54.795457+00:00",
+        "utc_finished": "2026-11-14T15:45:54.992851+00:00",
+        "scheduled_slot": 36,
+        "scheduled_at_seconds": 36.0,
+        "start_late_ms": 13.017600002058316,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 36.01301760000206,
+        "complete_ms": 197.3982999988948,
+        "timing": {
+          "combat_prompt_ready": 32.594299998891074,
+          "combat_model_done": 196.77690000389703
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 569,
+          "prompt_n": 145,
+          "prompt_ms": 26.021,
+          "prompt_per_token_ms": 0.1794551724137931,
+          "prompt_per_second": 5572.422274316898,
+          "predicted_n": 12,
+          "predicted_ms": 57.244,
+          "predicted_per_token_ms": 4.770333333333333,
+          "predicted_per_second": 209.6289567465586
+        },
+        "action": "Fight",
+        "target_id": "72e4001f-4a7d-5b38-8792-2f2cee17dbf9",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-38",
+        "case_index": 37,
+        "cycle": 0,
+        "attempt": 37,
+        "utc_started": "2026-11-14T15:45:55.790648+00:00",
+        "utc_finished": "2026-11-14T15:45:56.196836+00:00",
+        "scheduled_slot": 37,
+        "scheduled_at_seconds": 37.0,
+        "start_late_ms": 8.211700005631428,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 37.00821170000563,
+        "complete_ms": 406.18719999474706,
+        "timing": {
+          "combat_prompt_ready": 33.99099999660393,
+          "combat_model_done": 405.7475999943563
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 539,
+          "prompt_n": 144,
+          "prompt_ms": 40.995,
+          "prompt_per_token_ms": 0.2846875,
+          "prompt_per_second": 3512.623490669594,
+          "predicted_n": 10,
+          "predicted_ms": 54.613,
+          "predicted_per_token_ms": 5.4613,
+          "predicted_per_second": 183.10658634391078
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-39",
+        "case_index": 38,
+        "cycle": 0,
+        "attempt": 38,
+        "utc_started": "2026-11-14T15:45:56.788425+00:00",
+        "utc_finished": "2026-11-14T15:45:56.961133+00:00",
+        "scheduled_slot": 38,
+        "scheduled_at_seconds": 38.0,
+        "start_late_ms": 5.98829999944428,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 38.005988299999444,
+        "complete_ms": 172.70850000204518,
+        "timing": {
+          "combat_prompt_ready": 24.343400000361726,
+          "combat_model_done": 172.15910000231816
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 166,
+          "prompt_ms": 36.042,
+          "prompt_per_token_ms": 0.21712048192771086,
+          "prompt_per_second": 4605.737750402308,
+          "predicted_n": 13,
+          "predicted_ms": 64.59,
+          "predicted_per_token_ms": 4.968461538461539,
+          "predicted_per_second": 201.269546369407
+        },
+        "action": "Flee",
+        "target_id": "267e9d4b-dbe8-55db-8a5f-6915d57e276d",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-40",
+        "case_index": 39,
+        "cycle": 0,
+        "attempt": 39,
+        "utc_started": "2026-11-14T15:45:57.784687+00:00",
+        "utc_finished": "2026-11-14T15:45:58.703862+00:00",
+        "scheduled_slot": 39,
+        "scheduled_at_seconds": 39.0,
+        "start_late_ms": 2.2501999992528,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 39.00225019999925,
+        "complete_ms": 919.1779000029783,
+        "timing": {
+          "combat_prompt_ready": 48.255799993057735,
+          "combat_model_done": 918.6844999931054
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 566,
+          "prompt_n": 150,
+          "prompt_ms": 34.504,
+          "prompt_per_token_ms": 0.23002666666666666,
+          "prompt_per_second": 4347.322049617435,
+          "predicted_n": 10,
+          "predicted_ms": 44.2,
+          "predicted_per_token_ms": 4.42,
+          "predicted_per_second": 226.2443438914027
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-01",
+        "case_index": 0,
+        "cycle": 1,
+        "attempt": 40,
+        "utc_started": "2026-11-14T15:45:58.793278+00:00",
+        "utc_finished": "2026-11-14T15:45:59.024455+00:00",
+        "scheduled_slot": 40,
+        "scheduled_at_seconds": 40.0,
+        "start_late_ms": 10.840700000699144,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 40.0108407000007,
+        "complete_ms": 231.17869999987306,
+        "timing": {
+          "combat_prompt_ready": 48.726500004704576,
+          "combat_model_done": 230.60899999836693
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 175,
+          "prompt_ms": 53.98,
+          "prompt_per_token_ms": 0.3084571428571428,
+          "prompt_per_second": 3241.9414597999257,
+          "predicted_n": 12,
+          "predicted_ms": 56.576,
+          "predicted_per_token_ms": 4.714666666666667,
+          "predicted_per_second": 212.10407239819003
+        },
+        "action": "Fight",
+        "target_id": "ab769e32-0f96-56eb-8590-d15ed75973a0",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-02",
+        "case_index": 1,
+        "cycle": 1,
+        "attempt": 41,
+        "utc_started": "2026-11-14T15:45:59.786982+00:00",
+        "utc_finished": "2026-11-14T15:46:01.309652+00:00",
+        "scheduled_slot": 41,
+        "scheduled_at_seconds": 41.0,
+        "start_late_ms": 4.547299999103416,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 41.0045472999991,
+        "complete_ms": 1522.6658000028692,
+        "timing": {
+          "combat_prompt_ready": 34.406200000375975
+        },
+        "completed_inside_window": true,
+        "usage": null,
+        "action": null,
+        "target_id": null,
+        "protocol_valid": false,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": false,
+        "fallback_reason": "timeout",
+        "output": "",
+        "missed_slots_after_request": 1
+      },
+      {
+        "id": "independent-03",
+        "case_index": 2,
+        "cycle": 1,
+        "attempt": 42,
+        "utc_started": "2026-11-14T15:46:01.783761+00:00",
+        "utc_finished": "2026-11-14T15:46:01.784136+00:00",
+        "scheduled_slot": 43,
+        "scheduled_at_seconds": 43.0,
+        "start_late_ms": 1.3255000012577511,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 43.00132550000126,
+        "complete_ms": 0.37539999902946874,
+        "timing": {},
+        "completed_inside_window": true,
+        "usage": null,
+        "action": null,
+        "target_id": null,
+        "protocol_valid": false,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": false,
+        "fallback_reason": "busy",
+        "output": "",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-03",
+        "case_index": 2,
+        "cycle": 1,
+        "attempt": 43,
+        "utc_started": "2026-11-14T15:46:02.791393+00:00",
+        "utc_finished": "2026-11-14T15:46:03.045643+00:00",
+        "scheduled_slot": 44,
+        "scheduled_at_seconds": 44.0,
+        "start_late_ms": 8.956400000897702,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 44.0089564000009,
+        "complete_ms": 254.24819999898318,
+        "timing": {
+          "combat_prompt_ready": 48.99400000431342,
+          "combat_model_done": 253.64400000398746
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 584,
+          "prompt_n": 111,
+          "prompt_ms": 22.646,
+          "prompt_per_token_ms": 0.20401801801801803,
+          "prompt_per_second": 4901.527863640377,
+          "predicted_n": 10,
+          "predicted_ms": 66.837,
+          "predicted_per_token_ms": 6.6837,
+          "predicted_per_second": 149.6177267082604
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-04",
+        "case_index": 3,
+        "cycle": 1,
+        "attempt": 44,
+        "utc_started": "2026-11-14T15:46:03.794170+00:00",
+        "utc_finished": "2026-11-14T15:46:05.317324+00:00",
+        "scheduled_slot": 45,
+        "scheduled_at_seconds": 45.0,
+        "start_late_ms": 11.733999999705702,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 45.011733999999706,
+        "complete_ms": 1523.1504000039422,
+        "timing": {
+          "combat_prompt_ready": 14.581800001906231
+        },
+        "completed_inside_window": true,
+        "usage": null,
+        "action": null,
+        "target_id": null,
+        "protocol_valid": false,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": false,
+        "fallback_reason": "timeout",
+        "output": "",
+        "missed_slots_after_request": 1
+      },
+      {
+        "id": "independent-05",
+        "case_index": 4,
+        "cycle": 1,
+        "attempt": 45,
+        "utc_started": "2026-11-14T15:46:05.797655+00:00",
+        "utc_finished": "2026-11-14T15:46:05.798006+00:00",
+        "scheduled_slot": 47,
+        "scheduled_at_seconds": 47.0,
+        "start_late_ms": 15.220699999190401,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 47.01522069999919,
+        "complete_ms": 0.34830000367946923,
+        "timing": {},
+        "completed_inside_window": true,
+        "usage": null,
+        "action": null,
+        "target_id": null,
+        "protocol_valid": false,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait",
+          "Flee"
+        ],
+        "matches_evaluation_label": false,
+        "fallback_reason": "busy",
+        "output": "",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-05",
+        "case_index": 4,
+        "cycle": 1,
+        "attempt": 46,
+        "utc_started": "2026-11-14T15:46:06.788422+00:00",
+        "utc_finished": "2026-11-14T15:46:07.074877+00:00",
+        "scheduled_slot": 48,
+        "scheduled_at_seconds": 48.0,
+        "start_late_ms": 5.978900000627618,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 48.00597890000063,
+        "complete_ms": 286.45959999994375,
+        "timing": {
+          "combat_prompt_ready": 28.045899998687673,
+          "combat_model_done": 285.86709999945015
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 169,
+          "prompt_ms": 53.58,
+          "prompt_per_token_ms": 0.3170414201183432,
+          "prompt_per_second": 3154.162000746547,
+          "predicted_n": 10,
+          "predicted_ms": 53.247,
+          "predicted_per_token_ms": 5.3247,
+          "predicted_per_second": 187.80400773752513
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait",
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-06",
+        "case_index": 5,
+        "cycle": 1,
+        "attempt": 47,
+        "utc_started": "2026-11-14T15:46:07.784065+00:00",
+        "utc_finished": "2026-11-14T15:46:09.306669+00:00",
+        "scheduled_slot": 49,
+        "scheduled_at_seconds": 49.0,
+        "start_late_ms": 1.628900005016476,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 49.00162890000502,
+        "complete_ms": 1522.598099996685,
+        "timing": {
+          "combat_prompt_ready": 18.428300005325582
+        },
+        "completed_inside_window": true,
+        "usage": null,
+        "action": null,
+        "target_id": null,
+        "protocol_valid": false,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": false,
+        "fallback_reason": "timeout",
+        "output": "",
+        "missed_slots_after_request": 1
+      },
+      {
+        "id": "independent-07",
+        "case_index": 6,
+        "cycle": 1,
+        "attempt": 48,
+        "utc_started": "2026-11-14T15:46:09.797306+00:00",
+        "utc_finished": "2026-11-14T15:46:09.797643+00:00",
+        "scheduled_slot": 51,
+        "scheduled_at_seconds": 51.0,
+        "start_late_ms": 14.865500001178589,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 51.01486550000118,
+        "complete_ms": 0.34299999970244244,
+        "timing": {},
+        "completed_inside_window": true,
+        "usage": null,
+        "action": null,
+        "target_id": null,
+        "protocol_valid": false,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": false,
+        "fallback_reason": "busy",
+        "output": "",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-07",
+        "case_index": 6,
+        "cycle": 1,
+        "attempt": 49,
+        "utc_started": "2026-11-14T15:46:10.792983+00:00",
+        "utc_finished": "2026-11-14T15:46:11.055827+00:00",
+        "scheduled_slot": 52,
+        "scheduled_at_seconds": 52.0,
+        "start_late_ms": 10.546700003033038,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 52.01054670000303,
+        "complete_ms": 262.8437999956077,
+        "timing": {
+          "combat_prompt_ready": 13.505800001439638,
+          "combat_model_done": 262.27379999909317
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 542,
+          "prompt_n": 179,
+          "prompt_ms": 64.949,
+          "prompt_per_token_ms": 0.3628435754189944,
+          "prompt_per_second": 2756.0085605629033,
+          "predicted_n": 10,
+          "predicted_ms": 54.51,
+          "predicted_per_token_ms": 5.451,
+          "predicted_per_second": 183.452577508714
+        },
+        "action": "Wait",
+        "target_id": "",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Wait"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+        "missed_slots_after_request": 0
+      },
+      {
+        "id": "independent-08",
+        "case_index": 7,
+        "cycle": 1,
+        "attempt": 50,
+        "utc_started": "2026-11-14T15:46:11.794260+00:00",
+        "utc_finished": "2026-11-14T15:46:13.045598+00:00",
+        "scheduled_slot": 53,
+        "scheduled_at_seconds": 53.0,
+        "start_late_ms": 11.825000001408625,
+        "evaluation_profile_id": "xiumei",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 53.01182500000141,
+        "complete_ms": 1251.338100002613,
+        "timing": {
+          "combat_prompt_ready": 33.46610000153305,
+          "combat_model_done": 1250.8374000026379
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 566,
+          "prompt_n": 145,
+          "prompt_ms": 36.459,
+          "prompt_per_token_ms": 0.2514413793103448,
+          "prompt_per_second": 3977.0701335747003,
+          "predicted_n": 12,
+          "predicted_ms": 56.482,
+          "predicted_per_token_ms": 4.706833333333333,
+          "predicted_per_second": 212.45706596791896
+        },
+        "action": "Fight",
+        "target_id": "0135f03d-e10a-518c-aff5-ca00e892e399",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Fight"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 1
+      },
+      {
+        "id": "independent-09",
+        "case_index": 8,
+        "cycle": 1,
+        "attempt": 51,
+        "utc_started": "2026-11-14T15:46:13.789148+00:00",
+        "utc_finished": "2026-11-14T15:46:14.056215+00:00",
+        "scheduled_slot": 55,
+        "scheduled_at_seconds": 55.0,
+        "start_late_ms": 6.712599999445956,
+        "evaluation_profile_id": "chunlai",
+        "profile_added_for_evaluation": true,
+        "started_at_seconds": 55.006712599999446,
+        "complete_ms": 267.06640000338666,
+        "timing": {
+          "combat_prompt_ready": 26.371799998742063,
+          "combat_model_done": 266.5352999974857
+        },
+        "completed_inside_window": true,
+        "usage": {
+          "cache_n": 569,
+          "prompt_n": 150,
+          "prompt_ms": 34.832,
+          "prompt_per_token_ms": 0.23221333333333333,
+          "prompt_per_second": 4306.38493339458,
+          "predicted_n": 13,
+          "predicted_ms": 65.257,
+          "predicted_per_token_ms": 5.019769230769231,
+          "predicted_per_second": 199.2123450357816
+        },
+        "action": "Flee",
+        "target_id": "6c7223d0-cfcc-50f3-bb4b-d105566d27f8",
+        "protocol_valid": true,
+        "illegal_target": false,
+        "acceptable_actions": [
+          "Flee"
+        ],
+        "matches_evaluation_label": true,
+        "fallback_reason": "",
+        "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+        "missed_slots_after_request": 0
+      }
+    ],
+    "speech": [
+      {
+        "case": "male_short",
+        "voice": "male",
+        "text": "你先听我说完，我刚才真没看见你。",
+        "utc_started": "2026-11-14T15:45:18.782665+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T15:45:20.492726+00:00",
+        "complete_ms": 1710.020500002429,
+        "chunks": [
+          {
+            "received_ms": 1004.5399000009638,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 1046.2289000060991,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 1093.8483999998425,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 1259.4096000029822,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 1389.9973000006867,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 1463.9333000013721,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 1547.3440999994637,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 1629.2136000047321,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 1706.8918000004487,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          }
+        ],
+        "chunk_count": 9,
+        "first_chunk_ms": 1004.5399000009638,
+        "delivered_audio_seconds": 4.4,
+        "generation_rtf": 0.3886410227278247,
+        "pcm_sha256": "8a38f7b92898ae2faa696704da1584759b3345137c3d495a43259fb1fb6695a9",
+        "buffer_simulation": {
+          "duration_s": 4.4,
+          "retrospective_uninterrupted_start_ms": 1004.5399000009638,
+          "buffer_start_ms": 1389.9973000006867,
+          "buffer_min_margin_ms": 1766.0639999993148,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 0,
+        "scheduled_at_seconds": 0.0,
+        "started_at_seconds": 0.00023100000544218346,
+        "start_late_ms": 0.23100000544218346
+      },
+      {
+        "case": "female_short",
+        "voice": "female",
+        "text": "我就在旁边站着呢，你怎么能没看见呀？",
+        "utc_started": "2026-11-14T15:45:23.397169+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T15:45:25.031975+00:00",
+        "complete_ms": 1634.782000000996,
+        "chunks": [
+          {
+            "received_ms": 1106.1153999980888,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 1158.5568999944371,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 1206.958399998257,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 1293.7810000003083,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 1371.4918999976362,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 1448.4268999949563,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 1574.0602999940165,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 1634.1874999998254,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 149760
+          }
+        ],
+        "chunk_count": 8,
+        "first_chunk_ms": 1106.1153999980888,
+        "delivered_audio_seconds": 3.28,
+        "generation_rtf": 0.49840914634176714,
+        "pcm_sha256": "21fd5635507b76d3db1e762afa2fec5ae5e7a364c9a65d18e94acf3ba458e1c3",
+        "buffer_simulation": {
+          "duration_s": 3.2800000000000007,
+          "retrospective_uninterrupted_start_ms": 1106.1153999980888,
+          "buffer_start_ms": 1371.4918999976362,
+          "buffer_min_margin_ms": 1763.06500000268,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 0,
+        "scheduled_at_seconds": 4.6000000000000005,
+        "started_at_seconds": 4.614729300003091,
+        "start_late_ms": 14.729300003090806
+      },
+      {
+        "case": "male_long",
+        "voice": "male",
+        "text": "刚才是我没看清楚。你拿好东西，我把车挪开，别挡着大家。",
+        "utc_started": "2026-11-14T15:45:26.870794+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T15:45:29.642509+00:00",
+        "complete_ms": 2771.5657000007923,
+        "chunks": [
+          {
+            "received_ms": 1853.0006000000867,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 1894.4150999959675,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 1943.2020999956876,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 2064.4757999980357,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 2199.0506000001915,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 2275.2080999998725,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 2351.7725999990944,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 2425.454099997296,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 2502.2095999956946,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          },
+          {
+            "received_ms": 2588.412999997672,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 211200
+          },
+          {
+            "received_ms": 2685.677299996314,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 241920
+          },
+          {
+            "received_ms": 2765.135499997996,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 272640
+          },
+          {
+            "received_ms": 2770.7873999970616,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 288000
+          }
+        ],
+        "chunk_count": 13,
+        "first_chunk_ms": 1853.0006000000867,
+        "delivered_audio_seconds": 6.16,
+        "generation_rtf": 0.44992949675337535,
+        "pcm_sha256": "1a0a3710635f799a294ebc726e127bfc01f26eeb4faa1104971eda3f2f8e2586",
+        "buffer_simulation": {
+          "duration_s": 6.16,
+          "retrospective_uninterrupted_start_ms": 1853.0006000000867,
+          "buffer_start_ms": 2199.0506000001915,
+          "buffer_min_margin_ms": 1763.8425000003188,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 0,
+        "scheduled_at_seconds": 8.08,
+        "started_at_seconds": 8.088351099999272,
+        "start_late_ms": 8.351099999272193
+      },
+      {
+        "case": "female_long",
+        "voice": "female",
+        "text": "你别急着走呀。我刚才声音大了点，咱们好好说嘛。",
+        "utc_started": "2026-11-14T15:45:33.230639+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T15:45:36.343411+00:00",
+        "complete_ms": 3112.7315999983693,
+        "chunks": [
+          {
+            "received_ms": 2266.8264000021736,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 2314.6408000029624,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 2374.126900002011,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 2481.510600002366,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 2580.6737000020803,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 2654.9995000023046,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 2776.4113000012003,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 2905.1972000015667,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 2978.766200001701,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          },
+          {
+            "received_ms": 3063.8125999976182,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 211200
+          },
+          {
+            "received_ms": 3107.921900002111,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 241920
+          },
+          {
+            "received_ms": 3112.1963999976288,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 249600
+          }
+        ],
+        "chunk_count": 12,
+        "first_chunk_ms": 2266.8264000021736,
+        "delivered_audio_seconds": 5.28,
+        "generation_rtf": 0.5895324999996912,
+        "pcm_sha256": "487bb770bb810f6a1486006c368185d8e38f658a360e4b9c66c4c8105b6771e2",
+        "buffer_simulation": {
+          "duration_s": 5.28,
+          "retrospective_uninterrupted_start_ms": 2266.8264000021736,
+          "buffer_start_ms": 2580.6737000020803,
+          "buffer_min_margin_ms": 1765.6741999997755,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 0,
+        "scheduled_at_seconds": 14.440000000000001,
+        "started_at_seconds": 14.448199400001613,
+        "start_late_ms": 8.199400001611679
+      },
+      {
+        "case": "male_short",
+        "voice": "male",
+        "text": "你先听我说完，我刚才真没看见你。",
+        "utc_started": "2026-11-14T15:45:38.710201+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T15:45:43.383932+00:00",
+        "complete_ms": 4673.700100000133,
+        "chunks": [
+          {
+            "received_ms": 3864.66289999953,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 3912.4576000031084,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 4041.599500000302,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 4200.66080000106,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 4331.788000003144,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 4449.5687000016915,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 4523.114700001315,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 4597.305600000254,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 4670.922600002086,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          }
+        ],
+        "chunk_count": 9,
+        "first_chunk_ms": 3864.66289999953,
+        "delivered_audio_seconds": 4.4,
+        "generation_rtf": 1.0622045681818484,
+        "pcm_sha256": "8a38f7b92898ae2faa696704da1584759b3345137c3d495a43259fb1fb6695a9",
+        "buffer_simulation": {
+          "duration_s": 4.4,
+          "retrospective_uninterrupted_start_ms": 3864.66289999953,
+          "buffer_start_ms": 4331.788000003144,
+          "buffer_min_margin_ms": 1722.219300001452,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 1,
+        "scheduled_at_seconds": 19.92,
+        "started_at_seconds": 19.927760900005524,
+        "start_late_ms": 7.760900005521876
+      },
+      {
+        "case": "female_short",
+        "voice": "female",
+        "text": "我就在旁边站着呢，你怎么能没看见呀？",
+        "utc_started": "2026-11-14T15:45:43.383974+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T15:45:47.568058+00:00",
+        "complete_ms": 4184.036000006017,
+        "chunks": [
+          {
+            "received_ms": 3703.0801000000793,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 3771.976600000926,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 3824.6987000020454,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 3928.254000005836,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 4010.2746000047773,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 4082.3284000071,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 4155.230700001994,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 4183.195300000079,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 149760
+          }
+        ],
+        "chunk_count": 8,
+        "first_chunk_ms": 3703.0801000000793,
+        "delivered_audio_seconds": 3.28,
+        "generation_rtf": 1.2756207317091517,
+        "pcm_sha256": "21fd5635507b76d3db1e762afa2fec5ae5e7a364c9a65d18e94acf3ba458e1c3",
+        "buffer_simulation": {
+          "duration_s": 3.2800000000000007,
+          "retrospective_uninterrupted_start_ms": 3703.0801000000793,
+          "buffer_start_ms": 4010.2746000047773,
+          "buffer_min_margin_ms": 1767.9461999976772,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 1,
+        "scheduled_at_seconds": 24.520000000000003,
+        "started_at_seconds": 24.60154170000169,
+        "start_late_ms": 81.54170000168648
+      },
+      {
+        "case": "male_long",
+        "voice": "male",
+        "text": "刚才是我没看清楚。你拿好东西，我把车挪开，别挡着大家。",
+        "utc_started": "2026-11-14T15:45:47.568110+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T15:45:51.921195+00:00",
+        "complete_ms": 4353.024700001697,
+        "chunks": [
+          {
+            "received_ms": 3449.614199998905,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 3513.210999997682,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 3570.938400000159,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 3705.6814000025042,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 3788.014199999452,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 3859.5814000000246,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 3932.927900001232,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 4006.9396999970195,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 4126.376500003971,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          },
+          {
+            "received_ms": 4199.516400003631,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 211200
+          },
+          {
+            "received_ms": 4275.450599998294,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 241920
+          },
+          {
+            "received_ms": 4344.974500003445,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 272640
+          },
+          {
+            "received_ms": 4352.287599998817,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 288000
+          }
+        ],
+        "chunk_count": 13,
+        "first_chunk_ms": 3449.614199998905,
+        "delivered_audio_seconds": 6.16,
+        "generation_rtf": 0.7066598538963794,
+        "pcm_sha256": "1a0a3710635f799a294ebc726e127bfc01f26eeb4faa1104971eda3f2f8e2586",
+        "buffer_simulation": {
+          "duration_s": 6.16,
+          "retrospective_uninterrupted_start_ms": 3449.614199998905,
+          "buffer_start_ms": 3788.014199999452,
+          "buffer_min_margin_ms": 1768.4327999994273,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 1,
+        "scheduled_at_seconds": 28.000000000000004,
+        "started_at_seconds": 28.785678500003996,
+        "start_late_ms": 785.6785000039928
+      },
+      {
+        "case": "female_long",
+        "voice": "female",
+        "text": "你别急着走呀。我刚才声音大了点，咱们好好说嘛。",
+        "utc_started": "2026-11-14T15:45:53.152510+00:00",
+        "status": "failed",
+        "error": "neural_tts_timeout",
+        "utc_finished": "2026-11-14T15:46:14.613632+00:00",
+        "complete_ms": 21461.11910000036,
+        "chunks": [
+          {
+            "received_ms": 11301.156000001356,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 11586.35360000335,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 11661.928699999407,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 15274.352400003409,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 15739.591700003075,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 16120.962400003918,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 18456.31929999945,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 18831.13630000298,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 19271.353900003305,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          }
+        ],
+        "chunk_count": 9,
+        "first_chunk_ms": 11301.156000001356,
+        "delivered_audio_seconds": 4.4,
+        "generation_rtf": null,
+        "pcm_sha256": "4cd3f89c8c0af6c95741e3a2872ab6f372d94a022e33ded5478086dbe8f5898d",
+        "buffer_simulation": null,
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 1,
+        "scheduled_at_seconds": 34.36000000000001,
+        "started_at_seconds": 34.37006580000161,
+        "start_late_ms": 10.065800001605396
+      }
+    ],
+    "errors": [
+      "RuntimeError:语音合成失败：neural_tts_timeout"
+    ],
+    "decision_schedule": {
+      "interval_seconds": 1.0,
+      "enabled": true,
+      "missed_slots": 4,
+      "actual_requests": 49
+    },
+    "utc_finished": "2026-11-14T15:46:14.613777+00:00",
+    "actual_seconds": 55.83136020000529,
+    "cleanup_finished_utc": "2026-11-14T15:46:14.614029+00:00"
+  },
+  "summary": {
+    "attempted_unique_cases": 40,
+    "completed_unique_cases": 40,
+    "all_40_cases_completed": true,
+    "protocol_valid_calls": 46,
+    "matched_label_calls": 45,
+    "illegal_target_calls": 0,
+    "complete_ms_median": 201.54799999727402,
+    "complete_ms_p95": 1414.0940999990546,
+    "speech_completed": 7,
+    "speech_partial_or_failed": 1,
+    "rtf_median": 0.5895324999996912,
+    "simulated_stall_ms": 0,
+    "quality_acceptance_claimed": false,
+    "ue_audio_measured": false
+  },
+  "gpu_samples": [
+    {
+      "elapsed_ms": 0.29,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "6412, 2, 14.23, 532"
+    },
+    {
+      "elapsed_ms": 1072.26,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "8003, 21, 27.76, 1987"
+    },
+    {
+      "elapsed_ms": 2153.36,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "8003, 2, 55.61, 1777"
+    },
+    {
+      "elapsed_ms": 3208.51,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "7982, 2, 23.84, 1725"
+    },
+    {
+      "elapsed_ms": 4276.89,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "7967, 2, 18.03, 480"
+    },
+    {
+      "elapsed_ms": 5338.0,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "7445, 11, 19.97, 577"
+    },
+    {
+      "elapsed_ms": 6436.3,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "8130, 85, 47.21, 2445"
+    },
+    {
+      "elapsed_ms": 7510.63,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "8187, 2, 26.20, 510"
+    },
+    {
+      "elapsed_ms": 8586.7,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "7388, 9, 22.55, 682"
+    },
+    {
+      "elapsed_ms": 9670.1,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "7770, 9, 20.61, 930"
+    },
+    {
+      "elapsed_ms": 10738.53,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "8098, 89, 54.41, 2392"
+    },
+    {
+      "elapsed_ms": 11809.78,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "8101, 2, 34.17, 345"
+    },
+    {
+      "elapsed_ms": 12878.63,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "8376, 2, 22.32, 397"
+    },
+    {
+      "elapsed_ms": 13953.6,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "8498, 2, 20.67, 495"
+    },
+    {
+      "elapsed_ms": 15018.33,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "7674, 3, 19.94, 540"
+    },
+    {
+      "elapsed_ms": 16086.55,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "7877, 5, 20.49, 555"
+    },
+    {
+      "elapsed_ms": 17160.52,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "8492, 84, 45.14, 2535"
+    },
+    {
+      "elapsed_ms": 18218.9,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "8492, 2, 43.22, 502"
+    },
+    {
+      "elapsed_ms": 19446.47,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "8742, 30, 22.96, 465"
+    },
+    {
+      "elapsed_ms": 20502.15,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "7982, 17, 22.61, 802"
+    },
+    {
+      "elapsed_ms": 21610.8,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10550, 7, 22.34, 780"
+    },
+    {
+      "elapsed_ms": 22738.91,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11324, 8, 23.94, 802"
+    },
+    {
+      "elapsed_ms": 23854.38,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11388, 11, 21.52, 345"
+    },
+    {
+      "elapsed_ms": 24969.27,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10739, 80, 55.35, 2257"
+    },
+    {
+      "elapsed_ms": 26057.97,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10987, 21, 26.51, 967"
+    },
+    {
+      "elapsed_ms": 27440.26,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11242, 17, 22.27, 202"
+    },
+    {
+      "elapsed_ms": 28525.75,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11460, 9, 18.66, 232"
+    },
+    {
+      "elapsed_ms": 29593.74,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10629, 5, 30.03, 322"
+    },
+    {
+      "elapsed_ms": 30662.95,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "10773, 7, 20.47, 525"
+    },
+    {
+      "elapsed_ms": 31720.22,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11017, 7, 19.74, 817"
+    },
+    {
+      "elapsed_ms": 32814.15,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11497, 87, 35.02, 2137"
+    },
+    {
+      "elapsed_ms": 33909.56,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11597, 6, 49.32, 367"
+    },
+    {
+      "elapsed_ms": 35068.27,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11190, 10, 23.30, 225"
+    },
+    {
+      "elapsed_ms": 36169.82,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11481, 6, 24.01, 765"
+    },
+    {
+      "elapsed_ms": 37228.36,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11463, 1, 19.32, 525"
+    },
+    {
+      "elapsed_ms": 38396.51,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11499, 32, 20.75, 382"
+    },
+    {
+      "elapsed_ms": 39561.1,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11495, 1, 25.89, 180"
+    },
+    {
+      "elapsed_ms": 42403.17,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11440, 100, 39.87, 2737"
+    },
+    {
+      "elapsed_ms": 43573.78,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11563, 4, 23.48, 187"
+    },
+    {
+      "elapsed_ms": 44793.83,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11480, 3, 18.34, 195"
+    },
+    {
+      "elapsed_ms": 46269.45,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11483, 80, 31.03, 1057"
+    },
+    {
+      "elapsed_ms": 47432.4,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11478, 8, 29.24, 210"
+    },
+    {
+      "elapsed_ms": 48565.48,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11448, 15, 21.98, 457"
+    },
+    {
+      "elapsed_ms": 49842.56,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11392, 11, 13.23, 180"
+    },
+    {
+      "elapsed_ms": 50953.54,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11434, 93, 54.75, 2760"
+    },
+    {
+      "elapsed_ms": 52042.5,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11329, 23, 15.90, 180"
+    },
+    {
+      "elapsed_ms": 53185.12,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11501, 100, 36.92, 2700"
+    },
+    {
+      "elapsed_ms": 54351.28,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11420, 15, 42.24, 210"
+    },
+    {
+      "elapsed_ms": 55413.12,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11415, 12, 23.13, 210"
+    }
+  ],
+  "ue_after": {
+    "ue": "\"UnrealEditor.exe\",\"65440\",\"Console\",\"1\",\"1,763,820 K\"\n\"UnrealEditor.exe\",\"65936\",\"Console\",\"1\",\"4,630,344 K\"",
+    "ue_commandlet": "信息: 没有运行的任务匹配指定标准。",
+    "local_model": "\"llama-server.exe\",\"56836\",\"Console\",\"1\",\"2,036,912 K\""
+  },
+  "finished_utc": "2026-11-14T15:46:16.868544+00:00"
+}

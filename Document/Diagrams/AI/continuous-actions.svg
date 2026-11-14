@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 615" role="img" aria-labelledby="title desc">
+  <title id="title">行动与后台决策：类职责</title>
+  <desc id="desc">Agent 分别保存当前行动和本次回复。Gateway 在后台请求模型，行为树继续执行动作，表现组件按回复编号播放声音与字幕。</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="none" stroke="#54708c"/></marker></defs>
+  <style>text{font-family:"Segoe UI","Microsoft YaHei",sans-serif;fill:#24364a} .name{font-size:16px;font-weight:600}.sub{font-size:15px;fill:#406584}.body{font-size:15px}.fn{font:14px Consolas,monospace}.edge{fill:none;stroke:#54708c;stroke-width:1.5;marker-end:url(#arrow)}.box{fill:white;stroke:#b5c5d5}.head{fill:#eef4fa}.line{stroke:#c7d3df;stroke-width:1}.label{font-size:13px;fill:#52687d}</style>
+  <rect width="1200" height="615" fill="white"/>
+  <text x="30" y="30" class="name">行动继续执行，模型同时考虑下一步</text>
+  <g transform="translate(30 65)">
+    <rect class="box" width="330" height="230" rx="5"/><path class="head" d="M1 5Q1 1 5 1H325Q329 1 329 5V77H1Z"/>
+    <text x="18" y="30" class="name">UDeliveryAiGatewaySubsystem</text><text x="18" y="57" class="sub">负责模型请求</text><path class="line" d="M0 77H330M0 134H330"/>
+    <text x="18" y="104" class="body">请求队列、超时、当前游戏世界</text>
+    <text x="18" y="160" class="fn">Enqueue()</text><text x="18" y="183" class="body">安排请求，收到结果后通知 Agent</text>
+    <text x="18" y="212" class="fn">Cancel() · 取消指定请求</text>
+  </g>
+  <g transform="translate(435 65)">
+    <rect class="box" width="330" height="230" rx="5"/><path class="head" d="M1 5Q1 1 5 1H325Q329 1 329 5V77H1Z"/>
+    <text x="18" y="30" class="name">UDeliveryNpcAgentComponent</text><text x="18" y="57" class="sub">协调当前行动与下一次决定</text><path class="line" d="M0 77H330M0 134H330"/>
+    <text x="18" y="102" class="body">ActionId：这段行动的编号</text><text x="18" y="124" class="body">ReplyId：这次回复的编号</text>
+    <text x="18" y="160" class="fn">ScheduleNextActionDecision()</text><text x="18" y="182" class="body">在行动结束前安排下一次判断</text>
+    <text x="18" y="207" class="fn">CanChooseAction()</text><text x="175" y="207" class="body">检查动作条件</text>
+  </g>
+  <g transform="translate(840 65)">
+    <rect class="box" width="330" height="230" rx="5"/><path class="head" d="M1 5Q1 1 5 1H325Q329 1 329 5V77H1Z"/>
+    <text x="12" y="30" class="name" font-size="14">UDeliveryNpcPresentationComponent</text><text x="18" y="57" class="sub">播放对白与人物表现</text><path class="line" d="M0 77H330M0 134H330"/>
+    <text x="18" y="103" class="body">本次回复的声音、字幕及播放进度</text>
+    <text x="18" y="160" class="fn">BeginReply() · 开始接收新回复</text>
+    <text x="18" y="184" class="fn">QueueSentence() · 顺序加入短句</text>
+    <text x="18" y="209" class="body">旧回复的取消不影响新回复</text>
+  </g>
+  <path class="edge" d="M435 182H360"/><text x="397" y="168" text-anchor="middle" class="label">请求</text>
+  <path class="edge" d="M360 226H435"/><text x="397" y="248" text-anchor="middle" class="label">结果</text>
+  <path class="edge" d="M765 182H840"/><text x="803" y="167" text-anchor="middle" class="label">台词</text>
+  <path class="edge" d="M600 295V375"/><text x="615" y="338" class="label">继续或切换行动</text>
+  <g transform="translate(435 375)">
+    <rect class="box" width="330" height="178" rx="5"/><path class="head" d="M1 5Q1 1 5 1H325Q329 1 329 5V64H1Z"/>
+    <text x="12" y="26" class="name" style="font-size:14px">UBTTask_DeliveryExecuteNpcAction</text><text x="18" y="50" class="sub">在行为树中执行当前行动</text><path class="line" d="M0 64H330M0 108H330"/>
+    <text x="18" y="92" class="body">保留追赶、挥拳和逃跑的执行进度</text>
+    <text x="18" y="135" class="fn">TickFight() · 接近、出拳、收拳</text>
+    <text x="18" y="160" class="fn">TickFlee() · 沿可走的路线跑开</text>
+  </g>
+  <g transform="translate(30 375)">
+    <rect class="box" width="330" height="178" rx="5"/><path class="head" d="M1 5Q1 1 5 1H325Q329 1 329 5V64H1Z"/>
+    <text x="18" y="26" class="name">UDeliveryNpcCombatComponent</text><text x="18" y="50" class="sub">处理真实出拳、受击与交战时限</text><path class="line" d="M0 64H330M0 108H330"/>
+    <text x="18" y="92" class="body">当前拳、实际命中、整场开始时间</text>
+    <text x="18" y="135" class="fn">ContinueFight() · 延续同目标交战</text>
+    <text x="18" y="160" class="body">保留挥拳进度，碰到人才算命中</text>
+  </g>
+  <path class="edge" d="M435 470H360"/><text x="397" y="453" text-anchor="middle" class="label">出拳</text>
+  <text x="840" y="409" class="sub">通用部分</text><text x="840" y="439" class="body">请求、回复检查、行动衔接</text><text x="840" y="465" class="body">供以后跟随、搬运等行为复用</text>
+  <text x="30" y="592" class="label">箭头表示调用或通知；图中省略角色组装和多人复制细节，具体函数与本轮验证范围见正文。</text>
+</svg>

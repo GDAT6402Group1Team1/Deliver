@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Types/SlateEnums.h"
+#include "Speech/DeliverySpeechTurn.h"
 #include "DeliveryConversationWidget.generated.h"
 class ADeliveryNpcCharacter;
 class UEditableTextBox;
@@ -11,6 +12,9 @@ class UButton;
 class UScrollBox;
 class UBorder;
 class USizeBox;
+class UWidgetAnimation;
+class UDeliveryConversationComponent;
+class UDeliverySpeechInputComponent;
 
 // 显示玩家原话和输入，将消息交给交谈组件发送，NPC 台词显示在人物附近
 UCLASS()
@@ -39,15 +43,36 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> SendButton;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> SuggestionToggle;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> CloseButton;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> RetryButton;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UWidget> WaitingIndicator;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> VoiceToggleButton;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> VoiceHoldButton;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> VoiceToggleLabel;
+    // 动画与颜色保存在 Widget Blueprint，只在发送和等待状态改变时播放
+    UPROPERTY(Transient,meta=(BindWidgetAnimOptional)) TObjectPtr<UWidgetAnimation> SendFeedback;
+    UPROPERTY(Transient,meta=(BindWidgetAnimOptional)) TObjectPtr<UWidgetAnimation> MessageArrive;
+    UPROPERTY(Transient,meta=(BindWidgetAnimOptional)) TObjectPtr<UWidgetAnimation> WaitingPulse;
 private:
     friend class FDeliveryConversationFeedbackTest;
     UFUNCTION() void Send();
+    UFUNCTION() void Retry();
+    UFUNCTION() void ToggleVoice();
+    UFUNCTION() void BeginVoice();
+    UFUNCTION() void FinishVoice();
+    UFUNCTION() void RefreshVoice();
     UFUNCTION() void CommitInput(const FText& Text,ETextCommit::Type Method);
     UFUNCTION() void ToggleSuggestions();
     UFUNCTION() void Close();
     void SendText(const FString& Text);
     void RefreshReply();
     void ResetConversation();
+    void RefreshFeedback(bool bCanRetry);
+    void HandleSubmitted(ADeliveryNpcCharacter* Npc,FGuid MessageId,const FString& Text);
+    void HandleSubmissionBound(FGuid ClientId,FGuid MessageId);
+    void HandleVoiceError(FName Reason);
+    TWeakObjectPtr<UDeliveryConversationComponent> BoundConversation;
+    TWeakObjectPtr<UDeliverySpeechInputComponent> BoundSpeech;
+    FDeliverySpeechTurnToken ButtonVoiceToken;
     // 保存当前交谈的输入和回复，关闭面板或切换 NPC 后重新开始记录
     FString LastSubmittedText;
     FString LastReplyText;

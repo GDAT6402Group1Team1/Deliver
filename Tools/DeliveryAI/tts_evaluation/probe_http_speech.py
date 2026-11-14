@@ -202,6 +202,7 @@ def request_sample(server, traced, output, name, voice, text, mode):
     request = urllib.request.Request(f'http://127.0.0.1:{server.server_port}/v1/decisions/stream',
                                      json.dumps(data, ensure_ascii=False).encode(), {'Content-Type': 'application/json'})
     pcm = bytearray()
+    max_pcm_bytes = getattr(traced.inner, 'config', {}).get('max_pcm_bytes', 384000)
     begun = terminal = done = False
     rate = 24000
     def fixed_reply(context, provider):
@@ -243,7 +244,7 @@ def request_sample(server, traced, output, name, voice, text, mode):
                                 raise RuntimeError('unexpected_whole_sentence')
                             rate = event['sample_rate']
                         block = base64.b64decode(event['pcm'], validate=True)
-                        if len(block)%2 or len(pcm)+len(block)>384000 or rate!=24000:
+                        if len(block)%2 or len(pcm)+len(block)>max_pcm_bytes or rate!=24000:
                             raise RuntimeError('invalid_pcm')
                         if block:
                             row.setdefault('first_audio_http_ms', now)

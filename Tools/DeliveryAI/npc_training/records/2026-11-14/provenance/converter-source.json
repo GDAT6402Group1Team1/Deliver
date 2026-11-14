@@ -1,0 +1,443 @@
+{
+  "source": "https://codeload.github.com/ggml-org/llama.cpp/zip/47a39665e7081dc482feec169961acc09750a5c4",
+  "revision": "47a39665e7081dc482feec169961acc09750a5c4",
+  "archive_sha256": "e2443e3cc15052808c3150011efdfd684d65d7af8ac045d9f4875c97521842f7",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "path": "conversion\\__init__.py",
+      "sha256": "b62877cfa64ba9800f1edce1bd8d796cf6d226d8f63f9e27e659c480dd02a39e"
+    },
+    {
+      "path": "conversion\\afmoe.py",
+      "sha256": "3bd42ec59d00024257d40dbfa9d772bb25c4ad2fa4e04dd237eece1973b132f2"
+    },
+    {
+      "path": "conversion\\arctic.py",
+      "sha256": "f84ba77755f98bdb83019c7a5193d28898026026a1b6f51e3200ca6886f24dab"
+    },
+    {
+      "path": "conversion\\baichuan.py",
+      "sha256": "268b27b37a27c7e9e287b5b8e9cdf93d1eafa74f74b33a68a335b81c3e3281b6"
+    },
+    {
+      "path": "conversion\\bailingmoe.py",
+      "sha256": "261fb96af8acf0d5d63ede5c3a3c6aeda098e57bce1bdaa7ed62000cc017a5f8"
+    },
+    {
+      "path": "conversion\\base.py",
+      "sha256": "d4c8de9cd5bd6499c2a7ee9b41bc315e8b04a0cba9f19cd0f26140ecdf380484"
+    },
+    {
+      "path": "conversion\\bert.py",
+      "sha256": "6264aab56e5092992102a2b59fbb35e63801d3296531f3aaf428f8dfaddd55f1"
+    },
+    {
+      "path": "conversion\\bitnet.py",
+      "sha256": "49135e543881b1b578ef8e4b74eb43b02811199fd3fb792ace57ef6cd6102b1c"
+    },
+    {
+      "path": "conversion\\bloom.py",
+      "sha256": "ac6596675e315dda3732e840972d674018992eade051a6c2600f4ae19079ea65"
+    },
+    {
+      "path": "conversion\\chameleon.py",
+      "sha256": "27ea2cbcf3d8d01734cd0d41f6241320bf0d0b06dd30c63d4dd4997c9b2ca087"
+    },
+    {
+      "path": "conversion\\chatglm.py",
+      "sha256": "8399224c72ab35217afc37d5ed2fe64f67e75282400a8725f3c88291469fa7d6"
+    },
+    {
+      "path": "conversion\\codeshell.py",
+      "sha256": "e5d47d000980ea8531052c298d984770638e1921ac6311161736cdda0fea1bc3"
+    },
+    {
+      "path": "conversion\\cogvlm.py",
+      "sha256": "0e15edee4c42dff8ada2d2dfd5f6bbb4fd07d9c5ab80e548cf13ca92cd1287ba"
+    },
+    {
+      "path": "conversion\\command_r.py",
+      "sha256": "56765772dbc9d81e6d1a494dddda755fbad17952745b43507bc8befbd3aaec7c"
+    },
+    {
+      "path": "conversion\\dbrx.py",
+      "sha256": "3974e5cc7e7935a58c68d9d348b098e42f8bc6100d3ed782e72f046a419633f6"
+    },
+    {
+      "path": "conversion\\deci.py",
+      "sha256": "539f19de5518eaf8fc71089ff9c3bfe47f4ba9860e38243a38ebf7382e99f6fd"
+    },
+    {
+      "path": "conversion\\deepseek.py",
+      "sha256": "f8d5603bfa3e0dbc44deae65b8d4680554168584bd72175a12c53b4055f3e66f"
+    },
+    {
+      "path": "conversion\\dots1.py",
+      "sha256": "5be0a1a3a20cb8227ae74df6e6d6c962af538a438fc50b3ca1794da03d5c2cb8"
+    },
+    {
+      "path": "conversion\\dotsocr.py",
+      "sha256": "7f26af27485fb861461ba479baadea5b277f6b7613db373337411d3523b564bf"
+    },
+    {
+      "path": "conversion\\dream.py",
+      "sha256": "78ecfb29ed1b7ae9a8d582b4f803cddbaf56216166d79e4a62579af52e6f6832"
+    },
+    {
+      "path": "conversion\\ernie.py",
+      "sha256": "08e123c9d6157a72fd899772908d0b13e34236811052f14597239346daa2efa2"
+    },
+    {
+      "path": "conversion\\exaone.py",
+      "sha256": "b68cf971610c1a456ee15a2c167093001386488f5a590c45613555477563c246"
+    },
+    {
+      "path": "conversion\\falcon.py",
+      "sha256": "63957dd29689f4249546383f30e5377038b7b0942606ee77aad0279f3085c208"
+    },
+    {
+      "path": "conversion\\falcon_h1.py",
+      "sha256": "173b90aaca4ecf468b9d9f09a7021328f47825f4ac5f181d935129cd7546041e"
+    },
+    {
+      "path": "conversion\\gemma.py",
+      "sha256": "fbc879744cd6f50b8c3e2ef5d4262a731c17815b9fd443fc477503dc866c601a"
+    },
+    {
+      "path": "conversion\\glm.py",
+      "sha256": "19fe1b45fe6f16245987632a81bbc6ecbc8d02b9790e584c4a80b19546dad49a"
+    },
+    {
+      "path": "conversion\\gpt2.py",
+      "sha256": "b9e86d9762fa62b5bf9b1fc19884fb1dff5100cf3ec171450c5e84049cc6dbf0"
+    },
+    {
+      "path": "conversion\\gpt_oss.py",
+      "sha256": "b41e4457dbd9995f86b1868e15942b3ca55d0081208a164670a914dfd43abe2e"
+    },
+    {
+      "path": "conversion\\gptneox.py",
+      "sha256": "323fc9d282cc821856c62174da6f795477e2d38cd729271cd950ff0e5cfe76cd"
+    },
+    {
+      "path": "conversion\\granite.py",
+      "sha256": "77f240be483d2a35af2de4237b61968e79560e5665e473486ddab5a5d933d325"
+    },
+    {
+      "path": "conversion\\grok.py",
+      "sha256": "bb3f09307289936b3352d5482b857e12b5137e382cd2aca60a10b2832ea75fc8"
+    },
+    {
+      "path": "conversion\\grovemoe.py",
+      "sha256": "9ffb7713d112967c3dae7a0116a2a7bfe6032a26919bc53689b924501e0b84d2"
+    },
+    {
+      "path": "conversion\\hunyuan.py",
+      "sha256": "47f3f81c778048fb3e0c0d97e2eb98c54c88a466be0c2df129a16880d00a3b8d"
+    },
+    {
+      "path": "conversion\\internlm.py",
+      "sha256": "645a907e4aba3cd59f4438031dbe26027a9fba96b3a231b1c4699bd42535423e"
+    },
+    {
+      "path": "conversion\\internvl.py",
+      "sha256": "d5903957a9d6bdeb8e2a70ea071ddf7f39e1be00b6cc16d4eb5977f66c8a1f36"
+    },
+    {
+      "path": "conversion\\jais.py",
+      "sha256": "3ee5c25652b81a354f14a8266ff7e66b4e23ecbca35e50de61b3abf8a9aac9a5"
+    },
+    {
+      "path": "conversion\\jamba.py",
+      "sha256": "e2f86188a0471f8a547587cbd58ce82ee35b504ceef83fbdb30675873f166383"
+    },
+    {
+      "path": "conversion\\januspro.py",
+      "sha256": "1f44ab7d56c7441b00011478dc122230e3036092b3b7d44d1133cc8f5041a652"
+    },
+    {
+      "path": "conversion\\kimi_linear.py",
+      "sha256": "2fad4c425f36cc31fea8683e93ed3ee8a9cde2e41d35ce27477c64e801df1bae"
+    },
+    {
+      "path": "conversion\\kimivl.py",
+      "sha256": "ccdb3ce4d493971c5a072cc898c990fbb24df163c423839e398690b1bc998f19"
+    },
+    {
+      "path": "conversion\\lfm2.py",
+      "sha256": "3a982a27907248ca5b429d1cc43b035be77b31ae07754d6078c8b9f99cc126eb"
+    },
+    {
+      "path": "conversion\\lighton_ocr.py",
+      "sha256": "1eae70863b58e8189c93553cf71f65e328880cc14df0dc52a70e7233c0c70eec"
+    },
+    {
+      "path": "conversion\\llada.py",
+      "sha256": "ae255927394c3abb90aed567bc2cb929611ebee225f37e8c26b09b8a980525e5"
+    },
+    {
+      "path": "conversion\\llama.py",
+      "sha256": "039cfe4b5d7e760f16df109278346ec8637060680614ecd664dc4ea4eb498fa8"
+    },
+    {
+      "path": "conversion\\llama4.py",
+      "sha256": "75a52186d830e513905a5f5eee0b83001dcbf858c6de0e2d3e6ca450634ca306"
+    },
+    {
+      "path": "conversion\\llava.py",
+      "sha256": "3a33adcd447d07ae90b8d77bf29446667a32463e265e1e9a42995299527198d3"
+    },
+    {
+      "path": "conversion\\maincoder.py",
+      "sha256": "a9606d3c991c79661860751a8dd533dd7b9fe79b4fb289b802d0504470b02c03"
+    },
+    {
+      "path": "conversion\\mamba.py",
+      "sha256": "0d324bc25bf478789cf5770b0b09eb2bc25738e4942f798d635b1738f6e9a260"
+    },
+    {
+      "path": "conversion\\mellum.py",
+      "sha256": "10eadcbd970f78b82f7f6d4165588e63db3d0a97af394aea7e8d0f0bb3d8da92"
+    },
+    {
+      "path": "conversion\\mimo.py",
+      "sha256": "257ec120a05eaebd8278245e6f3538489d3c6cb6ccac3838a38c7d01a2212007"
+    },
+    {
+      "path": "conversion\\minicpm.py",
+      "sha256": "587d79beff22ceabc76eb23dbcf5ef68e1204978ab75a0531f56036f419d1866"
+    },
+    {
+      "path": "conversion\\minimax.py",
+      "sha256": "75f535ee336ee26185f866644d2a7fdbc5b4fb960e45c7cd81aa5f071f93750e"
+    },
+    {
+      "path": "conversion\\mistral.py",
+      "sha256": "08b157feb91b3f3d62210252313fc0d45482bc397efd13b9411d40ecce146e21"
+    },
+    {
+      "path": "conversion\\mistral3.py",
+      "sha256": "f1bf83f31f20079dd35aba94fcb4e8a46c5bd05d8a32cffe5eb8f6b30cad36df"
+    },
+    {
+      "path": "conversion\\mpt.py",
+      "sha256": "aabcdf19fb431478019cddaea26a2a6df12a6cdf06d31fc170a60d49e779b8b7"
+    },
+    {
+      "path": "conversion\\nemotron.py",
+      "sha256": "0d33e18ae666416fc0b14377000cf83292b26b05876091f69432c3b73b4c59d2"
+    },
+    {
+      "path": "conversion\\olmo.py",
+      "sha256": "79dbf113ec54b70068037caf4fc9b8f8effafaed1aff5273d7f8ef22cde7cbcd"
+    },
+    {
+      "path": "conversion\\openelm.py",
+      "sha256": "87e54f169264cd4d6d7dad4508b373c7303397391340cd4a1ac0c690901f60ec"
+    },
+    {
+      "path": "conversion\\orion.py",
+      "sha256": "f8ee26f5d6e2f33b61b2c29cb1236f972defc437e5c88c0989b65f199628a559"
+    },
+    {
+      "path": "conversion\\pangu.py",
+      "sha256": "1ceab2223aeb83b085e4148fa6e11740c46330b523ef4077b4511c53ac4463cd"
+    },
+    {
+      "path": "conversion\\phi.py",
+      "sha256": "34c2f060aebcb55d4a4566ac3b0ba8267efbd5ca74b3dc482017c0230fd80b47"
+    },
+    {
+      "path": "conversion\\pixtral.py",
+      "sha256": "ad39d0eb893e05aaa025d520d92834c6645c186398553ffb396ea5fec079a0fd"
+    },
+    {
+      "path": "conversion\\plamo.py",
+      "sha256": "ee021af4b1049304f2efc04128eebe9038b23506f9124a660944a2d5ea83cdc1"
+    },
+    {
+      "path": "conversion\\plm.py",
+      "sha256": "5cae68d81cc17b15640fa9d06a8f28f2afd4659c4dd3e89e3c8b3ed48d752cad"
+    },
+    {
+      "path": "conversion\\qwen.py",
+      "sha256": "07447bde7fcb7989d659a1d0c7ee6428a04493e4d6c67cd6b2bfd8759d30d8de"
+    },
+    {
+      "path": "conversion\\qwen3vl.py",
+      "sha256": "e5757e00ac85bf81cfa994f1125957d231c33099c69079b4816227ba7d21eba7"
+    },
+    {
+      "path": "conversion\\qwenvl.py",
+      "sha256": "a877fa77ec7b9d8394ed60f8d409550267ed696cd8b2541b31d909b20f0a96c6"
+    },
+    {
+      "path": "conversion\\refact.py",
+      "sha256": "2f077cbf9f6ea0cc2d7b225402b396d9a3fd6a787693727383f8c079f47eae51"
+    },
+    {
+      "path": "conversion\\rwkv.py",
+      "sha256": "724ae62ae39cf9303ca59224d5728949295c2f57ac85afa111a005a3de6b6860"
+    },
+    {
+      "path": "conversion\\sarashina2.py",
+      "sha256": "808e9dc4b2fe0c2b470b7235f916ffc77a24d28ccd77f1750f6b3334faf71949"
+    },
+    {
+      "path": "conversion\\smallthinker.py",
+      "sha256": "8185a3af869a61681dc05f637d039623e9882960856a762e7387413442293bb9"
+    },
+    {
+      "path": "conversion\\smolvlm.py",
+      "sha256": "f679d0e85608305e47860c755b316256d35ebaa876fd42f70cb5eb8c8193224e"
+    },
+    {
+      "path": "conversion\\stablelm.py",
+      "sha256": "ee9f6e30376d5430eafecfe72e65153ca9359647a239d826e3101d16b827e0a0"
+    },
+    {
+      "path": "conversion\\starcoder.py",
+      "sha256": "b3ad80664e3808cde9df9d4897c8eac839e786362cfa0131ff81a3cf88db2c24"
+    },
+    {
+      "path": "conversion\\step3.py",
+      "sha256": "45c1df4b0962a4911648c81d3ac5498ea093842d1c73476ba5c03b6d0f54334e"
+    },
+    {
+      "path": "conversion\\t5.py",
+      "sha256": "98a3c5b5ff2d811a1a16dd9f65da547f78dbc7db0fff8d36ee7c2f1855b30e0c"
+    },
+    {
+      "path": "conversion\\talkie.py",
+      "sha256": "d4f5eb53be4c630f3aa4b8bf8a19e1bfc1a8543386dea6d8ef6d1b62537d9c59"
+    },
+    {
+      "path": "conversion\\ultravox.py",
+      "sha256": "d2e3711d8bb4588df3c149ce82a94f788233e789fd5dedd6c582c9c02c1ab344"
+    },
+    {
+      "path": "conversion\\wavtokenizer.py",
+      "sha256": "7da3038029f302deac90772ddc23cf948e0dcc3e4246102fe014d68ce0fa9e3d"
+    },
+    {
+      "path": "conversion\\xverse.py",
+      "sha256": "08892a9db095f5f9a13243a4d5ac603678967e11d516f3a88d46e19acb174837"
+    },
+    {
+      "path": "conversion\\youtuvl.py",
+      "sha256": "e076b075db48a931b7f63e757ddec7a032718a426a0f4473dd99a07e78459f7f"
+    },
+    {
+      "path": "convert_hf_to_gguf.py",
+      "sha256": "8f1bed9466221e57e434caa7ee720abe1569deb6bc2fe5a65da950ea66c8e737"
+    },
+    {
+      "path": "gguf-py\\LICENSE",
+      "sha256": "ef78c7e6659e34c798194f0d344e807c722de70cbca1359ef54772661e11ca38"
+    },
+    {
+      "path": "gguf-py\\README.md",
+      "sha256": "f759ed01b8899c392cee7f1bc9012356090dd46014898c2cface1cca5f1e18af"
+    },
+    {
+      "path": "gguf-py\\examples\\reader.py",
+      "sha256": "ce0846a9968f3cd63a6d93032502a9c7c4a4c4526d65a2afe5bf32644a58c3a3"
+    },
+    {
+      "path": "gguf-py\\examples\\writer.py",
+      "sha256": "d96ade060e50cfe8a2f371217a388d70f1cd4bc3124fe5c65a75cb960d930a92"
+    },
+    {
+      "path": "gguf-py\\gguf\\__init__.py",
+      "sha256": "3ccfc0104cd7ea88c6028743b7bf3f2c89b5f474425de03a217a6072320d7c2f"
+    },
+    {
+      "path": "gguf-py\\gguf\\constants.py",
+      "sha256": "cf5e80f5d01422a0650adfa45879593a2fbc73d1a9e3ce78391e8d4d02e8fe97"
+    },
+    {
+      "path": "gguf-py\\gguf\\gguf.py",
+      "sha256": "f0c0eeedad0911784b52ffed8e162a0eb5ae6d535ce35705bc16196e46597a72"
+    },
+    {
+      "path": "gguf-py\\gguf\\gguf_reader.py",
+      "sha256": "91cb9e81f1a67f5856f012cf3f526ad9ffdb6b887d2aa66e2593ee6f63764aad"
+    },
+    {
+      "path": "gguf-py\\gguf\\gguf_writer.py",
+      "sha256": "165bf749a0292743475635670ae2a7499304f22ff52ef1791303455a424fc9e4"
+    },
+    {
+      "path": "gguf-py\\gguf\\lazy.py",
+      "sha256": "ec35541320443e1bdc293e39c699fa5d1adb7fb594f3f87af093b4c756a4ebe2"
+    },
+    {
+      "path": "gguf-py\\gguf\\metadata.py",
+      "sha256": "c871748f49f7fb8e67aa9a18867adf8a8ba862f0f1f4a89a0a0e285daa52a312"
+    },
+    {
+      "path": "gguf-py\\gguf\\py.typed",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "gguf-py\\gguf\\quants.py",
+      "sha256": "2c927a1b3d9f0920dcf4007fb686e1b0999333e9f65ce43dcc689900c0beae8b"
+    },
+    {
+      "path": "gguf-py\\gguf\\scripts\\gguf_convert_endian.py",
+      "sha256": "72e3085bb4e53a6fc8fa1f66ecdd9bcfb1227d5bef70aa777d2a31f488462901"
+    },
+    {
+      "path": "gguf-py\\gguf\\scripts\\gguf_dump.py",
+      "sha256": "d8b8fc28e96d15d8a4d6f05cdff4a747f5a06f31172efee9dfc971998ed0203f"
+    },
+    {
+      "path": "gguf-py\\gguf\\scripts\\gguf_editor_gui.py",
+      "sha256": "6e9d70e850268fff5d4108d9ecbc2b4d90e70b61f08e71f7d37ac20916d854bb"
+    },
+    {
+      "path": "gguf-py\\gguf\\scripts\\gguf_hash.py",
+      "sha256": "9f277c9338d12a73857a4e54683d7da4d5de01531751f14401267c9289e4197f"
+    },
+    {
+      "path": "gguf-py\\gguf\\scripts\\gguf_new_metadata.py",
+      "sha256": "972499d35957b4721b9243828d5547d1c84def8d4e6fc641887c6578bf765255"
+    },
+    {
+      "path": "gguf-py\\gguf\\scripts\\gguf_set_metadata.py",
+      "sha256": "c8612a7109428a677ea55976dd5eeed6088934ddef7ef01246a5bc7a6e585b3b"
+    },
+    {
+      "path": "gguf-py\\gguf\\tensor_mapping.py",
+      "sha256": "5a6ea9e2c68541bd283f3bbef019f61e89a48e89c06443bc8b36614508bdd796"
+    },
+    {
+      "path": "gguf-py\\gguf\\utility.py",
+      "sha256": "da920e2c62166ec9f30e407e9fb35ec29fda671310ffbf0f8ce856b62f1c70d7"
+    },
+    {
+      "path": "gguf-py\\gguf\\vocab.py",
+      "sha256": "16cddd93700f86c8b72e6f9e741e2362189155b9f96aa9e3bbb0995060095f1a"
+    },
+    {
+      "path": "gguf-py\\pyproject.toml",
+      "sha256": "820c0fa41085815a60d5e4939a08b91af5eee95e9cabf7270f779f3b6acf9746"
+    },
+    {
+      "path": "gguf-py\\tests\\__init__.py",
+      "sha256": "11ed0f04731b689a1f5e62114fa6cf5ae2ada2f6ebcae44622ec1d89a52043b5"
+    },
+    {
+      "path": "gguf-py\\tests\\test_metadata.py",
+      "sha256": "8577b24ebd407055e384a7b755178db73f9186da5f854ceebf56ed509c98fc95"
+    },
+    {
+      "path": "gguf-py\\tests\\test_quants.py",
+      "sha256": "7ed495f1371e9858750fd9c8c5e5a31a4491613c33d5af76508b24113313d86f"
+    }
+  ]
+}

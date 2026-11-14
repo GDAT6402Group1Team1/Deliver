@@ -61,6 +61,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 
   public:
 	ADeliveryMotorbike();
+	UFUNCTION(BlueprintPure, Category="Motorbike") bool CanBeUsedByPlayers() const { return AllowsPlayerUse(); }
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Motorbike|Resident") TObjectPtr<UDeliveryVehicleHoldComponent> ResidentHold;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	UFUNCTION(BlueprintPure, Category="Motorbike|Passenger") bool HasTrunkPassenger() const;
@@ -115,6 +116,9 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Motorbike|货物")
 	bool AttachCargo(ADeliveryPackageItem* Package);
+
+    // Owner 先于货架指针复制到达时，也能按当前归属恢复包裹表现
+    void RefreshCargoPresentation(ADeliveryPackageItem* Package);
 
 	/**
 	 * 服务器解除快递与车辆的关系并返回快递，无货时返回空指针
@@ -210,6 +214,12 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	TArray<TObjectPtr<UStaticMesh>> BodyMeshes;
 
   protected:
+	// 专属车辆可以关闭玩家入口，默认车辆保持原来的驾驶、装卸和召唤规则
+	virtual bool AllowsPlayerUse() const { return true; }
+	virtual bool HasAutonomousDriver() const { return false; }
+	virtual void UpdateAutonomousDriveInput(float DeltaSeconds, float& OutThrottle, float& OutSteer) {}
+	// 服务器取消自主驾驶时立即清空推进速度，不改变贴地与碰撞算法
+	void StopAutonomousMotion();
 	// 车体组件与固定槽位
 	/** 车体部件的固定槽位数；用定额的默认子对象而不是运行时 NewObject，避免构造脚本反复重建组件 */
 	static constexpr int32 MaxBodyParts = 12;

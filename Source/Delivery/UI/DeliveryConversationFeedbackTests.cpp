@@ -3,6 +3,8 @@
 #include "Misc/ScopeExit.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Conversation/DeliveryConversationComponent.h"
+#include "AI/Conversation/DeliveryConversationTurnSubsystem.h"
+#include "Speech/DeliverySpeechInputComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
@@ -59,6 +61,8 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     Controller->Possess(Pawn);
     auto* Conversation=NewObject<UDeliveryConversationComponent>(Controller);
     Conversation->RegisterComponent();
+    auto* SpeechInput=NewObject<UDeliverySpeechInputComponent>(Controller);
+    SpeechInput->RegisterComponent();
     FActorSpawnParameters Spawn;
     Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     auto* Npc=World->SpawnActor<ADeliveryNpcCharacter>(FVector(200,0,90),FRotator::ZeroRotator,Spawn);
@@ -78,10 +82,39 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     Panel->Suggestions=NewObject<UMultiLineEditableTextBox>(Panel);
     Panel->Suggestions->SetIsReadOnly(true);
     Panel->SendButton=NewObject<UButton>(Panel);
+    Panel->RetryButton=NewObject<UButton>(Panel);
+    Panel->WaitingIndicator=NewObject<UBorder>(Panel);
     Panel->SuggestionToggle=NewObject<UButton>(Panel);
+    Panel->VoiceToggleButton=NewObject<UButton>(Panel);
+    Panel->VoiceHoldButton=NewObject<UButton>(Panel);
+    Panel->VoiceToggleLabel=NewObject<UTextBlock>(Panel);
+    // HUD 先设置人物再加入视口，首次 Construct 必须保留这份对象和提示
+    Panel->SetResident(Npc);
     Panel->NativeConstruct();
+    Panel->NativeConstruct();
+    TestEqual(TEXT("连续连麦不再绑定按住事件"),Panel->VoiceHoldButton->OnPressed.GetAllObjects().Num(),0);
+    TestEqual(TEXT("连续连麦不再绑定松键事件"),Panel->VoiceHoldButton->OnReleased.GetAllObjects().Num(),0);
+    TestEqual(TEXT("旧按住控件保持隐藏"),Panel->VoiceHoldButton->GetVisibility(),ESlateVisibility::Collapsed);
+    TestEqual(TEXT("入口说明连接自己的二狗"),Panel->VoiceToggleLabel->GetText().ToString(),FString(TEXT("与二狗连麦")));
+    TestEqual(TEXT("重复构建只监听一次语音显示变化"),SpeechInput->OnDisplayChanged.GetAllObjects().Num(),1);
+
+    const FString VoiceDraft=TEXT("这是尚未发送的新草稿");
+    Panel->Input->SetText(FText::FromString(VoiceDraft));
+    const FGuid VoiceClient=FGuid::NewGuid(),VoiceMessage=FGuid::NewGuid(),NewVoiceMessage=FGuid::NewGuid();
+    Conversation->OnSubmitted.Broadcast(Npc,VoiceClient,TEXT("这一句来自语音"));
+    TestTrue(TEXT("语音提交更新原话而保留输入框草稿"),Panel->LastSubmittedText==TEXT("这一句来自语音") &&
+        Panel->Input->GetText().ToString()==VoiceDraft);
+    Conversation->OnSubmissionBound.Broadcast(VoiceClient,VoiceMessage);
+    TestEqual(TEXT("客户端编号绑定到服务器编号"),Panel->SubmittedEventId,VoiceMessage);
+    Conversation->OnSubmitted.Broadcast(Npc,NewVoiceMessage,TEXT("下一轮语音"));
+    Conversation->OnSubmissionBound.Broadcast(VoiceClient,FGuid::NewGuid());
+    TestEqual(TEXT("旧 Bound 回执不能覆盖下一轮编号"),Panel->SubmittedEventId,NewVoiceMessage);
+    Conversation->OnSubmitted.Broadcast(Neighbor,FGuid::NewGuid(),TEXT("另一个人的窗口内容"));
+    TestEqual(TEXT("其他 NPC 的提交不覆盖当前窗口"),Panel->SubmittedEventId,NewVoiceMessage);
     Panel->SetResident(Npc);
     TestEqual(TEXT("还没发言时不占用原话行的空间"),Panel->SubmittedLine->GetVisibility(),ESlateVisibility::Collapsed);
+    TestEqual(TEXT("还没发言时隐藏等待特效"),Panel->WaitingIndicator->GetVisibility(),ESlateVisibility::Collapsed);
+    TestEqual(TEXT("没有失败时隐藏重试入口"),Panel->RetryButton->GetVisibility(),ESlateVisibility::Collapsed);
     TestEqual(TEXT("输入提示明确当前交谈对象"),Panel->SpeakerName->GetText().ToString(),FString(TEXT("对 翠花 说")));
     TestFalse(TEXT("建议默认折叠"),Panel->IsSuggestionsVisible());
     Panel->SuggestionToggle->OnClicked.Broadcast();
@@ -94,23 +127,47 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     Panel->Input->OnTextCommitted.Broadcast(Panel->Input->GetText(),ETextCommit::OnUserMovedFocus);
     TestFalse(TEXT("阅读建议、在建议上回车和粘贴输入都不会发送消息"),Conversation->GetLastSubmissionId().IsValid());
     Panel->SendButton->OnClicked.Broadcast();
-    const FGuid ProvokeId=Panel->SubmittedEventId;
+    FGuid ProvokeId=Panel->SubmittedEventId;
     const FString Provoke=Panel->LastSubmittedText;
     TestTrue(TEXT("按发送后才通过交谈组件提交建议文字"),ProvokeId.IsValid() && ProvokeId==Conversation->GetLastSubmissionId());
     TestEqual(TEXT("拱火点名在场双方，由玩家明确发起比划挑战"),Provoke,FString(TEXT("翠花，大壮就在旁边。你俩到底谁厉害？敢不敢比划两下，输的当面认怂？")));
-    TestTrue(TEXT("输入区保留刚才发送的完整原话"),Panel->Reply->GetText().ToString().Contains(Provoke));
+    TestTrue(TEXT("消息区保留刚才发送的完整原话"),Panel->Reply->GetText().ToString().Contains(Provoke));
+    TestTrue(TEXT("按钮发送后立即清空输入框"),Panel->Input->GetText().IsEmpty());
     TestTrue(TEXT("发言后显示原话行，末尾不留空白段落"),Panel->SubmittedLine->GetVisibility()==ESlateVisibility::Visible &&
         !Panel->Reply->GetText().ToString().EndsWith(TEXT("\n")));
     TestTrue(TEXT("标题显示当前交谈对象"),Panel->SpeakerName->GetText().ToString().Contains(TEXT("翠花")));
     TestEqual(TEXT("服务器确实收到这次发言"),Conversation->GetSubmissionResult(ProvokeId),FName(TEXT("Heard")));
-    TestTrue(TEXT("收到服务器确认后才显示你说"),Panel->Reply->GetText().ToString().StartsWith(TEXT("你说：")));
+    TestTrue(TEXT("原话行不显示发送中或已送达状态"),Panel->Reply->GetText().ToString().StartsWith(TEXT("你说：")) &&
+        !Panel->Reply->GetText().ToString().Contains(TEXT("发送中")) && !Panel->Reply->GetText().ToString().Contains(TEXT("已送达")));
     TestFalse(TEXT("刚发送后进入统一冷却"),Conversation->CanSendNow());
+    TestEqual(TEXT("等待NPC回复时显示呼吸点容器"),Panel->WaitingIndicator->GetVisibility(),ESlateVisibility::HitTestInvisible);
+    // 模拟监听服务器同步回执的界面代码开始写下一份草稿
+    Conversation->NextLocalSendAt=Conversation->NextSendAt=0;
+    Panel->bAwaitingReply=false;
+    Panel->Input->SetText(FText::FromString(Provoke));
+    const FString SynchronousDraft=TEXT("同步回执期间开始写的下一句");
+    const auto DraftBinding=Conversation->OnSubmissionBound.AddLambda([&](FGuid,FGuid)
+        { Panel->Input->SetText(FText::FromString(SynchronousDraft)); });
+    Panel->SendButton->OnClicked.Broadcast();
+    Conversation->OnSubmissionBound.Remove(DraftBinding);
+    TestEqual(TEXT("同步回执写入的新草稿不能被原Send清空"),Panel->Input->GetText().ToString(),SynchronousDraft);
+    ProvokeId=Panel->SubmittedEventId;
+    Panel->Input->SetText(FText::FromString(TEXT("第二句还没写完")));
+    Panel->SendButton->OnClicked.Broadcast();
+    TestEqual(TEXT("本地冷却拒绝时保留草稿"),Panel->Input->GetText().ToString(),FString(TEXT("第二句还没写完")));
+    TestEqual(TEXT("本地拒绝不替换原话编号"),Panel->SubmittedEventId,ProvokeId);
+    Panel->Input->SetText(FText::GetEmpty());
 
     // 即使发送冷却已经结束，同一句仍在等回复时也不能重复发出
     Conversation->NextLocalSendAt=0;
     Conversation->NextSendAt=0;
     Panel->SendButton->OnClicked.Broadcast();
+    TestEqual(TEXT("发送后再次点击空输入不会重复提交"),Conversation->GetLastSubmissionId(),ProvokeId);
+    Panel->Input->SetText(FText::FromString(Provoke));
+    Panel->SendButton->OnClicked.Broadcast();
     TestTrue(TEXT("再次发送正在等待的同一句不会建立新请求"),Conversation->GetLastSubmissionId()==ProvokeId);
+    const FString NextDraft=TEXT("等一下，我还有一句话没说完");
+    Panel->Input->SetText(FText::FromString(NextDraft));
     Conversation->ResultExpiresAt=0;
     Panel->RefreshReply();
     TestEqual(TEXT("短提示过期不会丢失本次发送结果"),Panel->SubmissionResult,FName(TEXT("Heard")));
@@ -149,6 +206,9 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
         !Agent->IsDecisionPending() && !Npc->IsDecisionRetryScheduled() && !Panel->bAwaitingReply);
     TestTrue(TEXT("失败提示保留已送达的玩家原话"),Panel->Reply->GetText().ToString().StartsWith(TEXT("你说：")) &&
         Panel->Reply->GetText().ToString().Contains(TEXT("这次没能回复，可以再试一次")));
+    TestEqual(TEXT("上一句失败不会覆盖正在输入的下一句"),Panel->Input->GetText().ToString(),NextDraft);
+    TestEqual(TEXT("回复失败时停止等待特效"),Panel->WaitingIndicator->GetVisibility(),ESlateVisibility::Collapsed);
+    TestEqual(TEXT("回复失败显示重试入口"),Panel->RetryButton->GetVisibility(),ESlateVisibility::Visible);
 
     // 服务器拒绝下一句时保留玩家原话，同时明确标成没有送到
     Conversation->NextLocalSendAt=0;
@@ -160,12 +220,19 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     TestTrue(TEXT("服务器拒绝时保留原话行，并分行说明原因"),Panel->SubmittedLine->GetVisibility()==ESlateVisibility::Visible &&
         Panel->Reply->GetText().ToString().Contains(TEXT("我现在要送货\n刚才发得太快")));
     TestFalse(TEXT("被拒绝后不继续等模型回复"),Panel->bAwaitingReply);
+    const FGuid RejectedId=Panel->SubmittedEventId;
+    Conversation->NextLocalSendAt=0;
+    Panel->RefreshReply();
+    Panel->RetryButton->OnClicked.Broadcast();
+    TestTrue(TEXT("重试为原话建立新请求"),Panel->SubmittedEventId!=RejectedId && Panel->LastSubmittedText==TEXT("我现在要送货"));
+    TestEqual(TEXT("重试旧消息不覆盖下一句草稿"),Panel->Input->GetText().ToString(),NextDraft);
 
     Conversation->NextLocalSendAt=0;
     Conversation->NextSendAt=0;
     Panel->Input->SetText(FText::FromString(TEXT("对不起，刚才是我太急了，我先送货去了。")));
     Panel->Input->OnTextCommitted.Broadcast(Panel->Input->GetText(),ETextCommit::OnEnter);
     TestTrue(TEXT("在输入框回车发送玩家修改后的原话"),Panel->LastSubmittedText==TEXT("对不起，刚才是我太急了，我先送货去了。"));
+    TestTrue(TEXT("回车发送后立即清空输入框"),Panel->Input->GetText().IsEmpty());
     const FGuid ApologyId=Panel->SubmittedEventId;
     Agent->ReceiveDecision(LastFailedRequest,nullptr,TEXT("TransportFailure"));
     Conversation->ClientResult_Implementation(TEXT("ReplyFailed"),ProvokeId);
@@ -185,7 +252,11 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     FDeliveryNpcDecisionProposal Proposal;
     Proposal.RequestId=NewRequest.RequestId; Proposal.NpcId=NewRequest.NpcId; Proposal.WorldEpoch=NewRequest.WorldEpoch;
     Proposal.ContextRevision=NewRequest.ContextRevision; Proposal.PlanRevision=NewRequest.PlanRevision;
+    Proposal.CapabilityVersion=NewRequest.RequestedCapabilityVersion;
     Proposal.Action=EDeliveryNpcAction::Wait; Proposal.Duration=1; Proposal.Emotion=TEXT("Calm"); Proposal.Speech=TEXT("这事我听见了。");
+    const auto* WaitCandidate=NewRequest.Candidates.FindByPredicate([](const auto& Item){ return Item.Action==EDeliveryNpcAction::Wait; });
+    if (!TestNotNull(TEXT("使用本次请求真实的等候候选"),WaitCandidate)) return false;
+    Proposal.CandidateId=WaitCandidate->CandidateId; Proposal.TargetId=WaitCandidate->TargetId; Proposal.EvidenceIds=WaitCandidate->EvidenceIds;
     TestTrue(TEXT("接收模型动作后进入语音阶段"),Agent->ReceiveStreamDecision(NewRequest.RequestId,Proposal));
     TestFalse(TEXT("语音阶段不继续报告倾听"),Agent->IsListening());
     Panel->RefreshReply();
@@ -220,6 +291,7 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
         FDeliveryNpcDecisionProposal Reply;
         Reply.RequestId=Request.RequestId; Reply.NpcId=Request.NpcId; Reply.WorldEpoch=Request.WorldEpoch;
         Reply.ContextRevision=Request.ContextRevision; Reply.PlanRevision=Request.PlanRevision;
+        Reply.CapabilityVersion=Request.RequestedCapabilityVersion; Reply.CandidateId=Candidate->CandidateId;
         Reply.Action=Candidate->Action; Reply.TargetId=Candidate->TargetId; Reply.EvidenceIds=Candidate->EvidenceIds;
         Reply.Duration=1; Reply.Emotion=TEXT("Calm"); Reply.Speech=Speech;
         if (bStream)
@@ -296,7 +368,7 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
         TestEqual(TEXT("动作先失败时尚不能断定后端没有台词"),Conversation->GetSubmissionResult(Panel->SubmittedEventId),FName(TEXT("Heard")));
         // 模拟下一帧已停止对白，而后台的结束通知稍后才到达
         Npc->Presentation->TickComponent(.02f,LEVELTICK_All,nullptr);
-        TestFalse(TEXT("失败动作的待播数据已先清除"),Npc->Presentation->HasPendingSpeech());
+        TestFalse(TEXT("零台词回复没有待播音频"),Npc->Presentation->HasPendingSpeech());
         Agent->FinishReply(ActionRequest,true,0);
         Panel->RefreshReply();
         TestTrue(TEXT("对白先清除再确认零句也结束界面等待"),!Panel->bAwaitingReply &&
@@ -324,7 +396,7 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     auto MakeDisplayedSentence=[&](int32 Sequence,const FString& Text)
     {
         FDeliveryNpcSpeechState Sentence;
-        Sentence.TurnId=FGuid::NewGuid(); Sentence.ActionId=Agent->GetPublicState().ActionId;
+        Sentence.TurnId=FGuid::NewGuid(); Sentence.ActionId=Agent->GetPublicState().GetReplyId();
         Sentence.ReplyToEventId=Panel->SubmittedEventId; Sentence.Sequence=Sequence;
         Sentence.Text=Text; Sentence.Emotion=TEXT("Calm"); Sentence.bActive=true;
         return Sentence;
@@ -359,27 +431,26 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
         Panel->bAwaitingReply=true; Panel->bReplyTimedOut=false;
         Presentation->DisplayedSpeech={};
     };
-    for (const auto Status:{EDeliveryNpcActionStatus::Accepted,EDeliveryNpcActionStatus::Running,EDeliveryNpcActionStatus::Succeeded})
+    for (const auto Status:{EDeliveryNpcActionStatus::Idle,EDeliveryNpcActionStatus::Accepted,EDeliveryNpcActionStatus::Running,
+        EDeliveryNpcActionStatus::Succeeded,EDeliveryNpcActionStatus::Failed,EDeliveryNpcActionStatus::Cancelled})
     {
         ResetUnreadPanel(); Agent->PublicState=ReplyState; Agent->PublicState.Status=Status; Panel->RefreshReply();
-        TestTrue(TEXT("本轮有效动作在语音准备期间均可先显示首句"),!Panel->bAwaitingReply && Panel->LastReplyText==FirstText);
+        TestTrue(TEXT("独立回复不受当前活动状态影响"),!Panel->bAwaitingReply && Panel->LastReplyText==FirstText);
     }
-    for (const auto Status:{EDeliveryNpcActionStatus::Failed,EDeliveryNpcActionStatus::Cancelled})
-    {
-        ResetUnreadPanel(); Agent->PublicState=ReplyState; Agent->PublicState.Status=Status; Panel->RefreshReply();
-        TestTrue(TEXT("失败或取消的动作不提前显示首句"),Panel->bAwaitingReply && Panel->LastReplyText.IsEmpty());
-    }
+    ResetUnreadPanel(); Agent->PublicState=ReplyState; Agent->PublicState.ActionId.Invalidate();
+    Agent->PublicState.Status=EDeliveryNpcActionStatus::Idle; Panel->RefreshReply();
+    TestTrue(TEXT("没有短动作编号的持续安排也结束首句等待"),!Panel->bAwaitingReply && Panel->LastReplyText==FirstText);
     ResetUnreadPanel(); Agent->PublicState=ReplyState; Agent->PublicState.ReplyToEventId=FGuid::NewGuid(); Panel->RefreshReply();
     TestTrue(TEXT("其他发言的首句不能结束本次等待"),Panel->bAwaitingReply && Panel->LastReplyText.IsEmpty());
-    Agent->PublicState=ReplyState; Agent->PublicState.ActionId=FGuid::NewGuid(); Panel->RefreshReply();
-    TestTrue(TEXT("动作编号与本机待播回复不符时不提前显示"),Panel->bAwaitingReply && Panel->LastReplyText.IsEmpty());
+    Agent->PublicState=ReplyState; Agent->PublicState.ReplyId=FGuid::NewGuid(); Panel->RefreshReply();
+    TestTrue(TEXT("回复编号与本机待播回复不符时不提前显示"),Panel->bAwaitingReply && Panel->LastReplyText.IsEmpty());
     Agent->PublicState=ReplyState; Agent->PublicState.Speech.Reset();
     Neighbor->Agent->PublicState=ReplyState;
-    Neighbor->Presentation->BeginReply(ReplyState.ActionId,Panel->SubmittedEventId,Neighbor->Agent->GetActionConversationDepth()); Panel->RefreshReply();
+    Neighbor->Presentation->BeginReply(ReplyState.GetReplyId(),Panel->SubmittedEventId,Neighbor->Agent->GetActionConversationDepth()); Panel->RefreshReply();
     TestTrue(TEXT("相同发言编号也不能读取另一NPC的首句"),Panel->bAwaitingReply && Panel->LastReplyText.IsEmpty());
     Neighbor->Agent->CancelPlan(TEXT("EndOtherNpcPreviewTest"));
     Agent->PublicState=ReplyState;
-    Presentation->StopStreamSpeech_Implementation(ReplyState.ActionId,true); Panel->RefreshReply();
+    Presentation->StopStreamSpeech_Implementation(ReplyState.GetReplyId(),true); Panel->RefreshReply();
     TestTrue(TEXT("停止通知先到时不从晚到的动作状态显示旧首句"),Panel->bAwaitingReply && Panel->LastReplyText.IsEmpty());
 
     ActionRequest=PrepareActionReply(false,FString());
@@ -414,10 +485,12 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     auto* OtherConversation=NewObject<UDeliveryConversationComponent>(OtherController); OtherConversation->RegisterComponent();
     // 给另一控制器相同编号，确认成功回执确实发给原玩家，而不只是被编号过滤掉
     OtherConversation->LastSubmissionId=PossessionMessage; OtherConversation->LastResult=TEXT("Heard");
+    FDeliveryConversationTurnLease ExpiredLease;
+    World->GetSubsystem<UDeliveryConversationTurnSubsystem>()->GetLease(Npc,ExpiredLease);
     Agent->TryFinishAction(Agent->GetPublicState().ActionId,EDeliveryNpcActionStatus::Succeeded,NAME_None);
     Panel->RefreshReply();
-    TestTrue(TEXT("换Pawn后原玩家仍收到动作回应"),!Panel->bAwaitingReply &&
-        Conversation->GetSubmissionResult(PossessionMessage)==TEXT("ActionReply"));
+    TestTrue(TEXT("换Pawn使旧轮失效，旧动作不能再次完成这轮回应"),!Panel->bAwaitingReply &&
+        Conversation->GetSubmissionResult(PossessionMessage)==TEXT("ReplyFailed"));
     TestEqual(TEXT("后来占有原Pawn的人不会收到这次回应"),OtherConversation->GetSubmissionResult(PossessionMessage),FName(TEXT("Heard")));
     Panel->SetResident(Neighbor);
     TestEqual(TEXT("更换对象后收起旧原话行"),Panel->SubmittedLine->GetVisibility(),ESlateVisibility::Collapsed);
@@ -425,8 +498,23 @@ bool FDeliveryConversationFeedbackTest::RunTest(const FString&)
     TestTrue(TEXT("切换对象后不显示旧原话"),Panel->LastSubmittedText.IsEmpty());
     TestTrue(TEXT("新标题使用新交谈对象"),Panel->SpeakerName->GetText().ToString().Contains(TEXT("大壮")));
     TestFalse(TEXT("换交谈对象后重新折叠建议"),Panel->IsSuggestionsVisible());
+    OtherController->Player=NewObject<ULocalPlayer>(GEngine);
+    auto* OtherSpeech=NewObject<UDeliverySpeechInputComponent>(OtherController); OtherSpeech->RegisterComponent();
+    Panel->SetOwningPlayer(OtherController);
+    Panel->NativeConstruct();
+    Panel->NativeConstruct();
+    TestFalse(TEXT("换来源后解绑旧交谈提交"),Conversation->OnSubmitted.IsBoundToObject(Panel));
+    TestFalse(TEXT("换来源后解绑旧编号回执"),Conversation->OnSubmissionBound.IsBoundToObject(Panel));
+    TestEqual(TEXT("换来源后解绑旧语音显示"),SpeechInput->OnDisplayChanged.GetAllObjects().Num(),0);
+    TestEqual(TEXT("新语音来源重复构建仍只有一份监听"),OtherSpeech->OnDisplayChanged.GetAllObjects().Num(),1);
     Panel->NativeDestruct();
+    TestFalse(TEXT("关闭后解绑新交谈提交"),OtherConversation->OnSubmitted.IsBoundToObject(Panel));
+    TestEqual(TEXT("关闭后松键事件解除绑定"),Panel->VoiceHoldButton->OnReleased.GetAllObjects().Num(),0);
+    TestEqual(TEXT("关闭后按住事件解除绑定"),Panel->VoiceHoldButton->OnPressed.GetAllObjects().Num(),0);
+    TestEqual(TEXT("关闭后语音显示解除绑定"),OtherSpeech->OnDisplayChanged.GetAllObjects().Num(),0);
     TestEqual(TEXT("关闭后发送按钮解除绑定"),Panel->SendButton->OnClicked.GetAllObjects().Num(),0);
+    TestEqual(TEXT("关闭后重试按钮解除绑定"),Panel->RetryButton->OnClicked.GetAllObjects().Num(),0);
+    TestEqual(TEXT("关闭后隐藏等待特效"),Panel->WaitingIndicator->GetVisibility(),ESlateVisibility::Collapsed);
     TestEqual(TEXT("关闭后输入框回车解除绑定"),Panel->Input->OnTextCommitted.GetAllObjects().Num(),0);
     TestTrue(TEXT("关闭后清空当前交谈内容与对象"),!Panel->Resident.IsValid() && Panel->LastSubmittedText.IsEmpty() &&
         Panel->LastReplyText.IsEmpty() && Panel->Suggestions->GetText().IsEmpty());

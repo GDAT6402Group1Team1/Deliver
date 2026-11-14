@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "talker_mode": "cuda_graph",
+  "python_path": "Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe",
+  "model_path": "Saved/AIResearch/TtsEvaluation/qwen/model",
+  "installation_path": "Saved/AIResearch/TtsEvaluation/qwen/installation.json",
+  "model_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+  "voices": {
+    "male": {
+      "provider": "qwen",
+      "speaker": "Uncle_Fu"
+    },
+    "female": {
+      "provider": "qwen_base",
+      "speaker": "Xiaofang_B",
+      "predictor_mode": "cuda_graph",
+      "model_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model",
+      "model_revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+      "model_manifest_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model-downloads.json",
+      "model_manifest_sha256": "004284ecfa9008b58a7d6332e3d91583f608b74b9f5a947921f2d7be8850868d",
+      "reference_path": "Design/Art/NPC/Residents/Voice/Generated/Xiaofang_B_Reference.wav",
+      "reference_sha256": "35d6e6f5fda0189495782df45c7d13c45edd835066e84456a25760b409d5ca65",
+      "reference_text": "大军，你少在这儿瞎嚷嚷。"
+    }
+  },
+  "packages": {
+    "torch": "2.7.1+cu128",
+    "qwen-tts": "0.1.1",
+    "transformers": "4.57.3"
+  },
+  "sample_rate": 24000,
+  "max_pcm_bytes": 384000,
+  "max_text_chars": 120,
+  "max_new_tokens": 256,
+  "cpu_threads": 4,
+  "seed": 20261113,
+  "startup_timeout_seconds": 60,
+  "synthesis_timeout_seconds": 20,
+  "cancel_grace_seconds": 2,
+  "process_exit_timeout_seconds": 5
+}

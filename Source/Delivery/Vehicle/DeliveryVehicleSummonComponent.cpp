@@ -45,7 +45,7 @@ bool UDeliveryVehicleSummonComponent::CanOfferSummon() const
     {
         for (TActorIterator<ADeliveryMotorbike> It(World); It; ++It)
         {
-            if (IsValid(*It) && !It->IsActorBeingDestroyed()) return true;
+            if (IsValid(*It) && !It->IsActorBeingDestroyed() && It->CanBeUsedByPlayers()) return true;
         }
     }
     return false;
@@ -86,7 +86,7 @@ ADeliveryMotorbike* UDeliveryVehicleSummonComponent::FindSummonTarget() const
 	{
 		ADeliveryMotorbike* Bike = *It;
 		// 别人正骑着的车不能抽走
-		if (!IsValid(Bike) || Bike->GetDriver() != nullptr || Bike->HasTrunkPassenger())
+		if (!IsValid(Bike) || !Bike->CanBeUsedByPlayers() || Bike->GetDriver() != nullptr || Bike->HasTrunkPassenger())
 		{
 			continue;
 		}
@@ -134,7 +134,7 @@ void UDeliveryVehicleSummonComponent::ServerSummon_Implementation()
 		// 只补地图缺车的情况；已有车被占用或超出搜索范围时不能靠新生成绕过规则
 		for (TActorIterator<ADeliveryMotorbike> It(World); It; ++It)
 		{
-			if (IsValid(*It))
+			if (IsValid(*It) && It->CanBeUsedByPlayers())
 			{
 				UE_LOG(LogDelivery, Log, TEXT("召唤失败：没有可召回的空闲摩托车。"));
 				return;

@@ -1,0 +1,169 @@
+{
+  "recorded_utc": "2026-11-14T14:07:00.101448+00:00",
+  "scope": "仅准备本次双人PIE预览的备用设置，未调用UE、未修改默认配置或资产、未运行GPU测试",
+  "engine_version": {
+    "MajorVersion": 5,
+    "MinorVersion": 8,
+    "PatchVersion": 1,
+    "Changelist": 56057345,
+    "CompatibleChangelist": 55116800,
+    "IsLicenseeVersion": 0,
+    "IsPromotedBuild": 1,
+    "BranchName": "++UE5+Release-5.8"
+  },
+  "current_evidence": {
+    "ue_log": "Saved/Logs/DeliveryAiInspectorUiAcceptance.log",
+    "quality": "各项Epic=3，日志659-853行",
+    "texture_pool_runtime_mb": 1000,
+    "texture_pool_runtime_log_line": 2105,
+    "initial_rhi_pool_mb": 7040,
+    "initial_rhi_pool_is_not_final_streaming_budget": true,
+    "pie_resolution": "960x720",
+    "frame_report": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-tts8/frames-primary.json",
+    "frame_ms_median": 91.4803,
+    "game_thread_ms_median": 65.2323,
+    "gpu_ms_median": 16.5818,
+    "total_actors_median": 9883,
+    "pedestrians_median": 692
+  },
+  "candidate_commands": [
+    "sg.ShadowQuality 2",
+    "sg.GlobalIlluminationQuality 2",
+    "sg.ReflectionQuality 2",
+    "sg.AntiAliasingQuality 2"
+  ],
+  "optional_texture_command": "r.Streaming.PoolSize 800",
+  "restore_commands": [
+    "sg.ShadowQuality 3",
+    "sg.GlobalIlluminationQuality 3",
+    "sg.ReflectionQuality 3",
+    "sg.AntiAliasingQuality 3",
+    "r.Streaming.PoolSize 1000"
+  ],
+  "preserve": [
+    "960x720窗口与UMG分辨率",
+    "r.ScreenPercentage原值",
+    "视距、植被、角色、物理和AI游戏规则"
+  ],
+  "effects": [
+    {
+      "setting": "sg.ShadowQuality 2",
+      "change": "VSM页数4096→2048；雾体积网格16像素/64层，原为8像素/128层",
+      "memory": "每页128×128×4字节，常规两层页池每场景理论减少256 MiB，双PIE场景理论合计512 MiB；这是原始资源大小计算，不是整卡实测收益",
+      "visual_cost": "阴影细节和体积雾精度下降，保留虚拟阴影"
+    },
+    {
+      "setting": "sg.GlobalIlluminationQuality 2",
+      "change": "Lumen表面缓存4096→3584；屏幕探针降采样16→32",
+      "memory": "表面缓存面积下降23.4375%，不代表全部显存同比下降",
+      "visual_cost": "间接光细节和稳定性需要实际观察，保留Lumen"
+    },
+    {
+      "setting": "sg.ReflectionQuality 2",
+      "change": "Lumen反射降采样1→2",
+      "memory": "减少相关画面缓冲和计算；大小随场景与分辨率变化",
+      "visual_cost": "反射细节降低，保留Lumen反射"
+    },
+    {
+      "setting": "sg.AntiAliasingQuality 2",
+      "change": "TSR历史分辨率200%→100%",
+      "memory": "历史面积下降75%；960×720下单4字节平面理论差约7.91 MiB，多份历史需分别计算，不能声称单项节省1GB",
+      "visual_cost": "细线、运动中的稳定性可能变化，UMG输出分辨率保持原值"
+    },
+    {
+      "setting": "r.Streaming.PoolSize 800",
+      "change": "纹理流送预算1000→800 MiB",
+      "memory": "仅少200 MiB预算，实际驻留减少可能更小；不可由启动7040MB推算节省6GB",
+      "visual_cost": "只有预算不足的可流送纹理可能降低mip；保留r.Streaming.MipBias=0与原各向异性"
+    }
+  ],
+  "limitations": [
+    "本机尚未测这组预览设置；仅为GPU21+active仍拥挤时的备用，不是正式推荐画质",
+    "控制台CVar属于整个编辑器进程，会影响其中各个场景，不能称为每个玩家单独设置",
+    "记录旧值，停止比较前恢复；不调用ApplySettings或SaveSettings、不写ini",
+    "资源缓存和驱动内存回收可能滞后，应待画面稳定后再记录同样窗口，检查阴影缺页、纹理模糊和渲染错误",
+    "r.Streaming.LimitPoolSizeToVRAM在GIsEditor时忽略；UseFixedPoolSize非零会禁止运行期改变预算，先查询原值",
+    "不关闭纹理流送，不把池设为0，不关闭Lumen、阴影或玩法系统来凑指标",
+    "当前主线程耗时显著高于GPU；腾显存不等于解决所有低帧率，动态行人数量也影响比较",
+    "仅建议先测一组，不继续盲目尝试多档分辨率或低画质"
+  ],
+  "sources": [
+    {
+      "path": "D:\\Epic Games\\UE_5.8\\Engine\\Config\\BaseScalability.ini",
+      "lines": [
+        78,
+        89,
+        214,
+        215,
+        219,
+        252,
+        253,
+        257,
+        377,
+        389,
+        424,
+        436,
+        528,
+        540,
+        771,
+        782
+      ],
+      "sha256": "579039219a363c16936d7913fba7656dac4bdbf12bbe180ca99536bafb7af0a6"
+    },
+    {
+      "path": "D:\\Epic Games\\UE_5.8\\Engine\\Source\\Runtime\\Renderer\\Private\\VirtualShadowMaps\\VirtualShadowMapArray.cpp",
+      "lines": [
+        1011,
+        1029,
+        2419,
+        2421
+      ],
+      "sha256": "d0349b6b1632e8b3c482b8529712da201e6678b774b63bb8d3be8e97a68b25f9"
+    },
+    {
+      "path": "D:\\Epic Games\\UE_5.8\\Engine\\Source\\Runtime\\Renderer\\Private\\VirtualShadowMaps\\VirtualShadowMapCacheManager.cpp",
+      "lines": [
+        1090,
+        1116,
+        1118,
+        1125
+      ],
+      "sha256": "84ed715bcb9c175f52cbacea9befef24b1eec30ec4bf662a2e6e169abe9664c7"
+    },
+    {
+      "path": "D:\\Epic Games\\UE_5.8\\Engine\\Shaders\\Shared\\VirtualShadowMapDefinitions.h",
+      "lines": [
+        13,
+        14
+      ],
+      "sha256": "bc4fc23f62c900f5a931ec8da6169b2b6d2dd6929cbab74d3535f1531419268e"
+    },
+    {
+      "path": "D:\\Epic Games\\UE_5.8\\Engine\\Source\\Runtime\\Engine\\Private\\Streaming\\TextureStreamingHelpers.cpp",
+      "lines": [
+        113,
+        119,
+        343
+      ],
+      "sha256": "3030c038e7e7a5744898180ff81a4f7491df5c0ec09372c46cd5e261cd7d7da9"
+    },
+    {
+      "path": "D:\\Epic Games\\UE_5.8\\Engine\\Source\\Runtime\\Engine\\Private\\Streaming\\StreamingManagerTexture.cpp",
+      "lines": [
+        1820,
+        1836,
+        1841
+      ],
+      "sha256": "8ccb09087827350092396c4fc78c96c229e35cf8905c26819b296ae2d81e72ae"
+    },
+    {
+      "path": "D:\\Epic Games\\UE_5.8\\Engine\\Source\\Runtime\\Renderer\\Private\\PostProcess\\TemporalSuperResolution.cpp",
+      "lines": [
+        54,
+        1966,
+        2055
+      ],
+      "sha256": "3c84d6d70627858056da575e1b172086ea29888f044d34a434c961330f943360"
+    }
+  ]
+}

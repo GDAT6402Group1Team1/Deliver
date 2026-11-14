@@ -9,9 +9,19 @@ namespace DeliveryNpcVoice
 {
     inline constexpr int32 FormatVersion = 1;
     inline constexpr int32 StreamingFormatVersion = 2;
-    inline constexpr int32 MaxPcmBytes = 384000;
-    inline constexpr int32 MaxDecodedPcmBytes = 385920;
+    inline constexpr int32 MaxPcmSeconds = 12;
+    inline constexpr int32 MaxPcmBytes = 24000 * 2 * MaxPcmSeconds;
+    // 解码播放保留一次 40 ms 尾音，源 PCM 上限不包含这段补偿
+    inline constexpr int32 MaxDecodedPcmBytes = MaxPcmBytes + 24000 * 2 / 25;
+    inline constexpr int32 MaxPcmBase64Chars = ((MaxPcmBytes + 2) / 3) * 4;
+    inline constexpr int32 MaxAudioChunks = 48;
     inline constexpr int32 MaxEncodedBytes = 196608;
+
+    // 两种采样率都限制为 12 秒，旧 16 kHz 整句保持原来的字节上限
+    inline constexpr int32 GetMaxPcmBytes(int32 SampleRate)
+    {
+        return SampleRate == 16000 || SampleRate == 24000 ? SampleRate * 2 * MaxPcmSeconds : 0;
+    }
 
     // 编码器会延后几毫秒声音，末尾加入 40 ms 静音，让最后的声音完整输出
     DELIVERY_API int32 GetDecodedPcmBytes(int32 SourcePcmBytes, int32 SampleRate);

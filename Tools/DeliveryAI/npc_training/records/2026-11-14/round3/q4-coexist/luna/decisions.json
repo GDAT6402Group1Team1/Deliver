@@ -1,0 +1,898 @@
+{
+  "source_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+  "instructions_sha256": "9720d1cfd1156847370e4e4546b11a9b76b514e7a69ece29561e7d72435f4470",
+  "case_order": [
+    "independent-01",
+    "independent-02",
+    "independent-03",
+    "independent-04",
+    "independent-05",
+    "independent-06",
+    "independent-07",
+    "independent-08",
+    "independent-09",
+    "independent-10",
+    "independent-11",
+    "independent-12",
+    "independent-13",
+    "independent-14",
+    "independent-15",
+    "independent-16",
+    "independent-17",
+    "independent-18",
+    "independent-19",
+    "independent-20",
+    "independent-21",
+    "independent-22",
+    "independent-23",
+    "independent-24",
+    "independent-25",
+    "independent-26",
+    "independent-27",
+    "independent-28",
+    "independent-29",
+    "independent-30",
+    "independent-31",
+    "independent-32",
+    "independent-33",
+    "independent-34",
+    "independent-35",
+    "independent-36",
+    "independent-37",
+    "independent-38",
+    "independent-39",
+    "independent-40"
+  ],
+  "labels_sent_to_model": false,
+  "profile_routing": {
+    "note": "仅给评测副本补充正式人物编号，模型输入、标签和原始文件均不修改",
+    "name_to_profile": {
+      "大壮": "chunlai",
+      "翠花": "xiumei"
+    },
+    "added_case_ids": [
+      "independent-01",
+      "independent-02",
+      "independent-03",
+      "independent-04",
+      "independent-05",
+      "independent-06",
+      "independent-07",
+      "independent-08",
+      "independent-09",
+      "independent-10",
+      "independent-11",
+      "independent-12",
+      "independent-13",
+      "independent-14",
+      "independent-15",
+      "independent-16",
+      "independent-17",
+      "independent-18",
+      "independent-19",
+      "independent-20",
+      "independent-21",
+      "independent-22",
+      "independent-23",
+      "independent-24",
+      "independent-25",
+      "independent-26",
+      "independent-27",
+      "independent-28",
+      "independent-29",
+      "independent-30",
+      "independent-31",
+      "independent-32",
+      "independent-33",
+      "independent-34",
+      "independent-35",
+      "independent-36",
+      "independent-37",
+      "independent-38",
+      "independent-39",
+      "independent-40"
+    ],
+    "allowed_profile_ids": "chunlai,xiumei"
+  },
+  "sampling_local": {
+    "temperature": 0.0,
+    "mode": "greedy",
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0
+  },
+  "luna_sampling_note": "复用 AppServer 实际模型设置，不能假称与本地采样参数相同",
+  "measurement_start_utc": "2026-11-14T14:30:42.737290+00:00",
+  "measurement_end_utc": "2026-11-14T14:31:22.745408+00:00",
+  "request_timeout_seconds": 10.0,
+  "schedule": {
+    "interval_seconds": 1.0,
+    "enabled": true,
+    "missed_slots": 25,
+    "actual_requests": 15
+  },
+  "calls": [
+    {
+      "id": "independent-01",
+      "case_index": 0,
+      "cycle": 0,
+      "attempt": 0,
+      "utc_started": "2026-11-14T14:30:42.738951+00:00",
+      "utc_finished": "2026-11-14T14:30:44.655440+00:00",
+      "scheduled_slot": 0,
+      "scheduled_at_seconds": 0.0,
+      "start_late_ms": 1.6570000007050112,
+      "evaluation_profile_id": "chunlai",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 0.0016570000007050112,
+      "complete_ms": 1916.4870999957202,
+      "timing": {
+        "startup": 0.04369999805931002,
+        "thread_start": 80.81439999659779,
+        "turn_start": 93.46699999878183,
+        "first_delta": 1670.881099998951,
+        "model_terminal": 1915.3102999989642
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6575,
+          "cachedInputTokens": 0,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6590,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6575,
+          "cachedInputTokens": 0,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6590,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Fight",
+      "target_id": "ab769e32-0f96-56eb-8590-d15ed75973a0",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "missed_slots_after_request": 1
+    },
+    {
+      "id": "independent-02",
+      "case_index": 1,
+      "cycle": 0,
+      "attempt": 1,
+      "utc_started": "2026-11-14T14:30:44.739711+00:00",
+      "utc_finished": "2026-11-14T14:30:46.839443+00:00",
+      "scheduled_slot": 2,
+      "scheduled_at_seconds": 2.0,
+      "start_late_ms": 2.415999995719176,
+      "evaluation_profile_id": "xiumei",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 2.002415999995719,
+      "complete_ms": 2099.728500004858,
+      "timing": {
+        "startup": 0.027600006433203816,
+        "thread_start": 49.67080000642454,
+        "turn_start": 57.71160000585951,
+        "first_delta": 1646.0934999995516,
+        "model_terminal": 2098.248900001636
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6552,
+          "cachedInputTokens": 5888,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6567,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6552,
+          "cachedInputTokens": 5888,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6567,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Fight",
+      "target_id": "cc343ed7-b545-5e4d-8dc9-14219a422ec1",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "matches_evaluation_label": false,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "missed_slots_after_request": 2
+    },
+    {
+      "id": "independent-03",
+      "case_index": 2,
+      "cycle": 0,
+      "attempt": 2,
+      "utc_started": "2026-11-14T14:30:47.738532+00:00",
+      "utc_finished": "2026-11-14T14:30:49.842487+00:00",
+      "scheduled_slot": 5,
+      "scheduled_at_seconds": 5.0,
+      "start_late_ms": 1.237199998286087,
+      "evaluation_profile_id": "chunlai",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 5.001237199998286,
+      "complete_ms": 2103.9507999958005,
+      "timing": {
+        "startup": 0.020699997548945248,
+        "thread_start": 66.10360000195215,
+        "turn_start": 76.2410999959684,
+        "first_delta": 1854.058700002497,
+        "model_terminal": 2102.7241999981925
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6553,
+          "cachedInputTokens": 0,
+          "outputTokens": 14,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6567,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6553,
+          "cachedInputTokens": 0,
+          "outputTokens": 14,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6567,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Wait",
+      "target_id": "",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "missed_slots_after_request": 2
+    },
+    {
+      "id": "independent-04",
+      "case_index": 3,
+      "cycle": 0,
+      "attempt": 3,
+      "utc_started": "2026-11-14T14:30:50.746778+00:00",
+      "utc_finished": "2026-11-14T14:30:53.080396+00:00",
+      "scheduled_slot": 8,
+      "scheduled_at_seconds": 8.0,
+      "start_late_ms": 9.478899999521673,
+      "evaluation_profile_id": "xiumei",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 8.009478899999522,
+      "complete_ms": 2333.6225999955786,
+      "timing": {
+        "startup": 0.022599997464567423,
+        "thread_start": 64.5576999959303,
+        "turn_start": 74.02339999680407,
+        "first_delta": 2051.147199999832,
+        "model_terminal": 2332.3884999990696
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6542,
+          "cachedInputTokens": 4096,
+          "outputTokens": 16,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6558,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6542,
+          "cachedInputTokens": 4096,
+          "outputTokens": 16,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6558,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Flee",
+      "target_id": "074d0bbc-9704-5adb-bb9a-d9635984eb99",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "missed_slots_after_request": 2
+    },
+    {
+      "id": "independent-05",
+      "case_index": 4,
+      "cycle": 0,
+      "attempt": 4,
+      "utc_started": "2026-11-14T14:30:53.743975+00:00",
+      "utc_finished": "2026-11-14T14:30:56.545624+00:00",
+      "scheduled_slot": 11,
+      "scheduled_at_seconds": 11.0,
+      "start_late_ms": 6.679899997834582,
+      "evaluation_profile_id": "chunlai",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 11.006679899997835,
+      "complete_ms": 2801.6474999967613,
+      "timing": {
+        "startup": 0.01799999881768599,
+        "thread_start": 65.67749999521766,
+        "turn_start": 74.32059999700869,
+        "first_delta": 2641.585199999099,
+        "model_terminal": 2800.361099994916
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6570,
+          "cachedInputTokens": 4096,
+          "outputTokens": 16,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6586,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6570,
+          "cachedInputTokens": 4096,
+          "outputTokens": 16,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6586,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Flee",
+      "target_id": "3dd96ea4-95bf-5ff2-a87e-10fa6e14e4a1",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Wait",
+        "Flee"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "missed_slots_after_request": 2
+    },
+    {
+      "id": "independent-06",
+      "case_index": 5,
+      "cycle": 0,
+      "attempt": 5,
+      "utc_started": "2026-11-14T14:30:56.750140+00:00",
+      "utc_finished": "2026-11-14T14:30:58.645937+00:00",
+      "scheduled_slot": 14,
+      "scheduled_at_seconds": 14.0,
+      "start_late_ms": 12.843699994846247,
+      "evaluation_profile_id": "xiumei",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 14.012843699994846,
+      "complete_ms": 1895.798300000024,
+      "timing": {
+        "startup": 0.01799999881768599,
+        "thread_start": 50.79459999979008,
+        "turn_start": 57.411199995840434,
+        "first_delta": 1642.1267999976408,
+        "model_terminal": 1894.5332999937818
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6569,
+          "cachedInputTokens": 4096,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6584,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6569,
+          "cachedInputTokens": 4096,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6584,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Fight",
+      "target_id": "c8c65d55-3f90-5e98-ad5c-e123fe6021df",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "missed_slots_after_request": 1
+    },
+    {
+      "id": "independent-07",
+      "case_index": 6,
+      "cycle": 0,
+      "attempt": 6,
+      "utc_started": "2026-11-14T14:30:58.749429+00:00",
+      "utc_finished": "2026-11-14T14:31:00.800557+00:00",
+      "scheduled_slot": 16,
+      "scheduled_at_seconds": 16.0,
+      "start_late_ms": 12.132699994253926,
+      "evaluation_profile_id": "chunlai",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 16.012132699994254,
+      "complete_ms": 2051.128200000676,
+      "timing": {
+        "startup": 0.029900002118665725,
+        "thread_start": 66.47430000157328,
+        "turn_start": 75.76820000394946,
+        "first_delta": 1817.3482000056538,
+        "model_terminal": 2049.2334000009578
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6578,
+          "cachedInputTokens": 0,
+          "outputTokens": 14,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6592,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6578,
+          "cachedInputTokens": 0,
+          "outputTokens": 14,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6592,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Wait",
+      "target_id": "",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "missed_slots_after_request": 2
+    },
+    {
+      "id": "independent-08",
+      "case_index": 7,
+      "cycle": 0,
+      "attempt": 7,
+      "utc_started": "2026-11-14T14:31:01.737801+00:00",
+      "utc_finished": "2026-11-14T14:31:04.023169+00:00",
+      "scheduled_slot": 19,
+      "scheduled_at_seconds": 19.0,
+      "start_late_ms": 0.5048999955761246,
+      "evaluation_profile_id": "xiumei",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 19.000504899995576,
+      "complete_ms": 2285.3698000035365,
+      "timing": {
+        "startup": 0.022000000171829015,
+        "thread_start": 50.812599998607766,
+        "turn_start": 59.26510000426788,
+        "first_delta": 2057.1798000019044,
+        "model_terminal": 2284.1370000023744
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6571,
+          "cachedInputTokens": 0,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6586,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6571,
+          "cachedInputTokens": 0,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6586,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Fight",
+      "target_id": "0135f03d-e10a-518c-aff5-ca00e892e399",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "missed_slots_after_request": 2
+    },
+    {
+      "id": "independent-09",
+      "case_index": 8,
+      "cycle": 0,
+      "attempt": 8,
+      "utc_started": "2026-11-14T14:31:04.739179+00:00",
+      "utc_finished": "2026-11-14T14:31:06.783334+00:00",
+      "scheduled_slot": 22,
+      "scheduled_at_seconds": 22.0,
+      "start_late_ms": 1.8827999956556596,
+      "evaluation_profile_id": "chunlai",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 22.001882799995656,
+      "complete_ms": 2044.1571999981534,
+      "timing": {
+        "startup": 0.02729999687289819,
+        "thread_start": 50.58439999993425,
+        "turn_start": 59.01599999924656,
+        "first_delta": 1810.680800001137,
+        "model_terminal": 2043.0037999976776
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6578,
+          "cachedInputTokens": 0,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6593,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6578,
+          "cachedInputTokens": 0,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6593,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Fight",
+      "target_id": "6c7223d0-cfcc-50f3-bb4b-d105566d27f8",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "matches_evaluation_label": false,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "missed_slots_after_request": 2
+    },
+    {
+      "id": "independent-10",
+      "case_index": 9,
+      "cycle": 0,
+      "attempt": 9,
+      "utc_started": "2026-11-14T14:31:07.745399+00:00",
+      "utc_finished": "2026-11-14T14:31:09.696601+00:00",
+      "scheduled_slot": 25,
+      "scheduled_at_seconds": 25.0,
+      "start_late_ms": 8.10319999436615,
+      "evaluation_profile_id": "xiumei",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 25.008103199994366,
+      "complete_ms": 1951.2025000003632,
+      "timing": {
+        "startup": 0.023500004317611456,
+        "thread_start": 65.07830000191461,
+        "turn_start": 73.93830000364687,
+        "first_delta": 1736.283900005219,
+        "model_terminal": 1949.950499998522
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6549,
+          "cachedInputTokens": 0,
+          "outputTokens": 14,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6563,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6549,
+          "cachedInputTokens": 0,
+          "outputTokens": 14,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6563,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Wait",
+      "target_id": "",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Wait",
+        "Flee"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "missed_slots_after_request": 1
+    },
+    {
+      "id": "independent-11",
+      "case_index": 10,
+      "cycle": 0,
+      "attempt": 10,
+      "utc_started": "2026-11-14T14:31:09.746722+00:00",
+      "utc_finished": "2026-11-14T14:31:11.606268+00:00",
+      "scheduled_slot": 27,
+      "scheduled_at_seconds": 27.0,
+      "start_late_ms": 9.427799996046815,
+      "evaluation_profile_id": "chunlai",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 27.009427799996047,
+      "complete_ms": 1859.5462000012049,
+      "timing": {
+        "startup": 0.02099999983329326,
+        "thread_start": 49.339599994709715,
+        "turn_start": 56.91059999662684,
+        "first_delta": 1647.7954000001773,
+        "model_terminal": 1858.3838999984437
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6572,
+          "cachedInputTokens": 4096,
+          "outputTokens": 14,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6586,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6572,
+          "cachedInputTokens": 4096,
+          "outputTokens": 14,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6586,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Wait",
+      "target_id": "",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "missed_slots_after_request": 1
+    },
+    {
+      "id": "independent-12",
+      "case_index": 11,
+      "cycle": 0,
+      "attempt": 11,
+      "utc_started": "2026-11-14T14:31:11.738885+00:00",
+      "utc_finished": "2026-11-14T14:31:13.822456+00:00",
+      "scheduled_slot": 29,
+      "scheduled_at_seconds": 29.0,
+      "start_late_ms": 1.589100000273902,
+      "evaluation_profile_id": "xiumei",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 29.001589100000274,
+      "complete_ms": 2083.573799995065,
+      "timing": {
+        "startup": 0.018200000340584666,
+        "thread_start": 49.84630000399193,
+        "turn_start": 58.83600000379374,
+        "first_delta": 1805.35680000321,
+        "model_terminal": 2082.279700000072
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6577,
+          "cachedInputTokens": 4096,
+          "outputTokens": 16,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6593,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6577,
+          "cachedInputTokens": 4096,
+          "outputTokens": 16,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6593,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Flee",
+      "target_id": "fa221ea9-03e3-5cb9-a1bc-69e20d796f09",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "matches_evaluation_label": false,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "missed_slots_after_request": 2
+    },
+    {
+      "id": "independent-13",
+      "case_index": 12,
+      "cycle": 0,
+      "attempt": 12,
+      "utc_started": "2026-11-14T14:31:14.746986+00:00",
+      "utc_finished": "2026-11-14T14:31:16.985580+00:00",
+      "scheduled_slot": 32,
+      "scheduled_at_seconds": 32.0,
+      "start_late_ms": 9.690999999293126,
+      "evaluation_profile_id": "chunlai",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 32.00969099999929,
+      "complete_ms": 2238.5925999988103,
+      "timing": {
+        "startup": 0.015600002370774746,
+        "thread_start": 49.4302000006428,
+        "turn_start": 57.83030000020517,
+        "first_delta": 1990.0785999998334,
+        "model_terminal": 2237.526099997922
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6542,
+          "cachedInputTokens": 4096,
+          "outputTokens": 16,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6558,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6542,
+          "cachedInputTokens": 4096,
+          "outputTokens": 16,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6558,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Flee",
+      "target_id": "6d72d924-aab7-56ae-ab7a-052df7dd6145",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Flee\",\"target_id\":\"opponent\"}",
+      "missed_slots_after_request": 2
+    },
+    {
+      "id": "independent-14",
+      "case_index": 13,
+      "cycle": 0,
+      "attempt": 13,
+      "utc_started": "2026-11-14T14:31:17.744657+00:00",
+      "utc_finished": "2026-11-14T14:31:19.843394+00:00",
+      "scheduled_slot": 35,
+      "scheduled_at_seconds": 35.0,
+      "start_late_ms": 7.36029999825405,
+      "evaluation_profile_id": "xiumei",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 35.007360299998254,
+      "complete_ms": 2098.7386999986484,
+      "timing": {
+        "startup": 0.026699999580159783,
+        "thread_start": 49.29229999834206,
+        "turn_start": 57.9751999975997,
+        "first_delta": 1873.0452000017976,
+        "model_terminal": 2097.4331999968854
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6572,
+          "cachedInputTokens": 0,
+          "outputTokens": 14,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6586,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6572,
+          "cachedInputTokens": 0,
+          "outputTokens": 14,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6586,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Wait",
+      "target_id": "",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "missed_slots_after_request": 2
+    },
+    {
+      "id": "independent-15",
+      "case_index": 14,
+      "cycle": 0,
+      "attempt": 14,
+      "utc_started": "2026-11-14T14:31:20.741817+00:00",
+      "utc_finished": "2026-11-14T14:31:22.616158+00:00",
+      "scheduled_slot": 38,
+      "scheduled_at_seconds": 38.0,
+      "start_late_ms": 4.520499998761807,
+      "evaluation_profile_id": "chunlai",
+      "profile_added_for_evaluation": true,
+      "started_at_seconds": 38.00452049999876,
+      "complete_ms": 1874.3433999989065,
+      "timing": {
+        "startup": 0.026299996534362435,
+        "thread_start": 50.37809999339515,
+        "turn_start": 55.67409999639494,
+        "first_delta": 1625.9875999967335,
+        "model_terminal": 1873.145999998087
+      },
+      "completed_inside_window": true,
+      "usage": {
+        "last": {
+          "inputTokens": 6569,
+          "cachedInputTokens": 4096,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6584,
+          "cacheWriteInputTokens": 0
+        },
+        "total": {
+          "inputTokens": 6569,
+          "cachedInputTokens": 4096,
+          "outputTokens": 15,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 6584,
+          "cacheWriteInputTokens": 0
+        }
+      },
+      "action": "Fight",
+      "target_id": "904e64e5-c87c-5312-8b1e-5ea269d4b223",
+      "protocol_valid": true,
+      "illegal_target": false,
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "matches_evaluation_label": true,
+      "fallback_reason": "",
+      "output": "{\"action\":\"Fight\",\"target_id\":\"opponent\"}",
+      "missed_slots_after_request": 1
+    }
+  ]
+}

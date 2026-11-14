@@ -11,6 +11,8 @@ class UAudioComponent;
 class USoundWaveProcedural;
 class UDeliveryNpcExpressionSet;
 class FDeliveryNpcVoiceDecoder;
+class APlayerController;
+class APlayerState;
 struct FDeliveryNpcVoiceEncodingJob;
 
 USTRUCT(BlueprintType)
@@ -18,8 +20,11 @@ struct FDeliveryNpcSpeechState
 {
     GENERATED_BODY()
     UPROPERTY(BlueprintReadOnly) FGuid TurnId;
+    // 沿用原来的复制字段名，值对应 PublicState.ReplyId，标识这一次回复而非整段交战
     UPROPERTY(BlueprintReadOnly) FGuid ActionId;
     UPROPERTY(BlueprintReadOnly) FGuid ReplyToEventId;
+    // 服务器确认的队友连麦收听者，其他玩家仍按场景距离听见这句话
+    UPROPERTY(BlueprintReadOnly) TObjectPtr<APlayerState> RadioListener;
     UPROPERTY(BlueprintReadOnly) FString Text;
     UPROPERTY(BlueprintReadOnly) FName Emotion;
     UPROPERTY(BlueprintReadOnly) double StartTime=0;
@@ -49,12 +54,15 @@ struct FDeliveryNpcLocalVoice
     double FrontSince=0;
     double DrainedAt=0;
     double TextStartedAt=0;
+    // 普通续接后仍可补齐当前句，五秒后不再接收旧声音
+    double ReceiveUntil=0;
     float CaptionProgress=0;
     bool bRebuffering=false;
 };
 
 struct FDeliveryNpcServerVoice
 {
+    TWeakObjectPtr<APlayerState> RadioListener;
     TArray<uint8> Pcm;
     TArray<uint8> Encoded;
     double ExpiresAt=0;
@@ -83,6 +91,24 @@ struct FDeliveryNpcGeneratingSentence
     bool bFailed=false;
 };
 
+// 当前一句说完前，只保存一轮新回复；再次收到新回复时替换这份待播内容
+struct FDeliveryNpcPendingReply
+{
+    FDeliveryNpcCompleteReply CompleteReply;
+    FGuid ReplyId;
+    FGuid MessageId;
+    FGuid ActionId;
+    TWeakObjectPtr<AActor> Target;
+    TWeakObjectPtr<AActor> Listener;
+    int32 Depth=0;
+    int32 SentenceCount=INDEX_NONE;
+    bool bTransferFinished=false;
+    TMap<int32,FDeliveryNpcSentence> Whole;
+    TMap<int32,FDeliveryNpcSpeechBegin> Begins;
+    TMap<int32,TArray<FDeliveryNpcAudioChunk>> Chunks;
+    TMap<int32,FDeliveryNpcAudioEnd> Ends;
+};
+
 // 将 NPC 的台词和播放时间同步给所有玩家，在各自客户端播放声音、字幕和动画
 // 攻击结果和任务奖励由对应的玩法系统处理
 UCLASS(ClassGroup=(Delivery),meta=(BlueprintSpawnableComponent))
@@ -98,13 +124,21 @@ class DELIVERY_API UDeliveryNpcPresentationComponent : public UActorComponent
     friend class FDeliveryNpcLiveAudioCommand;
     friend class FDeliveryConversationFeedbackTest;
     friend class FDeliveryNpcLookTest;
+    friend class FDeliveryNpcModelSpeechSeparationTest;
+    friend class FDeliveryNpcPlayerInterruptionTest;
+    friend class FDeliveryNpcVoiceLinkTest;
 public:
     UDeliveryNpcPresentationComponent();
     // 服务器设置台词并通知客户端播放，返回 true 表示已安排播放
-    bool PublishSpeech(const FString& Text,FName Emotion,int32 Depth,FGuid ReplyToEventId=FGuid());
+    bool PublishSpeech(const FString& Text,FName Emotion,int32 Depth,FGuid ReplyToEventId=FGuid(),FGuid ModelReplyId=FGuid());
     // 停止对白，并让各客户端停止对应声音和字幕
-    void CancelSpeech();
-    void BeginReply(FGuid ActionId, FGuid MessageId, int32 Depth);
+    void CancelSpeech(bool bFinishCurrentSentence=false,bool bPreserveOtherReplies=false);
+    void BeginReply(FGuid ActionId, FGuid MessageId, int32 Depth, AActor* Listener=nullptr);
+    bool HasReply(FGuid ReplyId) const { return ReplyId.IsValid() && (ReplyId==ReplyAction || ReplyId==PendingReply.ReplyId); }
+    void CancelReply(FGuid ReplyId);
+    // 先移除整批待播声音，再停当前句，避免取消途中把旧待播回复提升为当前回复
+    void CancelReplies(const TArray<FGuid>& ReplyIds);
+    void SetReplySentenceCount(FGuid ReplyId,int32 Count);
     void QueueSentence(FGuid ActionId, FGuid MessageId, const FDeliveryNpcSentence& Sentence);
     // 返回 true 表示本轮接受了数据，声音仍可能正在编码或等待播放
     bool BeginSentenceAudio(FGuid ActionId, FGuid MessageId, const FDeliveryNpcSpeechBegin& Begin);
@@ -112,11 +146,13 @@ public:
     bool EndSentenceAudio(FGuid ActionId, FGuid MessageId, const FDeliveryNpcAudioEnd& End);
     void FinishSentences(FGuid ActionId, int32 Count);
     // 模型已结束这次回复并明确没有台词时返回 true
-    bool IsReplyWithoutSpeech(FGuid ActionId) const { return ActionId.IsValid() && ReplyAction==ActionId && ExpectedSentences==0; }
-    bool HasPendingSpeech() const { return ReplyAction.IsValid() || Speech.bActive; }
+    bool IsReplyWithoutSpeech(FGuid ActionId) const { return ActionId.IsValid() && (LastSilentReply==ActionId || (ReplyAction==ActionId && ExpectedSentences==0)); }
+    bool HasPendingSpeech() const { return ReplyAction.IsValid() || PendingReply.ReplyId.IsValid() || Speech.bActive; }
     bool IsRecordedVoicePlaying() const;
     // 查询某句仍可补发的声音，句末保留五秒，打断后移除
     bool GetSpeechAudioChunk(FGuid TurnId,int32 Offset,int32 MaxBytes,TArray<uint8>& OutData,int32& OutTotal) const;
+    // 只豁免指定主人这句已授权缓存的距离，归属变化或缓存过期后立即失效
+    bool CanPlayerReceiveLinkedAudio(const APlayerController* Player,FGuid TurnId) const;
     UPROPERTY(EditAnywhere,Category="Delivery|语音") FName TtsVoice=TEXT("male");
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|语音") TObjectPtr<UDeliveryNpcVoiceSet> VoiceSet;
     // 服务器为一次事件播放短反应音，重复编号不会再次播放
@@ -179,10 +215,22 @@ private:
     UFUNCTION(NetMulticast,Reliable) void ReceiveAudio(FGuid TurnId,int32 Offset,int32 Total,const TArray<uint8>& Data);
     UFUNCTION(NetMulticast,Reliable) void StartStreamSpeech(FDeliveryNpcSpeechState State);
     UFUNCTION(NetMulticast,Reliable) void StopStreamSpeech(FGuid ActionId,bool bStopAll=false);
+    UFUNCTION(NetMulticast,Reliable) void FinishReplyAfterSentence(FGuid ActionId);
     UFUNCTION(NetMulticast,Reliable) void FinishStreamAudio(FGuid TurnId,int32 PcmBytes,int32 EncodedBytes,bool bSucceeded);
     // 后台还在合成首句时也同步本轮编号，客户端据此保留模型已经选定的表情
     UPROPERTY(Replicated) FGuid ReplyAction;
     FGuid ReplyMessage;
+    FGuid ReplyGameplayAction;
+    TWeakObjectPtr<AActor> ReplyTarget;
+    bool bReplyHadTarget=false;
+    FGuid LastSilentReply;
+    FDeliveryNpcPendingReply PendingReply;
+    FDeliveryNpcCompleteReply DeferredCompleteReply;
+    bool QueueCompleteReply(const FDeliveryNpcCompleteReply& Reply);
+    bool StartCompleteReply(const FDeliveryNpcCompleteReply& Reply);
+    bool StartDeferredCompleteReply();
+    void DiscardPendingReply();
+    void PromotePendingReply();
     TWeakObjectPtr<AActor> ReplyListener;
     FGuid RequestedAudioTurn;
     double NextAudioRetry=0;
@@ -201,8 +249,15 @@ private:
     int32 NextSentence=0, ExpectedSentences=INDEX_NONE, SendingOffset=0;
     void TickSentences();
     void PlayRecordedVoice();
+    APlayerState* ResolveRadioListener(FGuid MessageId) const;
+    bool IsRadioListenerForPlayer(const APlayerController* Player,const APlayerState* Listener) const;
+    bool IsLocalRadioListener(const FDeliveryNpcSpeechState& State) const;
+    void ConfigureRecordedVoice(bool bRadio);
+    bool bPlayingRadioVoice=false;
     void AcceptLocalSpeech(const FDeliveryNpcSpeechState& State,bool bFromReplication);
     void UseTextForLocalVoice(FDeliveryNpcLocalVoice& Local);
+    bool CanReceiveVoiceData(const FDeliveryNpcLocalVoice& Local) const;
+    void TrimVoiceCache();
     void CancelSentenceGeneration();
     bool TryStartGeneratedSentence();
     void RefreshGeneratedSentence(int32 Sequence);

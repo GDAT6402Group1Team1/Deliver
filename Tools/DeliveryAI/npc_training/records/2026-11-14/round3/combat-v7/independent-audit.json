@@ -1,0 +1,1050 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-11-14T12:44:57.723422+00:00",
+  "auditor": "speech_measurement independent CPU review",
+  "scope": "本次第三轮训练、输入修复、内部验证与冻结40复算；未启动GPU、服务或游戏",
+  "audit_errors": [],
+  "threshold": {
+    "minimum_reasonable_fraction": 0.9,
+    "frozen_cases": 40,
+    "minimum_correct": 36,
+    "all_protocol_and_targets_must_be_valid": true,
+    "critical_technical_errors_must_be_zero": true,
+    "critical_technical_errors_definition": "非法目标、取消后旧攻击恢复等接入问题；不合理但格式合法的Fight计质量错",
+    "technical_integration_not_replaced_by_frozen40": true
+  },
+  "frozen_dataset": {
+    "path": "Saved\\AIResearch\\NpcTraining\\acceptance-reviewed.json",
+    "sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+    "expected_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+    "cases": 40,
+    "unique_ids": 40,
+    "unique_groups": 40,
+    "raw_and_labels_unchanged": true,
+    "same_dataset_evaluation_round": 3,
+    "new_blind_holdout": false
+  },
+  "model": {
+    "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3\\combat-Q8_0.gguf",
+    "bytes": 1834426080,
+    "actual_sha256": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3",
+    "runtime_sha256": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3",
+    "export_sha256": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3",
+    "hashes_match": true,
+    "gpu_layers": 99,
+    "context_tokens": 4096,
+    "output_tokens": 64,
+    "temperature": 0.0,
+    "runtime_pid_recorded": 63548,
+    "live_process_independently_inspected": false
+  },
+  "training": {
+    "status": "completed",
+    "datasets": {
+      "train": {
+        "sha256": "ed4c8774663f3b790f8196bb05637789a10b535ef6745b83f1aae2b7bf870675",
+        "rows": 224,
+        "groups": 187,
+        "training_run_hash_match": true
+      },
+      "validation": {
+        "sha256": "42ab811f9953e2fd7244a27361d64a8f52f823239cffa74999fd0e2a1817b36b",
+        "rows": 31,
+        "groups": 23,
+        "training_run_hash_match": true
+      },
+      "validation-new": {
+        "sha256": "752bbc2ba8dc8d1b62ec1dd6a7c933185e8f2558f476401f11d74963245432f1",
+        "rows": 16,
+        "groups": 8,
+        "training_run_hash_match": null
+      }
+    },
+    "settings": {
+      "rank": 16,
+      "alpha": 32,
+      "dropout": 0.05,
+      "target_modules": "all-linear",
+      "batch_size": 1,
+      "gradient_accumulation": 4,
+      "learning_rate": 2e-05,
+      "weight_decay": 0.0,
+      "max_grad_norm": 1.0,
+      "seed": 20261114,
+      "dtype": "bfloat16",
+      "gradient_checkpointing": true,
+      "checkpoint_use_reentrant": false,
+      "max_steps": 56,
+      "max_seq_length": 4096
+    },
+    "initial_adapter": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v5\\round2\\adapter",
+    "steps": 56,
+    "exact_steps_1_to_56": true,
+    "epochs_started": 1,
+    "training_seconds": 178.28171389999625,
+    "validation_before": {
+      "assistant_token_loss": 0.03360398184466104,
+      "samples": 31,
+      "supervised_tokens": 352
+    },
+    "validation_after": {
+      "assistant_token_loss": 0.024075921988501715,
+      "samples": 31,
+      "supervised_tokens": 352
+    },
+    "low_token_loss_is_not_action_accuracy": true
+  },
+  "input_repair": {
+    "current_preparation_sha256": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+    "rule": "只去掉本人SelfCombat中与当前动作和目标匹配的已知系统尾串；保留真实身体计数、命中、发言和current_action",
+    "answer_dependent_rule_found": false,
+    "old15_tail_only_ab": {
+      "original_correct": 14,
+      "false_tail_correct": 9,
+      "all_other_fields_identical": true,
+      "proves_only": "这15例对错误尾串敏感，不证明冻结40所有失败的唯一原因"
+    },
+    "new16_same_current_preparation": {
+      "round2_correct": 11,
+      "round3_correct": 12
+    },
+    "same_raw_final40_different_model_input": true,
+    "separate_training_only_gain_measured_on_final40": false
+  },
+  "scoring_reports": [
+    {
+      "name": "round1_frozen",
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v4\\final-acceptance-bf16-gpu99.json",
+      "report_sha256": "7b7110e401c867d26100f244bb3108bfe27d325ac74a8d56556e602772c6ac8b",
+      "source": "Saved\\AIResearch\\NpcTraining\\acceptance-reviewed.json",
+      "source_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+      "source_hash_matches_report": true,
+      "input_preparation_sha256_recorded": null,
+      "prepared_prompt_mismatches_against_current": [],
+      "timeout_seconds": 1.5,
+      "sampling": {
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "seed": 20261114
+      },
+      "reported_summary": {
+        "cases": 40,
+        "correct": 31,
+        "protocol_valid": 40,
+        "accuracy": 0.775,
+        "first_pass_ms_median": 189.6973499970045,
+        "first_pass_ms_p95": 246.8012999961502,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 6,
+        "acceptance_qualified": false
+      },
+      "independent_recomputed": {
+        "cases": 40,
+        "unique_ids": 40,
+        "correct": 31,
+        "protocol_valid": 40,
+        "target_valid": 40,
+        "accuracy": 0.775,
+        "unwanted_fight": 6,
+        "first_pass_ms_median": 189.6973499970045,
+        "first_pass_ms_p95": 246.8012999961502,
+        "maximum_ms": 286.70279999641934,
+        "timeout_or_error_count": 0
+      },
+      "recorded_label_mismatches": [],
+      "raw_output_action_mismatches": [],
+      "failures": [
+        {
+          "id": "independent-25",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-07",
+          "selected": "Fight",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Fight",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-06",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-35",
+          "selected": "Fight",
+          "expected": [
+            "Flee"
+          ],
+          "current_action": "Fight",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-20",
+          "selected": "Fight",
+          "expected": [
+            "Flee"
+          ],
+          "current_action": "Fight",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-28",
+          "selected": "Fight",
+          "expected": [
+            "Flee"
+          ],
+          "current_action": "Fight",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-02",
+          "selected": "Fight",
+          "expected": [
+            "Flee"
+          ],
+          "current_action": "Fight",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-09",
+          "selected": "Fight",
+          "expected": [
+            "Flee"
+          ],
+          "current_action": "Fight",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-36",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        }
+      ],
+      "runtime_model_sha256_recorded": null
+    },
+    {
+      "name": "round2_frozen",
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v5\\final-acceptance-q8-gpu99.json",
+      "report_sha256": "8e374b4102c5b7dc182d49edeae8487a7cf12ade8e869f4073025c97f7a20b23",
+      "source": "Saved\\AIResearch\\NpcTraining\\acceptance-reviewed.json",
+      "source_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+      "source_hash_matches_report": true,
+      "input_preparation_sha256_recorded": null,
+      "prepared_prompt_mismatches_against_current": [],
+      "timeout_seconds": 1.5,
+      "sampling": {
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "seed": 20261114
+      },
+      "reported_summary": {
+        "cases": 40,
+        "correct": 35,
+        "protocol_valid": 40,
+        "target_valid": 40,
+        "accuracy": 0.875,
+        "first_pass_ms_median": 156.00000000267755,
+        "first_pass_ms_p95": 218.99999999732245,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 2,
+        "acceptance_qualified": false,
+        "integration_checks_required": true
+      },
+      "independent_recomputed": {
+        "cases": 40,
+        "unique_ids": 40,
+        "correct": 35,
+        "protocol_valid": 40,
+        "target_valid": 40,
+        "accuracy": 0.875,
+        "unwanted_fight": 2,
+        "first_pass_ms_median": 156.00000000267755,
+        "first_pass_ms_p95": 218.99999999732245,
+        "maximum_ms": 390.99999999598367,
+        "timeout_or_error_count": 0
+      },
+      "recorded_label_mismatches": [],
+      "raw_output_action_mismatches": [],
+      "failures": [
+        {
+          "id": "independent-25",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-07",
+          "selected": "Fight",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Fight",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-06",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-30",
+          "selected": "Fight",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Fight",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "independent-36",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        }
+      ],
+      "runtime_model_sha256_recorded": "c213093220ba95c146c84560a96a14be01281e9c3e89dc213e5662db2455fc0e"
+    },
+    {
+      "name": "round2_legacy_original",
+      "path": "Saved\\AIResearch\\NpcTraining\\round3-baseline\\round2-old-validation-original-format.json",
+      "report_sha256": "f3a903fb730fd0d6713031ef372e1eaaa62554832f576216745d0471e631cdc2",
+      "source": "Saved\\AIResearch\\NpcTraining\\combat-v5\\situations.json",
+      "source_sha256": "9e7cfd68274a498ab50f2e77463a408988fa7c56244ec0f06d52f62c13718108",
+      "source_hash_matches_report": true,
+      "input_preparation_sha256_recorded": null,
+      "prepared_prompt_mismatches_against_current": [],
+      "timeout_seconds": 1.5,
+      "sampling": {
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "seed": 20261114
+      },
+      "reported_summary": {
+        "cases": 15,
+        "correct": 14,
+        "protocol_valid": 15,
+        "target_valid": 15,
+        "accuracy": 0.9333333333333333,
+        "first_pass_ms_median": 151.42199999536388,
+        "first_pass_ms_p95": 183.5099999952945,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 0,
+        "acceptance_qualified": false,
+        "integration_checks_required": true
+      },
+      "independent_recomputed": {
+        "cases": 15,
+        "unique_ids": 15,
+        "correct": 14,
+        "protocol_valid": 15,
+        "target_valid": 15,
+        "accuracy": 0.9333333333333333,
+        "unwanted_fight": 0,
+        "first_pass_ms_median": 151.42199999536388,
+        "first_pass_ms_p95": 183.5099999952945,
+        "maximum_ms": 183.5099999952945,
+        "timeout_or_error_count": 0
+      },
+      "recorded_label_mismatches": [],
+      "raw_output_action_mismatches": [],
+      "failures": [
+        {
+          "id": "combat-064",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        }
+      ],
+      "runtime_model_sha256_recorded": "c213093220ba95c146c84560a96a14be01281e9c3e89dc213e5662db2455fc0e"
+    },
+    {
+      "name": "round2_legacy_false_tail",
+      "path": "Saved\\AIResearch\\NpcTraining\\round3-baseline\\round2-old-validation-game-format.json",
+      "report_sha256": "a2b1e3b4d7361124d05a9ef04a4d3b25ecfda5bf3817eddf5b261e65eb8cae50",
+      "source": "Saved\\AIResearch\\NpcTraining\\round3-baseline\\old-validation-game-format.json",
+      "source_sha256": "ade11a7a0bc13c9e56fe899da68a3e6704350eb55617731ad98f8e811ffd3597",
+      "source_hash_matches_report": true,
+      "input_preparation_sha256_recorded": null,
+      "prepared_prompt_mismatches_against_current": [],
+      "timeout_seconds": 1.5,
+      "sampling": {
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "seed": 20261114
+      },
+      "reported_summary": {
+        "cases": 15,
+        "correct": 9,
+        "protocol_valid": 15,
+        "target_valid": 15,
+        "accuracy": 0.6,
+        "first_pass_ms_median": 160.70430000399938,
+        "first_pass_ms_p95": 468.39819999877363,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 1,
+        "acceptance_qualified": false,
+        "integration_checks_required": true
+      },
+      "independent_recomputed": {
+        "cases": 15,
+        "unique_ids": 15,
+        "correct": 9,
+        "protocol_valid": 15,
+        "target_valid": 15,
+        "accuracy": 0.6,
+        "unwanted_fight": 1,
+        "first_pass_ms_median": 160.70430000399938,
+        "first_pass_ms_p95": 468.39819999877363,
+        "maximum_ms": 468.39819999877363,
+        "timeout_or_error_count": 0
+      },
+      "recorded_label_mismatches": [],
+      "raw_output_action_mismatches": [],
+      "failures": [
+        {
+          "id": "combat-056",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "combat-048",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "combat-112",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "combat-088",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "combat-064",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        },
+        {
+          "id": "combat-016",
+          "selected": "Fight",
+          "expected": [
+            "Flee"
+          ],
+          "current_action": "Fight",
+          "source_topic": null,
+          "protocol_valid": true
+        }
+      ],
+      "runtime_model_sha256_recorded": "c213093220ba95c146c84560a96a14be01281e9c3e89dc213e5662db2455fc0e"
+    },
+    {
+      "name": "round2_new_false_tail",
+      "path": "Saved\\AIResearch\\NpcTraining\\round3-baseline\\round2-new-validation-draft-labels.json",
+      "report_sha256": "27035f3e370f11c192b79ee80f33737f5c05a8473f865def06222b0fea8d5d4f",
+      "source": "Saved\\AIResearch\\NpcTraining\\combat-v6\\validation-new.json",
+      "source_sha256": "ddfbbf6ae39f91393ba5f81f8aba3de00af8fdcdf15bbc5c9829ff4b047faa67",
+      "source_hash_matches_report": true,
+      "input_preparation_sha256_recorded": null,
+      "prepared_prompt_mismatches_against_current": [],
+      "timeout_seconds": 1.5,
+      "sampling": {
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "seed": 20261114
+      },
+      "reported_summary": {
+        "cases": 16,
+        "correct": 9,
+        "protocol_valid": 16,
+        "target_valid": 16,
+        "accuracy": 0.5625,
+        "first_pass_ms_median": 163.59765000015614,
+        "first_pass_ms_p95": 361.340299998119,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 1,
+        "acceptance_qualified": false,
+        "integration_checks_required": true
+      },
+      "independent_recomputed": {
+        "cases": 16,
+        "unique_ids": 16,
+        "correct": 9,
+        "protocol_valid": 16,
+        "target_valid": 16,
+        "accuracy": 0.5625,
+        "unwanted_fight": 1,
+        "first_pass_ms_median": 163.59765000015614,
+        "first_pass_ms_p95": 361.340299998119,
+        "maximum_ms": 361.340299998119,
+        "timeout_or_error_count": 0
+      },
+      "recorded_label_mismatches": [],
+      "raw_output_action_mismatches": [],
+      "failures": [
+        {
+          "id": "change-032-branch-1",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": "追着滚动的线轴",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-040-branch-1",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Fight",
+          "source_topic": "把争论留给排练",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-007-branch-1",
+          "selected": "Fight",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Fight",
+          "source_topic": "合唱照片裁切",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-032-branch-2",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Flee",
+          "source_topic": "追着滚动的线轴",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-023-branch-2",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": "临时漏水管",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-023-branch-1",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Flee",
+          "source_topic": "临时漏水管",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-008-branch-2",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": "认错同色雨披",
+          "protocol_valid": true
+        }
+      ],
+      "runtime_model_sha256_recorded": "c213093220ba95c146c84560a96a14be01281e9c3e89dc213e5662db2455fc0e"
+    },
+    {
+      "name": "round2_new_fixed_input",
+      "path": "Saved\\AIResearch\\NpcTraining\\round3-baseline\\round2-new-validation-fixed-input-draft-labels.json",
+      "report_sha256": "746d31c3880845fb22b1322777f7fd05ac6d1b3891fe1f233b60f82b3f3e816d",
+      "source": "Saved\\AIResearch\\NpcTraining\\combat-v7\\validation-new.json",
+      "source_sha256": "1276c27dd3827f38fff741a4e282bb5a75ee19c5bbd952456ab9590e051951e2",
+      "source_hash_matches_report": true,
+      "input_preparation_sha256_recorded": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+      "prepared_prompt_mismatches_against_current": [],
+      "timeout_seconds": 1.5,
+      "sampling": {
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "seed": 20261114
+      },
+      "reported_summary": {
+        "cases": 16,
+        "correct": 11,
+        "protocol_valid": 16,
+        "target_valid": 16,
+        "accuracy": 0.6875,
+        "first_pass_ms_median": 156.25650000220048,
+        "first_pass_ms_p95": 215.85359999880893,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 2,
+        "acceptance_qualified": false,
+        "integration_checks_required": true
+      },
+      "independent_recomputed": {
+        "cases": 16,
+        "unique_ids": 16,
+        "correct": 11,
+        "protocol_valid": 16,
+        "target_valid": 16,
+        "accuracy": 0.6875,
+        "unwanted_fight": 2,
+        "first_pass_ms_median": 156.25650000220048,
+        "first_pass_ms_p95": 215.85359999880893,
+        "maximum_ms": 215.85359999880893,
+        "timeout_or_error_count": 0
+      },
+      "recorded_label_mismatches": [],
+      "raw_output_action_mismatches": [],
+      "failures": [
+        {
+          "id": "change-032-branch-1",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": "追着滚动的线轴",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-040-branch-1",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Fight",
+          "source_topic": "把争论留给排练",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-007-branch-1",
+          "selected": "Fight",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Fight",
+          "source_topic": "合唱照片裁切",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-023-branch-1",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Flee",
+          "source_topic": "临时漏水管",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-008-branch-1",
+          "selected": "Fight",
+          "expected": [
+            "Flee"
+          ],
+          "current_action": "Flee",
+          "source_topic": "认错同色雨披",
+          "protocol_valid": true
+        }
+      ],
+      "runtime_model_sha256_recorded": "c213093220ba95c146c84560a96a14be01281e9c3e89dc213e5662db2455fc0e"
+    },
+    {
+      "name": "round3_legacy_missing_teacher",
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\internal-legacy-q8-gpu99.json",
+      "report_sha256": "c6af6057294ffcd9ac395d29e154615b2dba582033e7e65bda959bcccf5c83c6",
+      "source": "Saved\\AIResearch\\NpcTraining\\combat-v7\\validation-legacy.json",
+      "source_sha256": "99643e10075ac9f46015113addfef0c93ce2550256d5826c5a6ec79ea127b825",
+      "source_hash_matches_report": true,
+      "input_preparation_sha256_recorded": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+      "prepared_prompt_mismatches_against_current": [],
+      "timeout_seconds": 10.0,
+      "sampling": {
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "seed": 20261114
+      },
+      "reported_summary": {
+        "cases": 15,
+        "correct": 0,
+        "protocol_valid": 15,
+        "target_valid": 15,
+        "accuracy": 0.0,
+        "first_pass_ms_median": 137.52020000538323,
+        "first_pass_ms_p95": 329.2574000006425,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 0,
+        "acceptance_qualified": false,
+        "integration_checks_required": true
+      },
+      "independent_recomputed": {
+        "cases": 15,
+        "unique_ids": 15,
+        "correct": 14,
+        "protocol_valid": 15,
+        "target_valid": 15,
+        "accuracy": 0.9333333333333333,
+        "unwanted_fight": 0,
+        "first_pass_ms_median": 137.52020000538323,
+        "first_pass_ms_p95": 329.2574000006425,
+        "maximum_ms": 329.2574000006425,
+        "timeout_or_error_count": 0
+      },
+      "recorded_label_mismatches": [
+        "combat-040",
+        "combat-056",
+        "combat-096",
+        "combat-048",
+        "combat-120",
+        "combat-112",
+        "combat-008",
+        "combat-088",
+        "combat-024",
+        "combat-104",
+        "combat-064",
+        "combat-080",
+        "combat-072",
+        "combat-032",
+        "combat-016"
+      ],
+      "raw_output_action_mismatches": [],
+      "failures": [
+        {
+          "id": "combat-064",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        }
+      ],
+      "runtime_model_sha256_recorded": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3",
+      "excluded_from_quality_comparison_reason": "调用漏传 --teacher，15条acceptable_actions全空；原始输出按固定旧标签实际14/15，属于评测调用错误"
+    },
+    {
+      "name": "round3_legacy_scored",
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\internal-legacy-scored-q8-gpu99.json",
+      "report_sha256": "870205623beb0fd293e4e31acc480444ff6e023f869d2ca0f4aa28dfc03a9dd8",
+      "source": "Saved\\AIResearch\\NpcTraining\\combat-v7\\validation-legacy.json",
+      "source_sha256": "99643e10075ac9f46015113addfef0c93ce2550256d5826c5a6ec79ea127b825",
+      "source_hash_matches_report": true,
+      "input_preparation_sha256_recorded": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+      "prepared_prompt_mismatches_against_current": [],
+      "timeout_seconds": 10.0,
+      "sampling": {
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "seed": 20261114
+      },
+      "reported_summary": {
+        "cases": 15,
+        "correct": 14,
+        "protocol_valid": 15,
+        "target_valid": 15,
+        "accuracy": 0.9333333333333333,
+        "first_pass_ms_median": 132.95970000035595,
+        "first_pass_ms_p95": 426.67989999608835,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 0,
+        "acceptance_qualified": false,
+        "integration_checks_required": true
+      },
+      "independent_recomputed": {
+        "cases": 15,
+        "unique_ids": 15,
+        "correct": 14,
+        "protocol_valid": 15,
+        "target_valid": 15,
+        "accuracy": 0.9333333333333333,
+        "unwanted_fight": 0,
+        "first_pass_ms_median": 132.95970000035595,
+        "first_pass_ms_p95": 426.67989999608835,
+        "maximum_ms": 426.67989999608835,
+        "timeout_or_error_count": 0
+      },
+      "recorded_label_mismatches": [],
+      "raw_output_action_mismatches": [],
+      "failures": [
+        {
+          "id": "combat-064",
+          "selected": "Flee",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Flee",
+          "source_topic": null,
+          "protocol_valid": true
+        }
+      ],
+      "runtime_model_sha256_recorded": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3"
+    },
+    {
+      "name": "round3_new",
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\internal-new-q8-gpu99.json",
+      "report_sha256": "8ce68429daa354241d8ecaab325c7a4c15fddc9fcf6949cfe8a320deee78b2de",
+      "source": "Saved\\AIResearch\\NpcTraining\\combat-v7\\validation-new.json",
+      "source_sha256": "1276c27dd3827f38fff741a4e282bb5a75ee19c5bbd952456ab9590e051951e2",
+      "source_hash_matches_report": true,
+      "input_preparation_sha256_recorded": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+      "prepared_prompt_mismatches_against_current": [],
+      "timeout_seconds": 10.0,
+      "sampling": {
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "seed": 20261114
+      },
+      "reported_summary": {
+        "cases": 16,
+        "correct": 12,
+        "protocol_valid": 16,
+        "target_valid": 16,
+        "accuracy": 0.75,
+        "first_pass_ms_median": 143.9017500015325,
+        "first_pass_ms_p95": 189.05980000272393,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 2,
+        "acceptance_qualified": false,
+        "integration_checks_required": true
+      },
+      "independent_recomputed": {
+        "cases": 16,
+        "unique_ids": 16,
+        "correct": 12,
+        "protocol_valid": 16,
+        "target_valid": 16,
+        "accuracy": 0.75,
+        "unwanted_fight": 2,
+        "first_pass_ms_median": 143.9017500015325,
+        "first_pass_ms_p95": 189.05980000272393,
+        "maximum_ms": 189.05980000272393,
+        "timeout_or_error_count": 0
+      },
+      "recorded_label_mismatches": [],
+      "raw_output_action_mismatches": [],
+      "failures": [
+        {
+          "id": "change-040-branch-1",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Fight",
+          "source_topic": "把争论留给排练",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-007-branch-1",
+          "selected": "Fight",
+          "expected": [
+            "Wait"
+          ],
+          "current_action": "Fight",
+          "source_topic": "合唱照片裁切",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-023-branch-1",
+          "selected": "Flee",
+          "expected": [
+            "Fight"
+          ],
+          "current_action": "Flee",
+          "source_topic": "临时漏水管",
+          "protocol_valid": true
+        },
+        {
+          "id": "change-008-branch-1",
+          "selected": "Fight",
+          "expected": [
+            "Flee"
+          ],
+          "current_action": "Flee",
+          "source_topic": "认错同色雨披",
+          "protocol_valid": true
+        }
+      ],
+      "runtime_model_sha256_recorded": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3"
+    },
+    {
+      "name": "round3_frozen",
+      "path": "Saved\\AIResearch\\NpcTraining\\combat-v7\\final-acceptance-q8-gpu99.json",
+      "report_sha256": "44c82daebfc78b5b3c918f835cf0d29525d0e574f9f4a1e8bae8aa7c149621b3",
+      "source": "Saved\\AIResearch\\NpcTraining\\acceptance-reviewed.json",
+      "source_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+      "source_hash_matches_report": true,
+      "input_preparation_sha256_recorded": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+      "prepared_prompt_mismatches_against_current": [],
+      "timeout_seconds": 1.5,
+      "sampling": {
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "seed": 20261114
+      },
+      "reported_summary": {
+        "cases": 40,
+        "correct": 40,
+        "protocol_valid": 40,
+        "target_valid": 40,
+        "accuracy": 1.0,
+        "first_pass_ms_median": 147.04119999805698,
+        "first_pass_ms_p95": 207.02159999927972,
+        "exact_repeat_ms_p95": null,
+        "unwanted_fight": 0,
+        "acceptance_qualified": true,
+        "integration_checks_required": true
+      },
+      "independent_recomputed": {
+        "cases": 40,
+        "unique_ids": 40,
+        "correct": 40,
+        "protocol_valid": 40,
+        "target_valid": 40,
+        "accuracy": 1.0,
+        "unwanted_fight": 0,
+        "first_pass_ms_median": 147.04119999805698,
+        "first_pass_ms_p95": 207.02159999927972,
+        "maximum_ms": 348.4634000051301,
+        "timeout_or_error_count": 0
+      },
+      "recorded_label_mismatches": [],
+      "raw_output_action_mismatches": [],
+      "failures": [],
+      "runtime_model_sha256_recorded": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3"
+    }
+  ],
+  "new_internal_failure_notes": {
+    "change-040-branch-1": "按固定标签应继续交战，模型在对方撤回道歉并再次冲来后选择逃跑",
+    "change-007-branch-1": "双方已经解释清照片裁切的误会，模型仍选择继续交战",
+    "change-023-branch-1": "躲开喷水的原因已消失，人物已回话面对挑衅，模型仍选择逃跑",
+    "change-008-branch-1": "按固定标签应继续远离追来的对手，模型选择返身交战"
+  },
+  "previous_five_failure_categories": {
+    "state_transition_failure": [
+      "independent-25",
+      "independent-06"
+    ],
+    "agreement_or_misunderstanding_not_followed": [
+      "independent-07",
+      "independent-30",
+      "independent-36"
+    ],
+    "observation": "上一轮5项都保持当前动作，属于结果现象；输入尾串与训练变化共同存在，不能据此断言唯一原因"
+  },
+  "legacy_missing_teacher_handling": {
+    "original_report_preserved": true,
+    "later_scored_report_outputs_identical": true,
+    "do_not_report_zero_as_model_quality": true
+  },
+  "conclusion": {
+    "frozen40_numerical_gate_passed": true,
+    "new_internal16_correct": 12,
+    "new_internal16_total": 16,
+    "generalization_fully_verified": false,
+    "gameplay_acceptance_passed_by_this_audit": false,
+    "performance_scope": "本地模型独立调用的完整请求耗时，包含模板与分词；不是UE+TTS共存或实际玩家反馈延迟",
+    "attribution": "40/40同时包含输入事实修复和第三轮训练变化，不能全部归功于训练，也不是全新盲测"
+  },
+  "limitations": [
+    "冻结40已被反复用于验收，第三轮成绩不能当全新未知样本表现",
+    "新16固定标签未因教师分歧改变；训练6个分歧采用独立审核后的教师示范，原经过和draft保留",
+    "新16仍有4个质量错误，其中2个为不应选Fight时选择Fight；没有用格式合法性掩盖动作错误",
+    "未重跑冻结40推理，本报告只复算已保存输出",
+    "没有同时运行UE和TTS的帧时间证据，不能将207ms模型P95外推成游戏体验",
+    "取消后不恢复旧攻击依靠独立接入测试，不在静态40情境中估计"
+  ]
+}

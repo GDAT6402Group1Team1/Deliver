@@ -11,6 +11,8 @@ class APlayerState;
 class UDeliveryTaskDefinition;
 
 DECLARE_DELEGATE_RetVal_TwoParams(bool, FDeliveryDeliveryGate, AActor*, APlayerState*);
+// 任务结算和实物交接成功后的服务器通知，包裹此时尚未销毁
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FDeliveryDeliveryConfirmed, UDeliveryTaskDefinition*, AActor*, APlayerState*);
 
 /**
  * 挂在收件人（NPC 或投递点）身上，声明"这里收哪个任务的快递"
@@ -31,6 +33,7 @@ class DELIVERY_API UDeliveryTargetComponent : public UActorComponent
 
     /** 收件人额外条件，同样用于提示与服务器最终交付检查 */
     FDeliveryDeliveryGate DeliveryGate;
+    FDeliveryDeliveryConfirmed OnDeliveryConfirmed;
 
     // 收件任务与距离
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Task")

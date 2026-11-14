@@ -1,0 +1,34 @@
+{
+  "author": "Quaternius",
+  "source_page": "https://quaternius.com/packs/ultimatemodularcharacters.html",
+  "download_folder": "https://drive.google.com/drive/folders/1USAAquX2JJWuA2m6zol0KUkFe3UkZ8zX",
+  "checked_utc": "2026-11-14T04:38:44.328321+00:00",
+  "status": "download_attempt_complete",
+  "files": [
+    {
+      "file": "Humanoid/Casual.fbx",
+      "source_url": "https://drive.google.com/uc?export=download&id=1yYfYKaOp-yPrpMQ_Am2bBIC-E7MTbffs",
+      "expected_bytes": 439948,
+      "content_type": "text/html; charset=utf-8",
+      "received_bytes": 2040,
+      "status": "blocked_by_drive_download_quota"
+    },
+    {
+      "file": "Humanoid/Casual.blend",
+      "source_url": "https://drive.google.com/uc?export=download&id=1SJdSeFDjEqzl3mtMuItC22Url2-mMrdw",
+      "expected_bytes": 1499748,
+      "content_type": "text/html; charset=utf-8",
+      "received_bytes": 2040,
+      "status": "blocked_by_drive_download_quota"
+    },
+    {
+      "file": "Humanoid/Worker.fbx",
+      "source_url": "https://drive.google.com/uc?export=download&id=10dPAOOrlH6m6ASa3hOcc-ElclT_cIQjU",
+      "expected_bytes": 420604,
+      "content_type": "text/html; charset=utf-8",
+      "received_bytes": 2040,
+      "status": "blocked_by_drive_download_quota"
+    }
+  ],
+  "license_status": "Pack page says CC0; downloadable License.txt is quota-limited and not read. Conservatively retain current official QAL for any acquired assets; no standalone redistribution."
+}

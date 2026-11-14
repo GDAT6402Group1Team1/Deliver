@@ -8,6 +8,13 @@ param(
     [string]$ServiceTier = 'default',
     [ValidateSet('qwen', 'windows')]
     [string]$SpeechProvider = 'qwen',
+    # 原生实现先显式选择，声音和同机表现通过后再调整默认
+    [ValidateSet('torch', 'native')]
+    [string]$SpeechEngine = 'torch',
+    [string]$NativeSpeechRuntime = '',
+    [string]$CombatConfig = '',
+    # 临时退回原模型，保留已经验收的小模型文件与配置
+    [switch]$DisableLocalCombat,
     [ValidateRange(1024, 65535)]
     [int]$Port = 8765,
     [string]$PythonExecutable = 'python.exe',
@@ -85,6 +92,23 @@ if ($listeners.Count -gt 0) {
 
 # 同名 Python 可能出现在多个 PATH 目录，使用系统查找顺序中的第一个
 $pythonCommand = Get-Command $PythonExecutable -CommandType Application -ErrorAction Stop | Select-Object -First 1
+if (-not $CombatConfig) { $CombatConfig = Join-Path $PSScriptRoot 'combat_model_config.json' }
+$CombatConfig = [IO.Path]::GetFullPath($CombatConfig)
+$env:DELIVERY_COMBAT_MODEL_URL = ''
+if (-not $DisableLocalCombat -and (Test-Path -LiteralPath $CombatConfig -PathType Leaf)) {
+    $combatSettings = Get-Content -LiteralPath $CombatConfig -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($combatSettings.enabled -eq $true) {
+        $combatLauncher = Join-Path $PSScriptRoot 'llm_evaluation/start_local_model.py'
+        & $pythonCommand.Source -X utf8 $combatLauncher --combat-config $CombatConfig --run
+        if ($LASTEXITCODE -ne 0) { throw '本地战斗模型启动失败，请检查输出；临时使用原模型可加 -DisableLocalCombat' }
+        $combatPort = [int]$combatSettings.port
+        if ($combatPort -lt 1024 -or $combatPort -gt 65535) { throw '本地战斗模型端口无效' }
+        $env:DELIVERY_COMBAT_MODEL_URL = "http://127.0.0.1:$combatPort/v1/chat/completions"
+        $env:DELIVERY_COMBAT_MODEL_TIMEOUT_SECONDS = [string]$combatSettings.timeout_seconds
+        $env:DELIVERY_COMBAT_MODEL_TEMPERATURE = [string]$combatSettings.temperature
+        $env:DELIVERY_COMBAT_MODEL_PROFILE_IDS = $combatSettings.profile_ids -join ','
+    }
+}
 $env:DELIVERY_CODEX_MODEL = $Model
 if (-not $PSBoundParameters.ContainsKey('PlayerModel') -and $env:DELIVERY_CODEX_PLAYER_MODEL) {
     $PlayerModel = $env:DELIVERY_CODEX_PLAYER_MODEL
@@ -104,6 +128,20 @@ if ($ServiceTier -ne 'default') {
 }
 $env:DELIVERY_AI_DIALOGUE_LOG = if ($DialogueLog) { '1' } else { '' }
 $env:DELIVERY_TTS_PROVIDER = $SpeechProvider
+$env:DELIVERY_QWEN_ENGINE = $SpeechEngine
+if ($SpeechEngine -eq 'native') {
+    if (-not $NativeSpeechRuntime) {
+        $NativeSpeechRuntime = Join-Path $projectRoot 'Saved/AIResearch/NativeQwen/runtime-q8_0.json'
+    }
+    $NativeSpeechRuntime = [IO.Path]::GetFullPath($NativeSpeechRuntime)
+    if (-not (Test-Path -LiteralPath $NativeSpeechRuntime -PathType Leaf)) {
+        throw '缺少原生语音配置，请先完成构建和同机对照，或使用 -SpeechEngine torch'
+    }
+    $env:DELIVERY_NATIVE_TTS_RUNTIME = $NativeSpeechRuntime
+}
+else {
+    $env:DELIVERY_NATIVE_TTS_RUNTIME = ''
+}
 if ($SpeechProvider -eq 'qwen') {
     $voicePython = Join-Path $projectRoot 'Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe'
     $voiceModel = Join-Path $projectRoot 'Saved/AIResearch/TtsEvaluation/qwen/model/config.json'

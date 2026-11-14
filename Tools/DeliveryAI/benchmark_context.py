@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from app_server import AppServer
+from dialogue_background import select_resident_profiles
 from review_dialogue import make_cases
 from server import validate_action
 from streaming import SentenceParser, STREAM_INSTRUCTIONS, compact_context, model_context
@@ -44,7 +45,7 @@ def main():
     args = arguments.parse_args()
     output = ROOT / 'Saved/AIResearch' / Path(args.output).name
     output.parent.mkdir(parents=True, exist_ok=True)
-    profiles = json.loads((ROOT / 'Design/AI/NpcProfiles.json').read_text(encoding='utf-8'))['characters']
+    profiles = select_resident_profiles(json.loads((ROOT / 'Design/AI/NpcProfiles.json').read_text(encoding='utf-8')))
     results = []
     service = AppServer()
     service._start()

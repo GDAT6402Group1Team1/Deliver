@@ -1,0 +1,2282 @@
+{
+  "schema_version": 1,
+  "world_epoch": "dc233cc749d7c303a57ff58871062f9e",
+  "scope_utc": {
+    "from": "2026.11.14-15.55.17:274",
+    "to": "2026.11.14-15.56.58:815"
+  },
+  "created_utc": "2026-11-14T15:59:21.106388+00:00",
+  "production": "Luna low; native Q8 KV1024 BOTH B voices; local combat model disabled",
+  "evidence": [
+    {
+      "path": "Saved/Logs/DeliveryPlayableHandoff.log",
+      "sha256": "b3da5044c92cb132c04dbee392d30082ee304c2aabc0a97eee32921dd8190384",
+      "bytes": 1310822
+    },
+    {
+      "path": "Saved/Logs/AIResidentBackend.log",
+      "sha256": "3116082fa6c4f643e72d2bda3f88ac3f77c2a4d853f12eb943b5ff202909f411",
+      "bytes": 82961
+    },
+    {
+      "path": "Saved/Logs/NpcDialogue.ndjson",
+      "sha256": "68d526053e78148c90ad866fa77cf9ae819d425e0a902cecebcf5445660c56cd",
+      "bytes": 3020595
+    }
+  ],
+  "actual_input": {
+    "source": "Root agent actual client T and Send click; root also observed original text/clear and host character state. This reviewer did not operate or inspect UI.",
+    "speech_id": "CA8C22A54891E1A87FB4DBA1F9D0335B",
+    "request_id": "4a00ddef-4c21-c2a8-2dc4-cc8943438e00",
+    "accepted_utc": "2026-11-14T15:55:17.274Z",
+    "first_proposal_after_accept_ms": 2858,
+    "first_text_ready_after_accept_ms": 3276,
+    "first_audio_after_accept_ms": {
+      "host": 3530,
+      "client": 3575
+    },
+    "first_sentence_completed_on_both": true,
+    "first_sentence_pcm_bytes": 136320,
+    "model_first_sentence_ms": 2780,
+    "model_completed_ms": 3213,
+    "model_chosen": "LookAt:p0",
+    "events": [
+      {
+        "line": 4055,
+        "utc": "2026.11.14-15.55.17:274",
+        "event": "LogTemp: ResidentConversation accepted: player=BP_DeliveryManPC_C_1 resident=BP_ResidentLoud_C_0 speech=CA8C22A54891E1A87FB4DBA1F9D0335B pending=1 activeAction=0"
+      },
+      {
+        "line": 4056,
+        "utc": "2026.11.14-15.55.17:316",
+        "event": "LogTemp: NpcLatency request=4A00DDEF4C21C2A82DC4CC8943438E00 stage=http_start player=1"
+      },
+      {
+        "line": 4087,
+        "utc": "2026.11.14-15.55.20:132",
+        "event": "LogDeliveryNpcAgent: NpcLatency request=4A00DDEF4C21C2A82DC4CC8943438E00 stage=approved"
+      },
+      {
+        "line": 4098,
+        "utc": "2026.11.14-15.55.20:550",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B action=B3D84CA34A411AEFFFEA2DA7A9BC5590 stage=reply_text_ready sequence=0"
+      },
+      {
+        "line": 4099,
+        "utc": "2026.11.14-15.55.20:644",
+        "event": "LogTemp: NpcLatency request=4A00DDEF4C21C2A82DC4CC8943438E00 stage=model_done sentences=3"
+      },
+      {
+        "line": 4104,
+        "utc": "2026.11.14-15.55.20:804",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=9697C5524A3DFE059E5A23B0B150E6F9 stage=audio_play role=3 late_ms=401"
+      },
+      {
+        "line": 4105,
+        "utc": "2026.11.14-15.55.20:849",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=9697C5524A3DFE059E5A23B0B150E6F9 stage=audio_play role=1 late_ms=490"
+      },
+      {
+        "line": 4161,
+        "utc": "2026.11.14-15.55.24:609",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=7FDFC04C47201418C113D0A0A74A2315 stage=audio_play role=3 late_ms=93"
+      },
+      {
+        "line": 4162,
+        "utc": "2026.11.14-15.55.24:653",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=7FDFC04C47201418C113D0A0A74A2315 stage=audio_play role=1 late_ms=183"
+      },
+      {
+        "line": 4248,
+        "utc": "2026.11.14-15.55.28:329",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=17B316BC464326145CE9709AE9F5F4DB stage=audio_play role=3 late_ms=187"
+      },
+      {
+        "line": 4250,
+        "utc": "2026.11.14-15.55.28:371",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=17B316BC464326145CE9709AE9F5F4DB stage=audio_play role=1 late_ms=277"
+      },
+      {
+        "line": 4322,
+        "utc": "2026.11.14-15.55.31:665",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=A5F242794FBBF9C20B2207B825CAA23C stage=audio_play role=3 late_ms=6"
+      },
+      {
+        "line": 4328,
+        "utc": "2026.11.14-15.55.31:809",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=A5F242794FBBF9C20B2207B825CAA23C stage=audio_play role=1 late_ms=194"
+      },
+      {
+        "line": 4692,
+        "utc": "2026.11.14-15.55.49:983",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=98553D5945AA55EF61D59B9CA9D9F119 stage=audio_play role=3 late_ms=89"
+      },
+      {
+        "line": 4693,
+        "utc": "2026.11.14-15.55.50:025",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=98553D5945AA55EF61D59B9CA9D9F119 stage=audio_play role=1 late_ms=176"
+      },
+      {
+        "line": 4787,
+        "utc": "2026.11.14-15.55.53:594",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=EB609930441AC45B3F08FBA2D0EC6D3C stage=audio_play role=3 late_ms=80"
+      },
+      {
+        "line": 4788,
+        "utc": "2026.11.14-15.55.53:635",
+        "event": "LogTemp: NpcLatency speech=CA8C22A54891E1A87FB4DBA1F9D0335B turn=EB609930441AC45B3F08FBA2D0EC6D3C stage=audio_play role=1 late_ms=168"
+      }
+    ],
+    "backend_stages": {
+      "worker_started": [
+        {
+          "line": 50,
+          "scheduler_queue_ms": 0
+        }
+      ],
+      "model_slot_acquired": [
+        {
+          "line": 52,
+          "slot_wait_ms": 0
+        }
+      ],
+      "context_ready": [
+        {
+          "line": 53,
+          "player_message": "ca8c22a5-4891-e1a8-7fb4-dba1f9d0335b",
+          "player_answered": 0,
+          "candidates": 13
+        }
+      ],
+      "prompt_ready": [
+        {
+          "line": 54,
+          "chars": 4323,
+          "bytes": 6643
+        }
+      ],
+      "model_selected": [
+        {
+          "line": 55,
+          "source": "player",
+          "model": "gpt-6-luna"
+        }
+      ],
+      "model_connection_startup": [
+        {
+          "line": 56,
+          "connection_ms": 0,
+          "elapsed_ms": 7
+        }
+      ],
+      "model_connection_thread_start": [
+        {
+          "line": 58,
+          "connection_ms": 60,
+          "elapsed_ms": 68
+        }
+      ],
+      "model_connection_turn_start": [
+        {
+          "line": 59,
+          "connection_ms": 70,
+          "elapsed_ms": 77
+        }
+      ],
+      "model_connection_first_delta": [
+        {
+          "line": 60,
+          "connection_ms": 2133,
+          "elapsed_ms": 2141
+        }
+      ],
+      "first_sentence": [
+        {
+          "line": 61,
+          "elapsed_ms": 2780
+        }
+      ],
+      "transport_selected": [
+        {
+          "line": 62,
+          "transport": "pcm_chunks_v1",
+          "reason": "negotiated"
+        }
+      ],
+      "first_audio_chunk": [
+        {
+          "line": 63,
+          "sentence": 0,
+          "tts_queue_ms": 4,
+          "tts_ms": 194,
+          "elapsed_ms": 2980
+        },
+        {
+          "line": 78,
+          "sentence": 1,
+          "tts_queue_ms": 786,
+          "tts_ms": 55,
+          "elapsed_ms": 3627
+        },
+        {
+          "line": 80,
+          "sentence": 2,
+          "tts_queue_ms": 1034,
+          "tts_ms": 28,
+          "elapsed_ms": 4125
+        }
+      ],
+      "model_connection_model_terminal": [
+        {
+          "line": 64,
+          "connection_ms": 3205,
+          "elapsed_ms": 3212
+        }
+      ],
+      "model_token_usage": [
+        {
+          "line": 65,
+          "last_input_tokens": 11457,
+          "last_cached_input_tokens": 7424,
+          "last_output_tokens": 58,
+          "last_reasoning_output_tokens": 0,
+          "last_total_tokens": 11515,
+          "last_cache_write_input_tokens": 0,
+          "thread_total_input_tokens": 11457,
+          "thread_total_cached_input_tokens": 7424,
+          "thread_total_output_tokens": 58,
+          "thread_total_reasoning_output_tokens": 0,
+          "thread_total_total_tokens": 11515,
+          "thread_total_cache_write_input_tokens": 0
+        }
+      ],
+      "model_completed": [
+        {
+          "line": 66,
+          "elapsed_ms": 3213
+        }
+      ],
+      "audio_ready": [
+        {
+          "line": 77,
+          "sentence": 0,
+          "tts_queue_ms": 4,
+          "tts_ms": 785,
+          "elapsed_ms": 3571,
+          "voice_name": "Uncle_Fu"
+        },
+        {
+          "line": 79,
+          "sentence": 1,
+          "tts_queue_ms": 786,
+          "tts_ms": 519,
+          "elapsed_ms": 4090,
+          "voice_name": "Uncle_Fu"
+        },
+        {
+          "line": 81,
+          "sentence": 2,
+          "tts_queue_ms": 1034,
+          "tts_ms": 507,
+          "elapsed_ms": 4604,
+          "voice_name": "Uncle_Fu"
+        }
+      ],
+      "reply_finished": [
+        {
+          "line": 82,
+          "elapsed_ms": 4604
+        }
+      ]
+    }
+  },
+  "dialogue": [
+    {
+      "line": 466,
+      "time": "23:55:20",
+      "request_id": "4a00ddef-4c21-c2a8-2dc4-cc8943438e00",
+      "profile_id": "chunlai",
+      "source": "player",
+      "chosen": "LookAt:p0",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 467,
+      "time": "23:55:23",
+      "request_id": "b3fe4686-48ab-854e-d1f9-4ba38695e524",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "Fight:p0",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 468,
+      "time": "23:55:27",
+      "request_id": "431ece0d-44ab-909f-2c73-bcb72a8efe49",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "Fight:p3",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 469,
+      "time": "23:55:28",
+      "request_id": "63c603fa-4248-02f2-8659-eebd3b3cbb49",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": null,
+      "model": "gpt-6-luna",
+      "error": "RuntimeError",
+      "current_action": null
+    },
+    {
+      "line": 470,
+      "time": "23:55:31",
+      "request_id": "614c3570-4103-e7d4-6391-9093b8be7cbd",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "Fight:p1",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 471,
+      "time": "23:55:32",
+      "request_id": "f06be1ee-403d-0fbb-6d07-96aad8787926",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": null,
+      "model": "gpt-6-luna",
+      "error": "RuntimeError",
+      "current_action": {
+        "action": "Fight",
+        "target_id": "54ccbb19-4af5-f87e-b8c5-5da5bb3c31a4",
+        "source": "Model",
+        "remaining_seconds": 3.9874811992049217,
+        "action_id": "db356a09-4c5e-4aeb-a2ab-c3a469cad170"
+      }
+    },
+    {
+      "line": 472,
+      "time": "23:55:35",
+      "request_id": "a9ec61e7-42ab-ca92-7a5c-93adc27a1c23",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": null,
+      "model": "gpt-6-luna",
+      "error": "RuntimeError",
+      "current_action": null
+    },
+    {
+      "line": 473,
+      "time": "23:55:38",
+      "request_id": "74e8ef88-4f12-cbed-99e2-2aaae40de532",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "LookAt:p1",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 474,
+      "time": "23:55:43",
+      "request_id": "6d7dc007-4f78-020e-3ad6-c1820028ad09",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "LookAt:p2",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 475,
+      "time": "23:55:46",
+      "request_id": "f08c74b5-46c1-801a-7a4c-69871eb42ddd",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "Fight:p0",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 476,
+      "time": "23:55:49",
+      "request_id": "b20d16f6-4ea1-af99-f857-3a927a9d6c52",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "StrikeOnce:p2",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 477,
+      "time": "23:55:58",
+      "request_id": "f270dd00-4705-975a-224d-3f9335f7d434",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "Fight:p1",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 478,
+      "time": "23:56:00",
+      "request_id": "e15692bc-4ab7-8475-bf8f-3b82a635c61a",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "LookAt:p2",
+      "model": "gpt-6-luna",
+      "error": "RuntimeError",
+      "current_action": null
+    },
+    {
+      "line": 479,
+      "time": "23:56:03",
+      "request_id": "79a14528-465e-25c6-a7e4-5ea801835b4f",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "LookAt:p2",
+      "model": "gpt-6-luna",
+      "error": "RuntimeError",
+      "current_action": null
+    },
+    {
+      "line": 480,
+      "time": "23:56:06",
+      "request_id": "d5634b2f-430c-eb3e-748c-61a06027fee3",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "LookAt:p1",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 481,
+      "time": "23:56:12",
+      "request_id": "f04b8a59-42fc-8cc9-79e4-539122228441",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "Flee:p2",
+      "model": "gpt-6-luna",
+      "error": "RuntimeError",
+      "current_action": null
+    },
+    {
+      "line": 482,
+      "time": "23:56:14",
+      "request_id": "13956eb9-4ca2-6fa4-8051-2db338e2a953",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "LookAt:p1",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 483,
+      "time": "23:56:17",
+      "request_id": "fdbbeff8-4ecf-625e-ee6d-13a9cbbfcf1b",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "Fight:p2",
+      "model": "gpt-6-luna",
+      "error": "RuntimeError",
+      "current_action": null
+    },
+    {
+      "line": 484,
+      "time": "23:56:23",
+      "request_id": "fce1ff70-493b-6077-b645-5784b50b6752",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "Fight:p2",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 485,
+      "time": "23:56:25",
+      "request_id": "8b422a2d-4927-4c90-2e78-13be421a1aff",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "Fight:p1",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 486,
+      "time": "23:56:29",
+      "request_id": "28819d16-4b0e-5cd4-777c-debaae1117df",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "LookAt:p1",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 487,
+      "time": "23:56:32",
+      "request_id": "04fd3392-4133-229c-3abb-dc8c53250b72",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "StrikeOnce:p2",
+      "model": "gpt-6-luna",
+      "error": "RuntimeError",
+      "current_action": null
+    },
+    {
+      "line": 488,
+      "time": "23:56:36",
+      "request_id": "136e5b2b-4596-578b-7781-d685faeae82e",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "Fight:p1",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 489,
+      "time": "23:56:39",
+      "request_id": "b879025a-4f2f-c251-f191-a1a066be1d42",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "Fight:p1",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 490,
+      "time": "23:56:42",
+      "request_id": "911e935f-4b00-326a-e189-60b6952e830f",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "Flee:p1",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 491,
+      "time": "23:56:44",
+      "request_id": "f6f1ae65-4aa7-0a45-1aa7-c8979f9f4f6f",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "LookAt:p1",
+      "model": "gpt-6-luna",
+      "error": "RuntimeError",
+      "current_action": null
+    },
+    {
+      "line": 492,
+      "time": "23:56:48",
+      "request_id": "328d69fb-4d7b-431b-461e-258e4090799d",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "Wait:-",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 493,
+      "time": "23:56:50",
+      "request_id": "450d1bc6-4006-fe61-8203-4b8b2e66dfe0",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": "LookAt:p1",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 494,
+      "time": "23:56:56",
+      "request_id": "adec3e54-4c71-e655-441c-9aa557974789",
+      "profile_id": "xiumei",
+      "source": "ambient",
+      "chosen": "Wait:-",
+      "model": "gpt-6-luna",
+      "error": null,
+      "current_action": null
+    },
+    {
+      "line": 495,
+      "time": "23:56:58",
+      "request_id": "e012e1aa-4523-967c-4332-9f89d4ebca55",
+      "profile_id": "chunlai",
+      "source": "ambient",
+      "chosen": null,
+      "model": "gpt-6-luna",
+      "error": "RuntimeError",
+      "current_action": null
+    }
+  ],
+  "model_counts": {
+    "gpt-6-luna": 30
+  },
+  "successful_choices": {
+    "LookAt": 7,
+    "Fight": 9,
+    "StrikeOnce": 1,
+    "Flee": 1,
+    "Wait": 2
+  },
+  "dialogue_error_records": 10,
+  "audio": {
+    "host": {
+      "role": 3,
+      "played": 20,
+      "completed": 15,
+      "not_completed": 5,
+      "incomplete_turns": [
+        "7FDFC04C47201418C113D0A0A74A2315",
+        "A5F242794FBBF9C20B2207B825CAA23C",
+        "E7FDEB7E47F31ECA7AFE1B80D8CE5DC9",
+        "DE82977344F8C7B99B4A198CFCBDBC1E",
+        "EFFE2A8F4C05B5326B9AC092B08F703F"
+      ]
+    },
+    "client": {
+      "role": 1,
+      "played": 20,
+      "completed": 15,
+      "not_completed": 5,
+      "incomplete_turns": [
+        "7FDFC04C47201418C113D0A0A74A2315",
+        "A5F242794FBBF9C20B2207B825CAA23C",
+        "E7FDEB7E47F31ECA7AFE1B80D8CE5DC9",
+        "DE82977344F8C7B99B4A198CFCBDBC1E",
+        "EFFE2A8F4C05B5326B9AC092B08F703F"
+      ]
+    }
+  },
+  "tts_completed_sentences_by_voice": {
+    "Uncle_Fu": 11,
+    "Xiaofang_B": 14
+  },
+  "audio_turns": {
+    "9697C5524A3DFE059E5A23B0B150E6F9": {
+      "plays": {
+        "3": {
+          "line": 4104,
+          "utc": "2026.11.14-15.55.20:804"
+        },
+        "1": {
+          "line": 4105,
+          "utc": "2026.11.14-15.55.20:849"
+        }
+      },
+      "finished": {
+        "3": {
+          "line": 4153,
+          "utc": "2026.11.14-15.55.23:990",
+          "consumed": 136320,
+          "total": 136320
+        },
+        "1": {
+          "line": 4154,
+          "utc": "2026.11.14-15.55.24:047",
+          "consumed": 136320,
+          "total": 136320
+        }
+      },
+      "stops": {
+        "1": [
+          {
+            "line": 4176,
+            "utc": "2026.11.14-15.55.24:833"
+          }
+        ]
+      },
+      "cancelled_npc": []
+    },
+    "7FDFC04C47201418C113D0A0A74A2315": {
+      "plays": {
+        "3": {
+          "line": 4161,
+          "utc": "2026.11.14-15.55.24:609"
+        },
+        "1": {
+          "line": 4162,
+          "utc": "2026.11.14-15.55.24:653"
+        }
+      },
+      "finished": {},
+      "stops": {
+        "3": [
+          {
+            "line": 4174,
+            "utc": "2026.11.14-15.55.24:792"
+          }
+        ]
+      },
+      "cancelled_npc": [
+        "BP_ResidentLoud_C_0"
+      ]
+    },
+    "17B316BC464326145CE9709AE9F5F4DB": {
+      "plays": {
+        "3": {
+          "line": 4248,
+          "utc": "2026.11.14-15.55.28:329"
+        },
+        "1": {
+          "line": 4250,
+          "utc": "2026.11.14-15.55.28:371"
+        }
+      },
+      "finished": {
+        "1": {
+          "line": 4317,
+          "utc": "2026.11.14-15.55.31:409",
+          "consumed": 136320,
+          "total": 136320
+        },
+        "3": {
+          "line": 4318,
+          "utc": "2026.11.14-15.55.31:463",
+          "consumed": 136320,
+          "total": 136320
+        }
+      },
+      "stops": {
+        "1": [
+          {
+            "line": 4349,
+            "utc": "2026.11.14-15.55.32:173"
+          }
+        ]
+      },
+      "cancelled_npc": []
+    },
+    "A5F242794FBBF9C20B2207B825CAA23C": {
+      "plays": {
+        "3": {
+          "line": 4322,
+          "utc": "2026.11.14-15.55.31:665"
+        },
+        "1": {
+          "line": 4328,
+          "utc": "2026.11.14-15.55.31:809"
+        }
+      },
+      "finished": {},
+      "stops": {
+        "3": [
+          {
+            "line": 4343,
+            "utc": "2026.11.14-15.55.32:137"
+          },
+          {
+            "line": 4381,
+            "utc": "2026.11.14-15.55.33:566"
+          },
+          {
+            "line": 4429,
+            "utc": "2026.11.14-15.55.34:929"
+          },
+          {
+            "line": 4431,
+            "utc": "2026.11.14-15.55.34:929"
+          },
+          {
+            "line": 4658,
+            "utc": "2026.11.14-15.55.47:527"
+          },
+          {
+            "line": 4668,
+            "utc": "2026.11.14-15.55.48:927"
+          }
+        ],
+        "1": [
+          {
+            "line": 4383,
+            "utc": "2026.11.14-15.55.33:606"
+          },
+          {
+            "line": 4434,
+            "utc": "2026.11.14-15.55.34:968"
+          },
+          {
+            "line": 4435,
+            "utc": "2026.11.14-15.55.34:968"
+          },
+          {
+            "line": 4660,
+            "utc": "2026.11.14-15.55.47:562"
+          },
+          {
+            "line": 4670,
+            "utc": "2026.11.14-15.55.48:965"
+          }
+        ]
+      },
+      "cancelled_npc": [
+        "BP_ResidentLoud_C_0"
+      ]
+    },
+    "4F335D6C42A279F2C1B29F8277DDDBDA": {
+      "plays": {
+        "3": {
+          "line": 4339,
+          "utc": "2026.11.14-15.55.32:135"
+        },
+        "1": {
+          "line": 4351,
+          "utc": "2026.11.14-15.55.32:176"
+        }
+      },
+      "finished": {
+        "3": {
+          "line": 4410,
+          "utc": "2026.11.14-15.55.34:173",
+          "consumed": 86400,
+          "total": 86400
+        },
+        "1": {
+          "line": 4411,
+          "utc": "2026.11.14-15.55.34:217",
+          "consumed": 86400,
+          "total": 86400
+        }
+      },
+      "stops": {},
+      "cancelled_npc": []
+    },
+    "A2B0161C43FF8E396EF252A82D862B23": {
+      "plays": {
+        "3": {
+          "line": 4417,
+          "utc": "2026.11.14-15.55.34:464"
+        },
+        "1": {
+          "line": 4419,
+          "utc": "2026.11.14-15.55.34:506"
+        }
+      },
+      "finished": {
+        "3": {
+          "line": 4446,
+          "utc": "2026.11.14-15.55.36:333",
+          "consumed": 78720,
+          "total": 78720
+        },
+        "1": {
+          "line": 4448,
+          "utc": "2026.11.14-15.55.36:378",
+          "consumed": 78720,
+          "total": 78720
+        }
+      },
+      "stops": {},
+      "cancelled_npc": []
+    },
+    "B62A37F6437733E9DA932ABDDE670EAF": {
+      "plays": {
+        "3": {
+          "line": 4497,
+          "utc": "2026.11.14-15.55.39:369"
+        },
+        "1": {
+          "line": 4498,
+          "utc": "2026.11.14-15.55.39:424"
+        }
+      },
+      "finished": {
+        "3": {
+          "line": 4565,
+          "utc": "2026.11.14-15.55.42:775",
+          "consumed": 151680,
+          "total": 151680
+        },
+        "1": {
+          "line": 4566,
+          "utc": "2026.11.14-15.55.42:817",
+          "consumed": 151680,
+          "total": 151680
+        }
+      },
+      "stops": {
+        "3": [
+          {
+            "line": 4683,
+            "utc": "2026.11.14-15.55.49:891"
+          },
+          {
+            "line": 4687,
+            "utc": "2026.11.14-15.55.49:891"
+          }
+        ],
+        "1": [
+          {
+            "line": 4689,
+            "utc": "2026.11.14-15.55.49:929"
+          },
+          {
+            "line": 4690,
+            "utc": "2026.11.14-15.55.49:929"
+          }
+        ]
+      },
+      "cancelled_npc": [
+        "BP_ResidentShrewd_C_0"
+      ]
+    },
+    "98553D5945AA55EF61D59B9CA9D9F119": {
+      "plays": {
+        "3": {
+          "line": 4692,
+          "utc": "2026.11.14-15.55.49:983"
+        },
+        "1": {
+          "line": 4693,
+          "utc": "2026.11.14-15.55.50:025"
+        }
+      },
+      "finished": {
+        "3": {
+          "line": 4779,
+          "utc": "2026.11.14-15.55.53:314",
+          "consumed": 147840,
+          "total": 147840
+        },
+        "1": {
+          "line": 4781,
+          "utc": "2026.11.14-15.55.53:358",
+          "consumed": 147840,
+          "total": 147840
+        }
+      },
+      "stops": {},
+      "cancelled_npc": []
+    },
+    "EB609930441AC45B3F08FBA2D0EC6D3C": {
+      "plays": {
+        "3": {
+          "line": 4787,
+          "utc": "2026.11.14-15.55.53:594"
+        },
+        "1": {
+          "line": 4788,
+          "utc": "2026.11.14-15.55.53:635"
+        }
+      },
+      "finished": {
+        "1": {
+          "line": 4831,
+          "utc": "2026.11.14-15.55.57:020",
+          "consumed": 155520,
+          "total": 155520
+        },
+        "3": {
+          "line": 4834,
+          "utc": "2026.11.14-15.55.57:070",
+          "consumed": 155520,
+          "total": 155520
+        }
+      },
+      "stops": {
+        "3": [
+          {
+            "line": 4891,
+            "utc": "2026.11.14-15.55.58:985"
+          },
+          {
+            "line": 4910,
+            "utc": "2026.11.14-15.56.00:397"
+          },
+          {
+            "line": 4924,
+            "utc": "2026.11.14-15.56.01:760"
+          },
+          {
+            "line": 4988,
+            "utc": "2026.11.14-15.56.03:870"
+          },
+          {
+            "line": 4992,
+            "utc": "2026.11.14-15.56.03:872"
+          }
+        ],
+        "1": [
+          {
+            "line": 4893,
+            "utc": "2026.11.14-15.55.59:021"
+          },
+          {
+            "line": 4912,
+            "utc": "2026.11.14-15.56.00:436"
+          },
+          {
+            "line": 4926,
+            "utc": "2026.11.14-15.56.01:795"
+          },
+          {
+            "line": 4998,
+            "utc": "2026.11.14-15.56.03:911"
+          },
+          {
+            "line": 4999,
+            "utc": "2026.11.14-15.56.03:911"
+          }
+        ]
+      },
+      "cancelled_npc": [
+        "BP_ResidentLoud_C_0"
+      ]
+    },
+    "9C55A02B4BF024E45651CEB105C835A9": {
+      "plays": {
+        "3": {
+          "line": 4879,
+          "utc": "2026.11.14-15.55.58:644"
+        },
+        "1": {
+          "line": 4880,
+          "utc": "2026.11.14-15.55.58:686"
+        }
+      },
+      "finished": {
+        "1": {
+          "line": 4933,
+          "utc": "2026.11.14-15.56.02:410",
+          "consumed": 170880,
+          "total": 170880
+        },
+        "3": {
+          "line": 4934,
+          "utc": "2026.11.14-15.56.02:464",
+          "consumed": 170880,
+          "total": 170880
+        }
+      },
+      "stops": {},
+      "cancelled_npc": []
+    },
+    "D1459C374C64FD35270CF1AFF27928B5": {
+      "plays": {
+        "3": {
+          "line": 5062,
+          "utc": "2026.11.14-15.56.06:745"
+        },
+        "1": {
+          "line": 5063,
+          "utc": "2026.11.14-15.56.06:786"
+        }
+      },
+      "finished": {
+        "1": {
+          "line": 5121,
+          "utc": "2026.11.14-15.56.10:020",
+          "consumed": 144000,
+          "total": 144000
+        },
+        "3": {
+          "line": 5123,
+          "utc": "2026.11.14-15.56.10:067",
+          "consumed": 144000,
+          "total": 144000
+        }
+      },
+      "stops": {},
+      "cancelled_npc": []
+    },
+    "4E8D3372458C8D29AEBCD5B251106AB5": {
+      "plays": {
+        "3": {
+          "line": 5196,
+          "utc": "2026.11.14-15.56.15:323"
+        },
+        "1": {
+          "line": 5198,
+          "utc": "2026.11.14-15.56.15:363"
+        }
+      },
+      "finished": {
+        "3": {
+          "line": 5251,
+          "utc": "2026.11.14-15.56.17:207",
+          "consumed": 78720,
+          "total": 78720
+        },
+        "1": {
+          "line": 5255,
+          "utc": "2026.11.14-15.56.17:247",
+          "consumed": 78720,
+          "total": 78720
+        }
+      },
+      "stops": {
+        "3": [
+          {
+            "line": 5364,
+            "utc": "2026.11.14-15.56.23:944"
+          },
+          {
+            "line": 5382,
+            "utc": "2026.11.14-15.56.25:330"
+          }
+        ],
+        "1": [
+          {
+            "line": 5366,
+            "utc": "2026.11.14-15.56.23:982"
+          },
+          {
+            "line": 5384,
+            "utc": "2026.11.14-15.56.25:367"
+          }
+        ]
+      },
+      "cancelled_npc": [
+        "BP_ResidentShrewd_C_0"
+      ]
+    },
+    "1E87B7B04B95004B0857F79E9885E6F3": {
+      "plays": {
+        "3": {
+          "line": 5351,
+          "utc": "2026.11.14-15.56.23:452"
+        },
+        "1": {
+          "line": 5353,
+          "utc": "2026.11.14-15.56.23:498"
+        }
+      },
+      "finished": {
+        "3": {
+          "line": 5391,
+          "utc": "2026.11.14-15.56.25:705",
+          "consumed": 97920,
+          "total": 97920
+        },
+        "1": {
+          "line": 5392,
+          "utc": "2026.11.14-15.56.25:749",
+          "consumed": 97920,
+          "total": 97920
+        }
+      },
+      "stops": {
+        "1": [
+          {
+            "line": 5409,
+            "utc": "2026.11.14-15.56.26:145"
+          }
+        ]
+      },
+      "cancelled_npc": []
+    },
+    "E7FDEB7E47F31ECA7AFE1B80D8CE5DC9": {
+      "plays": {
+        "3": {
+          "line": 5397,
+          "utc": "2026.11.14-15.56.26:004"
+        },
+        "1": {
+          "line": 5398,
+          "utc": "2026.11.14-15.56.26:057"
+        }
+      },
+      "finished": {},
+      "stops": {
+        "3": [
+          {
+            "line": 5402,
+            "utc": "2026.11.14-15.56.26:102"
+          }
+        ]
+      },
+      "cancelled_npc": [
+        "BP_ResidentLoud_C_0"
+      ]
+    },
+    "42E461A44BF600B60A5BCA930122B93C": {
+      "plays": {
+        "3": {
+          "line": 5496,
+          "utc": "2026.11.14-15.56.30:000"
+        },
+        "1": {
+          "line": 5497,
+          "utc": "2026.11.14-15.56.30:038"
+        }
+      },
+      "finished": {
+        "3": {
+          "line": 5513,
+          "utc": "2026.11.14-15.56.32:149",
+          "consumed": 90240,
+          "total": 90240
+        },
+        "1": {
+          "line": 5514,
+          "utc": "2026.11.14-15.56.32:190",
+          "consumed": 90240,
+          "total": 90240
+        }
+      },
+      "stops": {},
+      "cancelled_npc": []
+    },
+    "F331A6F44C6C83BBD44C979BDA7F7D67": {
+      "plays": {
+        "3": {
+          "line": 5520,
+          "utc": "2026.11.14-15.56.32:432"
+        },
+        "1": {
+          "line": 5521,
+          "utc": "2026.11.14-15.56.32:473"
+        }
+      },
+      "finished": {
+        "1": {
+          "line": 5591,
+          "utc": "2026.11.14-15.56.35:305",
+          "consumed": 128640,
+          "total": 128640
+        },
+        "3": {
+          "line": 5592,
+          "utc": "2026.11.14-15.56.35:351",
+          "consumed": 128640,
+          "total": 128640
+        }
+      },
+      "stops": {
+        "3": [
+          {
+            "line": 5623,
+            "utc": "2026.11.14-15.56.37:690"
+          },
+          {
+            "line": 5659,
+            "utc": "2026.11.14-15.56.39:088"
+          }
+        ],
+        "1": [
+          {
+            "line": 5626,
+            "utc": "2026.11.14-15.56.37:723"
+          },
+          {
+            "line": 5661,
+            "utc": "2026.11.14-15.56.39:122"
+          }
+        ]
+      },
+      "cancelled_npc": [
+        "BP_ResidentShrewd_C_0"
+      ]
+    },
+    "DE82977344F8C7B99B4A198CFCBDBC1E": {
+      "plays": {
+        "3": {
+          "line": 5614,
+          "utc": "2026.11.14-15.56.37:345"
+        },
+        "1": {
+          "line": 5615,
+          "utc": "2026.11.14-15.56.37:379"
+        }
+      },
+      "finished": {},
+      "stops": {
+        "3": [
+          {
+            "line": 5692,
+            "utc": "2026.11.14-15.56.39:867"
+          }
+        ],
+        "1": [
+          {
+            "line": 5698,
+            "utc": "2026.11.14-15.56.39:905"
+          }
+        ]
+      },
+      "cancelled_npc": [
+        "BP_ResidentLoud_C_0"
+      ]
+    },
+    "18C7C50C4D6F139B613289BB239DB3FA": {
+      "plays": {
+        "3": {
+          "line": 5761,
+          "utc": "2026.11.14-15.56.42:759"
+        },
+        "1": {
+          "line": 5762,
+          "utc": "2026.11.14-15.56.42:799"
+        }
+      },
+      "finished": {
+        "1": {
+          "line": 5822,
+          "utc": "2026.11.14-15.56.45:576",
+          "consumed": 124800,
+          "total": 124800
+        },
+        "3": {
+          "line": 5823,
+          "utc": "2026.11.14-15.56.45:621",
+          "consumed": 124800,
+          "total": 124800
+        }
+      },
+      "stops": {},
+      "cancelled_npc": []
+    },
+    "1CDCD0FA4EEA6C91A9E82A90F3277DDF": {
+      "plays": {
+        "3": {
+          "line": 5871,
+          "utc": "2026.11.14-15.56.51:331"
+        },
+        "1": {
+          "line": 5872,
+          "utc": "2026.11.14-15.56.51:383"
+        }
+      },
+      "finished": {
+        "1": {
+          "line": 5982,
+          "utc": "2026.11.14-15.56.56:166",
+          "consumed": 220800,
+          "total": 220800
+        },
+        "3": {
+          "line": 5983,
+          "utc": "2026.11.14-15.56.56:217",
+          "consumed": 220800,
+          "total": 220800
+        }
+      },
+      "stops": {
+        "3": [
+          {
+            "line": 6054,
+            "utc": "2026.11.14-15.56.58:755"
+          }
+        ]
+      },
+      "cancelled_npc": [
+        "BP_ResidentLoud_C_0"
+      ]
+    },
+    "EFFE2A8F4C05B5326B9AC092B08F703F": {
+      "plays": {
+        "3": {
+          "line": 5992,
+          "utc": "2026.11.14-15.56.56:721"
+        },
+        "1": {
+          "line": 5993,
+          "utc": "2026.11.14-15.56.56:771"
+        }
+      },
+      "finished": {},
+      "stops": {
+        "3": [
+          {
+            "line": 6056,
+            "utc": "2026.11.14-15.56.58:756"
+          }
+        ]
+      },
+      "cancelled_npc": [
+        "BP_ResidentShrewd_C_0"
+      ]
+    }
+  },
+  "hit_count": 20,
+  "hits_by_attacker": {
+    "BP_ResidentShrewd_C_0": 12,
+    "BP_ResidentLoud_C_0": 8
+  },
+  "hits": [
+    {
+      "line": 4166,
+      "utc": "2026.11.14-15.55.24:790",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "2760EA15492FF40AA1BF8E8E80952C00",
+      "distance": "60.9"
+    },
+    {
+      "line": 4259,
+      "utc": "2026.11.14-15.55.28:690",
+      "npc": "BP_ResidentLoud_C_0",
+      "target": "BP_ResidentShrewd_C_0",
+      "punch": "6A0A0D7F49B4DDAACE36F9943B37E071",
+      "distance": "63.7"
+    },
+    {
+      "line": 4294,
+      "utc": "2026.11.14-15.55.29:980",
+      "npc": "BP_ResidentLoud_C_0",
+      "target": "BP_ResidentShrewd_C_0",
+      "punch": "B1C2BA9B43A0C675AC14AFAA1F9AC8A5",
+      "distance": "63.7"
+    },
+    {
+      "line": 4313,
+      "utc": "2026.11.14-15.55.31:371",
+      "npc": "BP_ResidentLoud_C_0",
+      "target": "BP_ResidentShrewd_C_0",
+      "punch": "B93B1ECA454C0C50638CC3AA43B1E2C6",
+      "distance": "63.7"
+    },
+    {
+      "line": 4340,
+      "utc": "2026.11.14-15.55.32:135",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "D491A2634B33C5CC365944AE2B519F09",
+      "distance": "63.7"
+    },
+    {
+      "line": 4379,
+      "utc": "2026.11.14-15.55.33:566",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "20A5B879477E99E1B8A45AA3FB15BC70",
+      "distance": "63.7"
+    },
+    {
+      "line": 4427,
+      "utc": "2026.11.14-15.55.34:928",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "6E4641804BB5C00855CA6B9C6E266962",
+      "distance": "63.7"
+    },
+    {
+      "line": 4656,
+      "utc": "2026.11.14-15.55.47:527",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "44650B4E486E58D4EFB198B9347E5CDD",
+      "distance": "61.1"
+    },
+    {
+      "line": 4666,
+      "utc": "2026.11.14-15.55.48:927",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "D6498BED477D48BFD1DD9FAD130A4361",
+      "distance": "61.1"
+    },
+    {
+      "line": 4681,
+      "utc": "2026.11.14-15.55.49:891",
+      "npc": "BP_ResidentLoud_C_0",
+      "target": "BP_ResidentShrewd_C_0",
+      "punch": "2E9F30144D6D1FEED926089A68A05983",
+      "distance": "61.1"
+    },
+    {
+      "line": 4889,
+      "utc": "2026.11.14-15.55.58:985",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "2E45F9494DB2F904727C0A91087B5882",
+      "distance": "61.1"
+    },
+    {
+      "line": 4908,
+      "utc": "2026.11.14-15.56.00:397",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "434B8B7C4E8DDE4E521069B6D6F56868",
+      "distance": "61.1"
+    },
+    {
+      "line": 4922,
+      "utc": "2026.11.14-15.56.01:760",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "72DAFC414EB6B5979C411EB8FE18301B",
+      "distance": "61.1"
+    },
+    {
+      "line": 4986,
+      "utc": "2026.11.14-15.56.03:870",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "D244B41245DAD4D347DD8EA45A55BF7D",
+      "distance": "61.1"
+    },
+    {
+      "line": 5362,
+      "utc": "2026.11.14-15.56.23:944",
+      "npc": "BP_ResidentLoud_C_0",
+      "target": "BP_ResidentShrewd_C_0",
+      "punch": "1B818CD14A3C610A28DF089507A52B8B",
+      "distance": "60.3"
+    },
+    {
+      "line": 5380,
+      "utc": "2026.11.14-15.56.25:330",
+      "npc": "BP_ResidentLoud_C_0",
+      "target": "BP_ResidentShrewd_C_0",
+      "punch": "F3E60DE34C0E4609CE077B84771A1DAB",
+      "distance": "60.3"
+    },
+    {
+      "line": 5399,
+      "utc": "2026.11.14-15.56.26:102",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "81767CD04DD47A2DC319DBA54025CC0A",
+      "distance": "60.3"
+    },
+    {
+      "line": 5621,
+      "utc": "2026.11.14-15.56.37:690",
+      "npc": "BP_ResidentLoud_C_0",
+      "target": "BP_ResidentShrewd_C_0",
+      "punch": "0CD3D619420E6AEB4C011F8873D11230",
+      "distance": "61.1"
+    },
+    {
+      "line": 5657,
+      "utc": "2026.11.14-15.56.39:088",
+      "npc": "BP_ResidentLoud_C_0",
+      "target": "BP_ResidentShrewd_C_0",
+      "punch": "9EBBAE82410358FD3820E4BFD65AC431",
+      "distance": "61.1"
+    },
+    {
+      "line": 5690,
+      "utc": "2026.11.14-15.56.39:867",
+      "npc": "BP_ResidentShrewd_C_0",
+      "target": "BP_ResidentLoud_C_0",
+      "punch": "0127A89546F960D2A592428A172AD329",
+      "distance": "61.1"
+    }
+  ],
+  "action_results": [
+    {
+      "line": 4167,
+      "utc": "2026.11.14-15.55.24:790",
+      "npc": "64FDBEA4414A4BBB0063FB98E06C02F4",
+      "action": "B3D84CA34A411AEFFFEA2DA7A9BC5590",
+      "result": "Cancelled",
+      "reason": "ReconsiderAfterHit"
+    },
+    {
+      "line": 4171,
+      "utc": "2026.11.14-15.55.24:791",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "DB426E6844C3659B69E17EB45FAD9465",
+      "result": "Cancelled",
+      "reason": "NpcReplyInterrupted"
+    },
+    {
+      "line": 4346,
+      "utc": "2026.11.14-15.55.32:137",
+      "npc": "64FDBEA4414A4BBB0063FB98E06C02F4",
+      "action": "DB356A094C5E4AEBA2ABC3A469CAD170",
+      "result": "Cancelled",
+      "reason": "NpcReplyInterrupted"
+    },
+    {
+      "line": 4433,
+      "utc": "2026.11.14-15.55.34:930",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "020D3AB3434C22D75BEB0582AF1D2E6A",
+      "result": "Succeeded",
+      "reason": "TargetDown"
+    },
+    {
+      "line": 4568,
+      "utc": "2026.11.14-15.55.43:119",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "9BE627524A5AD015B2646FA3AB1D6CFA",
+      "result": "Succeeded",
+      "reason": "None"
+    },
+    {
+      "line": 4685,
+      "utc": "2026.11.14-15.55.49:891",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "6EED2D74470F37EEDC3DBB9E4222C27D",
+      "result": "Cancelled",
+      "reason": "DecisionCancelled"
+    },
+    {
+      "line": 4708,
+      "utc": "2026.11.14-15.55.50:955",
+      "npc": "64FDBEA4414A4BBB0063FB98E06C02F4",
+      "action": "2E9F30144D6D1FEED926089A68A05983",
+      "result": "Succeeded",
+      "reason": "None"
+    },
+    {
+      "line": 4989,
+      "utc": "2026.11.14-15.56.03:872",
+      "npc": "64FDBEA4414A4BBB0063FB98E06C02F4",
+      "action": "2A29A9ED417019B4B728699F89C71943",
+      "result": "Cancelled",
+      "reason": "NpcReplyInterrupted"
+    },
+    {
+      "line": 4995,
+      "utc": "2026.11.14-15.56.03:872",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "9169135C404E9DAC53494F9CBDBA7508",
+      "result": "Succeeded",
+      "reason": "TargetDown"
+    },
+    {
+      "line": 5132,
+      "utc": "2026.11.14-15.56.10:480",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "6C0182A2418C75A69D837B82AE2B94FF",
+      "result": "Succeeded",
+      "reason": "None"
+    },
+    {
+      "line": 5274,
+      "utc": "2026.11.14-15.56.19:118",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "4B2F706141174668D884D2BC1BD3799F",
+      "result": "Succeeded",
+      "reason": "None"
+    },
+    {
+      "line": 5404,
+      "utc": "2026.11.14-15.56.26:103",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "297C191B45E9DC4D1F6363ADB1B2FE4A",
+      "result": "Cancelled",
+      "reason": "NpcReplyInterrupted"
+    },
+    {
+      "line": 5406,
+      "utc": "2026.11.14-15.56.26:103",
+      "npc": "64FDBEA4414A4BBB0063FB98E06C02F4",
+      "action": "7DAD871645D7EC0D46DA35B66AC07531",
+      "result": "Cancelled",
+      "reason": "NpcReplyInterrupted"
+    },
+    {
+      "line": 5563,
+      "utc": "2026.11.14-15.56.33:774",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "761FF7354029DA33A17F22AEE9169D28",
+      "result": "Succeeded",
+      "reason": "None"
+    },
+    {
+      "line": 5694,
+      "utc": "2026.11.14-15.56.39:868",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "B35C28F8468C18CFD22FEAA7B8664305",
+      "result": "Cancelled",
+      "reason": "NpcReplyInterrupted"
+    },
+    {
+      "line": 5696,
+      "utc": "2026.11.14-15.56.39:868",
+      "npc": "64FDBEA4414A4BBB0063FB98E06C02F4",
+      "action": "C084BF82424D7D6179880C9F55955B56",
+      "result": "Cancelled",
+      "reason": "NpcReplyInterrupted"
+    },
+    {
+      "line": 5782,
+      "utc": "2026.11.14-15.56.44:226",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "A75DF98A4382781746DA7DBF0F00A8FA",
+      "result": "Succeeded",
+      "reason": "FleeReachedDistance"
+    },
+    {
+      "line": 5925,
+      "utc": "2026.11.14-15.56.53:419",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "170794AA42AE2295E7C4B09CF5ECE4C8",
+      "result": "Succeeded",
+      "reason": "None"
+    },
+    {
+      "line": 5965,
+      "utc": "2026.11.14-15.56.55:004",
+      "npc": "64FDBEA4414A4BBB0063FB98E06C02F4",
+      "action": "0BF7D5D447D4C5778E71E19F1F7C32A0",
+      "result": "Succeeded",
+      "reason": "None"
+    },
+    {
+      "line": 6050,
+      "utc": "2026.11.14-15.56.58:749",
+      "npc": "461BA32246FC35C0D50B97A2B3CA5099",
+      "action": "F852737F44E035A1C08346AB69DB3531",
+      "result": "Cancelled",
+      "reason": "BehaviorTreeAbort"
+    }
+  ],
+  "issues": [
+    {
+      "line": 4569,
+      "utc": "2026.11.14-15.55.43:244",
+      "event": "LogDeliveryNpcAgent: Decision stale npc=64FDBEA4414A4BBB0063FB98E06C02F4 request=6D7DC0074F78020E3AD6C1820028AD09 active_request=6D7DC0074F78020E3AD6C1820028AD09 cause=NewNpcSpeech event=B62A37F6437733E9DA932ABDDE670EAF"
+    },
+    {
+      "line": 4571,
+      "utc": "2026.11.14-15.55.43:245",
+      "event": "LogTemp: NpcSpeech stream_rejected request=6D7DC0074F78020E3AD6C1820028AD09 reason=RejectedProposal"
+    },
+    {
+      "line": 4914,
+      "utc": "2026.11.14-15.56.00:800",
+      "event": "LogDeliveryNpcAgent: Decision stale npc=64FDBEA4414A4BBB0063FB98E06C02F4 request=E15692BC4AB78475BF8F3B82A635C61A active_request=E15692BC4AB78475BF8F3B82A635C61A cause=NewNpcSpeech event=9169135C404E9DAC53494F9CBDBA7508"
+    },
+    {
+      "line": 4916,
+      "utc": "2026.11.14-15.56.00:800",
+      "event": "LogTemp: NpcSpeech stream_rejected request=E15692BC4AB78475BF8F3B82A635C61A reason=RejectedProposal"
+    },
+    {
+      "line": 5149,
+      "utc": "2026.11.14-15.56.12:663",
+      "event": "LogDeliveryNpcAgent: Decision stale npc=64FDBEA4414A4BBB0063FB98E06C02F4 request=F04B8A5942FC8CC979E4539122228441 active_request=F04B8A5942FC8CC979E4539122228441 cause=NewNpcSpeech event=D1459C374C64FD35270CF1AFF27928B5"
+    },
+    {
+      "line": 5151,
+      "utc": "2026.11.14-15.56.12:663",
+      "event": "LogTemp: NpcSpeech stream_rejected request=F04B8A5942FC8CC979E4539122228441 reason=RejectedProposal"
+    },
+    {
+      "line": 5257,
+      "utc": "2026.11.14-15.56.17:786",
+      "event": "LogDeliveryNpcAgent: Decision stale npc=64FDBEA4414A4BBB0063FB98E06C02F4 request=FDBBEFF84ECF625EEE6D13A9CBBFCF1B active_request=FDBBEFF84ECF625EEE6D13A9CBBFCF1B cause=NewNpcSpeech event=4B2F706141174668D884D2BC1BD3799F"
+    },
+    {
+      "line": 5259,
+      "utc": "2026.11.14-15.56.17:787",
+      "event": "LogTemp: NpcSpeech stream_rejected request=FDBBEFF84ECF625EEE6D13A9CBBFCF1B reason=RejectedProposal"
+    },
+    {
+      "line": 5523,
+      "utc": "2026.11.14-15.56.32:655",
+      "event": "LogDeliveryNpcAgent: Decision stale npc=64FDBEA4414A4BBB0063FB98E06C02F4 request=04FD33924133229C3ABBDC8C53250B72 active_request=04FD33924133229C3ABBDC8C53250B72 cause=NewNpcSpeech event=761FF7354029DA33A17F22AEE9169D28"
+    },
+    {
+      "line": 5525,
+      "utc": "2026.11.14-15.56.32:656",
+      "event": "LogTemp: NpcSpeech stream_rejected request=04FD33924133229C3ABBDC8C53250B72 reason=RejectedProposal"
+    },
+    {
+      "line": 5787,
+      "utc": "2026.11.14-15.56.44:784",
+      "event": "LogDeliveryNpcAgent: Decision stale npc=64FDBEA4414A4BBB0063FB98E06C02F4 request=F6F1AE654AA70A451AA7C8979F9F4F6F active_request=F6F1AE654AA70A451AA7C8979F9F4F6F cause=NewNpcSpeech event=A75DF98A4382781746DA7DBF0F00A8FA"
+    },
+    {
+      "line": 5789,
+      "utc": "2026.11.14-15.56.44:784",
+      "event": "LogTemp: NpcSpeech stream_rejected request=F6F1AE654AA70A451AA7C8979F9F4F6F reason=RejectedProposal"
+    }
+  ],
+  "backend_terminal_events": [
+    {
+      "line": 55,
+      "request_id": "4a00ddef-4c21-c2a8-2dc4-cc8943438e00",
+      "stage": "model_selected",
+      "source": "player",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 66,
+      "request_id": "4a00ddef-4c21-c2a8-2dc4-cc8943438e00",
+      "stage": "model_completed",
+      "elapsed_ms": 3213
+    },
+    {
+      "line": 72,
+      "request_id": "b3fe4686-48ab-854e-d1f9-4ba38695e524",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 88,
+      "request_id": "b3fe4686-48ab-854e-d1f9-4ba38695e524",
+      "stage": "model_completed",
+      "elapsed_ms": 3134
+    },
+    {
+      "line": 99,
+      "request_id": "431ece0d-44ab-909f-2c73-bcb72a8efe49",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 110,
+      "request_id": "431ece0d-44ab-909f-2c73-bcb72a8efe49",
+      "stage": "model_completed",
+      "elapsed_ms": 2468
+    },
+    {
+      "line": 116,
+      "request_id": "63c603fa-4248-02f2-8659-eebd3b3cbb49",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 124,
+      "request_id": "63c603fa-4248-02f2-8659-eebd3b3cbb49",
+      "stage": "model_connection_cancel_requested",
+      "connection_ms": 811,
+      "elapsed_ms": 813
+    },
+    {
+      "line": 126,
+      "request_id": "63c603fa-4248-02f2-8659-eebd3b3cbb49",
+      "stage": "model_connection_cancel_terminal_interrupted",
+      "connection_ms": 886,
+      "elapsed_ms": 888
+    },
+    {
+      "line": 134,
+      "request_id": "614c3570-4103-e7d4-6391-9093b8be7cbd",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 145,
+      "request_id": "614c3570-4103-e7d4-6391-9093b8be7cbd",
+      "stage": "model_completed",
+      "elapsed_ms": 2355
+    },
+    {
+      "line": 153,
+      "request_id": "f06be1ee-403d-0fbb-6d07-96aad8787926",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 160,
+      "request_id": "f06be1ee-403d-0fbb-6d07-96aad8787926",
+      "stage": "model_connection_cancel_requested",
+      "connection_ms": 187,
+      "elapsed_ms": 192
+    },
+    {
+      "line": 162,
+      "request_id": "f06be1ee-403d-0fbb-6d07-96aad8787926",
+      "stage": "model_connection_cancel_terminal_interrupted",
+      "connection_ms": 190,
+      "elapsed_ms": 194
+    },
+    {
+      "line": 170,
+      "request_id": "a9ec61e7-42ab-ca92-7a5c-93adc27a1c23",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 176,
+      "request_id": "a9ec61e7-42ab-ca92-7a5c-93adc27a1c23",
+      "stage": "model_connection_cancel_requested",
+      "connection_ms": 2234,
+      "elapsed_ms": 2237
+    },
+    {
+      "line": 178,
+      "request_id": "a9ec61e7-42ab-ca92-7a5c-93adc27a1c23",
+      "stage": "model_connection_cancel_terminal_interrupted",
+      "connection_ms": 2235,
+      "elapsed_ms": 2238
+    },
+    {
+      "line": 184,
+      "request_id": "74e8ef88-4f12-cbed-99e2-2aaae40de532",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 195,
+      "request_id": "74e8ef88-4f12-cbed-99e2-2aaae40de532",
+      "stage": "model_completed",
+      "elapsed_ms": 2436
+    },
+    {
+      "line": 203,
+      "request_id": "6d7dc007-4f78-020e-3ad6-c1820028ad09",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 213,
+      "request_id": "6d7dc007-4f78-020e-3ad6-c1820028ad09",
+      "stage": "model_completed",
+      "elapsed_ms": 2516
+    },
+    {
+      "line": 221,
+      "request_id": "f08c74b5-46c1-801a-7a4c-69871eb42ddd",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 229,
+      "request_id": "f08c74b5-46c1-801a-7a4c-69871eb42ddd",
+      "stage": "model_completed",
+      "elapsed_ms": 3393
+    },
+    {
+      "line": 236,
+      "request_id": "b20d16f6-4ea1-af99-f857-3a927a9d6c52",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 247,
+      "request_id": "b20d16f6-4ea1-af99-f857-3a927a9d6c52",
+      "stage": "model_completed",
+      "elapsed_ms": 2903
+    },
+    {
+      "line": 257,
+      "request_id": "f270dd00-4705-975a-224d-3f9335f7d434",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 268,
+      "request_id": "f270dd00-4705-975a-224d-3f9335f7d434",
+      "stage": "model_completed",
+      "elapsed_ms": 2570
+    },
+    {
+      "line": 274,
+      "request_id": "e15692bc-4ab7-8475-bf8f-3b82a635c61a",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 284,
+      "request_id": "e15692bc-4ab7-8475-bf8f-3b82a635c61a",
+      "stage": "model_connection_cancel_requested",
+      "connection_ms": 2473,
+      "elapsed_ms": 2475
+    },
+    {
+      "line": 286,
+      "request_id": "e15692bc-4ab7-8475-bf8f-3b82a635c61a",
+      "stage": "model_connection_cancel_terminal_interrupted",
+      "connection_ms": 2475,
+      "elapsed_ms": 2477
+    },
+    {
+      "line": 292,
+      "request_id": "79a14528-465e-25c6-a7e4-5ea801835b4f",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 302,
+      "request_id": "79a14528-465e-25c6-a7e4-5ea801835b4f",
+      "stage": "model_connection_cancel_requested",
+      "connection_ms": 2525,
+      "elapsed_ms": 2526
+    },
+    {
+      "line": 304,
+      "request_id": "79a14528-465e-25c6-a7e4-5ea801835b4f",
+      "stage": "model_connection_cancel_terminal_interrupted",
+      "connection_ms": 2536,
+      "elapsed_ms": 2538
+    },
+    {
+      "line": 310,
+      "request_id": "d5634b2f-430c-eb3e-748c-61a06027fee3",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 321,
+      "request_id": "d5634b2f-430c-eb3e-748c-61a06027fee3",
+      "stage": "model_completed",
+      "elapsed_ms": 2345
+    },
+    {
+      "line": 329,
+      "request_id": "f04b8a59-42fc-8cc9-79e4-539122228441",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 340,
+      "request_id": "f04b8a59-42fc-8cc9-79e4-539122228441",
+      "stage": "model_connection_cancel_requested",
+      "connection_ms": 2962,
+      "elapsed_ms": 2969
+    },
+    {
+      "line": 342,
+      "request_id": "f04b8a59-42fc-8cc9-79e4-539122228441",
+      "stage": "model_connection_cancel_terminal_interrupted",
+      "connection_ms": 2973,
+      "elapsed_ms": 2979
+    },
+    {
+      "line": 347,
+      "request_id": "13956eb9-4ca2-6fa4-8051-2db338e2a953",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 358,
+      "request_id": "13956eb9-4ca2-6fa4-8051-2db338e2a953",
+      "stage": "model_completed",
+      "elapsed_ms": 2316
+    },
+    {
+      "line": 364,
+      "request_id": "fdbbeff8-4ecf-625e-ee6d-13a9cbbfcf1b",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 375,
+      "request_id": "fdbbeff8-4ecf-625e-ee6d-13a9cbbfcf1b",
+      "stage": "model_connection_cancel_requested",
+      "connection_ms": 2759,
+      "elapsed_ms": 2762
+    },
+    {
+      "line": 377,
+      "request_id": "fdbbeff8-4ecf-625e-ee6d-13a9cbbfcf1b",
+      "stage": "model_connection_cancel_terminal_interrupted",
+      "connection_ms": 2771,
+      "elapsed_ms": 2774
+    },
+    {
+      "line": 383,
+      "request_id": "fce1ff70-493b-6077-b645-5784b50b6752",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 394,
+      "request_id": "fce1ff70-493b-6077-b645-5784b50b6752",
+      "stage": "model_completed",
+      "elapsed_ms": 3244
+    },
+    {
+      "line": 400,
+      "request_id": "8b422a2d-4927-4c90-2e78-13be421a1aff",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 415,
+      "request_id": "8b422a2d-4927-4c90-2e78-13be421a1aff",
+      "stage": "model_completed",
+      "elapsed_ms": 2422
+    },
+    {
+      "line": 424,
+      "request_id": "28819d16-4b0e-5cd4-777c-debaae1117df",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 435,
+      "request_id": "28819d16-4b0e-5cd4-777c-debaae1117df",
+      "stage": "model_completed",
+      "elapsed_ms": 3325
+    },
+    {
+      "line": 441,
+      "request_id": "04fd3392-4133-229c-3abb-dc8c53250b72",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 454,
+      "request_id": "04fd3392-4133-229c-3abb-dc8c53250b72",
+      "stage": "model_connection_cancel_requested",
+      "connection_ms": 3001,
+      "elapsed_ms": 3004
+    },
+    {
+      "line": 456,
+      "request_id": "04fd3392-4133-229c-3abb-dc8c53250b72",
+      "stage": "model_connection_cancel_terminal_interrupted",
+      "connection_ms": 3003,
+      "elapsed_ms": 3005
+    },
+    {
+      "line": 462,
+      "request_id": "136e5b2b-4596-578b-7781-d685faeae82e",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 473,
+      "request_id": "136e5b2b-4596-578b-7781-d685faeae82e",
+      "stage": "model_completed",
+      "elapsed_ms": 2239
+    },
+    {
+      "line": 479,
+      "request_id": "b879025a-4f2f-c251-f191-a1a066be1d42",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 492,
+      "request_id": "b879025a-4f2f-c251-f191-a1a066be1d42",
+      "stage": "model_completed",
+      "elapsed_ms": 2531
+    },
+    {
+      "line": 500,
+      "request_id": "911e935f-4b00-326a-e189-60b6952e830f",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 511,
+      "request_id": "911e935f-4b00-326a-e189-60b6952e830f",
+      "stage": "model_completed",
+      "elapsed_ms": 2347
+    },
+    {
+      "line": 517,
+      "request_id": "f6f1ae65-4aa7-0a45-1aa7-c8979f9f4f6f",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 529,
+      "request_id": "f6f1ae65-4aa7-0a45-1aa7-c8979f9f4f6f",
+      "stage": "model_connection_cancel_requested",
+      "connection_ms": 2487,
+      "elapsed_ms": 2490
+    },
+    {
+      "line": 531,
+      "request_id": "f6f1ae65-4aa7-0a45-1aa7-c8979f9f4f6f",
+      "stage": "model_connection_cancel_terminal_interrupted",
+      "connection_ms": 2489,
+      "elapsed_ms": 2492
+    },
+    {
+      "line": 537,
+      "request_id": "328d69fb-4d7b-431b-461e-258e4090799d",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 545,
+      "request_id": "328d69fb-4d7b-431b-461e-258e4090799d",
+      "stage": "model_completed",
+      "elapsed_ms": 2404
+    },
+    {
+      "line": 552,
+      "request_id": "450d1bc6-4006-fe61-8203-4b8b2e66dfe0",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 562,
+      "request_id": "450d1bc6-4006-fe61-8203-4b8b2e66dfe0",
+      "stage": "model_completed",
+      "elapsed_ms": 2466
+    },
+    {
+      "line": 571,
+      "request_id": "adec3e54-4c71-e655-441c-9aa557974789",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 582,
+      "request_id": "adec3e54-4c71-e655-441c-9aa557974789",
+      "stage": "model_completed",
+      "elapsed_ms": 2961
+    },
+    {
+      "line": 588,
+      "request_id": "e012e1aa-4523-967c-4332-9f89d4ebca55",
+      "stage": "model_selected",
+      "source": "ambient",
+      "model": "gpt-6-luna"
+    },
+    {
+      "line": 596,
+      "request_id": "e012e1aa-4523-967c-4332-9f89d4ebca55",
+      "stage": "model_connection_cancel_requested",
+      "connection_ms": 2197,
+      "elapsed_ms": 2199
+    },
+    {
+      "line": 598,
+      "request_id": "e012e1aa-4523-967c-4332-9f89d4ebca55",
+      "stage": "model_connection_cancel_terminal_interrupted",
+      "connection_ms": 2198,
+      "elapsed_ms": 2201
+    }
+  ],
+  "limitations": [
+    "No sound-card capture or listening judgement; audio completion means logged nonzero PCM consumed equals total.",
+    "Both voice identities appear in backend synthesis. General UE playback lines lack speaker/voice fields, so per-voice host/client completion totals are not invented.",
+    "Each endpoint played 20 sentence turns and completed 15. Four other turns have server interruption records; the final female turn overlaps PIE teardown. Client stop logs sometimes reference the previous turn for the same reply; incomplete counts are definite, individual client cancellation reasons are not all directly logged.",
+    "First player reply had three generated sentences, but sentence two was interrupted by a real punch and sentence three was not played. Do not describe the full player answer as completely spoken.",
+    "Fight choices, 20 physical hit results, TargetDown and FleeReachedDistance were logged; this does not establish complete pursuit/flee visual acceptance.",
+    "Model RuntimeError rows coincide with cancellation/stale paths; they are not automatically model failures. All actual model selections here were Luna, not Q4.",
+    "Single actual Send does not establish a two-or-three-turn provocation success rate."
+  ]
+}

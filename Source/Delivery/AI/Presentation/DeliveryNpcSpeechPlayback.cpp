@@ -6,7 +6,10 @@
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Conversation/DeliveryConversationComponent.h"
+#include "AI/Companion/DeliveryCompanionCharacter.h"
+#include "AI/Companion/DeliveryCompanionComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 #include "Audio/DeliveryDialogueVoiceComponent.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundWaveProcedural.h"
@@ -16,23 +19,127 @@
 #include "Async/Async.h"
 #include "VoiceModule.h"
 
-void UDeliveryNpcPresentationComponent::BeginReply(FGuid ActionId, FGuid MessageId, int32 Depth)
+void UDeliveryNpcPresentationComponent::BeginReply(FGuid ActionId, FGuid MessageId, int32 Depth,AActor* Listener)
 {
-    if (!GetOwner()->HasAuthority()) return;
-    CancelSpeech();
+    if (!GetOwner()->HasAuthority() || !ActionId.IsValid() || HasReply(ActionId)) return;
+    const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    if (Npc && !Npc->Agent->CanRetainReplySpeech(ActionId)) return;
+    const auto State=Npc?Npc->Agent->GetPublicState():FDeliveryNpcPublicState();
+    const FGuid OriginalHead=ReplyAction;
+    const FGuid OriginalSpeech=Speech.TurnId;
+    if (ReplyAction.IsValid() || Speech.bActive)
+    {
+        // 同一请求者可以更新待播内容，另一玩家的回复不能被无条件覆盖
+        if (PendingReply.ReplyId.IsValid())
+        {
+            if (!Npc || !Npc->Agent->CanReplacePendingReply(PendingReply.ReplyId,ActionId)) return;
+            DiscardPendingReply();
+            if (!IsValid(Npc) || Npc->IsActorBeingDestroyed() || !Npc->Agent->CanRetainReplySpeech(ActionId)) return;
+            if (PendingReply.ReplyId.IsValid() || ReplyAction!=OriginalHead || Speech.TurnId!=OriginalSpeech) return;
+        }
+        PendingReply.ReplyId=ActionId; PendingReply.MessageId=MessageId; PendingReply.Depth=FMath::Clamp(Depth,0,3);
+        PendingReply.ActionId=State.ActionId; PendingReply.Target=State.Target;
+        PendingReply.Listener=Listener?Listener:State.SpeechTarget.Get();
+        return;
+    }
+    if (ReplyAction.IsValid() || Speech.bActive || PendingReply.ReplyId.IsValid()) CancelSpeech();
     Sentences.Reset(); SpokenReply.Reset(); NextSentence=0; ExpectedSentences=INDEX_NONE;
     ReplyAction=ActionId; ReplyMessage=MessageId;
+    ReplyGameplayAction=State.ActionId; ReplyTarget=State.Target; bReplyHadTarget=IsValid(State.Target);
     SpeechDepth=FMath::Clamp(Depth,0,3);
     GetOwner()->ForceNetUpdate();
-    if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()))
-        ReplyListener=Npc->Agent->GetPublicState().SpeechTarget;
+    ReplyListener=Listener?Listener:State.SpeechTarget.Get();
+}
+
+void UDeliveryNpcPresentationComponent::DiscardPendingReply()
+{
+    const FGuid Removed=PendingReply.ReplyId;
+    PendingReply={};
+    if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->Agent->CancelReply(Removed);
+}
+
+void UDeliveryNpcPresentationComponent::CancelReply(FGuid ReplyId)
+{
+    CancelReplies({ReplyId});
+}
+
+void UDeliveryNpcPresentationComponent::CancelReplies(const TArray<FGuid>& ReplyIds)
+{
+    if (!GetOwner()->HasAuthority() || ReplyIds.IsEmpty()) return;
+    if (ReplyIds.Contains(PendingReply.ReplyId)) DiscardPendingReply();
+    FDeliveryNpcPendingReply Waiting=MoveTemp(PendingReply);
+    PendingReply={};
+    if (ReplyIds.Contains(ReplyAction) || ReplyIds.Contains(Speech.ActionId) ||
+        (!Speech.ActionId.IsValid() && ReplyIds.Contains(Speech.TurnId))) CancelSpeech(false,true);
+    // 即使旧回复已离开服务器播放队首，远端仍须可靠地收到该 ReplyId 的取消
+    for (const FGuid& ReplyId:ReplyIds) if (ReplyId.IsValid()) StopStreamSpeech(ReplyId,false);
+    if (!IsValid(this) || !IsValid(GetOwner()) || GetOwner()->IsActorBeingDestroyed()) return;
+    if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()); Npc && Waiting.ReplyId.IsValid())
+    {
+        if (!PendingReply.ReplyId.IsValid() && Npc->Agent->CanRetainReplySpeech(Waiting.ReplyId)) PendingReply=MoveTemp(Waiting);
+        else if (PendingReply.ReplyId!=Waiting.ReplyId) Npc->Agent->CancelReply(Waiting.ReplyId);
+    }
+    if (!ReplyAction.IsValid()) PromotePendingReply();
+}
+
+void UDeliveryNpcPresentationComponent::SetReplySentenceCount(FGuid ReplyId,int32 Count)
+{
+    if (!GetOwner()->HasAuthority() || !ReplyId.IsValid() || Count<0 || Count>3) return;
+    if (Count==0) LastSilentReply=ReplyId;
+    if (ReplyId==ReplyAction) ExpectedSentences=Count;
+    else if (ReplyId==PendingReply.ReplyId) PendingReply.SentenceCount=Count;
+}
+
+void UDeliveryNpcPresentationComponent::PromotePendingReply()
+{
+    if (!PendingReply.ReplyId.IsValid() || Speech.bActive) return;
+    if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()); Npc && !Npc->Agent->CanRetainReplySpeech(PendingReply.ReplyId))
+    { DiscardPendingReply(); return; }
+    // A→B→A 的子回复不能在 A 首句结束时挤掉仍未播完的祖先
+    if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+        Npc && !Npc->Agent->CanStartReplyMessageAudio(PendingReply.ReplyId)) return;
+    FDeliveryNpcPendingReply Waiting=MoveTemp(PendingReply);
+    PendingReply={};
+    // 当前句已经说完，只记下已经播出的内容；其余旧台词不再播放
+    CancelSpeech(true);
+    if (!IsValid(this) || !IsValid(GetOwner()) || GetOwner()->IsActorBeingDestroyed()) return;
+    if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()); Npc && !Npc->Agent->CanRetainReplySpeech(Waiting.ReplyId)) return;
+    if (ReplyAction.IsValid() || Speech.bActive || PendingReply.ReplyId.IsValid())
+    {
+        if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->Agent->CancelReply(Waiting.ReplyId);
+        return;
+    }
+    BeginReply(Waiting.ReplyId,Waiting.MessageId,Waiting.Depth,Waiting.Listener.Get());
+    if (Waiting.CompleteReply.ReplyId.IsValid()) { QueueCompleteReply(Waiting.CompleteReply); return; }
+    for (int32 Sequence=0;Sequence<3;++Sequence)
+    {
+        if (const auto* Whole=Waiting.Whole.Find(Sequence)) QueueSentence(Waiting.ReplyId,Waiting.MessageId,*Whole);
+        if (const auto* Begin=Waiting.Begins.Find(Sequence))
+        {
+            BeginSentenceAudio(Waiting.ReplyId,Waiting.MessageId,*Begin);
+            if (const auto* Parts=Waiting.Chunks.Find(Sequence))
+                for (const auto& Part:*Parts) AppendSentenceAudio(Waiting.ReplyId,Waiting.MessageId,Part);
+            if (const auto* End=Waiting.Ends.Find(Sequence)) EndSentenceAudio(Waiting.ReplyId,Waiting.MessageId,*End);
+        }
+    }
+    if (Waiting.SentenceCount!=INDEX_NONE) SetReplySentenceCount(Waiting.ReplyId,Waiting.SentenceCount);
+    if (Waiting.bTransferFinished) FinishSentences(Waiting.ReplyId,Waiting.SentenceCount);
 }
 
 void UDeliveryNpcPresentationComponent::QueueSentence(FGuid ActionId, FGuid MessageId, const FDeliveryNpcSentence& Sentence)
 {
+    if (GetOwner()->HasAuthority() && ActionId.IsValid() && ActionId==PendingReply.ReplyId && MessageId==PendingReply.MessageId)
+    {
+        if (Sentence.Sequence>=0 && Sentence.Sequence<3 && !PendingReply.Whole.Contains(Sentence.Sequence) &&
+            !PendingReply.Begins.Contains(Sentence.Sequence) && Sentence.Pcm.Num()<=DeliveryNpcVoice::GetMaxPcmBytes(Sentence.SampleRate) && Sentence.Pcm.Num()%2==0 &&
+            !Sentence.Text.IsEmpty() && Sentence.Text.Len()<=120 &&
+            (PendingReply.SentenceCount==INDEX_NONE || Sentence.Sequence<PendingReply.SentenceCount))
+            PendingReply.Whole.Add(Sentence.Sequence,Sentence);
+        return;
+    }
     if (!GetOwner()->HasAuthority() || ActionId!=ReplyAction || MessageId!=ReplyMessage ||
         Sentence.Sequence<NextSentence || Sentence.Sequence>2 || Sentences.Contains(Sentence.Sequence) || GeneratingSentences.Contains(Sentence.Sequence) ||
-        Sentence.Pcm.Num()>384000 || Sentence.Pcm.Num()%2 || Sentence.Text.IsEmpty()) return;
+        Sentence.Pcm.Num()>DeliveryNpcVoice::GetMaxPcmBytes(Sentence.SampleRate) || Sentence.Pcm.Num()%2 || Sentence.Text.IsEmpty()) return;
     const double SubmitStarted=FPlatformTime::Seconds();
     Sentences.Add(Sentence.Sequence,Sentence);
     if (Sentence.Pcm.IsEmpty())
@@ -69,6 +176,19 @@ void UDeliveryNpcPresentationComponent::QueueSentence(FGuid ActionId, FGuid Mess
 
 void UDeliveryNpcPresentationComponent::FinishSentences(FGuid ActionId, int32 Count)
 {
+    if (GetOwner()->HasAuthority() && ActionId.IsValid() && ActionId==PendingReply.ReplyId)
+    {
+        if (Count<0 || Count>3 || (PendingReply.SentenceCount!=INDEX_NONE && PendingReply.SentenceCount!=Count))
+        { DiscardPendingReply(); return; }
+        for (int32 Index=0;Index<Count;++Index)
+            if (!PendingReply.Whole.Contains(Index) && !PendingReply.Ends.Contains(Index)) { DiscardPendingReply(); return; }
+        for (const auto& Pair:PendingReply.Whole)
+            if (Pair.Key>=Count) { DiscardPendingReply(); return; }
+        for (const auto& Pair:PendingReply.Begins)
+            if (Pair.Key>=Count) { DiscardPendingReply(); return; }
+        PendingReply.SentenceCount=Count; PendingReply.bTransferFinished=true;
+        return;
+    }
     if (!GetOwner()->HasAuthority() || ActionId!=ReplyAction) return;
     // 检查本次回复是否收齐，缺少句子时取消播放
     if (Count<NextSentence || Count>3) { CancelSpeech(); return; }
@@ -81,33 +201,63 @@ void UDeliveryNpcPresentationComponent::FinishSentences(FGuid ActionId, int32 Co
     ExpectedSentences=Count;
 }
 
+void UDeliveryNpcPresentationComponent::TrimVoiceCache()
+{
+    const double Now=FPlatformTime::Seconds();
+    for (auto It=ServerVoices.CreateIterator();It;++It)
+        if (It.Value().ExpiresAt>0 && Now>=It.Value().ExpiresAt) It.RemoveCurrent();
+    // 最多保留三句已经说完的声音，当前正在播放的一句另由播放状态管理
+    while (true)
+    {
+        int32 Completed=0;
+        FGuid Oldest;
+        double OldestExpiry=TNumericLimits<double>::Max();
+        for (const auto& Entry:ServerVoices)
+            if (Entry.Value.ExpiresAt>0)
+            {
+                ++Completed;
+                if (Entry.Value.ExpiresAt<OldestExpiry) { Oldest=Entry.Key; OldestExpiry=Entry.Value.ExpiresAt; }
+            }
+        if (Completed<=3) break;
+        ServerVoices.Remove(Oldest);
+    }
+}
+
 void UDeliveryNpcPresentationComponent::TickSentences()
 {
     auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
     if (!Npc) return;
-    for (auto It=ServerVoices.CreateIterator();It;++It)
-        if (It.Value().ExpiresAt>0 && FPlatformTime::Seconds()>It.Value().ExpiresAt) It.RemoveCurrent();
+    TrimVoiceCache();
+    // 流式父回复上一帧结束后队首已空，子回复仍须有提升机会
+    if (GetOwner()->HasAuthority() && !ReplyAction.IsValid() && !Speech.bActive && PendingReply.ReplyId.IsValid())
+    {
+        PromotePendingReply();
+        if (!IsValid(this) || !IsValid(Npc) || Npc->IsActorBeingDestroyed()) return;
+    }
     if (GetOwner()->HasAuthority() && ReplyAction.IsValid())
     {
-        const auto State=Npc->Agent->GetPublicState();
-        if (State.ActionId!=ReplyAction || State.Status==EDeliveryNpcActionStatus::Cancelled ||
-            State.Status==EDeliveryNpcActionStatus::Failed ||
-            (Npc->IsKnockedDown() && !Npc->Combat->IsDeliberatelyProne())) { CancelSpeech(); return; }
+        if (!Npc->Agent->CanRetainReplySpeech(ReplyAction)) { CancelReply(ReplyAction); return; }
+        if (Npc->IsKnockedDown() && !Npc->Combat->IsDeliberatelyProne()) { CancelSpeech(); return; }
+        if (DeferredCompleteReply.ReplyId.IsValid())
+        { StartDeferredCompleteReply(); return; }
         FinishSentence();
-        if (!Speech.bActive && ExpectedSentences==NextSentence &&
-            (ExpectedSentences>0 || State.Status==EDeliveryNpcActionStatus::Succeeded))
+        if (!Speech.bActive && PendingReply.ReplyId.IsValid()) PromotePendingReply();
+        if (!Speech.bActive && ExpectedSentences==NextSentence)
         {
             RecordSpokenReply(true);
+            const FGuid CompletedReply=ReplyAction;
             ReplyAction.Invalidate(); ReplyMessage.Invalidate();
+            Npc->Agent->FinishReplyPlayback(CompletedReply);
             GetOwner()->ForceNetUpdate();
         }
-        else if (!Speech.bActive && (State.Status==EDeliveryNpcActionStatus::Running || State.Status==EDeliveryNpcActionStatus::Succeeded))
+        else if (!Speech.bActive && Npc->Agent->CanStartReplySpeech(ReplyAction))
         {
             FDeliveryNpcSentence Sentence;FDeliveryNpcEncodedSentence Encoded;
             if (!TryStartGeneratedSentence() && EncodedSentences.Contains(NextSentence) && Sentences.RemoveAndCopyValue(NextSentence,Sentence))
             {
                 EncodedSentences.RemoveAndCopyValue(NextSentence,Encoded);
                 Speech={}; Speech.TurnId=FGuid::NewGuid(); Speech.ActionId=ReplyAction; Speech.ReplyToEventId=ReplyMessage;
+                Speech.RadioListener=ResolveRadioListener(ReplyMessage);
                 Speech.Sequence=NextSentence++; Speech.Text=Sentence.Text; Speech.Emotion=Sentence.Emotion;
                 Speech.SampleRate=Sentence.SampleRate;
                 SendingAudio=MoveTemp(Encoded.Audio); SendingOffset=0;
@@ -130,6 +280,7 @@ void UDeliveryNpcPresentationComponent::TickSentences()
                 if (!SendingAudio.IsEmpty())
                 {
                     auto& SavedVoice=ServerVoices.Add(Speech.TurnId);
+                    SavedVoice.RadioListener=Speech.RadioListener;
                     SavedVoice.Pcm=Sentence.Pcm;
                     SavedVoice.Encoded=SendingAudio;
                 }
@@ -186,12 +337,56 @@ void UDeliveryNpcPresentationComponent::TickSentences()
     if (GetNetMode()!=NM_DedicatedServer) PlayRecordedVoice();
 }
 
+APlayerState* UDeliveryNpcPresentationComponent::ResolveRadioListener(FGuid MessageId) const
+{
+    const auto* Companion=Cast<ADeliveryCompanionCharacter>(GetOwner());
+    if (!IsValid(Companion) || !Companion->HasAuthority() || Companion->IsActorBeingDestroyed() ||
+        !Companion->Companion || !MessageId.IsValid()) return nullptr;
+    auto* Listener=Companion->Companion->GetOwnerPlayerState();
+    if (!IsValid(Listener) || !GetWorld()) return nullptr;
+    for (auto It=GetWorld()->GetPlayerControllerIterator();It;++It)
+    {
+        const auto* Player=It->Get();
+        if (!IsRadioListenerForPlayer(Player,Listener)) continue;
+        const auto* Conversation=Player->FindComponentByClass<UDeliveryConversationComponent>();
+        if (Conversation && Conversation->IsVoiceReplyMessage(MessageId,Companion)) return Listener;
+    }
+    return nullptr;
+}
+
+bool UDeliveryNpcPresentationComponent::IsRadioListenerForPlayer(const APlayerController* Player,const APlayerState* Listener) const
+{
+    const auto* Companion=Cast<ADeliveryCompanionCharacter>(GetOwner());
+    return IsValid(Companion) && !Companion->IsActorBeingDestroyed() && Companion->Companion &&
+        IsValid(Player) && !Player->IsActorBeingDestroyed() && Player->GetWorld()==GetWorld() &&
+        IsValid(Listener) && !Listener->IsActorBeingDestroyed() && !Listener->IsInactive() &&
+        Listener->GetWorld()==GetWorld() && Player->PlayerState==Listener &&
+        Companion->Companion->GetOwnerPlayerState()==Listener;
+}
+
+bool UDeliveryNpcPresentationComponent::IsLocalRadioListener(const FDeliveryNpcSpeechState& State) const
+{
+    if (!State.RadioListener || !GetWorld()) return false;
+    for (auto It=GetWorld()->GetPlayerControllerIterator();It;++It)
+        if (const auto* Player=It->Get();Player && Player->IsLocalController() &&
+            IsRadioListenerForPlayer(Player,State.RadioListener)) return true;
+    return false;
+}
+
+bool UDeliveryNpcPresentationComponent::CanPlayerReceiveLinkedAudio(const APlayerController* Player,FGuid TurnId) const
+{
+    const auto* Saved=ServerVoices.Find(TurnId);
+    return GetOwner() && GetOwner()->HasAuthority() && TurnId.IsValid() && Saved &&
+        (Saved->ExpiresAt<=0 || FPlatformTime::Seconds()<Saved->ExpiresAt) &&
+        IsRadioListenerForPlayer(Player,Saved->RadioListener.Get());
+}
+
 bool UDeliveryNpcPresentationComponent::GetSpeechAudioChunk(FGuid TurnId,int32 Offset,int32 MaxBytes,TArray<uint8>& OutData,int32& OutTotal) const
 {
     OutData.Reset(); OutTotal=0;
     const auto* Saved=ServerVoices.Find(TurnId);
     if (!GetOwner()->HasAuthority() || !Saved || Offset<0 || Offset>=Saved->Encoded.Num() ||
-        (Saved->ExpiresAt>0 && FPlatformTime::Seconds()>Saved->ExpiresAt)) return false;
+        (Saved->ExpiresAt>0 && FPlatformTime::Seconds()>=Saved->ExpiresAt)) return false;
     const int32 Size=FMath::Min(FMath::Clamp(MaxBytes,0,2048),Saved->Encoded.Num()-Offset);
     if (Size==0) return false;
     OutTotal=Saved->bComplete?Saved->Encoded.Num():0;OutData.Append(Saved->Encoded.GetData()+Offset,Size);
@@ -205,7 +400,7 @@ void UDeliveryNpcPresentationComponent::StartStreamSpeech_Implementation(FDelive
 {
     // 先接收台词和编号，随后收到的声音归入对应句子
     if (!State.bActive || CancelledVoiceActions.Contains(State.ActionId) || FinishedVoiceTurns.Contains(State.TurnId)) return;
-    if (!GetOwner()->HasAuthority()) Speech=State;
+    // 开始通知只更新本机队列，复制字段仍由服务器更新，避免随后到达的字段差量混入旧值
     AcceptLocalSpeech(State,false);
 }
 
@@ -215,13 +410,14 @@ void UDeliveryNpcPresentationComponent::AcceptLocalSpeech(const FDeliveryNpcSpee
         !State.ActionId.IsValid() || CancelledVoiceActions.Contains(State.ActionId) || FinishedVoiceTurns.Contains(State.TurnId)) return;
     const bool bGenerating=State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion;
     const bool bUnknownLength=bGenerating && !State.bAudioComplete && State.PcmBytes==0 && State.EncodedBytes==0;
-    const bool bKnownLength=State.PcmBytes>0 && State.PcmBytes<=DeliveryNpcVoice::MaxPcmBytes && State.PcmBytes%2==0 &&
+    const bool bKnownLength=State.PcmBytes>0 && State.PcmBytes<=DeliveryNpcVoice::GetMaxPcmBytes(State.SampleRate) && State.PcmBytes%2==0 &&
         State.EncodedBytes>0 && State.EncodedBytes<=DeliveryNpcVoice::MaxEncodedBytes;
     if (State.bRecordedVoice && ((State.AudioFormatVersion!=DeliveryNpcVoice::FormatVersion && !bGenerating) ||
         (State.SampleRate!=16000 && State.SampleRate!=24000) ||
         !(bGenerating?(State.bAudioComplete?bKnownLength:bUnknownLength):bKnownLength)))
     {
-        UE_LOG(LogTemp,Warning,TEXT("NpcSpeech invalid_audio_format turn=%s version=%d"),*State.TurnId.ToString(),State.AudioFormatVersion);
+        UE_LOG(LogTemp,Warning,TEXT("NpcSpeech invalid_audio_format turn=%s version=%d complete=%d pcm=%d encoded=%d rate=%d replicated=%d"),
+            *State.TurnId.ToString(),State.AudioFormatVersion,int32(State.bAudioComplete),State.PcmBytes,State.EncodedBytes,State.SampleRate,int32(bFromReplication));
         return;
     }
     if (LocalVoices.ContainsByPredicate([&](const auto& Item){ return Item.State.TurnId==State.TurnId; }))
@@ -253,8 +449,8 @@ void UDeliveryNpcPresentationComponent::FinishStreamAudio_Implementation(FGuid T
 {
     auto* Local=LocalVoices.FindByPredicate([&](const auto& Item){ return Item.State.TurnId==TurnId; });
     if (!Local || Local->State.AudioFormatVersion!=DeliveryNpcVoice::StreamingFormatVersion ||
-        CancelledVoiceActions.Contains(Local->State.ActionId) || !Local->State.bRecordedVoice) return;
-    const bool bValid=bSucceeded && PcmBytes>0 && PcmBytes<=DeliveryNpcVoice::MaxPcmBytes && PcmBytes%2==0 &&
+        !CanReceiveVoiceData(*Local) || !Local->State.bRecordedVoice) return;
+    const bool bValid=bSucceeded && PcmBytes>0 && PcmBytes<=DeliveryNpcVoice::GetMaxPcmBytes(Local->State.SampleRate) && PcmBytes%2==0 &&
         EncodedBytes>0 && EncodedBytes<=DeliveryNpcVoice::MaxEncodedBytes && Local->Encoded.Num()<=EncodedBytes;
     if (!bValid || (Local->State.bAudioComplete &&
         (Local->State.PcmBytes!=PcmBytes || Local->State.EncodedBytes!=EncodedBytes)))
@@ -298,6 +494,26 @@ void UDeliveryNpcPresentationComponent::UseTextForLocalVoice(FDeliveryNpcLocalVo
     }
 }
 
+void UDeliveryNpcPresentationComponent::FinishReplyAfterSentence_Implementation(FGuid ActionId)
+{
+    if (!ActionId.IsValid()) return;
+    CancelledVoiceActions.AddUnique(ActionId);
+    if (CancelledVoiceActions.Num()>16) CancelledVoiceActions.RemoveAt(0);
+    if (GetOwner()->HasAuthority() && Speech.ActionId==ActionId) Speech.bActive=false;
+    // 远端可能比主机晚几帧播完，保留它正在说的这句，后续旧句直接移除
+    const FGuid KeepTurn=!LocalVoices.IsEmpty() && LocalVoices[0].State.ActionId==ActionId?LocalVoices[0].State.TurnId:FGuid();
+    LocalVoices.RemoveAll([&](const auto& Item){ return Item.State.ActionId==ActionId && Item.State.TurnId!=KeepTurn; });
+    if (KeepTurn.IsValid() && LocalVoices[0].ReceiveUntil==0)
+        LocalVoices[0].ReceiveUntil=FPlatformTime::Seconds()+5;
+}
+
+bool UDeliveryNpcPresentationComponent::CanReceiveVoiceData(const FDeliveryNpcLocalVoice& Local) const
+{
+    // 只补齐普通续接时保留下来的那一句，不能借补发重新开始其他旧句
+    if (Local.ReceiveUntil>0) return Local.ReceiveUntil>FPlatformTime::Seconds();
+    return !CancelledVoiceActions.Contains(Local.State.ActionId);
+}
+
 void UDeliveryNpcPresentationComponent::StopStreamSpeech_Implementation(FGuid ActionId,bool bStopAll)
 {
     auto RememberCancellation=[this](FGuid Id)
@@ -307,19 +523,27 @@ void UDeliveryNpcPresentationComponent::StopStreamSpeech_Implementation(FGuid Ac
         if (CancelledVoiceActions.Num()>16) CancelledVoiceActions.RemoveAt(0);
     };
     RememberCancellation(ActionId);
+    if (!Speech.ActionId.IsValid() && Speech.TurnId==ActionId)
+    {
+        if (GetOwner()->HasAuthority()) Speech.bActive=false;
+        if (Voice) Voice->StopSpeaking();
+        if (RecordedVoice && !DisplayedSpeech.bActive && LocalVoices.IsEmpty()) RecordedVoice->Stop();
+    }
+    if (GetOwner()->HasAuthority() && Speech.ActionId==ActionId) Speech.bActive=false;
     if (bStopAll)
     {
         // 玩家插话时也停止前一轮尚未播完的尾音
         for (const auto& Local:LocalVoices) RememberCancellation(Local.State.ActionId);
         RememberCancellation(DisplayedSpeech.ActionId);
-        RememberCancellation(Speech.ActionId);
-        // 服务器已通知停止，随后查询台词状态也应立即返回结束
-        Speech.bActive=false;
+        RememberCancellation(Speech.ActionId.IsValid()?Speech.ActionId:Speech.TurnId);
+        // 复制字段只在服务器修改，本机取消结果由播放队列和取消编号保存
+        if (GetOwner()->HasAuthority()) Speech.bActive=false;
         UE_LOG(LogTemp,Log,TEXT("NpcSpeech stream_stop_received role=%d turn=%s action=%s"),
             int32(GetOwner()->GetLocalRole()),*Speech.TurnId.ToString(),*ActionId.ToString());
     }
     if (bStopAll || DisplayedSpeech.ActionId==ActionId)
     {
+        bPlayingRadioVoice=false;
         DisplayedSpeech.bActive=false;
         if (RecordedVoice) RecordedVoice->Stop();
         if (RecordedWave) RecordedWave->ResetAudio();
@@ -330,7 +554,8 @@ void UDeliveryNpcPresentationComponent::StopStreamSpeech_Implementation(FGuid Ac
 
 FDeliveryNpcSpeechState UDeliveryNpcPresentationComponent::GetDisplayedSpeech() const
 {
-    if (DisplayedSpeech.bActive || Speech.ActionId.IsValid()) return DisplayedSpeech;
+    if (DisplayedSpeech.bActive || !LocalVoices.IsEmpty() || Speech.ActionId.IsValid()) return DisplayedSpeech;
+    if (CancelledVoiceActions.Contains(Speech.TurnId)) return {};
     return Speech;
 }
 
@@ -340,14 +565,12 @@ bool UDeliveryNpcPresentationComponent::IsWaitingForSpeechPlayback() const
     const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
     if (!Npc || !Npc->Agent) return false;
     const auto State=Npc->Agent->GetPublicState();
-    const bool bCurrentReply=State.Status==EDeliveryNpcActionStatus::Accepted ||
-        State.Status==EDeliveryNpcActionStatus::Running || State.Status==EDeliveryNpcActionStatus::Succeeded;
-    if (!bCurrentReply || !State.ActionId.IsValid() || CancelledVoiceActions.Contains(State.ActionId)) return false;
+    if (!State.GetReplyId().IsValid() || CancelledVoiceActions.Contains(State.GetReplyId())) return false;
     // 后台结束时声音可能还在编码或传输，服务器会在播放结束或取消时清除本轮编号
-    if (LocalVoices.IsEmpty()) return ReplyAction==State.ActionId;
+    if (LocalVoices.IsEmpty()) return ReplyAction==State.GetReplyId();
     const auto& Local=LocalVoices[0];
     // 只查看客户端收到的当前回复，旧句子不能让新一轮交谈继续保持等待姿态
-    if (Local.State.ActionId!=State.ActionId ||
+    if (Local.State.ActionId!=State.GetReplyId() ||
         Local.State.ReplyToEventId!=State.ReplyToEventId || !Local.State.bActive ||
         FinishedVoiceTurns.Contains(Local.State.TurnId)) return false;
     const bool bGenerating=Local.State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion && Local.State.bRecordedVoice;
@@ -386,6 +609,7 @@ float UDeliveryNpcPresentationComponent::GetDisplayedSpeechProgress() const
 void UDeliveryNpcPresentationComponent::FinishLocalSentence()
 {
     if (LocalVoices.IsEmpty()) return;
+    bPlayingRadioVoice=false;
     FinishedVoiceTurns.Add(LocalVoices[0].State.TurnId);
     if (FinishedVoiceTurns.Num()>16) FinishedVoiceTurns.RemoveAt(0);
     UE_LOG(LogTemp,Log,TEXT("NpcSpeech audio_finished turn=%s role=%d consumed=%d total=%d"),
@@ -415,6 +639,7 @@ void UDeliveryNpcPresentationComponent::FinishSentence()
     if (const auto* Current=GeneratingSentences.Find(Speech.Sequence); Current && Current->bInputEnded)
         GeneratingSentences.Remove(Speech.Sequence);
     if (auto* VoiceData=ServerVoices.Find(Speech.TurnId)) VoiceData->ExpiresAt=FPlatformTime::Seconds()+5;
+    TrimVoiceCache();
     SpokenReply+=Speech.Text;
     GetOwner()->ForceNetUpdate(); OnRep_Speech();
 }
@@ -432,9 +657,10 @@ void UDeliveryNpcPresentationComponent::RecordSpokenReply(bool bCompleteReply)
     // 最后一轮仍让邻居记住完整台词，但不再安排下一轮接话
     if (bCompleteReply)
         for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
-            if (*It!=Npc && FVector::DistSquared(It->GetActorLocation(),Npc->GetActorLocation())<FMath::Square(800.f))
+            if (*It!=Npc && !Npc->Agent->WasReplyTextDelivered(ReplyAction,*It) &&
+                FVector::DistSquared(It->GetActorLocation(),Npc->GetActorLocation())<FMath::Square(800.f))
                 It->HearSpeech(Npc,SpokenReply,Speech.TurnId,FMath::Min(SpeechDepth+1,3),
-                    ReplyListener.IsValid()?ReplyListener.Get():Npc,ReplyMessage,SpeechDepth<3);
+                    ReplyListener.IsValid()?ReplyListener.Get():Npc,ReplyMessage,SpeechDepth<3 && !Speech.RadioListener);
     if (bCompleteReply)
     {
         UE_LOG(LogTemp,Log,TEXT("NpcLatency speech=%s stage=reply_completed sentences=%d"),*ReplyMessage.ToString(),NextSentence);
@@ -451,7 +677,7 @@ void UDeliveryNpcPresentationComponent::ReceiveAudio_Implementation(FGuid TurnId
     if (GetOwner()->HasAuthority() || !TurnId.IsValid() || Total<0 || Total>DeliveryNpcVoice::MaxEncodedBytes ||
         Data.IsEmpty() || Data.Num()>2048 || Offset<0 || Offset>DeliveryNpcVoice::MaxEncodedBytes-Data.Num()) return;
     auto* Local=LocalVoices.FindByPredicate([&](const auto& Item){ return Item.State.TurnId==TurnId; });
-    if (!Local || CancelledVoiceActions.Contains(Local->State.ActionId) || !Local->Decoder) return;
+    if (!Local || !CanReceiveVoiceData(*Local) || !Local->Decoder) return;
     const bool bGenerating=Local->State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion;
     if ((!bGenerating && (Total<=0 || Local->State.EncodedBytes!=Total)) ||
         (Total>0 && (Offset>Total || Data.Num()>Total-Offset)) ||
@@ -493,15 +719,24 @@ void UDeliveryNpcPresentationComponent::ReceiveAudio_Implementation(FGuid TurnId
 void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
 {
     if (LocalVoices.IsEmpty()) return;
+    if (bPlayingRadioVoice && !IsLocalRadioListener(DisplayedSpeech))
+    {
+        // 已离开本玩家归属的同伴不能继续使用旧句子的连麦播放权限
+        UE_LOG(LogTemp,Log,TEXT("NpcSpeech radio_listener_revoked turn=%s"),*DisplayedSpeech.TurnId.ToString());
+        FinishLocalSentence();
+        return;
+    }
     auto& Local=LocalVoices[0];
     const double Now=FPlatformTime::Seconds();
     if (Local.FrontSince==0) Local.FrontSince=Now;
     const bool bGenerating=Local.State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion && Local.State.bRecordedVoice;
     const bool bHasBufferedAudio=RecordedWave && RecordedWave->GetAvailableAudioByteCount()>0;
+    // 整句已经收齐后不再等网络数据，让播放器正常播完尾音
+    const bool bHasCompleteAudio=Local.State.bAudioComplete && Local.TotalBytes>0 && Local.Pcm.Num()==Local.TotalBytes;
     // 后一句可能早已收齐，轮到它播放时重新计算缺音等待时间
     const double DataWaitingSince=FMath::Max(Local.FrontSince,Local.LastDataAt);
     const bool bTimedOut=bGenerating?
-        (Now-Local.FrontSince>30 || (!bHasBufferedAudio && Now-DataWaitingSince>5)):
+        (Now-Local.FrontSince>30 || (!bHasCompleteAudio && !bHasBufferedAudio && Now-DataWaitingSince>5)):
         Now-Local.FrontSince>Local.State.Duration+5;
     // 网络中断时结束本机播放，界面不会一直保留等待中的句子
     if (bTimedOut)
@@ -575,23 +810,7 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
         RecordedVoice->RegisterComponent();
     }
     RecordedVoice->Stop();
-    // 每句重新读取人物配置，切换配置或清空资产后不会沿用上一句的音量和范围
-    const float Volume=VoiceSet?VoiceSet->DialogueVolume:1.f;
-    RecordedVoice->SetVolumeMultiplier(FMath::IsFinite(Volume)?FMath::Clamp(Volume,0.f,2.f):1.f);
-    RecordedVoice->bAllowSpatialization=true;
-    RecordedVoice->AttenuationSettings=VoiceSet?VoiceSet->DialogueAttenuation.Get():nullptr;
-    RecordedVoice->bOverrideAttenuation=RecordedVoice->AttenuationSettings==nullptr;
-    if (RecordedVoice->bOverrideAttenuation)
-    {
-        // 第三人称镜头比玩家更远，交谈距离边缘仍需保留清楚的声音
-        RecordedVoice->AttenuationOverrides=FSoundAttenuationSettings();
-        RecordedVoice->AttenuationOverrides.bAttenuate=true;
-        RecordedVoice->AttenuationOverrides.bSpatialize=true;
-        RecordedVoice->AttenuationOverrides.DistanceAlgorithm=EAttenuationDistanceModel::Linear;
-        RecordedVoice->AttenuationOverrides.AttenuationShape=EAttenuationShape::Sphere;
-        RecordedVoice->AttenuationOverrides.AttenuationShapeExtents=FVector(600,0,0);
-        RecordedVoice->AttenuationOverrides.FalloffDistance=1200;
-    }
+    ConfigureRecordedVoice(IsLocalRadioListener(Local.State));
     RecordedWave=NewObject<USoundWaveProcedural>(this);
     RecordedWave->SetSampleRate(Local.State.SampleRate); RecordedWave->NumChannels=1;
     RecordedWave->Duration=INDEFINITELY_LOOPING_DURATION;
@@ -607,6 +826,28 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
     RecordedVoice->SetSound(RecordedWave); RecordedVoice->Play();
     UE_LOG(LogTemp,Log,TEXT("NpcLatency speech=%s turn=%s stage=audio_play role=%d late_ms=%d"),
         *Local.State.ReplyToEventId.ToString(),*Local.State.TurnId.ToString(),int32(GetOwner()->GetLocalRole()),int32((ServerTime()-Local.State.StartTime)*1000));
+}
+
+void UDeliveryNpcPresentationComponent::ConfigureRecordedVoice(bool bRadio)
+{
+    if (!RecordedVoice) return;
+    bPlayingRadioVoice=bRadio;
+    // 每句恢复人物配置，上一句连麦不能改变下一句普通对白的音量和范围
+    const float Volume=VoiceSet?VoiceSet->DialogueVolume:1.f;
+    RecordedVoice->SetVolumeMultiplier(FMath::IsFinite(Volume)?FMath::Clamp(Volume,0.f,2.f):1.f);
+    RecordedVoice->bAllowSpatialization=!bRadio;
+    RecordedVoice->AttenuationSettings=!bRadio && VoiceSet?VoiceSet->DialogueAttenuation.Get():nullptr;
+    RecordedVoice->bOverrideAttenuation=RecordedVoice->AttenuationSettings==nullptr;
+    if (RecordedVoice->bOverrideAttenuation)
+    {
+        RecordedVoice->AttenuationOverrides=FSoundAttenuationSettings();
+        RecordedVoice->AttenuationOverrides.bAttenuate=!bRadio;
+        RecordedVoice->AttenuationOverrides.bSpatialize=!bRadio;
+        RecordedVoice->AttenuationOverrides.DistanceAlgorithm=EAttenuationDistanceModel::Linear;
+        RecordedVoice->AttenuationOverrides.AttenuationShape=EAttenuationShape::Sphere;
+        RecordedVoice->AttenuationOverrides.AttenuationShapeExtents=FVector(600,0,0);
+        RecordedVoice->AttenuationOverrides.FalloffDistance=1200;
+    }
 }
 
 float UDeliveryNpcPresentationComponent::GetVoiceAmplitude() const

@@ -1,0 +1,22 @@
+{
+  "adapter": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\round3\\adapter",
+  "output": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3",
+  "device": "cpu",
+  "quantization": "Q8_0",
+  "production_configuration_changed": false,
+  "converter_sha256": "8f1bed9466221e57e434caa7ee720abe1569deb6bc2fe5a65da950ea66c8e737",
+  "quantizer_sha256": "04db194aec78507819726ea29aaedabb6a901daf37631cf185a3abef5b0be905",
+  "status": "exported_unapproved",
+  "weight_devices": [
+    "cpu"
+  ],
+  "model_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3\\combat-Q8_0.gguf",
+  "model_sha256": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3",
+  "model_bytes": 1834426080,
+  "adapter_files": {
+    "adapter_config.json": "eaee9004c47d7906983842aa7bb217ff7b2f9938d3f2417e77035e535713a334",
+    "adapter_model.safetensors": "f177f2d78e93880a9582f68cf9ee5ae2df3c548adfd1f09ab87c410d21286953",
+    "README.md": "cbdb99d21bf5cd7bba4c5471f5bc884632093fd2a994d4176c9083004e7a435f"
+  },
+  "cuda_initialized": false
+}

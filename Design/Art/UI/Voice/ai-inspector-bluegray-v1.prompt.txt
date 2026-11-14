@@ -1,0 +1,25 @@
+Tool: built-in image_gen (no local GPU)
+Reference: D:/Udev/Delivery/Saved/DeliverySpeech/UIPlaytest/client-layout-before-focus-fix.png
+Output: D:/Udev/Delivery/Design/Art/UI/Voice/ai-inspector-bluegray-v1.png
+Purpose: UI concept / example data only; not a gameplay screenshot or measured telemetry
+
+Use case: ui-mockup.
+Asset type: new versioned UI reference image for an Unreal Engine 5.8 cheerful delivery game. Recompose the referenced screenshot into one polished 16:9 game HUD design mockup, approximately 1920x1080, without OS/window chrome. The screenshot is the game-art reference: keep the vivid low-poly cartoon town, sunlit yellow/orange buildings with red roofs, chunky grass, paved street, small lime-green-haired delivery workers in yellow shirts and turquoise shorts, charming stylized older NPCs. Keep the player and NPC interaction readable in the center and left-middle of the frame; this is a game scene, not a flat dashboard.
+
+UI palette: refined translucent deep blue-gray panels, soft off-white typography, restrained pale blue accent and thin blue-gray outlines. Avoid the reference screenshot's orange send button. Clear modern simplified-Chinese sans-serif type, crisp and genuinely legible, subtle rounded corners, restrained spacing, lightweight hierarchy.
+
+Layout: circular minimap at the upper-right corner, matching the existing game. Place the AI observation panel directly beneath the minimap, aligned right with about 24 px outer margin; expanded panel is approximately 400 px wide at 1920 px canvas width, never a full-screen or center overlay. Fit all text comfortably. Panel header reads exactly "AI 现场观察", with a tiny outlined badge "示例数据". Second line: "翠花" and the current activity "站立倾听". This badge clearly identifies all panel content as example data, not measured telemetry.
+
+Expanded AI panel: four clearly separated accordion sections with generous spacing and small chevrons: "感知与输入", "候选与执行", "语音与耗时", "记录". Make "候选与执行" the active expanded section with a subtle pale-blue accent. Show four clean, stacked label-value rows, exactly:
+"玩家原话：先别打了，听我解释"
+"模型建议：停手，等待"
+"服务器结果：已接受"
+"当前执行：站立倾听"
+The first row may live in the perception section and the last three in the candidates/execution section if this improves hierarchy, but all must be readable. Under "语音与耗时" show only the quiet neutral wording "本轮记录" and no numeric measurements, gauges, or invented timing. "记录" is collapsed. Use one small line or chip to indicate the chosen candidate, not a wall of prose. Do not show model reasoning, chain-of-thought, token streams, confidence gauges, or arbitrary performance numbers.
+
+Also show a small separate compact-state thumbnail immediately to the left of the expanded panel, on an unobtrusive open patch of scene, without covering any character. Label it "收起态". The thumbnail is a narrow 180–220 px wide version of the same panel, showing only "AI 现场观察", "翠花 · 站立倾听", a tiny "示例数据" badge and an expansion chevron. Visually make it clear this is a design-state demonstration, not a second live panel.
+
+Bottom conversation: a narrow, understated blue-gray conversation bar centered near the bottom, above the inventory strip, about 900 px wide and 76–96 px high, avoiding the NPC's body and feet. Small context label exactly "对 翠花 说". One empty input field with placeholder "输入你想说的话", and a pale-blue send button labeled exactly "发送". Keep the bar slim, not a large panel. A restrained illustrative send-feedback cue sits immediately beside the send button: a tiny duplicate button silhouette with two faint motion outlines suggesting a gentle pop, accompanied by three small glowing pale-blue dots. No status sentence; do not put "发送中" or "已送达" anywhere. Keep any inventory slots very subtle and maintain the original playful game feeling.
+
+Constraints: one cohesive high-fidelity 16:9 raster mockup, no desktop borders, no huge panel, no code/debug clutter, no fake success statements outside the clearly labeled example panel, no invented metrics, no token stream, no chain-of-thought, no watermark. Only UI reference, not a claim of implementation or gameplay measurement.
+

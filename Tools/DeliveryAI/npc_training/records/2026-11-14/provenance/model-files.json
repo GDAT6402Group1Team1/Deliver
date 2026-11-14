@@ -1,0 +1,61 @@
+{
+  "repository": "Qwen/Qwen3-1.7B",
+  "revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11343,
+      "sha256": null
+    },
+    {
+      "path": "README.md",
+      "bytes": 13963,
+      "sha256": null
+    },
+    {
+      "path": "config.json",
+      "bytes": 726,
+      "sha256": null
+    },
+    {
+      "path": "generation_config.json",
+      "bytes": 239,
+      "sha256": null
+    },
+    {
+      "path": "merges.txt",
+      "bytes": 1671853,
+      "sha256": null
+    },
+    {
+      "path": "model-00001-of-00002.safetensors",
+      "bytes": 3441185608,
+      "sha256": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5"
+    },
+    {
+      "path": "model-00002-of-00002.safetensors",
+      "bytes": 622329984,
+      "sha256": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9"
+    },
+    {
+      "path": "model.safetensors.index.json",
+      "bytes": 25605,
+      "sha256": null
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 11422654,
+      "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 9732,
+      "sha256": null
+    },
+    {
+      "path": "vocab.json",
+      "bytes": 2776833,
+      "sha256": null
+    }
+  ]
+}

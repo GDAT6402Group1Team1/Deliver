@@ -21,33 +21,56 @@ def enabled():
 def record(request_id, source, model, original, context, proposal, sentences, error=None, instructions=None):
     """模型调用结束后写一行
 
-    original 是游戏发来的请求，context 是发给模型的短编号版本；两者候选顺序相同，
-    所以按下标把选中的动作换成模型看到的短编号，便于和事件对照
+    完整对话使用短编号候选，战斗小模型只接收动作名和 opponent
+    日志按各自格式记录，不修改游戏请求或模型输入
     """
     if not enabled():
         return
+    candidates = context.get('candidates', [])
+    combat = bool(candidates) and all(isinstance(item, str) for item in candidates)
     chosen = None
-    if proposal is not None:
+    if combat:
+        target = context.get('current_action', {}).get('target') or ''
+        labels = {action: f"{action}:{'-' if action == 'Wait' else target or '-'}" for action in candidates}
+        if proposal is not None:
+            expected = '' if proposal.get('action') == 'Wait' else original.get('current_action', {}).get('target_id')
+            if (proposal.get('target_id') or '') == expected:
+                chosen = labels.get(proposal.get('action'))
+        candidate_labels = list(labels.values())
+    else:
+        candidate_labels = [f"{item.get('action')}:{item.get('target_id') or '-'}" for item in candidates]
+    if proposal is not None and not combat:
         for index, item in enumerate(original.get('candidates', [])):
             if item.get('action') == proposal.get('action') and (item.get('target_id') or '') == (proposal.get('target_id') or ''):
-                alias = context['candidates'][index]
-                chosen = f"{alias.get('action')}:{alias.get('target_id') or '-'}"
+                if index < len(candidate_labels):
+                    chosen = candidate_labels[index]
                 break
+    pending = context.get('pending_player_message', original.get('pending_player_message'))
+    evidence = context.get('events', []) if combat else context.get('evidence', [])
+    original_events = original.get('evidence', [])
+    recorded_evidence = []
+    for index, event in enumerate(evidence):
+        # 战斗输入省略事件编号，但事件顺序不变，编号仍从游戏原请求保留
+        event_id = (original_events[index].get('event_id') if index < len(original_events) else None) if combat else event.get('event_id')
+        recorded_evidence.append({'id': event_id, 'who': event.get('subject' if combat else 'subject_id'),
+                                  'kind': event.get('kind'), 'text': event.get('description')})
     row = {
         'time': time.strftime('%H:%M:%S'),
         'request_id': request_id,
         'source': source,
         'model': model,
+        'npc_id': original.get('npc_id'),
+        'world_epoch': original.get('world_epoch'),
+        'current_action': copy.deepcopy(original.get('current_action')),
         'persona': (context.get('persona') or '')[:12],
         'profile_id': original.get('profile_id', ''),
         'full_persona': context.get('persona') or '',
         # 保存模型实际看到的人物、背景和对话，避免复查时拿新配置代替当时的内容
         'model_context': copy.deepcopy(context),
-        'pending_player_message': (context.get('pending_player_message') or {}).get('description'),
+        'pending_player_message': pending.get('description') if isinstance(pending, dict) else pending,
         'new_event_ids': context.get('new_event_ids', []),
-        'evidence': [{'id': e.get('event_id'), 'who': e.get('subject_id'), 'kind': e.get('kind'),
-                      'text': e.get('description')} for e in context.get('evidence', [])],
-        'candidates': [f"{c.get('action')}:{c.get('target_id') or '-'}" for c in context.get('candidates', [])],
+        'evidence': recorded_evidence,
+        'candidates': candidate_labels,
         'chosen': chosen,
         'emotion': None if proposal is None else proposal.get('emotion'),
         'speech': sentences,

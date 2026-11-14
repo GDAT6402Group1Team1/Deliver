@@ -1,0 +1,20 @@
+{
+  "player_speech_id": "6f67f488-41a1-4832-fc2d-ff85c2d56bd6",
+  "request_id": "0693468c-46b8-2e28-1f43-819fc2f39bc7",
+  "turn_id": "7BDBFF8A44221ED1A8EC4483AF31D450",
+  "player_text": "大壮，别打了，刚才都是误会，咱们和好吧。",
+  "npc_text": "行，既然是误会，那就和好，歇着吧。",
+  "accepted_utc": "2026-11-14T13:30:10.466Z",
+  "model": "gpt-6-luna",
+  "voice": "Uncle_Fu",
+  "backend_audio_ready": false,
+  "ue_finish_bytes": {
+    "role1": 0,
+    "role3": 0
+  },
+  "worker_last_failure": "neural_tts_audio_too_long",
+  "worker_eos_step": 101,
+  "worker_request_correlation": "Last failure observed during this request; native worker stderr does not log request ID",
+  "old_config_sha256": "19cdeaa143c0238a3d47a95fc91a1094d30a18eb1f95841739f49c3862bb6216",
+  "actual_game_recheck": "pending"
+}

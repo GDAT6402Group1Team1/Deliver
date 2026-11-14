@@ -37,7 +37,7 @@ void ADeliveryMotorbike::ResetRiderMotion()
 // 根据车速、转向和撞击更新骑手身体偏移
 void ADeliveryMotorbike::UpdateRiderMotion(float DeltaTime)
 {
-	if (!Driver)
+	if (!Driver && !HasAutonomousDriver())
 	{
 		bRiderSampleValid = false;
 		return;

@@ -1,13 +1,22 @@
 ﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Task/World/DeliveryItemComponent.h"
+#include "Inventory/DeliveryInventoryItemComponent.h"
 
 #include "Task/Data/DeliveryTaskDefinition.h"
 #include "Task/DeliveryTaskManagerComponent.h"
+#include "Net/UnrealNetwork.h"
 
 UDeliveryItemComponent::UDeliveryItemComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+    SetIsReplicatedByDefault(true);
+}
+
+void UDeliveryItemComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(UDeliveryItemComponent, OwningTask);
 }
 
 // 向任务管理器查询这件快递是否允许领取
@@ -15,12 +24,44 @@ bool UDeliveryItemComponent::CanBeAcquired() const
 {
 	const UDeliveryTaskManagerComponent* Manager = UDeliveryTaskManagerComponent::Get(this);
 
-	return Manager && Manager->CanAcquireItem(OwningTask);
+	return !IsTransferInProgress() && Manager && Manager->CanAcquireItem(OwningTask);
+}
+
+bool UDeliveryItemComponent::CanBeAcquiredBy(const AActor* Receiver) const
+{
+    const auto* Item=GetOwner()?GetOwner()->FindComponentByClass<UDeliveryInventoryItemComponent>():nullptr;
+    if (!IsValid(Receiver) || Receiver->GetWorld()!=GetWorld() || (Item && !Item->CanTransferTo(Receiver))) return false;
+    const auto* Manager = UDeliveryTaskManagerComponent::Get(this);
+    return Manager && Manager->CanAcquireItem(OwningTask);
+}
+
+bool UDeliveryItemComponent::BeginTransfer(AActor* Receiver)
+{
+    auto* Item=GetOwner()?GetOwner()->FindComponentByClass<UDeliveryInventoryItemComponent>():nullptr;
+    if (!Item || TaskTransferId.IsValid()) return false;
+    TaskTransferId=Item->BeginTransfer(Receiver);
+    return TaskTransferId.IsValid();
+}
+
+void UDeliveryItemComponent::EndTransfer()
+{
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return;
+    const FGuid OldId=TaskTransferId;
+    TaskTransferId.Invalidate();
+    if (auto* Item=GetOwner()->FindComponentByClass<UDeliveryInventoryItemComponent>()) Item->EndTransfer(OldId);
+}
+
+bool UDeliveryItemComponent::IsTransferInProgress() const
+{
+    const auto* Item=GetOwner()?GetOwner()->FindComponentByClass<UDeliveryInventoryItemComponent>():nullptr;
+    return Item && Item->IsTransferInProgress();
 }
 
 // 给出任务快递暂时无法领取的原因
 FText UDeliveryItemComponent::GetPickupBlockedReason() const
 {
+	if (IsTransferInProgress())
+        return NSLOCTEXT("DeliveryPickup", "TransferInProgress", "Package handover in progress");
 	const UDeliveryTaskManagerComponent* Manager = UDeliveryTaskManagerComponent::Get(this);
 	if (!OwningTask)
 		return NSLOCTEXT("DeliveryPickup", "NoTask", "Package Has No Delivery Assigned");

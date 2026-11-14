@@ -135,6 +135,7 @@ void UDeliveryActiveRagdollComponent::TickComponent(float DeltaTime, ELevelTick 
 // 两个物理阶段都先取消失效动作，并恢复到期的受击控制
 void UDeliveryActiveRagdollComponent::UpdateActionState()
 {
+    UpdateConversationFacing();
 	if (SwingAxe.IsValid())
 	{
 		const ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(GetOwner());
@@ -316,6 +317,7 @@ void UDeliveryActiveRagdollComponent::StartRagdoll()
 // 停止身体控制并清理约束和运行状态
 void UDeliveryActiveRagdollComponent::StopRagdoll()
 {
+    CancelConversationFacing();
     EndTrunkPose();
 	if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(AxeDoorHitTimer);
 	SwingAxe.Reset();
@@ -380,6 +382,7 @@ void UDeliveryActiveRagdollComponent::SetLimp(bool bLimp)
 // 根据倒地状态启停控制，并准备恢复站立
 void UDeliveryActiveRagdollComponent::ApplyLimpState(bool bLimp)
 {
+    CancelConversationFacing();
 	if (bLimp)
 		SwingAxe.Reset();
 	// 晕倒不是关闭物理模拟，而是放开站立电机，让整条刚体链继续受重力/碰撞驱动
@@ -473,6 +476,7 @@ void UDeliveryActiveRagdollComponent::SetLimpRecoveryDriveStrength(float Alpha)
 // 保存经过限制的移动意图，供后续身体和步态更新使用
 void UDeliveryActiveRagdollComponent::SetMoveInput(FVector2D RightForward)
 {
+    if (!RightForward.IsNearlyZero()) CancelConversationFacing();
 	Movement.MoveInput.X = FMath::Clamp(RightForward.X, -1.0f, 1.0f);
 	Movement.MoveInput.Y = FMath::Clamp(RightForward.Y, -1.0f, 1.0f);
 	if (GetOwner() && GetOwner()->HasAuthority() && GetWorld())
@@ -484,6 +488,7 @@ void UDeliveryActiveRagdollComponent::SetMoveInput(FVector2D RightForward)
 // 向指定身体部位施加外部冲量
 void UDeliveryActiveRagdollComponent::AddImpulse(FVector Impulse, bool bVelocityChange)
 {
+    CancelConversationFacing();
 	if (bIsActive && Mesh)
 	{
 		Mesh->AddImpulse(Impulse, Bones.Hips, bVelocityChange);
@@ -510,6 +515,7 @@ bool UDeliveryActiveRagdollComponent::IsGrounded() const
 // 确认身体和地面条件后开始跳跃
 bool UDeliveryActiveRagdollComponent::TryStartJump()
 {
+    CancelConversationFacing();
 	// 仅在可站立时启动一次跳跃；后续抬高目标的时间曲线由 UpdateJumpHeight 推进
 	if (ReplicatedControlMode != EDeliveryRagdollControlMode::Active || bIsLimp || !IsGrounded())
 	{

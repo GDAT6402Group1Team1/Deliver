@@ -13,14 +13,25 @@
 #include "GameFramework/PlayerController.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
+#include "Speech/DeliverySpeechInputComponent.h"
+#include "Character/DeliveryCharacter.h"
+#include "AbilitySystem/DeliverGameplayTags.h"
+#include "AbilitySystemComponent.h"
 
-UDeliveryConversationComponent::UDeliveryConversationComponent() { SetIsReplicatedByDefault(true); }
+UDeliveryConversationComponent::UDeliveryConversationComponent()
+{
+    SetIsReplicatedByDefault(true);
+    PrimaryComponentTick.bCanEverTick=true;
+    PrimaryComponentTick.bStartWithTickEnabled=false;
+    PrimaryComponentTick.bTickEvenWhenPaused=true;
+}
 void UDeliveryConversationComponent::ServerRequestNpcAudio_Implementation(ADeliveryNpcCharacter* Npc,FGuid TurnId,int32 Offset)
 {
     const double Now=FPlatformTime::Seconds();
     const auto* PC=Cast<APlayerController>(GetOwner());const APawn* Pawn=PC?PC->GetPawn():nullptr;
     if (Now<NextAudioRequestAt || Offset<0 || !Pawn || !IsValid(Npc) || Npc->GetWorld()!=GetWorld() ||
-        FVector::DistSquared(Pawn->GetActorLocation(),Npc->GetActorLocation())>FMath::Square(1000.f)) return;
+        !Npc->Presentation || (FVector::DistSquared(Pawn->GetActorLocation(),Npc->GetActorLocation())>FMath::Square(1000.f) &&
+        !Npc->Presentation->CanPlayerReceiveLinkedAudio(PC,TurnId))) return;
     NextAudioRequestAt=Now+.25;
     TArray<uint8> Audio;
     int32 Total=0;
@@ -35,19 +46,28 @@ void UDeliveryConversationComponent::ClientReceiveNpcAudio_Implementation(ADeliv
 }
 void UDeliveryConversationComponent::BindInput()
 {
+    BindSpeechInput();
+    BindInspectorInput();
     auto* PC=Cast<APlayerController>(GetOwner()); if (!PC || !PC->IsLocalController()) return;
     auto* Input=Cast<UEnhancedInputComponent>(PC->InputComponent);
     auto* Action=LoadObject<UInputAction>(nullptr,TEXT("/Game/NPC/Residents/Input/IA_Talk"));
     auto* Mapping=LoadObject<UInputMappingContext>(nullptr,TEXT("/Game/NPC/Residents/Input/IMC_ResidentConversation"));
-    if (Input && Action) Input->BindAction(Action,ETriggerEvent::Started,this,&UDeliveryConversationComponent::OpenAimedConversation);
+    if (Input && Action && (BoundTalkInput.Get()!=Input || !TalkInputBindingHandle))
+    {
+        if (auto* Old=BoundTalkInput.Get(); Old && TalkInputBindingHandle) Old->RemoveBindingByHandle(TalkInputBindingHandle);
+        BoundTalkInput=Input;
+        TalkInputBindingHandle=Input->BindAction(Action,ETriggerEvent::Started,this,&UDeliveryConversationComponent::OpenAimedConversation).GetHandle();
+    }
     if (Mapping)
-        if (auto* Sub=ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer())) Sub->AddMappingContext(Mapping,1);
+        if (auto* Sub=ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()); Sub && !Sub->HasMappingContext(Mapping)) Sub->AddMappingContext(Mapping,1);
 }
 bool UDeliveryConversationComponent::CanTalkTo(const ADeliveryNpcCharacter* Resident) const
 {
     const auto* PC=Cast<APlayerController>(GetOwner()); const APawn* Pawn=PC?PC->GetPawn():nullptr;
     if (!Pawn || !IsValid(Resident) || Resident->GetWorld()!=GetWorld() || Resident->IsKnockedDown() ||
         FVector::DistSquared(Pawn->GetActorLocation(),Resident->GetActorLocation())>FMath::Square(600.f)) return false;
+    if (const auto* Character=ADeliveryHUD::ResolveCharacter(const_cast<APawn*>(Pawn)))
+        if (const auto* ASC=Character->GetAbilitySystemComponent(); ASC && ASC->HasMatchingGameplayTag(TAG_State_Stunned)) return false;
     FHitResult Hit; FCollisionQueryParams Params(SCENE_QUERY_STAT(ResidentConversation),false,Pawn);
     return !GetWorld()->LineTraceSingleByChannel(Hit,Pawn->GetActorLocation()+FVector(0,0,60),Resident->GetActorLocation(),ECC_Visibility,Params) || Hit.GetActor()==Resident;
 }
@@ -113,7 +133,11 @@ ADeliveryNpcCharacter* UDeliveryConversationComponent::FindNpcInView(
 }
 void UDeliveryConversationComponent::OpenAimedConversation()
 {
-    if (auto* Npc=GetAimedNpc()) ServerOpenConversation(Npc);
+    if (auto* Npc=GetAimedNpc())
+    {
+        const uint64 FacingSequence=PrepareConversationFacingInput();
+        ServerOpenConversation(Npc,FacingSequence,LocalFacingPawn.Get());
+    }
 }
 FString UDeliveryConversationComponent::GetProvokeText(const ADeliveryNpcCharacter* Npc) const
 {
@@ -131,8 +155,16 @@ FString UDeliveryConversationComponent::GetProvokeText(const ADeliveryNpcCharact
             *Npc->DisplayName.ToString(),*Other->DisplayName.ToString())
         : FString::Printf(TEXT("%s，你就只敢嘴上横？我站这儿呢，你敢动手吗？"),*Npc->DisplayName.ToString());
 }
-void UDeliveryConversationComponent::ServerOpenConversation_Implementation(ADeliveryNpcCharacter* Resident)
-{ if (CanTalkTo(Resident)) ClientOpenConversation(Resident); }
+void UDeliveryConversationComponent::ServerOpenConversation_Implementation(ADeliveryNpcCharacter* Resident,uint64 FacingSequence,APawn* FacingPawn)
+{
+    RegisterConversationFacingInput(Resident,FGuid(),FacingSequence,FacingPawn);
+    if (!CanTalkTo(Resident)) return;
+    if (FacingSequence)
+    {
+        ConfirmConversationFacingInput(Resident,FGuid(),FacingSequence);
+    }
+    ClientOpenConversation(Resident);
+}
 void UDeliveryConversationComponent::ClientOpenConversation_Implementation(ADeliveryNpcCharacter* Resident)
 {
     auto* PC=Cast<APlayerController>(GetOwner()); if (!PC || !PC->IsLocalController() || !IsValid(Resident)) return;
@@ -143,19 +175,31 @@ bool UDeliveryConversationComponent::Submit(ADeliveryNpcCharacter* Resident,cons
 {
     auto* PC=Cast<APlayerController>(GetOwner());
     if (!PC || !PC->IsLocalController() || !IsValid(Resident) || Resident->GetWorld()!=GetWorld()) return false;
-    const FString Message=Text.TrimStartAndEnd().Left(256);
+    const FString Message=Text.TrimStartAndEnd();
     // 空输入不发送，也不覆盖上一条真实提交结果
-    if (Message.IsEmpty()) return false;
+    if (Message.IsEmpty() || Message.Len()>256) return false;
     const double Now=FPlatformTime::Seconds();
     if (Now<NextLocalSendAt) return false;
+    if (auto* Speech=GetSpeechInput()) Speech->CancelHold();
+    if (LocalVoiceToken.IsValid())
+    {
+        ServerCancelVoice(LocalVoiceToken.Id,LocalVoiceSequence);
+        ResetLocalVoice();
+    }
     NextLocalSendAt=Now+1.1;
-    LastSubmissionId=FGuid::NewGuid();
+    const FGuid ClientToken=FGuid::NewGuid();
+    const uint64 Sequence=NextInputSequence();
+    LastSubmissionId=ClientToken;
     LastResult=TEXT("Sending"); ResultExpiresAt=Now+2.5;
-    ServerSubmit(Resident,Message,LastSubmissionId);
+    const uint64 FacingSequence=PrepareConversationFacingInput();
+    ServerSubmit(Resident,Message,ClientToken,Sequence,FacingSequence,LocalFacingPawn.Get());
+    // 监听服务器回执可能同步触发另一份输入，旧提交不能再清下一份草稿
+    if (LastLocalInputSequence==Sequence) OnSubmitted.Broadcast(Resident,LastSubmissionId,Message);
     return true;
 }
-void UDeliveryConversationComponent::ServerSubmit_Implementation(ADeliveryNpcCharacter* Resident,const FString& Text,FGuid SpeechId)
+void UDeliveryConversationComponent::ServerSubmit_Implementation(ADeliveryNpcCharacter* Resident,const FString& Text,FGuid SpeechId,uint64 InputSequence,uint64 FacingSequence,APawn* FacingPawn)
 {
+    RegisterConversationFacingInput(Resident,SpeechId,FacingSequence,FacingPawn);
     if (!SpeechId.IsValid()) { ClientResult(TEXT("Unavailable"),SpeechId); return; }
     const double Now=FPlatformTime::Seconds();
     if (Now<NextSendAt) { ClientResult(TEXT("TooFast"),SpeechId); return; }
@@ -166,19 +210,90 @@ void UDeliveryConversationComponent::ServerSubmit_Implementation(ADeliveryNpcCha
         UE_LOG(LogTemp,Log,TEXT("ResidentConversation rejected: player=%s resident=%s reason=Unavailable"),*GetNameSafe(GetOwner()),*GetNameSafe(Resident));
         ClientResult(TEXT("Unavailable"),SpeechId); return;
     }
-    // 服务器接收消息后开始计算发送间隔
-    NextSendAt=Now+1;
     auto* PC=CastChecked<APlayerController>(GetOwner());
-    if (!Resident->HearSpeech(PC->GetPawn(),Message,SpeechId,0)) { ClientResult(TEXT("NotHeard"),SpeechId); return; }
+    auto* Turns=GetWorld()->GetSubsystem<UDeliveryConversationTurnSubsystem>();
+    if (!Turns) { ClientResult(TEXT("Unavailable"),SpeechId); return; }
+    FDeliveryConversationTurnHandle Handle;
+    TArray<FDeliveryConversationTurnLease> Replaced;
+    const auto Result=Turns->TryBeginText(PC,Resident,SpeechId,InputSequence,Handle,Replaced);
+    if (Result==EDeliveryConversationTurnResult::AlreadyActive)
+    {
+        ClientSubmissionBound(SpeechId,Handle.Token);
+        return;
+    }
+    if (Result!=EDeliveryConversationTurnResult::Accepted)
+    { ClientResult(Result==EDeliveryConversationTurnResult::Busy?TEXT("Busy"):TEXT("Unavailable"),SpeechId); return; }
+    CancelReplacedLeases(Replaced);
+    CancelNpcMessageTurns(Resident);
+    WatchReplies(Resident);
+    ClientSubmissionBound(SpeechId,Handle.Token);
+    DeliverFinalText(Resident,Message,Handle);
+}
+void UDeliveryConversationComponent::ClientSubmissionBound_Implementation(FGuid ClientToken,FGuid MessageId)
+{
+    if (LastSubmissionId!=ClientToken || !MessageId.IsValid()) return;
+    LastSubmissionId=MessageId;
+    OnSubmissionBound.Broadcast(ClientToken,MessageId);
+}
+bool UDeliveryConversationComponent::DeliverFinalText(ADeliveryNpcCharacter* Resident,const FString& Message,
+    const FDeliveryConversationTurnHandle& Handle)
+{
+    auto* PC=Cast<APlayerController>(GetOwner());
+    auto* Turns=GetWorld()?GetWorld()->GetSubsystem<UDeliveryConversationTurnSubsystem>():nullptr;
+    if (!PC || !Turns) { ClientResult(TEXT("Unavailable"),Handle.Token); return false; }
+    FDeliveryConversationTurnLease Lease;
+    if (!Turns->GetLease(Resident,Lease) || !(Lease.Handle==Handle) || Lease.Owner.Get()!=PC)
+    { ClientResult(TEXT("Expired"),Handle.Token); return false; }
+    // 已提交的 final 重发只读取原结果，不能撤销正在播放的回复
+    if (Lease.Phase==EDeliveryConversationTurnPhase::AwaitingReply) return true;
+    const bool bVoiceMessage=IsVoiceTurn(Handle);
+    if (!(bVoiceMessage?CanVoiceTalkTo(Resident):CanTalkTo(Resident)) || Message.IsEmpty() || Message.Len()>256 ||
+        Turns->ValidateFinal(PC,Resident,Handle)!=EDeliveryConversationTurnResult::Accepted ||
+        !Turns->CommitFinal(PC,Resident,Handle,Handle.Token))
+    {
+        Turns->Cancel(PC,Handle);
+        ClientResult(Message.IsEmpty()?TEXT("Empty"):TEXT("Unavailable"),Handle.Token);
+        return false;
+    }
+    NextSendAt=FPlatformTime::Seconds()+1;
+    const FGuid SpeechId=Handle.Token;
+    const bool bHeard=bVoiceMessage?Resident->HearCompanionVoice(PC,Message,SpeechId):
+        Resident->HearSpeech(PC->GetPawn(),Message,SpeechId,0);
+    if (!bHeard)
+    { Turns->Cancel(PC,Handle); ClientResult(TEXT("NotHeard"),SpeechId); return false; }
+    // 发言仍按原轮次确认；旧 final 可以继续提交，但不能重启已被新输入取代的朝向
+    if (!bVoiceMessage) ConfirmConversationFacingInput(Resident,Lease.ClientToken);
     // 同在现场的人也能听到原问题，但只有交谈对象收到需要回复的玩家发言
-    for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
-        if (*It!=Resident) It->HearSpeech(PC->GetPawn(),Message,SpeechId,0,Resident);
+    if (bVoiceMessage)
+    {
+        TArray<ADeliveryNpcCharacter*> Nearby;
+        const FVector SpeakerLocation=PC->GetPawn()->GetActorLocation();
+        for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
+            if (*It!=Resident && FVector::DistSquared(It->GetActorLocation(),SpeakerLocation)<=FMath::Square(900.f))
+                Nearby.Add(*It);
+        Nearby.Sort([&](const ADeliveryNpcCharacter& A,const ADeliveryNpcCharacter& B)
+        { return FVector::DistSquared(A.GetActorLocation(),SpeakerLocation)<FVector::DistSquared(B.GetActorLocation(),SpeakerLocation); });
+        int32 HeardCount=0;
+        for (auto* Listener:Nearby)
+        {
+            if (HeardCount>=FMath::Clamp(VoiceOverhearLimit,0,8)) break;
+            // 邻居只记玩家身边实际听到的话，不为连麦的每一句新开模型任务
+            if (Listener->HearSpeech(PC->GetPawn(),Message,SpeechId,0,Resident,FGuid(),false)) ++HeardCount;
+        }
+    }
+    else
+        for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
+            if (*It!=Resident) It->HearSpeech(PC->GetPawn(),Message,SpeechId,0,Resident);
     UE_LOG(LogTemp,Log,TEXT("ResidentConversation accepted: player=%s resident=%s speech=%s pending=%d activeAction=%d"),
         *GetNameSafe(GetOwner()),*GetNameSafe(Resident),*SpeechId.ToString(),Resident->Agent->IsDecisionPending(),Resident->Agent->HasActiveAction());
     ClientResult(TEXT("Heard"),SpeechId);
+    return true;
 }
 void UDeliveryConversationComponent::ClientResult_Implementation(FName Result,FGuid SpeechId)
 {
+    // 本轮接收回执解除连续语音等待，旧文字窗口的显示筛选不影响轮次清理
+    if (bVoiceSubmissionSent && LocalVoiceHandle.IsValid() && LocalVoiceHandle.Token==SpeechId)
+        ResetLocalVoice();
     // 通过发言编号区分每次发送结果，只更新当前这次发言的提示
     if (SpeechId!=LastSubmissionId) return;
     LastResult=Result; ResultExpiresAt=FPlatformTime::Seconds()+2.5;

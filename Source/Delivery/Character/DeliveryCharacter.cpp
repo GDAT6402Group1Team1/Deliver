@@ -47,6 +47,12 @@
 #include "Input/DeliveryInputComponent.h"
 #include "TimerManager.h"
 
+namespace
+{
+// 持续按键逐帧续期，允许低帧率和短时丢包，停止包缺失时也不会无限前进
+constexpr float MoveInputLeaseSeconds = 0.75f;
+}
+
 // 创建角色组件，并设置默认输入、镜头和资源
 ADeliveryCharacter::ADeliveryCharacter()
 {
@@ -212,24 +218,32 @@ void ADeliveryCharacter::DoMove(float Right, float Forward)
 {
     if (TrunkPassenger && TrunkPassenger->IsPassenger())
     {
-        if (ActiveRagdoll) ActiveRagdoll->SetMoveInput(FVector2D::ZeroVector);
+        ClearMoveInput();
         return;
     }
     if (ActiveRagdoll)
     {
-        const FVector2D Input(Right, Forward);
+        const FVector2D Input(FMath::IsFinite(Right) ? FMath::Clamp(Right, -1.0f, 1.0f) : 0.0f,
+            FMath::IsFinite(Forward) ? FMath::Clamp(Forward, -1.0f, 1.0f) : 0.0f);
         ActiveRagdoll->SetMoveInput(Input);
-        if (!HasAuthority())
+        const bool bMoving = !Input.IsNearlyZero();
+        if (!HasAuthority() && IsLocallyControlled() && (bMoving || bLocalMoveInputActive))
         {
-            // 本机立即响应移动，服务器也使用这次输入计算身体运动
-            ServerSetMoveInput(Input, Controller ? Controller->GetControlRotation().Yaw : 0.0f);
+            ++LocalMoveInputSequence;
+            if (bMoving)
+                ServerSetMoveInputSequenced(Input, Controller->GetControlRotation().Yaw, LocalMoveInputSequence);
+            else
+                ServerStopMoveInput(LocalMoveInputSequence);
         }
+        bLocalMoveInputActive = bMoving;
+        if (HasAuthority() && !bMoving && GetWorld()) GetWorldTimerManager().ClearTimer(MoveInputExpiryTimer);
     }
 }
 
 // 本机先响应跳跃，再向服务器提交请求
 void ADeliveryCharacter::DoJumpStart()
 {
+    if (ActiveRagdoll) ActiveRagdoll->CancelConversationFacing();
     if (TrunkPassenger && TrunkPassenger->IsPassenger()) return;
     if (!ActiveRagdoll)
     {
@@ -253,6 +267,7 @@ void ADeliveryCharacter::DoJumpEnd() {}
 // 持有物品时使用物品，否则请求左拳技能
 void ADeliveryCharacter::DoAttackLeft()
 {
+    if (ActiveRagdoll) ActiveRagdoll->CancelConversationFacing();
     if (TrunkPassenger && TrunkPassenger->IsPassenger()) return;
     if (GrabComponent && GrabComponent->IsGrabbing())
         return;
@@ -279,6 +294,7 @@ void ADeliveryCharacter::DoAttackLeft()
 // 允许空手攻击时请求右拳技能
 void ADeliveryCharacter::DoAttackRight()
 {
+    if (ActiveRagdoll) ActiveRagdoll->CancelConversationFacing();
     if (TrunkPassenger && TrunkPassenger->IsPassenger()) return;
     if (GrabComponent && GrabComponent->IsGrabbing())
         return;
@@ -412,9 +428,44 @@ bool ADeliveryCharacter::IsMeleeAttacking() const
 // 过滤无效输入，再更新服务器上的朝向和移动意图
 void ADeliveryCharacter::ServerSetMoveInput_Implementation(FVector2D Input, float AimYaw)
 {
+    // 保留既有两参数入口；当前角色启用有序请求后，不再接收无序旧请求
+    if (ServerMoveInputController.Get() != Controller) bHasServerMoveInputSequence = false;
+    if (!bHasServerMoveInputSequence) ApplyServerMoveInput(Input, AimYaw);
+}
+
+bool ADeliveryCharacter::AcceptMoveInputSequence(uint32 Sequence)
+{
+    if (!HasAuthority() || !Controller || Controller->GetPawn() != this) return false;
+    if (ServerMoveInputController.Get() != Controller)
+    {
+        ServerMoveInputController = Controller;
+        bHasServerMoveInputSequence = false;
+    }
+    // 无符号差值允许序号绕回，同时拒绝停止与移动的迟到、重复请求
+    const uint32 Advance = Sequence - LastServerMoveInputSequence;
+    if (bHasServerMoveInputSequence && (Advance == 0 || Advance >= 0x80000000u)) return false;
+    bHasServerMoveInputSequence = true;
+    LastServerMoveInputSequence = Sequence;
+    return true;
+}
+
+void ADeliveryCharacter::ServerSetMoveInputSequenced_Implementation(FVector2D Input, float AimYaw, uint32 Sequence)
+{
+    if (AcceptMoveInputSequence(Sequence)) ApplyServerMoveInput(Input, AimYaw);
+}
+
+void ADeliveryCharacter::ServerStopMoveInput_Implementation(uint32 Sequence)
+{
+    if (AcceptMoveInputSequence(Sequence)) ClearMoveInput();
+}
+
+void ADeliveryCharacter::ApplyServerMoveInput(FVector2D Input, float AimYaw)
+{
+    if (!HasAuthority() || !Controller || Controller->GetPawn() != this) return;
+    ServerMoveInputController = Controller;
     if (TrunkPassenger && TrunkPassenger->IsPassenger())
     {
-        if (ActiveRagdoll) ActiveRagdoll->SetMoveInput(FVector2D::ZeroVector);
+        ClearMoveInput();
         return;
     }
     if (Controller && FMath::IsFinite(AimYaw))
@@ -429,8 +480,46 @@ void ADeliveryCharacter::ServerSetMoveInput_Implementation(FVector2D Input, floa
         // 拒绝无效数值，并将每个输入轴限制在正常范围内
         const float Right = FMath::IsFinite(Input.X) ? FMath::Clamp(Input.X, -1.0f, 1.0f) : 0.0f;
         const float Forward = FMath::IsFinite(Input.Y) ? FMath::Clamp(Input.Y, -1.0f, 1.0f) : 0.0f;
-        ActiveRagdoll->SetMoveInput(FVector2D(Right, Forward));
+        const FVector2D SanitizedInput(Right, Forward);
+        ActiveRagdoll->SetMoveInput(SanitizedInput);
+        if (SanitizedInput.IsNearlyZero())
+        {
+            ClearMoveInput();
+        }
+        else if (GetWorld())
+        {
+            LastServerMoveInputTime = GetWorld()->GetTimeSeconds();
+            if (!GetWorldTimerManager().IsTimerActive(MoveInputExpiryTimer))
+                GetWorldTimerManager().SetTimer(MoveInputExpiryTimer, this,
+                    &ADeliveryCharacter::ExpireServerMoveInput, MoveInputLeaseSeconds, false);
+        }
     }
+}
+
+void ADeliveryCharacter::ExpireServerMoveInput()
+{
+    if (!HasAuthority() || !GetWorld()) return;
+    const double Remaining = MoveInputLeaseSeconds - (GetWorld()->GetTimeSeconds() - LastServerMoveInputTime);
+    if (Controller && Controller == ServerMoveInputController.Get() && Controller->GetPawn() == this && Remaining > 0.0)
+    {
+        GetWorldTimerManager().SetTimer(MoveInputExpiryTimer, this,
+            &ADeliveryCharacter::ExpireServerMoveInput, static_cast<float>(Remaining), false);
+        return;
+    }
+    ClearMoveInput();
+}
+
+void ADeliveryCharacter::ClearMoveInput()
+{
+    bLocalMoveInputActive = false;
+    if (ActiveRagdoll) ActiveRagdoll->SetMoveInput(FVector2D::ZeroVector);
+    if (GetWorld()) GetWorldTimerManager().ClearTimer(MoveInputExpiryTimer);
+}
+
+void ADeliveryCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    ClearMoveInput();
+    Super::EndPlay(EndPlayReason);
 }
 
 // 限制连续起跳请求，只记录实际成功的起跳
@@ -472,12 +561,17 @@ bool ADeliveryCharacter::IsGrabChordHeld() const
 
 void ADeliveryCharacter::UnPossessed()
 {
+    if (ActiveRagdoll) ActiveRagdoll->CancelConversationFacing();
     PlayerInput->ResetInput();
+    ClearMoveInput();
+    ServerMoveInputController.Reset();
+    bHasServerMoveInputSequence = false;
     Super::UnPossessed();
 }
 
 void ADeliveryCharacter::OnRep_Controller()
 {
+    if (ActiveRagdoll) ActiveRagdoll->CancelConversationFacing();
     Super::OnRep_Controller();
     if (!IsLocallyControlled()) PlayerInput->ResetInput();
 }

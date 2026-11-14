@@ -1,0 +1,52 @@
+{
+  "recorded_utc": "2026-11-14T13:43:07.836539+00:00",
+  "command": "python -B -X utf8 -m unittest test_tts_duration test_native_tts test_neural_stream test_neural_tts test_neural_audio_stream test_streaming_audio tts_evaluation.test_http_speech_probe tts_evaluation.test_compare_stream_runtime -v",
+  "cwd": "D:/Udev/Delivery/Tools/DeliveryAI",
+  "passed": true,
+  "tests": 71,
+  "seconds": 2.656,
+  "new_tests": 8,
+  "config_changes": {
+    "max_pcm_bytes": {
+      "old": 384000,
+      "new": 576000
+    }
+  },
+  "pcm_contract": {
+    "sample_rate": 24000,
+    "channels": 1,
+    "sample_bytes": 2,
+    "allowed_config_bytes": [
+      384000,
+      576000
+    ],
+    "max_protocol_line_chars": 786432,
+    "max_chunks": 48,
+    "max_worker_messages": 50,
+    "chunk_frames": [
+      4,
+      8
+    ],
+    "sender_pending_chunks": 4,
+    "http_pending_events": 64
+  },
+  "old_config_sha256": "19cdeaa143c0238a3d47a95fc91a1094d30a18eb1f95841739f49c3862bb6216",
+  "sources": {
+    "neural_tts.py": "5f1460b32734b741a93898e953583e93e088d369b48e07d1986a74975612f4e2",
+    "neural_audio_stream.py": "d3249cd198e65fec0818d07d87827db96a9b86a6608a2a6ca4e3db67a3d8ac85",
+    "neural_voice_config.json": "3dc88958701a23b5840a4b3820a057ee13de7e509dfec394681399a38fde278d",
+    "tts.py": "f03e098183120586174624b1d8c224ad125a43e8a5dd105e12760e945340341c",
+    "test_tts_duration.py": "066406ec0c39b6cbff77d85c35041f26c5c5bff2c0ad21a67acc4ae28867f34a",
+    "test_neural_tts.py": "23c0a04cfeedba58220b3a90334423c6728195abff81673c55556717649b4065",
+    "test_neural_stream.py": "1dc16f8709121e286fc8bdbc0af2c57d924946adc2858d0a23b6ba9705aefcec",
+    "tts_evaluation/probe_http_speech.py": "a1870f1e81730e6c78a6760daf7f0c6f60792d43d285bfb3b9101b71c196dd05",
+    "tts_evaluation/compare_stream_runtime.py": "0c02c733a9ce4a9df5b7b68a7ee3642ac3604e1499f5b7e3eb365eac5c9f50c4"
+  },
+  "concurrent_work": "native_tts_engine.py init/close/activation and native_tts runtime are being updated by model_latency_plan; current hash not frozen here",
+  "limitations": [
+    "Only CPU fake synthesis and actual localhost HTTP were exercised",
+    "No new real neural/native synthesis or UE playback has been run for the 12-second change",
+    "UE limits and new build are handled by the UI task; do not use the new formal config with the old UE binary"
+  ],
+  "evidence": "actual-long-sentence.json and actual-long-sentence.log"
+}

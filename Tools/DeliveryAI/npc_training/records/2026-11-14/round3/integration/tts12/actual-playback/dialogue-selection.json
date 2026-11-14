@@ -1,0 +1,22 @@
+{
+  "time": "22:15:23",
+  "request_id": "bf0cc448-408e-bf8b-abcb-8f9a02f6f994",
+  "source": "player",
+  "model": "gpt-6-luna",
+  "npc_id": "0b719b0a-4925-439e-1345-5b94ce3d5c4e",
+  "world_epoch": "16aa5fa7-4235-ce9a-f7ad-1a998ac7c909",
+  "profile_id": "xiumei",
+  "pending_player_message": "翠花，我刚来没听全。请用一句完整的话，详细说说你刚才看见了什么、为什么生气、准备怎么把误会说开，我认真听着。",
+  "chosen": "LookAt:p2",
+  "emotion": "Calm",
+  "speech": [
+    "我没看见什么新事，气的是大壮以前总拿“让着我”压人；刚才他答应以后好好说，我也不打算再较劲了。"
+  ],
+  "error": null,
+  "source_record": {
+    "path": "Saved/Logs/NpcDialogue.ndjson",
+    "line": 441,
+    "line_sha256": "1dd439b068dd8a678d8022520fa8760a1724b67b32e1e2c610571ed555e6a325",
+    "selection": "Only this player message, response and identifiers; full prompt/history not copied"
+  }
+}

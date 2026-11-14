@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-11-14T14:40:12.154488+00:00",
+  "scope": "Q4 全 GPU、当前说话者语音模型与双人 PIE 的三组同机测量",
+  "result": "frame_gate_failed",
+  "source_directory": "Saved/AIResearch/NpcTraining/combat-v7-integration",
+  "full_40_second_frame_gate_passed": false,
+  "real_player_input_and_ue_audio_acceptance": false,
+  "old_manifests_unchanged": {
+    "round3-manifest.json": "3d16302b5a45cf81c627cdcae6ff7955454ad61ec30716a3a29ee54505097472",
+    "integration\\manifest.json": "a852f8edece45a2befe90eb3e8137b1a87f144f7ec90de325244a4b0f77dfedf",
+    "q4\\manifest.json": "eaa151f4539d26bb42d1335293c191a65d7476fa335140750d49ae0529a6380f"
+  },
+  "exclusions": [
+    "模型权重",
+    "CSV 原始帧数据",
+    "WAV 或其他音频",
+    "无关日志",
+    "当前工作区后来修改的源码"
+  ],
+  "raw_csv_reference": {
+    "source_path": "Saved/Profiling/CSV/CombatQ4FullGpu.csv",
+    "archive_path": "Saved\\AIResearch\\NpcTraining\\combat-v7-integration\\CombatQ4FullGpu.csv",
+    "sha256": "239371acc77e3d3ac494f963f96c39548293c76a9d5758a4a135524912d69f00",
+    "bytes": 8157350,
+    "capture_id": "352877C449AA76D70238A492059E5992",
+    "capture_start_utc": "2026-11-14T14:26:20.938000+00:00",
+    "capture_end_utc": "2026-11-14T14:32:35.729000+00:00",
+    "frames": 3891,
+    "missing": [],
+    "zero": [],
+    "completion_footer": true,
+    "summed_frame_seconds": 374.6206660000003,
+    "log_duration_seconds": 374.791,
+    "log_vs_frame_sum_difference_seconds": 0.17033399999968424,
+    "log_path": "Saved\\Logs\\DeliveryQ4CoexistPlaytest.log",
+    "log_evidence": [
+      {
+        "line": 3039,
+        "text": "[2026.11.14-14.26.20:938][306]LogCsvProfiler: Display: Capture started. CSV ID: 352877C449AA76D70238A492059E5992"
+      },
+      {
+        "line": 8688,
+        "text": "[2026.11.14-14.32.35:729][197]LogCsvProfiler: Display: Capture Ended. Writing CSV to file : ../../../../../Udev/Delivery/Saved/Profiling/CSV/CombatQ4FullGpu.csv"
+      }
+    ],
+    "tail_excluded_after_utc": "2026-11-14T14:31:22.745408+00:00"
+  },
+  "files": [
+    {
+      "path": "baseline/decisions.json",
+      "origin": "baseline/summary.json",
+      "kind": "extracted_metadata",
+      "bytes": 3009,
+      "sha256": "e1376cd78acf1030fea5bbb657ea5eb959826228c27e8afc3345da396116060f"
+    },
+    {
+      "path": "baseline/frames-primary.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-q4active/frames-primary.json",
+      "kind": "exact_copy",
+      "bytes": 6570,
+      "sha256": "e98d87688712f05868d7725ea01a5470ae6079a8ced389c16487d185a03ff52a"
+    },
+    {
+      "path": "baseline/frames-trimmed-auxiliary.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-q4active/frames-trimmed-auxiliary.json",
+      "kind": "exact_copy",
+      "bytes": 6602,
+      "sha256": "d6abdb6f4ad22ced92440ea28a7215af82e4c1aa9862f906d4964364c4ba2a4a"
+    },
+    {
+      "path": "baseline/process-evidence.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-q4active-process-evidence.json",
+      "kind": "exact_copy",
+      "bytes": 5705,
+      "sha256": "920ea418f0f4dd1bbb4ad716d84298d400c3a9d02062efd60f121c4611892e5d"
+    },
+    {
+      "path": "baseline/speech-metadata.json",
+      "origin": "baseline/summary.json",
+      "kind": "extracted_metadata",
+      "bytes": 39707,
+      "sha256": "1f6dd9f3a847d41d375d71471d75bfccfa5e96b05ae7cb2cf6f3a3842e637d16"
+    },
+    {
+      "path": "baseline/summary.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-q4active/summary.json",
+      "kind": "exact_copy",
+      "bytes": 54927,
+      "sha256": "f96e24d1a347b834cf3415ba81634ea882248c9a98f964eea563698ef536b9d2"
+    },
+    {
+      "path": "commands.json",
+      "origin": "三个 process-evidence.json；未复制无关进程日志",
+      "kind": "extracted_metadata",
+      "bytes": 7538,
+      "sha256": "dbbb0e76adec3aaff9b55cf20a9ddb5a8a190772660aa120cad5e3731cd54621"
+    },
+    {
+      "path": "frames-overview.json",
+      "origin": "summary.json#/csv,frame_comparison",
+      "kind": "extracted_metadata",
+      "bytes": 3026,
+      "sha256": "58d77a5006cd3012645485925a02ac86416a3cd7a9badf50b0ae6df4c6a133f1"
+    },
+    {
+      "path": "luna/decisions.json",
+      "origin": "luna/summary.json",
+      "kind": "extracted_metadata",
+      "bytes": 28218,
+      "sha256": "ba64f974e92520c7147c07b1e548b6c8228748602dae361c7c4a64118b6a81b1"
+    },
+    {
+      "path": "luna/frames-primary.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-luna-q4active/frames-primary.json",
+      "kind": "exact_copy",
+      "bytes": 6560,
+      "sha256": "1e1ba363a536f01eb317c05b51d0cf760d0b2a4a4ca78ba1070d6e3a0e3b39d8"
+    },
+    {
+      "path": "luna/frames-trimmed-auxiliary.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-luna-q4active/frames-trimmed-auxiliary.json",
+      "kind": "exact_copy",
+      "bytes": 6656,
+      "sha256": "196d0fc9a4cc718e4c5141199214f783f8af6c57a33605699407c180dcef576f"
+    },
+    {
+      "path": "luna/process-evidence.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-luna-q4active-process-evidence.json",
+      "kind": "exact_copy",
+      "bytes": 5814,
+      "sha256": "7e13a7a1ff8156b0ec3e24edc6295da0841271de6468efe4be03783cf8d9f4ec"
+    },
+    {
+      "path": "luna/speech-metadata.json",
+      "origin": "luna/summary.json",
+      "kind": "extracted_metadata",
+      "bytes": 39701,
+      "sha256": "96bfb09d25468aba1322553998510f4c713060f66405f1b0f1c9f2e2d8032b44"
+    },
+    {
+      "path": "luna/summary.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-luna-q4active/summary.json",
+      "kind": "exact_copy",
+      "bytes": 82265,
+      "sha256": "17b8a87ef63f58f2038bb19f0aaab9cbc9eb459420906bdc3a19acf34621a5d3"
+    },
+    {
+      "path": "paired15.json",
+      "origin": "summary.json#/paired_luna",
+      "kind": "extracted_metadata",
+      "bytes": 3047,
+      "sha256": "db735918756ce7ca3dc17a1e21e3190862b2c4e854f923ead767be5263c81d51"
+    },
+    {
+      "path": "plan.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-fullgpu-plan.json",
+      "kind": "exact_copy",
+      "bytes": 16097,
+      "sha256": "03e54edd011df03ba10f0d5b276f10c94148e95ee736f654ad471584ead8c61e"
+    },
+    {
+      "path": "q4-fullgpu99/decisions.json",
+      "origin": "q4-fullgpu99/summary.json",
+      "kind": "extracted_metadata",
+      "bytes": 60113,
+      "sha256": "c6ec895f72c485502486a35cb0ad5df0f8ae5a15f97e5484b1804977c6371535"
+    },
+    {
+      "path": "q4-fullgpu99/frames-primary.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-local99-q4active/frames-primary.json",
+      "kind": "exact_copy",
+      "bytes": 6478,
+      "sha256": "4e1a95c5d91b37bef0017bd24f203e591b6428e3c5201e549058a5a3bee6c6ab"
+    },
+    {
+      "path": "q4-fullgpu99/frames-trimmed-auxiliary.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-local99-q4active/frames-trimmed-auxiliary.json",
+      "kind": "exact_copy",
+      "bytes": 6606,
+      "sha256": "fe3eef69ee0ce42654b07463183d7579fc48c9ce74794bd0bd10b6d32d225d54"
+    },
+    {
+      "path": "q4-fullgpu99/process-evidence.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-local99-q4active-process-evidence.json",
+      "kind": "exact_copy",
+      "bytes": 11475,
+      "sha256": "94374f9045eb9a0361851b7dc6e49e100eeec8f2a8ff38ea9cc3bbfb4b0e8a0a"
+    },
+    {
+      "path": "q4-fullgpu99/speech-metadata.json",
+      "origin": "q4-fullgpu99/summary.json",
+      "kind": "extracted_metadata",
+      "bytes": 39684,
+      "sha256": "a5d24572192a7d25d2fdc72d99d79954c2c2fcc63e16cd277d64b9dba7f84d9a"
+    },
+    {
+      "path": "q4-fullgpu99/summary.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-local99-q4active/summary.json",
+      "kind": "exact_copy",
+      "bytes": 115830,
+      "sha256": "e8031a19f96309415a54fcdb042f5321be9a1ecd1b0c9c92daa27cbe2e775026"
+    },
+    {
+      "path": "source-hashes.json",
+      "origin": "实际执行记录中的哈希；此归档阶段没有重新读取模型权重",
+      "kind": "extracted_metadata",
+      "bytes": 13523,
+      "sha256": "9eeeb9b8df49bce0c2484a900ecbe43fde9da5c3e4a1fbd04a843c0d4b33b9a6"
+    },
+    {
+      "path": "summary.json",
+      "origin": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-fullgpu-summary.json",
+      "kind": "exact_copy",
+      "bytes": 76148,
+      "sha256": "3257e320768c1efc5b366cdc7c34527a4511474f2e242caa5c94bb0f25b6f094"
+    }
+  ]
+}

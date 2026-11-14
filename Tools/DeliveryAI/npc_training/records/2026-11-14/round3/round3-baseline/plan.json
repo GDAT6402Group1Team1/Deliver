@@ -1,0 +1,7 @@
+{
+  "purpose": "round2 model on unchanged old validation stories with production SelfCombat suffix",
+  "source_sha256": "9e7cfd68274a498ab50f2e77463a408988fa7c56244ec0f06d52f62c13718108",
+  "only_change": "SelfCombat current-action suffix and regenerated prompt",
+  "labels_changed": false,
+  "acceptance_used": false
+}

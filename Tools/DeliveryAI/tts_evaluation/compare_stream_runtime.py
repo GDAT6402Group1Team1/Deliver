@@ -176,7 +176,7 @@ def run_case(worker, engine, case, mode, output, profile=True):
     closed = threading.Event()
     with trace_model(engine, profile) as model_trace:
         origin = time.perf_counter()
-        audio = AudioTrace(origin)
+        audio = AudioTrace(origin, engine.config['max_pcm_bytes'])
         result = method(engine, task, closed, audio.receive if task.chunk_frames else None)
         elapsed_ms = (time.perf_counter() - origin) * 1000
     pcm, row = audio.finish(result, elapsed_ms)

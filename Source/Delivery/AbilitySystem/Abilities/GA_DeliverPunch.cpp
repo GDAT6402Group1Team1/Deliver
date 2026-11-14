@@ -7,6 +7,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "Combat/DeliveryImpactReceiver.h"
+#include "Combat/DeliveryCombatEvents.h"
 #include "Combat/DeliveryRagdollCombatComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "AbilitySystem/DeliverGameplayTags.h"
@@ -29,6 +30,7 @@ bool UGA_DeliverPunch::CanActivateAbility(const FGameplayAbilitySpecHandle Handl
                                           const FGameplayTagContainer* TargetTags,
                                           FGameplayTagContainer* OptionalRelevantTags) const
 {
+	if (!ActorInfo || !ActorInfo->AvatarActor.IsValid()) return false;
 	// 晕倒判定：服务器靠 State.Stunned（ActivationBlockedTags）拦，
 	// 但那个 Tag 不复制，客户端预测时看不到；这里改查布娃娃的控制模式——
 	// ReplicatedControlMode 是复制的，两端都能得到一致结论
@@ -83,6 +85,7 @@ void UGA_DeliverPunch::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
 	// 一次技能实例可以重复出拳，每次成功启动都清空上一拳的命中记录
 	HitActors.Reset();
+	PunchId=FGuid::NewGuid();
 	bPlayedHitSound = false;
 	RagdollCombat = Character->GetRagdollCombat();
 	RagdollCombat->OnPunchHitWindow.AddDynamic(this, &UGA_DeliverPunch::OnHitWindow);
@@ -95,15 +98,17 @@ void UGA_DeliverPunch::EndAbility(const FGameplayAbilitySpecHandle Handle,
                                   const FGameplayAbilityActivationInfo ActivationInfo,
                                   bool bReplicateEndAbility, bool bWasCancelled)
 {
+	PunchId.Invalidate();
 	if (RagdollCombat)
 	{
+		UDeliveryRagdollCombatComponent* Combat = RagdollCombat;
+		RagdollCombat = nullptr;
 		// 技能结束后，不再处理这次出拳的命中和结束通知
-		RagdollCombat->OnPunchHitWindow.RemoveDynamic(this, &UGA_DeliverPunch::OnHitWindow);
-		RagdollCombat->OnPunchEnded.RemoveDynamic(this, &UGA_DeliverPunch::OnPunchEnded);
+		Combat->OnPunchHitWindow.RemoveDynamic(this, &UGA_DeliverPunch::OnHitWindow);
+		Combat->OnPunchEnded.RemoveDynamic(this, &UGA_DeliverPunch::OnPunchEnded);
 		// 被打断时，同时停止尚未完成的出拳
 		if (bWasCancelled)
-			RagdollCombat->CancelPunch();
-		RagdollCombat = nullptr;
+			Combat->CancelPunch();
 	}
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
@@ -112,7 +117,7 @@ void UGA_DeliverPunch::EndAbility(const FGameplayAbilitySpecHandle Handle,
 // 在服务器结算当前出拳手的命中目标和伤害
 void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 {
-	if (FiredHand != Hand || !CurrentActorInfo->IsNetAuthority())
+	if (!IsActive() || !CurrentActorInfo || FiredHand != Hand || !CurrentActorInfo->IsNetAuthority() || !PunchId.IsValid())
 	{
 		return;
 	}
@@ -127,43 +132,53 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 	const TSubclassOf<UGameplayEffect> DamageClass = Character->GetDamageEffect();
 	const FVector PunchDirection = RagdollCombat->GetPunchAimDirection();
 	const FVector ImpactPoint = RagdollCombat->GetPunchTraceTransform().GetLocation();
+	const FGuid ResolvingPunchId = PunchId;
+	const TWeakObjectPtr<UDeliveryRagdollCombatComponent> ResolvingCombat = RagdollCombat;
 
 	// 同一次出拳仅播放一次命中音效
-	bool bAnyHit = false;
+	bool bPlayHitSound = false;
 	bool bHitNPC = false;
+	const auto RecordHit = [&](AActor* HitActor)
+	{
+		// 受击和 GAS 事件会同步取消动作，进入回调前先记下本拳的去重与音效状态
+		HitActors.Add(HitActor);
+		if (!bPlayedHitSound) { bPlayedHitSound = true; bPlayHitSound = true; }
+	};
 
 	for (AActor* HitActor : Hits)
 	{
+		if (!IsActive() || PunchId != ResolvingPunchId || !IsValid(Character) ||
+		    Character->IsActorBeingDestroyed() || RagdollCombat != ResolvingCombat.Get()) break;
 		// 窗口会连续触发，多帧接触同一角色也只处理一拳
-		if (HitActors.Contains(HitActor))
+		if (!IsValid(HitActor) || HitActor->IsActorBeingDestroyed() || HitActors.Contains(HitActor))
 			continue;
 		// 路人这类不走 GAS 的目标：没有血量也没有晕倒，只有被打飞和退场。
 		// 判据是"实现了受击接口"而不是"Cast 成 ADeliveryPedestrian"——
 		// 后者会让战斗代码反向依赖 NPC 模块，而且同一个判断在撞车那边还要再写一遍
 		if (IDeliveryImpactReceiver* Receiver = Cast<IDeliveryImpactReceiver>(HitActor))
 		{
-			if (Receiver->IsKnockedDown())
+			if (Receiver->IsKnockedDown() && !Receiver->CanReceiveHitWhileDown())
 			{
 				continue;
 			}
+			RecordHit(HitActor);
+			bHitNPC = true;
 			if (HitReactionImpulse > 0.0f && !PunchDirection.IsNearlyZero())
 			{
 				const FVector ReactionDirection =
 				    (PunchDirection + FVector::UpVector * HitReactionUpwardFraction).GetSafeNormal();
 				// 冲量乘一个倍率：路人的刚体质量和玩家布娃娃不是一个量级，
 				// 用同一个数值的话要么推不动要么飞上天，所以单独给
-				Receiver->ReceiveImpactFrom(ReactionDirection * HitReactionImpulse * PedestrianImpulseScale,
-				                        ImpactPoint, GetAvatarActorFromActorInfo());
+				Receiver->ReceiveMeleeHitFrom(ReactionDirection * HitReactionImpulse * PedestrianImpulseScale,
+				                        ImpactPoint, Character, ResolvingPunchId);
 			}
-			bHitNPC = true;
-			HitActors.Add(HitActor);
-			bAnyHit = true;
+			DeliveryCombatEvents::ReportHit(Character,HitActor,ResolvingPunchId,ImpactPoint);
 			continue;
 		}
 
 		ADeliveryCharacter* TargetCharacter = Cast<ADeliveryCharacter>(HitActor);
 		const ADeliverPlayerState* TargetPS =
-		    TargetCharacter ? TargetCharacter->GetPlayerState<ADeliverPlayerState>() : nullptr;
+		    TargetCharacter ? Cast<ADeliverPlayerState>(TargetCharacter->GetTaskPlayerState()) : nullptr;
 		UAbilitySystemComponent* TargetASC = TargetPS ? TargetPS->GetAbilitySystemComponent() : nullptr;
 		UDeliveryActiveRagdollComponent* TargetRagdoll =
 		    TargetCharacter ? TargetCharacter->GetActiveRagdoll() : nullptr;
@@ -183,34 +198,33 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 				continue;
 			}
 			Spec.Data->SetSetByCallerMagnitude(TAG_Effect_Type_Damage, -PunchDamage);
+			RecordHit(HitActor);
 			TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 		}
+		else RecordHit(HitActor);
 
 		// 击打者只提供方向和力度；真正的物理冲量由服务器施加到受击者自身
-		if (HitReactionImpulse > 0.0f && !PunchDirection.IsNearlyZero())
+		if (IsValid(TargetCharacter) && !TargetCharacter->IsActorBeingDestroyed() && IsValid(TargetRagdoll) &&
+		    HitReactionImpulse > 0.0f && !PunchDirection.IsNearlyZero())
 		{
 			const FVector ReactionDirection =
 			    (PunchDirection + FVector::UpVector * HitReactionUpwardFraction).GetSafeNormal();
 			TargetRagdoll->ApplyMeleeImpact(ReactionDirection * HitReactionImpulse, ImpactPoint);
 		}
 
-		// 仅对通过检查并完成受击处理的目标记录命中
-		// 无效目标不触发命中音效
-		HitActors.Add(HitActor);
-		bAnyHit = true;
+		DeliveryCombatEvents::ReportHit(Character,HitActor,ResolvingPunchId,ImpactPoint);
 	}
 
-	if (bAnyHit && !bPlayedHitSound)
+	if (bPlayHitSound && ResolvingCombat.IsValid())
 	{
-		bPlayedHitSound = true;
-		RagdollCombat->MulticastPlayPunchHit(ImpactPoint, bHitNPC);
+		ResolvingCombat->MulticastPlayPunchHit(ImpactPoint, bHitNPC);
 	}
 }
 
 // 只结束当前技能对应的那只手，避免左右拳事件互相影响
 void UGA_DeliverPunch::OnPunchEnded(EMeleeHand FiredHand)
 {
-	if (FiredHand != Hand)
+	if (!IsActive() || !CurrentActorInfo || FiredHand != Hand)
 	{
 		return;
 	}

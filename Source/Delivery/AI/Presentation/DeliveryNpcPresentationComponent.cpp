@@ -40,25 +40,87 @@ void UDeliveryNpcPresentationComponent::BeginPlay()
         Voice->AttenuationOverrides.bAttenuate=true; Voice->AttenuationOverrides.AttenuationShapeExtents=FVector(150,0,0); Voice->AttenuationOverrides.FalloffDistance=800; Voice->SetupAttachment(GetOwner()->GetRootComponent()); Voice->RegisterComponent();
         Caption=NewObject<UWidgetComponent>(GetOwner()); Caption->SetupAttachment(GetOwner()->GetRootComponent());
         Caption->SetRelativeLocation(FVector(0,0,100)); Caption->SetWidgetSpace(EWidgetSpace::Screen);
-        Caption->SetWidgetClass(UDeliveryNpcCaptionWidget::StaticClass()); Caption->SetDrawSize(FVector2D(400,100)); Caption->SetDrawAtDesiredSize(true);
+        auto* CaptionClass=LoadClass<UDeliveryNpcCaptionWidget>(nullptr,TEXT("/Game/UI/Conversation/WBP_NpcCaption.WBP_NpcCaption_C"));
+        if (!CaptionClass)
+            UE_LOG(LogTemp,Warning,TEXT("NPC caption blueprint missing: /Game/UI/Conversation/WBP_NpcCaption; voice playback remains enabled"));
+        // 缺少字幕资产时保留组件，旧对白路径仍依赖它存在才会播放声音
+        Caption->SetWidgetClass(CaptionClass); Caption->SetDrawSize(FVector2D(400,100)); Caption->SetDrawAtDesiredSize(true);
         Caption->SetCollisionEnabled(ECollisionEnabled::NoCollision); Caption->RegisterComponent();
     }
     OnRep_Speech();
 }
-bool UDeliveryNpcPresentationComponent::PublishSpeech(const FString& Text,FName Emotion,int32 Depth,FGuid ReplyToEventId)
+bool UDeliveryNpcPresentationComponent::PublishSpeech(const FString& Text,FName Emotion,int32 Depth,FGuid ReplyToEventId,FGuid ModelReplyId)
 {
-    if (!GetOwner()->HasAuthority() || Text.IsEmpty() || Text.Len()>120 || Depth>3 || Speech.bActive) return false;
-    Speech={}; Speech.TurnId=FGuid::NewGuid(); Speech.Text=Text; Speech.Emotion=Emotion; Speech.ReplyToEventId=ReplyToEventId;
-    Speech.StartTime=ServerTime(); Speech.Duration=FMath::Clamp(Text.Len()*.075f+.5f,1.f,10.f); Speech.bActive=true;
-    SpeechDepth=Depth; GetOwner()->ForceNetUpdate(); OnRep_Speech();
-    if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner())) ReplyListener=Npc->Agent->GetPublicState().SpeechTarget;
+    if (!GetOwner()->HasAuthority() || !DeliveryNpcMessages::IsValidReplyText(Text,false) || Depth<0 || Depth>3) return false;
+    FDeliveryNpcCompleteReply Reply;
+    const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    if (ModelReplyId.IsValid())
+    {
+        if (!Npc || !Npc->Agent->GetCompleteReply(ModelReplyId,Reply) || Reply.Text!=Text || Reply.MessageId!=ReplyToEventId) return false;
+        return QueueCompleteReply(Reply);
+    }
+    if (Npc && Npc->Agent->GetCompleteReply(Npc->Agent->GetPublicState().GetReplyId(),Reply))
+    {
+        if (Reply.Text!=Text || Reply.MessageId!=ReplyToEventId) return false;
+        return QueueCompleteReply(Reply);
+    }
+    // 规则短台词沿原入口，完整模型回复使用已保存的收话人与编号
+    Reply.ReplyId=FGuid::NewGuid(); Reply.MessageId=ReplyToEventId;
+    Reply.Text=Text; Reply.Emotion=Emotion; Reply.Depth=Depth;
+    if (Npc)
+    {
+        const auto State=Npc->Agent->GetPublicState();
+        Reply.Listener=State.SpeechTarget;
+        if (State.GetReplyId().IsValid()) Reply.ReplyId=State.GetReplyId();
+    }
+    return StartCompleteReply(Reply);
+}
+
+bool UDeliveryNpcPresentationComponent::StartCompleteReply(const FDeliveryNpcCompleteReply& Reply)
+{
+    if (!GetOwner()->HasAuthority() || Speech.bActive || !Reply.ReplyId.IsValid()) return false;
+    Speech={}; Speech.TurnId=Reply.ReplyId; Speech.Text=Reply.Text; Speech.Emotion=Reply.Emotion;
+    Speech.ReplyToEventId=Reply.MessageId; ReplyListener=Reply.Listener;
+    Speech.RadioListener=ResolveRadioListener(Reply.MessageId);
+    Speech.StartTime=ServerTime(); Speech.Duration=FMath::Clamp(Reply.Text.Len()*.075f+.5f,1.f,10.f); Speech.bActive=true;
+    SpeechDepth=Reply.Depth; GetOwner()->ForceNetUpdate(); OnRep_Speech();
     UE_LOG(LogTemp,Log,TEXT("ResidentSpeech started: npc=%s turn=%s replyTo=%s length=%d"),
         *GetNameSafe(GetOwner()),*Speech.TurnId.ToString(),*Speech.ReplyToEventId.ToString(),Speech.Text.Len());
     return true;
 }
-void UDeliveryNpcPresentationComponent::CancelSpeech()
+
+bool UDeliveryNpcPresentationComponent::QueueCompleteReply(const FDeliveryNpcCompleteReply& Reply)
+{
+    if (!GetOwner()->HasAuthority() || !Reply.ReplyId.IsValid() || !DeliveryNpcMessages::IsValidReplyText(Reply.Text,false)) return false;
+    if (Speech.bActive && !Speech.ActionId.IsValid() && Speech.TurnId==Reply.ReplyId) return true;
+    if (!HasReply(Reply.ReplyId)) BeginReply(Reply.ReplyId,Reply.MessageId,Reply.Depth,Reply.Listener.Get());
+    if (ReplyAction==Reply.ReplyId)
+    {
+        DeferredCompleteReply=Reply;
+        StartDeferredCompleteReply();
+        return true;
+    }
+    if (PendingReply.ReplyId==Reply.ReplyId) { PendingReply.CompleteReply=Reply; return true; }
+    return false;
+}
+
+bool UDeliveryNpcPresentationComponent::StartDeferredCompleteReply()
+{
+    const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    if (!Npc || Speech.bActive || !DeferredCompleteReply.ReplyId.IsValid() ||
+        DeferredCompleteReply.ReplyId!=ReplyAction || !Npc->Agent->CanStartReplySpeech(ReplyAction)) return false;
+    const auto Reply=MoveTemp(DeferredCompleteReply);
+    DeferredCompleteReply={};
+    // 使用原完整台词的播音方式；这里只结束队首等待，不取消 Agent 的回复
+    ReplyAction.Invalidate(); ReplyMessage.Invalidate();
+    ReplyGameplayAction.Invalidate(); ReplyTarget.Reset(); bReplyHadTarget=false;
+    ExpectedSentences=INDEX_NONE; NextSentence=0;
+    return StartCompleteReply(Reply);
+}
+void UDeliveryNpcPresentationComponent::CancelSpeech(bool bFinishCurrentSentence,bool bPreserveOtherReplies)
 {
     if (!GetOwner()->HasAuthority()) return;
+    DiscardPendingReply();
     UE_LOG(LogTemp,Log,TEXT("ResidentSpeech cancelled: npc=%s turn=%s replyTo=%s"),
         *GetNameSafe(GetOwner()),*Speech.TurnId.ToString(),*Speech.ReplyToEventId.ToString());
     // 保留此前已经说完的句子，当前被打断的半句话不写入记忆
@@ -66,18 +128,37 @@ void UDeliveryNpcPresentationComponent::CancelSpeech()
     RecordSpokenReply(false);
     CancelSentenceGeneration();
     StopReaction();
-    StopStreamSpeech(ReplyAction.IsValid()?ReplyAction:Speech.ActionId,true);
+    // 只停止这一轮声音，旧停止通知晚到时不能取消已经开始的新回复
+    const FGuid StoppedReply=ReplyAction.IsValid()?ReplyAction:Speech.ActionId.IsValid()?Speech.ActionId:Speech.TurnId;
+    if (StoppedReply.IsValid())
+    {
+        if (bFinishCurrentSentence) FinishReplyAfterSentence(StoppedReply);
+        else StopStreamSpeech(StoppedReply,!bPreserveOtherReplies);
+    }
     ReplyAction.Invalidate(); ReplyMessage.Invalidate(); Sentences.Reset(); EncodedSentences.Reset(); SpokenReply.Reset();
     ReplyListener.Reset();
-    NextSentence=0; ExpectedSentences=INDEX_NONE; SendingAudio.Reset(); SendingOffset=0; ServerVoices.Reset();
+    DeferredCompleteReply={};
+    ReplyGameplayAction.Invalidate(); ReplyTarget.Reset(); bReplyHadTarget=false;
+    NextSentence=0; ExpectedSentences=INDEX_NONE; SendingAudio.Reset(); SendingOffset=0;
+    if (bFinishCurrentSentence)
+    {
+        // 刚走近的客户端可能还在补取当前句，已完成的声音保留原来的五秒期限
+        for (auto It=ServerVoices.CreateIterator();It;++It)
+            if (!It.Value().bComplete || It.Value().ExpiresAt<=0) It.RemoveCurrent();
+        TrimVoiceCache();
+    }
+    else if (bPreserveOtherReplies) ServerVoices.Remove(Speech.TurnId);
+    else ServerVoices.Reset();
     Speech.bActive=false; GetOwner()->ForceNetUpdate(); OnRep_Speech();
+    if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->Agent->CancelReply(StoppedReply);
 }
 void UDeliveryNpcPresentationComponent::OnRep_Speech()
 {
+    if (!Speech.ActionId.IsValid() && CancelledVoiceActions.Contains(Speech.TurnId)) return;
     if (Speech.ActionId.IsValid())
     {
         // 已取消的回复偶尔会晚于停止通知到达，保留停止结果
-        if (CancelledVoiceActions.Contains(Speech.ActionId)) { Speech.bActive=false; return; }
+        if (CancelledVoiceActions.Contains(Speech.ActionId)) return;
         AcceptLocalSpeech(Speech,true);
         return;
     }
@@ -91,6 +172,10 @@ void UDeliveryNpcPresentationComponent::OnRep_Speech()
     if (Speech.bRecordedVoice) return;
     const int32 Skip=FMath::Clamp(int32((ServerTime()-Speech.StartTime)/.075),0,Speech.Text.Len());
     StopReaction();
+    const bool bRadio=IsLocalRadioListener(Speech);
+    Voice->bAllowSpatialization=!bRadio;
+    Voice->AttenuationOverrides.bAttenuate=!bRadio;
+    Voice->AttenuationOverrides.bSpatialize=!bRadio;
     auto Settings=UDeliveryDialogueVoiceComponent::MakePresetSettings(Speech.Emotion==TEXT("Angry")?EDeliveryVoicePreset::Angry:EDeliveryVoicePreset::Normal);
     Settings.BaseFrequency=VoiceFrequency;
     Voice->SpeakTextWithSettings(FText::FromString(Speech.Text.Mid(Skip)),Settings);
@@ -100,6 +185,7 @@ void UDeliveryNpcPresentationComponent::TickComponent(float Dt,ELevelTick Type,F
 {
     Super::TickComponent(Dt,Type,Fn);
     TickReaction();
+    if (Voice && !Voice->bAllowSpatialization && !IsLocalRadioListener(Speech)) Voice->StopSpeaking();
     auto* Resident=Cast<ADeliveryNpcCharacter>(GetOwner()); if (!Resident) return;
     TickSentences();
     if (GetOwner()->HasAuthority() && !ReplyAction.IsValid() && Speech.bActive && ServerTime()>=Speech.StartTime+Speech.Duration)
@@ -113,12 +199,21 @@ void UDeliveryNpcPresentationComponent::TickComponent(float Dt,ELevelTick Type,F
         Said.EventId=Speech.TurnId;
         UE_LOG(LogTemp,Log,TEXT("ResidentSpeech completed: npc=%s turn=%s replyTo=%s"),
             *GetNameSafe(GetOwner()),*Speech.TurnId.ToString(),*Speech.ReplyToEventId.ToString());
+        const auto CompletedSpeech=Speech;
+        const auto CompletedListener=ReplyListener;
+        const int32 CompletedDepth=SpeechDepth;
+        const TWeakObjectPtr<ADeliveryNpcCharacter> WeakResident(Resident);
         Resident->Agent->ObserveEvent(Said);
+        Resident->Agent->FinishReplyPlayback(CompletedSpeech.TurnId);
+        if (!WeakResident.IsValid() || Resident->IsActorBeingDestroyed()) return;
         // 完整回复与流式回复一样，最后一轮只通知邻居记住台词
         for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
-            if (*It!=Resident && FVector::DistSquared(It->GetActorLocation(),Resident->GetActorLocation())<FMath::Square(800.f))
-                It->HearSpeech(Resident,Speech.Text,Speech.TurnId,FMath::Min(SpeechDepth+1,3),
-                    ReplyListener.IsValid()?ReplyListener.Get():Resident,Speech.ReplyToEventId,SpeechDepth<3);
+            if (*It!=Resident && !Resident->Agent->WasReplyTextDelivered(CompletedSpeech.TurnId,*It) &&
+                FVector::DistSquared(It->GetActorLocation(),Resident->GetActorLocation())<FMath::Square(800.f))
+                It->HearSpeech(Resident,CompletedSpeech.Text,CompletedSpeech.TurnId,FMath::Min(CompletedDepth+1,3),
+                    CompletedListener.IsValid()?CompletedListener.Get():Resident,CompletedSpeech.ReplyToEventId,
+                    CompletedDepth<3 && !CompletedSpeech.RadioListener);
+        PromotePendingReply();
     }
     if (GetNetMode()==NM_DedicatedServer) return;
     TickExpression(Dt);
@@ -188,6 +283,7 @@ void UDeliveryNpcPresentationComponent::UpdateLegacyAnimation(ADeliveryNpcCharac
 }
 void UDeliveryNpcPresentationComponent::EndPlay(const EEndPlayReason::Type Reason)
 {
+    PendingReply={};
     CancelSentenceGeneration();
     if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()))
     {

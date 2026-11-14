@@ -34,11 +34,10 @@ FName UDeliveryNpcPresentationComponent::GetActionEmotion() const
     if (!Npc || !Npc->Agent || Npc->IsKnockedDown()) return NAME_None;
     const auto State=Npc->Agent->GetPublicState();
     if (State.Status==EDeliveryNpcActionStatus::Accepted || State.Status==EDeliveryNpcActionStatus::Running) return State.Emotion;
-    if (State.Status!=EDeliveryNpcActionStatus::Succeeded || State.Emotion.IsNone() ||
-        State.Emotion==TEXT("Calm") || !IsValid(State.SpeechTarget)) return NAME_None;
+    if (State.Emotion.IsNone() || State.Emotion==TEXT("Calm") || !IsValid(State.SpeechTarget)) return NAME_None;
     // 后台合成期间还没有本机声音，使用服务器同步的本轮编号；旧编号和停止通知都不能恢复表情
-    const bool bThisReply=State.ActionId.IsValid() && ReplyAction==State.ActionId &&
-        !CancelledVoiceActions.Contains(State.ActionId);
+    const bool bThisReply=State.GetReplyId().IsValid() && ReplyAction==State.GetReplyId() &&
+        !CancelledVoiceActions.Contains(State.GetReplyId());
     return bThisReply || IsWaitingForSpeechPlayback()?State.Emotion:NAME_None;
 }
 

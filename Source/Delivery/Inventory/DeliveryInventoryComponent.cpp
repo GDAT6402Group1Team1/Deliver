@@ -2,12 +2,15 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Inventory/DeliveryInventoryComponent.h"
+#include "Carry/DeliveryHandheldCarrierInterface.h"
+#include "Grab/DeliveryGrabbableComponent.h"
 #include "AbilitySystemComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "AbilitySystem/DeliverGameplayTags.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "Inventory/DeliveryHandheldItem.h"
+#include "Inventory/DeliveryPackageItem.h"
 #include "Inventory/DeliveryInventoryItemComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Task/World/DeliveryItemComponent.h"
@@ -46,7 +49,9 @@ ADeliveryCharacter* UDeliveryInventoryComponent::GetCharacter() const
 
 ADeliveryHandheldItem* UDeliveryInventoryComponent::GetItemInSlot(int32 SlotIndex) const
 {
-	return Slots.IsValidIndex(SlotIndex) ? Slots[SlotIndex].Get() : nullptr;
+	ADeliveryHandheldItem* Item = Slots.IsValidIndex(SlotIndex) ? Slots[SlotIndex].Get() : nullptr;
+	// 销毁通知和槽位复制可能先后到达，已销毁的物品不能继续占手或阻止接件
+	return IsValid(Item) ? Item : nullptr;
 }
 
 // 从背包槽位中寻找空位，不包含手持槽
@@ -98,11 +103,13 @@ bool UDeliveryInventoryComponent::TryPickup(ADeliveryHandheldItem* Item)
 	if (!Character || !Character->HasAuthority() || !IsValid(Item) || !CanMutateInventory())
 		return false;
 	UDeliveryInventoryItemComponent* ItemData = Item->GetItemComponent();
-	if (!ItemData || Item->GetOwner())
+    const auto* Grabbable=Item->FindComponentByClass<UDeliveryGrabbableComponent>();
+	if (!ItemData || Item->GetOwner() || Item->GetWorld()!=GetWorld() ||
+        !ItemData->CanTransferTo(Character) || (Grabbable && Grabbable->HasAnyCarrier()))
 		return false;
 	UDeliveryItemComponent* DeliveryTaskItem = Item->FindComponentByClass<UDeliveryItemComponent>();
 	if (ItemData->ItemType == EDeliveryInventoryItemType::DeliveryItem && DeliveryTaskItem &&
-	    !DeliveryTaskItem->CanBeAcquired())
+	    !DeliveryTaskItem->CanBeAcquiredBy(Character))
 	{
 		return false;
 	}
@@ -142,14 +149,23 @@ bool UDeliveryInventoryComponent::TryPickup(ADeliveryHandheldItem* Item)
 		StoreItem(EmptyBackpack, Item);
 	}
 
+    const TWeakObjectPtr<UDeliveryInventoryComponent> WeakThis(this);
+    const TWeakObjectPtr<ADeliveryHandheldItem> WeakItem(Item);
+    const TWeakObjectPtr<ADeliveryCharacter> WeakCharacter(Character);
 	ApplyPresentation();
+    if (!WeakThis.IsValid() || !WeakItem.IsValid() || !WeakCharacter.IsValid() || Character->IsActorBeingDestroyed() ||
+        GetOwner()!=Character || !ContainsItem(Item) || (DeliveryTaskItem && !IsValid(DeliveryTaskItem))) return false;
 	if (DeliveryTaskItem)
 	{
 		DeliveryTaskItem->NotifyAcquired(Character->GetPlayerState());
 	}
+    // 任务状态通知可同步销毁库存或改变持有者，先复核再发库存事件
+    if (!WeakThis.IsValid() || !WeakItem.IsValid() || !WeakCharacter.IsValid() ||
+        Character->IsActorBeingDestroyed() || GetOwner()!=Character || !ContainsItem(Item)) return false;
 	OnInventoryChanged.Broadcast();
+    if (!WeakThis.IsValid() || !WeakItem.IsValid() || !IsValid(GetOwner()) || GetOwner()->IsActorBeingDestroyed()) return false;
 	GetOwner()->ForceNetUpdate();
-	return true;
+	return ContainsItem(Item);
 }
 
 // 校验槽位后在服务器执行切换或丢弃
@@ -293,9 +309,44 @@ void UDeliveryInventoryComponent::ApplyPresentation()
 		return;
 	for (int32 Index = 0; Index < Slots.Num(); ++Index)
 	{
-		if (ADeliveryHandheldItem* Item = Slots[Index])
+		if (ADeliveryHandheldItem* Item = GetItemInSlot(Index))
 		{
+			// 旧槽位可能晚于 Owner 复制到达，不能把已交出的包裹重新挂回手中
+            if (Item->GetOwner() != Character) continue;
 			Item->SetInventoryPresentation(Index == 0, Index != 0, Character->GetHeldItemAnchor());
 		}
 	}
+}
+
+bool UDeliveryInventoryComponent::CanReceiveFetchedItem(ADeliveryHandheldItem* Item) const
+{
+    const auto* Character=GetCharacter();
+    return Character && !Character->IsRidingVehicle() && !Character->IsIncapacitated() && CanMutateInventory() &&
+        DeliveryHandheldTransfer::IsOrdinaryItem(Item) && Item->GetWorld()==GetWorld() &&
+        Item->GetItemComponent()->CanTransferTo(Character) && FindEmptyBackpackSlot()!=INDEX_NONE;
+}
+
+bool UDeliveryInventoryComponent::ContainsItem(const ADeliveryHandheldItem* Item) const
+{
+    return IsValid(Item) && Item->GetOwner()==GetOwner() && Slots.ContainsByPredicate(
+        [Item](const TObjectPtr<ADeliveryHandheldItem>& Entry) { return Entry.Get()==Item; });
+}
+
+bool UDeliveryInventoryComponent::ReleaseFetchedItem(ADeliveryHandheldItem* Item)
+{
+    if (!GetOwner() || !GetOwner()->HasAuthority() || !DeliveryHandheldTransfer::IsOrdinaryItem(Item) || !ContainsItem(Item)) return false;
+    for (auto& Slot:Slots) if (Slot==Item) Slot=nullptr;
+    Item->SetOwner(nullptr);
+    // 接收方或回滚负责接下来的表现，释放时不能先把物品抛到地面
+    const TWeakObjectPtr<UDeliveryInventoryComponent> WeakThis(this);
+    const TWeakObjectPtr<ADeliveryHandheldItem> WeakItem(Item);
+    OnInventoryChanged.Broadcast();
+    if (!WeakThis.IsValid() || !WeakItem.IsValid() || !IsValid(GetOwner()) || GetOwner()->IsActorBeingDestroyed()) return false;
+    GetOwner()->ForceNetUpdate();
+    return !ContainsItem(Item) && Item->GetOwner()!=GetOwner();
+}
+
+void UDeliveryInventoryComponent::RefreshItemPresentation(ADeliveryHandheldItem* Item)
+{
+    if (ContainsItem(Item)) ApplyPresentation();
 }

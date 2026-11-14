@@ -1,4 +1,5 @@
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "AI/Characters/DeliveryNpcProfile.h"
 #include "AI/Characters/DeliveryNpcAIController.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
@@ -19,6 +20,8 @@
 #include "NavigationData.h"
 #include "HAL/IConsoleManager.h"
 #include "Engine/World.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystem/Abilities/GA_NpcStrike.h"
 
 namespace
 {
@@ -31,6 +34,10 @@ ADeliveryNpcCharacter::ADeliveryNpcCharacter()
 {
     bReplicates=true; SetReplicateMovement(true); PrimaryActorTick.bCanEverTick=true;
     AIControllerClass=ADeliveryNpcAIController::StaticClass(); AutoPossessAI=EAutoPossessAI::PlacedInWorldOrSpawned;
+    AbilitySystem=CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystem"));
+    AbilitySystem->SetIsReplicated(true);
+    AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+    StrikeAbilityClass=UGA_NpcStrike::StaticClass();
     Agent=CreateDefaultSubobject<UDeliveryNpcAgentComponent>(TEXT("Agent"));
     Combat=CreateDefaultSubobject<UDeliveryNpcCombatComponent>(TEXT("Combat"));
     Presentation=CreateDefaultSubobject<UDeliveryNpcPresentationComponent>(TEXT("Presentation"));
@@ -55,6 +62,9 @@ ADeliveryNpcCharacter::ADeliveryNpcCharacter()
 void ADeliveryNpcCharacter::BeginPlay()
 {
     Super::BeginPlay();
+    AbilitySystem->InitAbilityActorInfo(this,this);
+    if (HasAuthority() && StrikeAbilityClass)
+        StrikeAbilityHandle=AbilitySystem->GiveAbility(FGameplayAbilitySpec(StrikeAbilityClass,1,INDEX_NONE,this));
     ApplyProfile();
     ConversationInteractable->InteractRadius=600;
     GetCharacterMovement()->MaxWalkSpeed=WalkSpeed;
@@ -118,11 +128,16 @@ void ADeliveryNpcCharacter::ObserveFact(FName Kind,AActor* Subject,const FString
 }
 bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth,AActor* Addressee,FGuid ReplyToEventId,bool bRequestReply)
 {
+    return HearSpeechInternal(Speaker,Text,TurnId,Depth,Addressee,ReplyToEventId,bRequestReply,false);
+}
+bool ADeliveryNpcCharacter::HearSpeechInternal(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth,AActor* Addressee,FGuid ReplyToEventId,bool bRequestReply,bool bCompanionVoice)
+{
     if (!HasAuthority() || !IsValid(Speaker) || Speaker->GetWorld()!=GetWorld() || Depth>3 ||
         (Addressee && (!IsValid(Addressee) || Addressee->GetWorld()!=GetWorld())) ||
-        Text.IsEmpty() || Text.Len()>256 || FVector::DistSquared(Speaker->GetActorLocation(),GetActorLocation())>FMath::Square(900.f)) return false;
+        Text.IsEmpty() || Text.Len()>256 || (!bCompanionVoice &&
+        FVector::DistSquared(Speaker->GetActorLocation(),GetActorLocation())>FMath::Square(900.f))) return false;
     if (!Addressee) Addressee=this;
-    if (!DeliveryNpcConversationTrace::HasClearPath(this,Speaker)) return false;
+    if (!bCompanionVoice && !DeliveryNpcConversationTrace::HasClearPath(this,Speaker)) return false;
     const auto* SpeakingPawn=Cast<APawn>(Speaker);
     FDeliveryNpcObservation Event; Event.EventId=TurnId;
     Event.ReplyToEventId=ReplyToEventId;
@@ -139,7 +154,7 @@ bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid
     {
         DecisionRetryCount=0;
         bDecisionRetryScheduled=false;
-        Agent->BeginListening(Speaker,TurnId);
+        if (!Agent->BeginListening(Speaker,TurnId)) return false;
         ConversationDepth=0;
         bDecisionNeeded=!Agent->RequestDecision();
         return true;
@@ -152,7 +167,8 @@ bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker,const FString& Text,FGuid
 bool ADeliveryNpcCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target) const
 {
     if (Action==EDeliveryNpcAction::GetUp) return Combat->IsDown();
-    if (IsKnockedDown() || (Combat->IsReactingToHit() && Action!=EDeliveryNpcAction::Fight && Action!=EDeliveryNpcAction::Flee)) return false;
+    if (IsKnockedDown() || (Combat->IsReactingToHit() && Action!=EDeliveryNpcAction::Fight && Action!=EDeliveryNpcAction::Flee &&
+        Action!=EDeliveryNpcAction::Wait && Action!=EDeliveryNpcAction::LookAt)) return false;
     if (Action==EDeliveryNpcAction::ReleaseVehicle) return GetHeldVehicle()!=nullptr;
     if (GetHeldVehicle()) return Action==EDeliveryNpcAction::Wait || Action==EDeliveryNpcAction::LookAt;
     if (Action==EDeliveryNpcAction::Pace || Action==EDeliveryNpcAction::MoveAside)
@@ -163,7 +179,10 @@ bool ADeliveryNpcCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target)
     if (Action==EDeliveryNpcAction::StrikeOnce)
         return Cast<AAIController>(GetController()) && Combat->CanApproachStrike(Target);
     if (Action==EDeliveryNpcAction::Fight)
-        return Cast<AAIController>(GetController()) && Combat->CanBeginFight(Target);
+    {
+        const bool bChangingFight=Agent->CanUpdateRunningAction() && Agent->GetPublicState().Action==EDeliveryNpcAction::Fight;
+        return Cast<AAIController>(GetController()) && (bChangingFight?Combat->CanChooseFightTarget(Target):Combat->CanBeginFight(Target));
+    }
     if (Action==EDeliveryNpcAction::Flee)
     {
         FVector Destination;
@@ -174,6 +193,10 @@ bool ADeliveryNpcCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target)
     if (Action==EDeliveryNpcAction::MoveTo)
         return IsValid(Target) && Target!=this && !HasReachedMoveTarget(Target) && CanReachTarget(Target);
     return Action==EDeliveryNpcAction::Wait || Action==EDeliveryNpcAction::LookAt || Action==EDeliveryNpcAction::LieDown;
+}
+bool ADeliveryNpcCharacter::CanExecuteForRequester(EDeliveryNpcAction Action,AActor* Target,APlayerState* Requester) const
+{
+    return CanExecute(Action,Target);
 }
 bool ADeliveryNpcCharacter::HasReachedMoveTarget(AActor* Target) const
 {
@@ -286,9 +309,40 @@ bool ADeliveryNpcCharacter::FindFleeDestination(AActor* Threat,float RemainingTr
     }
     return false;
 }
+bool ADeliveryNpcCharacter::CanAdjustStandingPosition() const
+{
+    if (!HasAuthority() || IsKnockedDown() || GetHeldVehicle() || Combat->IsStriking() || Combat->IsReactingToHit() ||
+        !GetCharacterMovement()->IsMovingOnGround() || GetCharacterMovement()->MaxWalkSpeed<=0) return false;
+    const auto& State=Agent->GetPublicState();
+    return !Agent->HasActiveAction() || State.Action==EDeliveryNpcAction::Wait || State.Action==EDeliveryNpcAction::LookAt;
+}
+bool ADeliveryNpcCharacter::FindStandingSpace(AActor* Neighbor,float BodyGap,FVector& OutLocation) const
+{
+    if (!CanAdjustStandingPosition() || !IsValid(Neighbor) || Neighbor==this || Neighbor->GetWorld()!=GetWorld()) return false;
+    const FVector Start=GetNavAgentLocation();
+    const FVector Other=Neighbor->GetActorLocation();
+    const float Wanted=GetSimpleCollisionRadius()+Neighbor->GetSimpleCollisionRadius()+FMath::Clamp(BodyGap,40.f,200.f);
+    const float Distance=FVector::Dist2D(Start,Other);
+    if (Distance>=Wanted) return false;
+    FVector Away=(Start-Other).GetSafeNormal2D();
+    if (Away.IsNearlyZero()) Away=-GetActorForwardVector();
+    // 先向外挪，后方受阻再找斜侧空位；沿用导航与胶囊检查，不直接改变位置
+    for (const float Angle:{0.f,35.f,-35.f,70.f,-70.f,90.f,-90.f})
+    {
+        const float Along=Distance*FMath::Cos(FMath::DegreesToRadians(Angle));
+        const float Step=FMath::Clamp(FMath::Sqrt(FMath::Max(0.f,Wanted*Wanted-Distance*Distance+Along*Along))-Along+12.f,45.f,280.f);
+        FVector Destination;
+        if (FindNearbyWalkDestination(Start+Away.RotateAngleAxis(Angle,FVector::UpVector)*Step,Step*1.5f,Destination) &&
+            FVector::Dist2D(Destination,Other)>=Wanted-5.f)
+        { OutLocation=Destination; return true; }
+    }
+    return false;
+}
 bool ADeliveryNpcCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
 {
-    if (!HasAuthority() || ExecutingAction.IsValid() || !CanExecute(State.Action,State.Target)) return false;
+    const bool bAllowed=State.Origin==EDeliveryNpcActionOrigin::GameplayRule?
+        CanExecuteGameplayRule(State.Action,State.Target,State.RuleRevision):CanExecuteForRequester(State.Action,State.Target,State.Requester);
+    if (!HasAuthority() || ExecutingAction.IsValid() || !bAllowed) return false;
     ExecutingAction=State.ActionId;
     if (State.Action==EDeliveryNpcAction::Pace || State.Action==EDeliveryNpcAction::MoveAside ||
         State.Action==EDeliveryNpcAction::MoveTo || State.Action==EDeliveryNpcAction::StrikeOnce || State.Action==EDeliveryNpcAction::Fight || State.Action==EDeliveryNpcAction::Flee)
@@ -300,14 +354,14 @@ bool ADeliveryNpcCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
     bool bStarted=true;
     // 攻击目标还在远处时，由行为树先靠近；到达前不会启动命中判定
     if (State.Action==EDeliveryNpcAction::StrikeOnce && Combat->CanStrike(State.Target))
-        bStarted=Combat->StartStrike(State.Target,State.ActionId);
-    else if (State.Action==EDeliveryNpcAction::Fight) bStarted=Combat->BeginFight(State.Target,State.ActionId,State.Duration);
+        bStarted=RequestStrike(State.Target,State.ActionId);
+    else if (State.Action==EDeliveryNpcAction::Fight) bStarted=Combat->BeginFight(State.Target,State.ActionId,State.Duration,State.Origin==EDeliveryNpcActionOrigin::Model);
     else if (State.Action==EDeliveryNpcAction::HoldVehicle) bStarted=CastChecked<ADeliveryMotorbike>(State.Target)->ResidentHold->TryHold(this,State.ActionId);
     else if (State.Action==EDeliveryNpcAction::ReleaseVehicle) { if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("VoluntaryRelease")); }
     else if (State.Action==EDeliveryNpcAction::LieDown) bStarted=Combat->SetDeliberateProne(true);
     else if (State.Action==EDeliveryNpcAction::GetUp) bStarted=Combat->SetDeliberateProne(false);
     if (bStarted && !State.bStreamSpeech && !State.Speech.IsEmpty() &&
-        !Presentation->PublishSpeech(State.Speech,State.Emotion,Agent->GetActionConversationDepth(),State.ReplyToEventId))
+        !Presentation->PublishSpeech(State.Speech,State.Emotion,Agent->GetActionConversationDepth(),State.ReplyToEventId,State.GetReplyId()))
     {
         UE_LOG(LogTemp,Warning,TEXT("ResidentSpeech rejected: npc=%s action=%s"),*GetName(),*State.ActionId.ToString());
         return false;
@@ -323,7 +377,7 @@ void ADeliveryNpcCharacter::StopAction(FGuid Id)
         GetCharacterMovement()->MaxWalkSpeed=IsKnockedDown()?0.f:PreviousActionWalkSpeed;
         PreviousActionWalkSpeed=-1;
     }
-    Combat->EndFight(Id); Combat->CancelStrike(); if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("ActionEnded")); ExecutingAction.Invalidate();
+    CancelStrikeAbility(Id); Combat->EndFight(Id,!Agent->IsReplacingFight()); Combat->CancelStrike(); if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("ActionEnded")); ExecutingAction.Invalidate();
 }
 void ADeliveryNpcCharacter::SetHeldVehicle(UDeliveryVehicleHoldComponent* Hold)
 {
@@ -363,7 +417,8 @@ void ADeliveryNpcCharacter::Tick(float Dt)
         LastFinishedAction=State.ActionId;
         if (State.Status!=EDeliveryNpcActionStatus::Succeeded || (State.Action!=EDeliveryNpcAction::Wait && State.Action!=EDeliveryNpcAction::LookAt)) bDecisionNeeded=true;
     }
-    if (bDecisionNeeded && !Presentation->HasPendingSpeech() && !IsKnockedDown() && !Combat->IsReactingToHit() && !Agent->HasActiveAction() && !Agent->IsDecisionPending() && GetWorld()->GetTimeSeconds()>=NextDecision)
+    if (bDecisionNeeded && (Agent->IsWaitingToReplyToPlayer() || Agent->HasPendingNpcMessage() || !Presentation->HasPendingSpeech()) && !IsKnockedDown() && !Combat->IsReactingToHit() &&
+        (!Agent->HasActiveAction() || Agent->IsWaitingToReplyToPlayer()) && !Agent->IsDecisionPending() && GetWorld()->GetTimeSeconds()>=NextDecision)
     {
         NextDecision=GetWorld()->GetTimeSeconds()+4;
         if (Agent->RequestDecision()) { bDecisionNeeded=false; bDecisionRetryScheduled=false; }
@@ -372,6 +427,12 @@ void ADeliveryNpcCharacter::Tick(float Dt)
 void ADeliveryNpcCharacter::EndPlay(const EEndPlayReason::Type Reason)
 {
     StopAction(ExecutingAction);
+    if (AbilitySystem)
+    {
+        AbilitySystem->CancelAllAbilities();
+        if (HasAuthority() && StrikeAbilityHandle.IsValid()) AbilitySystem->ClearAbility(StrikeAbilityHandle);
+        AbilitySystem->ClearActorInfo();
+    }
     if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("ResidentEndPlay"));
     Agent->OnDecisionFinished.RemoveDynamic(this,&ADeliveryNpcCharacter::OnDecisionFinished);
     ConversationInteractable->CanUse.Unbind(); ConversationInteractable->Use.Unbind(); Super::EndPlay(Reason);

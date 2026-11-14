@@ -71,6 +71,15 @@ float TextDuration(const FString& Text)
 bool UDeliveryNpcPresentationComponent::BeginSentenceAudio(FGuid ActionId,FGuid MessageId,const FDeliveryNpcSpeechBegin& Begin)
 {
     check(IsInGameThread());
+    if (GetOwner() && GetOwner()->HasAuthority() && ActionId.IsValid() && ActionId==PendingReply.ReplyId && MessageId==PendingReply.MessageId)
+    {
+        if (Begin.Sequence<0 || Begin.Sequence>2 || Begin.SampleRate!=24000 || Begin.AudioStreamVersion!=1 ||
+            Begin.Text.IsEmpty() || Begin.Text.Len()>120 || PendingReply.Begins.Contains(Begin.Sequence) ||
+            PendingReply.Whole.Contains(Begin.Sequence) ||
+            (PendingReply.SentenceCount!=INDEX_NONE && Begin.Sequence>=PendingReply.SentenceCount)) return false;
+        PendingReply.Begins.Add(Begin.Sequence,Begin);
+        return true;
+    }
     if (!GetOwner() || !GetOwner()->HasAuthority() || !ActionId.IsValid() || ActionId!=ReplyAction || MessageId!=ReplyMessage ||
         Begin.Sequence<NextSentence || Begin.Sequence>2 || Begin.SampleRate!=24000 || Begin.AudioStreamVersion!=1 ||
         Begin.Text.IsEmpty() || Begin.Text.Len()>120 || GeneratingSentences.Contains(Begin.Sequence) || Sentences.Contains(Begin.Sequence) ||
@@ -114,9 +123,19 @@ bool UDeliveryNpcPresentationComponent::BeginSentenceAudio(FGuid ActionId,FGuid 
 bool UDeliveryNpcPresentationComponent::AppendSentenceAudio(FGuid ActionId,FGuid MessageId,const FDeliveryNpcAudioChunk& Chunk)
 {
     check(IsInGameThread());
+    if (GetOwner() && GetOwner()->HasAuthority() && ActionId.IsValid() && ActionId==PendingReply.ReplyId && MessageId==PendingReply.MessageId)
+    {
+        if (!PendingReply.Begins.Contains(Chunk.Sequence) || PendingReply.Ends.Contains(Chunk.Sequence)) return false;
+        auto& Parts=PendingReply.Chunks.FindOrAdd(Chunk.Sequence);
+        const int32 Offset=Parts.IsEmpty()?0:Parts.Last().OffsetBytes+Parts.Last().Pcm.Num();
+        if (Parts.Num()>=DeliveryNpcVoice::MaxAudioChunks || Chunk.ChunkIndex!=Parts.Num() || Chunk.OffsetBytes!=Offset || Chunk.Pcm.IsEmpty() ||
+            Chunk.Pcm.Num()%2 || Chunk.Pcm.Num()>30720 || Chunk.Pcm.Num()>DeliveryNpcVoice::MaxPcmBytes-Offset) return false;
+        Parts.Add(Chunk);
+        return true;
+    }
     if (!GetOwner() || !GetOwner()->HasAuthority() || ActionId!=ReplyAction || MessageId!=ReplyMessage) return false;
     auto* Current=GeneratingSentences.Find(Chunk.Sequence);
-    if (!Current || Current->bInputEnded || Chunk.ChunkIndex!=Current->NextChunk || Current->NextChunk>=32 ||
+    if (!Current || Current->bInputEnded || Chunk.ChunkIndex!=Current->NextChunk || Current->NextChunk>=DeliveryNpcVoice::MaxAudioChunks ||
         Chunk.OffsetBytes!=Current->ReceivedPcmBytes || Chunk.Pcm.IsEmpty() || Chunk.Pcm.Num()>30720 || Chunk.Pcm.Num()%2 ||
         Chunk.Pcm.Num()>DeliveryNpcVoice::MaxPcmBytes-Current->ReceivedPcmBytes) return false;
     ++Current->NextChunk;
@@ -156,6 +175,16 @@ bool UDeliveryNpcPresentationComponent::AppendSentenceAudio(FGuid ActionId,FGuid
 bool UDeliveryNpcPresentationComponent::EndSentenceAudio(FGuid ActionId,FGuid MessageId,const FDeliveryNpcAudioEnd& End)
 {
     check(IsInGameThread());
+    if (GetOwner() && GetOwner()->HasAuthority() && ActionId.IsValid() && ActionId==PendingReply.ReplyId && MessageId==PendingReply.MessageId)
+    {
+        if (!PendingReply.Begins.Contains(End.Sequence) || PendingReply.Ends.Contains(End.Sequence)) return false;
+        const auto* Parts=PendingReply.Chunks.Find(End.Sequence);
+        const int32 Count=Parts?Parts->Num():0;
+        const int32 Bytes=Count>0?Parts->Last().OffsetBytes+Parts->Last().Pcm.Num():0;
+        if (End.ChunkCount!=Count || End.TotalPcmBytes!=Bytes || (End.bSucceeded && (Count==0 || Bytes==0))) return false;
+        PendingReply.Ends.Add(End.Sequence,End);
+        return true;
+    }
     if (!GetOwner() || !GetOwner()->HasAuthority() || ActionId!=ReplyAction || MessageId!=ReplyMessage) return false;
     auto* Current=GeneratingSentences.Find(End.Sequence);
     if (!Current || Current->bInputEnded || End.ChunkCount!=Current->NextChunk || End.TotalPcmBytes!=Current->ReceivedPcmBytes ||
@@ -216,6 +245,7 @@ bool UDeliveryNpcPresentationComponent::TryStartGeneratedSentence()
     auto* Current=GeneratingSentences.Find(NextSentence);
     if (!Current || (!Current->bFailed && Current->Encoded.IsEmpty())) return false;
     Speech={}; Speech.TurnId=Current->TurnId; Speech.ActionId=ReplyAction; Speech.ReplyToEventId=ReplyMessage;
+    Speech.RadioListener=ResolveRadioListener(ReplyMessage);
     Speech.Sequence=NextSentence++; Speech.Text=Current->Sentence.Text; Speech.Emotion=Current->Sentence.Emotion;
     Speech.SampleRate=Current->Sentence.SampleRate; Speech.AudioFormatVersion=DeliveryNpcVoice::StreamingFormatVersion;
     Speech.bRecordedVoice=!Current->bFailed; Speech.bActive=true;
@@ -246,6 +276,7 @@ void UDeliveryNpcPresentationComponent::RefreshGeneratedSentence(int32 Sequence)
         if (Current->Encoded.Num()>SendingAudio.Num())
             SendingAudio.Append(Current->Encoded.GetData()+SendingAudio.Num(),Current->Encoded.Num()-SendingAudio.Num());
         auto& Saved=ServerVoices.FindOrAdd(Current->TurnId);
+        Saved.RadioListener=Speech.RadioListener;
         Saved.bComplete=Current->bEncodingEnded;
         if (Current->Sentence.Pcm.Num()>Saved.Pcm.Num())
             Saved.Pcm.Append(Current->Sentence.Pcm.GetData()+Saved.Pcm.Num(),Current->Sentence.Pcm.Num()-Saved.Pcm.Num());

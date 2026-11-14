@@ -1,0 +1,3024 @@
+[
+  {
+    "id": "change-007-branch-1",
+    "group_id": "change-007",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "合唱照片裁切",
+      "branch": 1,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+      "request_id": "b51cdcd8-309e-569a-b6f3-2b099645828a",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "大壮",
+      "self_subject_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+      "profile_id": "chunlai",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "1afccec1-f1a6-5f30-b8cd-7ee08af132f7",
+          "subject_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "kind": "Perceived",
+          "description": "看见附近的翠花，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "b1026e9d-e27b-5501-a44d-ab8e63d21126",
+          "subject_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+          "kind": "SelfSpeech",
+          "description": "合唱的照片把我半张脸裁没了，你倒站得端正。",
+          "source": "ActionResult",
+          "addressee_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "33ff0f09-355b-50f9-b623-e95ba9521ce4",
+          "subject_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "kind": "Speech",
+          "description": "这是半张打印纸，另一半在我手里，两张拼起来才完整。",
+          "source": "Heard",
+          "addressee_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "f752e72b-392b-58d8-b1c0-d0794127a2e7",
+          "subject_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+          "kind": "SelfSpeech",
+          "description": "我这眼神也是，照片没拼就冲你嚷。",
+          "source": "ActionResult",
+          "addressee_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "eff70b29-186b-5eff-bd2b-e5982e8ebcad",
+          "subject_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Flee",
+          "target_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "duration": 5.0,
+          "evidence_ids": [
+            "1afccec1-f1a6-5f30-b8cd-7ee08af132f7"
+          ]
+        },
+        {
+          "action": "Fight",
+          "target_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "duration": 8.0,
+          "evidence_ids": [
+            "1afccec1-f1a6-5f30-b8cd-7ee08af132f7"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "df4d07cd-5224-5d16-a046-5f876afaca72"
+      }
+    },
+    "prompt": {
+      "self_name": "大壮",
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的翠花，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "合唱的照片把我半张脸裁没了，你倒站得端正。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "这是半张打印纸，另一半在我手里，两张拼起来才完整。"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "我这眼神也是，照片没拼就冲你嚷。"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-007-branch-2",
+    "group_id": "change-007",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "合唱照片裁切",
+      "branch": 2,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+      "request_id": "b043b977-82ba-5bd9-8bd1-8b000acfed0d",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "大壮",
+      "self_subject_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+      "profile_id": "chunlai",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "96fa1da3-c30b-57fc-87a6-f3a30a09dcc0",
+          "subject_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "kind": "Perceived",
+          "description": "看见附近的翠花，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "a72d14db-2da7-5e1c-b3eb-0ee0345282b8",
+          "subject_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+          "kind": "SelfSpeech",
+          "description": "合唱的照片把我半张脸裁没了，你倒站得端正。",
+          "source": "ActionResult",
+          "addressee_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "b4403a3c-b9fb-592a-b506-c94dac9d4eaf",
+          "subject_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "kind": "Speech",
+          "description": "你那张脸少半边好看多了，我还想全裁掉呢！",
+          "source": "Heard",
+          "addressee_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "c758aed7-2b82-5e6d-9fc2-fe72f86e8439",
+          "subject_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "kind": "FightThreat",
+          "description": "这个人朝我冲过来，准备动手",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "56f1a423-a0e5-5981-a822-1d2caedfa363",
+          "subject_id": "19c052d1-ba38-5931-af0c-f37999b48d34",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Flee",
+          "target_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "duration": 5.0,
+          "evidence_ids": [
+            "96fa1da3-c30b-57fc-87a6-f3a30a09dcc0"
+          ]
+        },
+        {
+          "action": "Fight",
+          "target_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+          "duration": 8.0,
+          "evidence_ids": [
+            "96fa1da3-c30b-57fc-87a6-f3a30a09dcc0"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target_id": "e6764687-6952-5a4d-833e-c3f59f7abf85",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "df4d07cd-5224-5d16-a046-5f876afaca72"
+      }
+    },
+    "prompt": {
+      "self_name": "大壮",
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的翠花，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "合唱的照片把我半张脸裁没了，你倒站得端正。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "你那张脸少半边好看多了，我还想全裁掉呢！"
+        },
+        {
+          "kind": "FightThreat",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "这个人朝我冲过来，准备动手"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-008-branch-1",
+    "group_id": "change-008",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "认错同色雨披",
+      "branch": 1,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+      "request_id": "27db76ed-0172-5a62-b408-599688513fbf",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "翠花",
+      "self_subject_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+      "profile_id": "xiumei",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "ef3ee77e-5a8a-5664-8d11-05fac6654f20",
+          "subject_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "kind": "Perceived",
+          "description": "看见附近的大壮，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "f127506c-b47e-5809-a2d4-8cd00259bf6e",
+          "subject_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+          "kind": "SelfSpeech",
+          "description": "穿这雨披的人刚才朝我泼水，我还没问你就追过来了。",
+          "source": "ActionResult",
+          "addressee_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "dad6f99f-d5ba-5cec-981c-ddf41d96de19",
+          "subject_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "kind": "Speech",
+          "description": "是我泼的，你还敢躲！",
+          "source": "Heard",
+          "addressee_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "62187ce7-c8f2-5f5c-b87c-5fbd2f6cc672",
+          "subject_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "kind": "FightThreat",
+          "description": "这个人朝我冲过来，准备动手",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "a0c6e621-3e22-5688-80eb-ef57f395cea6",
+          "subject_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        },
+        {
+          "action": "Fight",
+          "target_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "duration": 8.0,
+          "evidence_ids": [
+            "ef3ee77e-5a8a-5664-8d11-05fac6654f20"
+          ]
+        },
+        {
+          "action": "Flee",
+          "target_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "duration": 5.0,
+          "evidence_ids": [
+            "ef3ee77e-5a8a-5664-8d11-05fac6654f20"
+          ]
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "bb8b0a9b-9864-546d-be44-3f6855358e87"
+      }
+    },
+    "prompt": {
+      "self_name": "翠花",
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的大壮，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "穿这雨披的人刚才朝我泼水，我还没问你就追过来了。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "是我泼的，你还敢躲！"
+        },
+        {
+          "kind": "FightThreat",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "这个人朝我冲过来，准备动手"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-008-branch-2",
+    "group_id": "change-008",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "认错同色雨披",
+      "branch": 2,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+      "request_id": "8d70ed25-6924-50fa-ac12-8dc416dedf59",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "翠花",
+      "self_subject_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+      "profile_id": "xiumei",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "438cae76-1d54-5316-bf85-bbbcfa3c3e2d",
+          "subject_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "kind": "Perceived",
+          "description": "看见附近的大壮，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "c19baba1-d34e-560b-9aa7-defff83c9ef1",
+          "subject_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+          "kind": "SelfSpeech",
+          "description": "穿这雨披的人刚才朝我泼水，我还没问你就追过来了。",
+          "source": "ActionResult",
+          "addressee_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "b9eb4c07-a25d-5d76-aed0-904cbcc1be4c",
+          "subject_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "kind": "Speech",
+          "description": "我这件是商店刚拆的，吊牌还挂着，那个人早拐过去了。",
+          "source": "Heard",
+          "addressee_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "f0657d22-5121-54b5-9d9a-34758019039a",
+          "subject_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+          "kind": "SelfSpeech",
+          "description": "那就是我认错了，刚才这顿吵白吵了。",
+          "source": "ActionResult",
+          "addressee_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "9da398a4-ad52-5a68-b5e8-a46d65989cf7",
+          "subject_id": "2325172b-fe19-5f42-9faf-6a4b33c4326c",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        },
+        {
+          "action": "Fight",
+          "target_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "duration": 8.0,
+          "evidence_ids": [
+            "438cae76-1d54-5316-bf85-bbbcfa3c3e2d"
+          ]
+        },
+        {
+          "action": "Flee",
+          "target_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+          "duration": 5.0,
+          "evidence_ids": [
+            "438cae76-1d54-5316-bf85-bbbcfa3c3e2d"
+          ]
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target_id": "6b4ced35-e795-5eef-bd1e-5b83c0e107c8",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "bb8b0a9b-9864-546d-be44-3f6855358e87"
+      }
+    },
+    "prompt": {
+      "self_name": "翠花",
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的大壮，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "穿这雨披的人刚才朝我泼水，我还没问你就追过来了。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "我这件是商店刚拆的，吊牌还挂着，那个人早拐过去了。"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "那就是我认错了，刚才这顿吵白吵了。"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 1 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-015-branch-1",
+    "group_id": "change-015",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "手绢花展示",
+      "branch": 1,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+      "request_id": "902748ac-d034-5832-8bdb-f1885e366bca",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "翠花",
+      "self_subject_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+      "profile_id": "xiumei",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "f6fba657-51de-5b7c-a371-6709bd61e901",
+          "subject_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "kind": "Perceived",
+          "description": "看见附近的大壮，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "b19fefd2-dbb8-523d-9d7e-ab77ddd0eb2a",
+          "subject_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+          "kind": "SelfSpeech",
+          "description": "我转的花怎么不算？你那下都掉地上了。",
+          "source": "ActionResult",
+          "addressee_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "a977cc3f-ed71-5ef8-8d38-702830ef3ce4",
+          "subject_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "kind": "Speech",
+          "description": "这一回算你赢，牌子归你，我不嘴硬了。",
+          "source": "Heard",
+          "addressee_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "53dcb9ea-ebec-5a9c-9fe7-c0b4752323de",
+          "subject_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+          "kind": "SelfSpeech",
+          "description": "行，牌子拿了，这事就过去了。",
+          "source": "ActionResult",
+          "addressee_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "29f7e799-c89e-51d6-b165-f1c80009fc35",
+          "subject_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Fight",
+          "target_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "duration": 8.0,
+          "evidence_ids": [
+            "f6fba657-51de-5b7c-a371-6709bd61e901"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        },
+        {
+          "action": "Flee",
+          "target_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "duration": 5.0,
+          "evidence_ids": [
+            "f6fba657-51de-5b7c-a371-6709bd61e901"
+          ]
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "a20fca59-9671-52bf-86d9-2da11f225183"
+      }
+    },
+    "prompt": {
+      "self_name": "翠花",
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的大壮，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "我转的花怎么不算？你那下都掉地上了。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "这一回算你赢，牌子归你，我不嘴硬了。"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "行，牌子拿了，这事就过去了。"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-015-branch-2",
+    "group_id": "change-015",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "手绢花展示",
+      "branch": 2,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+      "request_id": "ce5cb7db-65a5-5e06-b17d-ca1760527743",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "翠花",
+      "self_subject_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+      "profile_id": "xiumei",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "cae83ac0-5371-5f75-9a30-a977b2fa169a",
+          "subject_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "kind": "Perceived",
+          "description": "看见附近的大壮，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "9098dbef-ff9a-57b1-b4ff-36ab18726855",
+          "subject_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+          "kind": "SelfSpeech",
+          "description": "我转的花怎么不算？你那下都掉地上了。",
+          "source": "ActionResult",
+          "addressee_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "dcf0362d-f6c4-54f8-b86d-c02d6b20e7f3",
+          "subject_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "kind": "Speech",
+          "description": "牌子不给，你拿了我也得抢回来！",
+          "source": "Heard",
+          "addressee_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "0631dcde-2dd3-505d-ac2a-72afebd27014",
+          "subject_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "kind": "FightThreat",
+          "description": "这个人朝我冲过来，准备动手",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "fdc1d825-4cee-56e9-b5db-cc2a730a8385",
+          "subject_id": "bfdf9514-0591-5e2e-8aad-0d353f6620f8",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Fight",
+          "target_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "duration": 8.0,
+          "evidence_ids": [
+            "cae83ac0-5371-5f75-9a30-a977b2fa169a"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        },
+        {
+          "action": "Flee",
+          "target_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+          "duration": 5.0,
+          "evidence_ids": [
+            "cae83ac0-5371-5f75-9a30-a977b2fa169a"
+          ]
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target_id": "8482fac8-74a1-5a4a-8e47-4567c17754bb",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "a20fca59-9671-52bf-86d9-2da11f225183"
+      }
+    },
+    "prompt": {
+      "self_name": "翠花",
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的大壮，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "我转的花怎么不算？你那下都掉地上了。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "牌子不给，你拿了我也得抢回来！"
+        },
+        {
+          "kind": "FightThreat",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "这个人朝我冲过来，准备动手"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-016-branch-1",
+    "group_id": "change-016",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "拔河口角结束",
+      "branch": 1,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+      "request_id": "5f341149-64d6-53f4-b7e5-cdead9332021",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "大壮",
+      "self_subject_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+      "profile_id": "chunlai",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "5e4d75d3-1203-58da-91f4-ed35446b7d44",
+          "subject_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "kind": "Perceived",
+          "description": "看见附近的翠花，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "c0d1f2ff-28be-5b3c-b49f-89ed4de02a8f",
+          "subject_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+          "kind": "SelfSpeech",
+          "description": "绳子早放下了，你还揪着我刚才的那句话。",
+          "source": "ActionResult",
+          "addressee_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "373df373-1cd6-5b68-a4c2-63c2d7f96cd0",
+          "subject_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "kind": "Speech",
+          "description": "比赛散了也没完，你别想走！",
+          "source": "Heard",
+          "addressee_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "caf634b4-3bd1-59a1-8704-45cd197e7e75",
+          "subject_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "kind": "FightThreat",
+          "description": "这个人朝我冲过来，准备动手",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "212cce93-4f60-5007-a80f-e7740fa2a740",
+          "subject_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        },
+        {
+          "action": "Flee",
+          "target_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "duration": 5.0,
+          "evidence_ids": [
+            "5e4d75d3-1203-58da-91f4-ed35446b7d44"
+          ]
+        },
+        {
+          "action": "Fight",
+          "target_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "duration": 8.0,
+          "evidence_ids": [
+            "5e4d75d3-1203-58da-91f4-ed35446b7d44"
+          ]
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "67b3ad9f-a6e7-57ae-b259-92a7bd9148f1"
+      }
+    },
+    "prompt": {
+      "self_name": "大壮",
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的翠花，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "绳子早放下了，你还揪着我刚才的那句话。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "比赛散了也没完，你别想走！"
+        },
+        {
+          "kind": "FightThreat",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "这个人朝我冲过来，准备动手"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Flee"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-016-branch-2",
+    "group_id": "change-016",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "拔河口角结束",
+      "branch": 2,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+      "request_id": "b20d2440-86fb-5fa3-b9f4-a044291e8d38",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "大壮",
+      "self_subject_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+      "profile_id": "chunlai",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "ca6103a7-b730-56d6-a080-472350fd7d73",
+          "subject_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "kind": "Perceived",
+          "description": "看见附近的翠花，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "b1787c97-410d-523d-878d-ae55f83a4a55",
+          "subject_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+          "kind": "SelfSpeech",
+          "description": "绳子早放下了，你还揪着我刚才的那句话。",
+          "source": "ActionResult",
+          "addressee_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "050a0c5e-ac5f-59b1-8f7e-1b4014aad61a",
+          "subject_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "kind": "Speech",
+          "description": "是我把比赛当真了，刚才话说重了，咱们散了吧。",
+          "source": "Heard",
+          "addressee_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "4abe405f-06ff-51fb-bda2-039000fcdd1c",
+          "subject_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+          "kind": "SelfSpeech",
+          "description": "成，各忙各的，以后别为根绳子吵。",
+          "source": "ActionResult",
+          "addressee_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "5ce6146c-1f79-5710-8419-06b06bfd3fdd",
+          "subject_id": "76179b64-67f8-5bd1-872b-b9914022665d",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        },
+        {
+          "action": "Flee",
+          "target_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "duration": 5.0,
+          "evidence_ids": [
+            "ca6103a7-b730-56d6-a080-472350fd7d73"
+          ]
+        },
+        {
+          "action": "Fight",
+          "target_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+          "duration": 8.0,
+          "evidence_ids": [
+            "ca6103a7-b730-56d6-a080-472350fd7d73"
+          ]
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target_id": "04adfdf0-166e-57be-a4fc-c1293f4e653b",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "67b3ad9f-a6e7-57ae-b259-92a7bd9148f1"
+      }
+    },
+    "prompt": {
+      "self_name": "大壮",
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的翠花，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "绳子早放下了，你还揪着我刚才的那句话。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "是我把比赛当真了，刚才话说重了，咱们散了吧。"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "成，各忙各的，以后别为根绳子吵。"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 2 记轻拳；上一轮交战挥拳 1 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-023-branch-1",
+    "group_id": "change-023",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "临时漏水管",
+      "branch": 1,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+      "request_id": "9f74ea9c-7082-5936-ad5d-711ba7e32f54",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "大壮",
+      "self_subject_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+      "profile_id": "chunlai",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "69b609d9-f275-52ef-bf80-3379ffb85c2d",
+          "subject_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "kind": "Perceived",
+          "description": "看见附近的翠花，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "a9616e66-4fe2-5443-8555-81b962315632",
+          "subject_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+          "kind": "SelfSpeech",
+          "description": "水管冲着鞋喷，我先绕过去，你别跟着起哄。",
+          "source": "ActionResult",
+          "addressee_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "404ccd44-fae5-52e9-adc4-2afe22be5747",
+          "subject_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "kind": "Speech",
+          "description": "人家把阀门关了，现在干地上你还不敢站稳？",
+          "source": "Heard",
+          "addressee_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "f10e5b12-5153-5590-8652-cf55ae1331ab",
+          "subject_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+          "kind": "SelfSpeech",
+          "description": "我鞋没湿，倒要听听你还有什么狠话。",
+          "source": "ActionResult",
+          "addressee_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "92fc2ea9-91ce-5c41-80ba-b33a846844d9",
+          "subject_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "kind": "FightThreat",
+          "description": "这个人朝我冲过来，准备动手",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "af4b6c34-b2db-54f8-9954-f7356ed6a6b4",
+          "subject_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Fight",
+          "target_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "duration": 8.0,
+          "evidence_ids": [
+            "69b609d9-f275-52ef-bf80-3379ffb85c2d"
+          ]
+        },
+        {
+          "action": "Flee",
+          "target_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "duration": 5.0,
+          "evidence_ids": [
+            "69b609d9-f275-52ef-bf80-3379ffb85c2d"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "4d55c7ce-5573-55d3-9813-f3f8d5e7f20f"
+      }
+    },
+    "prompt": {
+      "self_name": "大壮",
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的翠花，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "水管冲着鞋喷，我先绕过去，你别跟着起哄。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "人家把阀门关了，现在干地上你还不敢站稳？"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "我鞋没湿，倒要听听你还有什么狠话。"
+        },
+        {
+          "kind": "FightThreat",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "这个人朝我冲过来，准备动手"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-023-branch-2",
+    "group_id": "change-023",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "临时漏水管",
+      "branch": 2,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+      "request_id": "f0598fb2-c35f-5a92-9dca-b678836b9551",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "大壮",
+      "self_subject_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+      "profile_id": "chunlai",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "ea9d698d-1bdb-585f-9f20-6bd23b067a38",
+          "subject_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "kind": "Perceived",
+          "description": "看见附近的翠花，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "0a5b643b-c520-5180-88f7-7f890d69859c",
+          "subject_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+          "kind": "SelfSpeech",
+          "description": "水管冲着鞋喷，我先绕过去，你别跟着起哄。",
+          "source": "ActionResult",
+          "addressee_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "f7455c88-e9ca-5484-ac61-735578d717d4",
+          "subject_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "kind": "Speech",
+          "description": "水关了，我也不跟你吵了，刚才就是嘴欠。",
+          "source": "Heard",
+          "addressee_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "ab9086d3-779d-587c-8d9f-e17ca2ecf12c",
+          "subject_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+          "kind": "SelfSpeech",
+          "description": "好，那各回各家。",
+          "source": "ActionResult",
+          "addressee_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "616d21ab-ebfc-581f-9063-997bec4d8d5a",
+          "subject_id": "8901d813-40b5-5fd5-b6e8-3fe44f02a40c",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Fight",
+          "target_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "duration": 8.0,
+          "evidence_ids": [
+            "ea9d698d-1bdb-585f-9f20-6bd23b067a38"
+          ]
+        },
+        {
+          "action": "Flee",
+          "target_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+          "duration": 5.0,
+          "evidence_ids": [
+            "ea9d698d-1bdb-585f-9f20-6bd23b067a38"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target_id": "cbfc808f-85d2-57f0-8ad5-0b41f72ddb11",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "4d55c7ce-5573-55d3-9813-f3f8d5e7f20f"
+      }
+    },
+    "prompt": {
+      "self_name": "大壮",
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的翠花，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "水管冲着鞋喷，我先绕过去，你别跟着起哄。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "水关了，我也不跟你吵了，刚才就是嘴欠。"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "好，那各回各家。"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-024-branch-1",
+    "group_id": "change-024",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "躲开挂着的彩带",
+      "branch": 1,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+      "request_id": "875652a4-e09c-5032-8ff5-0acc321cfa43",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "翠花",
+      "self_subject_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+      "profile_id": "xiumei",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "70dc613f-3ba6-586a-a782-cc2bf2f37abc",
+          "subject_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "kind": "Perceived",
+          "description": "看见附近的大壮，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "af13094d-dd06-5d8a-a4cb-4f7575c7a540",
+          "subject_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+          "kind": "SelfSpeech",
+          "description": "彩带绕到胳膊上了，我扯开再跟你说。",
+          "source": "ActionResult",
+          "addressee_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "0b6bb79e-83d6-5dba-b95e-cc7b6c2d0fd7",
+          "subject_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "kind": "Speech",
+          "description": "彩带我帮你解了，咱们也别为这事闹了。",
+          "source": "Heard",
+          "addressee_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "cc1aff4c-e5d9-5edf-9656-5fbe76ee2358",
+          "subject_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+          "kind": "SelfSpeech",
+          "description": "解开就好，我也不想把布景弄坏。",
+          "source": "ActionResult",
+          "addressee_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "21da4a9c-3266-5787-867e-66f277a2a135",
+          "subject_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Flee",
+          "target_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "duration": 5.0,
+          "evidence_ids": [
+            "70dc613f-3ba6-586a-a782-cc2bf2f37abc"
+          ]
+        },
+        {
+          "action": "Fight",
+          "target_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "duration": 8.0,
+          "evidence_ids": [
+            "70dc613f-3ba6-586a-a782-cc2bf2f37abc"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target_id": "465b5978-d213-5825-80dc-2b450ea29863",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "89a76d97-d6fd-5c6c-b580-f8d2d65581a0"
+      }
+    },
+    "prompt": {
+      "self_name": "翠花",
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的大壮，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "彩带绕到胳膊上了，我扯开再跟你说。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "彩带我帮你解了，咱们也别为这事闹了。"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "解开就好，我也不想把布景弄坏。"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-024-branch-2",
+    "group_id": "change-024",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "躲开挂着的彩带",
+      "branch": 2,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+      "request_id": "754ef5f9-78e3-5631-b28c-a2672eac1302",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "翠花",
+      "self_subject_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+      "profile_id": "xiumei",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "4cbaa50d-2138-54af-8a4b-9d3e6a472af2",
+          "subject_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "kind": "Perceived",
+          "description": "看见附近的大壮，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "1f7febe9-6790-55aa-ab32-a39984927173",
+          "subject_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+          "kind": "SelfSpeech",
+          "description": "彩带绕到胳膊上了，我扯开再跟你说。",
+          "source": "ActionResult",
+          "addressee_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "99387aef-1140-5019-ad3d-403cf191d69c",
+          "subject_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "kind": "Speech",
+          "description": "你胳膊都腾出来了，还能找什么借口！",
+          "source": "Heard",
+          "addressee_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "6e5e0459-52c0-509a-8cd8-99413017dd24",
+          "subject_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "kind": "FightThreat",
+          "description": "这个人朝我冲过来，准备动手",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "90bfab5e-47d3-5f03-b483-a325a0f5c2c3",
+          "subject_id": "a2fe1121-aaf3-56bb-9b25-4d6a968a051d",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Flee",
+          "target_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "duration": 5.0,
+          "evidence_ids": [
+            "4cbaa50d-2138-54af-8a4b-9d3e6a472af2"
+          ]
+        },
+        {
+          "action": "Fight",
+          "target_id": "465b5978-d213-5825-80dc-2b450ea29863",
+          "duration": 8.0,
+          "evidence_ids": [
+            "4cbaa50d-2138-54af-8a4b-9d3e6a472af2"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target_id": "465b5978-d213-5825-80dc-2b450ea29863",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "89a76d97-d6fd-5c6c-b580-f8d2d65581a0"
+      }
+    },
+    "prompt": {
+      "self_name": "翠花",
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的大壮，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "彩带绕到胳膊上了，我扯开再跟你说。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "你胳膊都腾出来了，还能找什么借口！"
+        },
+        {
+          "kind": "FightThreat",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "这个人朝我冲过来，准备动手"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-032-branch-1",
+    "group_id": "change-032",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "追着滚动的线轴",
+      "branch": 1,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+      "request_id": "715c41d8-2de6-55ea-bdec-f547744b144d",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "翠花",
+      "self_subject_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+      "profile_id": "xiumei",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "214646d6-c9b5-5fea-97be-12a5b2d8d3e4",
+          "subject_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "kind": "Perceived",
+          "description": "看见附近的大壮，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "81ed36a0-afdf-543c-8c13-fa98933a3572",
+          "subject_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+          "kind": "SelfSpeech",
+          "description": "我往这边走你就跟着跑，是不是没完了？",
+          "source": "ActionResult",
+          "addressee_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "4154a9db-b174-50f7-b36e-433326cae542",
+          "subject_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "kind": "Speech",
+          "description": "线轴从你脚边滚过去了，我追的是它。",
+          "source": "Heard",
+          "addressee_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "c0734150-9f82-5e9b-9b79-72abcb3e9aee",
+          "subject_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+          "kind": "SelfSpeech",
+          "description": "原来追线轴啊，那你快捡，我不挡着。",
+          "source": "ActionResult",
+          "addressee_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "53334160-c057-5df7-b367-c1221e7e9620",
+          "subject_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Fight",
+          "target_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "duration": 8.0,
+          "evidence_ids": [
+            "214646d6-c9b5-5fea-97be-12a5b2d8d3e4"
+          ]
+        },
+        {
+          "action": "Flee",
+          "target_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "duration": 5.0,
+          "evidence_ids": [
+            "214646d6-c9b5-5fea-97be-12a5b2d8d3e4"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "67e66d9c-2dbd-5f91-bfea-7ea50fe16461"
+      }
+    },
+    "prompt": {
+      "self_name": "翠花",
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的大壮，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "我往这边走你就跟着跑，是不是没完了？"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "线轴从你脚边滚过去了，我追的是它。"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "原来追线轴啊，那你快捡，我不挡着。"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-032-branch-2",
+    "group_id": "change-032",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "追着滚动的线轴",
+      "branch": 2,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+      "request_id": "1c03d1f7-5a93-5fc9-8147-bc2309a59f6e",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "翠花",
+      "self_subject_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+      "profile_id": "xiumei",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "cc0a2b5d-8ce5-5579-b159-ee26151a7aaa",
+          "subject_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "kind": "Perceived",
+          "description": "看见附近的大壮，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "e29aad67-cbbe-52c1-99a4-0452d9e84cd1",
+          "subject_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+          "kind": "SelfSpeech",
+          "description": "我往这边走你就跟着跑，是不是没完了？",
+          "source": "ActionResult",
+          "addressee_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "362ce4f2-a21e-571e-9dfe-46fb964994b0",
+          "subject_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "kind": "Speech",
+          "description": "线轴算什么，今天就追你！",
+          "source": "Heard",
+          "addressee_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "cdf355ab-e2c4-5d04-8e4a-bb2e4799473d",
+          "subject_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "kind": "FightThreat",
+          "description": "这个人朝我冲过来，准备动手",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "4860f492-d4bf-539d-bff8-15afc0c20c12",
+          "subject_id": "c86210ee-a380-5d55-9c4e-6c665b58d483",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Fight",
+          "target_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "duration": 8.0,
+          "evidence_ids": [
+            "cc0a2b5d-8ce5-5579-b159-ee26151a7aaa"
+          ]
+        },
+        {
+          "action": "Flee",
+          "target_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+          "duration": 5.0,
+          "evidence_ids": [
+            "cc0a2b5d-8ce5-5579-b159-ee26151a7aaa"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target_id": "15cb4dca-f422-519f-b997-bc212bfb1846",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "67e66d9c-2dbd-5f91-bfea-7ea50fe16461"
+      }
+    },
+    "prompt": {
+      "self_name": "翠花",
+      "persona": "你是翠花，村口退休大妈，大壮是常拌嘴、互不服气的老邻居。你嘴快、好胜、耐性短，最烦他摆长辈架子教训你，或当着外人说让着你、你不敢。他吹牛时你乐意主动接茬，拿他刚说的话拆台；越是熟人越敢呛，绝不为了认识多年就跟他站一边。普通问候好好接，偶然擦身不当回事。快递员说大壮在背后贬低你时，你不一定全信，但会在意他是不是小看你；他在旁边就直接问他、顶他，不把每轮都变成审问快递员。大壮再敷衍、嘲笑或挑衅，你会越听越来气，可能走近较劲、真的追着拍几下，不只在原地说狠话。快递员自己羞辱你时，也会找他算账。挨疼、吃亏或追不上时可以跑开、还嘴或罢手；真认错给台阶，嘴上否认却仍拿你开涮不等于和好。说短话，具体接住上一句，生气、得意、慌张都有变化。传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "翠花",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "大壮",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Flee",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的大壮，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "我往这边走你就跟着跑，是不是没完了？"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "线轴算什么，今天就追你！"
+        },
+        {
+          "kind": "FightThreat",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "这个人朝我冲过来，准备动手"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-040-branch-1",
+    "group_id": "change-040",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "把争论留给排练",
+      "branch": 1,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "9c100695-edc4-561c-b4a6-338247b97282",
+      "request_id": "54aac051-8fd6-5d9f-a78b-508524b43cc8",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "大壮",
+      "self_subject_id": "9c100695-edc4-561c-b4a6-338247b97282",
+      "profile_id": "chunlai",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "9c100695-edc4-561c-b4a6-338247b97282",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "8807f279-2582-5a2f-a106-cc44d2a7e70f",
+          "subject_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "kind": "Perceived",
+          "description": "看见附近的翠花，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "38901846-2c26-5863-94fc-ecda6ee5b8f9",
+          "subject_id": "9c100695-edc4-561c-b4a6-338247b97282",
+          "kind": "SelfSpeech",
+          "description": "咱们明明是在排戏，你怎么真跟我较上劲了。",
+          "source": "ActionResult",
+          "addressee_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "b1d238c4-9cf0-543e-91fb-faa16172bf07",
+          "subject_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "kind": "Speech",
+          "description": "刚才入戏了，确实是我过头。",
+          "source": "Heard",
+          "addressee_id": "9c100695-edc4-561c-b4a6-338247b97282",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "453df291-d889-5300-8040-565a789d6a8a",
+          "subject_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "kind": "Speech",
+          "description": "可你现在这副得意劲，我又看不顺眼了！",
+          "source": "Heard",
+          "addressee_id": "9c100695-edc4-561c-b4a6-338247b97282",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "93e1801c-aa94-5740-80ed-1011427b8dcc",
+          "subject_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "kind": "FightThreat",
+          "description": "这个人朝我冲过来，准备动手",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "d9fcd4d9-6705-5a68-95af-da921aa8c647",
+          "subject_id": "9c100695-edc4-561c-b4a6-338247b97282",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        },
+        {
+          "action": "Flee",
+          "target_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "duration": 5.0,
+          "evidence_ids": [
+            "8807f279-2582-5a2f-a106-cc44d2a7e70f"
+          ]
+        },
+        {
+          "action": "Fight",
+          "target_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "duration": 8.0,
+          "evidence_ids": [
+            "8807f279-2582-5a2f-a106-cc44d2a7e70f"
+          ]
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "bbfd65ba-5627-5aba-8dfd-f34ccdeb1b5b"
+      }
+    },
+    "prompt": {
+      "self_name": "大壮",
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的翠花，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "咱们明明是在排戏，你怎么真跟我较上劲了。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "刚才入戏了，确实是我过头。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "可你现在这副得意劲，我又看不顺眼了！"
+        },
+        {
+          "kind": "FightThreat",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "这个人朝我冲过来，准备动手"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Fight"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  },
+  {
+    "id": "change-040-branch-2",
+    "group_id": "change-040",
+    "usage": "validation",
+    "source": {
+      "kind": "authored_round3_state_change",
+      "gameplay_recording": false,
+      "topic": "把争论留给排练",
+      "branch": 2,
+      "basis": "general state-change failure categories; not a rewritten acceptance case",
+      "branches_are_alternatives_not_executed_trajectories": true
+    },
+    "context": {
+      "protocol_version": 1,
+      "capability_version": 1,
+      "world_epoch": "3a36ab61-1d43-5fb9-9efe-8d2503b23abd",
+      "npc_id": "9c100695-edc4-561c-b4a6-338247b97282",
+      "request_id": "c2e1167f-2862-5897-b1f7-a750e1e2085a",
+      "context_revision": 1,
+      "plan_revision": 1,
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "self_name": "大壮",
+      "self_subject_id": "9c100695-edc4-561c-b4a6-338247b97282",
+      "profile_id": "chunlai",
+      "allowed_actions": [
+        "Wait",
+        "Fight",
+        "Flee"
+      ],
+      "subjects": [
+        {
+          "subject_id": "9c100695-edc4-561c-b4a6-338247b97282",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "7b9e1cca-7922-5160-8f6c-ba58b969fd27",
+          "subject_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "kind": "Perceived",
+          "description": "看见附近的翠花，当时距离约 200 厘米",
+          "source": "Seen",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "826a2e6c-fc7e-5b08-8135-06cc3acdc60a",
+          "subject_id": "9c100695-edc4-561c-b4a6-338247b97282",
+          "kind": "SelfSpeech",
+          "description": "咱们明明是在排戏，你怎么真跟我较上劲了。",
+          "source": "ActionResult",
+          "addressee_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "a03b0ba4-281f-5a0a-8b6f-9eda59f89065",
+          "subject_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "kind": "Speech",
+          "description": "刚才入戏了，确实是我过头。",
+          "source": "Heard",
+          "addressee_id": "9c100695-edc4-561c-b4a6-338247b97282",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "6be4d6b8-37b4-5a49-a8cf-6a29d0f727bc",
+          "subject_id": "9c100695-edc4-561c-b4a6-338247b97282",
+          "kind": "SelfSpeech",
+          "description": "那就停一停，台词明天再对，今天别真闹了。",
+          "source": "ActionResult",
+          "addressee_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "10a41ca3-2e90-50fd-82ab-8b2450678a92",
+          "subject_id": "9c100695-edc4-561c-b4a6-338247b97282",
+          "kind": "SelfCombat",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。当前动作还未结束；下一步可以继续、逃跑或停手",
+          "source": "ActionResult",
+          "addressee_id": "",
+          "reply_to_event_id": ""
+        }
+      ],
+      "candidates": [
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 2.0,
+          "evidence_ids": []
+        },
+        {
+          "action": "Flee",
+          "target_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "duration": 5.0,
+          "evidence_ids": [
+            "7b9e1cca-7922-5160-8f6c-ba58b969fd27"
+          ]
+        },
+        {
+          "action": "Fight",
+          "target_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+          "duration": 8.0,
+          "evidence_ids": [
+            "7b9e1cca-7922-5160-8f6c-ba58b969fd27"
+          ]
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target_id": "7e53340b-3d2a-5831-a186-c3aa61d5a96f",
+        "source": "Model",
+        "remaining_seconds": 3.0,
+        "action_id": "bbfd65ba-5627-5aba-8dfd-f34ccdeb1b5b"
+      }
+    },
+    "prompt": {
+      "self_name": "大壮",
+      "persona": "你是大壮，村口退休大爷，翠花是常拌嘴、互不服气的老邻居。你爱显摆、爱面子，最受不了她当着外人说你只会吹牛、胆小、没本事；她越说不用跟你计较，你越觉得被看扁。平常爱主动搭话和较真，普通问候照常接，偶然擦身不当回事。有人说翠花在背后贬低你，你可能半信半疑，却很在意丢没丢面子；她在旁边时会直接找她争，不一直盘问传话人，也不总能识破挑拨。听她又嘲笑、敷衍或摆架势时，火气会接着上来，可能先走近顶嘴，再真的追过去挥拳；选了动手就配实际行动，不站着反复喊狠话。熟归熟，你不会天然护着她。你也会被快递员本人惹急，找真正惹你的人算账。挨疼、吃亏或追不上时会露怯，可以跑开、罢手或还嘴；真认错会给台阶，单纯否认或嘲笑不一定消气。说短话，接对方刚说的具体事；传话仍是传话，不捏造亲眼所见或胜负，只决定自己的动作。",
+      "subjects": [
+        {
+          "id": "self",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "id": "opponent",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "target": "opponent",
+        "remaining_seconds": 3.0
+      },
+      "candidates": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "events": [
+        {
+          "kind": "Perceived",
+          "subject": "opponent",
+          "addressee": "",
+          "description": "看见附近的翠花，当时距离约 200 厘米"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "咱们明明是在排戏，你怎么真跟我较上劲了。"
+        },
+        {
+          "kind": "Speech",
+          "subject": "opponent",
+          "addressee": "self",
+          "description": "刚才入戏了，确实是我过头。"
+        },
+        {
+          "kind": "SelfSpeech",
+          "subject": "self",
+          "addressee": "opponent",
+          "description": "那就停一停，台词明天再对，今天别真闹了。"
+        },
+        {
+          "kind": "SelfCombat",
+          "subject": "self",
+          "addressee": "",
+          "description": "这阵子实际挨了 1 记轻拳；本轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。"
+        }
+      ]
+    },
+    "label": {
+      "acceptable_actions": [
+        "Wait"
+      ],
+      "status": "author_draft_pending_independent_teacher_review"
+    }
+  }
+]

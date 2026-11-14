@@ -3,14 +3,17 @@
 #include "Task/World/DeliveryPickupPointComponent.h"
 
 #include "Delivery.h"
+#include "Carry/DeliveryPackageCarrierInterface.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerState.h"
 #include "Inventory/DeliveryPackageItem.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "World/DeliveryLocationComponent.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
 #include "Task/DeliveryTaskManagerComponent.h"
+#include "Misc/ScopeExit.h"
 
 UDeliveryPickupPointComponent::UDeliveryPickupPointComponent()
 {
@@ -262,6 +265,108 @@ bool UDeliveryPickupPointComponent::TryDispense(ADeliveryCharacter *Receiver)
     UE_LOG(LogDelivery, Log, TEXT("[取货点] %s 发出任务 %s 的快递给 %s"), *Owner->GetName(),
            *Task->TaskId.ToString(), *Receiver->GetName());
 
+    return true;
+}
+
+bool UDeliveryPickupPointComponent::TryDispenseToCarrier(APawn* Receiver, UDeliveryTaskDefinition* ExpectedTask)
+{
+    AActor* Point = GetOwner();
+    UWorld* World = GetWorld();
+    auto* Carrier = IsValid(Receiver) ? Cast<IDeliveryPackageCarrierInterface>(Receiver) : nullptr;
+    APlayerState* Player = Carrier ? Carrier->GetTaskPlayerState() : nullptr;
+    auto* Interaction = UDeliveryInteractableComponent::FindOn(Point, EDeliveryInteractionKey::PickupE);
+    const auto* Manager = UDeliveryTaskManagerComponent::Get(this);
+    if (!IsValid(Point) || !Point->HasAuthority() || !World || !IsValid(Receiver) ||
+        !Receiver->HasAuthority() || Receiver->GetWorld() != World || !Carrier ||
+        !Carrier->CanHandleTaskPackage() || Carrier->GetCarriedTaskPackage() ||
+        !IsValid(Player) || Player->GetWorld() != World || Player->IsInactive() ||
+        !IsValid(ExpectedTask) || !Manager || !Manager->IsTaskAccepted(ExpectedTask) ||
+        ResolvePendingTask() != ExpectedTask || !Manager->CanAcquireItem(ExpectedTask) ||
+        !Interaction || !Interaction->CanInteract(Receiver))
+    {
+        return false;
+    }
+
+    ADeliveryPackageItem* Package = nullptr;
+    // 距离和射线都指向原取货锚点，整栋建筑的其他墙面仍会挡住取件
+    const auto IsAtPickupPoint = [&]()
+    {
+        if (!IsValid(Point) || !IsValid(Receiver) || !IsValid(Interaction) ||
+            Point->GetWorld() != World || Receiver->GetWorld() != World || !Interaction->CanInteract(Receiver)) return false;
+        const FVector PickupPoint = Interaction->GetInteractionPoint(Receiver->GetActorLocation());
+        FCollisionQueryParams Query(SCENE_QUERY_STAT(CompanionPackagePickup), false, Receiver);
+        if (IsValid(Package)) Query.AddIgnoredActor(Package);
+        FCollisionObjectQueryParams Objects;
+        for (const auto Channel : {ECC_WorldStatic, ECC_WorldDynamic, ECC_Pawn, ECC_Vehicle, ECC_PhysicsBody})
+            Objects.AddObjectTypesToQuery(Channel);
+        FHitResult Hit;
+        // 锚点恰好位于取件表面时只容许末端两厘米，不能忽略整栋楼的遮挡
+        return !World->LineTraceSingleByObjectType(Hit, Receiver->GetActorLocation(), PickupPoint, Objects, Query) ||
+            FVector::DistSquared(Hit.ImpactPoint, PickupPoint) <= FMath::Square(2.f);
+    };
+    if (!IsAtPickupPoint()) return false;
+
+    UClass* SpawnClass = PackageClass ? PackageClass.Get() : ADeliveryTestPackage::StaticClass();
+    const FTransform Base = Point->GetActorTransform();
+    const FTransform SpawnTransform(Base.GetRotation(), Base.TransformPosition(SpawnOffset));
+    Package = World->SpawnActorDeferred<ADeliveryPackageItem>(
+        SpawnClass, SpawnTransform, nullptr, Receiver, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+    if (!Package) return false;
+    auto* Item = Package->GetDeliveryItemComponent();
+    if (!Item)
+    {
+        Package->Destroy();
+        return false;
+    }
+
+    // 未交出的新物品不是丢件，失败销毁不能把其他人的进行中任务退回待取件
+    const bool bReportLost = Item->bReportLostOnDestroy;
+    Item->bReportLostOnDestroy = false;
+    Item->OwningTask = ExpectedTask;
+    if (!Item->BeginTransfer(Receiver))
+    {
+        Package->Destroy();
+        return false;
+    }
+    const TWeakObjectPtr<UDeliveryItemComponent> ReservedItem = Item;
+    ON_SCOPE_EXIT
+    {
+        if (ReservedItem.IsValid()) ReservedItem->EndTransfer();
+    };
+    Package->FinishSpawning(SpawnTransform);
+
+    const auto RejectPackage = [&]()
+    {
+        if (!IsValid(Package)) return false;
+        auto* CurrentItem = Package->GetDeliveryItemComponent();
+        if (Package->GetOwner())
+        {
+            // 预约期间不应换手，若蓝图回调仍改了归属则保留实物供排查
+            if (IsValid(CurrentItem)) CurrentItem->bReportLostOnDestroy = bReportLost;
+            UE_LOG(LogDelivery, Warning, TEXT("[PickupPoint] %s 拒绝接收确认，保留已有归属的包裹 %s owner=%s"),
+                *GetNameSafe(Point), *GetNameSafe(Package), *GetNameSafe(Package->GetOwner()));
+            return false;
+        }
+        // 构造脚本可能覆盖标志，真正销毁临时物品前再次关闭丢件上报
+        if (IsValid(CurrentItem)) CurrentItem->bReportLostOnDestroy = false;
+        Package->Destroy();
+        return false;
+    };
+
+    // 生成期间的蓝图回调也可能改变人物或任务，真正交出前再次核对
+    if (!IsValid(Package) || !IsValid(Item) || !IsValid(Receiver) || !IsValid(Player) || Player->IsInactive() ||
+        Package->GetDeliveryItemComponent() != Item || Item->OwningTask != ExpectedTask ||
+        Player->GetWorld() != World || !IsAtPickupPoint() ||
+        Carrier->GetTaskPlayerState() != Player || !Carrier->CanHandleTaskPackage() ||
+        Carrier->GetCarriedTaskPackage() || ResolvePendingTask() != ExpectedTask ||
+        !Carrier->CanReceiveTaskPackage(Package))
+    {
+        return RejectPackage();
+    }
+    if (!Carrier->TryReceiveTaskPackage(Package) || !IsValid(Package) || !IsValid(Item) || !IsValid(Receiver) ||
+        Carrier->GetCarriedTaskPackage() != Package || Package->GetOwner() != Receiver || Item->OwningTask != ExpectedTask)
+        return RejectPackage();
+    Item->bReportLostOnDestroy = bReportLost;
     return true;
 }
 

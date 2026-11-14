@@ -1,0 +1,118 @@
+{
+  "common_count": 15,
+  "ids": [
+    "independent-01",
+    "independent-02",
+    "independent-03",
+    "independent-04",
+    "independent-05",
+    "independent-06",
+    "independent-07",
+    "independent-08",
+    "independent-09",
+    "independent-10",
+    "independent-11",
+    "independent-12",
+    "independent-13",
+    "independent-14",
+    "independent-15"
+  ],
+  "local_ms": {
+    "count": 15,
+    "median": 211.0686000014539,
+    "p95": 302.03351999880385,
+    "minimum": 184.2146999988472,
+    "maximum": 362.4998000013875
+  },
+  "luna_ms": {
+    "count": 15,
+    "median": 2083.573799995065,
+    "p95": 2474.030069995933,
+    "minimum": 1859.5462000012049,
+    "maximum": 2801.6474999967613
+  },
+  "median_reduction_fraction": 0.8986987645928578,
+  "at_least_30_percent": true,
+  "pairs": [
+    {
+      "id": "independent-01",
+      "local_ms": 275.6961000050069,
+      "luna_ms": 1916.4870999957202
+    },
+    {
+      "id": "independent-02",
+      "local_ms": 243.56799999804934,
+      "luna_ms": 2099.728500004858
+    },
+    {
+      "id": "independent-03",
+      "local_ms": 206.0397000022931,
+      "luna_ms": 2103.9507999958005
+    },
+    {
+      "id": "independent-04",
+      "local_ms": 276.11939999769675,
+      "luna_ms": 2333.6225999955786
+    },
+    {
+      "id": "independent-05",
+      "local_ms": 192.41029999830062,
+      "luna_ms": 2801.6474999967613
+    },
+    {
+      "id": "independent-06",
+      "local_ms": 243.76879999908851,
+      "luna_ms": 1895.798300000024
+    },
+    {
+      "id": "independent-07",
+      "local_ms": 196.6286000024411,
+      "luna_ms": 2051.128200000676
+    },
+    {
+      "id": "independent-08",
+      "local_ms": 211.0686000014539,
+      "luna_ms": 2285.3698000035365
+    },
+    {
+      "id": "independent-09",
+      "local_ms": 235.50350000004983,
+      "luna_ms": 2044.1571999981534
+    },
+    {
+      "id": "independent-10",
+      "local_ms": 202.39150000270456,
+      "luna_ms": 1951.2025000003632
+    },
+    {
+      "id": "independent-11",
+      "local_ms": 362.4998000013875,
+      "luna_ms": 1859.5462000012049
+    },
+    {
+      "id": "independent-12",
+      "local_ms": 255.80600000103004,
+      "luna_ms": 2083.573799995065
+    },
+    {
+      "id": "independent-13",
+      "local_ms": 184.2146999988472,
+      "luna_ms": 2238.5925999988103
+    },
+    {
+      "id": "independent-14",
+      "local_ms": 196.69750000321073,
+      "luna_ms": 2098.7386999986484
+    },
+    {
+      "id": "independent-15",
+      "local_ms": 209.0740999992704,
+      "luna_ms": 1874.3433999989065
+    }
+  ],
+  "filter": "双方合法完成且在窗口内，cycle0；不以标签是否正确筛除慢样本",
+  "sampling_difference": "local temperature0 greedy；Luna low effort/default tier，模型接口与服务开销不同但语义提示/动作输入一致",
+  "local_request_timeout_seconds": 1.5,
+  "luna_reference_timeout_seconds": 10,
+  "luna_not_claimed_to_meet_1500ms": true
+}

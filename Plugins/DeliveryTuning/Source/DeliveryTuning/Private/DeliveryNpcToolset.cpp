@@ -1,6 +1,8 @@
 #include "DeliveryNpcToolset.h"
 #include "DeliveryConversationAssetTools.h"
 #include "AI/BehaviorTree/BTTask_DeliveryListen.h"
+#include "AI/BehaviorTree/BTTask_DeliveryCompanionFollow.h"
+#include "AI/BehaviorTree/BTTask_DeliveryCompanionErrand.h"
 #include "AI/Presentation/DeliveryNpcExpressionSet.h"
 #include "Curves/CurveFloat.h"
 #include "NavigationSystem.h"
@@ -35,6 +37,7 @@
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.h"
 #include "BehaviorTree/BehaviorTree.h"
+#include "BehaviorTree/BTService.h"
 #include "BehaviorTree/BlackboardData.h"
 #include "BehaviorTree/Blackboard/BlackboardKeyType_Bool.h"
 #include "BehaviorTree/Blackboard/BlackboardKeyType_Object.h"
@@ -46,6 +49,8 @@
 #include "BehaviorTreeGraph.h"
 #include "BehaviorTreeGraphNode.h"
 #include "BehaviorTreeGraphNode_Root.h"
+#include "BehaviorTreeGraphNode_Task.h"
+#include "BehaviorTreeGraphNode_Decorator.h"
 #include "EdGraphSchema_BehaviorTree.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -249,8 +254,400 @@ FString UDeliveryNpcToolset::UpdateNpcConversationAssets()
     return SaveResidentAsset(Tree)?TEXT("NPC listening branch saved"):TEXT("Failed tree save");
 }
 
+FString UDeliveryNpcToolset::CreateCompanionBehaviorAsset()
+{
+    if (!GEditor || GEditor->PlayWorld) return TEXT("Close PIE before editing companion assets");
+    const FString Folder=TEXT("/Game/NPC/Companion/AI");
+    auto* Tree=LoadObject<UBehaviorTree>(nullptr,*(Folder+TEXT("/BT_Companion")));
+    if (!Tree)
+    {
+        auto* Original=LoadObject<UBehaviorTree>(nullptr,TEXT("/Game/NPC/Residents/AI/BT_Resident"));
+        if (!Original || !Original->RootNode) return TEXT("Missing BT_Resident");
+        Tree=Cast<UBehaviorTree>(FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().DuplicateAsset(TEXT("BT_Companion"),Folder,Original));
+    }
+    if (!Tree || !Tree->RootNode || !Tree->RootNode->IsA<UBTComposite_Selector>() || !Tree->BlackboardAsset || Tree->RootNode->Children.IsEmpty())
+        return TEXT("Missing companion selector or blackboard; kept unchanged");
+    // 只在原资产没有编辑图时补建；已有节点、服务、注释与布局保留原对象
+    if (!Tree->BTGraph) RebuildResidentGraph(Tree);
+    auto* Root=Tree->RootNode.Get();
+    auto& Last=Root->Children.Last();
+    if (!Last.Decorators.IsEmpty()) return TEXT("Default companion branch has decorators; kept unchanged");
+    auto* Sequence=Cast<UBTComposite_Sequence>(Last.ChildComposite.Get());
+    FBTCompositeChild* Leaf=Sequence && Sequence->Children.Num()==1?&Sequence->Children[0]:&Last;
+    const bool bHasFollow=Leaf->ChildTask && Leaf->ChildTask->IsA<UBTTask_DeliveryCompanionFollow>();
+    if (!bHasFollow && (!Leaf->ChildTask || !Leaf->ChildTask->IsA<UBTTask_Wait>() || !Leaf->Decorators.IsEmpty()))
+        return TEXT("Default companion branch was customized; kept unchanged");
+
+    auto BlackboardKey=[](const UBTDecorator* Decorator)->FName
+    {
+        if (!Decorator || !Decorator->IsA<UBTDecorator_Blackboard>()) return NAME_None;
+        const auto* Property=FindFProperty<FStructProperty>(Decorator->GetClass(),TEXT("BlackboardKey"));
+        return Property?Property->ContainerPtrToValuePtr<FBlackboardKeySelector>(Decorator)->SelectedKeyName:NAME_None;
+    };
+    int32 ErrandIndex=INDEX_NONE;
+    int32 UnavailableIndex=INDEX_NONE,ListeningIndex=INDEX_NONE,ApprovedIndex=INDEX_NONE;
+    for (int32 Index=0;Index<Root->Children.Num();++Index)
+    {
+        const auto& Child=Root->Children[Index];
+        if (Child.ChildTask && Child.ChildTask->IsA<UBTTask_DeliveryCompanionErrand>())
+        {
+            if (ErrandIndex!=INDEX_NONE) return TEXT("Duplicate companion errand branches; kept unchanged");
+            ErrandIndex=Index;
+        }
+        for (const UBTDecorator* Decorator:Child.Decorators)
+        {
+            const FName Key=BlackboardKey(Decorator);
+            if (Key==TEXT("Unavailable")) UnavailableIndex=Index;
+            if (Key==TEXT("Listening")) ListeningIndex=Index;
+            if (Key==TEXT("HasApprovedAction")) ApprovedIndex=Index;
+        }
+    }
+    // 插入点必须位于既有高优先级分支之后，不能靠重排自定义节点改变游戏行为
+    if (UnavailableIndex<0 || ListeningIndex<=UnavailableIndex || ApprovedIndex<=ListeningIndex || ApprovedIndex>=Root->Children.Num()-1)
+        return TEXT("Companion priority branches were customized; kept unchanged");
+    if (ErrandIndex!=INDEX_NONE)
+    {
+        const auto& Child=Root->Children[ErrandIndex];
+        if (ErrandIndex!=Root->Children.Num()-2 || ErrandIndex<=ApprovedIndex || Child.Decorators.Num()!=1 ||
+            BlackboardKey(Child.Decorators[0])!=TEXT("HasCompanionErrand"))
+            return TEXT("Existing companion errand branch was customized; kept unchanged");
+        const auto* Decorator=CastChecked<UBTDecorator_Blackboard>(Child.Decorators[0]);
+        const auto* AbortProperty=FindFProperty<FByteProperty>(Decorator->GetClass(),TEXT("FlowAbortMode"));
+        const auto* OperationProperty=FindFProperty<FByteProperty>(Decorator->GetClass(),TEXT("BasicOperation"));
+        if (!AbortProperty || !OperationProperty || AbortProperty->GetPropertyValue_InContainer(Decorator)!=EBTFlowAbortMode::Both ||
+            OperationProperty->GetPropertyValue_InContainer(Decorator)!=EBasicKeyOperation::Set)
+            return TEXT("Existing errand abort condition was customized; kept unchanged");
+    }
+
+    auto* Graph=Cast<UBehaviorTreeGraph>(Tree->BTGraph);
+    if (!Graph) return TEXT("Unsupported companion graph; kept unchanged");
+    auto FindGraphNode=[&](const UObject* Instance)->UBehaviorTreeGraphNode*
+    {
+        for (UEdGraphNode* Raw:Graph->Nodes)
+            if (auto* Node=Cast<UBehaviorTreeGraphNode>(Raw); Node && Node->NodeInstance==Instance) return Node;
+        return nullptr;
+    };
+    auto* RootGraph=FindGraphNode(Root);
+    auto* LeafGraph=FindGraphNode(Leaf->ChildTask);
+    auto* LastGraph=FindGraphNode(Root->GetChildNode(Root->Children.Num()-1));
+    auto* PreviousGraph=FindGraphNode(Root->GetChildNode(Root->Children.Num()-2));
+    UBehaviorTreeGraphNode_Root* GraphRoot=nullptr;
+    int32 GraphErrandCount=0;
+    for (UEdGraphNode* Raw:Graph->Nodes)
+    {
+        if (auto* Node=Cast<UBehaviorTreeGraphNode_Root>(Raw)) GraphRoot=Node;
+        const auto* Node=Cast<UBehaviorTreeGraphNode>(Raw);
+        if (Node && Node->NodeInstance && Node->NodeInstance->IsA<UBTTask_DeliveryCompanionErrand>()) ++GraphErrandCount;
+    }
+    if (GraphErrandCount!=(ErrandIndex==INDEX_NONE?0:1))
+        return TEXT("Companion errand was placed in a custom branch; kept unchanged");
+    if (!RootGraph || !LeafGraph || !LastGraph || !PreviousGraph || !GraphRoot || !RootGraph->GetOutputPin())
+        return TEXT("Companion graph does not match runtime nodes; kept unchanged");
+    auto* Output=RootGraph->GetOutputPin();
+    if (Output->LinkedTo.Num()!=Root->Children.Num()) return TEXT("Companion root links were customized; kept unchanged");
+    int32 PreviousX=MIN_int32;
+    for (int32 Index=0;Index<Root->Children.Num();++Index)
+    {
+        const auto* Node=FindGraphNode(Root->GetChildNode(Index));
+        if (!Node || !Node->GetInputPin() || !Output->LinkedTo.Contains(Node->GetInputPin()) || Node->NodePosX<=PreviousX)
+            return TEXT("Companion graph order differs from runtime priority; kept unchanged");
+        PreviousX=Node->NodePosX;
+    }
+    if (ErrandIndex==INDEX_NONE && int64(LastGraph->NodePosX)-PreviousGraph->NodePosX<2)
+        return TEXT("No graph space before companion follow branch; kept unchanged");
+
+    auto* SourceBB=Tree->BlackboardAsset.Get();
+    auto* BB=LoadObject<UBlackboardData>(nullptr,*(Folder+TEXT("/BB_Companion")));
+    if (!BB)
+        BB=Cast<UBlackboardData>(FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().DuplicateAsset(TEXT("BB_Companion"),Folder,SourceBB));
+    if (!BB) return TEXT("Failed to duplicate companion blackboard");
+    // 失败后重跑时仍保留专属黑板的配置，遇到不兼容的源键则交回编辑器处理
+    for (int32 Index=0;Index<SourceBB->GetNumKeys();++Index)
+    {
+        const auto Key=static_cast<FBlackboard::FKey>(Index);
+        const auto OtherKey=BB->GetKeyID(SourceBB->GetKeyName(Key));
+        if (OtherKey==FBlackboard::InvalidKey || BB->GetKeyType(OtherKey)!=SourceBB->GetKeyType(Key) ||
+            BB->IsKeyInstanceSynced(OtherKey)!=SourceBB->IsKeyInstanceSynced(Key))
+            return TEXT("Existing companion blackboard differs from tree keys; kept unchanged");
+    }
+    const FName ErrandKey=TEXT("HasCompanionErrand");
+    const auto ExistingKey=BB->GetKeyID(ErrandKey);
+    if (ExistingKey!=FBlackboard::InvalidKey && (BB->GetKeyType(ExistingKey)!=UBlackboardKeyType_Bool::StaticClass() || BB->IsKeyInstanceSynced(ExistingKey)))
+        return TEXT("HasCompanionErrand must be an unsynchronized bool; kept unchanged");
+    if (ExistingKey==FBlackboard::InvalidKey)
+    {
+        BB->Modify();
+        FBlackboardEntry Entry; Entry.EntryName=ErrandKey; Entry.KeyType=NewObject<UBlackboardKeyType_Bool>(BB);
+        Entry.EntryDescription=TEXT("本同伴是否持有尚未结束的主人委托，暂停导航时仍保留");
+        BB->Keys.Add(Entry); BB->UpdateKeyIDs();
+    }
+    if (bHasFollow && ErrandIndex!=INDEX_NONE && Tree->BlackboardAsset==BB && GraphRoot->BlackboardAsset==BB && ExistingKey!=FBlackboard::InvalidKey)
+        return TEXT("BT_Companion and BB_Companion already configured");
+    UBlueprint* FollowBP=nullptr;
+    if (!bHasFollow)
+    {
+        FollowBP=ResidentBlueprint(UBTTask_DeliveryCompanionFollow::StaticClass(),Folder+TEXT("/BTT_CompanionFollow"));
+        if (!FollowBP || !FollowBP->ParentClass || !FollowBP->ParentClass->IsChildOf(UBTTask_DeliveryCompanionFollow::StaticClass()))
+            return TEXT("Companion follow task has an incompatible parent; kept unchanged");
+        FKismetEditorUtilities::CompileBlueprint(FollowBP);
+        if (FollowBP->Status==BS_Error || !SaveResidentAsset(FollowBP)) return TEXT("Failed companion follow task save");
+    }
+    UBlueprint* ErrandBP=nullptr;
+    if (ErrandIndex==INDEX_NONE)
+    {
+        ErrandBP=ResidentBlueprint(UBTTask_DeliveryCompanionErrand::StaticClass(),Folder+TEXT("/BTT_CompanionErrand"));
+        if (!ErrandBP || !ErrandBP->ParentClass || !ErrandBP->ParentClass->IsChildOf(UBTTask_DeliveryCompanionErrand::StaticClass()))
+            return TEXT("Companion errand task has an incompatible parent; kept unchanged");
+        FKismetEditorUtilities::CompileBlueprint(ErrandBP);
+        if (ErrandBP->Status==BS_Error || !SaveResidentAsset(ErrandBP)) return TEXT("Failed companion errand task save");
+    }
+    if (!SaveResidentAsset(BB)) return TEXT("Failed companion blackboard save");
+    Tree->Modify(); Graph->Modify(); Graph->LockUpdates();
+    Tree->BlackboardAsset=BB;
+    GraphRoot->Modify(); GraphRoot->BlackboardAsset=BB;
+    if (FollowBP)
+    {
+        LeafGraph->Modify();
+        LeafGraph->NodeInstance=NewObject<UBTTaskNode>(Tree,FollowBP->GeneratedClass);
+        LeafGraph->ClassData=FGraphNodeClassData(FollowBP->GeneratedClass,FString());
+    }
+    if (ErrandBP)
+    {
+        FGraphNodeCreator<UBehaviorTreeGraphNode_Task> Builder(*Graph);
+        auto* Node=Builder.CreateNode();
+        Node->NodeInstance=NewObject<UBTTaskNode>(Tree,ErrandBP->GeneratedClass);
+        Node->ClassData=FGraphNodeClassData(ErrandBP->GeneratedClass,FString());
+        Node->NodePosX=static_cast<int32>((int64(LastGraph->NodePosX)+PreviousGraph->NodePosX)/2);
+        Node->NodePosY=LastGraph->NodePosY;
+        Builder.Finalize();
+        auto* Decorator=NewObject<UBTDecorator_Blackboard>(Tree);
+        auto* Property=FindFProperty<FStructProperty>(Decorator->GetClass(),TEXT("BlackboardKey"));
+        auto* Selector=Property->ContainerPtrToValuePtr<FBlackboardKeySelector>(Decorator);
+        Selector->SelectedKeyName=ErrandKey; Selector->ResolveSelectedKey(*BB);
+        FindFProperty<FByteProperty>(Decorator->GetClass(),TEXT("OperationType"))->SetPropertyValue_InContainer(Decorator,EBasicKeyOperation::Set);
+        FindFProperty<FByteProperty>(Decorator->GetClass(),TEXT("BasicOperation"))->SetPropertyValue_InContainer(Decorator,EBasicKeyOperation::Set);
+        FindFProperty<FByteProperty>(Decorator->GetClass(),TEXT("FlowAbortMode"))->SetPropertyValue_InContainer(Decorator,EBTFlowAbortMode::Both);
+        static_cast<UBTNode*>(Decorator)->InitializeFromAsset(*Tree); Decorator->BuildDescription();
+        auto* DecoratorNode=NewObject<UBehaviorTreeGraphNode_Decorator>(Graph);
+        DecoratorNode->NodeInstance=Decorator;
+        DecoratorNode->ClassData=FGraphNodeClassData(Decorator->GetClass(),FString());
+        Node->AddSubNode(DecoratorNode,Graph);
+        Output->Modify(); Output->MakeLinkTo(Node->GetInputPin());
+    }
+    Graph->UnlockUpdates();
+    Graph->UpdateBlackboardChange(); Graph->UpdateAsset();
+    Graph->NotifyGraphChanged();
+    const int32 Count=Root->Children.Num();
+    if (Count<2 || !Root->Children[Count-2].ChildTask || !Root->Children[Count-2].ChildTask->IsA<UBTTask_DeliveryCompanionErrand>())
+        return TEXT("Companion errand graph failed priority check; tree was not saved");
+    return SaveResidentAsset(Tree)?TEXT("Saved BT_Companion, BB_Companion and persistent companion tasks"):TEXT("Failed companion tree save");
+}
+
+FString UDeliveryNpcToolset::DescribeCompanionBehaviorAsset()
+{
+    auto Report=MakeShared<FJsonObject>();
+    Report->SetNumberField(TEXT("schema_version"),1);
+    TArray<TSharedPtr<FJsonValue>> Errors;
+    auto Error=[&](const FString& Reason){ Errors.Add(MakeShared<FJsonValueString>(Reason)); };
+    auto* Tree=LoadObject<UBehaviorTree>(nullptr,TEXT("/Game/NPC/Companion/AI/BT_Companion"));
+    Report->SetStringField(TEXT("tree_path"),GetPathNameSafe(Tree));
+    auto* BB=Tree?Tree->BlackboardAsset.Get():nullptr;
+    Report->SetStringField(TEXT("blackboard_path"),GetPathNameSafe(BB));
+    if (!Tree || !Tree->RootNode) Error(TEXT("Missing companion behavior tree root"));
+    if (!BB) Error(TEXT("Missing companion blackboard"));
+    if (BB)
+    {
+        auto Data=MakeShared<FJsonObject>();
+        Data->SetStringField(TEXT("path"),BB->GetPathName());
+        Data->SetStringField(TEXT("parent_path"),GetPathNameSafe(BB->Parent));
+        TArray<TSharedPtr<FJsonValue>> Keys;
+        for (int32 Index=0;Index<BB->GetNumKeys();++Index)
+        {
+            const auto KeyId=static_cast<FBlackboard::FKey>(Index);
+            auto Key=MakeShared<FJsonObject>();
+            Key->SetNumberField(TEXT("id"),Index); Key->SetStringField(TEXT("name"),BB->GetKeyName(KeyId).ToString());
+            Key->SetStringField(TEXT("type"),GetPathNameSafe(BB->GetKeyType(KeyId).Get()));
+            Key->SetBoolField(TEXT("instance_synced"),BB->IsKeyInstanceSynced(KeyId));
+            Key->SetBoolField(TEXT("inherited"),Index<static_cast<int32>(BB->GetFirstKeyID()));
+            Keys.Add(MakeShared<FJsonValueObject>(Key));
+        }
+        Data->SetArrayField(TEXT("keys"),Keys); Report->SetObjectField(TEXT("blackboard"),Data);
+        if (BB->GetPathName()!=TEXT("/Game/NPC/Companion/AI/BB_Companion.BB_Companion")) Error(TEXT("Tree must use its independent BB_Companion"));
+        const auto Key=BB->GetKeyID(TEXT("HasCompanionErrand"));
+        if (Key==FBlackboard::InvalidKey || BB->GetKeyType(Key)!=UBlackboardKeyType_Bool::StaticClass() || BB->IsKeyInstanceSynced(Key))
+            Error(TEXT("HasCompanionErrand must be an unsynchronized bool"));
+    }
+    auto DescribeDecorator=[](const UBTDecorator* Decorator)
+    {
+        auto Item=MakeShared<FJsonObject>();
+        Item->SetStringField(TEXT("path"),GetPathNameSafe(Decorator));
+        if (!Decorator) return Item;
+        Item->SetStringField(TEXT("class"),Decorator->GetClass()->GetPathName());
+        Item->SetNumberField(TEXT("flow_abort_mode"),Decorator->GetFlowAbortMode());
+        const auto Abort=Decorator->GetFlowAbortMode();
+        Item->SetStringField(TEXT("flow_abort_mode_name"),Abort==EBTFlowAbortMode::Both?TEXT("Both"):
+            Abort==EBTFlowAbortMode::Self?TEXT("Self"):Abort==EBTFlowAbortMode::LowerPriority?TEXT("LowerPriority"):TEXT("None"));
+        if (const auto* Blackboard=Cast<UBTDecorator_Blackboard>(Decorator))
+        {
+            Item->SetStringField(TEXT("key"),Blackboard->GetSelectedBlackboardKey().ToString());
+            for (const auto& Pair:{TPair<const TCHAR*,const TCHAR*>(TEXT("OperationType"),TEXT("operation")),
+                TPair<const TCHAR*,const TCHAR*>(TEXT("BasicOperation"),TEXT("basic_operation"))})
+                if (const auto* Property=FindFProperty<FByteProperty>(Decorator->GetClass(),Pair.Key))
+                    Item->SetNumberField(Pair.Value,Property->GetPropertyValue_InContainer(Decorator));
+            if (const auto* Property=FindFProperty<FByteProperty>(Decorator->GetClass(),TEXT("BasicOperation")))
+                Item->SetStringField(TEXT("basic_operation_name"),Property->GetPropertyValue_InContainer(Decorator)==EBasicKeyOperation::Set?TEXT("Set"):TEXT("NotSet"));
+        }
+        return Item;
+    };
+    TSet<const UBTNode*> RuntimeVisited;
+    TFunction<TSharedRef<FJsonObject>(const UBTNode*)> DescribeRuntime;
+    DescribeRuntime=[&](const UBTNode* Node)
+    {
+        auto Data=MakeShared<FJsonObject>();
+        Data->SetStringField(TEXT("path"),GetPathNameSafe(Node));
+        if (!Node) return Data;
+        Data->SetStringField(TEXT("class"),Node->GetClass()->GetPathName());
+        Data->SetStringField(TEXT("name"),Node->GetNodeName());
+        if (RuntimeVisited.Contains(Node)) { Data->SetBoolField(TEXT("already_described"),true); return Data; }
+        RuntimeVisited.Add(Node);
+        TArray<TSharedPtr<FJsonValue>> Services,Children;
+        const auto* Composite=Cast<UBTCompositeNode>(Node);
+        Data->SetStringField(TEXT("kind"),Composite?TEXT("composite"):Node->IsA<UBTTaskNode>()?TEXT("task"):TEXT("auxiliary"));
+        if (Composite)
+        {
+            for (const auto& Service:Composite->Services) Services.Add(MakeShared<FJsonValueObject>(DescribeRuntime(Service)));
+            for (int32 Index=0;Index<Composite->Children.Num();++Index)
+            {
+                const auto& Child=Composite->Children[Index];
+                auto Entry=MakeShared<FJsonObject>(); Entry->SetNumberField(TEXT("index"),Index);
+                Entry->SetObjectField(TEXT("node"),DescribeRuntime(Composite->GetChildNode(Index)));
+                TArray<TSharedPtr<FJsonValue>> Decorators,Operations;
+                for (const auto& Decorator:Child.Decorators) Decorators.Add(MakeShared<FJsonValueObject>(DescribeDecorator(Decorator)));
+                for (const auto& Operation:Child.DecoratorOps)
+                {
+                    auto Op=MakeShared<FJsonObject>(); Op->SetNumberField(TEXT("operation"),static_cast<int32>(Operation.Operation));
+                    Op->SetNumberField(TEXT("number"),Operation.Number); Operations.Add(MakeShared<FJsonValueObject>(Op));
+                }
+                Entry->SetArrayField(TEXT("decorators"),Decorators); Entry->SetArrayField(TEXT("decorator_ops"),Operations);
+                Children.Add(MakeShared<FJsonValueObject>(Entry));
+            }
+        }
+        else if (const auto* Task=Cast<UBTTaskNode>(Node))
+            for (const auto& Service:Task->Services) Services.Add(MakeShared<FJsonValueObject>(DescribeRuntime(Service)));
+        Data->SetArrayField(TEXT("services"),Services); Data->SetArrayField(TEXT("children"),Children);
+        return Data;
+    };
+    if (Tree)
+    {
+        Report->SetObjectField(TEXT("root"),DescribeRuntime(Tree->RootNode));
+        TArray<TSharedPtr<FJsonValue>> Decorators;
+        for (const auto& Decorator:Tree->RootDecorators) Decorators.Add(MakeShared<FJsonValueObject>(DescribeDecorator(Decorator)));
+        Report->SetArrayField(TEXT("root_decorators"),Decorators);
+    }
+    auto* Graph=Tree?Cast<UBehaviorTreeGraph>(Tree->BTGraph):nullptr;
+    if (!Graph) Error(TEXT("Missing companion editor graph"));
+    if (Graph)
+    {
+        auto Data=MakeShared<FJsonObject>(); Data->SetStringField(TEXT("path"),Graph->GetPathName());
+        int32 GraphRootCount=0;
+        TSet<const UEdGraphNode*> GraphVisited;
+        TFunction<TSharedRef<FJsonObject>(const UEdGraphNode*)> DescribeGraphNode;
+        DescribeGraphNode=[&](const UEdGraphNode* Node)
+        {
+            auto Entry=MakeShared<FJsonObject>(); Entry->SetStringField(TEXT("path"),GetPathNameSafe(Node));
+            if (!Node) return Entry;
+            Entry->SetStringField(TEXT("guid"),Node->NodeGuid.ToString()); Entry->SetStringField(TEXT("class"),Node->GetClass()->GetPathName());
+            Entry->SetNumberField(TEXT("x"),Node->NodePosX); Entry->SetNumberField(TEXT("y"),Node->NodePosY);
+            Entry->SetStringField(TEXT("comment"),Node->NodeComment);
+            if (GraphVisited.Contains(Node)) { Entry->SetBoolField(TEXT("already_described"),true); return Entry; }
+            GraphVisited.Add(Node);
+            TArray<TSharedPtr<FJsonValue>> Pins,SubNodes,Decorators,Services;
+            for (const UEdGraphPin* Pin:Node->Pins)
+            {
+                if (!Pin) continue;
+                auto P=MakeShared<FJsonObject>(); P->SetStringField(TEXT("name"),Pin->PinName.ToString());
+                P->SetStringField(TEXT("direction"),Pin->Direction==EGPD_Input?TEXT("Input"):TEXT("Output"));
+                TArray<TSharedPtr<FJsonValue>> Links;
+                for (const UEdGraphPin* Link:Pin->LinkedTo)
+                {
+                    if (!Link) continue;
+                    auto L=MakeShared<FJsonObject>(); L->SetStringField(TEXT("node_guid"),Link->GetOwningNode()->NodeGuid.ToString());
+                    L->SetStringField(TEXT("pin_name"),Link->PinName.ToString());
+                    L->SetStringField(TEXT("direction"),Link->Direction==EGPD_Input?TEXT("Input"):TEXT("Output"));
+                    Links.Add(MakeShared<FJsonValueObject>(L));
+                }
+                P->SetArrayField(TEXT("links"),Links); Pins.Add(MakeShared<FJsonValueObject>(P));
+            }
+            if (const auto* BT=Cast<UBehaviorTreeGraphNode>(Node))
+            {
+                Entry->SetStringField(TEXT("instance_path"),GetPathNameSafe(BT->NodeInstance));
+                Entry->SetStringField(TEXT("instance_class"),BT->NodeInstance?BT->NodeInstance->GetClass()->GetPathName():FString());
+                for (const auto& Sub:BT->SubNodes) SubNodes.Add(MakeShared<FJsonValueObject>(DescribeGraphNode(Sub)));
+                for (const auto& Sub:BT->Decorators) Decorators.Add(MakeShared<FJsonValueString>(GetPathNameSafe(Sub)));
+                for (const auto& Sub:BT->Services) Services.Add(MakeShared<FJsonValueString>(GetPathNameSafe(Sub)));
+            }
+            if (const auto* Root=Cast<UBehaviorTreeGraphNode_Root>(Node))
+            {
+                ++GraphRootCount;
+                Entry->SetStringField(TEXT("blackboard_path"),GetPathNameSafe(Root->BlackboardAsset));
+                if (Root->BlackboardAsset!=BB) Error(TEXT("Editor graph root blackboard differs from runtime tree"));
+            }
+            Entry->SetArrayField(TEXT("pins"),Pins); Entry->SetArrayField(TEXT("sub_nodes"),SubNodes);
+            Entry->SetArrayField(TEXT("decorator_paths"),Decorators); Entry->SetArrayField(TEXT("service_paths"),Services);
+            return Entry;
+        };
+        TArray<TSharedPtr<FJsonValue>> Nodes;
+        for (const auto& Node:Graph->Nodes) Nodes.Add(MakeShared<FJsonValueObject>(DescribeGraphNode(Node)));
+        if (GraphRootCount!=1) Error(TEXT("Editor graph must contain exactly one root"));
+        Data->SetArrayField(TEXT("nodes"),Nodes); Report->SetObjectField(TEXT("graph"),Data);
+    }
+    if (Tree && Tree->RootNode)
+    {
+        const auto* Root=Tree->RootNode.Get();
+        if (!Root->IsA<UBTComposite_Selector>()) Error(TEXT("Companion root must be a selector"));
+        auto Leaf=[](const UBTNode* Node)
+        {
+            TSet<const UBTNode*> Seen;
+            while (const auto* Sequence=Cast<UBTComposite_Sequence>(Node))
+            {
+                if (Sequence->Children.Num()!=1 || Seen.Contains(Node)) break;
+                Seen.Add(Node); Node=Sequence->GetChildNode(0);
+            }
+            return Node;
+        };
+        const TArray<FName> Keys={TEXT("Unavailable"),TEXT("Listening"),TEXT("HasApprovedAction"),TEXT("HasCompanionErrand")};
+        const TArray<UClass*> Classes={UBTTask_Wait::StaticClass(),UBTTask_DeliveryListen::StaticClass(),UBTTask_DeliveryExecuteNpcAction::StaticClass(),UBTTask_DeliveryCompanionErrand::StaticClass()};
+        int32 PreviousIndex=INDEX_NONE;
+        for (int32 Kind=0;Kind<Keys.Num();++Kind)
+        {
+            int32 FoundIndex=INDEX_NONE;
+            for (int32 Index=0;Index<Root->Children.Num();++Index)
+                for (const auto& Raw:Root->Children[Index].Decorators)
+                {
+                    const auto* Decorator=Cast<UBTDecorator_Blackboard>(Raw);
+                    if (!Decorator || Decorator->GetSelectedBlackboardKey()!=Keys[Kind]) continue;
+                    if (FoundIndex!=INDEX_NONE) Error(TEXT("Duplicate branch condition: ")+Keys[Kind].ToString());
+                    FoundIndex=Index;
+                    const auto* Task=Leaf(Root->GetChildNode(Index));
+                    const auto* Operation=FindFProperty<FByteProperty>(Decorator->GetClass(),TEXT("BasicOperation"));
+                    if (!Task || !Task->IsA(Classes[Kind]) || !Operation || Operation->GetPropertyValue_InContainer(Decorator)!=EBasicKeyOperation::Set || Decorator->GetFlowAbortMode()!=EBTFlowAbortMode::Both)
+                        Error(TEXT("Invalid task or Set/Both condition for ")+Keys[Kind].ToString());
+                }
+            if (FoundIndex<=PreviousIndex) Error(TEXT("Missing or misplaced branch: ")+Keys[Kind].ToString());
+            PreviousIndex=FoundIndex;
+        }
+        if (Root->Children.Num()<2 || PreviousIndex!=Root->Children.Num()-2) Error(TEXT("Errand must immediately precede default follow"));
+        const auto* Default=Root->Children.IsEmpty()?nullptr:Leaf(Root->GetChildNode(Root->Children.Num()-1));
+        if (!Default || !Default->IsA<UBTTask_DeliveryCompanionFollow>() || !Root->Children.Last().Decorators.IsEmpty())
+            Error(TEXT("Default branch must be undecorated companion follow"));
+    }
+    Report->SetBoolField(TEXT("ready_for_errands"),Errors.IsEmpty()); Report->SetArrayField(TEXT("validation_errors"),Errors);
+    FString Json; FJsonSerializer::Serialize(Report,TJsonWriterFactory<>::Create(&Json)); return Json;
+}
+
 FString UDeliveryNpcToolset::CreateResidentAssets()
 {
+    TArray<FString> BlackboardMigrationWarnings;
     TMap<FString,FNpcEditorProfile> Profiles;
     if (!ReadNpcProfiles(Profiles)) return TEXT("Run update_npc_profiles.py to create DT_NpcProfiles before creating NPC assets");
     const FString ResidentFolder=TEXT("/Game/NPC/Residents/");
@@ -301,17 +698,41 @@ FString UDeliveryNpcToolset::CreateResidentAssets()
         for (UEdGraphNode* Node : Graph->Nodes)
             if (auto* GraphRoot=Cast<UBehaviorTreeGraphNode_Root>(Node))
             { GraphRoot->BlackboardAsset=BB; GraphRoot->UpdateBlackboard(); }
-        // 修复旧生成资产中被错误黑板重置成 SelfActor 的两个条件
-        for (int32 Index=0; Index<2 && Index<Tree->RootNode->Children.Num(); ++Index)
-            for (UBTDecorator* Decorator : Tree->RootNode->Children[Index].Decorators)
+        // 只迁移旧 SelfActor，合法条件保持原样；倾听分支插入后节点下标已经变化
+        for (int32 Index=0;Index<Tree->RootNode->Children.Num();++Index)
+        {
+            const auto& Branch=Tree->RootNode->Children[Index];
+            for (UBTDecorator* Decorator:Branch.Decorators)
             {
+                if (!Decorator || !Decorator->IsA<UBTDecorator_Blackboard>()) continue;
                 auto* Property=FindFProperty<FStructProperty>(Decorator->GetClass(),TEXT("BlackboardKey"));
                 if (!Property) continue;
                 auto* Selector=Property->ContainerPtrToValuePtr<FBlackboardKeySelector>(Decorator);
-                Selector->SelectedKeyName=Index==0?TEXT("Unavailable"):TEXT("HasApprovedAction");
+                if (Selector->SelectedKeyName!=TEXT("SelfActor")) continue;
+                const UBTNode* LeafNode=Tree->RootNode->GetChildNode(Index);
+                TSet<const UBTNode*> Visited;
+                while (const auto* Sequence=Cast<UBTComposite_Sequence>(LeafNode))
+                {
+                    if (Sequence->Children.Num()!=1 || Visited.Contains(Sequence)) break;
+                    Visited.Add(Sequence); LeafNode=Sequence->GetChildNode(0);
+                }
+                FName Key=NAME_None;
+                if (LeafNode && LeafNode->IsA<UBTTask_DeliveryListen>()) Key=TEXT("Listening");
+                else if (LeafNode && LeafNode->IsA<UBTTask_DeliveryExecuteNpcAction>()) Key=TEXT("HasApprovedAction");
+                else if (LeafNode && LeafNode->IsA<UBTTask_Wait>()) Key=TEXT("Unavailable");
+                const auto KeyId=BB->GetKeyID(Key);
+                if (Key.IsNone() || KeyId==FBlackboard::InvalidKey || BB->GetKeyType(KeyId)!=UBlackboardKeyType_Bool::StaticClass())
+                {
+                    BlackboardMigrationWarnings.Add(FString::Printf(TEXT("branch %d SelfActor kept: unsupported leaf %s or missing bool key %s"),
+                        Index,*GetNameSafe(LeafNode?LeafNode->GetClass():nullptr),*Key.ToString()));
+                    continue;
+                }
+                Decorator->Modify(); Selector->SelectedKeyName=Key;
                 Selector->ResolveSelectedKey(*BB);
                 static_cast<UBTNode*>(Decorator)->InitializeFromAsset(*Tree);
+                CastChecked<UBTDecorator_Blackboard>(Decorator)->BuildDescription();
             }
+        }
         Graph->UpdateBlackboardChange(); Graph->UpdateAsset();
         if (!SaveResidentAsset(Tree)) return TEXT("Failed resident blackboard repair");
     }
@@ -343,7 +764,9 @@ FString UDeliveryNpcToolset::CreateResidentAssets()
     auto* Mapping=ResidentAsset<UInputMappingContext>(ResidentFolder+TEXT("Input/IMC_ResidentConversation"));
     if (Mapping->GetMappings().IsEmpty()) { Mapping->MapKey(Action,EKeys::T); Mapping->MapKey(Action,EKeys::Gamepad_DPad_Right); }
     if (!SaveResidentAsset(Action) || !SaveResidentAsset(Mapping)) return TEXT("Failed input assets");
-    return TEXT("Saved BB_Resident, BT_Resident, BTT_ResidentExecute, resident pair and conversation input");
+    FString Result=TEXT("Saved BB_Resident, BT_Resident, BTT_ResidentExecute, resident pair and conversation input");
+    if (!BlackboardMigrationWarnings.IsEmpty()) Result+=TEXT("; migration warnings: ")+FString::Join(BlackboardMigrationWarnings,TEXT("; "));
+    return Result;
 }
 FString UDeliveryNpcToolset::PlaceResidentPair(FVector Location)
 {
@@ -506,12 +929,13 @@ FString UDeliveryNpcToolset::CheckNpcNavigation(bool bRepairEmpty)
     Report->SetNumberField(TEXT("build_locks_before"),ReadBuildLocks());
     Report->SetBoolField(TEXT("async_loading_before"),IsAsyncLoading());
     Report->SetNumberField(TEXT("assets_compiling_before"),FAssetCompilingManager::Get().GetNumRemainingAssets());
+    // 显式重建时先等模型编译，启动编辑器运行的资产脚本也可能早于异步编译完成
+    FlushAsyncLoading();
+    FAssetCompilingManager::Get().FinishAllCompilation();
     bool bRemovedAsyncLoadLock=false;
     if (IsRunningCommandlet())
     {
-        // 命令行脚本没有编辑器的延后 Tick，先等模型加载与编译完成，再解除加载期间的导航锁
-        FlushAsyncLoading();
-        FAssetCompilingManager::Get().FinishAllCompilation();
+        // 命令行脚本没有编辑器的延后 Tick，只在这里解除已结束加载的导航锁
         if (!IsAsyncLoading() && FAssetCompilingManager::Get().GetNumRemainingAssets()==0
             && Nav->IsNavigationBuildingLocked(ENavigationBuildLock::AsyncLoadLock))
         {

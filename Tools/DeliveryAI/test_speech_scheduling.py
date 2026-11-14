@@ -29,10 +29,11 @@ class SpeechSchedulingTests(unittest.TestCase):
             except queue.Empty:
                 return result
 
-    def test_two_slow_voices_release_model_slots_but_keep_players_ahead_of_ambient(self):
+    def test_slow_voices_allow_new_models_and_queued_players_still_go_first(self):
         release = threading.Event()
         voices_started = threading.Barrier(3)
         ambient_started = threading.Event()
+        model_order = []
         class Voice:
             def synthesize(self, text, voice, emotion, cancel):
                 voices_started.wait(timeout=2)
@@ -41,6 +42,7 @@ class SpeechSchedulingTests(unittest.TestCase):
                 return b'\x01\x00'*160, 16000
         def model(prompt, cancel, on_delta):
             label = json.loads(prompt)['persona']
+            model_order.append(label)
             if label == 'ambient':
                 ambient_started.set()
             on_delta(json.dumps({'candidate_index': 0, 'speech': label+'。' if label in ('first', 'second') else '', 'emotion': 'Calm'}))
@@ -52,10 +54,15 @@ class SpeechSchedulingTests(unittest.TestCase):
                 first = server.scheduler.submit(player_request('first'))
                 second = server.scheduler.submit(player_request('second'))
                 voices_started.wait(timeout=2)
-                ambient = server.scheduler.submit({**player_request('ambient'), 'request_source': 'ambient'})
-                third = server.scheduler.submit(player_request('third'))
+                # 两条都还未开始时，玩家优先；已经运行的模型不会被假装取消
+                with server.scheduler.condition:
+                    ambient = server.scheduler.submit({**player_request('ambient'), 'request_source': 'ambient'})
+                    third = server.scheduler.submit(player_request('third'))
                 self.wait_finished(server, third)
-                self.assertFalse(first.finished or second.finished or ambient_started.is_set())
+                self.wait_finished(server, ambient)
+                self.assertFalse(first.finished or second.finished)
+                self.assertTrue(ambient_started.is_set(), '旧语音结束前也可以开始下一次普通决定')
+                self.assertLess(model_order.index('third'), model_order.index('ambient'))
                 # 两个模型位置都已归还，慢语音仍由原 Job 记录
                 acquired = 0
                 try:
@@ -66,7 +73,7 @@ class SpeechSchedulingTests(unittest.TestCase):
                     for _ in range(acquired):
                         server.slots.release()
                 with server.scheduler.condition:
-                    self.assertEqual(server.scheduler.running_players, 2)
+                    self.assertEqual(server.scheduler.running_players, 0)
                     self.assertIn(first.key, server.scheduler.jobs)
                     self.assertIn(second.key, server.scheduler.jobs)
                 self.assertEqual([event['type'] for event in self.events(first)], ['proposal'])

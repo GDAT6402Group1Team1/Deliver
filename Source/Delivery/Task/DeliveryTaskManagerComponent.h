@@ -29,6 +29,7 @@ class DELIVERY_API UDeliveryTaskManagerComponent : public UActorComponent
 {
 	GENERATED_BODY()
 	friend class FDeliveryStartupTaskGateTest;
+	friend class FDeliveryPackageTransferTest;
 
   public:
 	UDeliveryTaskManagerComponent();

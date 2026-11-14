@@ -39,6 +39,11 @@ class DELIVERY_API IDeliveryImpactReceiver
 
 	/** 已经被打飞的目标不再重复结算（音效、命中计数都看这个） */
 	virtual bool IsKnockedDown() const = 0;
+	// 少数角色允许倒地后继续受击，普通接收者保持原来的拒绝规则
+	virtual bool CanReceiveHitWhileDown() const { return false; }
 	// 来源在命中时采集，旧接收者继续走原接口
 	virtual void ReceiveImpactFrom(const FVector& Impulse, const FVector& Point, AActor* Source) { ReceiveImpact(Impulse, Point); }
+	// 同一拳的编号供允许倒地受击的角色去重，旧接收者沿用原受击表现
+	virtual void ReceiveMeleeHitFrom(const FVector& Impulse, const FVector& Point, AActor* Source, FGuid PunchId)
+	{ ReceiveImpactFrom(Impulse, Point, Source); }
 };

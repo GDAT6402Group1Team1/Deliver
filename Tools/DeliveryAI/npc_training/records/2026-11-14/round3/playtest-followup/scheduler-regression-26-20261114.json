@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T15:10:59.749893+00:00",
+  "record_type": "父任务本次已执行结果的人工记录，不是本子任务重跑",
+  "test_runner": "Python unittest",
+  "test_selectors": [
+    "test_scheduler",
+    "test_speech_queue",
+    "test_model_completion.ModelCompletionTests.test_old_speech_does_not_hold_model_slot_or_finish_new_request"
+  ],
+  "result": {
+    "tests_run": 26,
+    "elapsed_seconds": 0.336,
+    "passed": true
+  },
+  "execution_scope": {
+    "cpu_only": true,
+    "model_loaded": false,
+    "speech_synthesis_loaded": false,
+    "ue_started": false
+  },
+  "result_source": "父任务在本轮消息中确认本次26项全部通过及0.336秒耗时；此文件记录该结果，不冒充逐行终端日志",
+  "coverage_note": "调度、语音排队，以及旧语音不能占住模型执行名额或结束新请求；不代表C++补丁已编译或真实追打已验证",
+  "ue_patch_status": "源码已修改；等待统一构建、UE自动化和实际输入检查",
+  "unchanged_gates": {
+    "q4_enabled": false,
+    "max_frame_p95_increase_percent": 10
+  },
+  "frozen_records_modified": false
+}

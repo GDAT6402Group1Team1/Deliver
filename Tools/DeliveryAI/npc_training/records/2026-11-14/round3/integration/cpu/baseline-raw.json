@@ -1,0 +1,1682 @@
+{
+  "schema_version": 1,
+  "usage": "evaluation_only_not_training",
+  "status": "completed",
+  "provider": "none",
+  "label": "round3-dual-pie-baseline-tts8",
+  "source_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\acceptance-reviewed.json",
+  "source_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+  "case_order": [
+    "independent-01",
+    "independent-02",
+    "independent-03",
+    "independent-04",
+    "independent-05",
+    "independent-06",
+    "independent-07",
+    "independent-08",
+    "independent-09",
+    "independent-10",
+    "independent-11",
+    "independent-12",
+    "independent-13",
+    "independent-14",
+    "independent-15",
+    "independent-16",
+    "independent-17",
+    "independent-18",
+    "independent-19",
+    "independent-20",
+    "independent-21",
+    "independent-22",
+    "independent-23",
+    "independent-24",
+    "independent-25",
+    "independent-26",
+    "independent-27",
+    "independent-28",
+    "independent-29",
+    "independent-30",
+    "independent-31",
+    "independent-32",
+    "independent-33",
+    "independent-34",
+    "independent-35",
+    "independent-36",
+    "independent-37",
+    "independent-38",
+    "independent-39",
+    "independent-40"
+  ],
+  "labels_sent_to_model": false,
+  "instructions_sha256": "9720d1cfd1156847370e4e4546b11a9b76b514e7a69ece29561e7d72435f4470",
+  "game_state_reported_by_operator": "dual_pie",
+  "ue_before": {
+    "ue": "\"UnrealEditor.exe\",\"56396\",\"Console\",\"1\",\"6,667,684 K\"",
+    "ue_commandlet": "信息: 没有运行的任务匹配指定标准。",
+    "local_model": "信息: 没有运行的任务匹配指定标准。"
+  },
+  "request_timeout_seconds": 1.5,
+  "seed": 20261114,
+  "chunk_frames": 8,
+  "warmup_timeout_seconds": 10.0,
+  "start_buffer_seconds": 1.28,
+  "wait_seconds": 5.0,
+  "decision_load": "fixed_intervals_single_request_skip_missed_slots",
+  "decision_interval_seconds": 1.0,
+  "sampling_local": {
+    "temperature": 0.0,
+    "mode": "greedy",
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0
+  },
+  "evaluation_profile_routing": {
+    "note": "仅给评测副本补充正式人物编号，模型输入、标签和原始文件均不修改",
+    "name_to_profile": {
+      "大壮": "chunlai",
+      "翠花": "xiumei"
+    },
+    "added_case_ids": [
+      "independent-01",
+      "independent-02",
+      "independent-03",
+      "independent-04",
+      "independent-05",
+      "independent-06",
+      "independent-07",
+      "independent-08",
+      "independent-09",
+      "independent-10",
+      "independent-11",
+      "independent-12",
+      "independent-13",
+      "independent-14",
+      "independent-15",
+      "independent-16",
+      "independent-17",
+      "independent-18",
+      "independent-19",
+      "independent-20",
+      "independent-21",
+      "independent-22",
+      "independent-23",
+      "independent-24",
+      "independent-25",
+      "independent-26",
+      "independent-27",
+      "independent-28",
+      "independent-29",
+      "independent-30",
+      "independent-31",
+      "independent-32",
+      "independent-33",
+      "independent-34",
+      "independent-35",
+      "independent-36",
+      "independent-37",
+      "independent-38",
+      "independent-39",
+      "independent-40"
+    ],
+    "allowed_profile_ids": "chunlai,xiumei"
+  },
+  "luna_sampling_note": "复用 AppServer 实际模型设置，不能假称与本地采样参数相同",
+  "local_service_launch_record": {
+    "pid": 65172,
+    "device": "cpu",
+    "started_utc": "2026-11-14T13:16:37.750244+00:00",
+    "gpu_layers": 0,
+    "model_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3\\combat-Q8_0.gguf",
+    "model_sha256": "84fb04b090ced49496cea3c73fe6f48852d282db7acb216f87c724ec8100c3c3",
+    "context_tokens": 4096,
+    "output_tokens": 64,
+    "threads": null,
+    "threads_batch": null
+  },
+  "launch_record_process_identity_verified": false,
+  "tts_config_sha256": "e79f7146ab83d5cc197c21c803bf4678b071832236bd727e04a95e1f79ffcb4d",
+  "tts_runtime_sha256": "f30f3d8e54b2ac711c202be3933bd84b0e89338ff21d75efd603c7f147aff2d3",
+  "voice_identities": {
+    "male": {
+      "provider": "qwen",
+      "speaker": "Uncle_Fu",
+      "model_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+      "runtime": "qwentts_cpp",
+      "source_commit": "f1a6924789883bd92eeb59176793a94af55730b3",
+      "gguf_sha256": "4eb38675c736ed6ac72012846ac8d6ef80e5af8bc05726870f0b3a6569588519",
+      "codec_sha256": "1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94",
+      "quantization": "Q8_0"
+    },
+    "female": {
+      "provider": "qwen_base",
+      "speaker": "Xiaofang_B",
+      "model_revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+      "reference_sha256": "35d6e6f5fda0189495782df45c7d13c45edd835066e84456a25760b409d5ca65",
+      "reference_text_sha256": "2bd10a8b5c09b3d8bb4ba66d5c9ef6912aa577df2759ae58a62d008ff51c6ff7",
+      "runtime": "qwentts_cpp",
+      "source_commit": "f1a6924789883bd92eeb59176793a94af55730b3",
+      "gguf_sha256": "d54dbaf10591421fa764ed630d764efa717ae40cd959bd48c66d4eb1af226426",
+      "codec_sha256": "1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94",
+      "quantization": "Q8_0"
+    }
+  },
+  "tts_config": {
+    "schema_version": 1,
+    "talker_mode": "cuda_graph",
+    "python_path": "Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe",
+    "model_path": "Saved/AIResearch/TtsEvaluation/qwen/model",
+    "installation_path": "Saved/AIResearch/TtsEvaluation/qwen/installation.json",
+    "model_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+    "voices": {
+      "male": {
+        "provider": "qwen",
+        "speaker": "Uncle_Fu"
+      },
+      "female": {
+        "provider": "qwen_base",
+        "speaker": "Xiaofang_B",
+        "predictor_mode": "cuda_graph",
+        "model_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model",
+        "model_revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+        "model_manifest_path": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/model-downloads.json",
+        "model_manifest_sha256": "004284ecfa9008b58a7d6332e3d91583f608b74b9f5a947921f2d7be8850868d",
+        "reference_path": "Design/Art/NPC/Residents/Voice/Generated/Xiaofang_B_Reference.wav",
+        "reference_sha256": "35d6e6f5fda0189495782df45c7d13c45edd835066e84456a25760b409d5ca65",
+        "reference_text": "大军，你少在这儿瞎嚷嚷。"
+      }
+    },
+    "packages": {
+      "torch": "2.7.1+cu128",
+      "qwen-tts": "0.1.1",
+      "transformers": "4.57.3"
+    },
+    "sample_rate": 24000,
+    "max_pcm_bytes": 384000,
+    "max_text_chars": 120,
+    "max_new_tokens": 256,
+    "cpu_threads": 4,
+    "seed": 20261113,
+    "startup_timeout_seconds": 60,
+    "synthesis_timeout_seconds": 20,
+    "cancel_grace_seconds": 2,
+    "process_exit_timeout_seconds": 5
+  },
+  "tts_worker_pid": 66648,
+  "warmup_speech": [
+    {
+      "case": "male_short",
+      "voice": "male",
+      "text": "你先听我说完，我刚才真没看见你。",
+      "utc_started": "2026-11-14T13:37:11.158280+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T13:37:12.167831+00:00",
+      "complete_ms": 1009.5022000023164,
+      "chunks": [
+        {
+          "received_ms": 129.0138000040315,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 202.59640000585932,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 270.8467000047676,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 422.5064000056591,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 524.4863000043551,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 624.5988000009675,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 730.6750999996439,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 858.3546000008937,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 1005.6538000062574,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        }
+      ],
+      "chunk_count": 9,
+      "first_chunk_ms": 129.0138000040315,
+      "delivered_audio_seconds": 4.4,
+      "generation_rtf": 0.2294323181823446,
+      "pcm_sha256": "8a38f7b92898ae2faa696704da1584759b3345137c3d495a43259fb1fb6695a9",
+      "buffer_simulation": {
+        "duration_s": 4.4,
+        "retrospective_uninterrupted_start_ms": 129.0138000040315,
+        "buffer_start_ms": 524.4863000043551,
+        "buffer_min_margin_ms": 1739.887500003388,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    },
+    {
+      "case": "female_short",
+      "voice": "female",
+      "text": "我就在旁边站着呢，你怎么能没看见呀？",
+      "utc_started": "2026-11-14T13:37:12.167877+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T13:37:12.947400+00:00",
+      "complete_ms": 779.4829999984358,
+      "chunks": [
+        {
+          "received_ms": 165.6068000011146,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 215.38449999934528,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 274.95600000111153,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 419.83150000305614,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 523.3309000032023,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 621.1107999988599,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 736.3095999971847,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 778.7748999980977,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 149760
+        }
+      ],
+      "chunk_count": 8,
+      "first_chunk_ms": 165.6068000011146,
+      "delivered_audio_seconds": 3.28,
+      "generation_rtf": 0.23764725609708412,
+      "pcm_sha256": "21fd5635507b76d3db1e762afa2fec5ae5e7a364c9a65d18e94acf3ba458e1c3",
+      "buffer_simulation": {
+        "duration_s": 3.2800000000000007,
+        "retrospective_uninterrupted_start_ms": 165.6068000011146,
+        "buffer_start_ms": 523.3309000032023,
+        "buffer_min_margin_ms": 1742.2201000043426,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    },
+    {
+      "case": "male_long",
+      "voice": "male",
+      "text": "刚才是我没看清楚。你拿好东西，我把车挪开，别挡着大家。",
+      "utc_started": "2026-11-14T13:37:12.947441+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T13:37:14.112607+00:00",
+      "complete_ms": 1165.137700001651,
+      "chunks": [
+        {
+          "received_ms": 36.5721999987727,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 79.98380000208272,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 147.0058999984758,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 280.45559999736724,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 391.43789999798173,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 500.87550000171177,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 610.7487999979639,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 719.794799995725,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 821.8672000002698,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        },
+        {
+          "received_ms": 940.8408999952371,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 211200
+        },
+        {
+          "received_ms": 1061.7608999964432,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 241920
+        },
+        {
+          "received_ms": 1161.443099997996,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 272640
+        },
+        {
+          "received_ms": 1164.3876000016462,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 288000
+        }
+      ],
+      "chunk_count": 13,
+      "first_chunk_ms": 36.5721999987727,
+      "delivered_audio_seconds": 6.16,
+      "generation_rtf": 0.18914573051974853,
+      "pcm_sha256": "1a0a3710635f799a294ebc726e127bfc01f26eeb4faa1104971eda3f2f8e2586",
+      "buffer_simulation": {
+        "duration_s": 6.16,
+        "retrospective_uninterrupted_start_ms": 36.5721999987727,
+        "buffer_start_ms": 391.43789999798173,
+        "buffer_min_margin_ms": 1730.5623999962702,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    },
+    {
+      "case": "female_long",
+      "voice": "female",
+      "text": "你别急着走呀。我刚才声音大了点，咱们好好说嘛。",
+      "utc_started": "2026-11-14T13:37:14.112645+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T13:37:15.071731+00:00",
+      "complete_ms": 959.0469999966444,
+      "chunks": [
+        {
+          "received_ms": 47.68609999882756,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 69.08669999393169,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 131.521099996462,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 241.3929999966058,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 350.71529999549966,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 454.9602999977651,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 557.3882999960915,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 662.3531999939587,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 773.375799995847,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        },
+        {
+          "received_ms": 899.552599999879,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 211200
+        },
+        {
+          "received_ms": 955.9748999963631,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 241920
+        },
+        {
+          "received_ms": 958.5080999968341,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 249600
+        }
+      ],
+      "chunk_count": 12,
+      "first_chunk_ms": 47.68609999882756,
+      "delivered_audio_seconds": 5.28,
+      "generation_rtf": 0.18163768939330385,
+      "pcm_sha256": "487bb770bb810f6a1486006c368185d8e38f658a360e4b9c66c4c8105b6771e2",
+      "buffer_simulation": {
+        "duration_s": 5.28,
+        "retrospective_uninterrupted_start_ms": 47.68609999882756,
+        "buffer_start_ms": 350.71529999549966,
+        "buffer_min_margin_ms": 1735.7549999977348,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    }
+  ],
+  "speech_cadence": [
+    {
+      "case": "male_short",
+      "text_sha256": "6b31a361f4e5ee5eef59d3360f0ef09117564925cd061af14ab2de07aede6e47",
+      "audio_seconds": 4.4,
+      "interval_seconds": 4.6000000000000005
+    },
+    {
+      "case": "female_short",
+      "text_sha256": "23f1b45f4f2258b3cd72a2dd65263bcbee74e25111a71dee7d911db9fec58f28",
+      "audio_seconds": 3.28,
+      "interval_seconds": 3.48
+    },
+    {
+      "case": "male_long",
+      "text_sha256": "9ae251ba66f57f0436248f70205bee24ea7e6a1f80db541d996bf3cc32a657f6",
+      "audio_seconds": 6.16,
+      "interval_seconds": 6.36
+    },
+    {
+      "case": "female_long",
+      "text_sha256": "abfdc282f1aae0e27aca67a04c9623684fafe5e1864f26fc0cbe3feb43e2e086",
+      "audio_seconds": 5.28,
+      "interval_seconds": 5.48
+    }
+  ],
+  "ready_utc": "2026-11-14T13:37:15.071800+00:00",
+  "gpu_sampling_origin_utc": "2026-11-14T13:37:20.073167+00:00",
+  "gpu_sampling_includes_cancellation_cleanup": true,
+  "measurement": {
+    "utc_started": "2026-11-14T13:37:20.073190+00:00",
+    "requested_seconds": 40.0,
+    "decisions": [],
+    "speech": [
+      {
+        "case": "male_short",
+        "voice": "male",
+        "text": "你先听我说完，我刚才真没看见你。",
+        "utc_started": "2026-11-14T13:37:20.073456+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T13:37:20.963118+00:00",
+        "complete_ms": 889.6187999998801,
+        "chunks": [
+          {
+            "received_ms": 35.574999994423706,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 61.80189999577124,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 125.8215999987442,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 237.65289999573724,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 349.4672999950126,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 473.7840999951004,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 596.3050999998813,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 729.2289999968489,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 882.8219999995781,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          }
+        ],
+        "chunk_count": 9,
+        "first_chunk_ms": 35.574999994423706,
+        "delivered_audio_seconds": 4.4,
+        "generation_rtf": 0.20218609090906364,
+        "pcm_sha256": "8a38f7b92898ae2faa696704da1584759b3345137c3d495a43259fb1fb6695a9",
+        "buffer_simulation": {
+          "duration_s": 4.4,
+          "retrospective_uninterrupted_start_ms": 35.574999994423706,
+          "buffer_start_ms": 349.4672999950126,
+          "buffer_min_margin_ms": 1715.6831999999124,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 0,
+        "scheduled_at_seconds": 0.0,
+        "started_at_seconds": 0.000262100002146326,
+        "start_late_ms": 0.262100002146326
+      },
+      {
+        "case": "female_short",
+        "voice": "female",
+        "text": "我就在旁边站着呢，你怎么能没看见呀？",
+        "utc_started": "2026-11-14T13:37:24.688879+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T13:37:25.294886+00:00",
+        "complete_ms": 605.9771000000183,
+        "chunks": [
+          {
+            "received_ms": 49.2554000011296,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 75.69579999835696,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 142.52800000394927,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 252.54999999742722,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 357.3328999991645,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 458.1000000034692,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 561.6687000001548,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 605.4478000005474,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 149760
+          }
+        ],
+        "chunk_count": 8,
+        "first_chunk_ms": 49.2554000011296,
+        "delivered_audio_seconds": 3.28,
+        "generation_rtf": 0.1847491158536641,
+        "pcm_sha256": "21fd5635507b76d3db1e762afa2fec5ae5e7a364c9a65d18e94acf3ba458e1c3",
+        "buffer_simulation": {
+          "duration_s": 3.2800000000000007,
+          "retrospective_uninterrupted_start_ms": 49.2554000011296,
+          "buffer_start_ms": 357.3328999991645,
+          "buffer_min_margin_ms": 1739.2328999956956,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 0,
+        "scheduled_at_seconds": 4.6000000000000005,
+        "started_at_seconds": 4.615678599999228,
+        "start_late_ms": 15.678599999227494
+      },
+      {
+        "case": "male_long",
+        "voice": "male",
+        "text": "刚才是我没看清楚。你拿好东西，我把车挪开，别挡着大家。",
+        "utc_started": "2026-11-14T13:37:28.158187+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T13:37:29.365935+00:00",
+        "complete_ms": 1207.7053000029991,
+        "chunks": [
+          {
+            "received_ms": 43.78480000013951,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 74.96790000004694,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 150.48130000650417,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 293.4968000045046,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 424.4494000013219,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 527.2010000044247,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 631.1373000062304,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 733.1964000040898,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 854.1822000042885,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          },
+          {
+            "received_ms": 996.4930999994976,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 211200
+          },
+          {
+            "received_ms": 1111.5958000009414,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 241920
+          },
+          {
+            "received_ms": 1204.2192000008072,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 272640
+          },
+          {
+            "received_ms": 1206.9013000000268,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 288000
+          }
+        ],
+        "chunk_count": 13,
+        "first_chunk_ms": 43.78480000013951,
+        "delivered_audio_seconds": 6.16,
+        "generation_rtf": 0.19605605519529207,
+        "pcm_sha256": "1a0a3710635f799a294ebc726e127bfc01f26eeb4faa1104971eda3f2f8e2586",
+        "buffer_simulation": {
+          "duration_s": 6.16,
+          "retrospective_uninterrupted_start_ms": 43.78480000013951,
+          "buffer_start_ms": 424.4494000013219,
+          "buffer_min_margin_ms": 1737.2483999968974,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 0,
+        "scheduled_at_seconds": 8.08,
+        "started_at_seconds": 8.084988700000395,
+        "start_late_ms": 4.98870000039453
+      },
+      {
+        "case": "female_long",
+        "voice": "female",
+        "text": "你别急着走呀。我刚才声音大了点，咱们好好说嘛。",
+        "utc_started": "2026-11-14T13:37:34.515882+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T13:37:35.513708+00:00",
+        "complete_ms": 997.7969000028679,
+        "chunks": [
+          {
+            "received_ms": 24.503799999365583,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 55.68700000003446,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 115.25689999689348,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 232.45509999833303,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 338.0022999990615,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 437.2016999986954,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 542.9770999980974,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 662.9621000029147,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 807.2736999965855,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          },
+          {
+            "received_ms": 938.4706999990158,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 211200
+          },
+          {
+            "received_ms": 995.4145000010612,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 241920
+          },
+          {
+            "received_ms": 997.1059000017704,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 249600
+          }
+        ],
+        "chunk_count": 12,
+        "first_chunk_ms": 24.503799999365583,
+        "delivered_audio_seconds": 5.28,
+        "generation_rtf": 0.18897668560660377,
+        "pcm_sha256": "487bb770bb810f6a1486006c368185d8e38f658a360e4b9c66c4c8105b6771e2",
+        "buffer_simulation": {
+          "duration_s": 5.28,
+          "retrospective_uninterrupted_start_ms": 24.503799999365583,
+          "buffer_start_ms": 338.0022999990615,
+          "buffer_min_margin_ms": 1740.8006000003663,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 0,
+        "scheduled_at_seconds": 14.440000000000001,
+        "started_at_seconds": 14.442682000000787,
+        "start_late_ms": 2.682000000785223
+      },
+      {
+        "case": "male_short",
+        "voice": "male",
+        "text": "你先听我说完，我刚才真没看见你。",
+        "utc_started": "2026-11-14T13:37:40.007808+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T13:37:40.876258+00:00",
+        "complete_ms": 868.4110999965924,
+        "chunks": [
+          {
+            "received_ms": 34.37870000198018,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 72.89000000309898,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 138.9424000008148,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 293.0430999986129,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 413.44930000195745,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 515.5675999994855,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 618.453099996259,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 738.1515000015497,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 864.3830000000889,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          }
+        ],
+        "chunk_count": 9,
+        "first_chunk_ms": 34.37870000198018,
+        "delivered_audio_seconds": 4.4,
+        "generation_rtf": 0.1973661590901346,
+        "pcm_sha256": "8a38f7b92898ae2faa696704da1584759b3345137c3d495a43259fb1fb6695a9",
+        "buffer_simulation": {
+          "duration_s": 4.4,
+          "retrospective_uninterrupted_start_ms": 34.37870000198018,
+          "buffer_start_ms": 413.44930000195745,
+          "buffer_min_margin_ms": 1737.8817000024721,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 1,
+        "scheduled_at_seconds": 19.92,
+        "started_at_seconds": 19.93460810000397,
+        "start_late_ms": 14.608100003968616
+      },
+      {
+        "case": "female_short",
+        "voice": "female",
+        "text": "我就在旁边站着呢，你怎么能没看见呀？",
+        "utc_started": "2026-11-14T13:37:44.598280+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T13:37:45.174212+00:00",
+        "complete_ms": 575.9077000038815,
+        "chunks": [
+          {
+            "received_ms": 38.141500001074746,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 71.8672000002698,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 123.49410000024363,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 231.7209000029834,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 340.8093000034569,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 446.65399999939837,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 548.8761000015074,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 575.1478000020143,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 149760
+          }
+        ],
+        "chunk_count": 8,
+        "first_chunk_ms": 38.141500001074746,
+        "delivered_audio_seconds": 3.28,
+        "generation_rtf": 0.17558161585484192,
+        "pcm_sha256": "21fd5635507b76d3db1e762afa2fec5ae5e7a364c9a65d18e94acf3ba458e1c3",
+        "buffer_simulation": {
+          "duration_s": 3.2800000000000007,
+          "retrospective_uninterrupted_start_ms": 38.141500001074746,
+          "buffer_start_ms": 340.8093000034569,
+          "buffer_min_margin_ms": 1734.1553000040587,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 1,
+        "scheduled_at_seconds": 24.520000000000003,
+        "started_at_seconds": 24.52508200000011,
+        "start_late_ms": 5.082000000108167
+      },
+      {
+        "case": "male_long",
+        "voice": "male",
+        "text": "刚才是我没看清楚。你拿好东西，我把车挪开，别挡着大家。",
+        "utc_started": "2026-11-14T13:37:48.086168+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T13:37:49.251743+00:00",
+        "complete_ms": 1165.543399998569,
+        "chunks": [
+          {
+            "received_ms": 33.13950000301702,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 79.6074999962002,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 143.7992999999551,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 244.060899996839,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 346.41869999904884,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 447.6832000000286,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 550.0363000028301,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 657.9015999959665,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 799.0171999990707,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          },
+          {
+            "received_ms": 946.991099997831,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 211200
+          },
+          {
+            "received_ms": 1076.759099996707,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 241920
+          },
+          {
+            "received_ms": 1162.4121999993804,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 272640
+          },
+          {
+            "received_ms": 1164.6097999982885,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 288000
+          }
+        ],
+        "chunk_count": 13,
+        "first_chunk_ms": 33.13950000301702,
+        "delivered_audio_seconds": 6.16,
+        "generation_rtf": 0.18921159090885858,
+        "pcm_sha256": "1a0a3710635f799a294ebc726e127bfc01f26eeb4faa1104971eda3f2f8e2586",
+        "buffer_simulation": {
+          "duration_s": 6.16,
+          "retrospective_uninterrupted_start_ms": 33.13950000301702,
+          "buffer_start_ms": 346.41869999904884,
+          "buffer_min_margin_ms": 1738.7354999990205,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 1,
+        "scheduled_at_seconds": 28.000000000000004,
+        "started_at_seconds": 28.012968900002306,
+        "start_late_ms": 12.968900002302775
+      },
+      {
+        "case": "female_long",
+        "voice": "female",
+        "text": "你别急着走呀。我刚才声音大了点，咱们好好说嘛。",
+        "utc_started": "2026-11-14T13:37:54.446609+00:00",
+        "status": "completed",
+        "utc_finished": "2026-11-14T13:37:55.434285+00:00",
+        "complete_ms": 987.6425999973435,
+        "chunks": [
+          {
+            "received_ms": 25.25469999818597,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 50.1046999997925,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 109.85570000048028,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          },
+          {
+            "received_ms": 210.39010000095004,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 26880
+          },
+          {
+            "received_ms": 312.1215999999549,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 57600
+          },
+          {
+            "received_ms": 413.7932999947225,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 88320
+          },
+          {
+            "received_ms": 521.8267000018386,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 119040
+          },
+          {
+            "received_ms": 644.4180999969831,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 149760
+          },
+          {
+            "received_ms": 776.3616000011098,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 180480
+          },
+          {
+            "received_ms": 927.3628000009921,
+            "duration_s": 0.64,
+            "bytes": 30720,
+            "offset_bytes": 211200
+          },
+          {
+            "received_ms": 977.924399994663,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 241920
+          },
+          {
+            "received_ms": 986.9515999962459,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 249600
+          }
+        ],
+        "chunk_count": 12,
+        "first_chunk_ms": 25.25469999818597,
+        "delivered_audio_seconds": 5.28,
+        "generation_rtf": 0.1870535227267696,
+        "pcm_sha256": "487bb770bb810f6a1486006c368185d8e38f658a360e4b9c66c4c8105b6771e2",
+        "buffer_simulation": {
+          "duration_s": 5.28,
+          "retrospective_uninterrupted_start_ms": 25.25469999818597,
+          "buffer_start_ms": 312.1215999999549,
+          "buffer_min_margin_ms": 1738.3283000052327,
+          "buffer_max_missing_ms": 0.0,
+          "buffer_extra_delay_needed_ms": 0.0,
+          "simulated_resume_buffer_s": 0.32,
+          "simulated_stalls": [],
+          "simulated_total_stall_ms": 0,
+          "simulated_max_stall_ms": 0.0,
+          "simulation_only_not_ue_playback": true,
+          "start_buffer_s": 1.28
+        },
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 1,
+        "scheduled_at_seconds": 34.36000000000001,
+        "started_at_seconds": 34.37340799999947,
+        "start_late_ms": 13.407999999465403
+      },
+      {
+        "case": "male_short",
+        "voice": "male",
+        "text": "你先听我说完，我刚才真没看见你。",
+        "utc_started": "2026-11-14T13:37:59.927434+00:00",
+        "status": "cancelled",
+        "error": "cancelled",
+        "utc_finished": "2026-11-14T13:38:00.145128+00:00",
+        "complete_ms": 217.692199999874,
+        "chunks": [
+          {
+            "received_ms": 35.13210000528488,
+            "duration_s": 0.08,
+            "bytes": 3840,
+            "offset_bytes": 0
+          },
+          {
+            "received_ms": 61.37290000333451,
+            "duration_s": 0.16,
+            "bytes": 7680,
+            "offset_bytes": 3840
+          },
+          {
+            "received_ms": 121.42840000160504,
+            "duration_s": 0.32,
+            "bytes": 15360,
+            "offset_bytes": 11520
+          }
+        ],
+        "chunk_count": 3,
+        "first_chunk_ms": 35.13210000528488,
+        "delivered_audio_seconds": 0.56,
+        "generation_rtf": null,
+        "pcm_sha256": "7394c028537e24db5016857a46a7e5e1eced9d6e231ae8cdf6a04f4e0a438dfc",
+        "buffer_simulation": null,
+        "transport": "direct_worker_callback",
+        "ue_playback_measured": false,
+        "cycle": 2,
+        "scheduled_at_seconds": 39.84,
+        "started_at_seconds": 39.85423670000455,
+        "start_late_ms": 14.236700004545355
+      }
+    ],
+    "errors": [],
+    "decision_schedule": {
+      "interval_seconds": 1.0,
+      "enabled": false,
+      "missed_slots": 0,
+      "actual_requests": 0
+    },
+    "utc_finished": "2026-11-14T13:38:00.082927+00:00",
+    "actual_seconds": 40.00976240000455,
+    "cleanup_finished_utc": "2026-11-14T13:38:00.145299+00:00"
+  },
+  "summary": {
+    "attempted_unique_cases": 0,
+    "completed_unique_cases": 0,
+    "all_40_cases_completed": false,
+    "protocol_valid_calls": 0,
+    "matched_label_calls": 0,
+    "illegal_target_calls": 0,
+    "complete_ms_median": null,
+    "complete_ms_p95": null,
+    "speech_completed": 8,
+    "speech_partial_or_failed": 1,
+    "rtf_median": 0.1890941382577312,
+    "simulated_stall_ms": 0,
+    "quality_acceptance_claimed": false,
+    "ue_audio_measured": false
+  },
+  "gpu_samples": [
+    {
+      "elapsed_ms": 0.36,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11428, 27, 44.40, 1620"
+    },
+    {
+      "elapsed_ms": 1076.95,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 92, 64.07, 2445"
+    },
+    {
+      "elapsed_ms": 2137.73,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 25, 42.49, 1672"
+    },
+    {
+      "elapsed_ms": 3200.7,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 26, 43.89, 1665"
+    },
+    {
+      "elapsed_ms": 4260.92,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 25, 44.80, 1725"
+    },
+    {
+      "elapsed_ms": 5320.59,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 92, 60.33, 2467"
+    },
+    {
+      "elapsed_ms": 6384.45,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 25, 40.30, 1642"
+    },
+    {
+      "elapsed_ms": 7464.91,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 24, 42.64, 1822"
+    },
+    {
+      "elapsed_ms": 8537.88,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 66, 45.00, 1695"
+    },
+    {
+      "elapsed_ms": 9627.22,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 91, 64.51, 2062"
+    },
+    {
+      "elapsed_ms": 10688.25,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 24, 40.39, 1575"
+    },
+    {
+      "elapsed_ms": 11756.1,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 32, 44.62, 1725"
+    },
+    {
+      "elapsed_ms": 12834.28,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 28, 45.21, 1740"
+    },
+    {
+      "elapsed_ms": 13897.25,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 23, 45.85, 1725"
+    },
+    {
+      "elapsed_ms": 14958.69,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 92, 52.47, 1845"
+    },
+    {
+      "elapsed_ms": 16022.12,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 22, 57.67, 1740"
+    },
+    {
+      "elapsed_ms": 17085.06,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 27, 40.94, 1680"
+    },
+    {
+      "elapsed_ms": 18145.84,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 32, 41.47, 1875"
+    },
+    {
+      "elapsed_ms": 19205.61,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 26, 43.25, 1762"
+    },
+    {
+      "elapsed_ms": 20264.55,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 92, 49.74, 1837"
+    },
+    {
+      "elapsed_ms": 21333.43,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 23, 58.34, 1612"
+    },
+    {
+      "elapsed_ms": 22404.56,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 24, 42.47, 1785"
+    },
+    {
+      "elapsed_ms": 23464.47,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 29, 44.53, 1800"
+    },
+    {
+      "elapsed_ms": 24525.75,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 32, 44.70, 1732"
+    },
+    {
+      "elapsed_ms": 25587.28,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 60, 58.82, 2392"
+    },
+    {
+      "elapsed_ms": 26671.98,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 27, 40.36, 1710"
+    },
+    {
+      "elapsed_ms": 27747.92,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 24, 44.72, 1627"
+    },
+    {
+      "elapsed_ms": 28809.95,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 91, 61.29, 2400"
+    },
+    {
+      "elapsed_ms": 29881.52,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 23, 48.94, 1575"
+    },
+    {
+      "elapsed_ms": 30946.84,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 23, 42.45, 1590"
+    },
+    {
+      "elapsed_ms": 32012.78,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 25, 47.15, 1755"
+    },
+    {
+      "elapsed_ms": 33092.95,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 30, 44.23, 1807"
+    },
+    {
+      "elapsed_ms": 34171.9,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 27, 45.23, 1590"
+    },
+    {
+      "elapsed_ms": 35228.65,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 93, 65.15, 2310"
+    },
+    {
+      "elapsed_ms": 36287.25,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 30, 41.09, 1657"
+    },
+    {
+      "elapsed_ms": 37350.55,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11519, 27, 41.00, 1605"
+    },
+    {
+      "elapsed_ms": 38425.62,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11455, 35, 43.75, 1927"
+    },
+    {
+      "elapsed_ms": 39497.92,
+      "columns": "memory.used MiB, utilization.gpu %, power.draw W, clocks.sm MHz",
+      "value": "11423, 25, 43.91, 1605"
+    }
+  ],
+  "ue_after": {
+    "ue": "\"UnrealEditor.exe\",\"56396\",\"Console\",\"1\",\"6,866,960 K\"",
+    "ue_commandlet": "信息: 没有运行的任务匹配指定标准。",
+    "local_model": "信息: 没有运行的任务匹配指定标准。"
+  },
+  "finished_utc": "2026-11-14T13:38:02.213408+00:00"
+}

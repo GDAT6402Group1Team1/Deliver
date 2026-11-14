@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-11-14T13:53:51.604323+00:00",
+  "scope": "一次已授权active音色独立短测，UE66036双PIE存在，无小模型",
+  "report_path": "Saved\\AIResearch\\NativeQwen\\active-voice-prescreen\\summary.json",
+  "report_sha256": "9190155af4fb70d0794db38118b30e445a66c493caad646b14f9875d2acb0ccd",
+  "baseline_path": "Saved\\AIResearch\\NpcTraining\\combat-v7-integration\\coexist-baseline-tts8\\summary.json",
+  "baseline_sha256": "1a21ce475c3aec7004004c33dddbabd8c755b8239d96e78be41e770afb9bfeec",
+  "source_hashes_captured_after_test": {
+    "Tools/DeliveryAI/tts_evaluation/compare_native_qwen.py": "b8556f9545d9680a202fe255d6190a23704ca80cbc6426fa1b3a9bddca2651ff",
+    "Tools/DeliveryAI/native_tts.py": "c4a1355a389a4b3b187365857e496101cb5f4ce6427090247a6407842b0978a4",
+    "Tools/DeliveryAI/native_tts_worker.py": "f9989a31ba9afa61aa06c4d97b3096fa3e4ae5ee1b5ceab3c63d9f8018835af7",
+    "Tools/DeliveryAI/native_tts_engine.py": "1ca4a1ee526eb3682483dbfbef9e3e090e8ad4af0830837dd29a5b8aaa869725",
+    "Tools/DeliveryAI/native_tts_abi.py": "adcb8a36b485341f9439765a33ed82740d5fa72fcdfcf732824f31201d3561e5",
+    "Tools/DeliveryAI/neural_tts.py": "5f1460b32734b741a93898e953583e93e088d369b48e07d1986a74975612f4e2",
+    "Tools/DeliveryAI/neural_tts_worker.py": "452438c7677f96f376edeb7a0f7e4513237a25c23de35236278622aa3ce1c6fb",
+    "Tools/DeliveryAI/neural_voice_config.json": "3dc88958701a23b5840a4b3820a057ee13de7e509dfec394681399a38fde278d",
+    "Saved/AIResearch/NativeQwen/runtime-q8_0-kv1024-active.json": "9c189b08c108def672a15a07565fed49ba4c18a8edfbea614b9a759380646f21"
+  },
+  "source_hash_before_test_captured": false,
+  "config_difference_from_8_second_baseline": {
+    "max_pcm_bytes": {
+      "old": 384000,
+      "current": 576000
+    }
+  },
+  "prepare_ms": 7179.05,
+  "comparisons": [
+    {
+      "case": "male_short",
+      "voice": "male",
+      "text_identical": true,
+      "pcm_identical": true,
+      "pcm_sha256": "8a38f7b92898ae2faa696704da1584759b3345137c3d495a43259fb1fb6695a9",
+      "duration_seconds": 4.4,
+      "reference_duration_seconds": 4.4,
+      "first_chunk_ms": 176.67,
+      "first_audible_audio_offset_ms": 540.0,
+      "first_audible_block_delivered_ms": 355.71,
+      "generation_rtf": 0.2418,
+      "whole_elapsed_ms": 1063.94
+    },
+    {
+      "case": "female_short",
+      "voice": "female",
+      "text_identical": true,
+      "pcm_identical": true,
+      "pcm_sha256": "21fd5635507b76d3db1e762afa2fec5ae5e7a364c9a65d18e94acf3ba458e1c3",
+      "duration_seconds": 3.28,
+      "reference_duration_seconds": 3.28,
+      "first_chunk_ms": 1404.03,
+      "first_audible_audio_offset_ms": 160.0,
+      "first_audible_block_delivered_ms": 1472.06,
+      "generation_rtf": 0.6104,
+      "whole_elapsed_ms": 2002.06
+    },
+    {
+      "case": "male_long",
+      "voice": "male",
+      "text_identical": true,
+      "pcm_identical": true,
+      "pcm_sha256": "1a0a3710635f799a294ebc726e127bfc01f26eeb4faa1104971eda3f2f8e2586",
+      "duration_seconds": 6.16,
+      "reference_duration_seconds": 6.16,
+      "first_chunk_ms": 1210.42,
+      "first_audible_audio_offset_ms": 220.0,
+      "first_audible_block_delivered_ms": 1273.12,
+      "generation_rtf": 0.3804,
+      "whole_elapsed_ms": 2342.99
+    },
+    {
+      "case": "female_long",
+      "voice": "female",
+      "text_identical": true,
+      "pcm_identical": true,
+      "pcm_sha256": "487bb770bb810f6a1486006c368185d8e38f658a360e4b9c66c4c8105b6771e2",
+      "duration_seconds": 5.28,
+      "reference_duration_seconds": 5.28,
+      "first_chunk_ms": 1418.83,
+      "first_audible_audio_offset_ms": 540.0,
+      "first_audible_block_delivered_ms": 1537.34,
+      "generation_rtf": 0.4558,
+      "whole_elapsed_ms": 2406.58
+    }
+  ],
+  "all_four_pcm_identical": true,
+  "gpu_sampled": {
+    "count": 18,
+    "min_mib": 9293.0,
+    "max_mib": 11126.0,
+    "includes_prepare_and_voice_switches": true,
+    "continuous_peak_captured": false,
+    "same_scene_both_residency_control_present": false
+  },
+  "cancel_check": {
+    "delivered_chunks": 1,
+    "next_female_completed": true,
+    "cancel_requested_ms": 1382.24,
+    "cancel_confirmed_ms": 1415.32,
+    "cancel_latency_ms": 33.08,
+    "elapsed_with_next_ms": 3479.31
+  },
+  "cancellation_scope": "四句后切到男声，首块回调后取消，随后女声完整恢复；没有在qt_init加载中途取消，下一女声首块时间未单独记录",
+  "onset_scope": "对PCM做20ms窗口、RMS>=0.01的阈值分析；送达时刻不是UE播放器/声卡实际出声",
+  "cleanup": {
+    "compare_process_exit_code": 0,
+    "observed_after_test": "只读进程列表仅UE66036，无native_tts_worker、neural_tts_worker、llama或backend",
+    "new_model_started": false,
+    "backend_restored_by_this_task": false
+  },
+  "preflight_diagnostic_note": "额外Python进程检查把单个PowerShell JSON对象误当数组，触发断言；该检查未启动模型。PowerShell继续执行已授权短测。此前单独进程检查及测试后检查都只见UE66036；未伪称保存了失败检查后的前置SHA记录",
+  "recommendation": "可以作为下一次单档GPU21共存候选继续检查，尚未通过共存或延迟验收",
+  "limitations": [
+    "只做4句各一次，未增加重复轮次或多档模型测试",
+    "换人首块约1.21至1.42秒，RTF均低于0.8；这不能声称没有等待感",
+    "首男声是在7179ms准备完成后发起，不能当冷启动仅177ms",
+    "没有同场景both音色对照，只报告绝对显存采样，不能从不同UE时段推算严格节省量",
+    "没有UE网络/字幕/声卡播放，不是实际游戏听感验收",
+    "取消发生在首块之后，不覆盖换模型加载中途取消或销毁",
+    "下一句恢复测试只断言完整生成，未保存该句PCM进行额外比对"
+  ]
+}

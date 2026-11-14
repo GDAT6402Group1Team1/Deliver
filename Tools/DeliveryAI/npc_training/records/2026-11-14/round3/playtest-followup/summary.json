@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T15:15:23.541424+00:00",
+  "scope": "2026-11-14 14:57–14:58 UTC玩家试玩之后的语音、决策和轻量后台检查",
+  "gameplay_observation": {
+    "audio_starts": 8,
+    "complete_positive_sentences": 6,
+    "cancelled_sentences": 2,
+    "observed_audio_roles": [
+      3
+    ],
+    "client_role1_verified": false,
+    "buffer_empty_resumed_timeout_invalid_or_overlong_observed": false,
+    "acoustic_quality_verified_by_this_review": false
+  },
+  "decisions": {
+    "requests": 11,
+    "scheduler_wait_ms": 0,
+    "model_slot_wait_ms": 0,
+    "model": "gpt-6-luna",
+    "successful_requests": 7,
+    "successful_model_completed_seconds_range": [
+      2.377,
+      3.4
+    ],
+    "fight_or_flee_observed": false,
+    "player_request": "98ee7f1b-4980-a248-3d0f-719e4f5f49d2",
+    "player_response_completed": false,
+    "problem": "旧LookAt自然结束时取消了尚未答复的玩家请求"
+  },
+  "source_fix": {
+    "status": "written_pending_unified_build_and_ue_validation",
+    "behavior": [
+      "自然完成旧动作后保留同一条尚未答复的玩家原话，用新现场重新请求回答",
+      "旧请求返回继续当前动作时，不能重新启动已结束的动作",
+      "明确取消或角色失效仍清理请求",
+      "收拳后的追赶不再等待下一拳冷却结束"
+    ],
+    "not_claimed": [
+      "未宣称补丁已构建或UE测试通过",
+      "没有实际持续追打或逃跑的本轮结果"
+    ]
+  },
+  "cpu_regression": {
+    "tests": 26,
+    "elapsed_seconds": 0.336,
+    "passed": true,
+    "source": "父任务本轮执行结果的人工记录，不是本子任务重跑",
+    "model_or_tts_loaded": false
+  },
+  "unchanged": {
+    "q4_enabled": false,
+    "max_frame_p95_increase_percent": 10,
+    "previous_manifests": {
+      "Tools\\DeliveryAI\\npc_training\\records\\2026-11-14\\round3\\round3-manifest.json": "3d16302b5a45cf81c627cdcae6ff7955454ad61ec30716a3a29ee54505097472",
+      "Tools\\DeliveryAI\\npc_training\\records\\2026-11-14\\round3\\integration\\manifest.json": "a852f8edece45a2befe90eb3e8137b1a87f144f7ec90de325244a4b0f77dfedf"
+    }
+  },
+  "followup_policy": "后续构建和实机结果以新的结果文件追加到本目录，注明各自时间与范围；保留此次待验证记录，不覆盖原始检查文件",
+  "excluded": [
+    "原始整段日志",
+    "模型权重",
+    "声音和录音",
+    "凭据"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "status": "failed",
+  "failed_stage": "convert",
+  "error": "ModuleNotFoundError: sentencepiece",
+  "adapter": "../round1/adapter",
+  "merged_weights_saved": true,
+  "recovery": "Installed sentencepiece==0.2.1 in isolated training venv; retried in export-round1-retry"
+}

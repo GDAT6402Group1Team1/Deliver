@@ -185,7 +185,7 @@ class SentenceTests(unittest.TestCase):
         data=request()
         evidence=data['evidence'][0]
         data['allowed_actions'] += ['Fight','StrikeOnce']
-        fight={'action':'Fight','target_id':evidence['subject_id'],'duration':5,
+        fight={'action':'Fight','target_id':evidence['subject_id'],'duration':8,
                'evidence_ids':[evidence['event_id']]}
         data['candidates'].extend([{**fight,'action':'StrikeOnce','duration':2},fight])
         validate_context(data)

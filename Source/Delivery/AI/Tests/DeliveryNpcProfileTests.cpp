@@ -10,6 +10,8 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/WorldSettings.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 #include "Misc/ScopeExit.h"
 #include "Sound/SoundWave.h"
 #include "Sound/SoundAttenuation.h"
@@ -67,8 +69,12 @@ bool FDeliveryNpcProfileTest::RunTest(const FString&)
     Row.TtsVoice=NAME_None;Row.DisplayName=FText::FromString(TEXT("测试人物"));Table->AddRow(TEXT("test"),Row);
     TestTrue(TEXT("TTS 留空可以保留原音色"),Npc->ApplyProfile());
     TestEqual(TEXT("空 TTS 配置不改变已有音色"),P->TtsVoice,FName(TEXT("female")));
-    auto* Player=World->SpawnActor<AActor>();const FGuid HeardEvent=FGuid::NewGuid();
-    Npc->Agent->BeginListening(Player,HeardEvent);
+    auto* Controller=World->SpawnActor<APlayerController>();
+    Controller->PlayerState=World->SpawnActor<APlayerState>();
+    auto* Player=World->SpawnActor<APawn>();
+    Controller->Possess(Player);
+    const FGuid HeardEvent=FGuid::NewGuid();
+    TestTrue(TEXT("真实玩家开始倾听"),Npc->Agent->BeginListening(Player,HeardEvent));
     TestEqual(TEXT("最后一次取消旧交谈后才播放倾听短音"),P->ReactionEventId,HeardEvent);
     if (!TestNotNull(TEXT("短音使用 UE 音频组件"),P->ReactionAudio.Get())) return false;
     TestTrue(TEXT("倾听使用配置的短音"),P->ReactionAudio->Sound==Heard);
@@ -104,6 +110,8 @@ bool FDeliveryNpcProfileTest::RunTest(const FString&)
     P->AcceptLocalSpeech(Speech,false);P->PlayRecordedVoice();
     TestFalse(TEXT("正式字幕开始时停止倾听短音"),P->ReactionEventId.IsValid());
     TestTrue(TEXT("正式台词已经开始显示"),P->GetDisplayedSpeech().bActive);
+    // 上面只注入了客户端收到的句子，使用该句的真实停止通知清理本机队列
+    P->StopStreamSpeech_Implementation(Speech.ActionId,false);
     P->CancelSpeech();
     // 用短 PCM 进入实际播放入口，检查人物配置切换后音频组件使用哪份设置
     auto StartRecordedVoice=[P](UDeliveryNpcVoiceSet* Config)
@@ -113,6 +121,7 @@ bool FDeliveryNpcProfileTest::RunTest(const FString&)
         State.bActive=true;State.bRecordedVoice=true;State.StartTime=P->ServerTime()-1;State.Duration=.24f;
         State.Text=TEXT("声音配置检查");State.SampleRate=16000;State.PcmBytes=6400;State.EncodedBytes=64;
         State.AudioFormatVersion=DeliveryNpcVoice::FormatVersion;
+        P->BeginReply(State.ActionId,{},0);
         P->StartStreamSpeech_Implementation(State);
         if (P->LocalVoices.IsEmpty()) return false;
         P->LocalVoices[0].Pcm.SetNumZeroed(P->LocalVoices[0].TotalBytes);

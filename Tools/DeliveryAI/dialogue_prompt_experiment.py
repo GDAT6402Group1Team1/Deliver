@@ -6,6 +6,8 @@ import json
 import uuid
 from pathlib import Path
 
+from dialogue_background import RESIDENT_PROFILE_IDS, select_resident_profiles
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -35,6 +37,8 @@ PERSONA_CANDIDATES = {
 
 def make_cases(profile):
     """每个场景保留多种态度，评阅要求只约束理解、动作含义和说话是否自然"""
+    if profile.get('id') not in RESIDENT_PROFILE_IDS:
+        raise ValueError('This dialogue experiment only accepts the two resident profiles')
     rows = []
 
     def case(name, title, lines, offers, good, bad, group='new', focus='接话'):
@@ -203,6 +207,7 @@ def scoring_guide():
 
 
 def build_bundle(profiles):
+    profiles = select_resident_profiles({'version': 1, 'characters': profiles})
     # 复用正式编号压缩和协议检查，评分要求单独保存，模型输入不包含评阅答案
     from server import validate_context
     from streaming import STREAM_INSTRUCTIONS, model_context
@@ -254,7 +259,7 @@ def main():
     parser.add_argument('--output', default='dialogue-prompt-experiment.json')
     parser.add_argument('--check-only', action='store_true')
     args = parser.parse_args()
-    profiles = json.loads((ROOT / 'Design/AI/NpcProfiles.json').read_text(encoding='utf-8'))['characters']
+    profiles = select_resident_profiles(json.loads((ROOT / 'Design/AI/NpcProfiles.json').read_text(encoding='utf-8')))
     bundle = build_bundle(profiles)
     if not args.check_only:
         output = ROOT / 'Saved/AIResearch' / Path(args.output).name

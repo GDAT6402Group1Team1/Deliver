@@ -29,7 +29,7 @@
     "transformers": "4.57.3"
   },
   "sample_rate": 24000,
-  "max_pcm_bytes": 384000,
+  "max_pcm_bytes": 576000,
   "max_text_chars": 120,
   "max_new_tokens": 256,
   "cpu_threads": 4,

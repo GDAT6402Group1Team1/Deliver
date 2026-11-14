@@ -1,7 +1,9 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
+#include "ActorFactories/ActorFactory.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Characters/DeliveryNpcAIController.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "AI/Actions/DeliveryVehicleHoldComponent.h"
@@ -10,12 +12,20 @@
 #include "AI/Network/DeliveryAiSettings.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Character/DeliveryCharacter.h"
-#include "Components/BoxComponent.h"
+#include "BehaviorTree/BehaviorTreeComponent.h"
+#include "Builders/CubeBuilder.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/WorldSettings.h"
+#include "NavigationData.h"
+#include "NavigationSystem.h"
+#include "NavMesh/NavMeshBoundsVolume.h"
+#include "UObject/UnrealType.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryResidentIntegrationTest,"Delivery.AI.ResidentIntegration",
     EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
@@ -23,18 +33,58 @@ bool FDeliveryResidentIntegrationTest::RunTest(const FString&)
 {
     auto* Settings=GetMutableDefault<UDeliveryAiSettings>(); const bool OldEnabled=Settings->bEnabled;
     Settings->bEnabled=false;
-    const auto Init=UWorld::InitializationValues().AllowAudioPlayback(false).CreatePhysicsScene(true).ShouldSimulatePhysics(false).CreateNavigation(false).CreateAISystem(true);
+    const auto Init=UWorld::InitializationValues().AllowAudioPlayback(false).CreatePhysicsScene(true).ShouldSimulatePhysics(false).CreateNavigation(true).CreateAISystem(true);
     UWorld* World=UWorld::CreateWorld(EWorldType::Game,false,NAME_None,nullptr,true,ERHIFeatureLevel::Num,&Init);
     GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
     World->InitializeActorsForPlay(FURL()); World->GetWorldSettings()->NotifyBeginPlay();
     ON_SCOPE_EXIT { World->EndPlay(EEndPlayReason::Quit); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); Settings->bEnabled=OldEnabled; };
-    auto* Floor=World->SpawnActor<AActor>(); auto* Box=NewObject<UBoxComponent>(Floor); Floor->SetRootComponent(Box);
-    Box->SetBoxExtent(FVector(5000,5000,20)); Box->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics); Box->SetCollisionResponseToAllChannels(ECR_Block);
-    Box->SetCollisionResponseToChannel(ECC_GameTraceChannel3,ECR_Ignore);
-    Box->RegisterComponent(); Floor->SetActorLocation(FVector(0,0,-20));
+    auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+    if (!TestNotNull(TEXT("测试世界具有导航系统"),Nav)) return false;
+    auto* Floor=World->SpawnActor<AActor>();
+    auto* FloorMesh=NewObject<UStaticMeshComponent>(Floor); Floor->SetRootComponent(FloorMesh);
+    FloorMesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
+    FloorMesh->SetCollisionProfileName(TEXT("BlockAll"));
+    FloorMesh->SetCollisionResponseToChannel(ECC_GameTraceChannel3,ECR_Ignore);
+    FloorMesh->SetMobility(EComponentMobility::Static);
+    FloorMesh->SetWorldScale3D(FVector(100,100,.4));
+    Floor->SetActorLocation(FVector(0,0,-20)); FloorMesh->RegisterComponent();
+    // 移动候选要有完整路径，使用与导航回归相同的临时地面和导航生成方式
+    auto* Bounds=World->SpawnActor<ANavMeshBoundsVolume>(FVector(200,0,150),FRotator::ZeroRotator);
+    auto* Builder=NewObject<UCubeBuilder>(); Builder->X=1400; Builder->Y=1400; Builder->Z=500;
+    UActorFactory::CreateBrushForVolumeActor(Bounds,Builder);
+    Nav->OnNavigationBoundsUpdated(Bounds);
+    auto* NavData=Nav->GetDefaultNavDataInstance(FNavigationSystem::Create);
+    if (!TestNotNull(TEXT("创建本测试的导航数据"),NavData)) return false;
+    auto* Generation=FindFProperty<FEnumProperty>(ANavigationData::StaticClass(),TEXT("RuntimeGeneration"));
+    if (!TestNotNull(TEXT("临时导航可设置为动态生成"),Generation)) return false;
+    Generation->GetUnderlyingProperty()->SetIntPropertyValue(Generation->ContainerPtrToValuePtr<void>(NavData),
+        static_cast<int64>(ERuntimeGenerationType::Dynamic));
+    FNavigationSystem::AddNavigationSystemToWorld(*World,FNavigationSystemRunMode::GameMode);
+    FNavigationSystem::UpdateComponentData(*FloorMesh);
+    ++GFrameCounter; World->Tick(LEVELTICK_All,.02f);
+    Nav->Build();
+    FNavLocation Start,End;
+    if (!TestTrue(TEXT("居民起点有导航网格"),Nav->ProjectPointToNavigation(FVector(0,0,0),Start,FVector(50,50,100))) ||
+        !TestTrue(TEXT("移动目标有导航网格"),Nav->ProjectPointToNavigation(FVector(250,0,0),End,FVector(50,50,100)))) return false;
+    auto* ManClass=LoadClass<ADeliveryNpcCharacter>(nullptr,TEXT("/Game/NPC/Residents/BP_ResidentLoud.BP_ResidentLoud_C"));
+    auto* WomanClass=LoadClass<ADeliveryNpcCharacter>(nullptr,TEXT("/Game/NPC/Residents/BP_ResidentShrewd.BP_ResidentShrewd_C"));
+    if (!TestNotNull(TEXT("正式男居民蓝图"),ManClass) || !TestNotNull(TEXT("正式女居民蓝图"),WomanClass)) return false;
     FActorSpawnParameters Spawn; Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    auto* A=World->SpawnActor<ADeliveryNpcCharacter>(FVector(0,0,90),FRotator::ZeroRotator,Spawn);
-    auto* B=World->SpawnActor<ADeliveryNpcCharacter>(FVector(120,0,90),FRotator::ZeroRotator,Spawn);
+    auto* A=World->SpawnActor<ADeliveryNpcCharacter>(ManClass,FVector(0,0,90),FRotator::ZeroRotator,Spawn);
+    auto* B=World->SpawnActor<ADeliveryNpcCharacter>(WomanClass,FVector(120,0,90),FRotator(0,180,0),Spawn);
+    for (auto* Npc:{A,B})
+    {
+        Npc->SetActorTickEnabled(false);
+        Npc->GetMesh()->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+        Npc->GetMesh()->bEnableUpdateRateOptimizations=false;
+        // 测试直接提交动作，停止蓝图的自主决策与闲置避让，骨骼和战斗组件照常更新
+        if (auto* AI=Cast<ADeliveryNpcAIController>(Npc->GetController()))
+        {
+            AI->bKeepDistanceWhenIdle=false;
+            if (auto* Tree=Cast<UBehaviorTreeComponent>(AI->GetBrainComponent()))
+            { Tree->StopTree(EBTStopMode::Forced); Tree->SetComponentTickEnabled(false); }
+        }
+    }
     auto Tick=[&](float Seconds)
     { for (int i=0;i<FMath::CeilToInt(Seconds/.02f);++i) { ++GFrameCounter; World->Tick(LEVELTICK_All,.02f); } };
     TestTrue(TEXT("导航已将近处目标判定为到达"),A->HasReachedMoveTarget(B));
@@ -126,13 +176,41 @@ bool FDeliveryResidentIntegrationTest::RunTest(const FString&)
     TestEqual(TEXT("有台词的回复等待台词播放结束，不提前记作无声回应"),ReplyCount(),0);
     TestFalse(TEXT("无台词动作没有伪造说话记录"),A->Agent->Evidence.ContainsByPredicate([](const auto& Item){return Item.Kind==TEXT("SelfSpeech");}));
     A->Agent->CancelPlan(TEXT("ReplyTestsFinished"));
+    // 近身出拳必须让真实手部动画接触目标，不能仅凭旧的距离阈值让目标倒地
+    B->SetActorLocation(FVector(A->Combat->GetStrikeApproachDistance(B)-.5f,0,90));
+    A->GetCharacterMovement()->StopMovementImmediately();
+    B->GetCharacterMovement()->StopMovementImmediately();
+    Tick(.2f);
     TestTrue(TEXT("近距离居民可以挥拳"),A->Combat->CanStrike(B));
-    const FGuid Attack=FGuid::NewGuid();
-    TestTrue(TEXT("第一拳接受"),A->Combat->StartStrike(B,Attack));
+    // 动画蓝图读取 Agent 的动作和编号，按正式请求流程开始挥拳才能检查实际拳路
+    A->ObserveFact(TEXT("SeenNpc"),B,TEXT("对方就在面前"),EDeliveryNpcEvidenceSource::Seen);
+    Settings->bEnabled=true;
+    const bool bStrikeQueued=A->Agent->RequestDecision(); Settings->bEnabled=false;
+    if (!TestTrue(TEXT("提交近身挥拳请求"),bStrikeQueued)) return false;
+    const auto StrikeRequest=A->Agent->ActiveRequest;
+    World->GetSubsystem<UDeliveryAiGatewaySubsystem>()->Cancel(A->Agent);
+    const auto* StrikeCandidate=StrikeRequest.Candidates.FindByPredicate([](const auto& Candidate)
+        { return Candidate.Action==EDeliveryNpcAction::StrikeOnce; });
+    if (!TestNotNull(TEXT("服务器提供近身挥拳候选"),StrikeCandidate)) return false;
+    FDeliveryNpcDecisionProposal StrikeProposal;
+    StrikeProposal.WorldEpoch=StrikeRequest.WorldEpoch; StrikeProposal.NpcId=StrikeRequest.NpcId;
+    StrikeProposal.RequestId=StrikeRequest.RequestId; StrikeProposal.ContextRevision=StrikeRequest.ContextRevision;
+    StrikeProposal.PlanRevision=StrikeRequest.PlanRevision; StrikeProposal.Action=StrikeCandidate->Action;
+    StrikeProposal.TargetId=StrikeCandidate->TargetId; StrikeProposal.EvidenceIds=StrikeCandidate->EvidenceIds;
+    StrikeProposal.Duration=5;
+    A->Agent->ReceiveDecision(StrikeProposal.RequestId,&StrikeProposal,NAME_None);
+    FDeliveryNpcPublicState StrikeAction;
+    if (!TestTrue(TEXT("第一拳经 Agent 和角色接口启动"),A->Agent->StartAction(StrikeAction) && A->ExecuteAction(StrikeAction))) return false;
+    const FGuid Attack=StrikeAction.ActionId;
+    TestTrue(TEXT("骨骼动画使用这一次挥拳的时间"),A->Combat->GetStrikeStartTime(Attack)>=0);
     TestFalse(TEXT("挥拳窗口内重复请求拒绝"),A->Combat->StartStrike(B,Attack));
     Tick(.5f);
+    bool bHit=false;
+    TestTrue(TEXT("这一拳产生了接触判定结果"),A->Combat->GetStrikeResult(Attack,bHit));
+    TestTrue(TEXT("实际拳头接触确认命中"),bHit);
     TestTrue(TEXT("命中时刻后目标确实倒地"),B->IsKnockedDown());
     TestFalse(TEXT("倒地者不能被重复结算"),A->Combat->CanStrike(B));
+    A->Agent->CancelPlan(TEXT("StrikeTestFinished"));
     Tick(6.f);
     TestFalse(TEXT("到期恢复行动"),B->IsKnockedDown());
     B->SetActorLocation(FVector(1000,0,90)); TestFalse(TEXT("远距离拒绝攻击"),A->Combat->CanStrike(B));

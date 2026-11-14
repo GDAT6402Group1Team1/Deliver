@@ -1,0 +1,765 @@
+{
+  "mode": "run",
+  "maximum_model_requests": 3,
+  "runtime_record": "Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\running.json",
+  "contexts": [
+    {
+      "protocol_version": 1,
+      "capability_version": 4,
+      "stream_protocol_version": 2,
+      "world_epoch": "99f44205-16df-5570-8fac-23fcbce3e999",
+      "npc_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+      "request_id": "4a14a8e9-45e9-5fe4-abaa-9cc73d1fd93a",
+      "context_revision": 2,
+      "plan_revision": 3,
+      "profile_id": "chunlai",
+      "persona": "大壮是住在村口的老街坊，嘴快、好面子，真挨疼也会躲。只根据自己听到和看到的事情判断。",
+      "self_name": "大壮",
+      "self_subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "subjects": [
+        {
+          "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "82c856ad-615b-52d8-bd73-3c39476b4603",
+          "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "addressee_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+          "kind": "Speech",
+          "description": "你刚才撞了我的篮子，先把东西捡起来！"
+        },
+        {
+          "event_id": "db2f2458-fabc-55cc-86ff-d4d6af986c77",
+          "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+          "addressee_id": "",
+          "kind": "SelfCombat",
+          "description": "我还站着，刚才没有被击倒；对方离我约两米。"
+        }
+      ],
+      "allowed_actions": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "candidates": [
+        {
+          "action": "Fight",
+          "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "duration": 4.0,
+          "evidence_ids": [
+            "82c856ad-615b-52d8-bd73-3c39476b4603"
+          ]
+        },
+        {
+          "action": "Flee",
+          "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "duration": 4.0,
+          "evidence_ids": [
+            "82c856ad-615b-52d8-bd73-3c39476b4603"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 1.0,
+          "evidence_ids": []
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "action_id": "3adbb4b4-a04e-591e-abba-dfca9325baae",
+        "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+        "source": "Model",
+        "remaining_seconds": 3.5
+      }
+    },
+    {
+      "protocol_version": 1,
+      "capability_version": 4,
+      "stream_protocol_version": 2,
+      "world_epoch": "99f44205-16df-5570-8fac-23fcbce3e999",
+      "npc_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+      "request_id": "13d18854-e3ba-5229-9812-2f6dfe128099",
+      "context_revision": 2,
+      "plan_revision": 3,
+      "profile_id": "chunlai",
+      "persona": "大壮是住在村口的老街坊，嘴快、好面子，真挨疼也会躲。只根据自己听到和看到的事情判断。",
+      "self_name": "大壮",
+      "self_subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "subjects": [
+        {
+          "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "82c856ad-615b-52d8-bd73-3c39476b4603",
+          "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "addressee_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+          "kind": "Speech",
+          "description": "你刚才撞了我的篮子，先把东西捡起来！"
+        },
+        {
+          "event_id": "db2f2458-fabc-55cc-86ff-d4d6af986c77",
+          "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+          "addressee_id": "",
+          "kind": "SelfCombat",
+          "description": "我还站着，刚才没有被击倒；对方离我约两米。"
+        }
+      ],
+      "allowed_actions": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "candidates": [
+        {
+          "action": "Fight",
+          "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "duration": 4.0,
+          "evidence_ids": [
+            "82c856ad-615b-52d8-bd73-3c39476b4603"
+          ]
+        },
+        {
+          "action": "Flee",
+          "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "duration": 4.0,
+          "evidence_ids": [
+            "82c856ad-615b-52d8-bd73-3c39476b4603"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 1.0,
+          "evidence_ids": []
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "action_id": "3adbb4b4-a04e-591e-abba-dfca9325baae",
+        "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+        "source": "Model",
+        "remaining_seconds": 3.5
+      }
+    },
+    {
+      "protocol_version": 1,
+      "capability_version": 4,
+      "stream_protocol_version": 2,
+      "world_epoch": "99f44205-16df-5570-8fac-23fcbce3e999",
+      "npc_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+      "request_id": "631f5f25-7731-55cb-b94f-40f826cc73ac",
+      "context_revision": 2,
+      "plan_revision": 3,
+      "profile_id": "chunlai",
+      "persona": "大壮是住在村口的老街坊，嘴快、好面子，真挨疼也会躲。只根据自己听到和看到的事情判断。",
+      "self_name": "大壮",
+      "self_subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+      "request_source": "ambient",
+      "pending_player_message": false,
+      "subjects": [
+        {
+          "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+          "name": "大壮",
+          "kind": "npc"
+        },
+        {
+          "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "name": "翠花",
+          "kind": "npc"
+        }
+      ],
+      "evidence": [
+        {
+          "event_id": "82c856ad-615b-52d8-bd73-3c39476b4603",
+          "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "addressee_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+          "kind": "Speech",
+          "description": "你刚才撞了我的篮子，先把东西捡起来！"
+        },
+        {
+          "event_id": "db2f2458-fabc-55cc-86ff-d4d6af986c77",
+          "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+          "addressee_id": "",
+          "kind": "SelfCombat",
+          "description": "我还站着，刚才没有被击倒；对方离我约两米。"
+        }
+      ],
+      "allowed_actions": [
+        "Fight",
+        "Flee",
+        "Wait"
+      ],
+      "candidates": [
+        {
+          "action": "Fight",
+          "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "duration": 4.0,
+          "evidence_ids": [
+            "82c856ad-615b-52d8-bd73-3c39476b4603"
+          ]
+        },
+        {
+          "action": "Flee",
+          "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "duration": 4.0,
+          "evidence_ids": [
+            "82c856ad-615b-52d8-bd73-3c39476b4603"
+          ]
+        },
+        {
+          "action": "Wait",
+          "target_id": "",
+          "duration": 1.0,
+          "evidence_ids": []
+        }
+      ],
+      "current_action": {
+        "action": "Fight",
+        "action_id": "3adbb4b4-a04e-591e-abba-dfca9325baae",
+        "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+        "source": "Model",
+        "remaining_seconds": 3.5
+      }
+    }
+  ],
+  "source_hashes": {
+    "Tools/DeliveryAI/llm_evaluation/probe_combat_integration.py": "6362fb7c9720e64496a0f04e0b70cefc0a0e642759dd178e805c3e9e7a684e4c",
+    "Tools/DeliveryAI/combat_model.py": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+    "Tools/DeliveryAI/server.py": "4db3a98e1e18b0de9e41944b7afd886428477d5d9f26fa20509454b2091ce59c",
+    "Tools/DeliveryAI/streaming.py": "848c6da27b98025fb043c112bd1862a75c3bf2d160213cfac09fe77c97672252",
+    "Tools/DeliveryAI/continued_activity.py": "05494d8d893c569a680160e8fbf91c558700a617c5382449dce27b4f34f18ec9"
+  },
+  "routing_checks": [
+    {
+      "name": "v6_player_continue",
+      "method": "routing_only_guard_client_not_real_inference",
+      "passed": true,
+      "model_calls": 0,
+      "fallback_reason": "player_or_unknown_request"
+    },
+    {
+      "name": "companion",
+      "method": "routing_only_guard_client_not_real_inference",
+      "passed": true,
+      "model_calls": 0,
+      "fallback_reason": "companion_not_in_training_scope"
+    }
+  ],
+  "scope": "技术接口检查，不评价剧情选择，不运行语音或UE，不读取冻结验收标签",
+  "status": "passed",
+  "started_utc": "2026-11-14T14:21:06.417005+00:00",
+  "passed": true,
+  "ue_integration_verified": false,
+  "limitations": [
+    "Windows 等待响应头时取消可能到1.5秒配置截止才返回",
+    "目标映射只检查模型实际选择的动作，不把合法选择当作行为质量通过",
+    "ContinueCurrent与同伴排除只检查路由，不调用模型",
+    "没有游戏动作、声音播放、双人或GPU竞争检查"
+  ],
+  "checks": [
+    {
+      "name": "target_mapping",
+      "method": "real_model_http",
+      "passed": true,
+      "elapsed_ms": 350.48,
+      "context": {
+        "protocol_version": 1,
+        "capability_version": 4,
+        "stream_protocol_version": 2,
+        "world_epoch": "99f44205-16df-5570-8fac-23fcbce3e999",
+        "npc_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+        "request_id": "4a14a8e9-45e9-5fe4-abaa-9cc73d1fd93a",
+        "context_revision": 2,
+        "plan_revision": 3,
+        "profile_id": "chunlai",
+        "persona": "大壮是住在村口的老街坊，嘴快、好面子，真挨疼也会躲。只根据自己听到和看到的事情判断。",
+        "self_name": "大壮",
+        "self_subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+        "request_source": "ambient",
+        "pending_player_message": false,
+        "subjects": [
+          {
+            "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+            "name": "大壮",
+            "kind": "npc"
+          },
+          {
+            "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "name": "翠花",
+            "kind": "npc"
+          }
+        ],
+        "evidence": [
+          {
+            "event_id": "82c856ad-615b-52d8-bd73-3c39476b4603",
+            "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "addressee_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+            "kind": "Speech",
+            "description": "你刚才撞了我的篮子，先把东西捡起来！"
+          },
+          {
+            "event_id": "db2f2458-fabc-55cc-86ff-d4d6af986c77",
+            "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+            "addressee_id": "",
+            "kind": "SelfCombat",
+            "description": "我还站着，刚才没有被击倒；对方离我约两米。"
+          }
+        ],
+        "allowed_actions": [
+          "Fight",
+          "Flee",
+          "Wait"
+        ],
+        "candidates": [
+          {
+            "action": "Fight",
+            "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "duration": 4.0,
+            "evidence_ids": [
+              "82c856ad-615b-52d8-bd73-3c39476b4603"
+            ]
+          },
+          {
+            "action": "Flee",
+            "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "duration": 4.0,
+            "evidence_ids": [
+              "82c856ad-615b-52d8-bd73-3c39476b4603"
+            ]
+          },
+          {
+            "action": "Wait",
+            "target_id": "",
+            "duration": 1.0,
+            "evidence_ids": []
+          }
+        ],
+        "current_action": {
+          "action": "Fight",
+          "action_id": "3adbb4b4-a04e-591e-abba-dfca9325baae",
+          "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "source": "Model",
+          "remaining_seconds": 3.5
+        }
+      },
+      "proposal": {
+        "protocol_version": 1,
+        "capability_version": 4,
+        "world_epoch": "99f44205-16df-5570-8fac-23fcbce3e999",
+        "npc_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+        "request_id": "4a14a8e9-45e9-5fe4-abaa-9cc73d1fd93a",
+        "context_revision": 2,
+        "plan_revision": 3,
+        "action": "Wait",
+        "target_id": "",
+        "duration": 1.0,
+        "evidence_ids": [],
+        "speech": "",
+        "emotion": "Calm",
+        "speech_target_id": ""
+      },
+      "fallback_reason": "",
+      "raw_model_output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "usage": {
+        "cache_n": 217,
+        "prompt_n": 163,
+        "prompt_ms": 219.192,
+        "prompt_per_token_ms": 1.3447361963190185,
+        "prompt_per_second": 743.6402788422935,
+        "predicted_n": 10,
+        "predicted_ms": 49.781,
+        "predicted_per_token_ms": 4.9780999999999995,
+        "predicted_per_second": 200.87985375946647
+      },
+      "stages": [
+        {
+          "stage": "combat_prompt_ready",
+          "elapsed_ms": 27.54
+        },
+        {
+          "stage": "combat_model_done",
+          "elapsed_ms": 350.02
+        }
+      ]
+    },
+    {
+      "name": "cancel_active_inference",
+      "method": "real_model_http_and_slots",
+      "status": "passed",
+      "passed": true,
+      "observed_service_processing": true,
+      "context": {
+        "protocol_version": 1,
+        "capability_version": 4,
+        "stream_protocol_version": 2,
+        "world_epoch": "99f44205-16df-5570-8fac-23fcbce3e999",
+        "npc_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+        "request_id": "13d18854-e3ba-5229-9812-2f6dfe128099",
+        "context_revision": 2,
+        "plan_revision": 3,
+        "profile_id": "chunlai",
+        "persona": "大壮是住在村口的老街坊，嘴快、好面子，真挨疼也会躲。只根据自己听到和看到的事情判断。",
+        "self_name": "大壮",
+        "self_subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+        "request_source": "ambient",
+        "pending_player_message": false,
+        "subjects": [
+          {
+            "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+            "name": "大壮",
+            "kind": "npc"
+          },
+          {
+            "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "name": "翠花",
+            "kind": "npc"
+          }
+        ],
+        "evidence": [
+          {
+            "event_id": "82c856ad-615b-52d8-bd73-3c39476b4603",
+            "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "addressee_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+            "kind": "Speech",
+            "description": "你刚才撞了我的篮子，先把东西捡起来！"
+          },
+          {
+            "event_id": "db2f2458-fabc-55cc-86ff-d4d6af986c77",
+            "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+            "addressee_id": "",
+            "kind": "SelfCombat",
+            "description": "我还站着，刚才没有被击倒；对方离我约两米。"
+          }
+        ],
+        "allowed_actions": [
+          "Fight",
+          "Flee",
+          "Wait"
+        ],
+        "candidates": [
+          {
+            "action": "Fight",
+            "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "duration": 4.0,
+            "evidence_ids": [
+              "82c856ad-615b-52d8-bd73-3c39476b4603"
+            ]
+          },
+          {
+            "action": "Flee",
+            "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "duration": 4.0,
+            "evidence_ids": [
+              "82c856ad-615b-52d8-bd73-3c39476b4603"
+            ]
+          },
+          {
+            "action": "Wait",
+            "target_id": "",
+            "duration": 1.0,
+            "evidence_ids": []
+          }
+        ],
+        "current_action": {
+          "action": "Fight",
+          "action_id": "3adbb4b4-a04e-591e-abba-dfca9325baae",
+          "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "source": "Model",
+          "remaining_seconds": 3.5
+        }
+      },
+      "proposal_after_cancel": null,
+      "uncancelled_result": null,
+      "fallback_reason": "cancelled",
+      "cancel_latency_ms": 33.47,
+      "service_idle_after_return_ms": 17.26,
+      "stages": [
+        {
+          "stage": "combat_prompt_ready",
+          "elapsed_ms": 18.67
+        }
+      ]
+    },
+    {
+      "name": "after_cancel",
+      "method": "real_model_http",
+      "passed": true,
+      "elapsed_ms": 98.12,
+      "context": {
+        "protocol_version": 1,
+        "capability_version": 4,
+        "stream_protocol_version": 2,
+        "world_epoch": "99f44205-16df-5570-8fac-23fcbce3e999",
+        "npc_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+        "request_id": "631f5f25-7731-55cb-b94f-40f826cc73ac",
+        "context_revision": 2,
+        "plan_revision": 3,
+        "profile_id": "chunlai",
+        "persona": "大壮是住在村口的老街坊，嘴快、好面子，真挨疼也会躲。只根据自己听到和看到的事情判断。",
+        "self_name": "大壮",
+        "self_subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+        "request_source": "ambient",
+        "pending_player_message": false,
+        "subjects": [
+          {
+            "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+            "name": "大壮",
+            "kind": "npc"
+          },
+          {
+            "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "name": "翠花",
+            "kind": "npc"
+          }
+        ],
+        "evidence": [
+          {
+            "event_id": "82c856ad-615b-52d8-bd73-3c39476b4603",
+            "subject_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "addressee_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+            "kind": "Speech",
+            "description": "你刚才撞了我的篮子，先把东西捡起来！"
+          },
+          {
+            "event_id": "db2f2458-fabc-55cc-86ff-d4d6af986c77",
+            "subject_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+            "addressee_id": "",
+            "kind": "SelfCombat",
+            "description": "我还站着，刚才没有被击倒；对方离我约两米。"
+          }
+        ],
+        "allowed_actions": [
+          "Fight",
+          "Flee",
+          "Wait"
+        ],
+        "candidates": [
+          {
+            "action": "Fight",
+            "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "duration": 4.0,
+            "evidence_ids": [
+              "82c856ad-615b-52d8-bd73-3c39476b4603"
+            ]
+          },
+          {
+            "action": "Flee",
+            "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+            "duration": 4.0,
+            "evidence_ids": [
+              "82c856ad-615b-52d8-bd73-3c39476b4603"
+            ]
+          },
+          {
+            "action": "Wait",
+            "target_id": "",
+            "duration": 1.0,
+            "evidence_ids": []
+          }
+        ],
+        "current_action": {
+          "action": "Fight",
+          "action_id": "3adbb4b4-a04e-591e-abba-dfca9325baae",
+          "target_id": "dbefbb37-658a-5b2b-80c9-128892d8b3ec",
+          "source": "Model",
+          "remaining_seconds": 3.5
+        }
+      },
+      "proposal": {
+        "protocol_version": 1,
+        "capability_version": 4,
+        "world_epoch": "99f44205-16df-5570-8fac-23fcbce3e999",
+        "npc_id": "5a603ef1-1722-5f76-ab5c-43e595c78079",
+        "request_id": "631f5f25-7731-55cb-b94f-40f826cc73ac",
+        "context_revision": 2,
+        "plan_revision": 3,
+        "action": "Wait",
+        "target_id": "",
+        "duration": 1.0,
+        "evidence_ids": [],
+        "speech": "",
+        "emotion": "Calm",
+        "speech_target_id": ""
+      },
+      "fallback_reason": "",
+      "raw_model_output": "{\"action\":\"Wait\",\"target_id\":\"\"}",
+      "usage": {
+        "cache_n": 379,
+        "prompt_n": 1,
+        "prompt_ms": 4.419,
+        "prompt_per_token_ms": 4.419,
+        "prompt_per_second": 226.29554197782306,
+        "predicted_n": 10,
+        "predicted_ms": 38.429,
+        "predicted_per_token_ms": 3.8429,
+        "predicted_per_second": 260.2201462437222
+      },
+      "stages": [
+        {
+          "stage": "combat_prompt_ready",
+          "elapsed_ms": 31.03
+        },
+        {
+          "stage": "combat_model_done",
+          "elapsed_ms": 97.85
+        }
+      ]
+    }
+  ],
+  "runtime": {
+    "pid": 63016,
+    "device": "cuda",
+    "started_utc": "2026-11-14T14:20:35.267594+00:00",
+    "log": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\logs\\llama-cuda-20261114-222033.log",
+    "command": [
+      "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-server.exe",
+      "--model",
+      "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3-q4\\combat-Q4_K_M.gguf",
+      "--alias",
+      "delivery-npc-qwen3",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8771",
+      "--ctx-size",
+      "4096",
+      "--parallel",
+      "1",
+      "--n-predict",
+      "64",
+      "--threads",
+      "4",
+      "--threads-batch",
+      "8",
+      "--batch-size",
+      "256",
+      "--ubatch-size",
+      "128",
+      "--cache-type-k",
+      "f16",
+      "--cache-type-v",
+      "f16",
+      "--no-context-shift",
+      "--jinja",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--temp",
+      "0.0",
+      "--top-p",
+      "0.8",
+      "--top-k",
+      "20",
+      "--min-p",
+      "0",
+      "--metrics",
+      "--slots",
+      "--no-ui",
+      "--n-gpu-layers",
+      "99",
+      "--flash-attn",
+      "on"
+    ],
+    "health": "http://127.0.0.1:8771/health",
+    "environment_example_only": {
+      "DELIVERY_AI_MODEL_URL": "http://127.0.0.1:8771/v1/chat/completions",
+      "DELIVERY_AI_MODEL": "delivery-npc-qwen3"
+    },
+    "gpu_layers": 99,
+    "model_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3-q4\\combat-Q4_K_M.gguf",
+    "model_sha256": "da5a022325ba2fc89377e2cc5d2ba759aa97bce5e0ed5931c62ec29c176d0b31",
+    "context_tokens": 4096,
+    "output_tokens": 64,
+    "temperature": 0.0,
+    "threads": 4,
+    "threads_batch": 8,
+    "slots": "http://127.0.0.1:8771/slots"
+  },
+  "runtime_hashes": {
+    "record": "24135e94fbe7c36d58c16e25234d548383852793455371496bee9f8d7345e8be",
+    "model": "da5a022325ba2fc89377e2cc5d2ba759aa97bce5e0ed5931c62ec29c176d0b31",
+    "executable": "bdbbfbed461789d93488ae3a6073d52c38e2f4ec2b46bc64558ff86875c4b524",
+    "installation": "dce1e70d418dc1cde8ecbe09afefde271934af8a09846e123b7284d8d7dcd18b",
+    "dependencies": {
+      "runtime\\cublas64_13.dll": "f1d500d0cd892f5b8c6b6cdbffd82d0c55d5f5427215668e7ceb55aeeccc1b63",
+      "runtime\\cublasLt64_13.dll": "b592cd016d7673e9cb97716a22b27c4010ee635377a3ba28f37070a9bdb76a68",
+      "runtime\\cudart64_13.dll": "b00ca6f53699120da815bf3e06e2e4285fae2f201235b883dcbb50eec51e2a2a",
+      "runtime\\ggml-base.dll": "558c53121398e0d541d939dc222769721ca63f3285ba0f4a953095e2eee3c1bf",
+      "runtime\\ggml-cpu-alderlake.dll": "1a2ac0a361cc9ad52ae410807e9b2306ae790396c7fc0b43f5c505710395619d",
+      "runtime\\ggml-cpu-cannonlake.dll": "7aa433f1f0a67c6c9c3999f674bb36be9251a1e624db3a002dc86c2ae116d73a",
+      "runtime\\ggml-cpu-cascadelake.dll": "373d21f0dcb4dc24f59b0fdd92faf7a0d3a3dd9eff082e45cef35c8060d11d62",
+      "runtime\\ggml-cpu-cooperlake.dll": "bcba73a43486d0893ba69596d118bd9c2aea004327939e326bd9fce7f33fa355",
+      "runtime\\ggml-cpu-haswell.dll": "d3119193990278444f6df6e4dcfb1858ee34d352f13cf51afc16d98321fe9967",
+      "runtime\\ggml-cpu-icelake.dll": "cf0128fb280a2f9ecc93514954da098b477c8f91005274d0fbabd192ef9dedd3",
+      "runtime\\ggml-cpu-ivybridge.dll": "ba1f6d1c83ebfc5f7501b0d9c9e99601d2b78960684947390b3b494d0350597c",
+      "runtime\\ggml-cpu-piledriver.dll": "00ef547cc0c41ef9202e06f25d5f92b4c6b27db6d2d943f7cb43ab9b9d69bf77",
+      "runtime\\ggml-cpu-sandybridge.dll": "5a663373835aaa4c01ccc548e5ae0ac7baf666fbf54a453b8b064379f57ec3a1",
+      "runtime\\ggml-cpu-sapphirerapids.dll": "f40e8fb372d97e4cac3f961709419a412f0d193e2bb91fe6323f5e186b75824b",
+      "runtime\\ggml-cpu-skylakex.dll": "5c1bdba9e49ada156f78a9d5b1c1af8069011657e7c3d4dfa836286850adb60a",
+      "runtime\\ggml-cpu-sse42.dll": "4e756bd5684696ea5dcca9088d45d99cc61f11002b22bca7f830aa472527db68",
+      "runtime\\ggml-cpu-x64.dll": "9d9358acaaa6e84d453382a787abcb030e42d43b109598556be1a361a6dd6115",
+      "runtime\\ggml-cpu-zen4.dll": "21b1bbee0110772f4926b4b8b9d9c51a2b181380a934a93ebc0d24f9a8907ec8",
+      "runtime\\ggml-cuda.dll": "b175cf6bf18031183c243ccf87707a2d7c39968f6522f384a17e978f103ab548",
+      "runtime\\ggml-rpc-server.exe": "f728c6b9f111f81f6aa973523376aceafb4bde82d3a62ffc9a8a94f9101afb75",
+      "runtime\\ggml-rpc.dll": "6848c5da3b93d4cea9c08fa6cd4e64aebdb4a19709c1778eda8b9c4d46d6351c",
+      "runtime\\ggml.dll": "46887d7644ca2ae2b24cb23d38652646dec858d7bc99439b8ce05d139c4a6307",
+      "runtime\\libomp140.x86_64.dll": "4a20c1e5c115c29771a12324513eb109badac72180f79481527ad79d996ffb33",
+      "runtime\\llama-batched-bench-impl.dll": "379a69c77e4fd9be0b3611473a6e2911bfd1188ce3e118aecd686722326fa5e5",
+      "runtime\\llama-batched-bench.exe": "46b43d1804a463d732597b143881851a5f6c8e3944c97a09a766ffe419292fa7",
+      "runtime\\llama-bench-impl.dll": "7245c41beb990ee19d33fab87312ce3c40024ce013c47345eb53cedbbebafd98",
+      "runtime\\llama-bench.exe": "d3b61e78274e84a918b36adb6a75fe3ab63989123d4e8c2b5ee01521d39fd3d2",
+      "runtime\\llama-cli-impl.dll": "a19dd19f1ead4c238cd4278c88e32c7c686612461e37b48697bf519b5b603fb8",
+      "runtime\\llama-cli.exe": "a70f60db514b994bed5fbd06b6004c16f4378d29738e26e4713d3a32f8485831",
+      "runtime\\llama-common.dll": "94ec867756f24a5f647cbf5e112369d25d4926d26ea907f3eef2befa9baaece8",
+      "runtime\\llama-completion-impl.dll": "2d9d0470308c8ffa5ef02cc5e1ec153e89a013b886baf9c2bae29c52bd85229a",
+      "runtime\\llama-completion.exe": "99ab483f19521a37a585df4b804bd6cdd9b1a2ee24b3e39c8dc921b10fc933fd",
+      "runtime\\llama-fit-params-impl.dll": "5fa41f3185a0b5d8fbf375f0c8d714fd1ab5ae79f0f398df3fdf0edd3503276e",
+      "runtime\\llama-fit-params.exe": "cde7de3489781d6bc737b67350ba5360c04ce0ef345f29ae0820d6de28701129",
+      "runtime\\llama-gemma3-cli.exe": "7cc22b18f4275206439a52e0064cf023678f0e72fac92cd5a94676459e5209b1",
+      "runtime\\llama-gguf-split.exe": "a21888aa3533b9ef962d0f52347af027ea8463ddd9b69f1193561cc7f6abfe03",
+      "runtime\\llama-imatrix.exe": "607c6d723de8b59a0d44bdd8a8feb46bc6fd2304172853074a8537923d4b0ffa",
+      "runtime\\llama-llava-cli.exe": "7cc22b18f4275206439a52e0064cf023678f0e72fac92cd5a94676459e5209b1",
+      "runtime\\llama-minicpmv-cli.exe": "7cc22b18f4275206439a52e0064cf023678f0e72fac92cd5a94676459e5209b1",
+      "runtime\\llama-mtmd-cli.exe": "8e9a241267e54fadfe293c02aa69cec2a4104b1494fbc1bb90a794c863ba7e4b",
+      "runtime\\llama-mtmd-debug.exe": "fa6926198f8b306401ff296dffd44c6b4a29ac6c9090df4114396702702e81c3",
+      "runtime\\llama-perplexity-impl.dll": "f979c7dfe5a84dd82c29e9b040eb6cd38682d73219f29d58f9bcfe936f0a71d7",
+      "runtime\\llama-perplexity.exe": "16de9832922b1a7efb6e5718731192db774922166eb98b712fdda87987a8d93b",
+      "runtime\\llama-quantize-impl.dll": "1b5e8982538cd46ea7f7c312b10b0bf7b2c822e745fc60191f6fed576cebbb2b",
+      "runtime\\llama-quantize.exe": "04db194aec78507819726ea29aaedabb6a901daf37631cf185a3abef5b0be905",
+      "runtime\\llama-qwen2vl-cli.exe": "7cc22b18f4275206439a52e0064cf023678f0e72fac92cd5a94676459e5209b1",
+      "runtime\\llama-results.exe": "f3553744f38c30b18baa0590dde42374765410080e8b1bbf761e2a7c5f0f9b45",
+      "runtime\\llama-server-impl.dll": "219b5c71f53ca31e60aac180e1b9f345657188010e490e9b0bb2815fc641bd50",
+      "runtime\\llama-server.exe": "bdbbfbed461789d93488ae3a6073d52c38e2f4ec2b46bc64558ff86875c4b524",
+      "runtime\\llama-template-analysis.exe": "eb9383270510e49c76ea198c28e7d7d3ba67fa78c13228ee4b2f7edf9399413d",
+      "runtime\\llama-tokenize.exe": "81a731c2bac2cc9f059ee9e2547fa9882498819c07f0e0cbe451ec10b5d2e8d7",
+      "runtime\\llama-tts.exe": "99193cc5d19899ec53f7a0e99ff26b5b635ac6d45b0c2265926b9a383b01a026",
+      "runtime\\llama.dll": "4097490d34ae45aca233107470dfc6652b04880fef7daac4f0486dc0985c0e8d",
+      "runtime\\llama.exe": "bd995631fd11e6cd469c72c338e93f05c5904332e6ba915f747d28b5b62d4b03",
+      "runtime\\mtmd.dll": "f5552ab28851ac7e29236485756020996fa963df4b45a8eed9710d2b4d06dab7"
+    }
+  },
+  "finished_utc": "2026-11-14T14:21:09.174670+00:00"
+}

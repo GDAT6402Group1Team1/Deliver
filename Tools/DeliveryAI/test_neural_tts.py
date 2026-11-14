@@ -60,6 +60,7 @@ class FakeProcess:
 class NeuralTtsTests(unittest.TestCase):
     def setUp(self):
         self.config = load_voice_config()
+        self.config['max_pcm_bytes'] = 384000
         self.config['voices']['female'] = {'provider': 'qwen', 'speaker': 'Serena'}
         override = patch('neural_tts.load_voice_config', return_value=self.config)
         override.start()

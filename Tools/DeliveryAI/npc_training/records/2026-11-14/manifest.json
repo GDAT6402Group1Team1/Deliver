@@ -1,0 +1,462 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-11-14T11:53:27.036771+00:00",
+  "purpose": "Delivery 持续交战模型的可追溯数据、训练与评测记录",
+  "status": "quality_gate_failed",
+  "final_correct": 35,
+  "final_cases": 40,
+  "minimum_accuracy": 0.9,
+  "production_enabled": false,
+  "frozen_acceptance_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+  "data_separation": {
+    "train_groups": 155,
+    "validation_groups": 15,
+    "acceptance_groups": 40,
+    "group_overlap": false,
+    "acceptance_not_used_for_training": true,
+    "same_acceptance_evaluated_twice": true
+  },
+  "provenance": {
+    "round1_independent_authored_training_stories": 120,
+    "round2_additional_independent_authored_training_stories": 32,
+    "log_derived_rows": 8,
+    "log_episode_groups": 3,
+    "log_running_action_reconstructed": true,
+    "full_on_policy_dagger": false
+  },
+  "privacy_review": {
+    "human_review": "人物为项目内虚构的大壮、翠花；日志整理样本只涉及游戏中的说话、移动和互殴。教师记录为这些情境的动作判断及运行统计。",
+    "scanned_files": 45,
+    "credential_or_personal_marker_findings": [],
+    "scan_categories": [
+      "credential_prefix",
+      "bearer_value",
+      "private_key",
+      "credential_assignment",
+      "personal_email",
+      "windows_user_home"
+    ],
+    "excluded": [
+      "模型权重与LoRA参数",
+      "模型缓存、轮子与虚拟环境",
+      "整段原始玩家聊天日志",
+      "服务配置、凭据和账号文件",
+      "本机用户目录"
+    ]
+  },
+  "copy_notes": [
+    "除单独说明的环境版本摘要外，数据和结果逐字节保留原文件，原Saved资料没有修改",
+    "报告内路径保留测量当时的值；用本清单source与archive映射查找随源码保存的副本",
+    "旧manifest中的teacher_reviewed=false表示生成数据时的历史状态；后续教师结果和纠错文件一并保留",
+    "两次训练及模型导出可能存在浮点差异，不承诺重训后权重逐字节相同"
+  ],
+  "reproduction": {
+    "working_directory": "repository root",
+    "commands_are_records_not_executed_by_archiving": true,
+    "requires_separate_explicit_gpu_window": true,
+    "base_model": "Qwen/Qwen3-1.7B",
+    "base_revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+    "setup": "先按已固定版本准备独立训练环境、原模型和llama.cpp；下载来源及哈希见provenance，代码位于Tools/DeliveryAI/npc_training",
+    "commands": {
+      "train_round1": [
+        "Saved/AIResearch/NpcTraining/.venv/Scripts/python.exe",
+        "Tools/DeliveryAI/npc_training/train_lora.py",
+        "--train",
+        "Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v4/train.jsonl",
+        "--validation",
+        "Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v4/validation.jsonl",
+        "--learning-rate",
+        "0.0002",
+        "--max-steps",
+        "48",
+        "--max-seq-length",
+        "4096",
+        "--max-new-tokens",
+        "64",
+        "--output",
+        "Saved/AIResearch/NpcTraining/reproduction-20261114/round1",
+        "--run"
+      ],
+      "train_round2": [
+        "Saved/AIResearch/NpcTraining/.venv/Scripts/python.exe",
+        "Tools/DeliveryAI/npc_training/train_lora.py",
+        "--train",
+        "Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v5/train.jsonl",
+        "--validation",
+        "Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v5/validation.jsonl",
+        "--resume-adapter",
+        "Saved/AIResearch/NpcTraining/reproduction-20261114/round1/adapter",
+        "--learning-rate",
+        "0.00005",
+        "--max-steps",
+        "64",
+        "--max-seq-length",
+        "4096",
+        "--max-new-tokens",
+        "64",
+        "--output",
+        "Saved/AIResearch/NpcTraining/reproduction-20261114/round2",
+        "--run"
+      ],
+      "export_round2": [
+        "Saved/AIResearch/NpcTraining/.venv/Scripts/python.exe",
+        "Tools/DeliveryAI/npc_training/export_combat_model.py",
+        "--adapter",
+        "Saved/AIResearch/NpcTraining/reproduction-20261114/round2/adapter",
+        "--output",
+        "Saved/AIResearch/NpcTraining/reproduction-20261114/export-round2",
+        "--quantization",
+        "Q8_0",
+        "--run"
+      ],
+      "evaluate_frozen_40": [
+        "Saved/AIResearch/NpcTraining/.venv/Scripts/python.exe",
+        "Tools/DeliveryAI/npc_training/evaluate_combat.py",
+        "--source",
+        "Tools/DeliveryAI/npc_training/records/2026-11-14/acceptance-reviewed.json",
+        "--split",
+        "acceptance_only",
+        "--output",
+        "Saved/AIResearch/NpcTraining/reproduction-20261114/acceptance-q8-gpu99.json",
+        "--timeout",
+        "1.5",
+        "--temperature",
+        "0",
+        "--run"
+      ]
+    },
+    "evaluation_prerequisite": "先用start_local_model.py的独立--model-path/--model-sha256启动生成的GGUF，GPU99、4096上下文、64输出、temperature=0；不得通过未达标的生产配置启用"
+  },
+  "weights_local_only": {
+    "round1_adapter_sha256": "0040b38bf2bb9c7f890dbfe6cb6c6eef8be09df58aded329f44c7be747a18f65",
+    "round2_adapter_sha256": "c6762d92d8eaa5802a526b80e521dcb5a61f98cb7a1b91258c8386cd7ed77611",
+    "round2_q8_sha256": "c213093220ba95c146c84560a96a14be01281e9c3e89dc213e5662db2455fc0e",
+    "included_in_archive": false
+  },
+  "files": [
+    {
+      "source": "Saved/AIResearch/NpcTraining/acceptance-reviewed.json",
+      "archive": "acceptance-reviewed.json",
+      "sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+      "bytes": 297370,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/Implementation20261114/combat-model-checks.json",
+      "archive": "code-checks.json",
+      "sha256": "406578b34a60d2dc11b5ec0a32212c07905ac2ffbba1992a4bf8f39b573e1148",
+      "bytes": 924,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/baseline-training.json",
+      "archive": "combat-v4/baseline-training.json",
+      "sha256": "8eac676ab54c48990988260b65b293f78e3ac78ea613475e18f44e6fdca40bb5",
+      "bytes": 34352,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/baseline-validation.json",
+      "archive": "combat-v4/baseline-validation.json",
+      "sha256": "fcdeb716b6824bc7e6a609cd512814e44fbfba86076a2c8aacd0e2c1e9068a57",
+      "bytes": 17279,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/export-round1-retry/export.json",
+      "archive": "combat-v4/export-round1-retry/export.json",
+      "sha256": "8228e30917e3c341c3020447478b95fbd73cb9c17e9c1c2b36441804648747be",
+      "bytes": 1091,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/export-round1/export.json",
+      "archive": "combat-v4/export-round1/export.json",
+      "sha256": "88cdfcba391bda852af7c4e324da9cbb485745bb7f32224a20ca4dec6620b104",
+      "bytes": 281,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/final-acceptance-bf16-gpu99.json",
+      "archive": "combat-v4/final-acceptance-bf16-gpu99.json",
+      "sha256": "7b7110e401c867d26100f244bb3108bfe27d325ac74a8d56556e602772c6ac8b",
+      "bytes": 46440,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/imatrix-data.json",
+      "archive": "combat-v4/imatrix-data.json",
+      "sha256": "659ac2ec20a5edbe3b4c4d310c16dba1560c86ecb6258ea8f6c3642255a067db",
+      "bytes": 822,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/imatrix-training.txt",
+      "archive": "combat-v4/imatrix-training.txt",
+      "sha256": "7d753f000e53dbdc1d7bf0929c8eecb114260b5186ac979394660881bdbdd632",
+      "bytes": 73350,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/manifest.json",
+      "archive": "combat-v4/manifest.json",
+      "sha256": "bd17a4544a9f9b615a961e7584cd559b53cace17e8c5e99d21a6872b768e3a74",
+      "bytes": 756,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/needs_review.json",
+      "archive": "combat-v4/needs_review.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "bytes": 2,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/prompt-template-check.json",
+      "archive": "combat-v4/prompt-template-check.json",
+      "sha256": "4b130a3d0a8b75d7b8f7183b566b6f0ea246b680972733ae2b0700727225a5e6",
+      "bytes": 484,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-bf16-greedy.json",
+      "archive": "combat-v4/round1-validation-bf16-greedy.json",
+      "sha256": "abe74275116c64f445500eb808608fda48c36ce413bf06f2e24bc867735738d1",
+      "bytes": 17237,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q4-greedy.json",
+      "archive": "combat-v4/round1-validation-q4-greedy.json",
+      "sha256": "893970acc1f6a7ae3808eaee984d527a3ed30d81dd9b7fea14e608995c6fcc49",
+      "bytes": 17226,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q4-imatrix-embF16.json",
+      "archive": "combat-v4/round1-validation-q4-imatrix-embF16.json",
+      "sha256": "4ab72e5ef4a246bb7ceb077de55d19a97a284783bca644ea0fcac666b77a692f",
+      "bytes": 17254,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q4.json",
+      "archive": "combat-v4/round1-validation-q4.json",
+      "sha256": "db84e91f2a04162952465054aa24a30cd69eed66f56f78326f8a03141eea62c8",
+      "bytes": 17256,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q8-embF16-greedy.json",
+      "archive": "combat-v4/round1-validation-q8-embF16-greedy.json",
+      "sha256": "98fd53df322de3575ef5880065119a220a3daf5f8efe130df3a253ad3e15201b",
+      "bytes": 17217,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q8-greedy.json",
+      "archive": "combat-v4/round1-validation-q8-greedy.json",
+      "sha256": "3c079493e52bd5a0ca0a9ea2b21b049a8a39a4ffbaf9539e7f65e0724d834ccd",
+      "bytes": 17243,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q8.json",
+      "archive": "combat-v4/round1-validation-q8.json",
+      "sha256": "2d9382eadc9ecaff6c47531f9004cf0f4f22459b7ad766944a162a13880ca3b6",
+      "bytes": 17222,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/round1/loss.jsonl",
+      "archive": "combat-v4/round1/loss.jsonl",
+      "sha256": "d7524ad1082e4e457ea2ffff0dbff54454cd80b34e90724b987d03fc27ec594a",
+      "bytes": 8344,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/round1/run.json",
+      "archive": "combat-v4/round1/run.json",
+      "sha256": "a0a1442205cb45668842d1158c352513fd72b1398ce9e9d4e808baa4fd25fbe0",
+      "bytes": 2939,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/situations.json",
+      "archive": "combat-v4/situations.json",
+      "sha256": "2bead50bef8edba5c4257629a60c804dac22c96f8f6c9af95e47e5a6ef48453a",
+      "bytes": 1265310,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/student-corrections.json",
+      "archive": "combat-v4/student-corrections.json",
+      "sha256": "386c10ec9509d0fca5bdb9487ec395053600681d9a39afbeb58c4de8bc809aff",
+      "bytes": 28855,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/teacher-corrected.json",
+      "archive": "combat-v4/teacher-corrected.json",
+      "sha256": "08e55bc907c23418fd6dcf8ab1efad835f6cfb12a086c93d070cf8e39c140316",
+      "bytes": 79025,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/teacher.json",
+      "archive": "combat-v4/teacher.json",
+      "sha256": "47e9e9a3038ec1fd85eed03567da72ed688036f0730d7eced7ce6cc6c22e935d",
+      "bytes": 79032,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/train.jsonl",
+      "archive": "combat-v4/train.jsonl",
+      "sha256": "1e5928fb69c9b3570c0e6dc196594403b159f74385aff4fe9a3099fbe23c649f",
+      "bytes": 460035,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/training-shortcut-audit.json",
+      "archive": "combat-v4/training-shortcut-audit.json",
+      "sha256": "c716dc42b6f23766f1c5d830769cd1c6372e4f86ce42e7f9f75814fc9f4f89d2",
+      "bytes": 715,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v4/validation.jsonl",
+      "archive": "combat-v4/validation.jsonl",
+      "sha256": "477418702a2edd65b6a0cb5513153d4433ca3a7f64baf5f390af5a15e38cbb33",
+      "bytes": 52119,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/export-round2/export.json",
+      "archive": "combat-v5/export-round2/export.json",
+      "sha256": "afe6913107ffb205450cbc1094b244277f51415174f06ae25f519d019f431fd9",
+      "bytes": 1116,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/final-acceptance-q8-gpu99.json",
+      "archive": "combat-v5/final-acceptance-q8-gpu99.json",
+      "sha256": "8e374b4102c5b7dc182d49edeae8487a7cf12ade8e869f4073025c97f7a20b23",
+      "bytes": 49634,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/manifest.json",
+      "archive": "combat-v5/manifest.json",
+      "sha256": "d18fed63862ef07f9adc100094aa904bceddef08482e8329b6696094aefb5471",
+      "bytes": 341,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/needs_review.json",
+      "archive": "combat-v5/needs_review.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "bytes": 2,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/round2-validation-bf16-greedy.json",
+      "archive": "combat-v5/round2-validation-bf16-greedy.json",
+      "sha256": "a3243c1e62d5321605077c5bebed0f3b5c426d2e691a967f2bca7e90ced93a00",
+      "bytes": 19814,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/round2-validation-q8-greedy.json",
+      "archive": "combat-v5/round2-validation-q8-greedy.json",
+      "sha256": "fe4245b74e6feab8fc769d1de9a4bd4d8dfc6e733855c396b3fe19274a5b62cb",
+      "bytes": 19728,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/round2/loss.jsonl",
+      "archive": "combat-v5/round2/loss.jsonl",
+      "sha256": "003a3dbc499e4d19cb5914f1438f4d6a7969278cefbb2e4d5dc2414af6b01606",
+      "bytes": 11195,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/round2/run.json",
+      "archive": "combat-v5/round2/run.json",
+      "sha256": "30b735a3d76a70dc5430508690c60c53431fcba9eb6a7bee425fe2ef66937329",
+      "bytes": 3363,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/situations.json",
+      "archive": "combat-v5/situations.json",
+      "sha256": "9e7cfd68274a498ab50f2e77463a408988fa7c56244ec0f06d52f62c13718108",
+      "bytes": 1498312,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/teacher.json",
+      "archive": "combat-v5/teacher.json",
+      "sha256": "997cd347032dfcf94f9f109c10e0fb10bbbb0a8a88f5fcf6da88aadba6ec81ec",
+      "bytes": 97750,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/train.jsonl",
+      "archive": "combat-v5/train.jsonl",
+      "sha256": "541a397e439841b18f409623b405e19ac117132437112f487d8583f7e1d00f0a",
+      "bytes": 568895,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/combat-v5/validation.jsonl",
+      "archive": "combat-v5/validation.jsonl",
+      "sha256": "477418702a2edd65b6a0cb5513153d4433ca3a7f64baf5f390af5a15e38cbb33",
+      "bytes": 52119,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/model/LICENSE",
+      "archive": "provenance/Qwen3-LICENSE.txt",
+      "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+      "bytes": 11343,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/converter/source.json",
+      "archive": "provenance/converter-source.json",
+      "sha256": "de7c2e2fb9b1400ab85bc201a8e5c7f705ba8c1efba77f157f346cfe8e7bfaf6",
+      "bytes": 15656,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/environment.json",
+      "archive": "provenance/environment.json",
+      "sha256": "3f640c0c50282af4e3281b8d0640dc9824202fed24a941a7280800a1bff0a477",
+      "bytes": 612,
+      "copy": "selected_version_fields_only; local user paths omitted"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/model-downloads.json",
+      "archive": "provenance/model-downloads.json",
+      "sha256": "27ca8095f22561e407ac597d0cddb9e89451699aa3a38a24b5e02d3a94ec7f77",
+      "bytes": 5041,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/NpcTraining/model-files.json",
+      "archive": "provenance/model-files.json",
+      "sha256": "83941daac49d411d9b294b100dd63e6eba41f4e85fd89261880dc1a3251d6265",
+      "bytes": 1379,
+      "copy": "byte_identical"
+    },
+    {
+      "source": "Saved/AIResearch/Implementation20261114/combat-training-results.json",
+      "archive": "summary.json",
+      "sha256": "e7c700102769583879973d241aed3346a71108f66c6e821a631ca59d87726362",
+      "bytes": 27249,
+      "copy": "byte_identical"
+    }
+  ],
+  "file_count": 46,
+  "total_record_bytes": 4953729
+}

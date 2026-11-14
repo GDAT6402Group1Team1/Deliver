@@ -26,6 +26,8 @@ class DELIVERY_API ADeliveryHandheldItem : public AActor
     ADeliveryHandheldItem();
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaSeconds) override;
+    virtual void OnRep_Owner() override;
+    virtual void RefreshCarrierPresentation();
 
     // 物品使用
     /** 优先执行代码中的斧头动作，不依赖蓝图重写使用事件 */
@@ -51,6 +53,8 @@ class DELIVERY_API ADeliveryHandheldItem : public AActor
      * 还天然没有"快递落后车半个身位"的拖影——指数跟随在高速时必然欠一截
      */
     void SetVehicleCargoPresentation(USceneComponent *CargoParent);
+    // 动画角色的携带挂点与车辆货架共用附着表现，不进入玩家物理手掌跟随
+    void SetAttachedCarryPresentation(USceneComponent* CarryParent);
 
     UFUNCTION(BlueprintPure, Category = "Item")
 
@@ -98,6 +102,7 @@ class DELIVERY_API ADeliveryHandheldItem : public AActor
 
     TWeakObjectPtr<USceneComponent> HeldAnchor;
     bool bHeldPresentationActive = false;
+    bool bHadHandheldCarrierPresentation = false;
 
     UFUNCTION()
     void HandleInteract(APawn *Interactor);

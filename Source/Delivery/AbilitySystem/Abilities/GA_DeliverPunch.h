@@ -66,6 +66,7 @@ class DELIVERY_API UGA_DeliverPunch : public UGameplayAbility
 	// 一次出拳可以持续接触，同一目标只结算一次
 	TSet<TWeakObjectPtr<AActor>> HitActors;
 	bool bPlayedHitSound = false;
+	FGuid PunchId;
 
 	// 战斗组件回调
 	UFUNCTION()

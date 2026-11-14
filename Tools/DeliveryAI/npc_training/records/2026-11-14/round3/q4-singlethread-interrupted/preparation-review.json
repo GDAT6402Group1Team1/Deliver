@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "reviewed_utc": "2026-11-14T15:03:51.602292+00:00",
+  "scope": "仅源码和文件版本检查，没有运行测量、模型或 GPU",
+  "previous_plan": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-plan.json",
+  "previous_plan_sha256": "cd83c6c7380ad0cdbdfa4e2877b99df818a2f397fd740fd4a614f50c91aced53",
+  "previous_plan_preserved": true,
+  "benchmark_sources_changed": {},
+  "current_benchmark_source_hashes": {
+    "Tools/DeliveryAI/llm_evaluation/start_local_model.py": "608fb818cb8c9a9cde96ad57112ee8dfa4d7c74eafc0aa462d72c3b8bba41bcb",
+    "Tools/DeliveryAI/llm_evaluation/prepare_local_model.py": "dee599d235d96c86c72b6e26625de60b35c1b807186e3d2a4c14a47c2751559a",
+    "Tools/DeliveryAI/llm_evaluation/benchmark_combat_coexist.py": "cf65e9af9a6d6a28642793a410605549996d10c7f180b1566ae9905af1e9e5e2",
+    "Tools/DeliveryAI/llm_evaluation/analyze_game_frames.py": "72cd584a28aa30fed2613532d28660538feeeffc5ce17011d5b6799ae6efa00c",
+    "Tools/DeliveryAI/combat_model.py": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+    "Tools/DeliveryAI/app_server.py": "c2ece2a304a6c7aab73ba6055fef0e20d0d57afedf22c51b053724d5f8bf19d2",
+    "Tools/DeliveryAI/native_tts.py": "c4a1355a389a4b3b187365857e496101cb5f4ce6427090247a6407842b0978a4",
+    "Tools/DeliveryAI/native_tts_worker.py": "f9989a31ba9afa61aa06c4d97b3096fa3e4ae5ee1b5ceab3c63d9f8018835af7",
+    "Tools/DeliveryAI/native_tts_engine.py": "1ca4a1ee526eb3682483dbfbef9e3e090e8ad4af0830837dd29a5b8aaa869725",
+    "Tools/DeliveryAI/native_tts_abi.py": "adcb8a36b485341f9439765a33ed82740d5fa72fcdfcf732824f31201d3561e5",
+    "Tools/DeliveryAI/neural_tts.py": "5f1460b32734b741a93898e953583e93e088d369b48e07d1986a74975612f4e2",
+    "Tools/DeliveryAI/neural_tts_worker.py": "452438c7677f96f376edeb7a0f7e4513237a25c23de35236278622aa3ce1c6fb",
+    "Tools/DeliveryAI/tts_evaluation/compare_native_qwen.py": "b8556f9545d9680a202fe255d6190a23704ca80cbc6426fa1b3a9bddca2651ff",
+    "Tools/DeliveryAI/tts_evaluation/probe_http_speech.py": "a1870f1e81730e6c78a6760daf7f0c6f60792d43d285bfb3b9101b71c196dd05"
+  },
+  "small_files": {
+    "Tools/DeliveryAI/neural_voice_config.json": {
+      "sha256": "3dc88958701a23b5840a4b3820a057ee13de7e509dfec394681399a38fde278d",
+      "unchanged": true
+    },
+    "Saved/AIResearch/NativeQwen/runtime-q8_0-kv1024-active.json": {
+      "sha256": "9c189b08c108def672a15a07565fed49ba4c18a8edfbea614b9a759380646f21",
+      "unchanged": true
+    },
+    "Saved/AIResearch/NpcTraining/acceptance-reviewed.json": {
+      "sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+      "unchanged": true
+    }
+  },
+  "model": {
+    "file": {
+      "path": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/combat-Q4_K_M.gguf",
+      "bytes": 1107408608,
+      "last_write_utc": "2026-11-14T14:20:13.175827+00:00",
+      "mtime_ns": 1794666013175826800
+    },
+    "expected_sha256": "da5a022325ba2fc89377e2cc5d2ba759aa97bce5e0ed5931c62ec29c176d0b31",
+    "hash_origin": "前次已验证 Q4 文件 SHA；本次仅核对路径、大小、修改时间，不重新读取 1.11 GB 权重",
+    "full_hash_rechecked_this_review": false,
+    "required_before_execution": "实际开始时重新核对 GGUF SHA；必须与独立质量报告相同"
+  },
+  "candidate": {
+    "gpu_layers": 99,
+    "threads": 1,
+    "threads_batch": 1,
+    "temperature": 0,
+    "context": 4096,
+    "output_tokens": 64,
+    "parallel_slots": 1,
+    "duration_seconds": 70
+  },
+  "current_build": {
+    "files": [
+      {
+        "path": "Binaries/Win64/UnrealEditor-Delivery.dll",
+        "bytes": 7533568,
+        "last_write_utc": "2026-11-14T14:46:41.511838+00:00",
+        "mtime_ns": 1794667601511838200,
+        "sha256": "cdc93fc13c3ce9f92491939c84513f2bf6b7c865ab89aff3d43d78b7b530b396"
+      },
+      {
+        "path": "Binaries/Win64/UnrealEditor-Delivery.pdb",
+        "bytes": 126259200,
+        "last_write_utc": "2026-11-14T14:46:41.517864+00:00",
+        "mtime_ns": 1794667601517863400
+      },
+      {
+        "path": "Binaries/Win64/DeliveryEditor.target",
+        "bytes": 1088158,
+        "last_write_utc": "2026-11-14T14:46:45.747413+00:00",
+        "mtime_ns": 1794667605747413200,
+        "sha256": "0cc0ecd1d06931948c39021cc0906297ce82f44cb59519bded882db17bc294f6"
+      }
+    ],
+    "scope": "构建尚待 UI 任务统一完成，这只是当前磁盘快照，不作为新一轮最终构建身份",
+    "ue_sources": {
+      "Source/Delivery/Player/DeliveryPlayerController.cpp": {
+        "path": "Source/Delivery/Player/DeliveryPlayerController.cpp",
+        "bytes": 15842,
+        "last_write_utc": "2026-11-14T11:34:57.778883+00:00",
+        "mtime_ns": 1794656097778882900,
+        "sha256": "42e1dff8c44350a8f28a3d429a2e04fa6508b3308e655bc9383e47900706e276"
+      },
+      "Source/Delivery/Player/DeliveryPlayerController.h": {
+        "path": "Source/Delivery/Player/DeliveryPlayerController.h",
+        "bytes": 9701,
+        "last_write_utc": "2026-11-14T11:34:57.778360+00:00",
+        "mtime_ns": 1794656097778359700,
+        "sha256": "ba69f3b6fcd5abd49d510393424c0bd2a06aeadddd54741fca1ede03ce2244ff"
+      },
+      "Source/Delivery/UI/DeliveryHUD.cpp": {
+        "path": "Source/Delivery/UI/DeliveryHUD.cpp",
+        "bytes": 21375,
+        "last_write_utc": "2026-11-14T13:11:48.605045+00:00",
+        "mtime_ns": 1794661908605045200,
+        "sha256": "a5583f4ae0b6dc96468491c42a9c1533b50f4f25b0badc3922beeac7a2e8b2bf"
+      },
+      "Source/Delivery/UI/DeliveryConversationWidget.cpp": {
+        "path": "Source/Delivery/UI/DeliveryConversationWidget.cpp",
+        "bytes": 20004,
+        "last_write_utc": "2026-11-14T11:48:01.854832+00:00",
+        "mtime_ns": 1794656881854832400,
+        "sha256": "03b99e0b162d4f2bb9c7a8e1a1978b5c4121d722e9c36b8ef806f50928ef914e"
+      },
+      "Source/Delivery/Speech/DeliverySpeechInputComponent.cpp": {
+        "path": "Source/Delivery/Speech/DeliverySpeechInputComponent.cpp",
+        "bytes": 21997,
+        "last_write_utc": "2026-11-14T13:34:15.286407+00:00",
+        "mtime_ns": 1794663255286407100,
+        "sha256": "45131e49fdb62ef1681bafbff05534d281163e16c9222d8c8ecffb05d7a66633"
+      },
+      "Source/Delivery/Speech/DeliverySpeechInputComponent.h": {
+        "path": "Source/Delivery/Speech/DeliverySpeechInputComponent.h",
+        "bytes": 5963,
+        "last_write_utc": "2026-11-14T11:46:59.227517+00:00",
+        "mtime_ns": 1794656819227517400,
+        "sha256": "7db5a94cea0e51af8c48cfc26872e056723decf705a066e517dae2106cabc17d"
+      },
+      "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp": {
+        "path": "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp",
+        "bytes": 103937,
+        "last_write_utc": "2026-11-14T14:37:57.449954+00:00",
+        "mtime_ns": 1794667077449954000,
+        "sha256": "1e3e8d494eeafeee7117487db6b47dc65f5622caaa2e8dd4afe579e55925e958"
+      },
+      "Source/Delivery/AI/Network/DeliveryAiGatewaySubsystem.cpp": {
+        "path": "Source/Delivery/AI/Network/DeliveryAiGatewaySubsystem.cpp",
+        "bytes": 27950,
+        "last_write_utc": "2026-11-14T14:37:57.451497+00:00",
+        "mtime_ns": 1794667077451496900,
+        "sha256": "33428776f1f8a5e7e178113ffb47da34e84a3c751222349ad38847d59c4001c1"
+      },
+      "Source/Delivery/AI/Presentation/DeliveryNpcPresentationComponent.cpp": {
+        "path": "Source/Delivery/AI/Presentation/DeliveryNpcPresentationComponent.cpp",
+        "bytes": 17580,
+        "last_write_utc": "2026-11-14T14:37:57.451497+00:00",
+        "mtime_ns": 1794667077451496900,
+        "sha256": "cb0fa9fe16e9a85e81d83645194ac8773110a1628faf51d1b4ba118099e7e975"
+      },
+      "Source/Delivery/AI/Presentation/DeliveryNpcSpeechPlayback.cpp": {
+        "path": "Source/Delivery/AI/Presentation/DeliveryNpcSpeechPlayback.cpp",
+        "bytes": 47057,
+        "last_write_utc": "2026-11-14T14:37:57.451497+00:00",
+        "mtime_ns": 1794667077451496900,
+        "sha256": "2d7218f5dfb1cc4e5c410d0f08d488b1dca021e55ec6a30ec169c5afc78e3f31"
+      }
+    },
+    "comparison_limit": "旧 40 秒记录未封存这些 UE 文件的 SHA，不能由当前快照推断相对旧构建的完整源码变化"
+  },
+  "code_review": {
+    "continuous_decisions": {
+      "path": "Tools/DeliveryAI/llm_evaluation/benchmark_combat_coexist.py",
+      "lines": [
+        193,
+        226
+      ],
+      "finding": "planned_slots=ceil(duration/interval)；case 通过 index % len(cases) 循环，cycle=index//len(cases)。70 秒、1 秒间隔下计划 70 个时机，不在第 40 个结束；慢请求跳过时机但不跳题",
+      "required_result_checks": [
+        "全部决策的 scheduled_slot/start/finish 覆盖到正式时段尾部",
+        "单并发，actual_requests/missed_slots/取消分别报告",
+        "独立质量样本数仍最多 40，cycle1 不当新题",
+        "边界后才返回的请求保持在原始记录，但不进入双方共同成功耗时比较"
+      ]
+    },
+    "csv_final_header": {
+      "path": "Tools/DeliveryAI/llm_evaluation/analyze_game_frames.py",
+      "lines": [
+        20,
+        66
+      ],
+      "finding": "使用 headers[-1] 最终表头解释所有逐帧行，并跳过尾部元数据；FrameTime 必须唯一且为有效数值。不从平均 FPS 反算 P95",
+      "limitation": "现有基础脚本只输出 FrameTime，不直接汇总 GC、TimerManager 或 EndPhysics；后续总报告需基于同一最终表头补充这些列，不改帧样本"
+    },
+    "summary_limit": "benchmark 顶层摘要会汇总重复调用；最终报告需分离 unique case 数、重复调用数及 cycle0 共同 ID，不能把 70 次调用写成 70 个独立情境"
+  },
+  "gc_analysis": {
+    "event_marker": "EVENTS 中的 GC##<capture-relative-seconds>，对应日志 CSVEvent \"GC\" [Frame n]",
+    "event_reference_example": "Saved/Logs/DeliveryQ4CoexistPlaytest.log:6273，2026.11.14-14.29.54:991；旧 CSV 示例 GC##214.056492",
+    "count_crosscheck": "完整半开窗口内 GC 事件次数，与 GC/Count 求和交叉核对",
+    "scope_columns": [
+      "Exclusive/GameThread/GarbageCollection",
+      "Exclusive/GameThread/GarbageCollectionFull"
+    ],
+    "scope_statistics": [
+      "完整窗口求和",
+      "最大值",
+      "非零帧数",
+      "每个事件 UTC/相对秒/帧号/触发帧耗时"
+    ],
+    "cross_boundary": "分帧清理可跨边界，标记但不扣除；scope 非零帧数不是 GC 次数",
+    "cpu_columns": [
+      "GameThreadTime",
+      "Exclusive/GameThread/EventWait/EndPhysics",
+      "Exclusive/GameThread/TimerManager"
+    ],
+    "zero_event_rule": "任一组 0 个自然 GC 标记比较条件不足，不追加时长或删除慢帧来达到门槛"
+  },
+  "ready_for_execution": false,
+  "required_next": [
+    "UI 完成统一构建，记录新 DLL/target SHA 及版本",
+    "重新确认当前源码/声音/固定 40 输入哈希",
+    "新三组在同一构建和游戏条件下重新记录基线",
+    "取得新 PID、CSV ID、开始 UTC 和明确执行授权"
+  ]
+}

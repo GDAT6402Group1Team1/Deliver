@@ -9,6 +9,8 @@ import unittest
 from unittest.mock import patch
 
 import dialogue_log
+from combat_model import prepare_combat_context
+from test_combat_model import context as combat_request
 
 
 class DialogueLogTests(unittest.TestCase):
@@ -78,6 +80,44 @@ class DialogueLogTests(unittest.TestCase):
         self.assertEqual(row['instructions_sha256'],
                          hashlib.sha256(instructions.encode('utf-8')).hexdigest())
         self.assertNotIn(instructions, text)
+
+    def test_combat_log_keeps_model_aliases_and_original_game_identity(self):
+        original = combat_request()
+        original['candidates'].insert(0, {'action': 'LookAt', 'target_id': 'another-person'})
+        context, choices = prepare_combat_context(original)
+        before = copy.deepcopy((original, context))
+        for action in ('Fight', 'Flee', 'Wait'):
+            dialogue_log.record(original['request_id'], 'ambient', 'delivery-npc-qwen3',
+                                original, context, {**choices[action], 'emotion': 'Calm'}, [])
+        rows = [json.loads(line) for line in self.path.read_text(encoding='utf-8').splitlines()]
+        self.assertEqual([row['chosen'] for row in rows], ['Fight:opponent', 'Flee:opponent', 'Wait:-'])
+        for row in rows:
+            self.assertEqual(row['model_context'], context)
+            self.assertEqual(row['candidates'], ['Fight:opponent', 'Flee:opponent', 'Wait:-'])
+            self.assertEqual(row['current_action'], original['current_action'])
+            self.assertEqual(row['npc_id'], original['npc_id'])
+            self.assertEqual(row['world_epoch'], original['world_epoch'])
+            self.assertIs(row['pending_player_message'], False)
+            self.assertEqual(row['evidence'], [{'id': original['evidence'][0]['event_id'],
+                'who': 'opponent', 'kind': 'FightThreat', 'text': original['evidence'][0]['description']}])
+        self.assertEqual((original, context), before)
+
+    def test_combat_failure_and_wrong_opponent_are_not_logged_as_a_choice(self):
+        original = combat_request()
+        context, choices = prepare_combat_context(original)
+        dialogue_log.record(original['request_id'], 'ambient', 'delivery-npc-qwen3', original,
+                            context, None, [], error='TimeoutError')
+        dialogue_log.record(original['request_id'], 'ambient', 'delivery-npc-qwen3', original,
+                            context, {**choices['Fight'], 'target_id': 'someone-else'}, [])
+        rows = [json.loads(line) for line in self.path.read_text(encoding='utf-8').splitlines()]
+        self.assertEqual([row['chosen'] for row in rows], [None, None])
+        self.assertEqual(rows[0]['error'], 'TimeoutError')
+
+    def test_player_log_keeps_the_actual_pending_words(self):
+        self.context['pending_player_message'] = {'description': '你先别急，我把话说清楚。'}
+        self.record()
+        row = json.loads(self.path.read_text(encoding='utf-8'))
+        self.assertEqual(row['pending_player_message'], self.context['pending_player_message']['description'])
 
     def test_failed_request_without_profile_or_context_can_still_be_recorded(self):
         dialogue_log.record('failed-id', 'player', 'model-name', {}, {}, None, [], error='TimeoutError')

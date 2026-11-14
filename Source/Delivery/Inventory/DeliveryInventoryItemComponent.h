@@ -37,6 +37,17 @@ class DELIVERY_API UDeliveryInventoryItemComponent : public UActorComponent
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	TObjectPtr<UTexture2D> Icon;
 
+    // 只有明确标注的普通道具会提供给同伴取回候选
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Item|Companion")
+    bool bCompanionCanFetch = false;
+
+    // 每个实物只有一份同步转移预约，任务接口也使用这里的预约
+    FGuid BeginTransfer(AActor* Receiver);
+    bool RetargetTransfer(FGuid TransferId,AActor* Receiver);
+    void EndTransfer(FGuid TransferId);
+    bool IsTransferInProgress() const { return ActiveTransferId.IsValid(); }
+    bool CanTransferTo(const AActor* Receiver) const;
+
 	// 耐久配置与同步值
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Durability", meta = (ClampMin = "0.0"))
 	float MaxDurability = 100.0f;
@@ -71,6 +82,8 @@ class DELIVERY_API UDeliveryInventoryItemComponent : public UActorComponent
 	}
 
   private:
+    FGuid ActiveTransferId;
+    TWeakObjectPtr<AActor> TransferReceiver;
 	UFUNCTION()
 	void OnRep_Durability();
 };

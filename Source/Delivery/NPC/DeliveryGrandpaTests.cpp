@@ -2,6 +2,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/App.h"
 #include "NPC/DeliveryGrandpa.h"
+#include "World/DeliveryHome.h"
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BTCompositeNode.h"
@@ -303,7 +304,21 @@ public:
             Test->TestEqual(TEXT("旁观者未获奖励"), UDeliveryWalletComponent::FindWallet(HostCharacter)->GetBalance(), InitialHostBalance);
             Test->TestFalse(TEXT("重复提交不能二次结算"), Tasks->TryCompleteDelivery(Task, HostCharacter->GetTaskPlayerState()));
             Test->TestEqual(TEXT("蓝图播放收件感谢"), Grandpa->GetCurrentAction(), EDeliveryGrandpaAction::Thanks);
-            Step(3.f); break;
+            {
+                auto* Home=Grandpa->SharedHome.Get();
+                if (!Test->TestNotNull(TEXT("正式地图必须配置 SharedHome，请先执行 setup_grandpa_home.py"),Home)) return End();
+                if (!Test->TestTrue(TEXT("SharedHome 是本世界唯一房屋且关联当前爷爷"),
+                    ADeliveryHome::FindSharedHome(Server)==Home && Home->FormerResident==Grandpa && Home->DepartureRoute.Num()>=2)) return End();
+                if (!Test->TestTrue(TEXT("只由当前实物交付确认搬离资格"),Grandpa->HasConfirmedHomeDelivery())) return End();
+                Test->TestFalse(TEXT("感谢期间不能提前解锁房屋"),Home->IsClaimed());
+            }
+            // 玩家是原夹具的固定站位，交付后让出门口，爷爷仍须沿真实路线自己走完
+            MoveOutOrigin=Grandpa->GetActorLocation();
+            Move(AuthorityCharacter,MoveOutOrigin+FVector(180,0,12));
+            Move(Character,MoveOutOrigin+FVector(180,0,12));
+            Move(HostCharacter,MoveOutOrigin+FVector(-180,0,12));
+            MoveOutWaitStarted=FPlatformTime::Seconds();
+            Step(.2f); break;
         case 20:
             // 准备可交互站位，后续拾取、投放和重新取件均经远端玩家 RPC
             Move(AuthorityCharacter, Grandpa->GetActorLocation() + FVector(0,-75,12));
@@ -402,10 +417,36 @@ public:
             if (!Test->TestTrue(TEXT("远端正常长按取回加成外卖"), AuthorityCharacter->GetCarriedTaskPackage() == Package.Get())) return End();
             bCaterpillarComplete = true;
             Stage = 9; NextTime = Now + .8f; break;
-        default:
+        case 12:
+        {
+            auto* Home=Grandpa->SharedHome.Get();
+            if (!IsValid(Home) || ADeliveryHome::FindSharedHome(Server)!=Home)
+            { Test->AddError(TEXT("等待搬离时 SharedHome 缺失或重复配置")); return End(); }
+            auto* RemoteHome=ADeliveryHome::FindSharedHome(Client);
+            const bool bFinished=Grandpa->HasMovedOut() && RemoteGrandpa->HasMovedOut() && Home->IsClaimed() &&
+                RemoteHome && RemoteHome->IsClaimed() && RemoteGrandpa->GetCurrentAction()==EDeliveryGrandpaAction::Finished;
+            if (!bFinished)
+            {
+                if (FPlatformTime::Seconds()-MoveOutWaitStarted>=90)
+                {
+                    Test->AddError(FString::Printf(TEXT("爷爷实际搬离/房屋复制等待超过90秒：state=%d reason=%s position=%s home=%d remoteHome=%d"),
+                        int32(Grandpa->GetMoveOutState()),*Grandpa->GetMoveOutWaitReason().ToString(),*Grandpa->GetActorLocation().ToString(),
+                        Home->IsClaimed(),RemoteHome && RemoteHome->IsClaimed()));
+                    return End();
+                }
+                NextTime=Now+.2f;
+                return false;
+            }
+            Test->TestTrue(TEXT("爷爷实际离开收件位置"),FVector::Dist2D(MoveOutOrigin,Grandpa->GetActorLocation())>100.f);
+            Test->TestTrue(TEXT("房屋认领来自当前收件事实"),Home->ClaimEventId.IsValid() && Home->ClaimEventId==Grandpa->GetConfirmedDeliveryId());
+            Test->TestEqual(TEXT("房屋认领事实复制到客户端"),RemoteHome->ClaimEventId,Home->ClaimEventId);
             Test->TestEqual(TEXT("重复交付后奖励保持不变"), UDeliveryWalletComponent::FindWallet(AuthorityCharacter)->GetBalance(), PaidBalance);
             Test->TestEqual(TEXT("奖励余额复制到交付客户端"), UDeliveryWalletComponent::FindWallet(Character)->GetBalance(), PaidBalance);
             Test->TestEqual(TEXT("结束动作持久显示"), RemoteGrandpa->GetCurrentAction(), EDeliveryGrandpaAction::Finished);
+            return End();
+        }
+        default:
+            Test->AddError(FString::Printf(TEXT("爷爷流程遇到未知阶段 %d"),Stage));
             return End();
         }
         return false;
@@ -432,6 +473,8 @@ private:
     bool bTrackMovement = false;
     bool bClientSawShake = false, bHostSawShake = false;
     double Started = 0;
+    double MoveOutWaitStarted=0;
+    FVector MoveOutOrigin=FVector::ZeroVector;
 };
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryGrandpaPIETest, "Delivery.NPC.Grandpa.ListenServerFlow",

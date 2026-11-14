@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "prepared_utc": "2026-11-14T14:09:56.7866074Z",
+  "status": "planned_not_executed",
+  "cwd": "D:/Udev/Delivery/Tools/DeliveryAI",
+  "groups": [
+    {
+      "name": "decision_completion_diagnostics_and_cancel",
+      "modules": [
+        "test_model_completion",
+        "test_combat_model",
+        "test_combat_model_integration",
+        "test_streaming_audio"
+      ],
+      "defined_tests": 45,
+      "command": [
+        "D:/Udev/Delivery/Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe",
+        "-B",
+        "-X",
+        "utf8",
+        "-m",
+        "unittest",
+        "test_model_completion",
+        "test_combat_model",
+        "test_combat_model_integration",
+        "test_streaming_audio"
+      ],
+      "scope": [
+        "model_done releases decision before speech finishes; old speech cannot finish the new request",
+        "final reply text and diagnostics use actual input/counts/model identity",
+        "local model legal targets, profile routing, timeout and draining after cancellation",
+        "HTTP cancellation suppresses late attack and streaming success; failed local model uses Luna but cancelled does not"
+      ],
+      "log": "backend-decision-final.log"
+    },
+    {
+      "name": "native_active_and_twelve_second_speech",
+      "modules": [
+        "test_native_tts",
+        "test_native_tts_residency",
+        "test_tts_duration"
+      ],
+      "defined_tests": 25,
+      "command": [
+        "D:/Udev/Delivery/Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe",
+        "-B",
+        "-X",
+        "utf8",
+        "-m",
+        "unittest",
+        "test_native_tts",
+        "test_native_tts_residency",
+        "test_tts_duration"
+      ],
+      "scope": [
+        "one active voice model, repeated same voice, male/female/male switch, independent female reference",
+        "cancel while loading, wrong model, close and subsequent request recovery",
+        "native callback/parent/HTTP 12 second PCM, final tail exactly once, excess rejected",
+        "long speech cancellation does not leave output for the next sentence"
+      ],
+      "log": "backend-native-final.log"
+    }
+  ],
+  "source_hashes_at_plan": {
+    "Tools/DeliveryAI/streaming.py": "a023e7c116fad60c18426b0588e37ec53f195be45f89c31774c807ded22a9523",
+    "Tools/DeliveryAI/server.py": "c8fee3d8960ccd7a88a19b0ef979d3a78fb08cf82eebbeabafb8bebf152aed0f",
+    "Tools/DeliveryAI/scheduler.py": "55edcd58c96b259d11a6c219fc62ea888a0cb582a5d5235475db242bef1f9217",
+    "Tools/DeliveryAI/combat_model.py": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+    "Tools/DeliveryAI/continued_activity.py": "05494d8d893c569a680160e8fbf91c558700a617c5382449dce27b4f34f18ec9",
+    "Tools/DeliveryAI/native_tts.py": "c4a1355a389a4b3b187365857e496101cb5f4ce6427090247a6407842b0978a4",
+    "Tools/DeliveryAI/native_tts_engine.py": "1ca4a1ee526eb3682483dbfbef9e3e090e8ad4af0830837dd29a5b8aaa869725",
+    "Tools/DeliveryAI/native_tts_worker.py": "f9989a31ba9afa61aa06c4d97b3096fa3e4ae5ee1b5ceab3c63d9f8018835af7",
+    "Tools/DeliveryAI/neural_tts.py": "5f1460b32734b741a93898e953583e93e088d369b48e07d1986a74975612f4e2",
+    "Tools/DeliveryAI/neural_audio_stream.py": "d3249cd198e65fec0818d07d87827db96a9b86a6608a2a6ca4e3db67a3d8ac85",
+    "Tools/DeliveryAI/neural_audio_sender.py": "ffa720ba7a0ae556a34b9e723ce2e5fd5738da61ce02a020475362e77d2aa942",
+    "Tools/DeliveryAI/neural_voice_config.json": "3dc88958701a23b5840a4b3820a057ee13de7e509dfec394681399a38fde278d",
+    "Tools/DeliveryAI/test_model_completion.py": "7a02388102dbe6000f39f78562d0a15d75098aa4765a044a4f15028e7179619e",
+    "Tools/DeliveryAI/test_combat_model.py": "e27bd30b8ad71e10efaab71fb4844d9ae82d7b4fad512c92904147fa241211c0",
+    "Tools/DeliveryAI/test_combat_model_integration.py": "60bef6ed4ae76c952327cdfbbababd02fac58989ee9cf0e4f22506053d4a2221",
+    "Tools/DeliveryAI/test_streaming_audio.py": "6a1f65db71454fb60a4f57d61496145a20cf2a61766d067768630ab4ca1e6d10",
+    "Tools/DeliveryAI/test_native_tts.py": "121e8e9fd754ba3fb1f7bb9a9ac8b2c97b04a422e0b9b0055a959423f6fa0234",
+    "Tools/DeliveryAI/test_native_tts_residency.py": "1f417693099873a55880b2845a569c65be5025a7b8133e0003a97b9d8b83c8f5",
+    "Tools/DeliveryAI/test_tts_duration.py": "066406ec0c39b6cbff77d85c35041f26c5c5bff2c0ad21a67acc4ae28867f34a"
+  },
+  "source_hash_policy": "Hash these files again immediately before/after execution; do not present changed-source output as coverage of later edits.",
+  "cpu_only": true,
+  "no_model_or_gpu": true,
+  "full_backend_suite_rerun": false,
+  "existing_ue_evidence": {
+    "path": "Saved/Automation/DeliverySpeechTwelveSecond/index.json",
+    "sha256": "b13908980594b516c09335f47f004f2ae34de007f511f31658b79cc58aac614e",
+    "created_on": "2026.11.14-13.46.39",
+    "succeeded": 12,
+    "failed": 0,
+    "scope": "VoiceCodec/12 second PCM protocol/cancellation/device format/startup/end/turn boundaries in UE; Python tests do not replace these checks"
+  },
+  "pending_ue_evidence": {
+    "requested_path": "Saved/Automation/DeliverySpeechMicRecovery/index.json",
+    "exists": false,
+    "note": "Wait for UI task to supply its current report; current game log alone is not a 12 test result"
+  },
+  "not_covered": [
+    "latest microphone focus/layout/UMG behavior until UI report exists",
+    "actual double-player input and audio quality",
+    "native qt_init cancellation timing on real GPU",
+    "continuous fight animation and gameplay acceptance"
+  ],
+  "previous_backend_note": "Historical 319 test report is retained; this planned 70 test selection covers current touched paths only, not a fresh full-suite pass."
+}

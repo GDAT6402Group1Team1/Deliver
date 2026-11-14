@@ -1,0 +1,698 @@
+{
+  "created_utc": "2026-11-14T10:59:40.467815+00:00",
+  "status": "quality_gate_failed",
+  "production_enabled": false,
+  "training_rounds": 2,
+  "further_training_this_iteration": false,
+  "scope": {
+    "profiles": [
+      "chunlai",
+      "xiumei"
+    ],
+    "actions": [
+      "Fight",
+      "Flee",
+      "Wait"
+    ],
+    "only_continuing_model_fight_or_flee": true,
+    "speech": false,
+    "player_dialogue_and_companions_excluded": true
+  },
+  "data": {
+    "round1": {
+      "independent_authored_training_stories": 120,
+      "log_rows": 8,
+      "log_episode_groups": 3,
+      "training_rows": 128,
+      "training_groups": 123
+    },
+    "round2": {
+      "additional_independent_authored_stories": 32,
+      "training_rows": 160,
+      "training_groups": 155
+    },
+    "internal_validation_stories": 15,
+    "acceptance_stories": 40,
+    "acceptance_sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+    "acceptance_used_for_training": false,
+    "acceptance_evaluation_count": 2,
+    "group_overlaps": {
+      "train_validation": [],
+      "train_acceptance": [],
+      "validation_acceptance": []
+    },
+    "log_running_action_was_reconstructed": true,
+    "full_on_policy_dagger": false,
+    "rejected_drafts_trained": false
+  },
+  "training": [
+    {
+      "started_utc": "2026-11-14T10:22:23.203542+00:00",
+      "mode": "training",
+      "status": "completed",
+      "model_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\model",
+      "model_revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+      "script_sha256": "ad250fc383291b1e33ff9fa319323abc2c629fa8a2030bde4293d54f410fee50",
+      "settings": {
+        "rank": 16,
+        "alpha": 32,
+        "dropout": 0.05,
+        "target_modules": "all-linear",
+        "batch_size": 1,
+        "gradient_accumulation": 4,
+        "learning_rate": 0.0002,
+        "weight_decay": 0.0,
+        "max_grad_norm": 1.0,
+        "seed": 20261114,
+        "dtype": "bfloat16",
+        "gradient_checkpointing": true,
+        "checkpoint_use_reentrant": false,
+        "max_steps": 48,
+        "max_seq_length": 4096
+      },
+      "gpu_loaded": true,
+      "production_configuration_changed": false,
+      "versions": {
+        "torch": "2.7.1+cu128",
+        "transformers": "4.57.3",
+        "peft": "0.17.1",
+        "accelerate": "1.12.0",
+        "tokenizers": "0.22.2"
+      },
+      "adapter_used": false,
+      "model_manifest_sha256": "27ca8095f22561e407ac597d0cddb9e89451699aa3a38a24b5e02d3a94ec7f77",
+      "datasets": {
+        "train": {
+          "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v4\\train.jsonl",
+          "sha256": "1e5928fb69c9b3570c0e6dc196594403b159f74385aff4fe9a3099fbe23c649f",
+          "samples": 128,
+          "groups": 123,
+          "max_prompt_tokens": 1164,
+          "max_sequence_tokens": 1177,
+          "supervised_tokens": 1475
+        },
+        "validation": {
+          "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v4\\validation.jsonl",
+          "sha256": "477418702a2edd65b6a0cb5513153d4433ca3a7f64baf5f390af5a15e38cbb33",
+          "samples": 15,
+          "groups": 15,
+          "max_prompt_tokens": 742,
+          "max_sequence_tokens": 755,
+          "supervised_tokens": 174
+        }
+      },
+      "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "device_total_memory_bytes": 12820480000,
+      "model_load_seconds": 4.967980500005069,
+      "trainable_parameters": 17432576,
+      "total_parameters": 1738007552,
+      "validation_before": {
+        "assistant_token_loss": 0.6192704161894026,
+        "samples": 15,
+        "supervised_tokens": 174
+      },
+      "last_training_step": {
+        "step": 48,
+        "epoch_started": 2,
+        "loss": 0.022080663591623306,
+        "gradient_norm": 0.6288118958473206,
+        "step_seconds": 2.6699599000057788,
+        "elapsed_seconds": 115.44072379999852
+      },
+      "training_seconds": 115.44092309999542,
+      "validation_after": {
+        "assistant_token_loss": 0.018085473975546867,
+        "samples": 15,
+        "supervised_tokens": 174
+      },
+      "adapter_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v4\\round1\\adapter",
+      "tokenizer_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v4\\round1\\tokenizer",
+      "peak_gpu_allocated_bytes": 6079958016,
+      "peak_gpu_reserved_bytes": 10791944192,
+      "elapsed_seconds": 131.2925299999988
+    },
+    {
+      "started_utc": "2026-11-14T10:46:49.603927+00:00",
+      "mode": "training",
+      "status": "completed",
+      "model_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\model",
+      "model_revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+      "script_sha256": "f85388ff21b3ed7e4914b0b1bca85c0e7025449bc8bdd298c399f9aae8ab3c46",
+      "settings": {
+        "rank": 16,
+        "alpha": 32,
+        "dropout": 0.05,
+        "target_modules": "all-linear",
+        "batch_size": 1,
+        "gradient_accumulation": 4,
+        "learning_rate": 5e-05,
+        "weight_decay": 0.0,
+        "max_grad_norm": 1.0,
+        "seed": 20261114,
+        "dtype": "bfloat16",
+        "gradient_checkpointing": true,
+        "checkpoint_use_reentrant": false,
+        "max_steps": 64,
+        "max_seq_length": 4096
+      },
+      "gpu_loaded": true,
+      "production_configuration_changed": false,
+      "versions": {
+        "torch": "2.7.1+cu128",
+        "transformers": "4.57.3",
+        "peft": "0.17.1",
+        "accelerate": "1.12.0",
+        "tokenizers": "0.22.2"
+      },
+      "adapter_used": false,
+      "model_manifest_sha256": "27ca8095f22561e407ac597d0cddb9e89451699aa3a38a24b5e02d3a94ec7f77",
+      "datasets": {
+        "train": {
+          "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v5\\train.jsonl",
+          "sha256": "541a397e439841b18f409623b405e19ac117132437112f487d8583f7e1d00f0a",
+          "samples": 160,
+          "groups": 155,
+          "max_prompt_tokens": 1164,
+          "max_sequence_tokens": 1177,
+          "supervised_tokens": 1830
+        },
+        "validation": {
+          "path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v5\\validation.jsonl",
+          "sha256": "477418702a2edd65b6a0cb5513153d4433ca3a7f64baf5f390af5a15e38cbb33",
+          "samples": 15,
+          "groups": 15,
+          "max_prompt_tokens": 742,
+          "max_sequence_tokens": 755,
+          "supervised_tokens": 174
+        }
+      },
+      "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "device_total_memory_bytes": 12820480000,
+      "model_load_seconds": 5.133239100003266,
+      "initial_adapter": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v4\\round1\\adapter",
+      "initial_adapter_files": {
+        "adapter_config.json": "9664757e31f8ccfd0cb53c1794207c6150988108b071c1ed3ef7e4d6bfefebde",
+        "adapter_model.safetensors": "0040b38bf2bb9c7f890dbfe6cb6c6eef8be09df58aded329f44c7be747a18f65",
+        "README.md": "cbdb99d21bf5cd7bba4c5471f5bc884632093fd2a994d4176c9083004e7a435f"
+      },
+      "trainable_parameters": 17432576,
+      "total_parameters": 1738007552,
+      "validation_before": {
+        "assistant_token_loss": 0.018085473975546867,
+        "samples": 15,
+        "supervised_tokens": 174
+      },
+      "last_training_step": {
+        "step": 64,
+        "epoch_started": 2,
+        "loss": 0.0013974733883515,
+        "gradient_norm": 0.11538911610841751,
+        "step_seconds": 2.2578506999998353,
+        "elapsed_seconds": 155.15239809999912
+      },
+      "training_seconds": 155.15261059999466,
+      "validation_after": {
+        "assistant_token_loss": 0.024452024498777033,
+        "samples": 15,
+        "supervised_tokens": 174
+      },
+      "adapter_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v5\\round2\\adapter",
+      "tokenizer_path": "D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v5\\round2\\tokenizer",
+      "peak_gpu_allocated_bytes": 6053606912,
+      "peak_gpu_reserved_bytes": 10345250816,
+      "elapsed_seconds": 174.92409270000644
+    }
+  ],
+  "round1_acceptance": {
+    "cases": 40,
+    "correct": 31,
+    "protocol_valid": 40,
+    "accuracy": 0.775,
+    "first_pass_ms_median": 189.6973499970045,
+    "first_pass_ms_p95": 246.8012999961502,
+    "exact_repeat_ms_p95": null,
+    "unwanted_fight": 6,
+    "acceptance_qualified": false
+  },
+  "round2_acceptance": {
+    "cases": 40,
+    "correct": 35,
+    "protocol_valid": 40,
+    "target_valid": 40,
+    "accuracy": 0.875,
+    "first_pass_ms_median": 156.00000000267755,
+    "first_pass_ms_p95": 218.99999999732245,
+    "exact_repeat_ms_p95": null,
+    "unwanted_fight": 2,
+    "acceptance_qualified": false,
+    "integration_checks_required": true
+  },
+  "selection_before_second_acceptance": {
+    "chosen": "Q8_0 temperature=0",
+    "basis": "Q8 and BF16 both 14/15 on internal validation with the same failure; Q8 uses less memory",
+    "model_sha256": "c213093220ba95c146c84560a96a14be01281e9c3e89dc213e5662db2455fc0e"
+  },
+  "scoring": {
+    "reasonable_actions_minimum": 0.9,
+    "protocol_and_targets_must_be_legal": true,
+    "second_scoring_definition_changed_before_inference": true,
+    "unwanted_fight_is_quality_failure_not_automatically_protocol_failure": true,
+    "previous_report_unchanged": true,
+    "technical_integration_checks_are_separate": true
+  },
+  "round2_failures": [
+    {
+      "id": "independent-25",
+      "actual": "Flee",
+      "acceptable": [
+        "Fight"
+      ],
+      "evidence": [
+        {
+          "event_id": "edadb673-2f07-54d7-b76a-a837a07e4ab1",
+          "subject_id": "7583c7ca-7c9e-5490-abc8-e34876e99b7c",
+          "addressee_id": "7265f74c-2741-5e5b-949e-a28bd97d92dc",
+          "kind": "SelfSpeech",
+          "source": "ActionResult",
+          "description": "这儿全是菜，我可不想赔钱。",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "138a3f1a-45c9-5927-9c18-a8d52c40bdb6",
+          "subject_id": "7265f74c-2741-5e5b-949e-a28bd97d92dc",
+          "addressee_id": "7583c7ca-7c9e-5490-abc8-e34876e99b7c",
+          "kind": "Speech",
+          "source": "Heard",
+          "description": "到空地了，你还往哪儿躲？",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "a47988fa-6342-521b-8047-281152bb1675",
+          "subject_id": "7265f74c-2741-5e5b-949e-a28bd97d92dc",
+          "addressee_id": "7583c7ca-7c9e-5490-abc8-e34876e99b7c",
+          "kind": "FightThreat",
+          "source": "Seen",
+          "description": "这个人朝我冲过来，准备动手",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "e1932182-a45f-54e0-ae27-6245eb2eda09",
+          "subject_id": "7583c7ca-7c9e-5490-abc8-e34876e99b7c",
+          "addressee_id": "",
+          "kind": "SelfCombat",
+          "source": "ActionResult",
+          "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手",
+          "reply_to_event_id": ""
+        }
+      ]
+    },
+    {
+      "id": "independent-07",
+      "actual": "Fight",
+      "acceptable": [
+        "Wait"
+      ],
+      "evidence": [
+        {
+          "event_id": "b9302524-48b9-5b7e-a5d9-507439ecd93a",
+          "subject_id": "fdbe143f-d31e-5e60-b0e8-67ded89f0e67",
+          "addressee_id": "b3f7bb0e-e12c-58d0-814a-e19874697a64",
+          "kind": "Speech",
+          "source": "Heard",
+          "description": "花盆是我碰掉的，你别冲别人来了。",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "6c138bbe-66b5-59f1-b1af-7965938b1c7c",
+          "subject_id": "b3f7bb0e-e12c-58d0-814a-e19874697a64",
+          "addressee_id": "fdbe143f-d31e-5e60-b0e8-67ded89f0e67",
+          "kind": "SelfSpeech",
+          "source": "ActionResult",
+          "description": "原来是你啊，你早说不就完了！",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "e897650f-d990-5214-9a88-a9163df8cc59",
+          "subject_id": "fdbe143f-d31e-5e60-b0e8-67ded89f0e67",
+          "addressee_id": "b3f7bb0e-e12c-58d0-814a-e19874697a64",
+          "kind": "Speech",
+          "source": "Heard",
+          "description": "我给你赔一个新的，这事到这儿行吗？",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "e83adc21-9fa0-5627-9aa3-4b408a7bf06f",
+          "subject_id": "b3f7bb0e-e12c-58d0-814a-e19874697a64",
+          "addressee_id": "",
+          "kind": "SelfCombat",
+          "source": "ActionResult",
+          "description": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。；我正在对翠花执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手",
+          "reply_to_event_id": ""
+        }
+      ]
+    },
+    {
+      "id": "independent-06",
+      "actual": "Flee",
+      "acceptable": [
+        "Fight"
+      ],
+      "evidence": [
+        {
+          "event_id": "450aecf6-cf32-5bdd-8f2e-bcde165d1d33",
+          "subject_id": "1433f5c1-0ec3-5b3f-92fe-be6937d4428c",
+          "addressee_id": "c8c65d55-3f90-5e98-ad5c-e123fe6021df",
+          "kind": "SelfSpeech",
+          "source": "ActionResult",
+          "description": "旁边有人，你先让他们过去。",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "25085325-7d9c-595e-bf2d-8ece483ca790",
+          "subject_id": "c8c65d55-3f90-5e98-ad5c-e123fe6021df",
+          "addressee_id": "1433f5c1-0ec3-5b3f-92fe-be6937d4428c",
+          "kind": "Speech",
+          "source": "Heard",
+          "description": "人都走了，你不是怕了吧？",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "5cd499c2-7348-512a-bca8-6b7445555326",
+          "subject_id": "c8c65d55-3f90-5e98-ad5c-e123fe6021df",
+          "addressee_id": "1433f5c1-0ec3-5b3f-92fe-be6937d4428c",
+          "kind": "FightThreat",
+          "source": "Seen",
+          "description": "这个人朝我冲过来，准备动手",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "b8ef4cc4-3e99-5b53-8da6-d3e7d6fbd690",
+          "subject_id": "1433f5c1-0ec3-5b3f-92fe-be6937d4428c",
+          "addressee_id": "",
+          "kind": "SelfCombat",
+          "source": "ActionResult",
+          "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 1 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手",
+          "reply_to_event_id": ""
+        }
+      ]
+    },
+    {
+      "id": "independent-30",
+      "actual": "Fight",
+      "acceptable": [
+        "Wait"
+      ],
+      "evidence": [
+        {
+          "event_id": "1a4f5c0d-08a5-54f1-8b4b-9e1f8115c6d7",
+          "subject_id": "0392ed36-c65a-5b42-acf2-912549f74f9c",
+          "addressee_id": "c94417b8-9de2-54ed-9c47-65288038f5b9",
+          "kind": "Speech",
+          "source": "Heard",
+          "description": "你厉害，我认输了，大家都看着呢。",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "76956acd-6de4-51ae-9d0f-86ca45591f28",
+          "subject_id": "c94417b8-9de2-54ed-9c47-65288038f5b9",
+          "addressee_id": "0392ed36-c65a-5b42-acf2-912549f74f9c",
+          "kind": "SelfSpeech",
+          "source": "ActionResult",
+          "description": "这还差不多。",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "48ce8567-42ef-52c2-b5ad-b720edb5f00d",
+          "subject_id": "c94417b8-9de2-54ed-9c47-65288038f5b9",
+          "addressee_id": "",
+          "kind": "SelfCombat",
+          "source": "ActionResult",
+          "description": "这阵子实际挨了 0 记轻拳；本轮交战挥拳 2 次，实际命中 1 次。现在站着，可以行动。；我正在对大壮执行Fight，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手",
+          "reply_to_event_id": ""
+        }
+      ]
+    },
+    {
+      "id": "independent-36",
+      "actual": "Flee",
+      "acceptable": [
+        "Wait"
+      ],
+      "evidence": [
+        {
+          "event_id": "f4861c2d-1b35-571d-8f1a-9b16d61c873a",
+          "subject_id": "304ce5d0-b0fc-55e7-9bc4-eee1f8a2a40f",
+          "addressee_id": "82cbd56b-5117-5a26-9718-c4728350cd2f",
+          "kind": "Speech",
+          "source": "Heard",
+          "description": "我刚才伸手接你的包呢，没要打你。",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "e709e40f-323a-5efb-be65-68e287b9ccf4",
+          "subject_id": "82cbd56b-5117-5a26-9718-c4728350cd2f",
+          "addressee_id": "304ce5d0-b0fc-55e7-9bc4-eee1f8a2a40f",
+          "kind": "SelfSpeech",
+          "source": "ActionResult",
+          "description": "吓我一跳，我还以为你要动手。",
+          "reply_to_event_id": ""
+        },
+        {
+          "event_id": "196aa1ad-e0dd-5904-9c50-f26b820a137b",
+          "subject_id": "82cbd56b-5117-5a26-9718-c4728350cd2f",
+          "addressee_id": "",
+          "kind": "SelfCombat",
+          "source": "ActionResult",
+          "description": "这阵子实际挨了 0 记轻拳；上一轮交战挥拳 0 次，实际命中 0 次。现在站着，可以行动。；我正在对大壮执行Flee，剩余约3.0秒。追近、出拳和受击仍在继续；可决定继续、逃跑或停手",
+          "reply_to_event_id": ""
+        }
+      ]
+    }
+  ],
+  "timing_scope": "single model, gpu_layers=99, no UE or TTS load; not coexistence performance",
+  "coexistence_99_21_14_cpu": "pending root task; no result claimed here",
+  "artifacts": [
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/manifest.json",
+      "sha256": "bd17a4544a9f9b615a961e7584cd559b53cace17e8c5e99d21a6872b768e3a74",
+      "bytes": 756
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/situations.json",
+      "sha256": "2bead50bef8edba5c4257629a60c804dac22c96f8f6c9af95e47e5a6ef48453a",
+      "bytes": 1265310
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/teacher.json",
+      "sha256": "47e9e9a3038ec1fd85eed03567da72ed688036f0730d7eced7ce6cc6c22e935d",
+      "bytes": 79032
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/student-corrections.json",
+      "sha256": "386c10ec9509d0fca5bdb9487ec395053600681d9a39afbeb58c4de8bc809aff",
+      "bytes": 28855
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/training-shortcut-audit.json",
+      "sha256": "c716dc42b6f23766f1c5d830769cd1c6372e4f86ce42e7f9f75814fc9f4f89d2",
+      "bytes": 715
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/train.jsonl",
+      "sha256": "1e5928fb69c9b3570c0e6dc196594403b159f74385aff4fe9a3099fbe23c649f",
+      "bytes": 460035
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/validation.jsonl",
+      "sha256": "477418702a2edd65b6a0cb5513153d4433ca3a7f64baf5f390af5a15e38cbb33",
+      "bytes": 52119
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/round1/run.json",
+      "sha256": "a0a1442205cb45668842d1158c352513fd72b1398ce9e9d4e808baa4fd25fbe0",
+      "bytes": 2939
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/round1/loss.jsonl",
+      "sha256": "d7524ad1082e4e457ea2ffff0dbff54454cd80b34e90724b987d03fc27ec594a",
+      "bytes": 8344
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/export-round1/export.json",
+      "sha256": "88cdfcba391bda852af7c4e324da9cbb485745bb7f32224a20ca4dec6620b104",
+      "bytes": 281
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/export-round1-retry/export.json",
+      "sha256": "8228e30917e3c341c3020447478b95fbd73cb9c17e9c1c2b36441804648747be",
+      "bytes": 1091
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/baseline-training.json",
+      "sha256": "8eac676ab54c48990988260b65b293f78e3ac78ea613475e18f44e6fdca40bb5",
+      "bytes": 34352
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/baseline-validation.json",
+      "sha256": "fcdeb716b6824bc7e6a609cd512814e44fbfba86076a2c8aacd0e2c1e9068a57",
+      "bytes": 17279
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q4.json",
+      "sha256": "db84e91f2a04162952465054aa24a30cd69eed66f56f78326f8a03141eea62c8",
+      "bytes": 17256
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q4-greedy.json",
+      "sha256": "893970acc1f6a7ae3808eaee984d527a3ed30d81dd9b7fea14e608995c6fcc49",
+      "bytes": 17226
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-bf16-greedy.json",
+      "sha256": "abe74275116c64f445500eb808608fda48c36ce413bf06f2e24bc867735738d1",
+      "bytes": 17237
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q4-imatrix-embF16.json",
+      "sha256": "4ab72e5ef4a246bb7ceb077de55d19a97a284783bca644ea0fcac666b77a692f",
+      "bytes": 17254
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q8.json",
+      "sha256": "2d9382eadc9ecaff6c47531f9004cf0f4f22459b7ad766944a162a13880ca3b6",
+      "bytes": 17222
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q8-greedy.json",
+      "sha256": "3c079493e52bd5a0ca0a9ea2b21b049a8a39a4ffbaf9539e7f65e0724d834ccd",
+      "bytes": 17243
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/round1-validation-q8-embF16-greedy.json",
+      "sha256": "98fd53df322de3575ef5880065119a220a3daf5f8efe130df3a253ad3e15201b",
+      "bytes": 17217
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v4/final-acceptance-bf16-gpu99.json",
+      "sha256": "7b7110e401c867d26100f244bb3108bfe27d325ac74a8d56556e602772c6ac8b",
+      "bytes": 46440
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v5/manifest.json",
+      "sha256": "d18fed63862ef07f9adc100094aa904bceddef08482e8329b6696094aefb5471",
+      "bytes": 341
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v5/situations.json",
+      "sha256": "9e7cfd68274a498ab50f2e77463a408988fa7c56244ec0f06d52f62c13718108",
+      "bytes": 1498312
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v5/teacher.json",
+      "sha256": "997cd347032dfcf94f9f109c10e0fb10bbbb0a8a88f5fcf6da88aadba6ec81ec",
+      "bytes": 97750
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v5/train.jsonl",
+      "sha256": "541a397e439841b18f409623b405e19ac117132437112f487d8583f7e1d00f0a",
+      "bytes": 568895
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v5/validation.jsonl",
+      "sha256": "477418702a2edd65b6a0cb5513153d4433ca3a7f64baf5f390af5a15e38cbb33",
+      "bytes": 52119
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v5/round2/run.json",
+      "sha256": "30b735a3d76a70dc5430508690c60c53431fcba9eb6a7bee425fe2ef66937329",
+      "bytes": 3363
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v5/round2/loss.jsonl",
+      "sha256": "003a3dbc499e4d19cb5914f1438f4d6a7969278cefbb2e4d5dc2414af6b01606",
+      "bytes": 11195
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v5/export-round2/export.json",
+      "sha256": "afe6913107ffb205450cbc1094b244277f51415174f06ae25f519d019f431fd9",
+      "bytes": 1116
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v5/round2-validation-q8-greedy.json",
+      "sha256": "fe4245b74e6feab8fc769d1de9a4bd4d8dfc6e733855c396b3fe19274a5b62cb",
+      "bytes": 19728
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v5/round2-validation-bf16-greedy.json",
+      "sha256": "a3243c1e62d5321605077c5bebed0f3b5c426d2e691a967f2bca7e90ced93a00",
+      "bytes": 19814
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/combat-v5/final-acceptance-q8-gpu99.json",
+      "sha256": "8e374b4102c5b7dc182d49edeae8487a7cf12ade8e869f4073025c97f7a20b23",
+      "bytes": 49634
+    },
+    {
+      "path": "Saved/AIResearch/NpcTraining/acceptance-reviewed.json",
+      "sha256": "77706e89104e4ec6d12704cb5b2214ff8efa9e4117cded6e8c400adf3acacced",
+      "bytes": 297370
+    }
+  ],
+  "implementation_artifacts": [
+    {
+      "path": "Tools/DeliveryAI/combat_model.py",
+      "sha256": "934972d07d51c3c8fdf2e62a65787e2920fb2c53c2235a786fef6c07f16fefb5",
+      "bytes": 14298
+    },
+    {
+      "path": "Tools/DeliveryAI/combat_model_config.json",
+      "sha256": "e2499641b31016969d7cf8b63047184fa4eaae26dbb1e128300b9304d518e0ee",
+      "bytes": 781
+    },
+    {
+      "path": "Tools/DeliveryAI/test_combat_model.py",
+      "sha256": "062937fe64d7ac0fb7495c0dfc20483a01a1e5f87f0ff2cdece43fe3e016af83",
+      "bytes": 9045
+    },
+    {
+      "path": "Tools/DeliveryAI/llm_evaluation/start_local_model.py",
+      "sha256": "d73ba82d9c709c83025b18f05d83f5aebef8750a4fce701d292543a539567e5d",
+      "bytes": 11822
+    },
+    {
+      "path": "Tools/DeliveryAI/npc_training/train_lora.py",
+      "sha256": "f85388ff21b3ed7e4914b0b1bca85c0e7025449bc8bdd298c399f9aae8ab3c46",
+      "bytes": 24935
+    },
+    {
+      "path": "Tools/DeliveryAI/npc_training/evaluate_combat.py",
+      "sha256": "37ce41708ca2203f805c2248d04b21d2ddc737217b02ad281ed96f6dd678989e",
+      "bytes": 6709
+    },
+    {
+      "path": "Tools/DeliveryAI/npc_training/build_combat_data.py",
+      "sha256": "0bf2e8328d4ecfa34db4797bd82015f66a3844e82964ae1b6b82776571b2ee71",
+      "bytes": 10496
+    },
+    {
+      "path": "Tools/DeliveryAI/npc_training/build_combat_refinement.py",
+      "sha256": "d8e4c41d397689cf73f80496d83076bc7aaf9586fe5741ccec87f9ce6e0eb0a9",
+      "bytes": 9239
+    },
+    {
+      "path": "Tools/DeliveryAI/npc_training/review_combat_data.py",
+      "sha256": "42320afa8a3d8c4de23cf5bded71968fd30363a020272825edcaefc977111b46",
+      "bytes": 7133
+    },
+    {
+      "path": "Tools/DeliveryAI/npc_training/correct_combat_data.py",
+      "sha256": "7be1ef8c6be895fd880bb39ad0f5b3b0702259354d16b557fa59ce7cf21b78e9",
+      "bytes": 3488
+    },
+    {
+      "path": "Tools/DeliveryAI/npc_training/export_combat_model.py",
+      "sha256": "adc5a31c8f333a8e29363e3d3287ec940c5362709adf9c28d46c441014b52385",
+      "bytes": 4227
+    }
+  ]
+}

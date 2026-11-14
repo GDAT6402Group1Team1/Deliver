@@ -1,0 +1,544 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T15:05:13.305265+00:00",
+  "scope": {
+    "ue_window_start_utc": "2026-11-14T14:57:26Z",
+    "ue_window_end_utc": "2026-11-14T14:58:31Z",
+    "observed_roles": [
+      3
+    ],
+    "client_role1_present": false,
+    "no_game_or_model_operation": true
+  },
+  "sources": [
+    {
+      "path": "Saved\\Logs\\Delivery.log",
+      "bytes": 562359,
+      "sha256": "4ddd54183219abcd7ebd35962db8f9240fe54a37d27ef813eace5da60b215243"
+    },
+    {
+      "path": "Saved\\Logs\\AIResidentBackend.log",
+      "bytes": 24022,
+      "sha256": "6fce8cdaf1c2944876243674dbebbb5d3813afce7084d912fb73bf38d302f689"
+    },
+    {
+      "path": "Saved\\Logs\\NativeQwenSpeechWorker.log",
+      "bytes": 567779,
+      "sha256": "2e056439deeee80b9a3541081171c3067a773865b644703c7ab0c46e5b4cb9fd"
+    }
+  ],
+  "summary": {
+    "audio_starts": 8,
+    "complete_positive_sentences": 6,
+    "played_then_cancelled_without_finish": 2,
+    "problem_markers": [],
+    "audio_play_after_same_turn_cancel": [],
+    "generated_sentences": 8,
+    "tts_synthesis_ms_range": [
+      422,
+      1090
+    ],
+    "tts_queue_ms_range": [
+      3,
+      1730
+    ],
+    "no_logs_show_generation_starvation_or_over_12_seconds": true
+  },
+  "turns": [
+    {
+      "turn_id": "7821A54A41C52E1EF7D74B9661BBE4AE",
+      "events": [
+        {
+          "line": 3031,
+          "text": "[2026.11.14-14.57.30:445][ 66]LogTemp: NpcLatency speech=00000000000000000000000000000000 turn=7821A54A41C52E1EF7D74B9661BBE4AE stage=stream_scheduled sequence=0"
+        },
+        {
+          "line": 3034,
+          "text": "[2026.11.14-14.57.30:920][ 74]LogTemp: NpcLatency speech=00000000000000000000000000000000 turn=7821A54A41C52E1EF7D74B9661BBE4AE stage=audio_play role=3 late_ms=376"
+        },
+        {
+          "line": 3076,
+          "text": "[2026.11.14-14.57.35:150][170]LogTemp: NpcSpeech audio_finished turn=7821A54A41C52E1EF7D74B9661BBE4AE role=3 consumed=193920 total=193920"
+        }
+      ],
+      "play": [
+        {
+          "line": 3034,
+          "role": 3,
+          "text": "[2026.11.14-14.57.30:920][ 74]LogTemp: NpcLatency speech=00000000000000000000000000000000 turn=7821A54A41C52E1EF7D74B9661BBE4AE stage=audio_play role=3 late_ms=376"
+        }
+      ],
+      "finish": [
+        {
+          "line": 3076,
+          "role": 3,
+          "consumed": 193920,
+          "total": 193920,
+          "complete_positive": true,
+          "decoded_seconds": 4.04,
+          "text": "[2026.11.14-14.57.35:150][170]LogTemp: NpcSpeech audio_finished turn=7821A54A41C52E1EF7D74B9661BBE4AE role=3 consumed=193920 total=193920"
+        }
+      ],
+      "cancel": [],
+      "speech_id": "00000000000000000000000000000000"
+    },
+    {
+      "turn_id": "B33F80004F9D80818B14CCBE479866C8",
+      "events": [
+        {
+          "line": 3089,
+          "text": "[2026.11.14-14.57.38:197][257]LogTemp: NpcLatency speech=357279B34C944C22A9FAEE8EDB9BF4C3 turn=B33F80004F9D80818B14CCBE479866C8 stage=stream_scheduled sequence=0"
+        },
+        {
+          "line": 3092,
+          "text": "[2026.11.14-14.57.38:631][269]LogTemp: NpcLatency speech=357279B34C944C22A9FAEE8EDB9BF4C3 turn=B33F80004F9D80818B14CCBE479866C8 stage=audio_play role=3 late_ms=339"
+        },
+        {
+          "line": 3141,
+          "text": "[2026.11.14-14.57.42:061][359]LogTemp: NpcSpeech audio_finished turn=B33F80004F9D80818B14CCBE479866C8 role=3 consumed=155520 total=155520"
+        }
+      ],
+      "play": [
+        {
+          "line": 3092,
+          "role": 3,
+          "text": "[2026.11.14-14.57.38:631][269]LogTemp: NpcLatency speech=357279B34C944C22A9FAEE8EDB9BF4C3 turn=B33F80004F9D80818B14CCBE479866C8 stage=audio_play role=3 late_ms=339"
+        }
+      ],
+      "finish": [
+        {
+          "line": 3141,
+          "role": 3,
+          "consumed": 155520,
+          "total": 155520,
+          "complete_positive": true,
+          "decoded_seconds": 3.24,
+          "text": "[2026.11.14-14.57.42:061][359]LogTemp: NpcSpeech audio_finished turn=B33F80004F9D80818B14CCBE479866C8 role=3 consumed=155520 total=155520"
+        }
+      ],
+      "cancel": [],
+      "speech_id": "357279B34C944C22A9FAEE8EDB9BF4C3"
+    },
+    {
+      "turn_id": "B266897B454C2FC1C10316AE3024C610",
+      "events": [
+        {
+          "line": 3143,
+          "text": "[2026.11.14-14.57.42:167][361]LogTemp: NpcLatency speech=303D453C4EF28D500D3E5CAF0D686495 turn=B266897B454C2FC1C10316AE3024C610 stage=stream_scheduled sequence=0"
+        },
+        {
+          "line": 3174,
+          "text": "[2026.11.14-14.57.42:289][363]LogTemp: NpcLatency speech=303D453C4EF28D500D3E5CAF0D686495 turn=B266897B454C2FC1C10316AE3024C610 stage=audio_play role=3 late_ms=21"
+        },
+        {
+          "line": 3215,
+          "text": "[2026.11.14-14.57.47:561][469]LogTemp: NpcSpeech audio_finished turn=B266897B454C2FC1C10316AE3024C610 role=3 consumed=243840 total=243840"
+        }
+      ],
+      "play": [
+        {
+          "line": 3174,
+          "role": 3,
+          "text": "[2026.11.14-14.57.42:289][363]LogTemp: NpcLatency speech=303D453C4EF28D500D3E5CAF0D686495 turn=B266897B454C2FC1C10316AE3024C610 stage=audio_play role=3 late_ms=21"
+        }
+      ],
+      "finish": [
+        {
+          "line": 3215,
+          "role": 3,
+          "consumed": 243840,
+          "total": 243840,
+          "complete_positive": true,
+          "decoded_seconds": 5.08,
+          "text": "[2026.11.14-14.57.47:561][469]LogTemp: NpcSpeech audio_finished turn=B266897B454C2FC1C10316AE3024C610 role=3 consumed=243840 total=243840"
+        }
+      ],
+      "cancel": [],
+      "speech_id": "303D453C4EF28D500D3E5CAF0D686495"
+    },
+    {
+      "turn_id": "3CD48C81450F940DA595BEAFDB55AE40",
+      "events": [
+        {
+          "line": 3364,
+          "text": "[2026.11.14-14.58.06:332][846]LogTemp: NpcLatency speech=00000000000000000000000000000000 turn=3CD48C81450F940DA595BEAFDB55AE40 stage=stream_scheduled sequence=0"
+        },
+        {
+          "line": 3367,
+          "text": "[2026.11.14-14.58.06:593][851]LogTemp: NpcLatency speech=00000000000000000000000000000000 turn=3CD48C81450F940DA595BEAFDB55AE40 stage=audio_play role=3 late_ms=160"
+        },
+        {
+          "line": 3425,
+          "text": "[2026.11.14-14.58.11:719][948]LogTemp: NpcSpeech audio_finished turn=3CD48C81450F940DA595BEAFDB55AE40 role=3 consumed=236160 total=236160"
+        }
+      ],
+      "play": [
+        {
+          "line": 3367,
+          "role": 3,
+          "text": "[2026.11.14-14.58.06:593][851]LogTemp: NpcLatency speech=00000000000000000000000000000000 turn=3CD48C81450F940DA595BEAFDB55AE40 stage=audio_play role=3 late_ms=160"
+        }
+      ],
+      "finish": [
+        {
+          "line": 3425,
+          "role": 3,
+          "consumed": 236160,
+          "total": 236160,
+          "complete_positive": true,
+          "decoded_seconds": 4.92,
+          "text": "[2026.11.14-14.58.11:719][948]LogTemp: NpcSpeech audio_finished turn=3CD48C81450F940DA595BEAFDB55AE40 role=3 consumed=236160 total=236160"
+        }
+      ],
+      "cancel": [],
+      "speech_id": "00000000000000000000000000000000"
+    },
+    {
+      "turn_id": "2B4E2D3C4CD05F2C68C8EC886CB3AB6C",
+      "events": [
+        {
+          "line": 3455,
+          "text": "[2026.11.14-14.58.13:103][975]LogTemp: NpcLatency speech=BA5F598D4B6954A7E09EDCBF78A8F23D turn=2B4E2D3C4CD05F2C68C8EC886CB3AB6C stage=stream_scheduled sequence=0"
+        },
+        {
+          "line": 3458,
+          "text": "[2026.11.14-14.58.13:377][980]LogTemp: NpcLatency speech=BA5F598D4B6954A7E09EDCBF78A8F23D turn=2B4E2D3C4CD05F2C68C8EC886CB3AB6C stage=audio_play role=3 late_ms=176"
+        },
+        {
+          "line": 3465,
+          "text": "[2026.11.14-14.58.13:813][987]LogTemp: ResidentSpeech cancelled: npc=BP_ResidentShrewd_C_0 turn=2B4E2D3C4CD05F2C68C8EC886CB3AB6C replyTo=BA5F598D4B6954A7E09EDCBF78A8F23D"
+        }
+      ],
+      "play": [
+        {
+          "line": 3458,
+          "role": 3,
+          "text": "[2026.11.14-14.58.13:377][980]LogTemp: NpcLatency speech=BA5F598D4B6954A7E09EDCBF78A8F23D turn=2B4E2D3C4CD05F2C68C8EC886CB3AB6C stage=audio_play role=3 late_ms=176"
+        }
+      ],
+      "finish": [],
+      "cancel": [
+        {
+          "line": 3465,
+          "text": "[2026.11.14-14.58.13:813][987]LogTemp: ResidentSpeech cancelled: npc=BP_ResidentShrewd_C_0 turn=2B4E2D3C4CD05F2C68C8EC886CB3AB6C replyTo=BA5F598D4B6954A7E09EDCBF78A8F23D"
+        }
+      ],
+      "speech_id": "BA5F598D4B6954A7E09EDCBF78A8F23D"
+    },
+    {
+      "turn_id": "88D4A2EC4C514F20183A61B89AED379E",
+      "events": [
+        {
+          "line": 3551,
+          "text": "[2026.11.14-14.58.21:295][127]LogTemp: NpcLatency speech=00000000000000000000000000000000 turn=88D4A2EC4C514F20183A61B89AED379E stage=stream_scheduled sequence=0"
+        },
+        {
+          "line": 3557,
+          "text": "[2026.11.14-14.58.21:558][132]LogTemp: NpcLatency speech=00000000000000000000000000000000 turn=88D4A2EC4C514F20183A61B89AED379E stage=audio_play role=3 late_ms=161"
+        },
+        {
+          "line": 3595,
+          "text": "[2026.11.14-14.58.26:166][220]LogTemp: NpcSpeech audio_finished turn=88D4A2EC4C514F20183A61B89AED379E role=3 consumed=209280 total=209280"
+        },
+        {
+          "line": 3658,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: ResidentSpeech cancelled: npc=BP_ResidentShrewd_C_0 turn=88D4A2EC4C514F20183A61B89AED379E replyTo=00000000000000000000000000000000"
+        },
+        {
+          "line": 3659,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: ResidentSpeech cancelled: npc=BP_ResidentShrewd_C_0 turn=88D4A2EC4C514F20183A61B89AED379E replyTo=00000000000000000000000000000000"
+        },
+        {
+          "line": 3660,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: NpcSpeech stream_stop_received role=3 turn=88D4A2EC4C514F20183A61B89AED379E action=87DE741D4821C022348666887DE6ABF0"
+        }
+      ],
+      "play": [
+        {
+          "line": 3557,
+          "role": 3,
+          "text": "[2026.11.14-14.58.21:558][132]LogTemp: NpcLatency speech=00000000000000000000000000000000 turn=88D4A2EC4C514F20183A61B89AED379E stage=audio_play role=3 late_ms=161"
+        }
+      ],
+      "finish": [
+        {
+          "line": 3595,
+          "role": 3,
+          "consumed": 209280,
+          "total": 209280,
+          "complete_positive": true,
+          "decoded_seconds": 4.36,
+          "text": "[2026.11.14-14.58.26:166][220]LogTemp: NpcSpeech audio_finished turn=88D4A2EC4C514F20183A61B89AED379E role=3 consumed=209280 total=209280"
+        }
+      ],
+      "cancel": [
+        {
+          "line": 3658,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: ResidentSpeech cancelled: npc=BP_ResidentShrewd_C_0 turn=88D4A2EC4C514F20183A61B89AED379E replyTo=00000000000000000000000000000000"
+        },
+        {
+          "line": 3659,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: ResidentSpeech cancelled: npc=BP_ResidentShrewd_C_0 turn=88D4A2EC4C514F20183A61B89AED379E replyTo=00000000000000000000000000000000"
+        },
+        {
+          "line": 3660,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: NpcSpeech stream_stop_received role=3 turn=88D4A2EC4C514F20183A61B89AED379E action=87DE741D4821C022348666887DE6ABF0"
+        }
+      ],
+      "speech_id": "00000000000000000000000000000000"
+    },
+    {
+      "turn_id": "93465EE44FC0FE6D70315DBDBC01C115",
+      "events": [
+        {
+          "line": 3597,
+          "text": "[2026.11.14-14.58.26:261][222]LogTemp: NpcLatency speech=87DE741D4821C022348666887DE6ABF0 turn=93465EE44FC0FE6D70315DBDBC01C115 stage=stream_scheduled sequence=0"
+        },
+        {
+          "line": 3599,
+          "text": "[2026.11.14-14.58.26:410][225]LogTemp: NpcLatency speech=87DE741D4821C022348666887DE6ABF0 turn=93465EE44FC0FE6D70315DBDBC01C115 stage=audio_play role=3 late_ms=47"
+        },
+        {
+          "line": 3643,
+          "text": "[2026.11.14-14.58.29:787][288]LogTemp: NpcSpeech audio_finished turn=93465EE44FC0FE6D70315DBDBC01C115 role=3 consumed=151680 total=151680"
+        }
+      ],
+      "play": [
+        {
+          "line": 3599,
+          "role": 3,
+          "text": "[2026.11.14-14.58.26:410][225]LogTemp: NpcLatency speech=87DE741D4821C022348666887DE6ABF0 turn=93465EE44FC0FE6D70315DBDBC01C115 stage=audio_play role=3 late_ms=47"
+        }
+      ],
+      "finish": [
+        {
+          "line": 3643,
+          "role": 3,
+          "consumed": 151680,
+          "total": 151680,
+          "complete_positive": true,
+          "decoded_seconds": 3.16,
+          "text": "[2026.11.14-14.58.29:787][288]LogTemp: NpcSpeech audio_finished turn=93465EE44FC0FE6D70315DBDBC01C115 role=3 consumed=151680 total=151680"
+        }
+      ],
+      "cancel": [],
+      "speech_id": "87DE741D4821C022348666887DE6ABF0"
+    },
+    {
+      "turn_id": "9D28C8B343559078BF48729398E2665D",
+      "events": [
+        {
+          "line": 3644,
+          "text": "[2026.11.14-14.58.29:843][289]LogTemp: NpcLatency speech=87DE741D4821C022348666887DE6ABF0 turn=9D28C8B343559078BF48729398E2665D stage=stream_scheduled sequence=1"
+        },
+        {
+          "line": 3645,
+          "text": "[2026.11.14-14.58.29:952][291]LogTemp: NpcLatency speech=87DE741D4821C022348666887DE6ABF0 turn=9D28C8B343559078BF48729398E2665D stage=audio_play role=3 late_ms=10"
+        },
+        {
+          "line": 3654,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: ResidentSpeech cancelled: npc=BP_ResidentLoud_C_0 turn=9D28C8B343559078BF48729398E2665D replyTo=87DE741D4821C022348666887DE6ABF0"
+        },
+        {
+          "line": 3656,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: ResidentSpeech cancelled: npc=BP_ResidentLoud_C_0 turn=9D28C8B343559078BF48729398E2665D replyTo=87DE741D4821C022348666887DE6ABF0"
+        },
+        {
+          "line": 3657,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: NpcSpeech stream_stop_received role=3 turn=9D28C8B343559078BF48729398E2665D action=AC8D5947474B298FF2EDE0BE029A351B"
+        }
+      ],
+      "play": [
+        {
+          "line": 3645,
+          "role": 3,
+          "text": "[2026.11.14-14.58.29:952][291]LogTemp: NpcLatency speech=87DE741D4821C022348666887DE6ABF0 turn=9D28C8B343559078BF48729398E2665D stage=audio_play role=3 late_ms=10"
+        }
+      ],
+      "finish": [],
+      "cancel": [
+        {
+          "line": 3654,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: ResidentSpeech cancelled: npc=BP_ResidentLoud_C_0 turn=9D28C8B343559078BF48729398E2665D replyTo=87DE741D4821C022348666887DE6ABF0"
+        },
+        {
+          "line": 3656,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: ResidentSpeech cancelled: npc=BP_ResidentLoud_C_0 turn=9D28C8B343559078BF48729398E2665D replyTo=87DE741D4821C022348666887DE6ABF0"
+        },
+        {
+          "line": 3657,
+          "text": "[2026.11.14-14.58.30:759][303]LogTemp: NpcSpeech stream_stop_received role=3 turn=9D28C8B343559078BF48729398E2665D action=AC8D5947474B298FF2EDE0BE029A351B"
+        }
+      ],
+      "speech_id": "87DE741D4821C022348666887DE6ABF0"
+    }
+  ],
+  "tts_completed": [
+    {
+      "line": 32,
+      "text": "latency request=819e7c03-43a9-d116-32f7-778e8fb7f3fe stage=audio_ready sentence=0 tts_queue_ms=3 tts_ms=1032 elapsed_ms=4155 voice_name=\"Uncle_Fu\"",
+      "sentence": 0,
+      "tts_queue_ms": 3,
+      "tts_ms": 1032,
+      "elapsed_ms": 4155
+    },
+    {
+      "line": 66,
+      "text": "latency request=01ba9561-46ea-4a67-499a-2ab0d35cfa72 stage=audio_ready sentence=0 tts_queue_ms=4 tts_ms=867 elapsed_ms=4203 voice_name=\"Xiaofang_B\"",
+      "sentence": 0,
+      "tts_queue_ms": 4,
+      "tts_ms": 867,
+      "elapsed_ms": 4203
+    },
+    {
+      "line": 75,
+      "text": "latency request=f9b7e7be-4437-b234-8359-1d8a33c55d6a stage=audio_ready sentence=0 tts_queue_ms=4 tts_ms=1090 elapsed_ms=3673 voice_name=\"Uncle_Fu\"",
+      "sentence": 0,
+      "tts_queue_ms": 4,
+      "tts_ms": 1090,
+      "elapsed_ms": 3673
+    },
+    {
+      "line": 104,
+      "text": "latency request=473cdca1-48ac-f6ce-4990-f599aa1e5744 stage=audio_ready sentence=0 tts_queue_ms=3 tts_ms=988 elapsed_ms=3381 voice_name=\"Uncle_Fu\"",
+      "sentence": 0,
+      "tts_queue_ms": 3,
+      "tts_ms": 988,
+      "elapsed_ms": 3381
+    },
+    {
+      "line": 138,
+      "text": "latency request=6b30f8bb-4b90-2d60-382f-ee82736f9520 stage=audio_ready sentence=0 tts_queue_ms=4 tts_ms=566 elapsed_ms=2941 voice_name=\"Xiaofang_B\"",
+      "sentence": 0,
+      "tts_queue_ms": 4,
+      "tts_ms": 566,
+      "elapsed_ms": 2941
+    },
+    {
+      "line": 171,
+      "text": "latency request=90991ffa-440b-0f51-49ef-5d910a5ad4a0 stage=audio_ready sentence=0 tts_queue_ms=4 tts_ms=848 elapsed_ms=3328 voice_name=\"Xiaofang_B\"",
+      "sentence": 0,
+      "tts_queue_ms": 4,
+      "tts_ms": 848,
+      "elapsed_ms": 3328
+    },
+    {
+      "line": 191,
+      "text": "latency request=eb960e44-46c5-3205-c43a-8181d776cb01 stage=audio_ready sentence=0 tts_queue_ms=4 tts_ms=548 elapsed_ms=2806 voice_name=\"Uncle_Fu\"",
+      "sentence": 0,
+      "tts_queue_ms": 4,
+      "tts_ms": 548,
+      "elapsed_ms": 2806
+    },
+    {
+      "line": 197,
+      "text": "latency request=eb960e44-46c5-3205-c43a-8181d776cb01 stage=audio_ready sentence=1 tts_queue_ms=1730 tts_ms=422 elapsed_ms=4411 voice_name=\"Uncle_Fu\"",
+      "sentence": 1,
+      "tts_queue_ms": 1730,
+      "tts_ms": 422,
+      "elapsed_ms": 4411
+    }
+  ],
+  "player_input": {
+    "request_id": "98EE7F1B4980A2483D0F719E4F5F49D2",
+    "player": true,
+    "ue_line": 3587,
+    "ue_text": "[2026.11.14-14.58.23:688][173]LogTemp: NpcLatency request=98EE7F1B4980A2483D0F719E4F5F49D2 stage=http_start player=1",
+    "backend_events": [
+      {
+        "line": 177,
+        "text": "\"POST /v1/decisions/stream HTTP/1.1\" 200 -latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=worker_started scheduler_queue_ms=0"
+      },
+      {
+        "line": 179,
+        "text": "latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=model_slot_acquired slot_wait_ms=0"
+      },
+      {
+        "line": 180,
+        "text": "latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=context_ready player_message=5d845482-45de-512d-4d86-1199b8ae5f6c player_answered=0 candidates=14"
+      },
+      {
+        "line": 181,
+        "text": "latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=prompt_ready chars=6022 bytes=8554"
+      },
+      {
+        "line": 182,
+        "text": "latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=combat_route result=player_or_unknown_request"
+      },
+      {
+        "line": 183,
+        "text": "latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=model_selected source=player model=\"gpt-6-luna\""
+      },
+      {
+        "line": 184,
+        "text": "latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=model_connection_startup connection_ms=0 elapsed_ms=10"
+      },
+      {
+        "line": 189,
+        "text": "latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=model_connection_thread_start connection_ms=58 elapsed_ms=68"
+      },
+      {
+        "line": 190,
+        "text": "latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=model_connection_turn_start connection_ms=69 elapsed_ms=79"
+      },
+      {
+        "line": 193,
+        "text": "latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=model_connection_cancel_requested connection_ms=1612 elapsed_ms=1623"
+      },
+      {
+        "line": 194,
+        "text": "latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=model_connection_model_terminal connection_ms=1614 elapsed_ms=1624"
+      },
+      {
+        "line": 195,
+        "text": "latency request=98ee7f1b-4980-a248-3d0f-719e4f5f49d2 stage=model_connection_cancel_terminal_interrupted connection_ms=1614 elapsed_ms=1625"
+      }
+    ],
+    "speech_id": "5D84548245DE512D4D861199B8AE5F6C",
+    "accepted_ue_line": 3586,
+    "complete_reply_observed": false,
+    "explanation": "后台接受后约1623ms收到取消，1625ms确认模型中断，无首句或语音；同一时段旧NPC动作结束但日志未记录取消原因，不能据此断定原因"
+  },
+  "request_count": 11,
+  "native_perf_tail_unlinked": [
+    {
+      "line": 9102,
+      "text": "[Perf] Total 1025.5 ms (50 frames, 15.48 ms/frame AR, audio 4.00 s, RTF 0.256)"
+    },
+    {
+      "line": 9126,
+      "text": "[Perf] Total 861.3 ms (40 frames, 16.50 ms/frame AR, audio 3.20 s, RTF 0.269)"
+    },
+    {
+      "line": 9147,
+      "text": "[Perf] Total 1083.0 ms (63 frames, 15.38 ms/frame AR, audio 5.04 s, RTF 0.215)"
+    },
+    {
+      "line": 9168,
+      "text": "[Perf] Total 981.8 ms (61 frames, 14.14 ms/frame AR, audio 4.88 s, RTF 0.201)"
+    },
+    {
+      "line": 9189,
+      "text": "[Perf] Total 559.3 ms (39 frames, 12.13 ms/frame AR, audio 3.12 s, RTF 0.179)"
+    },
+    {
+      "line": 9212,
+      "text": "[Perf] Total 843.1 ms (54 frames, 14.08 ms/frame AR, audio 4.32 s, RTF 0.195)"
+    },
+    {
+      "line": 9230,
+      "text": "[Perf] Total 536.9 ms (39 frames, 12.09 ms/frame AR, audio 3.12 s, RTF 0.172)"
+    },
+    {
+      "line": 9247,
+      "text": "[Perf] Total 415.4 ms (28 frames, 12.72 ms/frame AR, audio 2.24 s, RTF 0.185)"
+    }
+  ],
+  "limits": [
+    "只有role3证据，本轮不能宣称客户端也完整播放",
+    "日志没有检测到缺音不等于听感无卡顿；尚未听录音",
+    "原生语音性能行没有请求编号，末尾8条只作辅助，不作为精确request映射",
+    "玩家输入未得到完成回复；不可把后来邻居的闲聊当作对该发言的回答",
+    "没有删除0/0完成记录；本窗实际未出现0/0"
+  ]
+}

@@ -1,0 +1,454 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-11-14T15:47:40.321909+00:00",
+  "status": "invalid_game_conditions_and_early_tts_failure",
+  "plan": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-buildrefresh-plan.json",
+  "plan_at_execution_sha256": "4d8bf6b1eacddcfac9a5ea186636b6183ba9f73f1c0150b0413ade1ba92ad7b6",
+  "source_hashes": {
+    "Tools/DeliveryAI/llm_evaluation/start_local_model.py": "608fb818cb8c9a9cde96ad57112ee8dfa4d7c74eafc0aa462d72c3b8bba41bcb",
+    "Tools/DeliveryAI/llm_evaluation/prepare_local_model.py": "dee599d235d96c86c72b6e26625de60b35c1b807186e3d2a4c14a47c2751559a",
+    "Tools/DeliveryAI/llm_evaluation/benchmark_combat_coexist.py": "cf65e9af9a6d6a28642793a410605549996d10c7f180b1566ae9905af1e9e5e2",
+    "Tools/DeliveryAI/llm_evaluation/analyze_game_frames.py": "72cd584a28aa30fed2613532d28660538feeeffc5ce17011d5b6799ae6efa00c",
+    "Tools/DeliveryAI/combat_model.py": "55d28fb043e294874bcd1ce602641ca39afc39485cf8d70afcda7128e639225c",
+    "Tools/DeliveryAI/app_server.py": "c2ece2a304a6c7aab73ba6055fef0e20d0d57afedf22c51b053724d5f8bf19d2",
+    "Tools/DeliveryAI/native_tts.py": "c4a1355a389a4b3b187365857e496101cb5f4ce6427090247a6407842b0978a4",
+    "Tools/DeliveryAI/native_tts_worker.py": "f9989a31ba9afa61aa06c4d97b3096fa3e4ae5ee1b5ceab3c63d9f8018835af7",
+    "Tools/DeliveryAI/native_tts_engine.py": "1ca4a1ee526eb3682483dbfbef9e3e090e8ad4af0830837dd29a5b8aaa869725",
+    "Tools/DeliveryAI/native_tts_abi.py": "adcb8a36b485341f9439765a33ed82740d5fa72fcdfcf732824f31201d3561e5",
+    "Tools/DeliveryAI/neural_tts.py": "5f1460b32734b741a93898e953583e93e088d369b48e07d1986a74975612f4e2",
+    "Tools/DeliveryAI/neural_tts_worker.py": "452438c7677f96f376edeb7a0f7e4513237a25c23de35236278622aa3ce1c6fb",
+    "Tools/DeliveryAI/tts_evaluation/compare_native_qwen.py": "b8556f9545d9680a202fe255d6190a23704ca80cbc6426fa1b3a9bddca2651ff",
+    "Tools/DeliveryAI/tts_evaluation/probe_http_speech.py": "a1870f1e81730e6c78a6760daf7f0c6f60792d43d285bfb3b9101b71c196dd05"
+  },
+  "assets": {
+    "model_path": "Saved/AIResearch/NpcTraining/combat-v7/export-round3-q4/combat-Q4_K_M.gguf",
+    "model_sha256": "da5a022325ba2fc89377e2cc5d2ba759aa97bce5e0ed5931c62ec29c176d0b31",
+    "tts_runtime_path": "Saved/AIResearch/NativeQwen/runtime-q8_0-kv1024-active.json",
+    "tts_runtime_file_sha256": "9c189b08c108def672a15a07565fed49ba4c18a8edfbea614b9a759380646f21",
+    "tts_config_path": "Tools/DeliveryAI/neural_voice_config.json",
+    "tts_config_file_sha256": "3dc88958701a23b5840a4b3820a057ee13de7e509dfec394681399a38fde278d"
+  },
+  "build_identity": {
+    "verified_utc": "2026-11-14T15:38:17.850242+00:00",
+    "evidence_path": "Saved/AIResearch/NpcTraining/combat-v7-integration/final-build-followup-20261114.json",
+    "evidence_sha256": "2acc809334a16a13c6bd6a01b5fd7f4a7daf1136db7feba55e86f0fdb880607f",
+    "sha256": {
+      "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp": "ea334b9b0243d7942ddbd6ceb6156f5d313aa706cbb503b557d99afbd309381c",
+      "Source/Delivery/AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.cpp": "1729f4386612acb685ff51c1e0d5b378c2c5398e0bf97377f525902d54b3d732",
+      "Source/Delivery/AI/Tests/DeliveryNpcPlayerInterruptionTests.cpp": "0d9ab8497b84b362de3de6a155c824fc778d202bcfe5be272bcbd122ab4f41d0",
+      "Source/Delivery/AI/Tests/DeliveryNpcStrikeNavigationTests.cpp": "c01c733078ef42e74f27fbe87181402de30ee37cbd37ed3c4e2a5262c184830b",
+      "Binaries/Win64/UnrealEditor-Delivery.dll": "be03119b83c153d9fb802ade95da392123d9bc14647347988c78a841f80d9a02",
+      "Plugins/DeliveryTuning/Binaries/Win64/UnrealEditor-DeliveryTuning.dll": "d43eb4487b418498ed2d70d03e6c143f9c6e08b3425c2c305afb7310b10767cc",
+      "Binaries/Win64/DeliveryEditor.target": "0cc0ecd1d06931948c39021cc0906297ce82f44cb59519bded882db17bc294f6",
+      "Binaries/Win64/UnrealEditor.modules": "1a29d9d499cdc0c814e1441ffde18d92971e34243fab8fef36304195731c6913",
+      "Plugins/DeliveryTuning/Binaries/Win64/UnrealEditor.modules": "7409a9527a419025736967f04e0d83badaa23d560cb74b20b4fa0e9e8baa8b1c"
+    },
+    "target_identity": {
+      "TargetName": "DeliveryEditor",
+      "Platform": "Win64",
+      "Configuration": "Development",
+      "BuildSettingsVersion": "V7",
+      "TargetType": "Editor",
+      "Architecture": "x64",
+      "Project": "../../Delivery.uproject",
+      "Launch": "$(EngineDir)/Binaries/Win64/UnrealEditor.exe",
+      "LaunchCmd": "$(EngineDir)/Binaries/Win64/UnrealEditor-Cmd.exe",
+      "Version": {
+        "MajorVersion": 5,
+        "MinorVersion": 8,
+        "PatchVersion": 1,
+        "Changelist": 56057345,
+        "CompatibleChangelist": 55116800,
+        "IsLicenseeVersion": 0,
+        "IsPromotedBuild": 0,
+        "BranchName": "++UE5+Release-5.8",
+        "BuildId": "55116800"
+      }
+    },
+    "module_buildids_match_target": true,
+    "root_four_sources_unchanged_from_build2": true,
+    "root_four_sources": [
+      {
+        "path": "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp",
+        "bytes": 105418,
+        "sha256": "ea334b9b0243d7942ddbd6ceb6156f5d313aa706cbb503b557d99afbd309381c",
+        "last_write_utc": "2026-11-14T15:07:33.938750+00:00",
+        "previous_sha256": "ea334b9b0243d7942ddbd6ceb6156f5d313aa706cbb503b557d99afbd309381c",
+        "unchanged_from_build2_snapshot": true
+      },
+      {
+        "path": "Source/Delivery/AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.cpp",
+        "bytes": 20131,
+        "sha256": "1729f4386612acb685ff51c1e0d5b378c2c5398e0bf97377f525902d54b3d732",
+        "last_write_utc": "2026-11-14T15:05:58.373648+00:00",
+        "previous_sha256": "1729f4386612acb685ff51c1e0d5b378c2c5398e0bf97377f525902d54b3d732",
+        "unchanged_from_build2_snapshot": true
+      },
+      {
+        "path": "Source/Delivery/AI/Tests/DeliveryNpcPlayerInterruptionTests.cpp",
+        "bytes": 15492,
+        "sha256": "0d9ab8497b84b362de3de6a155c824fc778d202bcfe5be272bcbd122ab4f41d0",
+        "last_write_utc": "2026-11-14T15:25:06.280613+00:00",
+        "previous_sha256": "0d9ab8497b84b362de3de6a155c824fc778d202bcfe5be272bcbd122ab4f41d0",
+        "unchanged_from_build2_snapshot": true
+      },
+      {
+        "path": "Source/Delivery/AI/Tests/DeliveryNpcStrikeNavigationTests.cpp",
+        "bytes": 26893,
+        "sha256": "c01c733078ef42e74f27fbe87181402de30ee37cbd37ed3c4e2a5262c184830b",
+        "last_write_utc": "2026-11-14T15:05:58.378823+00:00",
+        "previous_sha256": "c01c733078ef42e74f27fbe87181402de30ee37cbd37ed3c4e2a5262c184830b",
+        "unchanged_from_build2_snapshot": true
+      }
+    ],
+    "build_log": {
+      "path": "Saved/Logs/DeliveryOpenMicBuild3.log",
+      "bytes": 6453,
+      "sha256": "bf1744efc1f4bc9e9b30fb2959a873eecc2b19d31a9a61a975f163acacb22f2a",
+      "last_write_utc": "2026-11-14T15:33:31.994387+00:00"
+    },
+    "build_result": "Result: Succeeded",
+    "build_actions": 5,
+    "build_total_seconds": 8.18,
+    "automation_note": "首次27项中25项通过，修正测试前提并增量构建后，仅复跑此前失败的KeyOwnership和MoveInputSafety，两项通过；不能写成第三次DLL已重新跑全部27项",
+    "single_run_27_all_passed": false,
+    "real_gameplay_acceptance_claimed": false
+  },
+  "csv": {
+    "path": "Saved/Profiling/CSV/CombatQ4SingleThread.csv",
+    "sha256": "afa8723b1530a780228246a88b8f583e234bbe3d3a79d87e6dfd3245b8513fc2",
+    "bytes": 5063727,
+    "capture_id": "D600EF324456B242FBEA4CBE9E3581FD",
+    "capture_start_utc": "2026-11-14T15:42:35.263000+00:00",
+    "capture_end_utc": "2026-11-14T15:51:41.045000+00:00",
+    "log_duration_seconds": 545.782,
+    "sum_frame_time_seconds": 545.6512366000006,
+    "footer_capture_duration_seconds": 545.572521,
+    "sum_vs_log_difference_seconds": 0.13076339999940956,
+    "final_header_used": true,
+    "header_rows": 2,
+    "columns": 457,
+    "integrity": {
+      "data_rows": 2736,
+      "valid_frames": 2736,
+      "missing_frame_indices": [],
+      "zero_frame_indices": [],
+      "capture_duration_seconds": 545.6512366000006,
+      "ue_completion_footer_present": true,
+      "frame_column": "FrameTime",
+      "unit": "ms",
+      "metadata": {
+        "platform": "Windows",
+        "buildversion": "++UE5+Release-5.8-CL-56057345",
+        "systemresolution.resx": "960",
+        "systemresolution.resy": "720",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "deviceprofile": "WindowsEditor",
+        "endtimestamp": "1794671500",
+        "captureduration": "545.572521",
+        "csvmaxfilebytesreached": "0"
+      }
+    },
+    "log": "Saved/Logs/DeliveryOpenMicPlay.log",
+    "log_evidence": [
+      {
+        "line": 9190,
+        "text": "[2026.11.14-15.42.35:263][391]LogCsvProfiler: Display: Capture started. CSV ID: D600EF324456B242FBEA4CBE9E3581FD"
+      },
+      {
+        "line": 11922,
+        "text": "[2026.11.14-15.51.41:045][127]LogCsvProfiler: Display: Capture Ended. Writing CSV to file : ../../../../../Udev/Delivery/Saved/Profiling/CSV/CombatQ4SingleThread.csv"
+      },
+      {
+        "line": 11923,
+        "text": "[2026.11.14-15.51.41:045][128]LogCsvProfiler: Display:   Frames : 2736"
+      }
+    ],
+    "diagnostic_report": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-csv-diagnostic.json",
+    "diagnostic_report_sha256": "2a367bef26104831cdb6086466d3e5952435cb017a145c19558537221f290df2",
+    "capture_end_pending": false
+  },
+  "groups": {
+    "baseline-q4single70": {
+      "report": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-q4single70/summary.json",
+      "report_sha256": "2fa5a153ae3d5dc8792babac5033056b4e3b9fe111b09abac8a077b08d181b5e",
+      "process_evidence": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-baseline-q4single70-process-evidence.json",
+      "process_evidence_sha256": "118ad35dcb5817878d4e1af26cbd2d7b8d0192edfa27c2a2eafe45f16fcb0d97",
+      "status": "completed",
+      "measurement": {
+        "utc_started": "2026-11-14T15:43:38.915422+00:00",
+        "requested_seconds": 70.0,
+        "errors": [],
+        "decision_schedule": {
+          "interval_seconds": 1.0,
+          "enabled": false,
+          "missed_slots": 0,
+          "actual_requests": 0
+        },
+        "utc_finished": "2026-11-14T15:44:48.926736+00:00",
+        "actual_seconds": 70.01133480000135,
+        "cleanup_finished_utc": "2026-11-14T15:44:48.927019+00:00"
+      },
+      "reported_summary": {
+        "attempted_unique_cases": 0,
+        "completed_unique_cases": 0,
+        "all_40_cases_completed": false,
+        "protocol_valid_calls": 0,
+        "matched_label_calls": 0,
+        "illegal_target_calls": 0,
+        "complete_ms_median": null,
+        "complete_ms_p95": null,
+        "speech_completed": 15,
+        "speech_partial_or_failed": 0,
+        "rtf_median": 0.3798821590912253,
+        "simulated_stall_ms": 0,
+        "quality_acceptance_claimed": false,
+        "ue_audio_measured": false
+      },
+      "call_count": 0,
+      "fallback_counts": {},
+      "complete_speech_count": 15,
+      "max_complete_speech_rtf": 0.6798715243903423,
+      "complete_speech_first_chunk_ms": [
+        1462.997800001176,
+        1602.6324999984354,
+        1350.0767000004998,
+        1416.4945000011357,
+        1014.9013999980525,
+        1000.2340999999433,
+        1010.2509999996983,
+        1056.2352999986615,
+        1077.991899997869,
+        1452.5826000026427,
+        1004.0292999983649,
+        1027.7161999983946,
+        1077.6427000018884,
+        959.7290999954566,
+        942.3382999957539
+      ],
+      "failed_speech": [],
+      "ue_after": {
+        "ue": "\"UnrealEditor.exe\",\"65440\",\"Console\",\"1\",\"7,193,152 K\"",
+        "ue_commandlet": "信息: 没有运行的任务匹配指定标准。",
+        "local_model": "信息: 没有运行的任务匹配指定标准。"
+      },
+      "full_game_conditions_preserved": false,
+      "within_70_second_frame_comparison_eligible": false
+    },
+    "local99-q4single70": {
+      "report": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-local99-q4single70/summary.json",
+      "report_sha256": "419c3777c4526e8c0ed836da79e2547bba44ec46a9f31355941896e7dca01726",
+      "process_evidence": "Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-local99-q4single70-process-evidence.json",
+      "process_evidence_sha256": "c2cf28c2727494b2ee5928d9dfeff2d07a872aa34f9d7fadf72e67cbdb297e2d",
+      "status": "failed",
+      "measurement": {
+        "utc_started": "2026-11-14T15:45:18.782430+00:00",
+        "requested_seconds": 70.0,
+        "errors": [
+          "RuntimeError:语音合成失败：neural_tts_timeout"
+        ],
+        "decision_schedule": {
+          "interval_seconds": 1.0,
+          "enabled": true,
+          "missed_slots": 4,
+          "actual_requests": 49
+        },
+        "utc_finished": "2026-11-14T15:46:14.613777+00:00",
+        "actual_seconds": 55.83136020000529,
+        "cleanup_finished_utc": "2026-11-14T15:46:14.614029+00:00"
+      },
+      "reported_summary": {
+        "attempted_unique_cases": 40,
+        "completed_unique_cases": 40,
+        "all_40_cases_completed": true,
+        "protocol_valid_calls": 46,
+        "matched_label_calls": 45,
+        "illegal_target_calls": 0,
+        "complete_ms_median": 201.54799999727402,
+        "complete_ms_p95": 1414.0940999990546,
+        "speech_completed": 7,
+        "speech_partial_or_failed": 1,
+        "rtf_median": 0.5895324999996912,
+        "simulated_stall_ms": 0,
+        "quality_acceptance_claimed": false,
+        "ue_audio_measured": false
+      },
+      "call_count": 52,
+      "fallback_counts": {
+        "": 46,
+        "timeout": 3,
+        "busy": 3
+      },
+      "complete_speech_count": 7,
+      "max_complete_speech_rtf": 1.2756207317091517,
+      "complete_speech_first_chunk_ms": [
+        1004.5399000009638,
+        1106.1153999980888,
+        1853.0006000000867,
+        2266.8264000021736,
+        3864.66289999953,
+        3703.0801000000793,
+        3449.614199998905
+      ],
+      "failed_speech": [
+        {
+          "case": "female_long",
+          "voice": "female",
+          "text": "你别急着走呀。我刚才声音大了点，咱们好好说嘛。",
+          "utc_started": "2026-11-14T15:45:53.152510+00:00",
+          "status": "failed",
+          "error": "neural_tts_timeout",
+          "utc_finished": "2026-11-14T15:46:14.613632+00:00",
+          "complete_ms": 21461.11910000036,
+          "chunks": [
+            {
+              "received_ms": 11301.156000001356,
+              "duration_s": 0.08,
+              "bytes": 3840,
+              "offset_bytes": 0
+            },
+            {
+              "received_ms": 11586.35360000335,
+              "duration_s": 0.16,
+              "bytes": 7680,
+              "offset_bytes": 3840
+            },
+            {
+              "received_ms": 11661.928699999407,
+              "duration_s": 0.32,
+              "bytes": 15360,
+              "offset_bytes": 11520
+            },
+            {
+              "received_ms": 15274.352400003409,
+              "duration_s": 0.64,
+              "bytes": 30720,
+              "offset_bytes": 26880
+            },
+            {
+              "received_ms": 15739.591700003075,
+              "duration_s": 0.64,
+              "bytes": 30720,
+              "offset_bytes": 57600
+            },
+            {
+              "received_ms": 16120.962400003918,
+              "duration_s": 0.64,
+              "bytes": 30720,
+              "offset_bytes": 88320
+            },
+            {
+              "received_ms": 18456.31929999945,
+              "duration_s": 0.64,
+              "bytes": 30720,
+              "offset_bytes": 119040
+            },
+            {
+              "received_ms": 18831.13630000298,
+              "duration_s": 0.64,
+              "bytes": 30720,
+              "offset_bytes": 149760
+            },
+            {
+              "received_ms": 19271.353900003305,
+              "duration_s": 0.64,
+              "bytes": 30720,
+              "offset_bytes": 180480
+            }
+          ],
+          "chunk_count": 9,
+          "first_chunk_ms": 11301.156000001356,
+          "delivered_audio_seconds": 4.4,
+          "generation_rtf": null,
+          "pcm_sha256": "4cd3f89c8c0af6c95741e3a2872ab6f372d94a022e33ded5478086dbe8f5898d",
+          "buffer_simulation": null,
+          "transport": "direct_worker_callback",
+          "ue_playback_measured": false,
+          "cycle": 1,
+          "scheduled_at_seconds": 34.36000000000001,
+          "started_at_seconds": 34.37006580000161,
+          "start_late_ms": 10.065800001605396
+        }
+      ],
+      "ue_after": {
+        "ue": "\"UnrealEditor.exe\",\"65440\",\"Console\",\"1\",\"1,763,820 K\"\n\"UnrealEditor.exe\",\"65936\",\"Console\",\"1\",\"4,630,344 K\"",
+        "ue_commandlet": "信息: 没有运行的任务匹配指定标准。",
+        "local_model": "\"llama-server.exe\",\"56836\",\"Console\",\"1\",\"2,036,912 K\""
+      },
+      "full_game_conditions_preserved": false,
+      "within_70_second_frame_comparison_eligible": false
+    }
+  },
+  "luna": {
+    "status": "not_started",
+    "reason": "Q4结束后发现第二个UE进程，开始前条件检查拒绝运行"
+  },
+  "game_condition_evidence": {
+    "path": "Saved/AIResearch/NpcTraining/combat-v7-integration/q4-singlethread70-game-condition-events.json",
+    "sha256": "22c4757348c3784a6dcd5ba3808e9c3643f8f74eb9e16cf136fa67a3698330ec",
+    "pie_torn_down_at_utc": "2026-11-14T15:43:57.836Z",
+    "baseline_started_utc": "2026-11-14T15:43:38.915422+00:00",
+    "new_ue_processes": [
+      {
+        "ProcessId": 65936,
+        "Name": "UnrealEditor.exe",
+        "ExecutablePath": "D:\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor.exe",
+        "CommandLine": "\"D:\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor.exe\" \"D:\\Udev\\Delivery\\Delivery.uproject\"",
+        "CreatedUtc": "2026-11-14T15:45:15.1289540Z"
+      }
+    ],
+    "note": "PIE 在 baseline 正式窗口内结束；第二个 UE 在 Q4 正式窗前约 3.65 秒启动。本轮三组不再是同一游戏条件"
+  },
+  "model_cleanup": {
+    "before_stop": {
+      "ProcessId": 56836,
+      "Name": "llama-server.exe",
+      "ExecutablePath": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-server.exe",
+      "CommandLine": "D:\\Udev\\Delivery\\Saved\\AIResearch\\LocalNpcModel\\qwen3-1.7b\\runtime\\llama-server.exe --model D:\\Udev\\Delivery\\Saved\\AIResearch\\NpcTraining\\combat-v7\\export-round3-q4\\combat-Q4_K_M.gguf --alias delivery-npc-qwen3 --host 127.0.0.1 --port 8771 --ctx-size 4096 --parallel 1 --n-predict 64 --threads 1 --threads-batch 1 --batch-size 256 --ubatch-size 128 --cache-type-k f16 --cache-type-v f16 --no-context-shift --jinja --reasoning off --reasoning-budget 0 --temp 0.0 --top-p 0.8 --top-k 20 --min-p 0 --metrics --slots --no-ui --n-gpu-layers 99 --flash-attn on",
+      "CreatedUtc": "2026-11-14T15:44:56.3673200Z"
+    },
+    "after_stop": [
+      {
+        "ProcessId": 65440,
+        "Name": "UnrealEditor.exe",
+        "ExecutablePath": "D:\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor.exe",
+        "CommandLine": "\"D:\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor.exe\" D:/Udev/Delivery/Delivery.uproject /Game/Level/TestForCharacter -NoSplash -NoLiveCoding -UTF8Output -abslog=D:/Udev/Delivery/Saved/Logs/DeliveryOpenMicPlay.log",
+        "CreatedUtc": "2026-11-14T15:34:36.2741910Z"
+      },
+      {
+        "ProcessId": 65936,
+        "Name": "UnrealEditor.exe",
+        "ExecutablePath": "D:\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor.exe",
+        "CommandLine": "\"D:\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor.exe\" \"D:\\Udev\\Delivery\\Delivery.uproject\"",
+        "CreatedUtc": "2026-11-14T15:45:15.1289540Z"
+      }
+    ],
+    "stopped_utc": "2026-11-14T15:46:20.115551+00:00"
+  },
+  "runner_finished_utc": "2026-11-14T15:46:21.012341+00:00",
+  "all_loads_completed": false,
+  "owned_model_and_tts_stopped": true,
+  "formal_configuration_changed": false,
+  "qualified_frame_comparison": false,
+  "frame_p95_increase_fraction": null,
+  "paired_luna": null,
+  "performance_acceptance_passed": false,
+  "gameplay_acceptance_passed": false,
+  "conclusion": "原始数据保留；baseline中途结束PIE，Q4与新UE启动重叠且语音超时提前结束，Luna未运行。本轮不能确认单线程改善或退化，不计算达标帧增幅，不补跑或降低标准",
+  "limits": [
+    "报告内RTF/调用耗时只描述这次异常条件下收到的数据",
+    "冻结40仍是重复负载，重复调用不增加独立质量样本",
+    "语音来自合成回调与缓冲模拟，不是UE声卡播放验收",
+    "自然GC与完整70秒条件未满足，不删除异常帧或改取短窗"
+  ],
+  "csv_integrity_complete": true,
+  "updated_utc": "2026-11-14T15:53:58.179862+00:00",
+  "runtime_followup_from_root": {
+    "recorded_utc": "2026-11-14T15:53:58.179862+00:00",
+    "source": "根任务消息，当前任务没有启动或修改服务",
+    "old_editors_closed_normally_after_dirty_check": true,
+    "restored_backend": "Luna + native Q8 B both",
+    "q4_enabled": false,
+    "priority": "先交付稳定试玩，暂停新的模型/GPU负载"
+  }
+}

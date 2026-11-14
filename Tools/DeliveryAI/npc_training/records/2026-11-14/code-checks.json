@@ -1,0 +1,28 @@
+{
+  "recorded_utc": "2026-11-14T10:59:59.110127+00:00",
+  "cpu_only": true,
+  "actual_prior_commands": [
+    {
+      "command": "python -m unittest discover -s Tools/DeliveryAI -p test_combat_model.py -v",
+      "passed": 10,
+      "failed": 0
+    },
+    {
+      "command": "python -m unittest discover -s Tools/DeliveryAI/llm_evaluation -p test_local_model_setup.py -v",
+      "passed": 4,
+      "failed": 0
+    }
+  ],
+  "syntax_compilation_files": [
+    "Tools/DeliveryAI/combat_model.py",
+    "Tools/DeliveryAI/test_combat_model.py",
+    "Tools/DeliveryAI/llm_evaluation/start_local_model.py",
+    "Tools/DeliveryAI/npc_training/train_lora.py",
+    "Tools/DeliveryAI/npc_training/evaluate_combat.py",
+    "Tools/DeliveryAI/npc_training/summarize_combat_training.py"
+  ],
+  "html_links_valid": 11,
+  "html_links_base": "Document",
+  "no_browser_or_ue_test": true,
+  "production_enabled": false
+}

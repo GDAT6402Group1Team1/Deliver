@@ -1,0 +1,8 @@
+{
+  "same": true,
+  "hf_tail": "阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。\"}]}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "llama_tail": "阵子实际挨了 3 记轻拳；上一轮交战挥拳 2 次，实际命中 0 次。现在站着，可以行动。\"}]}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "hf_tokens": 729,
+  "llama_text_tokens_by_hf": 729,
+  "diff": []
+}

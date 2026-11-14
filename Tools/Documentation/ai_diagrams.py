@@ -20,12 +20,12 @@ def canvas(title, width, height, body):
 def node(name, role, fields, methods, status="已实现", kind="class"):
     # 类图先展示职责，再给出代码名；每框只选两个主要接口，其余在正文解释
     descriptions = {
-        'UDeliveryNpcAgentComponent': ('NPC 决策', ['保存所见所闻和当前请求', '记录正在执行的动作'], [('RequestDecision()', '安排一次模型请求'), ('StartAction()', '检查条件并开始动作')]),
+        'UDeliveryNpcAgentComponent': ('NPC 决策', ['保存所见所闻和当前请求', '分别记录行动与每次回复的编号'], [('RequestDecision()', '安排一次模型请求'), ('StartAction()', '检查条件并开始动作')]),
         'UDeliveryAiGatewaySubsystem': ('模型网络请求', ['保存排队和发送中的请求', '记录超时与所属游戏世界'], [('Enqueue()', '把请求加入队列'), ('Cancel()', '取消这个 NPC 的请求')]),
         'ADeliveryNpcCharacter': ('NPC 角色', ['创建决策、战斗和表现组件', '保存当前执行的动作编号'], [('HearSpeech()', '接收玩家或其他 NPC 的话'), ('ExecuteAction()', '按动作类型调用相应功能')]),
         'UDeliveryNpcPresentationComponent': ('对白与人物表现', ['安排逐句对白和客户端播放', '管理声音、字幕与面部表情'], [('QueueSentence()', '按序保存这次回复的句子'), ('GetDisplayedSpeech()', '读取本机实际播放的句子')]),
         'ADeliveryNpcAIController': ('NPC 控制器', ['使用 UE 的视听感知', '更新行为树需要的条件'], [('OnTargetSeenOrHeard()', '记录发现或失去目标的通知'), ('RefreshBlackboard()', '更新倒地、动作和目标信息')]),
-        'UBTTask_DeliveryExecuteNpcAction': ('动作执行任务', ['保存本次动作编号与目标', 'Fight 等待靠近、收拳与冷却'], [('ExecuteTask()', '开始执行行为树任务'), ('TickFight()', '检查次数、距离与停止条件')]),
+        'UBTTask_DeliveryExecuteNpcAction': ('动作执行任务', ['保存本次动作编号与目标', '追赶、挥拳、受击后继续'], [('ExecuteTask()', '开始执行行为树任务'), ('TickFight()', '检查距离、收拳与停止条件')]),
         'UDeliveryConversationComponent': ('玩家交谈', ['位于玩家控制器上', '记录发言编号和发送间隔'], [('Submit()', '从玩家本机发送消息'), ('ServerSubmit()', '服务器检查后交给 NPC')]),
         'DecisionServer / DecisionHandler': ('AI 后端', ['模型结束后可调用下一条请求', '本轮语音完成后再结束 HTTP 回复'], [('do_POST()', '接收请求、取消和逐句连接'), ('run_job() [模块函数]', '调用模型并安排语音合成')]),
         'BT_Resident / BTT_ResidentExecute': ('NPC 行为树', ['保存各个行为分支', '倒地时优先停止普通动作'], [('选择动作分支', '读取黑板中的条件'), ('运行动作任务', '交给 C++ 任务类执行')]),
@@ -54,7 +54,7 @@ def node(name, role, fields, methods, status="已实现", kind="class"):
         'ADeliveryPedestrian': ('普通路人', ['沿原路线和 Boids 规则行走', '保留程序化步态与受击行为'], [('NpcLook', '短暂关注附近玩家'), ('头部叠加旋转', '走路时看一眼，再恢复')]),
         'ABP_NpcConversation': ('交谈动画蓝图', ['保留原动作，调整 Spine2 与 Head', '仅用于两份独立 Face 网格'], [('LookAt / ModifyBone 节点', '跟随视线并叠加前倾和侧头'), ('姿态权重降到零', '挥拳、倒地、拽车时退出')]),
         'FDeliveryNpcSpeechState': ('对白状态', ['保存台词、情绪和发言编号', '保存句子顺序、时间与音频信息'], [('Speech / DisplayedSpeech', '分别记录安排和本机实际播放'), ('ReplyToEventId / Sequence', '对应玩家发言和句子顺序')]),
-        'UDeliveryNpcCombatComponent': ('NPC 战斗', ['Fight：默认 5 秒、3 拳、6 米', '轻拳累计，重击保留倒地规则'], [('StartFightStrike()', '检查本轮目标和次数再出一拳'), ('ReceiveFightHit()', '记录轻拳，后仰或倒地')]),
+        'UDeliveryNpcCombatComponent': ('NPC 战斗', ['模型交战：单次最多 8 秒', '继续交战：整场最多 20 秒'], [('StartFightStrike()', '检查目标和时限后出拳'), ('ReceiveFightHit()', '记录轻拳，后仰或倒地')]),
         'UDeliveryVehicleHoldComponent': ('车辆拽车处理', ['记录拽住车辆的 NPC', '记录拽车和持续油门时间'], [('TryHold()', '检查条件后建立拽车关系'), ('Release()', '松手并恢复正常速度倍率')]),
         'ADeliveryMotorbike': ('电瓶车', ['处理驾驶与车辆移动', '持有拽车处理组件'], [('读取 GetSpeedScale()', '根据拽车状态调整速度'), ('调用 UpdateThrottle()', '累计油门时间以便挣脱')]),
         'FDeliveryNpcProfileRow': ('NPC 人物配置', ['DisplayName / Persona：名字与性格', 'TtsVoice / VoiceSet：两类声音配置'], [('继承 FTableRowBase', 'DT_NpcProfiles 每行对应一名角色'), ('chunlai / xiumei', '分别配置大壮与翠花')]),

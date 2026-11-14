@@ -1,0 +1,22 @@
+{
+  "python_version": "3.10.12",
+  "versions": {
+    "torch": "2.7.1+cu128",
+    "transformers": "4.57.3",
+    "accelerate": "1.12.0",
+    "peft": "0.17.1",
+    "huggingface-hub": "0.36.0",
+    "tokenizers": "0.22.2",
+    "safetensors": "0.8.0"
+  },
+  "cuda_initialized": false,
+  "imports_passed": true,
+  "wheel_sha256": "5174f02de8ca14df87c8e333c4c39cf3ce93a323c9d470d690301d110a053b3c",
+  "additional_converter_dependency": "sentencepiece==0.2.1",
+  "removed_fields": [
+    "python",
+    "base_python",
+    "wheel"
+  ],
+  "source_sha256": "620e13e24c9174ca5c68af72fe8f084b3824f0985992f0dc5d30ec483c6b8033"
+}

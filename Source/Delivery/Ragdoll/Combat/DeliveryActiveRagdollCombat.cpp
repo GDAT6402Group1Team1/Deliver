@@ -128,6 +128,7 @@ void UDeliveryActiveRagdollComponent::SetPunchFeetPlanted(bool bPlant)
 // 对受击身体施加冲量并启动受击恢复
 void UDeliveryActiveRagdollComponent::ApplyMeleeImpact(const FVector& Impulse, const FVector& ImpactPoint)
 {
+    CancelConversationFacing();
 	// 真实受击先给刚体冲量，再短暂降低站立电机力度，让身体有时间表现后仰/失衡
 	if (!GetOwner() || !GetOwner()->HasAuthority() || !bIsActive || !Mesh ||
 	    !HasPhysicsBody(Mesh, Bones.Spine))
@@ -197,6 +198,7 @@ void UDeliveryActiveRagdollComponent::BraceTorsoForAction(float DeltaTime, bool 
 // 标记身体正在出拳，并保存本次攻击方向
 void UDeliveryActiveRagdollComponent::BeginBodyDrivenPunch(FVector AimDirection, float HandSide)
 {
+    CancelConversationFacing();
 	// 进入蓄力阶段：记录方向和出拳侧，后续 Tick 会据此改变胸腰与手臂目标
 	Punch.Begin(AimDirection, HandSide);
 	bPunchSupportInterrupted = false;

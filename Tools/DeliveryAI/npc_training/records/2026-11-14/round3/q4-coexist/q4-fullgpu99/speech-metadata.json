@@ -1,0 +1,1256 @@
+{
+  "voices": {
+    "male": {
+      "provider": "qwen",
+      "speaker": "Uncle_Fu",
+      "model_revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+      "runtime": "qwentts_cpp",
+      "source_commit": "f1a6924789883bd92eeb59176793a94af55730b3",
+      "gguf_sha256": "4eb38675c736ed6ac72012846ac8d6ef80e5af8bc05726870f0b3a6569588519",
+      "codec_sha256": "1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94",
+      "quantization": "Q8_0"
+    },
+    "female": {
+      "provider": "qwen_base",
+      "speaker": "Xiaofang_B",
+      "model_revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+      "reference_sha256": "35d6e6f5fda0189495782df45c7d13c45edd835066e84456a25760b409d5ca65",
+      "reference_text_sha256": "2bd10a8b5c09b3d8bb4ba66d5c9ef6912aa577df2759ae58a62d008ff51c6ff7",
+      "runtime": "qwentts_cpp",
+      "source_commit": "f1a6924789883bd92eeb59176793a94af55730b3",
+      "gguf_sha256": "d54dbaf10591421fa764ed630d764efa717ae40cd959bd48c66d4eb1af226426",
+      "codec_sha256": "1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94",
+      "quantization": "Q8_0"
+    }
+  },
+  "tts_config_sha256": "9e18115bf583dbca2e070edeacc0ec00a63cb853a8e69f63f24dbc4b88476c6b",
+  "tts_runtime_sha256": "f7468d1f989edbf171a39136afd995f2c1c2a655fbd590ad6b421ba35fe00170",
+  "hash_note": "此处是解析后的配置指纹；原始配置文件字节哈希见 source-hashes.json/config_and_runtime",
+  "cadence": [
+    {
+      "case": "male_short",
+      "text_sha256": "6b31a361f4e5ee5eef59d3360f0ef09117564925cd061af14ab2de07aede6e47",
+      "audio_seconds": 4.4,
+      "interval_seconds": 4.6000000000000005
+    },
+    {
+      "case": "female_short",
+      "text_sha256": "23f1b45f4f2258b3cd72a2dd65263bcbee74e25111a71dee7d911db9fec58f28",
+      "audio_seconds": 3.28,
+      "interval_seconds": 3.48
+    },
+    {
+      "case": "male_long",
+      "text_sha256": "9ae251ba66f57f0436248f70205bee24ea7e6a1f80db541d996bf3cc32a657f6",
+      "audio_seconds": 6.16,
+      "interval_seconds": 6.36
+    },
+    {
+      "case": "female_long",
+      "text_sha256": "abfdc282f1aae0e27aca67a04c9623684fafe5e1864f26fc0cbe3feb43e2e086",
+      "audio_seconds": 5.28,
+      "interval_seconds": 5.48
+    }
+  ],
+  "start_buffer_seconds": 1.28,
+  "warmup": [
+    {
+      "case": "male_short",
+      "voice": "male",
+      "text": "你先听我说完，我刚才真没看见你。",
+      "utc_started": "2026-11-14T14:29:15.563032+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:29:16.553146+00:00",
+      "complete_ms": 990.0639999978011,
+      "chunks": [
+        {
+          "received_ms": 156.83639999770094,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 242.98719999933382,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 317.0847000001231,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 422.1047000028193,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 525.874400002067,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 626.1316000018269,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 727.1646000008332,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 844.8581999982707,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 978.0507999967085,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        }
+      ],
+      "chunk_count": 9,
+      "first_chunk_ms": 156.83639999770094,
+      "delivered_audio_seconds": 4.4,
+      "generation_rtf": 0.2250145454540457,
+      "pcm_sha256": "8a38f7b92898ae2faa696704da1584759b3345137c3d495a43259fb1fb6695a9",
+      "buffer_simulation": {
+        "duration_s": 4.4,
+        "retrospective_uninterrupted_start_ms": 162.9871999993338,
+        "buffer_start_ms": 525.874400002067,
+        "buffer_min_margin_ms": 1739.7428000002403,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    },
+    {
+      "case": "female_short",
+      "voice": "female",
+      "text": "我就在旁边站着呢，你怎么能没看见呀？",
+      "utc_started": "2026-11-14T14:29:16.553201+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:29:19.506803+00:00",
+      "complete_ms": 2953.5289999985253,
+      "chunks": [
+        {
+          "received_ms": 2359.224699997867,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 2417.578399996273,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 2482.6755999965826,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 2597.665399996913,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 2694.9648999943747,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 2795.159399996919,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 2906.052499994985,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 2952.324999998382,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 149760
+        }
+      ],
+      "chunk_count": 8,
+      "first_chunk_ms": 2359.224699997867,
+      "delivered_audio_seconds": 3.28,
+      "generation_rtf": 0.9004661585361358,
+      "pcm_sha256": "21fd5635507b76d3db1e762afa2fec5ae5e7a364c9a65d18e94acf3ba458e1c3",
+      "buffer_simulation": {
+        "duration_s": 3.2800000000000007,
+        "retrospective_uninterrupted_start_ms": 2359.224699997867,
+        "buffer_start_ms": 2694.9648999943747,
+        "buffer_min_margin_ms": 1739.8054999974554,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    },
+    {
+      "case": "male_long",
+      "voice": "male",
+      "text": "刚才是我没看清楚。你拿好东西，我把车挪开，别挡着大家。",
+      "utc_started": "2026-11-14T14:29:19.506886+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:29:22.951179+00:00",
+      "complete_ms": 3444.224999999278,
+      "chunks": [
+        {
+          "received_ms": 2321.0393999979715,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 2371.519000000262,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 2423.2772999966983,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 2535.6826999995974,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 2638.0433999947854,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 2738.784899993334,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 2850.4379999940284,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 2976.0259999966365,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 3108.009999996284,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        },
+        {
+          "received_ms": 3242.6347999935388,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 211200
+        },
+        {
+          "received_ms": 3351.2908999982756,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 241920
+        },
+        {
+          "received_ms": 3438.7731999959215,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 272640
+        },
+        {
+          "received_ms": 3443.7611999965156,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 288000
+        }
+      ],
+      "chunk_count": 13,
+      "first_chunk_ms": 2321.0393999979715,
+      "delivered_audio_seconds": 6.16,
+      "generation_rtf": 0.5591274350648179,
+      "pcm_sha256": "1a0a3710635f799a294ebc726e127bfc01f26eeb4faa1104971eda3f2f8e2586",
+      "buffer_simulation": {
+        "duration_s": 6.16,
+        "retrospective_uninterrupted_start_ms": 2321.0393999979715,
+        "buffer_start_ms": 2638.0433999947854,
+        "buffer_min_margin_ms": 1739.2585000014512,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    },
+    {
+      "case": "female_long",
+      "voice": "female",
+      "text": "你别急着走呀。我刚才声音大了点，咱们好好说嘛。",
+      "utc_started": "2026-11-14T14:29:22.951232+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:29:25.555964+00:00",
+      "complete_ms": 2604.678399999102,
+      "chunks": [
+        {
+          "received_ms": 1614.5789999936824,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 1676.0436999975354,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 1737.0931999976165,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 1847.3381000003428,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 1949.3396999969264,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 2053.427399994689,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 2161.2977999975556,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 2291.7315999948187,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 2423.0210999958217,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        },
+        {
+          "received_ms": 2540.3487000003224,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 211200
+        },
+        {
+          "received_ms": 2595.824399999401,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 241920
+        },
+        {
+          "received_ms": 2603.812099994684,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 249600
+        }
+      ],
+      "chunk_count": 12,
+      "first_chunk_ms": 1614.5789999936824,
+      "delivered_audio_seconds": 5.28,
+      "generation_rtf": 0.49331030303013296,
+      "pcm_sha256": "487bb770bb810f6a1486006c368185d8e38f658a360e4b9c66c4c8105b6771e2",
+      "buffer_simulation": {
+        "duration_s": 5.28,
+        "retrospective_uninterrupted_start_ms": 1614.5789999936824,
+        "buffer_start_ms": 1949.3396999969264,
+        "buffer_min_margin_ms": 1735.9123000022375,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false
+    }
+  ],
+  "utterances": [
+    {
+      "case": "male_short",
+      "voice": "male",
+      "text": "你先听我说完，我刚才真没看见你。",
+      "utc_started": "2026-11-14T14:29:30.803082+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:29:33.972307+00:00",
+      "complete_ms": 3169.176499999594,
+      "chunks": [
+        {
+          "received_ms": 2344.717699998,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 2398.9908000003197,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 2460.247099996195,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 2562.6514999967185,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 2666.316499999084,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 2768.392899997707,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 2873.4137999999803,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 3014.793099995586,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 3164.822799997637,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        }
+      ],
+      "chunk_count": 9,
+      "first_chunk_ms": 2344.717699998,
+      "delivered_audio_seconds": 4.4,
+      "generation_rtf": 0.720267386363544,
+      "pcm_sha256": "8a38f7b92898ae2faa696704da1584759b3345137c3d495a43259fb1fb6695a9",
+      "buffer_simulation": {
+        "duration_s": 4.4,
+        "retrospective_uninterrupted_start_ms": 2344.717699998,
+        "buffer_start_ms": 2666.316499999084,
+        "buffer_min_margin_ms": 1737.9236000013768,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false,
+      "cycle": 0,
+      "scheduled_at_seconds": 0.0,
+      "started_at_seconds": 0.00020529999892460182,
+      "start_late_ms": 0.20529999892460182
+    },
+    {
+      "case": "female_short",
+      "voice": "female",
+      "text": "我就在旁边站着呢，你怎么能没看见呀？",
+      "utc_started": "2026-11-14T14:29:35.417014+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:29:37.790900+00:00",
+      "complete_ms": 2373.8607999985106,
+      "chunks": [
+        {
+          "received_ms": 1758.7825000009616,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 1849.0038000018103,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 1906.9597000052454,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 2011.9865000015125,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 2115.9789000012097,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 2215.382700000191,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 2328.1763999984832,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 2373.097700001381,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 149760
+        }
+      ],
+      "chunk_count": 8,
+      "first_chunk_ms": 1758.7825000009616,
+      "delivered_audio_seconds": 3.28,
+      "generation_rtf": 0.7237380487800338,
+      "pcm_sha256": "21fd5635507b76d3db1e762afa2fec5ae5e7a364c9a65d18e94acf3ba458e1c3",
+      "buffer_simulation": {
+        "duration_s": 3.2800000000000007,
+        "retrospective_uninterrupted_start_ms": 1769.0038000018103,
+        "buffer_start_ms": 2115.9789000012097,
+        "buffer_min_margin_ms": 1740.5962000010188,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false,
+      "cycle": 0,
+      "scheduled_at_seconds": 4.6000000000000005,
+      "started_at_seconds": 4.6141298999937135,
+      "start_late_ms": 14.129899993712947
+    },
+    {
+      "case": "male_long",
+      "voice": "male",
+      "text": "刚才是我没看清楚。你拿好东西，我把车挪开，别挡着大家。",
+      "utc_started": "2026-11-14T14:29:38.896229+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:29:41.360730+00:00",
+      "complete_ms": 2464.463300006173,
+      "chunks": [
+        {
+          "received_ms": 1222.3296000011032,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 1269.8805000036373,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 1326.844400005939,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 1432.4339000013424,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 1534.4275000024936,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 1634.351600005175,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 1741.5578000000096,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 1871.1305000033462,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 2007.5361000053817,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        },
+        {
+          "received_ms": 2181.2891000008676,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 211200
+        },
+        {
+          "received_ms": 2354.2622000022675,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 241920
+        },
+        {
+          "received_ms": 2453.7175000004936,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 272640
+        },
+        {
+          "received_ms": 2463.6178000000655,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 288000
+        }
+      ],
+      "chunk_count": 13,
+      "first_chunk_ms": 1222.3296000011032,
+      "delivered_audio_seconds": 6.16,
+      "generation_rtf": 0.40007521103996313,
+      "pcm_sha256": "1a0a3710635f799a294ebc726e127bfc01f26eeb4faa1104971eda3f2f8e2586",
+      "buffer_simulation": {
+        "duration_s": 6.16,
+        "retrospective_uninterrupted_start_ms": 1222.3296000011032,
+        "buffer_start_ms": 1534.4275000024936,
+        "buffer_min_margin_ms": 1740.0758999973189,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false,
+      "cycle": 0,
+      "scheduled_at_seconds": 8.08,
+      "started_at_seconds": 8.093343399996229,
+      "start_late_ms": 13.34339999622891
+    },
+    {
+      "case": "female_long",
+      "voice": "female",
+      "text": "你别急着走呀。我刚才声音大了点，咱们好好说嘛。",
+      "utc_started": "2026-11-14T14:29:45.253396+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:29:47.780149+00:00",
+      "complete_ms": 2526.718399996753,
+      "chunks": [
+        {
+          "received_ms": 1415.652499999851,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 1467.9747999980464,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 1530.3515999985393,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 1639.0095000024303,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 1778.0952999964938,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 1962.4783999970532,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 2095.7202999998117,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 2234.3097999983,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 2352.2467000002507,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        },
+        {
+          "received_ms": 2468.372900002578,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 211200
+        },
+        {
+          "received_ms": 2519.323300002725,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 241920
+        },
+        {
+          "received_ms": 2525.619899999583,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 249600
+        }
+      ],
+      "chunk_count": 12,
+      "first_chunk_ms": 1415.652499999851,
+      "delivered_audio_seconds": 5.28,
+      "generation_rtf": 0.4785451515145365,
+      "pcm_sha256": "487bb770bb810f6a1486006c368185d8e38f658a360e4b9c66c4c8105b6771e2",
+      "buffer_simulation": {
+        "duration_s": 5.28,
+        "retrospective_uninterrupted_start_ms": 1415.652499999851,
+        "buffer_start_ms": 1778.0952999964938,
+        "buffer_min_margin_ms": 1655.6168999994409,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false,
+      "cycle": 0,
+      "scheduled_at_seconds": 14.440000000000001,
+      "started_at_seconds": 14.45050849999825,
+      "start_late_ms": 10.508499998248766
+    },
+    {
+      "case": "male_short",
+      "voice": "male",
+      "text": "你先听我说完，我刚才真没看见你。",
+      "utc_started": "2026-11-14T14:29:50.737140+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:29:53.081839+00:00",
+      "complete_ms": 2344.660799994017,
+      "chunks": [
+        {
+          "received_ms": 1489.681599996402,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 1538.8965999954962,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 1597.7439999987837,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 1719.2603000003146,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 1819.7664999970584,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 1924.7685999944224,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 2047.5852999952622,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 2174.0062999961083,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 2339.55359999527,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        }
+      ],
+      "chunk_count": 9,
+      "first_chunk_ms": 1489.681599996402,
+      "delivered_audio_seconds": 4.4,
+      "generation_rtf": 0.5328774545440947,
+      "pcm_sha256": "8a38f7b92898ae2faa696704da1584759b3345137c3d495a43259fb1fb6695a9",
+      "buffer_simulation": {
+        "duration_s": 4.4,
+        "retrospective_uninterrupted_start_ms": 1489.681599996402,
+        "buffer_start_ms": 1819.7664999970584,
+        "buffer_min_margin_ms": 1734.9979000026362,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false,
+      "cycle": 1,
+      "scheduled_at_seconds": 19.92,
+      "started_at_seconds": 19.934257299995807,
+      "start_late_ms": 14.257299995804829
+    },
+    {
+      "case": "female_short",
+      "voice": "female",
+      "text": "我就在旁边站着呢，你怎么能没看见呀？",
+      "utc_started": "2026-11-14T14:29:55.334260+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:29:57.595403+00:00",
+      "complete_ms": 2261.093699999037,
+      "chunks": [
+        {
+          "received_ms": 1545.9780000019236,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 1636.2213000029442,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 1753.3050999991246,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 1871.0829000046942,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 1978.5703000015928,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 2082.6330999989295,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 2204.2633000019123,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 2260.0653000044986,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 149760
+        }
+      ],
+      "chunk_count": 8,
+      "first_chunk_ms": 1545.9780000019236,
+      "delivered_audio_seconds": 3.28,
+      "generation_rtf": 0.6893578353655602,
+      "pcm_sha256": "21fd5635507b76d3db1e762afa2fec5ae5e7a364c9a65d18e94acf3ba458e1c3",
+      "buffer_simulation": {
+        "duration_s": 3.2800000000000007,
+        "retrospective_uninterrupted_start_ms": 1556.2213000029442,
+        "buffer_start_ms": 1978.5703000015928,
+        "buffer_min_margin_ms": 1735.9372000026635,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false,
+      "cycle": 1,
+      "scheduled_at_seconds": 24.520000000000003,
+      "started_at_seconds": 24.531369500000437,
+      "start_late_ms": 11.36950000043413
+    },
+    {
+      "case": "male_long",
+      "voice": "male",
+      "text": "刚才是我没看清楚。你拿好东西，我把车挪开，别挡着大家。",
+      "utc_started": "2026-11-14T14:29:58.811049+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:30:01.499950+00:00",
+      "complete_ms": 2688.851599996269,
+      "chunks": [
+        {
+          "received_ms": 1429.794399999082,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 1490.9012999996776,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 1547.435399996175,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 1670.7925999944564,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 1775.724099999934,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 1874.9766999972053,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 1991.0891999970772,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 2149.358700000448,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 2337.765099997341,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        },
+        {
+          "received_ms": 2489.920499996515,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 211200
+        },
+        {
+          "received_ms": 2593.429100001231,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 241920
+        },
+        {
+          "received_ms": 2680.732699998771,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 272640
+        },
+        {
+          "received_ms": 2688.021599999047,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 288000
+        }
+      ],
+      "chunk_count": 13,
+      "first_chunk_ms": 1429.794399999082,
+      "delivered_audio_seconds": 6.16,
+      "generation_rtf": 0.43650188311627747,
+      "pcm_sha256": "1a0a3710635f799a294ebc726e127bfc01f26eeb4faa1104971eda3f2f8e2586",
+      "buffer_simulation": {
+        "duration_s": 6.16,
+        "retrospective_uninterrupted_start_ms": 1429.794399999082,
+        "buffer_start_ms": 1775.724099999934,
+        "buffer_min_margin_ms": 1740.747400002729,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false,
+      "cycle": 1,
+      "scheduled_at_seconds": 28.000000000000004,
+      "started_at_seconds": 28.00817009999446,
+      "start_late_ms": 8.170099994455171
+    },
+    {
+      "case": "female_long",
+      "voice": "female",
+      "text": "你别急着走呀。我刚才声音大了点，咱们好好说嘛。",
+      "utc_started": "2026-11-14T14:30:05.173486+00:00",
+      "status": "completed",
+      "utc_finished": "2026-11-14T14:30:07.685889+00:00",
+      "complete_ms": 2512.374699996144,
+      "chunks": [
+        {
+          "received_ms": 1373.2794999959879,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 0
+        },
+        {
+          "received_ms": 1432.4378999954206,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 3840
+        },
+        {
+          "received_ms": 1542.630999996618,
+          "duration_s": 0.32,
+          "bytes": 15360,
+          "offset_bytes": 11520
+        },
+        {
+          "received_ms": 1654.1260999947554,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 26880
+        },
+        {
+          "received_ms": 1773.9728999949875,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 57600
+        },
+        {
+          "received_ms": 1910.426099995675,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 88320
+        },
+        {
+          "received_ms": 2086.8056999970577,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 119040
+        },
+        {
+          "received_ms": 2213.9992999946116,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 149760
+        },
+        {
+          "received_ms": 2340.4994000011357,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 180480
+        },
+        {
+          "received_ms": 2456.4675000001444,
+          "duration_s": 0.64,
+          "bytes": 30720,
+          "offset_bytes": 211200
+        },
+        {
+          "received_ms": 2505.907399994612,
+          "duration_s": 0.16,
+          "bytes": 7680,
+          "offset_bytes": 241920
+        },
+        {
+          "received_ms": 2511.739099994884,
+          "duration_s": 0.08,
+          "bytes": 3840,
+          "offset_bytes": 249600
+        }
+      ],
+      "chunk_count": 12,
+      "first_chunk_ms": 1373.2794999959879,
+      "delivered_audio_seconds": 5.28,
+      "generation_rtf": 0.47582854166593636,
+      "pcm_sha256": "487bb770bb810f6a1486006c368185d8e38f658a360e4b9c66c4c8105b6771e2",
+      "buffer_simulation": {
+        "duration_s": 5.28,
+        "retrospective_uninterrupted_start_ms": 1373.2794999959879,
+        "buffer_start_ms": 1773.9728999949875,
+        "buffer_min_margin_ms": 1703.5467999993127,
+        "buffer_max_missing_ms": 0.0,
+        "buffer_extra_delay_needed_ms": 0.0,
+        "simulated_resume_buffer_s": 0.32,
+        "simulated_stalls": [],
+        "simulated_total_stall_ms": 0,
+        "simulated_max_stall_ms": 0.0,
+        "simulation_only_not_ue_playback": true,
+        "start_buffer_s": 1.28
+      },
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false,
+      "cycle": 1,
+      "scheduled_at_seconds": 34.36000000000001,
+      "started_at_seconds": 34.370600499998545,
+      "start_late_ms": 10.600499998538737
+    },
+    {
+      "case": "male_short",
+      "voice": "male",
+      "text": "你先听我说完，我刚才真没看见你。",
+      "utc_started": "2026-11-14T14:30:10.644411+00:00",
+      "status": "cancelled",
+      "error": "cancelled",
+      "utc_finished": "2026-11-14T14:30:10.853683+00:00",
+      "complete_ms": 209.27150000352412,
+      "chunks": [],
+      "chunk_count": 0,
+      "first_chunk_ms": null,
+      "delivered_audio_seconds": 0.0,
+      "generation_rtf": null,
+      "pcm_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "buffer_simulation": null,
+      "transport": "direct_worker_callback",
+      "ue_playback_measured": false,
+      "cycle": 2,
+      "scheduled_at_seconds": 39.84,
+      "started_at_seconds": 39.841529999997874,
+      "start_late_ms": 1.5299999978708456
+    }
+  ],
+  "ue_audio_measured": false
+}

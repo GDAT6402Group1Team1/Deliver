@@ -42,7 +42,7 @@ namespace
 
 int32 DeliveryNpcVoice::GetDecodedPcmBytes(int32 SourcePcmBytes, int32 SampleRate)
 {
-    if (!IsSampleRateSupported(SampleRate) || SourcePcmBytes <= 0 || SourcePcmBytes > MaxPcmBytes || SourcePcmBytes % 2)
+    if (!IsSampleRateSupported(SampleRate) || SourcePcmBytes <= 0 || SourcePcmBytes > GetMaxPcmBytes(SampleRate) || SourcePcmBytes % 2)
     {
         return 0;
     }
@@ -148,7 +148,7 @@ bool FDeliveryNpcVoiceStreamEncoder::Append(const TArray<uint8>& Pcm, TArray<uin
 {
     OutEncoded.Reset(); OutError.Reset();
     if (!bStarted || bFinished || bFailed || Pcm.IsEmpty() || Pcm.Num() % 2 ||
-        Pcm.Num() > DeliveryNpcVoice::MaxPcmBytes - SourcePcmBytes)
+        Pcm.Num() > DeliveryNpcVoice::GetMaxPcmBytes(SampleRate) - SourcePcmBytes)
         return Fail(TEXT("Invalid NPC voice stream PCM"), OutEncoded, OutError);
     SourcePcmBytes += Pcm.Num();
     PendingPcm.Append(Pcm);
@@ -292,7 +292,7 @@ bool FDeliveryNpcVoiceDecoder::TryDecodeAvailable(const TArray<uint8>& Encoded, 
         const bool bValidLength = Version == DeliveryNpcVoice::FormatVersion
             ? ActualBytes == FMath::Min(PacketPcmBytes, TotalPcmBytes - DecodedPcmBytes)
             : !bSawPartialPacket && ActualBytes > 0 && ActualBytes <= PacketPcmBytes && ActualBytes % 2 == 0 &&
-              ActualBytes <= DeliveryNpcVoice::MaxDecodedPcmBytes - DecodedPcmBytes;
+              ActualBytes <= DeliveryNpcVoice::GetDecodedPcmBytes(DeliveryNpcVoice::GetMaxPcmBytes(SampleRate), SampleRate) - DecodedPcmBytes;
         if (PacketBytes < 4 || PacketBytes > MaxPacketBytes || Read16(Header + 4) != PacketIndex ||
             !bValidLength)
         {

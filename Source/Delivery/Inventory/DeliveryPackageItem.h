@@ -22,6 +22,9 @@ class DELIVERY_API ADeliveryPackageItem : public ADeliveryHandheldItem
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
     virtual bool CanPickup(APawn *Interactor, bool bCheckTaskAvailability) const override;
     virtual bool Pickup(APawn *Interactor) override;
+    // 归属复制和槽位复制可能先后到达，始终按物品当前Owner选择携带表现
+    virtual void RefreshCarrierPresentation() override;
+    virtual void OnRep_Owner() override;
 
     UFUNCTION(BlueprintPure, Category = "Delivery|Caterpillar")
     bool ContainsCaterpillar() const { return bContainsCaterpillar; }
@@ -45,6 +48,7 @@ class DELIVERY_API ADeliveryPackageItem : public ADeliveryHandheldItem
     TObjectPtr<UStaticMeshComponent> CaterpillarVisual;
 
 private:
+    bool bHadCarrierPresentation = false;
     // 状态属于这份外卖，丢弃、换手和装车都保留；销毁后不污染下一份外卖
     UPROPERTY(ReplicatedUsing = OnRep_Caterpillar)
     bool bContainsCaterpillar = false;

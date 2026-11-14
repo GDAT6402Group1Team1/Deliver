@@ -1,0 +1,452 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-14T15:32:46.989150+00:00",
+  "scope": "只读提取两次统一构建日志、四份根任务修复文件与当前DLL/target身份；没有启动编译、测试、模型或UI",
+  "builds": [
+    {
+      "log": {
+        "path": "Saved/Logs/DeliveryOpenMicBuild.log",
+        "bytes": 27994,
+        "sha256": "a5eb0de2a63f1c3bde59381202da086f1ad2c8dfb972c4166ec165b486a9bd6d",
+        "last_write_utc": "2026-11-14T15:26:27.818858+00:00"
+      },
+      "command_recorded_in_log": "Running UnrealBuildTool: dotnet \"..\\..\\Engine\\Binaries\\DotNET\\UnrealBuildTool\\UnrealBuildTool.dll\" DeliveryEditor Win64 Development -Project=D:/Udev/Delivery/Delivery.uproject -WaitMutex -NoHotReloadFromIDE -MaxParallelActions=2",
+      "result": {
+        "line": 348,
+        "text": "Result: Failed (OtherCompilationError)"
+      },
+      "total_execution_seconds": 267.35,
+      "uba_execution_seconds": 258.55,
+      "planned_actions": 124,
+      "reported_action_lines": 120,
+      "last_reported_action": {
+        "line": 344,
+        "text": "[120/124] Link [x64] UnrealEditor-DeliveryTuning.lib"
+      },
+      "compiler": "Using Visual Studio 14.44.35228 toolchain (C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207) and Windows 10.0.22621.0 SDK (C:\\Program Files (x86)\\Windows Kits\\10).",
+      "warnings": [],
+      "errors": [
+        {
+          "line": 64,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\AI\\Conversation\\Tests\\DeliveryConversationTurnTests.cpp(399,23): error C2660: “UDeliveryConversationComponent::ServerBeginVoice_Implementation”: 函数不接受 3 个参数"
+        },
+        {
+          "line": 74,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\AI\\Conversation\\DeliveryConversationVoiceTarget.cpp(45,21): error C3535: 无法推导“const auto *”的类型(依据“TObjectPtr<APawn>”)"
+        },
+        {
+          "line": 77,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\AI\\Conversation\\DeliveryConversationVoiceTarget.cpp(45,21): error C2440: “初始化”: 无法从“TObjectPtr<APawn>”转换为“const <error type> *”"
+        },
+        {
+          "line": 79,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\AI\\Conversation\\DeliveryConversationVoiceTarget.cpp(46,60): error C2664: “bool IsValid(const UObject *)”: 无法将参数 1 从“const <error type> *”转换为“const UObject *”"
+        },
+        {
+          "line": 91,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\AI\\Conversation\\DeliveryConversationVoiceTarget.cpp(48,62): error C2440: “const_cast”: 无法从“const <error type> *”转换为“APawn *”"
+        },
+        {
+          "line": 95,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\AI\\Conversation\\DeliveryConversationVoiceTarget.cpp(48,21): error C3536: “Character”: 初始化之前无法使用"
+        },
+        {
+          "line": 98,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\AI\\Conversation\\DeliveryConversationVoiceTarget.cpp(49,68): error C3536: “ASC”: 初始化之前无法使用"
+        },
+        {
+          "line": 132,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\AI\\Tests\\DeliveryNpcPlayerInterruptionTests.cpp(201,53): error C2039: \"Duration\": 不是 \"FDeliveryNpcCandidate\" 的成员"
+        },
+        {
+          "line": 154,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\Player\\DeliveryPlayerController.cpp(250,32): error C3535: 无法推导“const auto *”的类型(依据“const TObjectPtr<UGameViewportClient>”)"
+        },
+        {
+          "line": 157,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\Player\\DeliveryPlayerController.cpp(250,32): error C2440: “初始化”: 无法从“const TObjectPtr<UGameViewportClient>”转换为“const <error type> *”"
+        },
+        {
+          "line": 159,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\Player\\DeliveryPlayerController.cpp(251,16): error C2737: “Viewport”: 必须初始化 const 对象"
+        },
+        {
+          "line": 162,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\Player\\DeliveryPlayerController.cpp(252,10): error C3536: “Viewport”: 初始化之前无法使用"
+        },
+        {
+          "line": 165,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\Player\\DeliveryPlayerController.cpp(254,16): error C2737: “Window”: 必须初始化 const 对象"
+        },
+        {
+          "line": 168,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\Player\\DeliveryPlayerController.cpp(255,31): error C3536: “Window”: 初始化之前无法使用"
+        },
+        {
+          "line": 171,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\Player\\DeliveryPlayerController.cpp(255,16): error C2737: “NativeWindow”: 必须初始化 const 对象"
+        },
+        {
+          "line": 174,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\Player\\DeliveryPlayerController.cpp(258,39): error C2446: “==”: 没有从“TSharedPtr<ObjectType,ESPMode::ThreadSafe>”到“<error type>”的转换"
+        },
+        {
+          "line": 184,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\Player\\DeliveryPlayerController.cpp(259,9): error C3536: “NativeWindow”: 初始化之前无法使用"
+        },
+        {
+          "line": 187,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\Player\\DeliveryPlayerController.cpp(260,39): error C2446: “==”: 没有从“<error type>”到“TSharedPtr<ObjectType,ESPMode::ThreadSafe>”的转换"
+        },
+        {
+          "line": 310,
+          "text": "D:\\Udev\\Delivery\\Source\\Delivery\\Player\\DeliveryPlayerController.cpp(280,15): error C4458: “Character”的声明隐藏了类成员"
+        }
+      ],
+      "error_line_count": 19,
+      "warning_line_count": 0,
+      "compile_lines": {
+        "DeliveryNpcAgentComponent.cpp": [
+          {
+            "line": 120,
+            "text": "[64/124] Compile [x64] DeliveryNpcAgentComponent.cpp"
+          }
+        ],
+        "BTTask_DeliveryExecuteNpcAction.cpp": [
+          {
+            "line": 22,
+            "text": "[2/124] Compile [x64] BTTask_DeliveryExecuteNpcAction.cpp"
+          }
+        ],
+        "DeliveryNpcPlayerInterruptionTests.cpp": [
+          {
+            "line": 131,
+            "text": "[75/124] Compile [x64] DeliveryNpcPlayerInterruptionTests.cpp"
+          }
+        ],
+        "DeliveryNpcStrikeNavigationTests.cpp": [
+          {
+            "line": 147,
+            "text": "[85/124] Compile [x64] DeliveryNpcStrikeNavigationTests.cpp"
+          }
+        ]
+      }
+    },
+    {
+      "log": {
+        "path": "Saved/Logs/DeliveryOpenMicBuild2.log",
+        "bytes": 8078,
+        "sha256": "76079210d8c3076dcd5aa92930196e52cbed70882b20c5f8470b639d53de9791",
+        "last_write_utc": "2026-11-14T15:30:23.060769+00:00"
+      },
+      "command_recorded_in_log": "Running UnrealBuildTool: dotnet \"..\\..\\Engine\\Binaries\\DotNET\\UnrealBuildTool\\UnrealBuildTool.dll\" DeliveryEditor Win64 Development -Project=D:/Udev/Delivery/Delivery.uproject -WaitMutex -NoHotReloadFromIDE -MaxParallelActions=2",
+      "result": {
+        "line": 55,
+        "text": "Result: Succeeded"
+      },
+      "total_execution_seconds": 76.26,
+      "uba_execution_seconds": 67.97,
+      "planned_actions": 29,
+      "reported_action_lines": 29,
+      "last_reported_action": {
+        "line": 50,
+        "text": "[29/29] WriteMetadata DeliveryEditor.target [NoUba]"
+      },
+      "compiler": "Using Visual Studio 14.44.35228 toolchain (C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207) and Windows 10.0.22621.0 SDK (C:\\Program Files (x86)\\Windows Kits\\10).",
+      "warnings": [],
+      "errors": [],
+      "error_line_count": 0,
+      "warning_line_count": 0,
+      "compile_lines": {
+        "DeliveryNpcAgentComponent.cpp": [
+          {
+            "line": 30,
+            "text": "[11/29] Compile [x64] DeliveryNpcAgentComponent.cpp"
+          }
+        ],
+        "BTTask_DeliveryExecuteNpcAction.cpp": [],
+        "DeliveryNpcPlayerInterruptionTests.cpp": [
+          {
+            "line": 31,
+            "text": "[12/29] Compile [x64] DeliveryNpcPlayerInterruptionTests.cpp"
+          }
+        ],
+        "DeliveryNpcStrikeNavigationTests.cpp": []
+      }
+    }
+  ],
+  "failure_summary": {
+    "root_test_error": "首次 DeliveryNpcPlayerInterruptionTests.cpp:201 使用不存在的 FDeliveryNpcCandidate::Duration",
+    "root_test_fix_now": "Reply.Duration=DeliveryNpc::CandidateDuration(Wait->Action)",
+    "other_interface_errors": [
+      "DeliveryConversationTurnTests: ServerBeginVoice_Implementation 参数数量不匹配",
+      "DeliveryConversationVoiceTarget: TObjectPtr 与 auto* 推导不匹配及后续错误",
+      "DeliveryPlayerController: Viewport TObjectPtr 推导和后续 Slate 接口错误；局部 Character 名称隐藏父类成员"
+    ],
+    "note": "保留首轮失败，不把第二次增量成功写为首轮一次通过"
+  },
+  "source_snapshot_after_success": [
+    {
+      "path": "Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp",
+      "bytes": 105418,
+      "sha256": "ea334b9b0243d7942ddbd6ceb6156f5d313aa706cbb503b557d99afbd309381c",
+      "last_write_utc": "2026-11-14T15:07:33.938750+00:00",
+      "modified_after_success_log": false,
+      "compiled_in_builds": [
+        1,
+        2
+      ]
+    },
+    {
+      "path": "Source/Delivery/AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.cpp",
+      "bytes": 20131,
+      "sha256": "1729f4386612acb685ff51c1e0d5b378c2c5398e0bf97377f525902d54b3d732",
+      "last_write_utc": "2026-11-14T15:05:58.373648+00:00",
+      "modified_after_success_log": false,
+      "compiled_in_builds": [
+        1
+      ]
+    },
+    {
+      "path": "Source/Delivery/AI/Tests/DeliveryNpcPlayerInterruptionTests.cpp",
+      "bytes": 15492,
+      "sha256": "0d9ab8497b84b362de3de6a155c824fc778d202bcfe5be272bcbd122ab4f41d0",
+      "last_write_utc": "2026-11-14T15:25:06.280613+00:00",
+      "modified_after_success_log": false,
+      "compiled_in_builds": [
+        1,
+        2
+      ]
+    },
+    {
+      "path": "Source/Delivery/AI/Tests/DeliveryNpcStrikeNavigationTests.cpp",
+      "bytes": 26893,
+      "sha256": "c01c733078ef42e74f27fbe87181402de30ee37cbd37ed3c4e2a5262c184830b",
+      "last_write_utc": "2026-11-14T15:05:58.378823+00:00",
+      "modified_after_success_log": false,
+      "compiled_in_builds": [
+        1
+      ]
+    }
+  ],
+  "target": {
+    "file": {
+      "path": "Binaries/Win64/DeliveryEditor.target",
+      "bytes": 1088158,
+      "sha256": "0cc0ecd1d06931948c39021cc0906297ce82f44cb59519bded882db17bc294f6",
+      "last_write_utc": "2026-11-14T15:30:22.770666+00:00"
+    },
+    "identity": {
+      "TargetName": "DeliveryEditor",
+      "Platform": "Win64",
+      "Configuration": "Development",
+      "BuildSettingsVersion": "V7",
+      "TargetBuildEnvironment": "Shared",
+      "TargetType": "Editor",
+      "Architecture": "x64",
+      "Project": "../../Delivery.uproject",
+      "Launch": "$(EngineDir)/Binaries/Win64/UnrealEditor.exe",
+      "LaunchCmd": "$(EngineDir)/Binaries/Win64/UnrealEditor-Cmd.exe",
+      "Version": {
+        "MajorVersion": 5,
+        "MinorVersion": 8,
+        "PatchVersion": 1,
+        "Changelist": 56057345,
+        "CompatibleChangelist": 55116800,
+        "IsLicenseeVersion": 0,
+        "IsPromotedBuild": 0,
+        "BranchName": "++UE5+Release-5.8",
+        "BuildId": "55116800"
+      }
+    },
+    "module_metadata": [
+      {
+        "path": "Binaries/Win64/UnrealEditor.modules",
+        "bytes": 94,
+        "sha256": "1a29d9d499cdc0c814e1441ffde18d92971e34243fab8fef36304195731c6913",
+        "last_write_utc": "2026-11-14T15:30:22.748210+00:00",
+        "content": {
+          "BuildId": "55116800",
+          "Modules": {
+            "Delivery": "UnrealEditor-Delivery.dll"
+          }
+        }
+      },
+      {
+        "path": "Plugins/DeliveryTuning/Binaries/Win64/UnrealEditor.modules",
+        "bytes": 106,
+        "sha256": "7409a9527a419025736967f04e0d83badaa23d560cb74b20b4fa0e9e8baa8b1c",
+        "last_write_utc": "2026-11-14T15:30:22.749219+00:00",
+        "content": {
+          "BuildId": "55116800",
+          "Modules": {
+            "DeliveryTuning": "UnrealEditor-DeliveryTuning.dll"
+          }
+        }
+      }
+    ],
+    "module_buildids_match_target": true
+  },
+  "dll_outputs": [
+    {
+      "path": "Binaries/Win64/UnrealEditor-Delivery.dll",
+      "bytes": 7670272,
+      "sha256": "0320379a6eda30dbf5971da4b5cb838aec19cd9e5743f7645452dbf085dda09b",
+      "last_write_utc": "2026-11-14T15:30:22.233556+00:00",
+      "pe_machine": "0x8664",
+      "pe_machine_name": "AMD64",
+      "pe_coff_timestamp_raw": 0,
+      "listed_in_target_products": true
+    },
+    {
+      "path": "Plugins/DeliveryTuning/Binaries/Win64/UnrealEditor-DeliveryTuning.dll",
+      "bytes": 1312768,
+      "sha256": "d43eb4487b418498ed2d70d03e6c143f9c6e08b3425c2c305afb7310b10767cc",
+      "last_write_utc": "2026-11-14T15:30:21.788072+00:00",
+      "pe_machine": "0x8664",
+      "pe_machine_name": "AMD64",
+      "pe_coff_timestamp_raw": 0,
+      "listed_in_target_products": true
+    }
+  ],
+  "validation_status": {
+    "second_build_succeeded": true,
+    "all_four_sources_modified_before_success_log": true,
+    "automation_results_included": true,
+    "actual_gameplay_verified_by_this_record": false,
+    "root_patch_automation_tests_passed": 3,
+    "whole_automation_batch_passed": false
+  },
+  "limits": [
+    "源码哈希是在第二次成功后从当前工作区取得；没有首轮编译时四文件的独立快照，因此不伪造首轮源码哈希",
+    "BT任务与StrikeNavigation测试在首次构建编译，第二次增量链接使用其已生成对象；不称第二次逐个重编了这四份源码",
+    "两份日志均未出现warning级诊断；这仅描述这两份日志，不宣称整个项目没有任何警告",
+    "DLL哈希和target身份不能代替自动化或真实输入/追赶验证",
+    "PE COFF timestamp可能是确定性构建标识，只保留原值，不当作UTC时间",
+    "上述DLL/target和四源码保留15:30构建快照；后续UI增量构建可能改变DLL，不用后续文件覆盖本次身份"
+  ],
+  "updated_utc": "2026-11-14T15:33:22.511198+00:00",
+  "automation_followup": {
+    "log": {
+      "path": "Saved/Logs/DeliveryOpenMicTests.log",
+      "bytes": 395685,
+      "sha256": "1493e40c3c87521453e99a1b9f137a61749ff64e50afea3cb78186a2ab122dae"
+    },
+    "command_from_log": "LogInit: Command Line: -Unattended -NoSplash -NullRHI -NoSound -NoLiveCoding -ExecCmds=\"Automation RunTests Delivery.Speech.+Delivery.Systems.InputLifecycle+Delivery.Systems.MoveInputSafety+Delivery.AI.VoiceLink+Delivery.AI.ConversationFeedback+Delivery.AI.Fight+Delivery.AI.StrikeNavigation+Delivery.AI.PlayerInterruption+Delivery.AI.SentencePlayback+Delivery.AI.SentenceAudioProtocol\" -TestExit=\"Automation Test Queue Empty\" -ReportExportPath=D:/Udev/Delivery/Saved/Automation/DeliveryOpenMic -abslog=D:/Udev/Delivery/Saved/Logs/DeliveryOpenMicTests.log -UTF8Output",
+    "batch_counts": {
+      "completed": 27,
+      "success": 25,
+      "failed": 2
+    },
+    "root_patch_tests": [
+      {
+        "path": "Delivery.AI.Fight",
+        "result": "Success",
+        "line": 2354,
+        "text": "[2026.11.14-15.32.03:988][555]LogAutomationController: Display: Test Completed. Result={Success} Name={Fight} Path={Delivery.AI.Fight}",
+        "reported_events": [
+          {
+            "line": 2356,
+            "text": "[2026.11.14-15.32.03:988][555]LogAutomationController: Warning: LogTemp: NpcSpeech text_only turn=3C29981E4E574BA6C8A8F19600401877 reason=NoSynthesizedAudio [log] "
+          },
+          {
+            "line": 2357,
+            "text": "[2026.11.14-15.32.03:988][555]LogAutomationController: Warning: LogDelivery: [Voice] 音频生成器尚未就绪，跳过字符 0 [log] "
+          },
+          {
+            "line": 2358,
+            "text": "[2026.11.14-15.32.03:988][555]LogAutomationController: Warning: LogDelivery: [Voice] 音频生成器尚未就绪，跳过字符 2 [log] "
+          },
+          {
+            "line": 2359,
+            "text": "[2026.11.14-15.32.03:988][555]LogAutomationController: Warning: LogDelivery: [Voice] 音频生成器尚未就绪，跳过字符 3 [log] "
+          },
+          {
+            "line": 2360,
+            "text": "[2026.11.14-15.32.03:988][555]LogAutomationController: Warning: LogDelivery: [Voice] 音频生成器尚未就绪，跳过字符 4 [log] "
+          },
+          {
+            "line": 2361,
+            "text": "[2026.11.14-15.32.03:988][555]LogAutomationController: Warning: LogDelivery: [Voice] 音频生成器尚未就绪，跳过字符 5 [log] "
+          },
+          {
+            "line": 2362,
+            "text": "[2026.11.14-15.32.03:988][555]LogAutomationController: Warning: LogDelivery: [Voice] 音频生成器尚未就绪，跳过字符 6 [log] "
+          },
+          {
+            "line": 2363,
+            "text": "[2026.11.14-15.32.03:988][555]LogAutomationController: Warning: LogDelivery: [Voice] 音频生成器尚未就绪，跳过字符 7 [log] "
+          }
+        ]
+      },
+      {
+        "path": "Delivery.AI.PlayerInterruption",
+        "result": "Success",
+        "line": 2402,
+        "text": "[2026.11.14-15.32.04:022][557]LogAutomationController: Display: Test Completed. Result={Success} Name={PlayerInterruption} Path={Delivery.AI.PlayerInterruption}",
+        "reported_events": []
+      },
+      {
+        "path": "Delivery.AI.StrikeNavigation",
+        "result": "Success",
+        "line": 2585,
+        "text": "[2026.11.14-15.32.04:660][842]LogAutomationController: Display: Test Completed. Result={Success} Name={StrikeNavigation} Path={Delivery.AI.StrikeNavigation}",
+        "reported_events": [
+          {
+            "line": 2587,
+            "text": "[2026.11.14-15.32.04:660][842]LogAutomationController: NavigationDiag BeforeWall actorA=X=0.000 Y=0.000 Z=72.150 feetA=X=0.000 Y=0.000 Z=2.150 modeA=1 actorB=X=400.000 Y=0.000 Z=72.150 feetB=X=400.000 Y=0.000 Z=2.150 modeB=1 projectA=1:X=-0.000 Y=-0.000 Z=10.000 projectB=1:X=400.000 Y=-0.000 Z=10.000 capsuleNavA=0 capsuleNavB=0 floorRegistered=1 floorNav=1"
+          },
+          {
+            "line": 2588,
+            "text": "[2026.11.14-15.32.04:660][842]LogAutomationController: NavigationDiag BeforeWall queryStart=X=0.000 Y=0.000 Z=2.150 queryEnd=X=400.000 Y=0.000 Z=2.150 result=3 validPath=1 partial=0 points=2 first=X=-0.000 Y=-0.000 Z=10.000 last=X=400.000 Y=-0.000 Z=10.000"
+          },
+          {
+            "line": 2589,
+            "text": "[2026.11.14-15.32.04:660][842]LogAutomationController: NavigationDiag BeforeWall betweenBlocking=0 betweenActor=None betweenPoint=X=0.000 Y=0.000 Z=0.000 groundBlocking=1 groundActor=Actor_0 groundPoint=X=0.000 Y=0.000 Z=0.000"
+          },
+          {
+            "line": 2590,
+            "text": "[2026.11.14-15.32.04:660][842]LogAutomationController: NavigationDiag WithWall actorA=X=0.000 Y=0.000 Z=72.150 feetA=X=0.000 Y=0.000 Z=2.150 modeA=1 actorB=X=400.000 Y=0.000 Z=72.150 feetB=X=400.000 Y=0.000 Z=2.150 modeB=1 projectA=1:X=-0.000 Y=-0.000 Z=10.000 projectB=1:X=400.000 Y=-0.000 Z=10.000 capsuleNavA=0 capsuleNavB=0 floorRegistered=1 floorNav=1"
+          },
+          {
+            "line": 2591,
+            "text": "[2026.11.14-15.32.04:660][842]LogAutomationController: NavigationDiag WithWall queryStart=X=0.000 Y=0.000 Z=2.150 queryEnd=X=400.000 Y=0.000 Z=2.150 result=2 validPath=1 partial=1 points=2 first=X=-0.000 Y=-0.000 Z=10.000 last=X=114.000 Y=-0.000 Z=10.000"
+          },
+          {
+            "line": 2592,
+            "text": "[2026.11.14-15.32.04:660][842]LogAutomationController: NavigationDiag WithWall betweenBlocking=1 betweenActor=Actor_1 betweenPoint=X=170.000 Y=0.000 Z=72.150 groundBlocking=1 groundActor=Actor_0 groundPoint=X=0.000 Y=0.000 Z=0.000"
+          },
+          {
+            "line": 2593,
+            "text": "[2026.11.14-15.32.04:660][842]LogAutomationController: NavigationDiag AfterWallRemoval actorA=X=0.000 Y=0.000 Z=72.150 feetA=X=0.000 Y=0.000 Z=2.150 modeA=1 actorB=X=400.000 Y=0.000 Z=72.150 feetB=X=400.000 Y=0.000 Z=2.150 modeB=1 projectA=1:X=-0.000 Y=-0.000 Z=10.000 projectB=1:X=400.000 Y=-0.000 Z=10.000 capsuleNavA=0 capsuleNavB=0 floorRegistered=1 floorNav=1"
+          },
+          {
+            "line": 2594,
+            "text": "[2026.11.14-15.32.04:660][842]LogAutomationController: NavigationDiag AfterWallRemoval queryStart=X=0.000 Y=0.000 Z=2.150 queryEnd=X=400.000 Y=0.000 Z=2.150 result=3 validPath=1 partial=0 points=2 first=X=-0.000 Y=-0.000 Z=10.000 last=X=400.000 Y=-0.000 Z=10.000"
+          },
+          {
+            "line": 2595,
+            "text": "[2026.11.14-15.32.04:660][842]LogAutomationController: NavigationDiag AfterWallRemoval betweenBlocking=0 betweenActor=None betweenPoint=X=0.000 Y=0.000 Z=0.000 groundBlocking=1 groundActor=Actor_0 groundPoint=X=0.000 Y=0.000 Z=0.000"
+          }
+        ]
+      }
+    ],
+    "other_batch_failures": [
+      {
+        "path": "Delivery.Speech.Conversation.KeyOwnership",
+        "result": "Fail",
+        "line": 2721,
+        "text": "[2026.11.14-15.32.07:022][878]LogAutomationController: Error: Test Completed. Result={Fail} Name={KeyOwnership} Path={Delivery.Speech.Conversation.KeyOwnership}"
+      },
+      {
+        "path": "Delivery.Systems.MoveInputSafety",
+        "result": "Fail",
+        "line": 2824,
+        "text": "[2026.11.14-15.32.07:336][897]LogAutomationController: Error: Test Completed. Result={Fail} Name={MoveInputSafety} Path={Delivery.Systems.MoveInputSafety}"
+      }
+    ],
+    "full_batch_passed": false,
+    "real_gameplay_verified": false,
+    "scope": "读取已完成NullRHI/NoSound自动化结果；本代理没有重新运行测试。Fight、PlayerInterruption、StrikeNavigation三项通过；同批UI两项失败继续处理，不能写全套通过。"
+  }
+}

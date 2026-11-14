@@ -68,7 +68,7 @@ void ADeliveryMotorbike::ApplyVisualScale()
 bool ADeliveryMotorbike::CanDriveNow(const ADeliveryCharacter* Character) const
 {
 	// 只有处于正常碰撞状态的角色能上车，客户端退出时可确定地恢复步行碰撞
-	if (!IsValid(Character) || !Character->GetActorEnableCollision() || Driver || IsTrunkBusy())
+	if (!AllowsPlayerUse() || !IsValid(Character) || !Character->GetActorEnableCollision() || Driver || IsTrunkBusy())
 	{
 		return false;
 	}
@@ -95,7 +95,7 @@ bool ADeliveryMotorbike::CanDriveNow(const ADeliveryCharacter* Character) const
 
 bool ADeliveryMotorbike::CanLoadTrunk(const ADeliveryCharacter* Character) const
 {
-	if (!IsValid(Character) || Driver || IsTrunkBusy() || HasCargo() || HasTrunkPassenger() || Character->IsIncapacitated())
+	if (!AllowsPlayerUse() || !IsValid(Character) || Driver || IsTrunkBusy() || HasCargo() || HasTrunkPassenger() || Character->IsIncapacitated())
 	{
 		return false;
 	}
@@ -106,7 +106,7 @@ bool ADeliveryMotorbike::CanLoadTrunk(const ADeliveryCharacter* Character) const
 
 bool ADeliveryMotorbike::CanUnloadTrunk(const ADeliveryCharacter* Character) const
 {
-	if (!IsValid(Character) || Driver || IsTrunkBusy() || !HasCargo() || Character->IsIncapacitated())
+	if (!AllowsPlayerUse() || !IsValid(Character) || Driver || IsTrunkBusy() || !HasCargo() || Character->IsIncapacitated())
 	{
 		return false;
 	}
@@ -151,7 +151,7 @@ void ADeliveryMotorbike::ApplyTrunkPresentation()
 	 */
 	TrunkInteractable->PromptText = HasCargo() ? TrunkUnloadPromptText : TrunkLoadPromptText;
 	// 有人骑着的时候别人不该还能在车尾开箱
-	TrunkInteractable->bInteractEnabled = Driver == nullptr;
+	TrunkInteractable->bInteractEnabled = AllowsPlayerUse() && Driver == nullptr;
 }
 
 // 服务器：把手上的快递装进后备箱，并让两端开始播动画
@@ -201,7 +201,7 @@ void ADeliveryMotorbike::MulticastTrunkAction_Implementation(EDeliveryTrunkPhase
 {
 	TrunkPhase = Phase;
 	TrunkElapsed = 0.0f;
-	if (ADeliveryPackageItem* Package = GetCargo())
+	if (ADeliveryPackageItem* Package = GetCargo(); Package && Package->GetOwner() == this)
 	{
 		// 动画期间看得见：装是从箱口落进去，卸是从箱里升出来
 		Package->SetActorHiddenInGame(false);
@@ -270,7 +270,7 @@ void ADeliveryMotorbike::UpdateTrunkAnimation(float DeltaSeconds)
 	ApplyTrunkLidAlpha(FMath::Clamp(LidAlpha, 0.0f, 1.0f));
 
 	// 快递：在箱口和箱内之间走一趟。位置是相对 CargoPivot（它就在箱内）的偏移
-	if (ADeliveryPackageItem* Package = GetCargo())
+	if (ADeliveryPackageItem* Package = GetCargo(); Package && Package->GetOwner() == this)
 	{
 		const float MoveAlpha =
 		    FMath::Clamp((TrunkElapsed - LidTime) / MoveTime, 0.0f, 1.0f);

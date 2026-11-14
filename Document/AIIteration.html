@@ -13,11 +13,543 @@
     @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
     @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
     .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
-<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="#dialogue-music-balance-20261114">对白与背景音乐</a><a href="#decision-latency-next-20261114">决策等待与后续方案</a><a href="#speech-continuity-20261114">语音加速与试玩记录</a><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#npc-rivalry-goals-20261114">拱火与完整记忆</a><a href="#next-chat-handoff">二狗交接提示词</a><a href="#npc-natural-perception-20261114">自然口语与感知记录</a><a href="#npc-contact-ui-v4-20261114">命中与 v4 界面</a><a href="#light-dialogue-ui-20261114">v3 界面历史</a><a href="#npc-playability-result-20261114">互殴与道歉让路</a><a href="#npc-playability-trial-20261114">旧按钮失败记录</a><a href="#silent-action-feedback">无台词动作的交谈反馈</a><a href="#model-speech-streaming">真实回复分段与缓冲</a><a href="#reply-waiting-feedback">交谈等待与反馈调整</a><a href="#speech-streaming-comparison">分段对照与停顿表现</a><a href="#sentence-audio-playback">句内语音播放</a><a href="#sentence-audio-integration">分段接口与编码</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
+<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="#player-speech-input-20261114">玩家语音与发送特效</a><a href="#combat-training-round3-20261114">第三轮训练与游戏接入</a><a href="#combat-training-results-20261114">两轮小模型训练结果</a><a href="#native-speech-results-20261114">原生语音对照结果</a><a href="#npc-playtest-20261114">居民实际试玩与新问题</a><a href="#npc-training-next-20261114">小模型训练改进方案</a><a href="#npc-training-20261114">小模型第一轮训练</a><a href="#continuous-decisions-20261114">持续行动与后台决策</a><a href="#dialogue-music-balance-20261114">对白与背景音乐</a><a href="#decision-latency-next-20261114">决策等待与后续方案</a><a href="#ergou-errand-execution-20261114">持续跑腿与实际结果</a><a href="#ergou-stage1-implementation-20261114">二狗第一阶段实施</a><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#npc-standing-space-20261114">站位与避让</a><a href="#npc-rivalry-goals-20261114">拱火与完整记忆</a><a href="#next-chat-handoff">二狗交接提示词</a><a href="#npc-natural-perception-20261114">自然口语与感知记录</a><a href="#npc-contact-ui-v4-20261114">命中与 v4 界面</a><a href="#light-dialogue-ui-20261114">v3 界面历史</a><a href="#npc-playability-result-20261114">互殴与道歉让路</a><a href="#npc-playability-trial-20261114">旧按钮失败记录</a><a href="#silent-action-feedback">无台词动作的交谈反馈</a><a href="#model-speech-streaming">真实回复分段与缓冲</a><a href="#reply-waiting-feedback">交谈等待与反馈调整</a><a href="#speech-streaming-comparison">分段对照与停顿表现</a><a href="#sentence-audio-playback">句内语音播放</a><a href="#sentence-audio-integration">分段接口与编码</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a><a href="#gpu-continuous-20261114">GPU 小模型与连续语音</a></nav></aside><main>
 <header><div class="meta">AI / 交谈、语音与表情 / 2026-11-14</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
-<div class="finding"><strong>最新进展：</strong>大壮与翠花的加速 B 已获试听认可并用于试玩。启用 GPU 计算复用、后台发送和模型启动预热，对话默认使用 Luna low。用户反馈声音已较顺畅，下一步调整对白与背景声比例并继续减少决策等待。<a href="#speech-continuity-20261114">查看修改与实测记录</a>。</div>
+<div class="finding"><strong>二狗最新进展：</strong>人物背景与 Stay 持续活动修复已合入，Stay 已构建；NPC 定向通信、公开地点观察、具名街坊目击记忆与普通物品基础层已合入，完整构建 160 项、129.97 秒通过；后端与地点协议分别通过 14 项和 29 项离线检查。FetchItem/ReturnItem 第二批仍在审查，尚未运行 UE 新玩法。12 组配对评估数据尚未运行模型评分或训练；二狗人物表单字段已迁移并独立读回，家居与公开地点资产配置仍待完成。此前外观、专属车、再次扶起与门洞成果继续保留。本聊天未启动 PIE、真实按键或多人验收。<a href="#ergou-continuous-companion-20261114">持续陪伴与知识</a> · <a href="#ergou-home-objects-20261114">家居资源</a> · <a href="#ergou-return-recovery-20261114">车辆与返程</a> · <a href="#next-chat-handoff">完整交接</a></div>
+<div class="finding" id="ergou-playtest-first-delivery"><strong>本轮先交第一段试玩：2026-11-15 已恢复正式窗口并交给用户</strong>
+<p><strong>11 月 15 日用户实际反馈：二狗聊天可用，但不跟随，不会取货送货，扶起后缺少感谢回应。</strong>第一阶段未通过验收。用户要求先提交当前试玩版，再修后续实现，完成后再交验收。具体要求是按主人原话从手中或车上接货、使用二狗自己的车、明确目的地及步行/骑车安排；必要信息不足时先询问，不能擅自改主人的安排。家具使用、搬运和布置也必须完成。本轮先保留问题版回退点，Saved 中尚未合入的普通取回、地点记忆与退出修复均不混入该快照；不擅自启动 PIE。</p>
+<p>用户希望先玩一段、反馈后分批提交。本轮交付使用现有 UE 工程的 <code>TestForCharacter</code> 关卡。输入与连续开麦的首次统一构建未通过，修正新测试接口参数、TObjectPtr 访问及局部声明等编译错误后，<code>Saved/Logs/DeliveryOpenMicBuild2.log</code> 记录第二次 29 项、76.26 秒 Succeeded；该构建由并行输入/语音任务运行。首轮 27 项回归通过 25 项，余下 KeyOwnership 和 MoveInputSafety 的测试前提修正后，<code>DeliveryOpenMicBuild3.log</code> 构建 8.18 秒成功、<code>DeliveryOpenMicRetest.log</code> 两项复查成功；这不是单次 27 项全通过的记录。并行任务报告实际主客 W/T 与点击没有再次自行前走，连麦入口及未结识提示可见；临时预设主人因 protected 字段访问被拒，尚未实际成功开麦，不把预设或权限单测当作招募与自然语音验收。</p>
+<p>23:41 左右，性能任务接手同一编辑器进行三组各 70 秒的测量，并暂停正式 AI 后台；本聊天只读查询确认当时 8769 没有监听。随后第二个编辑器进入，测量中止，本轮性能数据不能用于宣布提速或启用小模型。用户明确要求各任务协调后先交试玩，本聊天核实原始授权并同步统一协调任务。11 月 15 日统一协调任务确认：旧编辑器核对无未保存资源后正常退出，唯一正式编辑器 PID 65368 已在前台运行 TestForCharacter 单窗口 Listen PIE，日志为 <code>Saved/Logs/DeliveryPlayableHandoff.log</code>；稳定后台 PID 37992 已恢复 8769 端口，使用 Luna 与 native Q8 B 声音并完成预热，小模型保持关闭。并行任务另报告实际双人客户端 T/点击发送一次，观察到原话及输入清空、主客语音和双方真实命中；该报告不等于完整追赶、二狗结识或首单验收。本聊天未追加游戏操作，交付后保持代码、资产、服务与前台不动，等待用户试玩反馈；新的普通道具 FetchItem/ReturnItem 和家居装饰继续暂存。下列路线仍是用户试玩步骤，不能写成已经全部验收通过。</p>
+<ol>
+<li>先步行、松开方向键，再打开和关闭聊天输入，检查有没有无输入继续前走。未结识时按 V，应提示先与二狗结识。用户随后在语音任务反馈已经成功连麦，但上下车会要求重新连麦；语音任务在本次回退提交之后修复该连续性问题。</li>
+<li>先接听第一单电话，再到面馆门外或实际取件区，保持门外视线无遮挡。等二狗真实落地、倒地动作结束并出现提示，再靠近长按 E 至进度完成，等待站起。</li>
+<li>起身完成后，用原聊天入口依次说“跟着我”“在这里等我”“过来”，观察跟随、避让、等候和召回。主人身份应在上下车后保留。</li>
+<li>二狗起身完成、结识成功后，按 V 尝试开启连麦，与二狗边走边聊，再按 V 关闭；具体按键以游戏中的正式提示为准。成功开麦、远处联系与附近居民旁听仍需在这次试玩中确认。</li>
+<li>带二狗完成第一单，重点看任务、对话、车辆和临时受击是否打断或遗失原安排。</li>
+</ol>
+<p>反馈记“在哪一步、说了什么或按了什么、实际发生什么”即可。初遇动画、真实物品交接、延迟和多人体验尚未完整验收；构建、静态审查与离线协议检查不替代这些结果。用户已授权提交当前试玩版，尚未授权推送。</p>
+<p>本机恢复后台使用 <code>Tools/DeliveryAI/start_backend.ps1 -SpeechEngine native -NativeSpeechRuntime D:/Udev/Delivery/Saved/AIResearch/NativeQwen/runtime-q8_0-kv1024.json -DisableLocalCombat -DialogueLog -StreamAudio -Port 8769 -PythonExecutable C:/Python314/python.exe</code>。原生声音权重、DLL 与该配置仍在本机 Saved；本次提交是工程回退点，不包含可移植模型包。语音输入运行库由 <code>Tools/DeliverySpeech/build_runtime.ps1</code> 和 <code>deploy_runtime.ps1</code> 准备，Binaries/ThirdParty/DeliverySpeech 不入库。</p></div>
+<section id="gpu-continuous-20261114">
+<h2>GPU 小模型与连续语音</h2>
+<p>这次修改针对两个试玩问题：NPC 说话时迟迟不作下一次决定，声音播放到一半又等下一块音频。两者需要分别处理。模型回答完就应该允许下一次判断；声音是否连续，则要看语音生成速度能否跟上播放。</p>
+<div class="notice"><strong>第三轮小模型已通过原定的 40 个验收情境，双人游戏检查正在继续。</strong>本节保留此前真实试玩中发现的语音断流、窗口焦点和回复接续问题。第三轮训练、输入修正以及尚未解决的内部情境错误，见<a href="#combat-training-round3-20261114">第三轮记录</a>；单独模型和后台合成的结果不能代替游戏中的实际操作与听感。</div>
+<h3>决定与声音分别完成</h3>
+<p>原来的后台虽然已经让模型线程提前返回，调度器却仍把这次请求算作正在使用模型，一直等到语音生成完才减少计数。因此下一次普通决定仍会被旧语音挡住。这次增加 <code>model_done</code>：表示模型输出已经检查完毕。原有 <code>done</code> 保留，表示本次回复的声音已经全部发送。</p>
+<p>游戏收到 <code>model_done</code> 后可以提出下一个问题，同时继续接收旧回复的声音。每次请求、行动和台词各有自己的编号，旧音频的结束通知只能结束对应的回复。播放器最多保留正在播放的一条回复和一条待播回复；同一目标的无台词续战保留旧声音，新台词等当前完整句说完再接替。玩家插话、NPC 倒地或改变行动时，停止对应字幕、声音和后台任务。</p>
+<div class="table-scroll"><table><thead><tr><th>位置</th><th>这次修改</th><th>当前检查结果</th></tr></thead><tbody>
+<tr><td>后端 Scheduler</td><td>模型函数退出时释放模型名额，语音仍计入有上限的后台工作数。取消后，实际工作结束前不会假装已经退出。</td><td>已检查旧声音不阻挡新决定，以及旧声音结束不释放新请求名额。</td></tr>
+<tr><td>后端 run_job</td><td>按传输版本 2 发送 model_done，保留旧客户端的事件顺序。取消或模型失败时不发送成功通知。</td><td>新旧版本、失败和取消检查通过；双人实际操作已收到 model_done，随后仍继续传输声音。</td></tr>
+<tr><td>UE Gateway、Agent、Presentation</td><td>分别记录模型请求和仍在接收音频的回复，为待播台词保留一个位置。</td><td>构建及相关回归通过；双人试玩确认交谈和动作日志，另发现首句超时、句中缺音及尾音结束处理问题，仍需修复后复测。</td></tr>
+</tbody></table></div>
+<figure class="uml"><figcaption>持续行动与连续语音类图 · 实施中</figcaption><div class="diagram-viewport"><img src="Diagrams/NpcGpuSpeech.svg" alt="游戏请求、模型选择与语音播放的类职责" style="display:block;width:100%;min-width:880px;height:auto"></div></figure>
+<h3>本轮代码检查与修复记录</h3>
+<p class="evidence">最新补充检查：后端 298 项通过，尾音修复相关三项 UE 检查全部通过。<a href="../Saved/Automation/NpcGpuTail20261114-summary.json">结果、日志与本次文件校验值</a>。下面保留更早的 293 项检查记录，便于区分修改前后的范围。</p>
+<p>随后补查了多人句末切换：当前句刚说完时，服务器保留最多三句完整声音的短时缓存，让正在补收声音的客户端取得尾段；五秒后删除。玩家插话或 NPC 倒地仍立即清除。新增真实音频编解码回归后，三项相关检查通过，更新后的 DeliveryEditor 构建通过。另修复了开启对话日志后，小模型候选格式与原日志格式不一致造成的报错，日志现可关联 NPC、当前动作和模型选择。</p>
+<p>后端 293 项回归通过。UE 的 ModelSpeechSeparation、SentenceAudioProtocol、SentencePlayback、AudioStreaming、ConversationContext、Fight 六项最终通过。检查了旧音频继续接收、新决定不被旧完成通知清除、待播回复替换、迟到首句被拒绝和玩家插话停止旧声音。</p>
+<p>首次 UE 检查有两项失败，均保留记录后修正测试准备方式：接话轮数测试曾直接写入“说完”记录，没有真正结束播放；记忆测试使用缺少攻击动画的裸角色，并误把新请求新增的身体状态当成过期记忆。现在使用实际播放入口、正式出拳资源与正确的检查时点，原有接话轮数和攻击候选要求均保留。</p>
+<p>后端检查还发现，发送 done 后工作回调仍在收尾时偶尔会多发一条心跳。现在发送 done 就结束网络数据，后台任务按原完成流程退出。队列测试也改为验证本次要求：旧声音尚未生成完时允许新决定，尚未开始的玩家请求仍排在闲聊前。</p>
+<p class="evidence"><a href="../Saved/Automation/NpcGpuCore20261114-summary.json">六项 UE 最终结果与源码哈希</a> · <a href="../Saved/Logs/NpcGpuBackendRegression-final2.log">293 项后端回归</a> · <a href="../Saved/Logs/NpcModelSpeechBuild-tests.log">最终构建日志</a>。这些检查不代替游戏内试玩和听感验收。</p>
+<p>最后补充了续战表情检查：同一目标、同一动作且没有新台词时，NPC 保留当前表情；新台词或改为停手后仍正常更新。更新后的 DeliveryEditor 构建通过，Fight 与 ModelSpeechSeparation 两项通过。Fight 的无音频测试环境产生七条警告，未作为实际声音播放证据。<a href="../Saved/Automation/ModelSpeechEmotion20261114/index.json">两项检查的原始结果</a>。</p>
+<h3 id="npc-evening-playtest-20261114">晚间双人试玩：真实发送与语音问题</h3>
+<p>2026 年 11 月 14 日晚，在双人 PIE 的主机和客户端中分别输入原话并实际点击发送。19:21:42，主机向翠花说“大壮说你只会嘴上逞能，真动手肯定打不过他”。约 19:23:22，客户端发送“翠花，别打了，是我瞎说的。对不起，你们都先停手吧”，服务器在 19:23:23.168 收到。发送截图分别保留了玩家原话和界面反馈。本次使用 Luna 与原生 Q8 B 声音，本地战斗小模型保持关闭。</p>
+<div class="table-scroll"><table><thead><tr><th>玩家操作</th><th>模型与动作记录</th><th>声音记录</th></tr></thead><tbody>
+<tr><td>主机拱火</td><td>Luna 选择 Fight，约 2.81 秒完成这次模型回复。随后同一段交战连续记录四次命中，时间为 19:21:46.217 至 19:21:51.102，最后记录对手倒地。</td><td>原首句一直没有收到音频，五秒等待后记录超时。29.50 秒左右才出现同一玩家消息下另一条回复的播放调用，不能把它算作原首句正常播放。</td></tr>
+<tr><td>客户端道歉</td><td>Luna 选择 LookAt，并回答“行，听你的，先停手”。本轮另有逃跑完成和结束交战的日志。</td><td>主机、客户端分别在服务器收到消息后约 8.50、8.55 秒调用播放。这里记录的是播放器调用，不是扬声器实测出声时间。</td></tr>
+</tbody></table></div>
+<p>后续一段翠花声音出现两处明显缺音：主机约 1.43 秒、1.25 秒，客户端约 1.42 秒、1.25 秒。整轮每端各记录七次缓冲暂时为空，其中包含同帧恢复的情况，不能说玩家听到了七次明显卡顿。另有一段声音已收到全部 182400 字节 PCM，却仍记录超时，同一句还出现过格式检查警告。</p>
+<p>已修复完整声音播完后被误判为超时的问题。客户端收到开始、结束通知时，现在只更新本机播放记录，保留服务器复制过来的原始状态，避免完成标记与音频长度混在不同句子之间。日志中的格式警告尚不能唯一归因于这一顺序，因此仍保留更详细的字段记录，供实机继续核对。</p>
+<p>更新后的 DeliveryEditor 完整构建通过。AudioStreaming 与 SentenceAudioProtocol 两项回归均通过，零错误、零警告；覆盖完整尾音、真正缺音、开始通知与属性更新交错、重复通知和旧句取消。首次统一构建在新界面工具的指针类型推导处失败，修正后增量构建成功。<a href="../Saved/AIResearch/Playtest20261114Evening/fix-verification.json">本次构建、测试及文件校验记录</a>。这些检查没有重新运行双人游戏，修复后的听感仍待检查。</p>
+<p>本轮合并后的后端回归为 310 项通过，使用与当前游戏相同的协议版本和模型完成通知。<a href="../Saved/Logs/NpcBackendMerged20261114.log">本次后端检查日志</a>。已恢复本机 8769 服务，试用下文记录的 KV1024 原生 B 声音；小模型仍关闭。</p>
+<p>本次确认了真实界面能够提交玩家发言，Luna 能选择交战、逃跑和停手，动作日志也记录了连续命中。这不等于已经验收了双方追赶的完整画面、每一拳的视觉接触、表情和自然听感，更不能说未启用的小模型已经控制了游戏。训练仍是 35/40，未达 90% 的结论不变。</p>
+<p>本轮不用于比较模型性能：开头约一分钟还有另一个独立编译占用 CPU，中途恢复和最大化窗口时一度观察到约 10 FPS，负载条件发生变化。结束前缩小窗口后没有再次发言，因此也不能据此宣称缩小窗口解决了声音问题。此前最小化窗口时的语音采样继续单独保留，不计入本轮性能对照。</p>
+<details><summary>查看主机和客户端的发送画面</summary>
+<figure><a href="../Saved/AIResearch/Playtest20261114Evening/01-host-send.png"><img src="../Saved/AIResearch/Playtest20261114Evening/01-host-send.png" alt="主机向翠花发送拱火原话，界面显示玩家已说出的内容" loading="lazy" style="width:100%;height:auto"></a><figcaption>主机发送后可见玩家原话；这张图用于核对交谈界面，不是完整追打录像。</figcaption></figure>
+<figure><a href="../Saved/AIResearch/Playtest20261114Evening/02-client-apology-send.png"><img src="../Saved/AIResearch/Playtest20261114Evening/02-client-apology-send.png" alt="客户端在正式输入框发送道歉，界面显示正在发送" loading="lazy" style="width:100%;max-width:650px;height:auto"></a><figcaption>客户端实际发送道歉，服务器接收与后续回复由同一条消息的日志核对。</figcaption></figure>
+</details>
+<p class="evidence"><a href="../Saved/AIResearch/Playtest20261114Evening/summary.json">双人操作、分段计时与限制说明</a> · <a href="../Saved/AIResearch/Playtest20261114Evening/game.log">游戏原始日志</a> · <a href="../Saved/AIResearch/Playtest20261114Evening/backend.log">后端原始日志</a> · <a href="../Saved/AIResearch/Playtest20261114Evening/dialogue-current.ndjson">本轮模型选择与台词</a>。日志时间为 UTC，正文操作时间已换算为北京时间。</p>
+<h3 id="npc-audio-recheck-20261114">修复后的双人声音检查</h3>
+<p>19:57:51 至 20:04:19，使用更新后的代码、正式界面和原生 KV1024 语音，再次运行双人 PIE。两位居民共说了八句话，主机和客户端各记录八次开始播放、八次正常结束，没有语音超时、格式错误、解码失败或播放缓冲缺音的日志。<a href="../Saved/AIResearch/Playtest20261114AfterFix/summary.json">本轮记录与原始文件清单</a>。</p>
+<p><strong>本轮没有完成玩家发言复测。</strong>实际操作时任务电话反复打开和关闭，交谈输入焦点不稳定，未完成一次有效发送，服务器也没有收到新的玩家发言。界面任务继续处理这个问题；上面的八句都是 NPC 闲聊，不能用来证明玩家插话、道歉或战斗后的声音已经通过验收。<a href="../Saved/DeliverySpeech/UIPlaytest/client-layout-before-focus-fix.png">当时的客户端界面</a>。</p>
+<p>本轮只读 GPU 采样持续 300 秒，显存占用约 11.2–11.4 GiB。没有录制逐帧 FrameTime，也没有在同样的窗口条件下重跑旧版本，因此不计算帧时间 P95，不把这次无缺音直接归功于某一个改动。声音自然程度仍需结合实际听感确认。</p>
+<p>当前进展：模型与声音已经可以分别完成，尾音和客户端状态覆盖的修复已通过对应回归；B 声音的小缓存版本已在双人闲聊中完成播放。尚未完成小模型实际控制游戏、三档 GPU 与 Luna 的同机对照，以及新版本玩家交谈和战斗的完整实际检查。</p>
+<h3>小模型的职责</h3>
+<p>Qwen3-1.7B 只处理已经开始的追打或逃跑，判断接下来继续追打、逃跑还是停手。当前对手由游戏确定，小模型不能换成另一个人；返回的动作必须对应服务器本次提供的候选。玩家发言、首次挑衅和人物台词仍由 Luna 处理。</p>
+<p>训练资料分成至少 120 个独立情境和另留的 40 个验收情境，同一故事的改写不跨集合。人工编写的情境与真实日志分别注明来源，不能把换名字、换编号后的样本数写成独立实战数量。最多进行两轮针对性训练，部署前还要检查 Q4 量化后的实际结果。</p>
+<p>比较全部层、21 层、14 层放到 GPU 的配置，三档都采用 4096 上下文、64 输出 token 和单请求并发。输入超过限制时交回 Luna，不截掉关键事实。声音、游戏帧时间也通过要求后，再选完整决策 P95 最低的配置。CPU 保留作为对照和回退。</p>
+<p>两轮训练已结束，最终 40 个情境答对 35 个，未达到 90%。<a href="#combat-training-results-20261114">完整训练记录</a>说明数据划分、训练参数、量化对照、两轮失败和下一步需要补充的真实记录。</p>
+<h3>两个 B 音色保持不变</h3>
+<p>先固定两个人各一长一短四句台词，记录每块声音生成和送达的时间。比较现有 CUDA Graph 实现与固定版本的 qwentts.cpp，使用相同的两个 0.6B 检查点、参考声音、文本和采样参数。先比较未量化的 BF16，再检查 Q8。文件格式转换成功不代表音色和听感通过。</p>
+<p>原生实现必须通过现有接口持续发送 PCM，并支持取消。只有持续生成速度足够，才调整起播缓冲；如果平均生成速度仍慢于播放，单纯调小音频块或增大缓冲不能消除长句中的停顿。</p>
+<h3>验收要求</h3><p>中位耗时代表一半请求的等待范围；P95 表示 95% 的请求不超过该耗时。除模型本身外，还要测排队、声音生成和游戏帧时间。</p>
+<ul><li>玩家说话后约 0.3 秒出现倾听或转头反馈，旧闲聊不再使玩家回复无效重试。</li>
+<li>40 个独立情境中，合理动作与目标不少于 90%；非法目标和取消后恢复旧攻击为零。</li>
+<li>同条件小模型完整决策中位耗时比 Luna 至少低 30%，热请求 P95 争取不超过 1.5 秒。</li>
+<li>游戏负载下语音合成耗时与声音长度之比争取不超过 0.8，B 音色保持自然，播放中无缺音。</li>
+<li>新增处理造成的 P95 游戏帧时间增幅不超过 10%；实际操作主机和客户端的 T 键、输入与发送，确认追打、逃跑、道歉和打断。</li></ul>
+<h3>参考版本与采用范围</h3>
+<p><a href="https://github.com/ggml-org/llama.cpp/blob/47a39665e7081dc482feec169961acc09750a5c4/tools/server/README.md">llama.cpp b10000 / 47a3966</a>提供 GPU 卸载、上下文大小与受约束 JSON 输出的实现依据。JSON 合法只保证格式，动作是否合理仍要用独立情境和游戏试玩判断。</p>
+<p><a href="https://github.com/ServeurpersoCom/qwentts.cpp/tree/f1a6924789883bd92eeb59176793a94af55730b3">qwentts.cpp f1a6924</a>作为原生语音候选，检查其持续音频回调与取消接口。项目采用 MIT 许可，所用 Qwen 检查点保留原来源及许可记录。</p>
+<p><a href="https://github.com/NVIDIA-RTX/NVIGI-Core/blob/main/docs/GpuSchedulingForAI.md">NVIDIA GPU Scheduling for AI</a>说明推理与渲染同时运行时需要考虑 GPU 调度。本轮先测同机表现，没有把后台 Python 进程的线程设置描述为已经接入 NVIGI 的图形队列调度。</p>
+</section>
+
+<section id="combat-training-round3-20261114">
+<h2>战斗小模型：补充状态变化的训练情境</h2>
+<div class="notice"><strong>第三轮 Q8 答对 40 题，随后 Q4 量化答对 38 题；游戏性能检查仍未达标，后续单线程对照中断，当前优先稳定试玩。</strong>用户在第二轮未达标后要求继续补充数据和训练。原来的 40 个验收情境、答案、90% 门槛和关键错误要求保持不变；Q8 是同一验收集的第三次正式评测，Q4 又使用相同题目检查量化后的结果。额外的 16 个内部情境只答对 12 个，不能将小样本通过写成所有情况都可靠。</div>
+<div class="notice" id="combat-playtest-handoff-20261114"><strong>先交给玩家试玩，暂停新的性能试验。</strong><p>当前试玩使用已实际检查过的 Luna 和原生 Q8 的两种 B 声音，配置为 <code>runtime-q8_0-kv1024.json</code>，两种声音同时常驻（<code>both</code>）。蓝灰配色的卡通 UMG 对话界面和 F6 观察面板已保存。主机、客户端均已实际点击发送；一条 8.64 秒的源语音也已在两端完整播完。这里确认的是文字输入与回复播放，不代表语音识别已完成验收。</p><p>战斗小模型 Q4 的原 40 题答对 38 题，正确率为 95%；与游戏同时运行时，动作选择中位耗时约 208 毫秒。但完整 40 秒内的帧时间 P95 增加 12.04%，超过原定 10% 要求，因此正式试玩仍禁用小模型。将工作线程改为 1/1、每组观察完整 70 秒的对照已经开始，但因运行条件改变而中止，不能用于比较性能；原有失败结果和验收标准保持不变。</p></div>
+<p id="handoff-real-input-20261114"><strong>23:55 的实际双人试玩：</strong>在客户端按 T、输入挑拨台词并点击发送后，服务器接收了这条消息，Luna 在约 2.86 秒后给出有效回应；主机和客户端分别在约 3.53、3.58 秒开始播放，第一句均完整播完。随后两位 NPC 都由模型选择了交战，记录中有翠花命中 12 次、大壮命中 8 次，以及倒地和逃离到安全距离的结果。两端各播放了 20 句，其中 15 句完整结束，其余受到动作打断或退出游戏影响；这次玩家回复的第二句也被真实命中打断，不能说整段回答已经播完。未发现音频缓冲耗尽、超时或格式错误，两种 B 声音均有实际合成记录。这次确认了真实发送、回复与互相命中；没有进行声卡录音试听，也没有完成追赶、逃跑全过程的画面验收。小模型仍关闭。<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/handoff-playtest/handoff-playtest-20261114.json">本次试玩记录</a>保留发言编号、两端播放结果和未完成范围。</p>
+<h3 id="playtest-decision-followup-20261114">试玩反馈：回复等待与追赶</h3>
+<p>玩家试玩后仍觉得 NPC 作决定、开始追打太慢。最新一轮记录了 11 次模型请求，后台排队和等待模型执行名额的时间均为 0；Luna 完成了其中 7 次，从请求开始到模型完成用了 2.377–3.400 秒，其余 4 次被取消。等待主要发生在收到模型内容之前，现有日志不能进一步区分网络传输与远端模型计算。7 次成功结果均选择看向目标（<code>LookAt</code>），没有追打或逃跑，因此这轮不能用来判断持续追赶是否已经改善。详见<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/playtest-followup/latest-decision-review.json">本次决策检查</a>。</p>
+<p>声音共开始播放 8 句，其中 6 句有完整、非零的播放完成记录，另 2 句分别因玩家开始输入和结束游戏而中止。没有发现缓冲耗尽、恢复补播、超时、超过 12 秒，或同一句取消后重新播放的记录。这次只有主机 <code>role=3</code> 的记录，不能当作新的双端验收，也不能仅凭日志断言听感完全顺畅。<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/playtest-followup/playtest-1457-speech-audit.json">语音检查记录</a>保留每句编号和播放结果。</p>
+<p>其中一条玩家发言没有得到回复，已找到对应代码原因：玩家说话时，NPC 上一个看向目标的动作还剩约 1.58 秒；旧动作正常结束，却把正在等待的新发言回复一并取消了。已修改 NPC 的处理：旧动作正常完成时，保留尚未答复的玩家原话，根据新的现场信息重新请求回答；旧请求若返回“继续当前动作”，不能重新启动已经结束的动作。明确取消交谈或角色失效时，仍撤销相关请求。行为树也已调整：拳头收回后可以继续追赶目标，不再因为下一拳尚在冷却而停在原地。</p>
+<p>后台目前已支持玩家优先处理、模型与声音分别完成，以及旧语音不影响新请求。这次没有排队积压的证据，所以先修复上述具体问题。已运行调度、语音排队及旧语音不占住模型执行名额的 26 项 CPU 检查，0.336 秒全部通过，没有加载模型或合成声音；<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/playtest-followup/scheduler-regression-26-20261114.json">本次检查摘要</a>注明了执行范围。<strong>后续三次统一构建最终成功，Fight、PlayerInterruption 和 StrikeNavigation 已通过对应检查。全批 27 个唯一用例的记录为首轮 25 项通过、两项测试前提修正后复查通过；完整追赶与逃跑的实机体验仍未验收。</strong>Q4 仍禁用，帧时间 P95 增幅不超过 10% 的标准未改。</p>
+<h3>第三轮训练经过</h3>
+<p>第二轮的五个错误都延续了之前的动作：原先追打的继续追打，原先逃跑的继续逃跑。其中已经出现和解、认输、危险解除或新的威胁。这说明需要重点检查模型是否理解后来发生的事，但仅凭这五个结果，还不能断定具体原因。</p>
+<p>数据复查发现两处不足。旧内部验证集的 15 个故事全部使用翠花，没有覆盖大壮；训练输入也缺少正式游戏在战况末尾追加的当前动作说明。新增数据将覆盖两个人物，并使用游戏实际发送的文字格式。同一故事的不同发展放在同一组，避免一部分用于训练、另一部分用于验证。</p>
+<p>为检查文字格式的影响，用第二轮 Q8 在同一进程中重新跑了旧的 15 个内部情境。旧格式答对 14 个；只补上游戏使用的当前动作说明后，答对 9 个。人物、经过、答案、采样温度和模型均未改变。这个对照说明输入格式确实影响了这组结果，但不能据此认定它是所有错误的唯一原因。两次检查都没有使用封存的 40 个验收情境。</p>
+<p>教师审核进一步指出，旧说明在 NPC 逃跑时也写“追近、出拳和受击仍在继续”。它会被理解为此刻仍在挨打，而这段文字并没有检查是否发生了新的命中。第一份第三轮草稿因此退回，保留在 <code>combat-v6</code>，没有用于训练。游戏说明改为“当前动作还未结束”；小模型输入只保留一份独立的当前动作字段，并移除已知的重复说明，实际命中、身体情况和人物原话继续保留。</p>
+<p>训练、评测和游戏调用使用同一段输入处理代码。封存 40 题的原文件与答案没有改动，但修复后送给模型的文字会去掉上述错误尾句，因此不能将前后结果描述为完全相同的模型输入。评测新增输入处理代码的校验值和逐题提示校验值，便于区分输入修复与训练带来的变化；计分公式保持原样。</p>
+<p>新增故事会同时包含改变动作和继续原动作的情况。例如，已经接受道歉后停手，与对方嘴上道歉却继续挥拳需要作出不同选择。模型仍根据经过和性格决定，不增加固定对话轮数，也不把验收题换个物件或姓名加入训练。</p>
+<p>训练前固定学习率和步数，先检查旧内部验证集及新增的双角色情境，再评估导出的模型。训练参数、教师审核、错误及部署结果会保存在新的记录中，原来的两轮结果继续保留。质量达标后，还需完成取消与目标检查，以及小模型、两个人物声音和双人游戏同时运行的实际操作验证。</p>
+<p>第三轮已按预定参数完成：从第二轮 LoRA 继续，学习率 0.00002，累积四步，共 56 次参数更新，恰好训练 224 条数据一遍。实际训练用时 178.28 秒，包含加载、内部损失检查与保存共 202.01 秒。31 条内部验证的答案 token loss 从 0.03360 降至 0.02408；动作正确率与游戏表现仍需单独检查。新增 16 条内部验证的草标签已在模型对照前固定，教师对其中一条的不同意见单独保留，没有扩大可接受答案来提高分数。</p>
+<div class="table-scroll"><table><thead><tr><th>检查内容</th><th>第三轮结果</th><th>说明</th></tr></thead><tbody>
+<tr><td>原来的 40 个验收情境</td><td>40 / 40；输出与目标全部合法</td><td>同题第三次评测，原始文件与标签未变；输入修复和训练共同影响结果</td></tr>
+<tr><td>旧内部验证</td><td>14 / 15</td><td>与第二轮相同；首次命令漏带教师答案造成的错误计分记录仍保留，补齐后逐条输出一致</td></tr>
+<tr><td>新增内部验证</td><td>12 / 16</td><td>输入修复后的第二轮为 11 / 16；已解释清楚仍攻击，以及追打或逃跑的取舍仍有错误</td></tr>
+<tr><td>独立模型耗时</td><td>中位 147 ms；P95 207 ms</td><td>Q8、全 GPU、单请求，4096 上下文与 64 输出 token；没有同时运行游戏或语音</td></tr>
+<tr><td>接入技术检查</td><td>319 项后端测试通过；真实模型取消与恢复探针通过</td><td>不代替主机和客户端实际操作，也不证明游戏内没有声音停顿</td></tr>
+</tbody></table></div>
+<h3 id="combat-coexist-first-20261114">双人游戏、两种声音和小模型同时运行</h3>
+<p>首轮比较在同一进程的两个 960×720 PIE 窗口中进行，使用原生 Q8 B 音色、1024 语音缓存和相同的四句台词。每组正式记录 40 秒，所有小模型请求仍采用 1.5 秒截止。预热和模型加载不计入正式时段，但单独保留耗时与失败；无模型组也合成相同台词。这里测量的是游戏渲染与后台合成同时工作，声音还未通过游戏播放器输出，不能当作最终试听。</p>
+<div class="table-scroll"><table><thead><tr><th>配置</th><th>实际结果</th><th>结论</th></tr></thead><tbody>
+<tr><td>无小模型，双人游戏与两种 B</td><td>8 句完整声音；合成耗时 / 声音长度为 0.185；帧 P95 105.32 ms</td><td>本次比较基线；原场景自身帧时间已较长</td></tr>
+<tr><td>全 GPU（99 层）</td><td>语音超时，32.65 秒提前结束；模型 21 次调用中 14 次合法完成</td><td>未完成规定时段，不能采用</td></tr>
+<tr><td>GPU 21 层</td><td>语音超时，31.67 秒提前结束；模型 17 次调用中 10 次合法完成</td><td>未完成规定时段，不能采用</td></tr>
+<tr><td>GPU 14 层</td><td>完成 40 秒，但声音合成比例为 2.539；模型 19 次调用中仅 5 次合法完成；帧 P95 146.39 ms</td><td>声音生成明显跟不上播放，不能采用</td></tr>
+<tr><td>CPU，生成 4 线程 / 输入 8 线程</td><td>冷预热触及 1.5 秒截止，未进入正式时段</td><td>记录为启动失败，不能据此断言热请求全部超时</td></tr>
+<tr><td>Luna</td><td>15 次合法完成，中位约 2.03 秒；8 句完整声音，合成比例 0.188；帧 P95 102.60 ms</td><td>保留为当前可用的语音和界面检查配置；没有替代小模型接入目标</td></tr>
+</tbody></table></div>
+<p>无小模型时，GPU 采样已达到 11688 MiB，而本机报告总容量为 12227 MiB。加入小模型后，三档 GPU 配置都发生明显语音变慢。这支持继续检查常驻资源占用与同机竞争，但总显存数字本身不能证明是哪块资源被移到了系统内存。代码确认两种 B 分别保存了一份 GPU 模型、缓存与 codec；逐次释放和重载虽然可能省显存，也可能让男女换人时等待更久，因此尚未直接替换。</p>
+<p>原场景的游戏线程中位耗时约 66 ms，远高于当时记录的 GPU 耗时；行人数会随游戏变化，镜头也因角色物理稳定过程偏移约 34 cm。GPU 14 层的帧 P95 比基线高约 39%，这是本次观察，不能将增幅全归因于模型。首尾对时误差、动态场景、共同完成情境的样本偏差和所有失败均保留在<a href="../Saved/AIResearch/NpcTraining/combat-v7-integration/coexist-comparison-summary.json">六组汇总</a>，不只展示成功返回的快速样本。</p>
+<p>下一步只比较一个有依据的 CPU 参数组合：生成使用 8 线程，输入处理使用 12 线程，仍用已经通过质量检查的 Q8 权重。启动预热单独给予 10 秒并记录，正式请求继续保持 1.5 秒。这样可以检查冷启动和热运行的差别，同时避免新增 GPU 常驻模型；是否更快、是否影响游戏帧时间，要由后续同机结果决定。</p>
+<h3 id="combat-cpu-threads-20261114">CPU 增加线程后的结果：语音正常，动作仍来不及返回</h3>
+<p>上面的 CPU 方案随后完成了一轮对照。两组都使用旧的 8 秒语音配置、同样的四句台词与播放间隔，并各记录完整 40 秒。先测双人游戏和两种声音，再加入生成 8 线程、输入处理 12 线程的小模型；模型预热用了 1.984 秒，在单独给予的 10 秒准备时间内完成。正式请求的 1.5 秒限制没有放宽。</p>
+<div class="table-scroll"><table><thead><tr><th>比较项</th><th>未运行小模型</th><th>CPU 8 / 12 线程</th></tr></thead><tbody>
+<tr><td>完整生成的语音</td><td>8 句</td><td>8 句，声音字节与基线一致</td></tr>
+<tr><td>生成耗时 / 声音长度，中位数</td><td>大壮 0.197；翠花 0.186</td><td>大壮 0.180；翠花 0.177</td></tr>
+<tr><td>1.5 秒内完成的动作请求</td><td>没有提交动作请求</td><td>7 / 19；其余 12 次超时</td></tr>
+<tr><td>完整时段的帧耗时 P95</td><td>103.53 ms</td><td>205.24 ms</td></tr>
+</tbody></table></div>
+<p>这次语音生成能跟上播放，按收包时间计算也没有缺音，但动作请求只有 36.8% 在规定时间内返回，因此没有采用这组 CPU 设置。帧 P95 相对增加约 98.25%，也超过了原定的 10% 门槛。两组只按先后顺序各测一次，场景中的行人数量仍在变化，不能把这个增幅全部归因于 CPU 推理；报告保留了镜头位置、行人数和游戏线程耗时，供后续核对。</p>
+<p>第三轮原 40 个情境全部答对，说明这组情境下的动作选择达标；它不代表小模型已经能够在游戏中及时工作。本次正式时段也没有跑完全部 40 题，不将这 19 次调用当成新的完整质量验收。语音结果来自后台 PCM 收包，还没有经过 UE 播放器和扬声器。<a href="../Saved/AIResearch/NpcTraining/combat-v7-integration/cpu8-12-summary.json">CPU 对照报告</a>保留两个时段、全部请求、声音校验值和帧统计；<a href="../Saved/AIResearch/NpcTraining/combat-v7-integration/tts8-config.json">旧 8 秒配置</a>继续保留，原六组失败结果未覆盖。</p>
+<h3 id="combat-active-voice-20261114">只保留当前说话者的语音模型</h3>
+<p>两种 B 声音原先各自保留一份 GPU 模型和声音解码器。新增的可选方式只保留当前说话者：换人时释放上一份模型，再加载下一份。翠花的参考声音在准备阶段提取后单独保存，换人不重新生成参考声音；模型权重、采样参数和声音配置保持原样。原来的双模型方式仍是默认，这次只用独立配置试验。</p>
+<p>短测时双人 PIE 正在运行，没有运行小模型。四句台词各合成一次，与此前相同台词、相同种子的结果比较，四句 PCM 均逐字节相同。准备两种声音共用了 7.179 秒，单独记录，不计入下表；首句已经准备好了大壮的模型，不能把它的速度当作每次冷启动速度。</p>
+<div class="table-scroll"><table><thead><tr><th>台词</th><th>声音长度</th><th>首块到达后台</th><th>有声片段到达后台</th><th>生成耗时 / 声音长度</th></tr></thead><tbody>
+<tr><td>大壮短句，已准备模型</td><td>4.40 秒</td><td>177 ms</td><td>356 ms</td><td>0.242</td></tr>
+<tr><td>翠花短句，换人</td><td>3.28 秒</td><td>1404 ms</td><td>1472 ms</td><td>0.610</td></tr>
+<tr><td>大壮长句，换人</td><td>6.16 秒</td><td>1210 ms</td><td>1273 ms</td><td>0.380</td></tr>
+<tr><td>翠花长句，换人</td><td>5.28 秒</td><td>1419 ms</td><td>1537 ms</td><td>0.456</td></tr>
+</tbody></table></div>
+<p>换人后首块约需 1.2–1.4 秒，说明减少常驻模型确实会增加换人的等待，不能写成“没有延迟”。有声片段按 PCM 的音量阈值判断，仍不是声卡实际播放时间。整卡显存采样最高为 11126 MiB，包含游戏、准备和换人；这次没有在相同场景同时补测双模型方式，也不是连续记录峰值，因此不从这个数字直接推算节省了多少显存。</p>
+<p>另做了一次首块之后的取消，33.08 毫秒收到停止确认，下一句翠花语音完整生成；它没有覆盖模型加载途中取消。四句均短于 8 秒，虽然本次配置已允许 12 秒，也不能据此认为长句修复已经实测通过。<a href="../Saved/AIResearch/NativeQwen/active-voice-prescreen/prescreen-review.json">短测复核</a>列出逐句比较与限制，<a href="../Saved/AIResearch/NativeQwen/active-voice-prescreen/summary.json">原始报告</a>保留声音和时间。随后完成了 GPU 21 层小模型与这份语音配置共同运行的比较，结果如下。</p>
+<h3 id="combat-active21-coexist-20261114">GPU 21 层与单活跃语音：动作能及时返回，帧耗时仍未达标</h3>
+<p>本次重新测了对应基线：两组都使用单活跃语音、相同的 12 秒配置、四句台词和播放间隔，各记录完整 40 秒；候选组再加入 GPU 21 层的小模型。声音依次交替生成，没有同时合成两个 NPC 的声音。38 次模型请求全部在 1.5 秒内完成，动作和目标合法，也符合这些情境的原标签。正式时段错过了两个发送时槽，另外两题未覆盖，不为了凑满 40 题延长测试，也不把这次重复负载称为新的盲测。</p>
+<div class="table-scroll"><table><thead><tr><th>比较项</th><th>单活跃语音，无小模型</th><th>单活跃语音，加 GPU 21 层</th></tr></thead><tbody>
+<tr><td>模型完整返回</td><td>未调用模型</td><td>38 / 38；中位 468.8 ms，P95 944.5 ms</td></tr>
+<tr><td>完整生成的语音</td><td>8 句</td><td>8 句，均与原声音 PCM 一致</td></tr>
+<tr><td>生成耗时 / 声音长度，中位数</td><td>0.543</td><td>0.512；其中一条男声达到 0.834，超过 0.8 目标</td></tr>
+<tr><td>完整时段帧耗时 P95</td><td>112.90 ms</td><td>134.28 ms，相对增加 18.94%</td></tr>
+<tr><td>整卡显存采样最高值</td><td>11138 MiB</td><td>11587 MiB</td></tr>
+</tbody></table></div>
+<p><strong>这组仍未采用，原定帧 P95 增幅不超过 10% 的要求不变。</strong>模型返回速度明显改善，但不能只凭这一项宣布接入完成，也不能将“模拟没有缺音”写成所有语音指标都通过。换人后的首块仍需约 1.35–1.81 秒，模型加载会带来等待；声音尚未通过 UE 播放器和扬声器验证。</p>
+<p>游戏线程中位耗时从 72.32 ms 增至 85.17 ms，GPU 耗时约为 16.71 ms 和 16.80 ms。两组镜头中位位置只差约 0.004 cm，但行人数仍分别在 190–934 和 190–942 之间变化，而且只按先后顺序各测一次。因此，18.94% 是此次同设置比较的观察结果，不把原因全部归为小模型，也不裁掉较慢的时段来通过门槛。约每秒一次的显存采样也可能漏掉瞬时峰值。</p>
+<p>由于帧耗时已经不合格，原计划中的同条件 Luna 对照没有继续运行，也没有拿此前不同条件的 Luna 成绩补足通过条件。随后试玩恢复为 Luna 与两种 B 同时常驻的语音配置，保留新的 12 秒上限，供界面和长句实际检查使用；小模型仍未启用。后续 Q4 候选的独立验收另记在下方。<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/integration/active21/summary.json">GPU 21 层完整报告</a>保存全部限制，<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/integration/active21/candidate-raw.json">原始请求与语音记录</a>保留成功样本和正常截止取消的末句。</p>
+<h3 id="combat-round3-q4-20261114">Q4 量化：动作验收达标，游戏共存仍待检查</h3>
+<p>为减少小模型占用的资源，这次直接将第三轮已有的 BF16 权重转换为 Q4_K_M，没有追加训练，也没有重新调整提示或答案。固定版本的 llama.cpp 在 CPU 上完成量化，用时 10.37 秒。新文件约 1.11 GB，比原来的 Q8 少 693 MiB；这是权重文件的差值，实际显存减少多少还需在游戏中测量。</p>
+<p>Q4 使用原来的 40 个验收情境，答对 38 个，正确率为 95%，全部输出和目标均合法，达到原定 90% 门槛。逐条校验确认，送给 Q4 的 40 份输入、可接受答案、采样设置和计分规则均与 Q8 相同。这是同一组题目的量化对照，不是新的盲测。两处错误仍完整保留：第 25 个情境选择逃开，原答案是继续交战；第 2 个情境选择攻击，原答案是逃开。两次都按质量错误计分，没有修改标签。</p>
+<p>本次全 GPU 独立运行的中位耗时为 123.8 毫秒，P95 为 181.3 毫秒；上下文仍为 4096、最多输出 64 token、单并发、温度为 0，每次请求仍限 1.5 秒。当时没有运行 UE 或语音，因此这些数字不能作为游戏内响应速度。随后真实 HTTP 检查确认目标映射正确，取消后没有返回旧攻击，下一次请求也正常完成；本次取消返回用了 33.47 毫秒，再过 17.26 毫秒确认模型空闲，这是一次实测，不是所有取消操作的耗时保证。</p>
+<p>模型服务已在核对进程身份后停止，正式小模型配置仍保持关闭。下一步再与两种 B 声音和双人游戏一起比较，帧 P95 增幅不超过 10% 的要求保持不变。Q4 本轮没有重跑额外的 16 个内部情境，第三轮此前仅答对 12 个的不足继续保留。<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4/summary.json">Q4 汇总</a>、<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4/input-comparison.json">逐条输入核对</a>、<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4/quality-errors.json">两处错误</a>和<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4/manifest.json">独立文件清单</a>随源码保存；权重继续留在本机，没有提交到资料目录。</p>
+<h3 id="combat-q4-coexist-20261114">Q4 与游戏同时运行：动作更快，帧时间仍超出目标</h3>
+<p><strong>这次动作选择和连续合成达到了各自的指标，但整体还没有通过。</strong>加入 Q4 后，完整 40 秒内的帧时间 P95 从 109.08 毫秒升到 122.21 毫秒，增加 12.04%，仍超过事先约定的 10%。因此没有启用正式小模型，也没有用去掉首尾几秒的结果代替原来的验收结果。</p>
+<p>本次依次测了三组：双人游戏与语音、再加入 Q4 小模型、最后改为 Luna。两个游戏窗口均为 960×720，使用同一出生点视角，关闭麦克风和正式 AI 后端，帧率上限为 60；这个数字只是上限，当时游戏实际并没有达到 60 帧。三组都使用已认可的两种 B 音色、相同的四句台词、12 秒语音上限，并且只保留当前说话者的语音模型。每组记录完整 40 秒，语音顺序和请求发起节奏相同：模型每秒最多收到一次请求，前一次未完成时不会并发补发。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>本轮配置</th><th>完成的动作请求</th><th>动作请求中位 / P95</th><th>语音合成耗时与音频长度之比，中位数</th><th>完整 40 秒的帧时间 P95</th></tr></thead>
+<tbody>
+<tr><td>双人游戏＋语音</td><td>不调用模型</td><td>—</td><td>0.441</td><td>109.08 毫秒（416 帧）</td></tr>
+<tr><td>再加入 Q4，全 GPU 运行</td><td>40 / 40，全部格式和目标合法</td><td>207.6 / 359.2 毫秒</td><td>0.506</td><td>122.21 毫秒（401 帧），增加 12.04%</td></tr>
+<tr><td>改用 Luna</td><td>15 / 15，全部格式和目标合法</td><td>2083.6 / 2474.0 毫秒</td><td>0.484</td><td>111.10 毫秒（415 帧）</td></tr>
+</tbody></table></div>
+<p><strong>速度比较只取双方都完成的同一批 15 个情境。</strong>这 15 个情境中，Q4 的中位耗时为 211.07 毫秒，Luna 为 2083.57 毫秒，减少 89.87%，达到原定至少减少 30% 的要求。这里统计的是动作选择，不包括玩家发言、台词生成和游戏内播放。Q4 的请求截止仍为 1.5 秒，40 次都及时完成；Luna 为收集实际耗时使用了 10 秒截止，15 次均超过 1.5 秒，另有 25 个发起时机因上一请求尚未结束而跳过。Luna 的采样方式和服务开销也与本地模型不同，不能将这一结果理解为所有类型对话都会快同样的比例。</p>
+<p><strong>动作质量仍按前一节独立量化检查的 38 / 40 记录。</strong>本轮运行时又回答了同一组 40 个情境，其中 39 个符合原有答案，全部动作和目标合法。39 / 40 是重复测量的结果，不替代原来的 38 / 40，也不是一组新的盲测。Luna 在实际完成的 15 个情境中有 12 个符合答案；这不是对完整 40 个情境的质量结论。所有答案和计分标准均未修改。</p>
+<p>每组都完成了 8 句语音，三组共 24 句的 PCM 音频数据与此前固定台词逐字节一致。Q4 组最慢一句的合成耗时是音频长度的 0.724 倍，低于 0.8 的目标；按 1.28 秒起播缓冲模拟，三组都没有耗尽缓冲。不过换人仍需等待：Q4 组第一句在 2345 毫秒时收到第一块音频，此后各次换人约为 1.22–1.76 秒。这些时间截至合成器交出第一块数据，还没有包含 UE 接收和声音设备实际播放，不能据此宣布游戏语音已通过验收。</p>
+<p>帧时间变慢的原因还不能只凭这轮数字确定。游戏线程中位耗时由 71.42 毫秒升到 74.38 毫秒，GPU 耗时中位数均约 16.73 毫秒；三组采样到的显存最高值分别为 11293、11625、9875 MiB。它们来自顺序运行的三组，路人数量也在变化，因此只能作为后续排查依据，不能直接认定某种资源争用是唯一原因。这次只做了一轮顺序对照，游戏 P95 使用完整 40 秒，5–35 秒的附表仅供检查首尾影响。</p>
+<p>本轮已停止自己启动的模型和语音进程，保留原正式配置。测量时虽然双人游戏在运行，但动作输入由脚本提交，声音也没有经过 UE 播放，所以仍需另做真实发送、主机与客户端听感的验收。相关的<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4-coexist/summary.json">完整结果</a>、<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4-coexist/paired15.json">同一批 15 个情境的逐项比较</a>、<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4-coexist/frames-overview.json">帧统计</a>、<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4-coexist/commands.json">实际运行命令</a>和<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4-coexist/manifest.json">文件清单</a>单独归档；原有记录保持不变，归档中不包含模型权重、CSV 原始数据和音频文件。</p>
+
+<h3 id="combat-q4-singlethread-interrupted-20261114">单线程对照中断，先恢复稳定试玩</h3>
+<p>下一次对照只把 Q4 的 CPU 线程从 4/8 改为 1/1，模型、声音和采样设置保持原样。三组原计划各记录完整 70 秒，以覆盖约一分钟的自然 GC 周期；原来的帧时间 P95 增幅不超过 10% 的要求不变，也没有准备删除 GC 或慢帧。<strong>这次游戏状态在测量期间发生变化，因此不能用结果判断单线程是否改善了性能。</strong></p>
+<p>日志显示，基线从 15:43:38.915 UTC 开始，约 19 秒后双人 PIE 被结束。随后在 15:45:15.129 UTC 又启动了第二个编辑器，Q4 的正式记录从 15:45:18.782 UTC 开始，两个编辑器的运行时间重叠。原先约定的同一双人场景已经不成立，基线与 Q4 之间不再是可用的性能对照。</p>
+<p>Q4 组在运行 55.83 秒后因女声合成超时结束，没有完成计划的 70 秒。这句声音等待 11.30 秒才产生第一块音频，21.46 秒后报超时；此前有 7 句完整合成。动作请求也保留了所有失败：49 次实际调用中有 46 次返回合法结果、3 次超时，另有 3 次因服务仍忙而未发起调用。检查发现第二个编辑器后，脚本没有启动 Luna 组，并停止了自己启动的模型和语音进程。这些是异常条件下的记录，不能直接归因于单线程设置。</p>
+<p>CSV 于 15:51:41.045 UTC 正常结束，共 2736 帧，文件完成标记存在，FrameTime 没有缺失或零值。分析使用文件末尾的完整表头。基线窗口中记录到的 1 次 GC 与退出 PIE 的清理重叠，Q4 窗口则没有 GC；两组均不满足原先的比较条件。全部帧和失败记录保留，后续空闲时段没有补入测量窗口，也没有计算帧改善百分比或将任何指标判为达标。</p>
+<p>当前先恢复 Luna 和已认可的两种 B 声音供玩家试玩，正式小模型继续关闭。本次未追加训练或新负载。<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4-singlethread-interrupted/summary.json">中断报告</a>、<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4-singlethread-interrupted/game-condition-events.json">游戏状态变化记录</a>、<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4-singlethread-interrupted/csv-diagnostic.json">CSV 完整性与诊断</a>、<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4-singlethread-interrupted/commands.json">实际运行命令</a>和<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4-singlethread-interrupted/manifest.json">独立文件清单</a>已随项目资料保存。CSV 本体留在 Saved，模型权重和音频没有加入资料目录，既有记录也未覆盖。</p>
+
+<h3 id="combat-long-speech-fix-20261114">实际道歉回复被 8 秒上限截断</h3>
+<p>客户端在实际游戏中向大壮发送：“大壮，别打了，刚才都是误会，咱们和好吧。”Luna 选择看向玩家，回复：“行，既然是误会，那就和好，歇着吧。”主机和客户端都开始播放，但声音随后停止，不能把这次交互记为完整语音通过。</p>
+<p>后台没有记录这句声音生成完成；原生语音日志显示在第 101 帧附近结束，约 8.08 秒，随后报出 <code>neural_tts_audio_too_long</code>。两端收到过音频，最后的播放记录却变成 <code>consumed=0 total=0</code>。问题是正常语速下的一句台词略长于 8 秒，触发了长度限制，不是这次声音生成跟不上播放。<a href="../Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/actual-long-sentence.json">实际发言记录</a>保存玩家原话、模型回复和请求编号，<a href="../Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/actual-long-sentence.log">对应日志</a>保留失败过程；语音子进程没有请求编号，因此其报错按同次现场观察关联，这项日志限制也已注明。</p>
+<p>后端现已支持 8 秒和 12 秒两种配置，正式配置采用 12 秒。24 kHz、16 位单声道的完整声音上限从 384000 字节调整为 576000 字节；整句消息、分块数量和测量工具的限制也一并调整。音色、随机种子、温度和模型最大生成步数不变，超过新上限仍明确报错，不把半句当作完整结果。</p>
+<p>修复时的 71 项 CPU 回归检查通过，其中新增 8 项检查长句传输、4 帧和 8 帧分块、首尾短块、超限拒绝、取消后的下一句，以及实际本机 HTTP 连续传输三句 12 秒声音。测试使用模拟 PCM，没有加载语音模型。检查命令与结果见<a href="../Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/summary.json">12 秒修复报告</a>和<a href="../Saved/AIResearch/NpcTraining/combat-v7-integration/tts12-fix/targeted-tests.log">测试日志</a>。</p>
+<p>加入单活跃语音和后续诊断修改后，又按当前代码运行了 70 项有针对性的后端检查：45 项覆盖回复、模型选择、HTTP 与取消，25 项覆盖语音换人、声音参考和 12 秒传输，全部通过。它不是重新跑完此前的 319 项全套测试。另有 12 项 UE 声音编码和协议自动化通过；各自的命令、源码校验值和未覆盖范围见<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/integration/technical/current-backend-70.json">当前检查记录</a>。</p>
+<p><strong>随后实际在客户端按 T、输入消息并点击发送，主机和客户端都完整播完了一条超过 8 秒的回复。</strong>玩家请翠花把刚才的误会说清楚，Luna 回复：“我没看见什么新事，气的是大壮以前总拿‘让着我’压人；刚才他答应以后好好说，我也不打算再较劲了。”源语音为 108 帧、8.64 秒，生成耗时约 1.54 秒；编码后的播放数据包含约 40 毫秒尾部补齐，共 8.68 秒。两端均记录 <code>consumed=416640 total=416640</code>，这条回复没有出现缓冲耗尽、音频超时或格式错误。</p>
+<p>服务器接受消息后，主机约 3.53 秒开始播放，客户端约 3.56 秒开始播放。此结果证明超过旧上限的声音能在双人游戏中完整播完，等待感仍需继续改善。此次使用 Luna 和两种 B 声音常驻配置，不属于本地小模型验收；满 12 秒的边界仍只由自动化检查覆盖。<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/integration/tts12/actual-playback/summary.json">实机长句记录</a>附有玩家发言、请求编号及两端日志片段。原生语音子进程仍没有请求编号，因此生成帧数按当时唯一最新长句关联，不能把这项日志限制省略。</p>
+<p>本轮接入检查、CPU 失败、单活跃声音短测、GPU 21 层失败和长句修复已另存为<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/integration/summary.json">接入结果摘要</a>及<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/integration/manifest.json">独立文件清单</a>。34 份原始记录及 5 份本次实机摘要、日志摘录均按保存文件归档，并附来源路径与 SHA256；没有复制模型权重、WAV 或大型 CSV，也没有覆盖下面原来的 52 份训练记录清单。</p>
+<p>本次 52 个记录文件约 7.93 MB，已复制到源码目录，原来的两轮归档保持不变。新归档包含退回草稿、教师分歧、训练数据、每步 loss、部署文件校验值、全部内部结果与最终 40 题结果；模型权重和缓存继续留在本机。<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/round3-manifest.json">第三轮文件清单</a>和<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/round3/combat-v7/independent-audit.json">独立复核</a>可用于核对来源和计分。</p>
+</section>
+<section id="combat-training-results-20261114">
+<h2>战斗小模型：两轮训练与验收结果</h2>
+<div class="notice"><strong>独立运行 P95 为 219 ms，决策质量尚未通过。</strong>第二轮在 40 个封存情境中答对 35 个，合理动作比例为 87.5%，低于约定的 90%。正式配置保持关闭，不以“训练完成”代替玩法验收。</div>
+<p>本轮数据与结果已整理到 <code>Tools/DeliveryAI/npc_training/records/2026-11-14/</code>，可随项目源码保存。归档包括两轮训练集、内部检查集、同一份 40 例验收集、教师纠错、每步 loss 和评测结果；<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/manifest.json">文件清单</a>记录来源、SHA256 和复现命令。模型权重与 LoRA 参数仍只在本机，未提交；缓存和整段原始玩家聊天日志也未放入归档。</p><h3>训练了什么</h3>
+<p>模型只接手大壮和翠花已经开始的追打、逃跑，选择继续追打、逃跑或停手。它不能另找一个目标，也不生成台词。玩家交谈、首次拱火和二狗仍交给原模型。游戏继续检查目标、距离和动作是否有效，模型没有直接造成伤害的权限。</p>
+<p>第一轮有 120 个独立编写的训练故事，另加三段试玩日志整理出的八条记录，共 128 条、123 组。日志中的“正在交战”状态经过人工重建，不能算作完整的真实连续决策轨迹。15 个故事单独用于内部检查，另外 40 个独立故事封存验收。同一故事没有通过改名或改编号增加数量。</p>
+<p>早期草稿把“决定停手”等答案写进输入，另有受击次数已经足够倒地却仍站立的情境，均在训练前退回重做。正式数据只保留游戏实际能够报告的台词、看到或听到的事件、挥拳和命中次数。教师模型逐例审核，再针对原始小模型的 17 个训练错误重新检查，其中三条教师答案也被修正。这是离线纠错，还没有完成由实际游戏轨迹持续收集数据的 DAgger 训练。</p>
+<p>第一轮检查发现：所有人工故事都带有自己的上一句话，而且“已挨三拳、仍在追打”的训练故事几乎都被标成逃跑。这样的分布可能使模型只盯着受击次数，忽略后来发生的事。第二轮新增 32 个独立故事，补充双方和解、旧话与新动作矛盾、没有自己发言、旁人转述等情况。教师审核后，共有 152 个独立编写的训练故事，加上原有八条日志记录，合计 160 条、155 组。新增内容依据训练和内部检查结果编写，没有使用封存 40 例的错误详情。</p>
+<p>两次最终验收使用的是同一组 40 个情境，标签和文件内容保持不变。第二次是原验收集的复测，不是另外 40 个从未测试过的新情境。这 40 个情境都没有进入训练，但目前的结果仍只是这组小样本上的表现，不能当作真实试玩成功率。</p>
+<h3>训练成本与模型精度</h3>
+<p>两轮均在 RTX 5070 Ti Laptop 12 GB 上训练 Qwen3-1.7B，采用 BF16 LoRA，rank 16、alpha 32、批量 1、累积四步。第一轮 48 步，学习率 0.0002，训练 115.44 秒、含加载和保存共 131.29 秒；第二轮从第一轮继续训练 64 步，学习率降到 0.00005，训练 155.15 秒、总计 174.92 秒。</p>
+<p>第一轮 PyTorch 峰值实际分配约 5.66 GiB、保留约 10.05 GiB；第二轮约 5.64 GiB 和 9.63 GiB。这些是训练进程的统计，不是游戏和语音同时运行时的显存。15 个内部检查情境的答案 token loss 从 0.619 降至 0.018，第二轮为 0.024；这个值反映模型预测参考答案时的误差，不能当作动作正确率。</p>
+<div class="table-scroll"><table><thead><tr><th>模型</th><th>采样温度</th><th>内部检查</th><th>40 例独立验收</th><th>结论</th></tr></thead><tbody><tr><td>原始 Q4</td><td>0.7</td><td>5 / 15</td><td>未用于最终验收</td><td>训练前参照；不是正式模型</td></tr><tr><td>第一轮 Q4</td><td>0.7 / 0</td><td>12 / 15；10 / 15</td><td>未用于最终验收</td><td>仍会在应停手或逃跑时选择追打</td></tr><tr><td>第一轮 BF16</td><td>0</td><td>15 / 15</td><td>31 / 40（77.5%）</td><td>内部样本全部通过，独立情境仍明显不足</td></tr><tr><td>第二轮 Q8</td><td>0</td><td>14 / 15</td><td>35 / 40（87.5%）</td><td>未达到 90%，保持关闭</td></tr><tr><td>第二轮 BF16</td><td>0</td><td>14 / 15</td><td>不再重复挑选最终结果</td><td>与 Q8 的内部选择相同，因此评测前选定 Q8</td></tr></tbody></table></div>
+<p>第一轮还比较过 Q4 的训练集 imatrix 校准及嵌入矩阵保留 F16，内部结果仍是 10/15；Q8 为 14/15，BF16 为 15/15。没有把 Q4 写成通过。第二轮 Q8 与 BF16 的内部错误完全相同，因此在第二次验收前选定占空间更小的 Q8，不再用不同精度重复试到一个好看的成绩。首次导出曾缺少 sentencepiece，已在独立训练环境安装固定版本后重试，失败文件和日志仍保留。</p>
+<h3>还错在哪里</h3>
+<p>第二轮仍有两个明显的问题：对方说愿意赔花盆、本人已经接受解释后，模型仍选择追打；对方已经认输，本人也说“这还差不多”，模型还是没有停手。另外三例继续逃跑，其中一例已经澄清伸手只是接包，另两例则是原先为了让行或避开菜摊而移动，到了空地、对手再次冲来后仍没有改变安排。它对“局面已经变化”的理解还不够稳定。</p>
+<p>第二次验收的 40 个结果全部符合动作和目标格式，没有选择新的对手；合理动作仅 35 个。评分在第二轮推理前与原要求对齐：合理动作至少 90%，目标和协议全部合法；取消后恢复旧动作等问题由独立接入测试检查。“不该追打却选择追打”保留为重要质量错误，不直接混同为协议错误。旧报告、原标签和 90% 门槛均未修改。</p>
+<p>Q8 在全 GPU、4096 上下文、64 输出 token、单请求条件下，中位耗时 156 毫秒，P95 为 219 毫秒，首次请求约 391 毫秒。测量包含输入检查和完整动作输出，当时没有同时运行 UE 或语音。这只能说明独立服务响应快，尚不能说明游戏内一定流畅。99、21、14 层及 CPU 与游戏、语音共存的成本由后续记录补充。</p>
+<p>截至第二轮，已完成当时约定的两次训练，未达到门槛，因此当时没有继续增加候选或修改标签来宣称通过。正式配置保留原模型回退。用户随后要求继续补充数据训练，第三轮的输入修正、训练结果和局限另记在上方；仍由模型作决定，不加按次数打架的规则。</p>
+<p class="evidence">数据文件：<a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v4/train.jsonl">第一轮训练集</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v4/validation.jsonl">第一轮内部检查集</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v5/train.jsonl">第二轮训练集</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v5/validation.jsonl">第二轮内部检查集</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/acceptance-reviewed.json">冻结的 40 例验收集</a>。</p><p class="evidence"><a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v4/round1/run.json">第一轮训练参数与显存</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v4/round1/loss.jsonl">第一轮逐步 loss</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v5/round2/run.json">第二轮训练参数与显存</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v5/round2/loss.jsonl">第二轮逐步 loss</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v4/student-corrections.json">教师纠错记录</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v4/training-shortcut-audit.json">数据偏差检查</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v5/teacher.json">第二轮教师审核</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v5/export-round2/export.json">导出文件与哈希</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v4/final-acceptance-bf16-gpu99.json">第一次 40 例结果</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/combat-v5/final-acceptance-q8-gpu99.json">第二次 40 例结果</a> · <a href="../Tools/DeliveryAI/npc_training/records/2026-11-14/summary.json">总报告与全部文件校验值</a></p>
+</section>
+<section id="native-speech-results-20261114">
+  <h2>语音生成：原生实现与实测对照</h2>
+  <p>这次优化针对“一句话说几个词就停一下”的问题。此前游戏运行时，后续声音生成得太慢，播放器经常把已经收到的声音播完。多存一些声音再开播可以暂时减少停顿，但会增加开口前的等待；如果生成速度一直赶不上播放，长句仍然会断开。因此，这轮先比较语音生成本身的速度。</p>
+  <div class="notice"><strong>两种原生 Q8 声音已获认可。</strong>用户试听大壮和翠花后确认：“两个人都自然，可以采用”。下面的速度是在 UE 关闭时测得的；随后<a href="#npc-evening-playtest-20261114">双人实际操作</a>仍出现首句超时和句中缺音，需要修复后继续检查，不能用独立合成成绩代替游戏听感。</div>
+
+  <h3>实现调整</h3>
+  <p>现有 B 已经使用 CUDA Graph，减少了每一步 GPU 运算的准备开销。这次在保留现有实现的同时，增加了 <code>qwentts.cpp</code> 原生版本作对照。它在生成过程中连续解码声音，并保存前面已经计算过的状态。新增的语音进程将这些声音逐块发送给游戏；玩家打断时，后台停止生成，尚未发送的声音也随之取消。</p>
+  <p>大壮继续使用 <code>Uncle_Fu</code>，翠花继续使用原来的 B 参考录音和对应文字，采样温度仍为 0.9。原生计算与原实现并不完全相同，翠花的参考文字与音频组织方式也有差异，所以不能仅凭参数相同就认定声音不变。本轮实际试听通过后，选用 Q8 版本继续接入；原 PyTorch 版本保留用于回退。</p>
+
+  <h3>同条件性能对照</h3>
+  <p>测试使用本机 Windows、RTX 5070 Ti Laptop GPU（12 GB）。UE、代码编译和其他 GPU 工作停止后，每种方案分别在同一个常驻进程中，将相同的四句台词读两轮，共八句。台词覆盖男女声及相对长短的句子，模型来源、随机种子和采样设置均有记录。BF16 使用较高精度保存模型参数；Q8 对部分参数采用 8 位量化，减少占用。</p>
+  <p><strong>生成耗时与声音时长之比（RTF）越小越好。</strong>例如 0.13 表示生成一秒声音约需 0.13 秒。下表同时记录第一个有明显声音的片段何时到达后台调用方；这些时间没有计入游戏的播放缓冲和扬声器输出。</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>方案</th><th>RTF 中位数与范围</th><th>大壮：有声片段到达</th><th>翠花：有声片段到达</th><th>整卡显存采样最高值</th></tr></thead>
+      <tbody>
+        <tr><td>现有 PyTorch B</td><td>0.437（0.391–0.446）</td><td>292–322 ms</td><td>294–314 ms</td><td>6426 MiB</td></tr>
+        <tr><td>原生 BF16</td><td>0.178（0.170–0.202）</td><td>203–309 ms</td><td>59–163 ms</td><td>7918 MiB</td></tr>
+        <tr><td>原生 Q8</td><td><strong>0.130（0.122–0.186）</strong></td><td>44–180 ms</td><td>44–154 ms</td><td>6229 MiB</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>原生 Q8 在本轮中生成得更快，显存采样值也低于原生 BF16，因此优先采用 Q8。这里的显存数值是每秒采样一次得到的整卡用量，包含桌面等其他占用，不能当作模型独占显存或绝对峰值。三个测试开始前的整卡用量分别约为 1437、1266、1317 MiB。游戏与本地对话模型同时运行时，还要重新检查余量。</p>
+
+  <h3 id="native-kv1024-20261114">减少语音缓存占用的显存</h3>
+  <p>实际双人试玩时，游戏和语音合成几乎占满了 12 GB 显存。检查原生源码后发现，每种声音都预留了 4096 个位置来保存生成过程中使用的计算结果，这部分缓存每种声音占 896 MiB。游戏每句最多生成 256 个音频标记，因此先将独立试验版的容量改为 1024；模型权重、声音、随机种子和采样设置保持原样。</p>
+  <p>改动基于同一个 <code>f1a6924</code> 版本，只调整缓存容量并增加完整长度检查。开始生成前，先确认输入提示和本句生成上限之和不超过 1024；超过就明确拒绝，不裁掉文字或声音。补丁、原源码和生成源码均保存校验值，独立 DLL 沿用原来的 MSVC 14.38 与 ggml CUDA 库。</p>
+  <div class="table-scroll"><table>
+    <thead><tr><th>检查项目</th><th>原生 Q8：4096 位置</th><th>独立试验：1024 位置</th></tr></thead>
+    <tbody>
+      <tr><td>四句台词，各读两轮</td><td>使用已认可声音的原生基线</td><td><strong>8 / 8 份 PCM 逐字节相同</strong>，声音长度也相同</td></tr>
+      <tr><td>整卡显存：启动前 → 采样最高值</td><td>1317 → 6229 MiB</td><td>1170 → 4742 MiB</td></tr>
+      <tr><td>扣除启动前用量后的增加值</td><td>4912 MiB</td><td>3572 MiB，<strong>少 1340 MiB</strong></td></tr>
+      <tr><td>RTF 中位数</td><td>0.1299</td><td>0.1335；本轮不作为速度提升的依据</td></tr>
+    </tbody>
+  </table></div>
+  <p>两轮使用相同台词、先后顺序和配置，比较对象都是原生 Q8。显存按一秒间隔采样；扣除启动前用量后的差值接近缓存容量计算得到的 1344 MiB。新测试期间另一项任务可能正在编译 C++，因此这里确认的是声音不变与显存下降，不声称生成更快。减少占用能否改善游戏运行时的卡顿，仍要在同机双人游戏中重测。</p>
+  <p>收到第一块后取消，20.65 ms 后确认结束，随后翠花的新句正常完成。另用男女两种声音分别提交超出容量的请求，均在生成前拒绝，没有输出任何音频；同一实例随后生成正常台词，PCM 仍与原生基线相同。原生接口与补丁准备的 13 项 CPU 检查通过。正式 DLL 与旧运行配置未覆盖，试验使用独立的 <code>runtime-q8_0-kv1024.json</code>。</p>
+  <p class="evidence"><a href="../Saved/AIResearch/NativeQwen/kv1024-report.json">验证摘要</a> · <a href="../Saved/AIResearch/NativeQwen/native-q8-kv1024-idle/summary.json">八句逐块记录与显存采样</a> · <a href="../Saved/AIResearch/NativeQwen/kv1024-boundary.json">越界拒绝与恢复结果</a> · <a href="../Tools/DeliveryAI/native_tts_vendor/kv1024.patch">相对固定上游的补丁</a> · <a href="../Tools/DeliveryAI/native_tts_vendor/source-manifest.json">版本和校验值</a> · <a href="../Tools/DeliveryAI/tts_evaluation/build_native_qwen_kv.ps1">独立构建脚本</a> · <a href="../Saved/AIResearch/NativeQwen/kv1024-build.log">构建日志</a> · <a href="../Saved/AIResearch/NativeQwen/kv1024-boundary.log">边界检查日志</a>。</p>
+
+  <h3>测量中发现的问题</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>发现的问题</th><th>处理与检查</th></tr></thead>
+      <tbody>
+        <tr><td>第一次原生运行无法识别中文</td><td>转换工具按 Windows 默认编码读取了词表。改为显式使用 UTF-8，重新转换两个声音模型，并逐项比较转换前后的词表，防止乱码再次混入。</td></tr>
+        <tr><td>最初的长句超过八秒声音上限</td><td>保留失败结果，将对照台词缩短后重新测试。正式八秒限制没有扩大，也没有把被截断的声音当作成功结果。</td></tr>
+        <tr><td>第一块音频返回很快，但里面几乎没有人声</td><td>原生实现的第一块只有 80 ms，现有实现通常为 640 ms，不能直接比较第一次回调。现在另查实际音量起点，上表只列有声片段的到达时间。</td></tr>
+        <tr><td>早期计时出现 16、32 ms 的台阶</td><td>确认原计时器在此 Python 环境下只有 15.625 ms 的精度，改用高精度计时器，三种方案均重新测量。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <details>
+    <summary>查看测量与取消检查的具体范围</summary>
+    <p>有声起点按 20 ms 小段检查，均方根音量达到满量程的 1% 时计入。这是统一的测量标准，不等同于人工确认每个音节。记录同时保存每块音频的样本数、到达时间、音量和完整 PCM 校验值；同一方案两轮的同句 PCM 完全一致，不同方案之间的声音和长度有所不同。</p>
+    <p>三种方案都检查了“收到第一块后取消，再生成一句翠花台词”，均只交付一块旧声音，随后新句正常完成。已有记录中的 <code>cancel_confirmed_ms</code> 从开始合成计时，包含等待第一块的时间，不能用它比较纯取消耗时；后续工具已将取消请求与确认时刻分开记录。</p>
+    <p>原生接口会等当前请求结束后才返回。每个新请求重新准备对应的声音状态；参考录音只用于准备状态，不直接发送给游戏。Python 适配层的取消后同声重试、发送顺序、长度限制和重复关闭等检查，以及原有进程检查，共 24 项通过。真实 GPU 取消后继续同一男声尚未单独验证。</p>
+  </details>
+
+  <h3>声音确认与后续检查</h3>
+  <p>用户已认可原生 Q8 的两种声音，不需要重复请求这次试听确认。四段对照录音保留原始音量，没有拼接、裁掉开头或修改语速；文件校验值与认可原话一起保存。认可记录保存于 2026 年 11 月 14 日 10:20:18 UTC，这个时间是记录时刻。</p>
+  <p>同句试听：<a href="../Saved/AIResearch/NativeQwen/audition/Dazhuang_current.wav">大壮 · 现有 B</a> · <a href="../Saved/AIResearch/NativeQwen/audition/Dazhuang_native_q8.wav">大壮 · 原生 Q8</a>；<a href="../Saved/AIResearch/NativeQwen/audition/Cuihua_current.wav">翠花 · 现有 B</a> · <a href="../Saved/AIResearch/NativeQwen/audition/Cuihua_native_q8.wav">翠花 · 原生 Q8</a>。</p>
+  <p>接下来在正式地图运行画面，同时播放较长对白，检查是否缺音、打断是否及时，以及恢复交谈后有没有旧声音混入。再用主机和远端客户端实际交谈，核对字幕、声音、空间音量与人物动作。还需与本地对话模型共同运行，检查显存和游戏帧率。本轮离线对照通过，不代表这些游戏内项目已经验收。</p>
+
+  <details>
+    <summary>来源版本与复查资料</summary>
+    <ul>
+      <li><a href="https://github.com/ServeurpersoCom/qwentts.cpp/tree/f1a6924789883bd92eeb59176793a94af55730b3">qwentts.cpp 固定版本 f1a6924</a>，ggml 固定为 <code>0d403add5cb6329935290f02462e1072045aacd2</code>，原生项目采用 MIT 许可。本机使用 MSVC 19.38、CUDA 12.8.93 构建，源码与生成文件保存在 Saved，未作为游戏模型资源提交。</li>
+      <li>已阅读 <a href="https://github.com/ServeurpersoCom/qwentts.cpp/blob/f1a6924789883bd92eeb59176793a94af55730b3/src/qwen.h">C 接口</a>、<a href="https://github.com/ServeurpersoCom/qwentts.cpp/blob/f1a6924789883bd92eeb59176793a94af55730b3/src/pipeline-tts.cpp">逐块生成与取消实现</a>、<a href="https://github.com/ServeurpersoCom/qwentts.cpp/blob/f1a6924789883bd92eeb59176793a94af55730b3/src/pipeline-codec.cpp">连续音频解码实现</a>，据此接入现有后台接口。</li>
+      <li><a href="https://arxiv.org/html/2601.15621v1">Qwen3-TTS 论文</a>中的低延迟结果使用专门优化的推理服务，没有直接当作本项目成绩。<a href="https://github.com/vllm-project/vllm-omni/blob/main/vllm_omni/model_executor/stage_input_processors/chunk_size_utils.py">vLLM-Omni 分块控制器</a>用于参考生成速度与缓冲的关系，本轮没有整体迁移其服务。</li>
+    </ul>
+    <p><a href="../Saved/AIResearch/NativeQwen/native-report.json">完整研究与认可记录</a> · <a href="../Saved/AIResearch/NativeQwen/comparison-summary.json">同条件结果汇总</a> · <a href="../Saved/AIResearch/NativeQwen/current-clean-qpc/summary.json">现有版本逐句记录</a> · <a href="../Saved/AIResearch/NativeQwen/native-bf16-clean-qpc/summary.json">BF16 逐句记录</a> · <a href="../Saved/AIResearch/NativeQwen/native-q8-clean-qpc/summary.json">Q8 逐句记录</a> · <a href="../Saved/AIResearch/NativeQwen/interface-tests.log">24 项接口检查</a> · <a href="../Tools/DeliveryAI/native_tts_vendor/source-manifest.json">版本与文件校验</a>。</p>
+  </details>
+</section>
+
+
+
+
+<section id="ergou-continuous-companion-20261114"><h2>二狗持续陪伴：自我、城镇、关系与日常聊天</h2>
+<div class="finding"><strong>本批已构建：</strong>UE 定向通信、分支取消、普通/流式排播门控、公开地点观察、街坊目击记忆与普通持物基础层已正式合入，DeliveryEditor 完整构建 160 项、129.97 秒通过；<a href="../Saved/AIResearch/CompanionEnvironment/environment_communication_build.json">构建与源码记录</a>绑定 45 文件实际哈希。本聊天未执行游戏验收或训练，FetchItem/ReturnItem 第二批仍在 Saved 审查。</div>
+<p>23:03 后追加的离线审查：取物第二批原 22 文件已经完成两轮指定范围审查，继续核对通用短动作时发现新的旁路。普通道具进入 KnownSubjects 后，原 CanLookAt 只检查实时距离与遮挡；即使物品移到背后或 Sight 已停用，BT 仍可能通过 SetFocus 追踪它。Subjects JSON 只有编号、名称与类别，不能把该问题误写成直接发送实时坐标。修正已在 Saved 完成并独立复核，增加通用 BT 执行文件后共 23 文件，共用当前视觉检查并在停止导航的同步回调后重新核对原动作身份；不改变普通居民对人物的规则。持物事实也改为记录确认时的状态，交回后的当前持有者以本次请求为准。新补丁 SHA 为 <code>318b702438f825c735badc350c3a958e13dc03a9af8cb91e864bbc3336fb2b40</code>，<code>independent_review_look_guard.json</code> 绑定五份相关源文件；原冻结补丁与审查记录已归档为历史。基线核对发现正式 BT 和 Agent 又有并行修复，合入工具会拒绝旧基线，要求先重基；工具尚未执行，不会覆盖旧快照。取物能力尚未合入、编译或启用具体物品。</p>
+<p>随后只在 Saved 将两份并行修改按片段纳入新的 before/after，补丁更新为 <code>1f21cca71a58596e3c5bcbd1bbe3eb16c9b883164fe697c5d0f1dafed0151ec8</code>。从最新正式基线加取物修改、以及旧取物版本加并行修改，得到完全相同字节；其余 21 文件不变，<code>independent_review_rebase_b.json</code> 独立复核通过。旧套件保存在 <code>rebase_b_20261114T151455932754Z/previous_frozen</code>。该结果只证明本次源码组合保留了双方修改；实际应用前还需再查实时基线，当前版本继续留给输入/开麦统一构建与性能检查。</p>
+<p>公开地点的四字段迁移与独立读回入口已经准备在 <code>Saved/AIResearch/CompanionEnvironment/PublicPlaces/metadata_apply.py</code>，尚未运行。必须先取得实际静态检查的 sampled_clear 证据，再绑定地图、清单和报告哈希；只改面馆与住宅 Location 的公开名称、介绍、开关和独立观察偏移，保留原任务锚点。八项纯文本检查确认保护逻辑不会忽略任务编号、其他组件、嵌套属性或 Actor 标签；它们使用手写 T3D 形状的文本，不证明 UE 导出绑定、实际地图写入或独立重载成功。最新报告为 <code>PublicPlaces/TextGuardChecks/20261114T151144032094Z/report.json</code>，绑定当前迁移脚本。联合检查汇总现在读取各真实子报告，明确候选结果、错误和 calibrated 状态，脚本调用完成不等于候选通过。</p>
+<p>人物表迁移只改 ergou.Persona，保存报告 <code>CompanionPersonaUpdate/20261114T144240747841Z/report.json</code> 与独立进程读回 <code>20261114T144337928147Z/report.json</code> 确认其他行、字段及受保护包不变，前后无脏包。两次 Python 操作成功，命令行仍因原有 CDO 物理材质初始化三条错误退出 1，不能记作干净的命令行通过。公开地点与家居路径的联合静态检查因新的可见编辑器占用而未启动；未接管其窗口或修改地图。</p>
+<p>后端本次区分 <code>NpcMessage/ToldBy</code> 与 <code>NpcMessageSent/ActionResult</code>，保留 <code>needs_reply</code> 与对话原文、身份和回执关联。关闭的接话只作历史，回执不会成为新问题或回答玩家。独立审查发现并修正：待回复消息后出现旧 SelfSpeech 时 hybrid 仍须交给语言模型；发给第三人的回执不能算回应原提问者；主人权限测试必须越过“未提供动作”的前置拒绝，真正检查 owner guard。10 项新增与 4 项原有相关回归全部通过，网络/服务/进程守门零尝试；应用记录、源码哈希和独立审查见 <a href="../Saved/AIResearch/NpcCommunication/UeFastTextStaging/20261114T135950819356Z/backend_applied.json">后端应用记录</a>。UE 尚未发送新消息，不将此结果称作提前接话已经运行。</p>
+<p>普通取物沿已有 Errand/BT、GAS、Inventory 和专属车接线，首批版本 7 计划加入带真实物品目标的 FetchItem/ReturnItem。24 文件基础层先暂存审查，旧私有持物槽拓宽而不另加库存，任务预约委托同一个物品预约；原任务、奖励和玩家背包规则仍须保留。审查已修复新接口错插在旧 UFUNCTION 与 GetCarriedTaskPackage 之间的问题；事务和回滚仍在独立审查，旧补丁不可直接合入。当前没有任何新道具资产启用，来源见 <a href="../Saved/AIResearch/CompanionPolish/20261114T135830572977Z/world_item_fetch_design.json">取物接口与多人流程</a>。</p>
+<p>具名街坊记忆补丁位于 <code>Saved/AIResearch/CompanionTownMemory/Staging/20261114T140842727713Z</code>，SHA256 <code>a985a7ca4bd175b6067a2619f6ff7eeeb246b83bba65c4c06e3be94b14edc7cd</code>。当前感知、双方视线和真实接触点均可见且二狗未倒地时，才把“主人打中谁/谁打中主人”写入已有当局记忆；每段两个方向各一次，亲密变化为零。其余护主规则不改；保守遮挡可能漏记，不据此否认真实命中。只完成暂存与静态审查，没有编译或游戏运行。</p>
+<p>地点协议另完成 29 项纯数据检查：正式 validate_context、compact_context/model_context 保留观察列表，拒绝重复编号、私有字段、过长文字、控制字符和非有限距离；没有扩大动作候选，报告为 <code>CompanionEnvironment/20261114T131931449795Z/protocol_checks.json</code>。首次合入因 UE/UBT 占用停止；22:18（+08）守门确认两者退出后，七文件正式合入并逐文件核对归一化全文一致，<a href="../Saved/AIResearch/CompanionEnvironment/20261114T131931449795Z/applied.json">应用记录</a>保留实际哈希。尚未构建、配置地点资产或重启后台。UE MCP 的 list_toolsets 返回本机 8000/mcp 连接失败，本聊天没有重启它或接管并行 UI 任务。</p>
+<p>普通物品基础层 24 文件已完成独立审查并重封 v3，补丁 SHA <code>eb330eaf45116b835586456d92262a1e7b4d6282770901e117fc8e364190b250</code>。原 UFUNCTION 归属和同步回调后继续通知的两项问题均已修复；根端核对 v3 与审过的 v2 只差已合入的两处地点扩展，其他全文一致。合入工具发现新编辑器 PID 50292（并行 Q4 同机测试），因此未写入正式源码。报告见 <code>CompanionItems/20261114T140147092364Z/foundation/independent_review_encounter_scene.json</code>；没有把源代码审查当作交接、资产兼容或多人验收。</p>
+<p>NPC 接话的播放审查还发现 A→B→A 的时序缺口：等待父链结束的待播回复，在父流式回复完成并清空队首后缺少再次提升机会，会一直等待。已要求在空队首统一重试提升，并复核同步回调后的对象与回复身份；这项仍在 Saved 修复，尚未编译或实际播放。</p>
+<p>用户进一步明确要精细的长期伙伴：能谈自己的身份、城镇环境与关系网，认识周围可用物件，聊天时持续执行安排，等候也有自然反馈。当前按“持续安排、临时反应、经确认的实际结果”区分生命周期，继续复用原 Companion/BT/GAS/Presentation，不用随机乱走或频繁调用模型制造忙碌。训练与评估需要覆盖改口、指代、误解纠正、已知/未知环境、转述来源、访客权限与连续委托；动态世界状态由游戏提供。</p>
+<p>本轮新增精读 <a href="https://arxiv.org/html/2308.11339v3">ProAgent v3</a> 的合作意图预测、纠错及执行反馈；阅读 <a href="https://github.com/mindcraft-bots/mindcraft/tree/e1c1fc3ffa481506c2445fc639e16dba504b5920">Mindcraft 固定源码</a> 的 action_manager、modes、conversation、history 等文件，借鉴暂停/恢复/取消分离与结果回流；<a href="https://news.ubisoft.com/en-us/article/3mWlITIuWuu0MoVuR6o8ps/ubisoft-reveals-teammates-an-ai-experiment-to-change-the-game">Ubisoft Teammates 官方开发者介绍</a>用于完整协作过程与人物边界。<a href="../Saved/AIResearch/CompanionPolish/20261114T125405976083Z/research.json">阅读与接口记录</a>保留固定提交、文件哈希、采用/不采用和未运行范围。ProAgent 的论文实验不等于本项目真人多人结果；GTC 官方页面只取得议程入口，没有完整讲稿，不声称读过技术全文。</p>
+<p><strong>两个缺口已经修到源码与配置：</strong>后台新增 ergou 的八段作者背景、三个口吻示例，身份、面馆经历、小绿、爷爷与当前主人关系分别标明来源或运行条件，原居民和声音字段保持。居民专用工具显式只取 chunlai/xiumei，完整编号检查仍拒绝重复和缺少必需人物；二狗不会混入居民争执训练。<a href="../Saved/AIResearch/CompanionPolish/20261114T130547212267Z/report.json">43 项离线检查与差异记录</a>通过，原居民各 24 个复核案例、28 个实验案例及 8 个选中基准案例保持。没有启动模型、训练或重启服务；后台缓存未刷新，不能写成正在运行的角色已经应用新背景。复建短 Persona 也改为按背景和亲历回答，允许回答已知问路，旧 UE 人物表待独立迁移。</p>
+<p>Stay 已计入持续活动，当前请求中的活动名也改为 Stay，保留原等候点、回位、避让和主人权限；聊天通过 ContinueCurrent 接续旧安排。<a href="../Saved/AIResearch/CompanionConversation/StayActivityStaging/20261114T130047968308Z/stay_activity.patch">最小修复</a>已在编辑器关闭窗口合入；三次本聊天构建守门因其它编辑器或 UBT 占用退出，后来由 UI 任务的统一 <a href="../Saved/Logs/DeliveryAiInspectorLayoutBuild.log">DeliveryAiInspectorLayoutBuild</a> 编译当前 Agent.cpp，19 项、69.08 秒 Succeeded。<a href="../Saved/AIResearch/CompanionConversation/stay_activity_build.json">源码与构建对应记录</a>已保存，仍未进行该功能的实机确认。其余有限后续安排、可纠正的协作猜测及动作兼容注视仍为后续增量。</p>
+<p>重新核对 <a href="https://developer.nvidia.com/blog/how-krafton-built-pubg-ally-a-co-playable-character-powered-by-nvidia-ace/">KRAFTON 在 NVIDIA 的开发者访谈</a>正文：采用作者定义的物品与规则资料，并从引擎重新读取当前状态；语言理解与持续执行分工。本文不把网页顶部 AI 摘要或演示当源码。二狗据此细化“认识、可用、当前可执行”，先准备自我/关系/场景/物品的配对评估，动态占用与当前任务仍由游戏提供。未执行新的训练或模型评估。</p>
+<p>NPC 快通道已完成后台第一步：<code>model_done.reply_text</code> 携带本轮全部已批准文本，多句与格式失败后的合法前缀都使用既有审批结果；取消或模型失败不发完成。这一通知只确认模型文本完成，不确认声音已播放或被听见。9 项离线 mock 检查通过，独立重跑也是 9/9，网络、进程和服务启动守门均无尝试，没有真实模型、语音请求或后台重启。源码应用后发现原文件 CRLF 与暂存 LF 的字节哈希不同，完整文本归一化比对一致，实际哈希记录在 <a href="../Saved/AIResearch/NpcCommunication/ReplyTextStaging/20261114T133619482335Z/applied.json">应用记录</a>。独立审查同时发现，原 UE 文本降级仍会沿 FinishSentence→RecordSpokenReply→HearSpeech 记录对白，Gateway 尚未读取 audio_error；新增字段没有改变这条旧语义，不能据后台检查宣称端到端严格区分了听见和语音失败。UE 仍等整轮声音结束；定向 NpcMessage、父链版本、抢话取消和普通/流式声音排播尚待接线，当前没有启用提前接话或证明响应变快。</p>
+<p><strong>地点观察暂存实现：</strong><a href="../Saved/AIResearch/CompanionEnvironment/20261114T131931449795Z/review.json">职责与边界</a>及<a href="../Saved/AIResearch/CompanionEnvironment/20261114T131931449795Z/independent_review_encounter_scene.json">独立审查</a>已保存。地点组件新增默认关闭的公开资料和独立观察点，不移动取送件锚点；同伴读取当前世界地点，复用本机 UE5.8 视锥与严格 LOS，最多输出八条，仅作聊天上下文。独立审查发现 const Controller 调用非 const GetPerceptionComponent 的确定编译问题，已在暂存中改用有 const 重载的 GetAIPerceptionComponent；这属于源码审查修正，未编译。七项纯字段检查覆盖超大整数、NaN、Infinity、bool、距离边界和旧请求省略。最终暂存补丁 SHA 为 c16ea631eb2297053ad86045d9c6e987c660f3af29900dd3bfe84317660c618f；当前 UE 正在另一任务试玩，未应用反射变更、未配置地图、未启动本批 UE 检查。</p>
+<p><strong>二狗配对评估数据：</strong><a href="../Saved/AIResearch/CompanionPolish/20261114T132114516042Z/delivery.json">bundle_02 交付入口</a>包含 12 组、24 份请求和正式模型输入，独立评分规范不送给被测角色；正式协议、候选与事实保留、独立读回和按整组拆分守门通过。共 156 个唯一候选，允许多种合适表达，不强制复读标准台词。bundle_01 虽然格式有效，核对源码发现小绿提议缺真实包裹条件、取枕完成仍伪装成正在取物，已修为实际持件、原 Stay 与匹配的可用用途。全部是作者合成场景，没有模型回复、真实游戏记录或训练结果。</p>
+<p>旧二狗人物表的安全单表迁移入口已合入 place_companion.py，提供 Update/VerifyCompanionPersonaOnly，保存前检查旧/新文本哈希、整表其他字段、声音资源、进程占用、脏包与磁盘备份，重载要求独立进程；未执行迁移，DT_CompanionProfiles 仍保持原哈希 8f0a51c60b3fab0d6e8f563f3fb50bd5a8600b9b69666d1f2f19e9da106da970。BeginPlay 原本会 ApplyProfile，迁移不需要加载或重编角色蓝图、地图。</p>
+</section>
+
+<section id="npc-facing-20261114"><h2>朝向问题：受击来源、对话对象与家居使用</h2>
+<p>用户实测追加：NPC 受击不会转向攻击来源，主角开始对话也不会朝向目标。源码已确认轻拳入口只开始反应并停止移动，没有设置来源焦点；普通 NPC 已使用 CharacterMovement 跟随控制器朝向。修正准备由 Combat 短期持有自身的受击焦点，倒地期间不强行旋转，新的模型行动继续决定追打、逃跑或交谈，旧反应不得清掉新焦点。</p>
+<p>主角为持续物理驱动，不能通过 SetActorRotation 或转摄像机代替真实转身。已在原布娃娃朝向目标中加入短期对话意图：服务器通过原交谈入口验证目标后，同时通知拥有者客户端；远端继续沿既有身体复制观察。移动、攻击、抓取、跳跃、受击、倒地、上下车和换 Pawn 取消旧对话意图，序号与有效期拒绝迟到请求。独立审查发现 CF-001：新目标被服务器提前拒绝时，旧语音 final 仍可能转回旧对象；v2 将独立序号登记移到三个服务器入口最前，保留原发言轮次与语音取消规则。NPC 受击 v2、主角对话 v2 与家居中转补丁均已在 UI 会话正常关闭编辑器后合入，24 份文件与审查稿按换行归一后逐一吻合，补丁及相关 diff 空白检查通过；统一 <a href="../Saved/Logs/DeliverySpeechFocusBuild.log">DeliverySpeechFocusBuild</a> 的 102 项完整构建已通过，248.21 秒；本批未运行游戏或朝向专项自动化。后台 UI 会话另行运行其已授权测试，不能替代本批朝向、家居或多人验收。</p>
+<p>家居追加发现 Take/Place 到点后缺少转身等待。已在正式 HomeExecution 接入 AlignForHome(Entrance)，并在服务器 StartHomeUse 再检查朝向和停止速度；人物使用原 CharacterMovement 转动。该小修已纳入 <a href="../Saved/Logs/DeliveryConversationAssetFinalBuild.log">DeliveryConversationAssetFinalBuild.log</a>，本次 7 项/9.56 秒 Succeeded；未运行家居玩法。桌沿道具中转点仍在 Saved 暂存实现与静态采样准备中，不将动作脚本或终点通过当作演出完成。</p>
+</section>
+
+<section id="ergou-home-objects-20261114"><h2>新增方向：认识家中物件、使用家具与布置</h2>
+<p><strong>入口候选追加：</strong>原第二个抱枕入口的边缘采样超出导航投射容差，现只将其入口 X 调至 9180；独立 <a href="../Saved/AIResearch/HomeObjects/interaction_candidate_entrances.json">候选入口检查</a>确认两个 Take 和留声机 Play 各 9/9 采样通过，Stop 共用入口通过，Actor、地图与脏包无新增变化。候选清单仍 calibrated=false，未安装家具。桌端重复 Take 视线、4 cm 误差、旋转与运行时碰撞查询包络的补充脚本已准备；同时保留 20° 全局保守查询及有条件的分段查询，尚未运行。Take 后半段的朝向范围并非运行时硬保证，不能仅用条件查询宣布完全可用。以上静态进程 Python 成功，仍因既有 CDO 三条错误 exit 1。</p>
+<p><strong>桌端完整路径追加检查：</strong>单中转点运行时已随 102 项/248.21 秒完整构建通过。原生家具 Inspect 增加真实对象通道映射读回，追加构建 7 项/10.61 秒 Succeeded；不改反射或玩法。新脚本前五次分别因 Python 类未导出、私有字段名/访问限制、自定义查询枚举命名和未等待异步网格编译失败，均保留报告，没有跳过正控。第六次 <a href="../Saved/AIResearch/HomeObjects/TableCarryRoutes/20261114T123823174402Z/report.json">原生只读查询</a>成功检查 18 组支撑/站位、两种抱枕及三种路线：直线无通过项，真实扫掠命中桌沿；支撑 X=10530、站位 X=10370 的南北两端，在中转 X=10400 或 10410、Z=max(2170,原尺寸根位置) 时两种抱枕均通过本轮条件。实际 12cm 到点圆的最大物品距离分别为 193.37/181.85cm，地图、二狗蓝图哈希、Actor 变换和脏包增量保持。仍只覆盖当前静态姿势和零朝向采样，不是动态手部、容差包络或多人验收；坐标尚未写入正式家具资产。Python 完成但 commandlet exit 1，启动阶段已有 CDO 物理材质三条错误继续如实保留。</p>
+<p><strong>本批最新资源状态：</strong>已修正源动画前向 +Y 与二狗前向 +X 的 90 度差。使用 UE 原生 Interchange 的 ImportOffsetRotation=-90，将作者网格、参考骨架和动作一起导入独立 QuaterniusAligned 目录；未修改下载原文件或自制骨轨道。两库参考前向、左右轴、脚尖读回均与目标一致。五段候选通过后才覆盖本批动作，首/中/末与作者对应的六段肢体方向最大差分别为坐下 1.713°、坐姿 1.472°、起身 3.079°、取物 0.633°、搬运 0.506°；旧版侧折腿问题在骨点上已消失。<a href="../Saved/AIResearch/HomeObjects/AnimationImport/20261114T105703308360Z/report.json">重定向与备份报告</a>记录原人物、骨架、旧 Source、骑乘、居民、UI 和地图哈希未变。<a href="../Saved/AIResearch/HomeObjects/AnimationGraph/20261114T105816880682Z/validation.json">独立 ABP 的真实静态图求值</a>再次完成 90 个进入、稳定与退出采样，原身体分支和尺度保持，无 BeginPlay、世界 Tick 或资源保存。蓝图默认值已绑定，地图实例尚未接线，手持位置已有静态首版配置；PickUp_Table 尚未接取物演出，当前 Take 只播放 Carry；三段坐起动作也尚无有效 Sit 槽。方向与图检查不能代替真实人物外观和游戏验收。最初的预览 Idle 条件误设、原尺度丢失与错向证据仍保留在前述历史报告中。</p>
+<p>本轮原生导入、重定向与图检查的 Python 均成功；对应 <code>CompanionHomeAnimationAlignedSources.log</code>、<code>CompanionHomeAnimationAlignedRetarget.log</code>、<code>CompanionHomeAnimationAlignedGraph.log</code> 仍以 exit 1 结束，原因是启动时既有 native CDO 物理材质查询的 3 条错误。另保留源骨架父节点、无动画曲线等导入警告，不将这些进程记作零错误成功。真实上半身骨点拟合得到 Spine2 厘米偏移 (4.54,-5.01,35.53)，手持倍率建议抱枕一 0.22、抱枕二 0.21；<a href="../Saved/AIResearch/HomeObjects/CarryAnchors/20261114T105816880682Z/analysis.json">计算依据</a>和<a href="../Saved/AIResearch/HomeObjects/CarryAnchors/20261114T105816880682Z/carry_bones.png">骨架侧/正视图</a>说明物体后缘与手的位置，尚不能证明衣服、手指或行走携带无穿插。该组参数正在准备写入蓝图。</p>
+<p>家具第 4 轮只读采样完成：11 个物件的几何正控、屋内非零双向导航正控通过，Actor 变换与脏包增量均为空；<a href="../Saved/AIResearch/HomeObjects/use_geometry.json">完整报告</a>、<a href="../Saved/Logs/CompanionHomeGeometry4.log">日志</a>。通过 UE 原生 OBJ 导出后用 CPU 查看实际网格，确认 chair 是高凳、phonograph 包含长桌、sofa 前方低层是散落软垫，不能按标签或最高点设置座位。<a href="../Saved/AIResearch/HomeObjects/GeometryExport/furniture_geometry.png">无材质几何检查图</a>只说明形体和尺寸，不作为游戏效果验收。仍未替换地图家具。</p>
+<p>进一步检查 60 组位置/朝向，两个抱枕各自按原尺度完成五点支撑、完整盒净空、站位胶囊、双向导航和 200 cm 搬运范围检查；长桌南北端各有一个共用支撑点，yaw 0/90 均通过。<a href="../Saved/AIResearch/HomeObjects/placement_candidates.json">候选报告</a>保留每个物件各自结果，尚未自动标为已校准。沙发前软垫本次 24 个候选全部因支撑缺点或与沙发几何重叠而拒绝，不能扩展为整个沙发永远不可用。高凳与主沙发的坐姿、取物和音频入口仍按实际几何另行核对，不给模型提供尚未成立的用途。</p>
+<p>厚薄不同的抱枕共用槽位时，固定 root 高度会导致一件浮空或陷入支撑面。已统一 Place 的 UseOffset 为支撑面中心，纯查询 <code>GetPlacementTransform</code> 根据来源物件原尺度包围盒计算各自 root 偏移；执行器开始、持续搬放、释放后检查和服务器最终确认使用同一目标。此追加修正已通过本次完整 DeliveryEditor 构建：<a href="../Saved/Logs/CompanionHomeObjectsBuild5.log">CompanionHomeObjectsBuild5.log</a> 为 66 项、42.13 秒成功；仍未运行游戏或本会话 Delivery 自动化。此前 Build3 为 8 项/45.96 秒、Build4 为 7 项/11.74 秒，分别包含图节点和预览条件修复。</p>
+<p>旋转摆放追加修正：最终尺寸校验直接将原尺度几何转入槽位轴向，避免世界包围盒反转后再次膨胀，误拒绝本来放得下的物件。<code>CompanionHomeObjectsBuild6.log</code> 本次完整构建成功，4 项、39.11 秒、exit 0。静态复核了尺度唯一写者、释放后展开、重复拿取、取消、受击和目标销毁清理；未运行 PIE 或 Delivery 自动化。</p>
+<p><strong>重复拿取修正已接源码并编译：</strong>原 Take 入口跟随物件 root，抱枕放上高桌后，入口随高度抬高，可能无法满足导航的地面到点条件。现在候选、领取复核和执行共用 ResolveUseTransforms：优先读取同一房屋中仍有效的实际摆放占槽入口，无记录时仅在作者入口 35 cm 内查询本屋地面。站位仍需真实支撑、导航、胶囊净空、200 cm 搬运范围与视线；同点只跳过无须发生的移动，不冒充路径通过。已经由本次 actionId 实际拿住时不再重投地面，其他搬运者仍拒绝。Build6 不包含该修正；本批已随统一 DeliveryEditor 构建通过，尚未做高桌重复取放游戏验证。</p>
+<p>家居安装脚本已补蓝图默认与地图实例的 ABP、Carry、Spine2 挂点和偏移统一接线及保存前读回，并加入两抱枕显式 2 kg 质量覆盖；参数保存在可编辑蓝图中，只配置新道具，不改玩家抓取规则。原生替换地图 Actor 后也恢复该质量配置，避免旧静态网格的默认体积质量覆盖。安装尚未执行，读回值只代表配置，不是实物质量或动态手感测量。另将五处持续跟随/跑腿/回家/家居执行的交谈暂停条件接入 Agent 的 ShouldPauseForConversation，继续现有安排时不因倾听强制停步；战斗和其他已有动作阻挡条件保留。</p>
+<p>补充执行路径复核发现：长桌候选的完整尺寸终点通过，不代表从手前到桌面的直线搬放能通过。当前执行器没有额外绕开桌沿的物件路径，真实抓取组件仍会核对人物中心视线、盒净空和扫掠，受阻会停止；正在补采样整段路径与站位余量，未将这两个桌端写为已标定。安装读回补丁也已接入并编译，核对实际用途/组件引用、根刚体/复制及留声机音频参数，避免蓝图指纹正确而实例覆盖仍错误；不符时停止保存，不覆盖未知人工配置。</p>
+<p><strong>本批完整目标构建：</strong><a href="../Saved/Logs/DeliverySpeechFullBuild.log">统一首轮日志</a>执行 115 项计划任务，本批 Companion/Home 源码已编译，但 UI 资源工具的 TObjectPtr 推导错误使整体失败；修正后<a href="../Saved/Logs/DeliverySpeechFullBuildRetry.log">重编译日志</a>为 5 项、10.58 秒、Succeeded，重新编译最新 HomeObjectAssetTools 并链接编辑器插件。不能把首轮记为成功，也未把另一会话自己的声音/UI测试计入本家居验收。</p>
+<p><strong>随后新增的尺寸玩法：</strong>用户允许拿在手中缩小、放置后变大。已接真实道具的服务器尺度状态，默认手持倍率 0.35 可在蓝图修改；摆放候选与展开空间均按完整尺寸检查，到位后释放搬运、恢复，再确认放稳。取消或被打断时不删除物件。若恢复会穿地、卡人或卡家具，就保留小尺寸等待安全空间；落地恢复保留支撑底面，避免把已经缩小的尺度误记成原尺寸。尺度由 HomeObject 在服务器写入，沿根组件原生复制；执行器负责搬运与放下，模型继续选择使用对象和安排。该代码已随同工作区本次完整 DeliveryEditor 构建通过：首轮发现 HomeExecution 局部 bRegistered 遮蔽父类字段，改名 bCarryProviderRegistered 后，<a href="../Saved/Logs/NpcModelSpeechBuild-recheck.log">重编译日志</a>记录 6 项、8.03 秒成功。仍未做本功能实机检查，不能把构建成功记作搬放或多人验收。</p>
+<p>成品动画导入首轮在开始导入前失败：命令行工具调用 <code>LevelEditorSubsystem.is_in_play_in_editor</code>，该接口在无完整视口的 Python commandlet 中触发访问异常，进程退出码 3。日志 <a href="../Saved/Logs/CompanionHomeAnimationSources.log">CompanionHomeAnimationSources.log</a> 已保留。改用 <code>UnrealEditorSubsystem.get_game_world</code> 后，第二轮将两套作者原动画导入独立 <code>Home/Source/Quaternius/Library1/2</code> 目录，Python 执行成功，保护资产哈希保持一致；报告 <a href="../Saved/AIResearch/HomeObjects/AnimationImport/20261114T095944538162Z/report.json">source_imported_needs_name_inspection</a>。进程仍因已有原生 CDO PhysicalMaterial 错误返回 1，不能记作命令行零警告通过；日志 <a href="../Saved/Logs/CompanionHomeAnimationSources2.log">CompanionHomeAnimationSources2.log</a>。实际源骨架名称、重定向、二狗 ABP 与家具使用位置继续分别核对，全程无 BeginPlay、NullRHI、无声音。</p>
+<p><strong>用户最新修正：</strong>新增动画使用下载成品，在 UE 中导入与重定向，不自行用代码生成动作。已撤掉尚未执行的家居 IK/骨轨道生成入口，没有产出对应 Sit/Carry 资产。直接读取项目已下载 Quaternius 两份 GLB 的动画清单，确认 Library 1 已含 Sitting_Enter、Sitting_Idle_Loop、Sitting_Exit，Library 2 含 Walk_Carry_Loop；随包 License 文件明确 CC0，<a href="https://quaternius.com/packs/universalanimationlibrary.html">作者 Library 1</a>与<a href="https://quaternius.com/packs/universalanimationlibrary2.html">Library 2</a>页面亦明确列出该许可。原包与许可继续保存在 Design/Art/NPC/Grandpa；导入源、独立 IK Rig/Retargeter 和目标动画待接线，运行时只播放保存的资源。尚未做本批性能比较，不将此选型宣称为已测得优化。</p>
+<p>首轮原生重定向虽保存了 5 个成品动作，压缩骨点检查发现全部手臂/腿段仅为现有 Idle 的约 1/140.274。<a href="../Saved/AIResearch/HomeObjects/AnimationScale/20261114T101255641237Z/report.json">局部与参考姿势读回</a>确认唯一非单位参考局部缩放在 GrandpaRig，Hips 的导出平移已经是厘米；直接放大整根会导致人物飞远，只给 Hips 放大又会在与旧动画混合时形成异常尺度。本机 UE 5.8 的 IKRetargetProcessor 会移除目标骨架尺度，离线 BatchOperation 写入此结果，运行时 RetargetPoseFromMesh 则另有恢复参考尺度步骤。正采用独立 ABP 的原生 ModifyBone 与 BlendBoneByChannel 节点恢复参考尺度、保留原剪辑 Hips 的组件空间平移，再检查真实图求值及过渡；不编写新动作轨道、不改现有角色骨架或旧动画。资产存在尚不代表重定向正确，当前未绑定地图二狗。</p>
+<p>家具静态采样脚本的首两轮因 Python 反射类型错误失败：ECollisionResponse 的 ScriptName 为 CollisionResponseType，不能使用同名结构体 CollisionResponse。改为实际枚举后，第三轮地面、胶囊净空和导航投影正控成功，但 anchor 到自身的零长度路径被误作失败；正在区分“无需移动”与非零真实路径，并分别保留家具表面和导航结果。原失败报告与日志保存在 Saved/AIResearch/HomeObjects 及 Saved/Logs，没有把失败查询当作无碰撞或可使用证据。</p>
+<p>用户进一步要求二狗知道家里有什么，能使用物件或装饰房屋。已静态读取现有 house2 周边独立 Actor，确认沙发、椅子、留声机、书架、衣柜、两个枕头、vane 和 tv2；旧 tv 标签没有网格。<a href="../Saved/AIResearch/CompanionRoutes/home_objects_editor.json">实际资产清单与位置</a>、<a href="../Saved/Logs/CompanionHomeObjectInventory.log">检查日志</a>保留证据，未移动物件或调用游戏行为。目录与包围盒只找候选，正式归属和用途需要显式编辑器元数据。</p>
+<p>采用本机 UE 5.8 SmartObjects 核心做家具及摆放槽的唯一占用，沿现有 BT/GAS 执行。本批已启用核心及 SmartObjectsModule；两个额外 GameplayInteractions 插件标 Experimental，当前不需要。首批按真实物件认知 → 沙发坐/起及留声机开/关 → 枕头真实搬运和布置推进。新增 HomeObject/BehaviorDefinition、HomeUseExecutor、GA_UseHomeObject 与独立身体动画输入；原 Grabbable 接动画 NPC 的 carry provider，服务器仍只有该抓取组件移动原道具。正式家具包装蓝图、SO 及独立动画正在工具中接线，尚未生成到关卡。</p>
+<p>家居能力协议已增加版本 5；普通居民继续版本 4，保留持续 Fight 与 ReplyId。模型收到当时可见的明确家具和用途，每个候选绑定本次 candidate_id；PlaceProp 同时绑定原道具、目的家具及槽位，可先取再放，也可沿用实际拿着的同一道具。服务器按主人 PlayerState、命令版本、弱身份、物件版本、当前用途和变换再次检查。BT 接收只记录 HomeArrangementAccepted，真实坐到位、播放、搬起和摆好各自确认。Home 也增加单独的室内回家点，车仍在屋外结束行程。详细接口及多人流程见 <a href="Architecture.md#ergou-design">二狗设计</a>。</p>
+<p>17:48 通过新 DLL 执行无 BeginPlay 的只读检查，11 件实物与真实骨架基准已读回；室内点 (9812,13840,2010.25) 命中原 house2 地板，30/70 胶囊净空通过，关闭门洞边时路径不完整，临时开放时得到 533.22 cm 完整路径并经过该门洞，随后恢复原关闭状态。无预先脏包，未保存地图或资产。<a href="../Saved/AIResearch/HomeObjects/20261114T094855273377Z/report.json">静态报告</a>、<a href="../Saved/Logs/CompanionHomeObjectsInspect.log">日志</a>包含实际范围：Python 成功结束，但 commandlet 总退出码为 1，原因仍有原项目 native CDO PhysicalMaterial 初始化错误；不能把它写成干净退出。实际家具 Actor 缩放为 3，抱枕宽约两米，后续必须按真实尺寸、握点与成品动画标定，不能套普通小抱枕参数。</p>
+<p>静态审阅中修正两处生命周期问题：SmartObjects 领取通知可同步撤销并重新分配槽，注册失效回调前必须再次核对 token，避免覆盖新使用者的回调；晚加入客户端的 GameState 尚未就绪时不能按本地时间标记留声机已播放，改为短重试读取当前复制状态，停播与 EndPlay 清理重试。家居能力的同步开始/结束也按安排 ID 检查，旧 Start 返回失败不能取消随后启动的新安排。摆放要检查支撑确实属于目的家具，不能靠别的物件托住就声称已放到沙发。</p>
+<p>当前检查：家居协议 14 项及相关上下文、解析、契约 64 项离线检查通过，共 78/78；未启动服务、真实模型或 TTS。本批 DeliveryEditor 首轮 94 项在 61.88 秒以编译错误退出：const 方法弱指针类型、DOREPLIFETIME 固定形参名、TObjectPtr 数组遍历、枚举/对象指针三元式及 Error 名字冲突；已修复并补齐 DeliveryTuning 的 SmartObjects 插件依赖。第二轮 9 项、12.31 秒构建成功，日志 <a href="../Saved/Logs/CompanionHomeObjectsBuild.log">首轮失败</a>、<a href="../Saved/Logs/CompanionHomeObjectsBuild2.log">修正后通过</a>。家具和成品动画接线、静态重载、坐起、搬运和多人效果仍未完成。本会话未启动 PIE 或 Delivery 自动化。<a href="../Saved/AIResearch/HomeObjects/backend_protocol_validation.json">离线协议检查</a>保留其原范围。延迟仍未解决，本轮先接功能。</p></section>
+<section id="continuous-decisions-20261114">
+<h2>持续行动与后台决策</h2>
+<p>试玩中，居民常常追过来打一拳，站着想一阵，再开始下一次攻击。检查发现，这里面有三处等待：轻拳受击会取消整段交战；已有动作时不能请求下一次决定；短轮交战结束后还要重新排队。仅让模型算得更快，无法补齐行动之间的衔接。</p>
+<p>本轮将当前行动和下一次模型判断分开。居民开始追打后，行为树继续处理靠近、挥拳、短暂收拳与受击恢复。Agent 在行动结束前安排下一次判断，把正在做什么、实际命中和自身受击告诉模型。模型可以继续追打、逃跑或停手；服务器检查通过后再继续或切换动作。</p>
+<p>这次整理的是一套可复用的行动衔接。以后增加跟随、搬运或其他持续行为时，可以使用同样的请求、回复检查与取消方式。各行为仍各自负责路线、动画和完成条件。本轮只让模型来源的 Fight、Flee 使用这一机制，二狗的护主规则保留原来的权限与短轮限制。</p>
+<figure class="uml"><figcaption>行动与后台决策：类职责</figcaption><div class="diagram-tools"><a href="Diagrams/AI/continuous-actions.svg">单独查看类图</a></div><div class="diagram-viewport"><img src="Diagrams/AI/continuous-actions.svg" alt="Agent协调持续行动和下一次决策，Gateway请求模型，行为树执行，Combat确认命中，Presentation播放每次回复" style="display:block;width:100%;min-width:800px;height:auto"></div></figure>
+<h3>通用部分负责什么</h3>
+<div class="table-scroll"><table><thead><tr><th>位置</th><th>接口</th><th>作用</th></tr></thead><tbody>
+<tr><td>Agent</td><td><code>ScheduleNextActionDecision()</code></td><td>提前安排下一次模型请求。同一 NPC 保持一个正在处理的请求，避免每帧重复调用。</td></tr>
+<tr><td>Agent</td><td><code>CanChooseAction()</code></td><td>检查身体状态、目标及当前行动，判断这个动作现在能否供模型选择。</td></tr>
+<tr><td>Agent</td><td><code>GetActionTimeRemaining()</code></td><td>让行为树读取本次动作还剩多少时间，继续执行和模型续接使用同一份时限。</td></tr>
+<tr><td>动作状态</td><td><code>ActionId</code> / <code>ReplyId</code></td><td>前者标识一段行动，后者标识一次台词回复。同目标续战保留行动编号，新台词使用新回复编号。</td></tr>
+<tr><td>Combat</td><td><code>ContinueFight()</code></td><td>继续同目标交战时更新结束时间，保留已经挥出的拳、实际命中、交战起点和整场开始时间。</td></tr>
+</tbody></table></div>
+<p>例如，大壮正在追翠花时，模型可以在后台考虑是否继续。若决定继续，行为树沿用正在追赶和挥拳的进度；若决定逃跑，服务器先检查逃跑条件，再停止尚未命中的旧拳并开始移动。已经发生的命中不会撤销。倒地、目标消失或行动结束后，原请求返回的结果不能再次启动这段交战。</p>
+<h3>行动时限与请求时机</h3>
+<p>模型批准的单次 Fight 最多 8 秒；到期前 4 秒安排下一次判断。整段连续交战最多 20 秒，每次延续仍需要模型给出有效的新决定。Flee 与其他普通动作保持原来的 5 秒上限。模型没有及时回复时，当前批准时间到期仍会停止；这不是对任何网络条件都能隐藏等待的承诺。</p>
+<p>模型交战中的三拳限制改为短暂收拳，默认停顿 0.75 秒后仍可在已批准时限内继续。真正结束交战才进入原来的脱战冷却。轻拳造成短暂受击反应，倒地立即结束行动。命中仍通过实际拳头接触判断，不因为播放攻击动画就让对方摔倒。</p>
+<p>当前流式接口仍按一轮请求收完模型与声音数据，再安排同一 NPC 的下一轮请求；它不会等声音在游戏中全部播完。将来如果实测这段收尾仍占用主要等待时间，再把决策请求与声音任务完全分开。本次没有声称已经做到多个模型请求同时执行。</p>
+<h3>参考与采用范围</h3>
+<p><a href="https://arxiv.org/html/2609.29837v1#S3.SS3">PUBG Ally 第 3.3 节</a>与<a href="https://arxiv.org/html/2609.29837v1#A3.SS3">附录 C.3</a>描述了跨模型调用持续执行的行为，以及把执行结果送回后续判断的方式。本项目采用行动与请求分开、结果再次观察的思路，没有照搬其自定义行为树引擎。</p>
+<p><a href="https://dev.epicgames.com/documentation/en-us/unreal-engine/behavior-tree-in-unreal-engine---overview">UE 行为树概述</a>说明了 Services、Simple Parallel 与条件中止的用途，也指出并发行为不等于多线程。本机 UE 5.8 的 BTService 与 BTComposite_SimpleParallel 头文件已核对；网页当前显示 5.9 文档。本轮复用现有 Agent 的异步请求和原生行为树任务，未另开线程访问 UObject。</p>
+<div id="continuous-validation-status"><h3>实现与验证结果</h3>
+<p>UE 5.8 DeliveryEditor 完整构建通过，首轮用时 76.12 秒；修正旧测试数据后的两次增量构建分别用时 31.95 秒和 7.90 秒。后端 253 项回归通过，最终提示调整后又检查了相关的 49 项。</p>
+<p>共九项 UE 自动化最终通过：Fight、StrikeNavigation、StrikeApproach、ConfirmedHitAssistAuthority、ResidentIntegration、SentencePlayback、SentenceAudioProtocol、AudioStreaming 和 CompleteSpeech。检查包含同目标续接不重启当前拳、二十秒总时限、停手后不补算未命中的拳、真实导航中追打转逃跑、倒地后旧回复失效，以及旧声音停止通知不影响新回复。</p>
+<p>首轮八项中有三项失败，原因和修复一并保留：语音测试只换行动编号却留下旧回复编号，另有模拟客户端调用了错误的服务器取消入口；护主测试生成的原生玩家没有物理资产；居民集成测试没有导航与攻击骨骼，还直接用随机编号启动命中检测，正式动画因此没有出拳。测试现使用一致的回复编号、实际客户端停止通知、正式角色资源和真实动作/GAS流程，保留原来的命中、倒地、恢复与记忆断言，没有放宽生产碰撞判定。</p>
+<p>三项带有测试场景中的无语音、音频超时或原生占位角色骨骼警告；没有剩余失败断言。本轮只做了无渲染的逻辑与组件检查，没有启动 PIE、点击游戏按钮或完成双人观感验收。因此可以说明行动衔接已实现并通过这些回归，实际追打节奏、表情和两端声音仍需试玩。</p>
+<p class="evidence"><a href="../Saved/Automation/ContinuousDecisions20261114-summary.json">九项最终结果与源码哈希</a> · <a href="../Saved/Logs/NpcContinuousDecisionBuild.log">完整构建</a> · <a href="../Saved/Logs/NpcContinuousBackendTests.log">后端回归</a>。逐次报告保留在 Saved/Automation/ContinuousDecisions20261114、后缀 -recheck 和 -final 目录。</p></div>
+</section>
+
+<section id="npc-training-20261114">
+<h2>本地小模型：第一轮实际训练</h2>
+<p>用户希望尝试游戏专用小模型。本轮在独立环境中训练了 Qwen3-1.7B，目的是让它学会根据人物、现场和候选动作选择行动，并说一句自然的话。训练与正式游戏后端分开，没有替换已采用的 Luna 模型或大壮 B、翠花 B 声音。</p>
+<h3>数据与训练方式</h3>
+<p>先审计了 306 条历史日志，其中只有 35 条同时保留完整现场且调用成功，尚无一批经过逐条认可的训练答案。因此没有把“调用成功”直接当作“回答正确”。本轮由 AI 助手逐条编写 48 个居民情境，包含普通问候、让路、传闻、当面嘲讽、道歉、继续追打和吃亏逃跑。每个情境换两位人物，并重排两次候选和编号，共 192 行；这些仍只有 48 个独立故事，不能写成 192 场独立实战。</p>
+<p>按故事分组，40 组、160 行用于训练，8 组、32 行检查训练期间的变化。同一故事的角色互换和重排全部留在同一集合。另一位助手独立编写 18 个验收情境，其中居民 12 个、二狗 6 个；这些原话及答案范围不进入训练。二狗没有参加本轮训练，六个场景只用来观察能力能否迁移，不能据此宣布已经训练好了跟班。</p>
+<p>使用 <a href="https://huggingface.co/Qwen/Qwen3-1.7B">Qwen3-1.7B 官方模型</a>的固定版本 <code>70d244cc86ccca08cf5af4e1e306ecf908b1ad5e</code>。LoRA 只训练约 1743 万个新增参数，原模型不改写；rank 16、alpha 32、dropout 0.05，学习率 0.0002，BF16，单样本批次、累计四次梯度，共 48 次参数更新。训练只计算 assistant JSON 与结束标记的误差，不把玩家原话当作要求模型复述的答案。做法参考 <a href="https://huggingface.co/docs/peft/main/en/developer_guides/lora">PEFT 的 LoRA 文档</a>。</p>
+<p>训练和推理均关闭 thinking，使用同一提示模板和输入整理方式。完整样本最长 1866 tokens，超过预算会停止检查，不会悄悄截断人物设定。评测前把 LoRA 合并到内存中的模型，原权重文件保持不变；基线和训练后使用完全相同的 18 条输入与贪心生成设置，没有给模型验收标签。</p>
+<h3>实际结果：格式改善，行为仍不可靠</h3>
+<div class="table-scroll"><table><thead><tr><th>18 个独立场景</th><th>训练前</th><th>训练后</th></tr></thead><tbody>
+<tr><td>输出格式、编号等基础检查通过</td><td>12 / 18</td><td>18 / 18</td></tr>
+<tr><td>动作与目标在预先允许的范围内</td><td>4 / 18</td><td>5 / 18</td></tr>
+<tr><td>说话对象在预先允许的范围内</td><td>8 / 18</td><td>18 / 18</td></tr>
+<tr><td>完整结果耗时中位数</td><td>2.228 秒</td><td>2.604 秒</td></tr>
+</tbody></table></div>
+<p>这些是定位问题的检查，不是整体对话质量分数。逐条阅读发现，训练前经常复述玩家原话；训练后虽然学会了完整句子与说话对象，但 12 个居民场景都选择了候选 11。它还会在问候中臆造对方身份、受伤时继续叫阵，以及对要求发奖励的玩家说“我给你发钱，你别再挤兑我了”。游戏不会因此发钱，但这种台词已经不符合人物和事实要求。</p>
+<p>所以本轮没有接入正式玩法。验证集误差从 2.734 降到 1.366，只说明模型更接近这批示例的写法，不能说明它理解了游戏。当前的样本、任务编码和训练设置尚未教会它稳定选择候选；下一轮应先把候选理解和事实错误单独检查，再从实际试玩记录中整理经过纠正的示例，不直接增加训练时间赌结果。</p>
+<p>参数更新实际用时 446.7 秒，训练进程连同加载、前后验证和保存共 488.7 秒。PyTorch 报告分配峰值约 6.91 GiB，缓存保留峰值约 18 GiB；后者是框架统计，不能当作这块 12 GiB 显卡的物理显存用量。正式部署仍须检查 Windows 共享内存、分配策略，以及与语音和 UE 同时运行的影响。本轮没有做这些部署检查，也没有声称缩短了游戏首声等待。</p>
+<p>训练时并行进行了一次 C++ 构建；训练前后的推理评测没有与该构建重叠，训练后评测也在 NullRHI 检查退出之后开始。以上耗时不含声音、网络和 UE 播放，使用相同输入但输出长度不同，不能把它当成玩家完整等待时间。正式后端已在试验后恢复原模型与 B 音色。</p>
+<h3>留下哪些内容继续迭代</h3>
+<p><code>Tools/DeliveryAI/npc_training</code> 中保留固定版本的环境准备、分组数据生成、训练和独立评测入口。默认只检查数据，明确加 <code>--run</code> 才使用 GPU。模型权重、训练适配参数与原始评测都在 <code>Saved/AIResearch/NpcTraining</code>，未作为正式游戏资源发布。后续可以用同一输入和验收文件对比新的数据或训练方法，避免只挑成功台词展示。</p>
+<p class="evidence">证据：<a href="../Saved/AIResearch/NpcTraining/data_audit.json">日志审计</a> · <a href="../Saved/AIResearch/NpcTraining/data/manifest.json">数据来源与分组</a> · <a href="../Saved/AIResearch/NpcTraining/trial-20261114-164506/train/run.json">训练参数与资源统计</a> · <a href="../Saved/AIResearch/NpcTraining/trial-20261114-164506/baseline/holdout_review.json">训练前逐条结果</a> · <a href="../Saved/AIResearch/NpcTraining/trial-20261114-164506/trained/holdout_review.json">训练后逐条结果</a>。这些本机证据位于 Git 忽略的 Saved 目录，本文保留关键结论，其他机器需重新生成证据。</p>
+</section>
+
+<section id="ergou-return-recovery-20261114"><h2>专属车返程、再次扶起与门洞导航</h2>
+<p>继续检查发现，旧车辆执行只覆盖活动跑腿，完成订单后会切回步行，把车留在远处；Stay 的等候锚点还会在 FinishErrand 被改成收件处。当前将同一车辆流程扩到 Errand、Follow、ReturnToStay、GoHome，保留原等候点。真实交付先完成原任务结算，返程属于持续安排，不再接触奖励；远处取车单独按首次完整步行路径补足委托时间预算。车辆销毁不再传送回远处的上车位置。</p>
+<p>Joined 后的战斗倒地复用同一个 E 交互和 Combat 原起身时序。服务器复核当前主人、倒地轮次、实际落地、距离和遮挡；被再次打中或离开时取消旧长按。亲密度增加只在辅助恢复真正完成后发生，初遇认主和重复扶起分开统计。重要当局事实保留首次扶起及真实累计经历，不让后续闲聊挤掉首次结识。</p>
+<p>只读 Commandlet 查到面店到爷爷家门外的行人路径约 375 米，二狗到车约 3.45 米，面店取件候选与严格物体射线也可达。进一步查询显示正式地图为 Static 导航，门外到屋内只得到 54.3 cm 的部分路径，结束于 Y=13414；破门不会重建这段烘焙结果。现用 UE 原生 UNavLinkCustomComponent 连接门洞两侧，完整门对应 NavArea_Null，服务器收到真实 OnDoorBroken 后才开放。没有自定义传送或跳跃执行器，人物仍由原路径跟随和碰撞移动；房屋认领仍须爷爷真实搬离。</p>
+<p>新增 inspect_companion_routes.py 只读路线与碰撞查询；setup_grandpa_home.py 的 -SetupGrandpaDoorway 显式备份、构建并保存门洞导航，-InspectGrandpaHome 在独立进程读取。静态检查临时启用导航边后恢复原状态，不调用破门、任务、搬离、人物移动或 BeginPlay。</p>
+<p>另发现爷爷搬离的路线固定在室内 Z=2010.25，而门外实测地面 Z≈1965.70，旧误差阈值会让他一直等待。已将路线限于 XY 指引，运行时查询实际支撑，完整胶囊扫掠处理上台阶、前进和分帧下降；默认最大上 20 cm、下 60 cm，底球搭在门槛时可继续横移，真实落稳才推进路点和认领房屋。未运行真实搬离，不能将此静态修复写成已验证台阶手感。</p>
+<p><strong>构建与自我修正：</strong><a href="../Saved/Logs/CompanionReturnRecoveryBuild.log">主体 DeliveryEditor 构建</a>成功，47 actions、43.81 秒、exit 0。首次门洞 Setup 因 Commandlet 的 AsyncLoadLock 未解除，Nav Build 没有执行，脚本拒绝保存；工具改为 FlushAsyncLoading/FinishAllCompilation 后只解除这一个加载锁，保留其他导航锁。补编译首轮遗漏枚举所属类，修正后 <a href="../Saved/Logs/CompanionReturnRecoveryBuild3.log">Build3</a>成功，6.64 秒、exit 0。没有热重载或运行新增 C++ 回归。</p>
+<p><strong>资产结果：</strong>Setup2 完成导航烘焙并保存地图，其后的变换保护曾错误比较 Python Transform 的字符串（包含临时对象地址），触发假阳性；现改为数值数组。<a href="../Saved/Logs/CompanionDoorwayReload.log">独立重载</a>通过 GRANDPA_HOME_OK：默认未 claimed、连接默认关闭，关闭时两向均不完整且不使用本链接，开启时两向均完整、518.59 cm 且包含本 LinkId，最后恢复关闭。爷爷仍为 (9812,13750,2068.25)，house2 仍为 (9687,13979,2762)，只读过程 changed_packages/unexpected_changes 均空。Commandlet 总进程仍因既有 native CDO PhysicalMaterial 错误 exit 1，不能称干净退出。</p>
+<p class="evidence">修复前结果：<a href="../Saved/AIResearch/CompanionRoutes/editor_navigation_before_doorway.json">路线、门洞和射线记录</a>。前两次检查分别遇到 Python 未暴露 get_capsule_component、取件交互组件仅在 BeginPlay 才创建的问题，已改为组件查询及与运行时一致的地点锚点；没有为检查启动游戏。物体射线另用已知地板作为阳性对照。Commandlet 脚本成功，但进程仍受既有 native CDO PhysicalMaterial 错误影响而 exit 1。<a href="https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/AIModule/ANavLinkProxy">UE 智能导航连接</a>与本机 5.8 NavLinkCustomComponent.cpp 已核对：连接区域可以在运行时切换，不需要整图重建；本次新增连接仍须先保存编辑器烘焙数据。</p>
+<p><strong>最终静态检查修正：</strong>新增地面采样最初在屋内只命中更低的 Landscape。追查确认 Commandlet 刚载入时静态网格碰撞尚在异步编译；完成 <code>Editor.AsyncAssetCompilationFinishAll</code> 后，同点命中 house2 楼板 Z=2010.2264，完整门也会阻挡门洞射线，忽略门时才畅通。房屋和门均为 ComplexAsSimple 且阻挡 Pawn，没有放宽搬离落差或修改正式碰撞资产。原单一 Landscape 阳性对照不足，检查脚本现要求实际房屋楼板和完整门命中，并记录命中 Actor/Component、初始重叠和阻挡状态。</p>
+<p>最终 <a href="../Saved/Logs/CompanionReturnAssetsReload2.log">CompanionReturnAssetsReload2</a> 的全部资产、Home 双向连接和路线脚本成功；48 个搬离地面采样全部有命中，涉及 house2 和 Landscape，取件仍有 23 个无遮挡候选。<a href="../Saved/AIResearch/CompanionRoutes/floor_collision.json">编译完成前后碰撞对照</a>保留实际差异。检查脚本先后三次因 Python 枚举/未暴露类/Commandlet 缺失编辑器子系统失败，已改用现有胶囊通道、Visibility 对照及可读取的 BodySetup；失败均未保存地图。进程仍有既有 CDO PhysicalMaterial 错误而 exit 1，只有脚本断言通过；没有启动 PIE 或动态扫掠人物。</p>
+<p class="evidence">最终文档检查通过当前正文的 11 张 UML、1440/390/320 三种宽度、锚点、缩放与打印布局。目录中另有并行任务新增的第 12 个 SVG，旧脚本固定要求目录恰好 11 个因此失败；现按正文实际引用检查对应源文件，并保留额外文件。软件渲染截图还遇到长类图反复调整视口的超时，改为 2400 px 高的图形截图视口后完整检查用时约 5.5 秒通过；三种正文宽度检查仍为 1000 px 高。<code>git diff --check</code> 与本批 Python 语法检查通过，未提交或推送。</p>
+<h3>PUBG Ally 全文补读及和平精英资料边界</h3>
+<p>本批补齐 <a href="https://arxiv.org/html/2609.29837v1">PUBG Ally 作者论文</a>摘要、正文 1–10 节、附录 A–L 的文字、表格与图注阅读；没有审查私有源码、复现实验或观看完整 GDC 录像。第 8 节及附录 L 的玩家反馈同时提及陪伴感、未兑现安排与战斗时插话。招募试玩者和自愿公测者不是同一组人，评分不能直接当作版本提升。</p>
+<p>已采用到本轮的是持续安排和单次动作分开、交付终态和返程分开、重要真实记忆保留。下一批拟让同一次模型回复提出有限的昵称、安静模式或道歉语义结果，并由服务器核对当前主人与原话编号；感想与事实分别保存。昵称、安静模式、真实送面和解、小本本仍未实现，论文内容不构成本项目效果或延迟证据。</p>
+<p>和平精英已读 <a href="https://attend.gdcevents.gdconf.com/event/gdc-festival-of-gaming-2026/planning/UGxhbm5pbmdfNDMxOTMwMQ%3D%3D">LIGHTSPEED 官方 GDC 议程</a>和 <a href="https://trtc.io/blog/details/in-game-ai-companion">腾讯 RTC 官方综述全文</a>，尚未取得可核验的完整技术讲稿、录像或 GameMate 原始论文。<a href="https://www.tencent.com/gamers-have-a-new-teammate-ai/">腾讯 F.A.C.U.L. 官方访谈</a>属于《暗区突围》，不混写为和平精英实现。继续保留这一资料缺口，不把议程、产品综述或第三方转述扩写成源码验证。</p>
+<h3>扩展精读：Mantella、AI Town 与 Voyager</h3>
+<p>用户进一步明确：不必等待和平精英的官方材料，继续寻找其他技术文章。本批已扩展到开发者技术说明和三套公开实现，实际阅读下列源码，未运行它们，也未复制或引入依赖。源码阅读的结论与本项目验证分开记录。</p>
+<p><strong>Mantella，固定版本 c0c1ae6。</strong> 已读 <a href="https://github.com/art-from-the-machine/Mantella/blob/c0c1ae6db01f3c2a14dbab8ec5c3e6419e4f6bac/src/remember/summaries.py">summaries.py</a>、<a href="https://github.com/art-from-the-machine/Mantella/blob/c0c1ae6db01f3c2a14dbab8ec5c3e6419e4f6bac/src/actions/function_manager.py">function_manager.py</a>与句子队列：它按 NPC 实际参与对话的区间构建摘要，并标明转述来源；动作有 schema、目标范围和游戏 ID 解析。二狗后续闲话应保存说话人、听闻参与者和转述关系，小本本用真实事件引用加人物感想。当前重要事实保留仍由游戏直接提供，不额外调用摘要模型。其上一轮动作过滤的类级状态不满足本项目 World/主人隔离，摘要失败的无限重试也不采用；后续摘要需可取消、有界重试。项目为 AGPL-3.0，本次仅借鉴设计。</p>
+<p><strong>AI Town，固定版本 1b2f7d8。</strong> 已读 <a href="https://github.com/a16z-infra/ai-town/blob/1b2f7d8b824c7bc679017a091d9d45ba3dc3029e/ARCHITECTURE.md">架构说明</a>、agent、agentInputs、agentOperations 与 <a href="https://github.com/a16z-infra/ai-town/blob/1b2f7d8b824c7bc679017a091d9d45ba3dc3029e/convex/agent/memory.ts">记忆实现</a>。异步模型操作返回带 operationId 的输入，再由引擎统一处理，适合继续支撑二狗已有请求版本和持续 BT。静态阅读还发现 agentSendMessage 先写消息、后提交完成输入，后者才检查 operationId；因此仅拒绝旧动作未必阻止旧消息落盘，这是源码推断，未运行复现。二狗应在字幕、音频、语义关系和记忆写入前分别复核归属与请求版本。其活动仍含随机选择，不能当作已完成 LLM 行为；24 条记忆现阶段不需要向量数据库和多次重要性/反思请求。MIT 项目，本次未接入代码。</p>
+<p><strong>Voyager，固定版本 55e45a8。</strong> 已读 <a href="https://github.com/MineDojo/Voyager/blob/55e45a880755d0c8c66ca7fb5fe7962ac8974f89/voyager/voyager.py">任务循环</a>、<a href="https://github.com/MineDojo/Voyager/blob/55e45a880755d0c8c66ca7fb5fe7962ac8974f89/voyager/agents/critic.py">critic</a> 和 skill：真实环境事件、执行错误与当前状态进入下一轮有限尝试。二狗已有 Errand 状态与原因可承接 PathBlocked、OwnerHandsBusy、TargetLost 等结果，后续由模型重新选择等待、交还或调整安排。暂不采用其生成 JavaScript 执行与模型判成功机制；本项目仍由服务器确认物品、命中、奖励。MIT 项目，未接入代码。</p>
+<p>另外读了 Mantella 的 <a href="https://art-from-the-machine.github.io/Mantella/pages/real_time_npcs.html">实时 NPC 技术说明</a>，其中分开观察首个模型输出、首句、TTS 和转写等待。可沿用本项目已有阶段计时记录，在功能完成后做相同场景对照；文中耗时不代表二狗已提速。下一批实施优先是带来源的听闻记忆、覆盖所有输出的版本校验，以及真实失败结果驱动的有限重新规划，不因一项官方资料缺失暂停功能。</p>
+</section>
+<section id="ergou-vehicle-home-20261114"><h2>面店巨大背包、卡通老板与二狗专属车</h2>
+<p>用户明确指出巨大模型就在面店二狗边上，并要求老板使用项目卡通老人、跑腿给二狗自己的车。静态场景中背包尺寸正常，问题发生在 BeginPlay：三个球体背包片附着 Spine2 时采用相对变换，该骨的压缩动画和参考姿势全局缩放约 140.273970；原 38 cm 袋片会膨胀到约 53.3 m。没有通过缩小整个人物或原面馆隐藏问题。</p>
+<p>在独立 SK_ErgouBoy 上添加可编辑网格 Socket <code>ErgouBagAnchor</code>，抵消骨骼缩放和参考旋转；BP_Companion_Ergou 三个 Attach 引脚均改到此挂点。MCP 改引脚后最初未标记包为 dirty，第一次保存没有写入磁盘；补资产元数据强制标记后再次保存，并用独立 Commandlet 重载核对三个引脚和 Idle/Punch/Down 的五点压缩姿势，组合缩放约为 1。源居民网格未修改，背包仍是原三片造型。</p>
+<p>老板使用 <code>/Game/NPC/Companion/Appearance/SK_NoodleOwner</code>（复制项目 SK_NpcGrandpa）和 <code>/Game/NPC/Companion/Encounter/A_NoodleOwnerEject</code>（复制匹配骨架的 A_ResidentPunch），清除旧材质覆盖并按 +X 朝向校准。独立蓝图和地图实例均已保存；原 The_Boss 资产不再作为该场景当前模型。压缩姿势采样确认骨架和动作可加载、开门 0.6 秒与出手峰值衔接配置为延后 0.4 秒；这些是资产检查，尚未观察实际初遇演出。</p>
+<p>新增 <code>ADeliveryCompanionMotorbike</code> 复用原电动车服务器速度、转向、地面碰撞和复制；蓝图将配置二狗独立坐姿与车座。CompanionComponent 仅引用地图预放专属车，原 AI Controller 始终控制二狗，车不接管玩家 PlayerState 或玩家车辆。远程跑腿沿路线开到停车点，再下车步行完成原物品接口的距离、遮挡、占用与任务校验；下车受阻保留车辆状态并重试。其他玩家的驾驶、乘坐、货箱与召唤入口均拒绝此车。导航暂复用现有 NPC NavMesh，车辆宽度和急弯仍需实机检查，不宣称已能通过所有道路。</p>
+<p>本轮服务器真实命中事件接入 GAS 保护主人规则，LLM 仍负责语言及一般行动选择；新增只读当局事实、关系阶段、OfferCaterpillar 与 GoHome 候选。爷爷完成真实收件并实际走到搬离路线终点后才认领唯一共用 Home。小绿必须由主人实际按 E 接收，再由既有虫子/包裹系统处理投放。完整第三阶段的更多关系事件、昵称、小本本和屋内日常尚未完成，不能把基础候选接口算成全部陪伴内容。</p>
+<p><strong>本轮验证：</strong>构建前保存并关闭编辑器。第一次 <code>CompanionVehicleHomeBuild.log</code> 因 Memory/Caterpillar.cpp 缺 PlayerState 完整类型及 Printf 条件格式串失败，修复后 <code>CompanionVehicleHomeBuild2.log</code> 成功，47 actions、49.82 秒、exit 0。同批还修复扶起和接小绿共用 E 时只能找到首个组件的问题：现在复用单一 HelpUp 入口，按阶段切换长按扶起与按 E 接物。小绿院子机会具有真实 GUID、45 秒有效期和重入冷却，ambient 只能据此获得提议候选，访客仍不能取得主人安排权；模型可以不提议。</p>
+<p>15:41 独立 Commandlet 重载 <code>Saved/Logs/CompanionDeliveryAssetsReload.log</code> 返回脚本完成标记 <code>COMPANION_DELIVERY_ASSETS_RELOADED_OK</code>。外观报告 <code>Saved/AIResearch/CompanionVisualFix/pose_probe.json</code> 的三挂点与五点压缩姿势断言通过；专属车蓝图/地图引用一对一，独立坐姿、车座与货架已保存；<code>Saved/AIResearch/CompanionVehicle/assets.json</code> 记录四个手脚骨点偏差约 2.91、2.88、1.98、1.98 cm，不代表动态握把已验收。校准中曾因原座位下左手够不到、共享骨架压缩姿势存在偏差而停止；随后把臀部在原座垫前移 3 cm，保留骨长，并明确记录最终近似误差，没有放大人物。</p>
+<p>爷爷 <code>BT_Grandpa</code> 的收件分支已加入可编辑 <code>BTT_GrandpaMoveOut</code>；地图唯一 Home 关联原 house2 与爷爷，默认未认领。独立检查 <code>GRANDPA_HOME_OK</code> 的变更清单为空；初次配置后的范围检查曾因 Windows 反斜杠与允许清单斜杠不一致而误报三个允许资产，改为统一路径格式后重载通过。Commandlet 进程仍因既有 native CDO PhysicalMaterial 错误返回 1，早期与开放编辑器并行时还出现 8000 端口冲突；脚本断言通过与进程退出码分别保留。</p>
+<p>后台离线 <code>test_companion_context test_server test_action_prompt test_model_context</code> 最终 57 项通过；本线程没有调用真实模型或语音。文档检查通过 11 个 SVG、1440/390/320 三种宽度及锚点/缩放/打印布局。新 C++ 回归仅编译，其中爷爷用例已改为有上限地等待实际离开与房屋复制，不再假设三秒内结束。本批未执行 PIE、Simulate、Delivery.* 自动化、真实游戏按键或多人检查；完整第三阶段和车辆动态表现仍未验收。</p>
+<p>重启后 MCP 确认未 PIE，并检查面店旁已放置的专属车、二狗静态比例及坐姿缩略图。坐姿检查图保存于 <code>Saved/AIResearch/CompanionVehicle/ride-pose.png</code>。该画面是编辑器资产预览，没有模拟上车、发言、驾驶或物品交接；骑乘手脚接触、初遇运行后的袋子表现和多人仍需实际游戏验证。一般跟随/GoHome 当前仍使用步行，送达后的返程及离车很远后重新取车也需要继续检查。</p>
+</section>
 <div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、翠花眉形和 B 音色短反应已加入；轻拳误用倒地片段已修正，本次单人实际受击保持站立。翠花已采用用户认可的 B 加速版；句内音频已接到 UE 接收、编码和播放流程，八项专项通过。句内分段已接入试玩，开播缓冲为 1.28 秒。一次真实模型到 UE 播放器的检查通过，两句完整且没有再次等待音频；随后语音生成中的打断检查也通过。用户已试听并认可分段 B 样本；游戏中的空间音量、画面与真实多人效果仍需验收。倾听和失败反馈已修复并通过六项专项检查。动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
 <div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
+<section id="npc-playtest-20261114">
+<h2>实际试玩：持续互殴、追赶与玩家插话</h2>
+<p class="meta">2026 年 11 月 14 日 17:16–17:24 · TestForCharacter · Listen Server 与远端客户端</p>
+<p>本次进入正式地图，通过游戏窗口实际按 T、输入原话并点击发送。UE MCP 用于设置人数、开始和结束 PIE、读取双方状态；没有用脚本代替玩家发言，也没有直接指定攻击、逃跑或停手。游戏仍使用正式 Luna 模型和已经认可的 B 音色，本地小模型没有参与这次试玩。</p>
+<div class="finding"><strong>已确认：</strong>玩家的挑衅能引出互殴，持续 Fight 中连续四次真实命中的间隔约为 1.36、1.36、2.12 秒；随后模型选择逃跑和追赶。远端玩家也能通过界面发送道歉，双方记录到相同的回复和动作。<strong>仍未通过整体验收：</strong>双人运行帧率低，客户端曾出现镜头进入人物身体，日志还记录到语音供给不足。</div>
+
+<h3>实际操作与结果</h3>
+<div class="table-scroll"><table><thead><tr><th>场景</th><th>实际输入</th><th>观察到的结果</th></tr></thead><tbody>
+<tr><td>双人浮动窗口，第一次进入</td><td>尝试打开交谈</td><td>来电界面干扰了输入焦点，没有成功发送玩家发言。放大窗口后帧率显示约 3–8 FPS。这一轮不计作交谈成功。</td></tr>
+<tr><td>单人 Listen Server</td><td>按 T，输入“翠花，大壮刚才说你也就嘴上厉害，真动手你根本不敢。”，点击发送一次</td><td>玩家原话显示在界面中。翠花回复“大壮，你当面说清楚，谁不敢动手？”，随后两人先后命中对方，翠花又开始持续交战。大壮后来选择逃跑，翠花选择追赶。只成功提交了这一句挑衅，不能据此宣称任何两三轮对话都能稳定触发互殴。</td></tr>
+<tr><td>双人 Listen Server，远端玩家</td><td>按 T，输入“翠花，别打了，刚才都是我瞎说的。”；第一次点击仅取得焦点，第二次点击实际发送</td><td>服务器接收到玩家 1 的发言。翠花回复“行了，这回算你认错，我不打了。”，主机与客户端读取到相同台词和 LookAt 动作。该轮在这句话之前已发生自主争吵，不能把此前战斗算作这次输入的结果。</td></tr>
+</tbody></table></div>
+<p>持续交战的四次命中发生在服务器日志 09:20:22.026、23.383、24.746、26.870（UTC），最后一次使目标倒地。之后大壮离开原来的站位，翠花跟随移动；实际画面中也看到了大壮跑开。画面仅保留了少量截图，不能证明整个过程的每次接触、动画与网络平滑程度都没有问题。</p>
+<details><summary>查看本机试玩画面</summary>
+<figure><img src="../Saved/AIResearch/Playtest20261114/host-provocation.png" alt="单人试玩后段，大壮已跑离原站位" loading="lazy" style="display:block;max-width:100%;height:auto"><figcaption>单人试玩后段：大壮已跑开。截图不代替整段视频。</figcaption></figure>
+<figure><img src="../Saved/AIResearch/Playtest20261114/client-apology.png" alt="远端玩家发送道歉后的界面，镜头同时被人物身体遮挡" loading="lazy" style="display:block;max-width:100%;height:auto"><figcaption>远端玩家发送道歉后的原话反馈。此时镜头进入人物身体，NPC 回复已播过；这张图用于记录界面和镜头问题。</figcaption></figure>
+</details>
+
+<h3>已定位并修改：旧闲聊让玩家多等一次</h3>
+<p>玩家在 09:19:50.148 发言后，后端约 2.59 秒给出第一份回复。但大壮此前的一句闲聊刚好在此期间播完，才被记入翠花听到的内容。接收回复时，系统把这句 NPC 闲聊当成必须重新判断的新消息，丢弃了玩家的回复，等两秒后再请求一次。最终在 09:19:57.888 才接受结果，这次额外等待约 5.1 秒。</p>
+<p>现在先完成正在回答的玩家问题，后来听到的 NPC 闲聊保留到下一轮。玩家再次开口、NPC 受击或目标失效，仍能使旧结果失效。修改集中在 <code>UDeliveryNpcAgentComponent::TryAcceptProposal()</code>；日志增加具体拒绝原因，便于区分新玩家发言、目标变化和其他失效情况。模型判断本身没有改成按次数攻击。</p>
+<p id="player-reply-fix-validation-20261114"><strong>检查状态：</strong>源码与回归用例已完成，独立静态审阅和差异检查通过。当前等待与二狗任务统一编译；尚未运行这次新增的 UE 回归，也未在新 DLL 上重复实际点击。不能把前面的试玩结果当成本次修复后的效果。</p>
+
+<h3>语音与画面还存在的问题</h3>
+<p>一段语音在 09:19:39–49（UTC）期间，约每 1.24–1.38 秒才补入 640 毫秒声音，最后一段为 600 毫秒，连续九次记录到缺音后恢复。这说明当时供音速度跟不上播放。增加起播缓冲能暂时推迟断音，却不能解决持续供给不足；下一步需要把后端合成时间与游戏收到音频的时间逐段对应。</p>
+<p>09:16:18–09:21:11 的日志共有 34 条缺音事件，分布于五轮对白。部分事件可能发生在同一帧补入已有数据之前，不能直接当成 34 次听得见的卡顿。工具没有提供本轮实时监听，因此这里报告的是日志中的供音问题，不声称已经亲耳确认声音流畅。</p>
+<p>双人测试还出现客户端镜头进入身体、人物头顶对白被窗口边缘裁切、来电面板影响交谈焦点。这些需要分别修复。两窗口与 TTS 同时运行时，显卡显存使用约 11.55 GB、利用率约 99%；尚未单独隔离渲染、合成和传输各自的开销，不能把所有卡顿都归因于同一处。</p>
+<p>另一个容易被误认为“又在思考”的间隔来自现有战斗规则：<code>StrikeOnce</code> 是重击路径，命中居民后直接倒地，默认等待约 4 秒，再起身约 1.6 秒；持续 <code>Fight</code> 使用累计轻拳。本轮没有改变这项强度。如果希望普通争执先推搡、轻打，之后才击倒，应单独调整并检查战斗表现。</p>
+
+<p class="evidence">本机证据：<a href="../Saved/AIResearch/Playtest20261114/game.log">游戏日志</a> · <a href="../Saved/AIResearch/Playtest20261114/backend.log">后端日志</a> · <a href="../Saved/AIResearch/Playtest20261114/backend.stderr.log">后端错误输出</a>。这些文件位于被 Git 忽略的 Saved 目录，只在当前电脑保留。玩家请求编号：<code>A493A68C45EA4E8B47FB56831B21051F</code>（挑衅首次请求）、<code>DF3A4AEF4ABEEB30821BE9B099649E4A</code>（远端道歉）。</p>
+</section>
+
+<section id="npc-training-next-20261114">
+  <p class="meta">Delivery · 2026 年 11 月 14 日 · 研究记录与下一轮方案</p>
+  <h2>小模型训练改进方案</h2>
+  <p>第一轮微调提高了输出格式和说话对象的正确率，动作选择仍未达到接入要求。下一轮应先检查模型是否真正理解了动作与人物，再用真实错误补充训练数据。正式游戏继续由当前大模型做决定，小模型先在后台给出自己的答案，供对照检查。</p>
+  <div class="notice"><strong>当前状态：</strong>下面记录的是研究结论和待实施方案。语义动作对照、真实纠错数据训练和新的模型路由均未实施，本轮没有再次训练，也没有改变正式服务。第一轮 LoRA 已完成，结果用于分析问题。本节不记录游戏试玩结果。</div>
+
+  <h3>上一轮为什么没有达到要求</h3>
+  <p>这批数据包含 48 个独立故事，其中 40 个用于训练、8 个用于验证。每个故事交换人物、打乱候选顺序，形成 192 行数据；这些变化没有增加独立故事的数量。训练使用的 160 行中，96 行选择看向目标。数据由助手编写，尚未经过用户审阅，也没有包含真实游玩记录或二狗的任务。</p>
+  <p>在另行检查的 18 个场景中，格式正确的回答从 12 个增加到 18 个，说话对象正确的回答从 8 个增加到 18 个，但动作和目标符合预期的回答只从 4 个增加到 5 个。其中 12 个居民场景的动作和目标正确数仍是 2 个；总数增加的一个来自未纳入训练的同伴场景，不能据此声称居民判断得到改善。完整输出的中位耗时从 2.23 秒变为 2.60 秒。这些数字只描述本次检查，不能说明角色已经自然、有趣或适合正式接入。</p>
+  <p>模型还有一个明显问题：微调前的 18 次回答全部选择候选编号 0；微调后有 12 次选择编号 11。不过，训练数据里编号 11 只有 8 次，候选顺序也已经打乱。因此，需要检查模型是否学会了把编号对应到动作，不能简单归因于答案总放在同一位置。</p>
+  <p>48 步训练用了约 447 秒，验证损失从 2.73 降到 1.37。损失衡量的是整段输出的预测情况，格式和台词变得容易预测，也会让它下降。动作实际选择几乎没有改善，说明后续应单独检查动作和目标，不能只看损失继续降低就增加训练轮数。</p>
+
+  <h3>参考方法与适用范围</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th style="width:28%">资料与精读位置</th><th style="width:35%">Delivery 可以采用的做法</th><th>需要注意的限制</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><p><strong>PUBG Ally</strong></p><p>已读第 4.2 节的教师纠错与训练、第 3.3 节及附录 C.3 的持续执行、附录 E 的数据划分。</p><a href="https://arxiv.org/html/2609.29837v1">论文正文与附录</a></td>
+          <td>保留小模型实际经历过的对话和游戏情况，从出错的位置让教师生成正确的后续回应，再加入下一轮训练。已发出的持续动作由行为树继续执行，模型同时考虑下一步。</td>
+          <td>论文还使用中间教师和逐 token 的概率分布训练学生。当前文本接口不能直接提供这套训练所需的完整教师分布；短期先采用经过检查的文字与动作答案。</td>
+        </tr>
+        <tr>
+          <td><p><strong>DAgger：根据实际错误补充示范</strong></p><p>已读第 3 节、算法 3.1，以及实现中的 <code>step_async()</code> 和 <code>extend_and_update()</code>。</p><a href="https://arxiv.org/pdf/1011.0686">原论文</a> · <a href="https://github.com/HumanCompatibleAI/imitation/blob/master/src/imitation/algorithms/dagger.py">imitation 项目实现</a></td>
+          <td>收集小模型做错后真正遇到的情况，例如认错了挑衅者，随后玩家指出错误。训练目标使用教师针对这一情况给出的选择，保留前面的真实经历。</td>
+          <td>只在大模型留下的日志上让小模型答题，还没有覆盖小模型行动造成的新情况。后续需要受控游戏场景或能够正确反馈动作结果的回放；已有日志不能随意改写成另一条成功经历。</td>
+        </tr>
+        <tr>
+          <td><p><strong>候选编号与选择偏好</strong></p><p>已读 <em>Large Language Models Are Not Robust Multiple Choice Selectors</em> 第 2.4–2.6 节与第 3 节。</p><a href="https://arxiv.org/html/2309.03882v4">原论文</a></td>
+          <td>比较原来的候选编号与明确的动作名称、目标编号。同一场景更换候选顺序后，检查模型是否仍选择同一动作和人物。</td>
+          <td>论文也发现，删除选项编号可能降低准确率。语义动作是本项目准备验证的方案，不能据此承诺换一种输出格式就能解决问题。</td>
+        </tr>
+        <tr>
+          <td><p><strong>RAFT：筛选回答后再训练</strong></p><p>已读第 3.2 节、附录 A.2，以及官方 <code>annotate_data/get_bon_data.py</code> 的评分选择代码。</p><a href="https://arxiv.org/html/2304.06767v3">原论文</a> · <a href="https://github.com/RLHFlow/RAFT/blob/main/annotate_data/get_bon_data.py">官方实现</a></td>
+          <td>离线生成少量不同回答，先排除非法动作、错误人物和编造事实，再比较是否自然、是否回应了当前话题，将合格答案用于训练。</td>
+          <td>几个回答都不好时，应请教师纠正，不能勉强选一个。把多次生成放进正式交谈会增加等待；这里仅建议用于准备数据，不照搬仓库的训练环境。</td>
+        </tr>
+        <tr>
+          <td><p><strong>RouteLLM：选择适合的模型</strong></p><p>已读第 3.1–3.2 节，以及 <code>Router.route()</code> 和阈值校准脚本。</p><a href="https://arxiv.org/html/2406.18665">原论文</a> · <a href="https://github.com/lm-sys/RouteLLM/blob/main/routellm/routers/routers.py">路由实现</a> · <a href="https://github.com/lm-sys/RouteLLM/blob/main/routellm/calibrate_threshold.py">校准实现</a></td>
+          <td>积累大小模型在同一游戏情境中的表现，确定哪些情况可以交给小模型，其他情况直接交给现有大模型。</td>
+          <td>实现中的分数用于比较两个模型，阈值校准控制调用比例，不保证动作正确。游戏数据仍需单独检查，不能用小模型自报的“很有把握”代替依据。</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>下一轮实施顺序</h3>
+  <ol>
+    <li><strong>先检查动作表达。</strong>
+      <p>为独立试验增加 <code>action</code> 和 <code>target_id</code> 输出，与现有 <code>candidate_index</code> 对照。模型选择后，仍要与服务器提供的合法候选完全对应。如果两个候选的动作与目标相同，但参数不同，还需要保留唯一候选编号，避免丢失具体操作。先让小模型只学习短动作结果，台词单独评价，避免较长的对白掩盖动作错误。候选换序、人物编号变化和目标离开都要检查。</p>
+    </li>
+    <li><strong>整理真实纠错样例。</strong>
+      <p>先以 100–200 个独立情况作为一轮试验预算，优先整理继续追打、停手、逃跑、找错人物、轻擦后道歉和路线被挡住等问题。这个数量是控制工作量的建议，不是达到效果的保证。每条保留当时的人物、对话、正在执行的动作、真实结果和合法候选；教师给出正确选择，人工复核人物事实与台词。</p>
+      <p>现有故事可继续补充少见情况。同一句挑衅应同时有目标在场、目标已离开、目标已经倒地等不同版本，让模型根据现场选择，避免只记住某句话对应攻击。</p>
+    </li>
+    <li><strong>保留独立场景，再训练一次。</strong>
+      <p>同一故事及其改写、人物互换全部放在同一组，不能拆进训练集和检查集。已有 18 个场景继续用于回归，另外保留未用于调参的新场景。训练后分别检查动作、目标、说话对象和自然程度；再观察连续几轮后是否重复、无故开打、道歉后仍停不下来。下一轮先沿用现有独立 LoRA 环境，不同时引入新的训练框架。</p>
+    </li>
+    <li><strong>先比较答案，再逐步接入。</strong>
+      <p>旁路评估指小模型收到与正式模型相同的情况，只记录自己的选择，不控制 NPC。达到要求后，才考虑让它处理已经充分检查的场景，未覆盖的情况继续交给大模型。二狗不在上一轮训练范围内，需要单独准备任务数据。输出格式合法只能说明服务器能够读取，不能说明选择合理。</p>
+      <p>如果每次都先等小模型失败，再请求大模型，等待可能更长。正式接入前应比较完整响应时间；明确不适合小模型的情况直接交给大模型。先动作、后台词若另行接入，也需要统一动作与台词的决定，避免两个模型各说各话。</p>
+    </li>
+  </ol>
+
+  <div class="finding"><strong>玩法目标保持不变：</strong>大模型根据性格、对话和当前情况决定是否争吵、动手、追赶、逃跑或停手。训练不加入“第三轮必须打架”的次数规则，也不把所有挑衅都标成攻击。已经开始的动作由行为树持续执行，模型判断下一步时，人物仍能继续靠近、收拳和追赶。</div>
+
+  <h3>硬件与时间安排</h3>
+  <p>当前电脑使用 12 GB 显存的 RTX 5070 Ti Laptop GPU，已有独立的小模型训练环境。一次小规模 LoRA 已经能够完成，但训练用时短不代表数据充分。下一轮应把时间优先用于纠正真实错误和检查动作，再安排有限训练。</p>
+  <p>完整复现 PUBG Ally 的教师与学生蒸馏还涉及更大的模型、教师概率分布和交互数据。仅 8B 模型的 bf16 权重就约需 16 GB，尚未计算学生和训练中的其他数据，因此不能直接在这张显卡上同时完整加载。量化、分批计算或使用其他机器可以另行评估；现阶段不为此新增大模型下载。训练与语音、游戏性能测量应错开，完成后再检查游戏和语音同时运行时的实际表现。</p>
+
+  <p class="evidence">本机记录：<code>Saved/AIResearch/NpcTraining/data/manifest.json</code>；<code>trial-20261114-164506/baseline/holdout_review.json</code>；<code>trial-20261114-164506/trained/holdout_review.json</code>；<code>trial-20261114-164506/train/run.json</code>。后三项位于同一 <code>Saved/AIResearch/NpcTraining</code> 目录。已核对生成数据、输出校验和 LoRA 训练代码；本节仅整理既有结果与公开资料，没有运行新的模型实验。</p>
+</section>
 <section id="dialogue-music-balance-20261114"><h2>11 月 14 日：调整对白与背景音乐的音量</h2>
 <p>用户认可加速 B 的试玩效果，但觉得人声偏小、背景声太大。先将已认可的版本保存并推送为 <a href="https://github.com/GDAT6402Group1Team1/Deliver/commit/8d33742bacbe56782c5f914d4b792dac68c3a4e1">8d33742</a>，再单独调整背景音乐。二狗尚未完成的源码、地图和资源没有混入这次提交。</p>
 <p>读取正式资产后确认，玩家控制器的 MusicVolume 为 0.45，大壮、翠花和二狗的完整对白音量均为 1.0。这次把 <code>BP_DeliveryManPC → Music → MusicVolume</code> 改为 0.22，约降低 6.2 dB；对白、短反应音、声音方向和距离衰减保留原值。修改仍在蓝图参数中可编辑，没有重做声音或放大音频采样。</p>
@@ -60,6 +592,7 @@
   <li><a href="https://github.com/mlc-ai/xgrammar">XGrammar 官方仓库</a> — 为自建推理提供高效的结构化生成；能约束格式，无法替代人物理解和动作判断。</li></ol>
   <p class="meta">本机依据：Saved/Logs/AIResidentBackend.log、Saved/Logs/Delivery.log；玩家请求编号 886b919b-4441-4757-fd6d-54ad31ad62cf。</p>
 </section>
+
 <section id="speech-continuity-20261114"><h2>11 月 14 日：句中断音与回复等待</h2>
 <div class="finding"><strong>试玩配置已接入：</strong>用户已试听并认可两种加速 B。语音配置采用 <code>talker_mode=cuda_graph</code>，启动时先在后台预热两种声音；玩家交谈和 NPC 接话默认使用 Luna low，服务档位保持 default。模型和参考音频仍为原来的 B。编辑器关闭时的真实 HTTP 检查通过；当前没有完成游戏画面渲染与声音同时运行的验收。</div>
 <p>玩家反馈一句话说几个词就停一下，语气也被打断。日志中有一段约 4.04 秒的声音，合成用了 15.15 秒，游戏从开播到结束用了 10.32 秒。这组数据说明生成和播放没有顺畅衔接，但尚未单独测出每次缺音的时长。同一请求的模型首句约 12.54 秒，排队接近零，因此模型等待和语音生成需要分别处理。</p>
@@ -85,6 +618,139 @@
 <li><a href="https://github.com/andimarafioti/faster-qwen3-tts">faster-qwen3-tts</a>：主干网络和编码预测都可以使用 CUDA Graph。项目此前仅采用编码预测部分，主干网络此前只读过源码，没有实际性能结论。</li>
 <li><a href="https://developer.nvidia.com/blog/how-krafton-built-pubg-ally-a-co-playable-character-powered-by-nvidia-ace/">PUBG Ally 开发访谈</a>：专用小模型、量化、稳定提示前缀和即时动作分工。Delivery 将本地小模型作为独立候选，先检查对白质量、显存和与语音共同运行时的速度。</li></ul>
 <p class="evidence">试玩反馈：用户确认这版声音已较顺畅，可以保存为试玩版本；仍需降低背景声的干扰并继续缩短决策等待。本次单独导出待提交内容，后端 212 项检查通过，其中 1 项需要本机安装资料的检查跳过；完整共享工作区此前为 252 项通过。导出记录位于 Saved/AIResearch/CommitReview20261114/tests-final.log。</p>
+</section>
+<section id="npc-backend-restored-20261114"><h2>11 月 14 日：用户试玩时 NPC 没有回复</h2>
+<p>用户反馈所有 AI 都没有反应。只读检查发现编辑器进程 12660 正在运行，但没有项目 Python 后台，也没有 8769 端口监听。<code>Saved/Logs/Delivery.log</code> 在 06:18:58 UTC 记录 <code>Connection refused</code>、<code>TransportFailure</code>，请求地址为项目配置的 <code>http://127.0.0.1:8769/v1/decisions/stream</code>。这次直接原因是此前后台停止后没有恢复，不能归因于模型推理慢或角色没有交谈能力。</p>
+<p>按用户恢复试玩的需要，运行 <code>Tools/DeliveryAI/start_backend.ps1 -Provider codex-local -Model gpt-6.1-sol -PlayerModel gpt-6.1-sol -ServiceTier default -SpeechProvider qwen -DialogueLog -StreamAudio</code>。14:43（+08）检查时后台进程 51748 已监听 127.0.0.1:8769，Qwen 准备完成日志为 27579 毫秒，标准错误日志为空。保留 Uncle_Fu、Xiaofang_B、现有声音配置与分段播放；旧日志由启动脚本归档。该 PID 和准备时间只描述这次检查，不能作为后续运行状态或交谈延迟指标。</p>
+<p>没有操作用户的游戏、发送测试台词或发起模型请求。旧的失败消息不会自动重发，用户可重新发言；服务启动与语音准备完成不等于游戏回复和声卡出声已验证。编辑器保持运行，未重载模块或热编译。当前协同战斗 GAS 修改仍在源码中进行，接口尚未补齐且未构建，不能把此前 CompanionErrandBuild2 的成功结论用于当前工作树。</p>
+</section>
+<section id="npc-standing-space-20261114"><h2>11 月 14 日：聊天与停手后的站位</h2>
+<p>玩家反馈两人打完仍贴在一起，普通聊天也可能出现同样情况。出拳需要靠近身体，但动作结束后原代码只停止导航，没有重新留出聊天距离。因此本轮处理所有空闲站位，不只在打架结束时插入一次退步。</p>
+<p>服务器每 0.4 秒检查附近 NPC。两人胶囊边缘相距不到 80 厘米，且没有正在进行的移动、出拳、追赶、逃跑或受击动作时，空闲的一方沿导航挪开，目标是留出约 120 厘米。开始和停止使用不同距离，挪完再等 1.2 秒检查，避免停下又挪。两人同时空闲时，先开始移动的一方会被另一方识别为正在移动，另一方留在原地。</p>
+<p>等待模型、倾听和播放对白不禁止调整站位，避让也不取消回复、字幕或声音。仍有人朝自己出拳时暂停这项调整，是否逃跑继续由模型决定。只在服务器发出导航请求，位置沿用 CharacterMovement 的同步；没有瞬移、推力或扩大受击范围。</p>
+<p>落点先尝试远离对方，再检查斜后和侧面。必须有完整导航路径，并通过胶囊扫掠与落点检查；不会为了留出距离穿墙、穿人或踩到其他 NPC 身边。路径只尝试一小段，最多 3 秒，受阻后稍后重试。控制器保存本次导航编号，取消时只停止自己的路径，已被新动作替换的路径继续执行。解除控制或退出世界时也清除本次移动。</p>
+<p>主要实现是 <code>ADeliveryNpcAIController</code> 的站位检查与 <code>ADeliveryNpcCharacter::CanAdjustStandingPosition / FindStandingSpace</code>。距离在控制器蓝图的“Delivery|站位”分类配置。二狗正在并行实现，其持续跟随由同伴组件管理；本轮通过覆写 <code>CanAdjustStandingPosition</code> 让二狗继续使用自己的避让，避免两个系统竞争导航。</p>
+<p id="npc-standing-space-validation">已与二狗任务协调关闭编辑器，统一构建当前共享工作区。完整构建 27.81 秒通过，测试文件写完后补编 5.29 秒；最后增加站位开关并修正测试隔离，构建 12.01 秒通过。最终独立场景的 <code>Delivery.AI.StandingSpace</code>、<code>Fight</code>、<code>StrikeApproach</code>、<code>StrikeNavigation</code> 四项全部通过，各项没有测试错误或警告。</p>
+<p>站位检查使用正式两居民蓝图、真实导航与 CharacterMovement，验证实际分开、停稳不漂移、墙体受阻、旧请求不停止新导航、倒地和出拳时不挪步，以及停手后恢复避让。关闭模型与声音，不进入用户关卡。首次导航回归中，隔离测试关闭了 Controller Tick，连带停止了转向，导致追赶移动目标后的第二拳未中；现改为只关闭 <code>bKeepDistanceWhenIdle</code>，保留控制器正常更新，复测通过。</p>
+<p>命令使用 <code>DeliveryEditor Win64 Development -WaitMutex -NoHotReloadFromIDE</code> 构建，随后以 <code>UnrealEditor-Cmd -NullRHI -nosound -unattended</code> 运行上述四项。记录位于 <code>Saved/Logs/NpcStandingSpaceBuild*.log</code>、<code>NpcStandingSpaceTests*.log</code> 与 <code>Saved/AIResearch/NpcStandingSpace/Report2</code>。启动日志仍有项目既有的 CDO 物理材质与 Condition failed 信息，本轮没有处理。实际地图、多人同步和动画观感尚未验收。未提交共享改动，构建完成后已通知二狗任务恢复开发。</p>
+</section>
+<section id="ergou-errand-execution-20261114"><h2>11 月 14 日：持续跑腿与实际物品结果</h2>
+<p>在此前真实包裹接口上补齐委托执行。玩家的原话继续经过自己的控制器、ConversationComponent、Agent和Gateway；模型从服务器当时提供的候选理解取件、接件、帮送、交还或取消。保留原声音、分段播放与轻量交谈界面，没有把自然语言改为关键词分支。收到安排与完成交付分别记录，不能以模型答应或走到附近代替物品系统结果。</p>
+<div class="table-scroll"><table><thead><tr><th>候选</th><th>实际执行</th><th>完成条件</th></tr></thead><tbody>
+<tr><td>FetchPackage</td><td>前往当前订单取件点，领取后回到主人身边</td><td>同一实物包裹交到主人手中；取到包裹只记录中间结果</td></tr>
+<tr><td>TakePackage</td><td>靠近主人并接过主人手里的任务包裹</td><td>服务器交接成功，二狗持件后恢复原Follow/Stay安排</td></tr>
+<tr><td>DeliverPackage</td><td>按实际持件状态取件、接件或直接前往收件人</td><td>Target.TryDeliver成功，继续保留爷爷门槛和TaskManager唯一发奖</td></tr>
+<tr><td>ReturnPackage</td><td>携带已有实物回到主人身边</td><td>主人可以接收且同一包裹交接成功</td></tr>
+<tr><td>Follow / Stay / CancelCompanionTask</td><td>结束当前委托并更改持续安排；Cancel转为等候</td><td>确认安排已更改；保留实物包裹，不凭空销毁或发奖</td></tr>
+</tbody></table></div>
+<h3>状态、接口与多人流程</h3>
+<p><code>UDeliveryCompanionComponent</code>保存复制的Errand、主人PlayerState和命令版本；<code>DeliveryCompanionErrand.cpp</code>实现可取消的导航和事务步骤。<code>StartErrand</code>先复查主人、命令版本、任务对象及实物包裹对象，再替换旧委托。Agent还核对请求时的弱引用身份，已销毁包裹不会与新的空引用混为一谈。任务和包裹的请求快照只留在服务器，不发送给模型或作为客户端权限。其他玩家可交谈，不能获得或执行这些委托候选；上下车继续绑定同一个PlayerState。</p>
+<p>能力版本升为3，兼容旧版本1/2；旧模式要求版本≥2，四项跑腿要求版本3。持续命令duration为0，只确认接受；普通短动作继续0.1–5秒。上下文新增实际持件、委托动作、阶段、状态与原因，后端复查owner/candidate/evidence并从可信候选还原执行参数。<code>CompanionErrandAccepted</code>只表示接下委托，后续取件、接件、结束事实均由同步接口的实际结果生成。</p>
+<p>编辑器资产<code>/Game/NPC/Companion/AI/BT_Companion</code>新增可编辑的<code>BTT_CompanionErrand</code>，使用独立<code>BB_Companion</code>的非共享布尔键HasCompanionErrand。优先级为Unavailable → Listening → HasApprovedAction → HasCompanionErrand → Follow。中断只停止本委托的导航编号，状态继续保留；短动作、倾听与倒地结束后由树重新执行。复建工具保留原图GUID、坐标、节点实例、注释和服务/装饰器引用；顺带修正居民树复建可能误把Listening改写为HasApprovedAction的旧迁移逻辑，只迁移确认为旧SelfActor的节点。</p>
+<p>主人骑车不取消已接受的取件或帮送；接件、交还在主人能接收时继续。主人忙手、倒地和临时换Pawn时报告暂停，不删除包裹。导航只接受完整路径与净空落点，接近位置和实际交接前复查遮挡，跑腿没有瞬移补位。DA默认额外活动余量120秒、近距离交互拒绝超时6秒；每个阶段第一次成功的完整导航按路径长度/当前步速补足行走时间，重复寻路不继续延长；BT中断和等待主人恢复不消耗活动时间，持续路径失败会超时。同步交接可能触发事件或销毁对象，返回后复查对象有效性及本次命令版本，旧调用不能结束新委托。</p>
+<p>文档检查<code>python -X utf8 Tools/Documentation/check_ai_docs.py</code>通过：11张图，1440/390/320宽度无溢出，锚点、SVG文本、缩放和打印通过，JS错误为空；两份HTML内部链接与重复ID检查通过。六份同伴资产脚本AST通过，AGENTS/CLAUDE同伴段落一致；首次临时比对脚本假设段落后必有下一标题，修正为支持文件末尾后通过。git diff --check无差异错误，三个文件仅有既有LF转CRLF提示。</p>
+<h3>本轮修复与证据</h3>
+<p>第一单完成后GetTimedTask会清空，原初遇条件会让错过开场的二狗永远隐藏，开门中完成订单还会取消演出。现改为检查任务管理器保留的AwaitingPickup/InProgress/Completed记录，完成后仍允许回来结识，且已开始的开门不因订单完成撤销。加入事实改为准备继续陪玩家送快递，未亲历的旧订单不能说成一起完成。新增EncounterOrderLifetime回归通过真实任务接口推进状态，但本次仅编译，未运行。</p>
+<p>静态审查还修复了近距离隔墙时重复尝试交接、旧缓存落点不再处于移动目标范围、骑车暂停原因覆盖独立跑腿状态等问题。新增ErrandPackageAndCommandLifetime规则回归覆盖访客/旧命令/旧任务/旧包裹拒绝、同一实物交还、取消保留包裹、忙手暂停及奖励去重；只编译，不把测试夹具初始化Joined或直接调用事务当作实机扶起和跑腿验收。</p>
+<ul>
+<li><code>Saved/Logs/CompanionErrandBuild1.log</code>：DeliveryEditor Win64 Development完整构建成功，32.21秒，包含跑腿、BT工具及两组新C++回归；未执行UE自动化。</li>
+<li>后台<code>python -m unittest test_companion_context test_action_prompt test_server test_streaming</code>：69项通过，6.316秒；新版能力/候选/上下文和取消采用离线替身，没有真实模型或TTS。</li>
+<li><code>python -m unittest -v test_model_context test_codex_local test_dialogue_background test_app_server</code>：45项通过，0.225秒，exit0。新增v3编号还原与提示封装边界检查；记录<code>Saved/Logs/CompanionErrandBackendBoundaryChecks.log</code>。这是不同模块的补充检查，没有为增加数量重复上一组。</li>
+<li>资产脚本<code>Content/Python/setup_companion_errands.py</code>提供显式Setup/Inspect。Setup2保存树并新增黑板/任务，Follow包未变；独立进程Inspect为inspected_ready、ready_for_errands=true。原图布局及201个保护文件不变，11段导航和地图未改。证据<code>Saved/AIResearch/CompanionErrandAssets/20261114T054627180228Z/execution_summary.json</code>。</li>
+<li>Setup1错误地把CSV中300秒/15秒视为必须值，在保存前失败，进程exit−1。实际DA_Task_001为120秒限时、开局10秒解锁；改为保留实际资产并明确警告，ID和引用错误仍会停止。Setup2与独立Inspect的Python均成功，进程exit1分别来自日志中既有3条CDO物理材质初始化错误，不能写成无错误运行。</li>
+</ul>
+<p>追加检查发现面馆到爷爷约369米，现有180厘米/秒步速走直线也超过120秒，原固定总超时会让正常帮送失败。现将120秒作为额外活动余量，每阶段只补一次完整路径的预计步行时间；主人持续跑远和堵路仍受有限预算约束，等待主人/BT中断仍不计时。此修正依据静态距离和代码步速，不是实机耗时测量。</p>
+<p>包裹直接销毁时，物品栏可能暂时保留pending-kill指针；仅比较弱引用还不足以判断当前真正持件。已让GetItemInSlot和同伴GetCommandPackage过滤失效物品，表现刷新沿同一有效查询，避免旧包裹占手阻止新交接；Agent使用HasSameIndexAndSerialNumber保留请求原身份，区分旧包裹失效与原本就未持件。对应回归沿真实销毁、任务回退及Agent采纳入口构造，不伪造模型网络结果；本次仍只编译。</p>
+<p><strong>最终构建：</strong>关闭全部UE/UBT进程后执行DeliveryEditor Win64 Development -WaitMutex -NoHotReloadFromIDE，<code>Saved/Logs/CompanionErrandBuild2.log</code>成功24.93秒、exit0，共33项构建动作。包含实际取件范围触发、原始弱引用身份、失效物品过滤、路线行走时间补足及新增规则回归。正式资产独立读回在Build2之前完成；Build2不包含游戏、导航实跑或声音验收。</p>
+<pre>&amp; 'D:\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat' DeliveryEditor Win64 Development '-Project=D:/Udev/Delivery/Delivery.uproject' -WaitMutex -NoHotReloadFromIDE '-log=D:/Udev/Delivery/Saved/Logs/CompanionErrandBuild2.log'</pre>
+<h3>仍需继续的功能与验收</h3>
+<p>正式取件点、包裹类、爷爷ExpectedTask、门和斧头引用已只读核对。发现面馆取件半径1000厘米、初遇触发半径900厘米，两中心约480厘米，正常接近可能先取件折返而错过初遇。已补CanWitnessEncounter：保留原900厘米入口，并让第一单实际PickupE.CanInteract范围内的步行角色进入候选，两种入口都检查玩家眼点到门外锚点的遮挡，不忽略店铺。额外范围不依赖能否再次发放包裹，因此取件后或完成订单后仍可见初遇。未移动地图地点、放大调参或拖延取件；新增范围/遮挡规则回归只编译，实际时机与可见性仍未验收。</p>
+<p>召回仍通过现有600厘米且无遮挡的T交谈入口，尚无远程呼叫。面馆到爷爷约369米，骑车期间Follow等候；现有屏外补位必须通过全玩家视角、完整路径与连续扫掠，跨建筑的实际追赶效果未测。编织袋、抱包动作、协同战斗、记忆关系、小绿与共用住房仍需继续；第一阶段和跑腿都没有实际E/T、路线、声音、主客/旁观视角验收。未启动PIE、Simulate、Delivery.*自动化或真实LLM/TTS；未提交或推送。</p>
+<p>共同战斗下一步已完成源码职责复核：居民目前没有ASC，也不实现玩家CombatInterface；GA_DeliverPunch依赖玩家布娃娃，不能直接授给NPC。计划给NPC接原生ASC和可编辑薄能力，通过执行接口复用NpcCombat现有StartFightStrike/GetStrikeResult/CancelStrike；BT保留接近与TickFight，Combat继续唯一真实拳头扫掠。先配二狗轻拍与一拳倒地/倒地再击延长规则，再开放护主入口，不能直接沿用居民对玩家10伤害/900冲量及居民4次轻拳倒地的现状。</p>
+<p>主人真实命中/受击由PlayerState上的ASC事件传递具PunchId的服务器事实，Companion记录有期限的协助目标/代次，Agent显式标明GameplayRule来源；访客命令、台词或挥空不作为护主事实，街坊仍由各自LLM决定回应。打架暂存跑腿，取消/断线/销毁结束自己的能力和导航；排除主人、自己及同属主人的同伴，防止辅助命中无限续仇。这部分仅是下一实施顺序，尚未实现和验证，接口继续按本机UE5.8核对。</p>
+<h3 id="npc-fast-text-communication-20261114">用户新增：NPC快速文本通信（代码调查，待实现）</h3>
+<p>用户提出NPC之间无需语音传递，希望更快通信。已核对实际调用：<code>ADeliveryNpcCharacter::HearSpeech</code>接收文本并写Observation，没有把NPC声音送去识别；完整回复在Presentation.Tick等语音时间结束才遍历附近居民，流式回复由<code>FinishSentence → SpokenReply → RecordSpokenReply(true)</code>在整段播放完成后通知。下一NPC此时才获得对白并发模型请求，声音播放与下一轮生成形成串行等待。当前消息本身已经是服务器内文本调用，不能把增加一条网络管道描述成消除全部等待。</p>
+<p>采用方向是分开“对方可提前准备的文本”和“游戏确认已经说出/听到的事实”。声音与字幕继续为玩家呈现；提前准备的回复必须绑定来源轮次、内容版本和取消状态，不能提前写永久已听记忆、提前攻击或抢着播音。被打断、玩家插话、离开范围、遮挡或源角色销毁时使旧准备失效；实际说完的部分仍按既有记忆规则保存，保留原三轮接话限制和玩家优先调度。这是下一项通信功能设计，本批没有修改语音/消息派发代码，也没有进行新模型或TTS试验。</p>
+<p>下一批先统一已说完文本通知，并按ReplyAction/Sequence聚合、去重；流式每个真正说完的句子可以提交，取消时旁人也应保留已实际听到的部分，但不能每句话各触发一轮模型。提前准备需独立Prepare/Commit/Discard接口，现有ReceiveStreamDecision会直接启动行动与播放，不能把预备结果送入这条路径。提交时复核来源轮次、证据、对象和权限，并尊重新玩家输入与发声轮次。较小的逐句通知也需配合提交控制，单句对白的收益有限。</p>
+<p>还核对了<code>Tools/DeliveryAI/scheduler.py</code>：环境请求要等running_ambient/running_players清零，完成计数随completion回调释放，仍可能受前一轮TTS尾部影响。因此提前传文本不等于下一模型一定立即开始；下一步沿现有阶段日志核对真实重叠窗口，保留玩家请求优先级。这次没有修改调度、生成或播放规则，也没有提速实测结论。</p>
+<h3>已读实现如何用于功能</h3>
+<p><a href="https://github.com/mindcraft-bots/mindcraft/blob/e1c1fc3ffa481506c2445fc639e16dba504b5920/src/agent/action_manager.js">MINDcraft action_manager.js</a>177行与同提交self_prompter.js146行已完整阅读，agent.js只读中断/消息/idle相关路径。采用持续安排与当前动作分开、模型返回后重查中断的方式，落到Errand状态、BT执行和命令版本；不采用绕过模型的直接指令或生成代码执行。它仍等待完整promptConvo再解析，没有据此推导本项目首响应收益。</p>
+<p><a href="https://arxiv.org/html/2610.24282v1">ROAR论文</a>细读§3.2、§4.3和附录G Algorithm 1，作者仓库提交d3a68f89d287bfe4dff005a7998f11507c2fe164的<a href="https://github.com/tb6147877/ROAR/blob/d3a68f89d287bfe4dff005a7998f11507c2fe164/roar_evaluation/async_agent_runner.py">async_agent_runner.py</a>95行及async_env_runner.py171行已读。采用游戏继续推进、模型基于新状态提出动作的分工；其obs_version只避免重复推理，动作未携带观察版本供环境拒绝过期结果，不能当作本项目过期回包防护。Delivery继续核对命令、任务和包裹快照。没有引入外部框架或训练依赖。</p>
+<p><strong>用户最新优先级：</strong>先完成功能，再着手延迟。工程已有性能分析、分段日志和对照记录，后续直接沿这些证据定位，不重复以资料研究推迟功能交付。旧15次请求的turn_start→first_delta范围2816–12499毫秒、中位6776毫秒，属于既有条件下的历史样本；本轮没有新的真实调用或速度结论。声音、分段协议与正式模型配置继续保留。</p>
+</section>
+<section id="ergou-stage1-implementation-20261114"><h2>11 月 14 日：二狗第一阶段实施（进行中）</h2>
+<p>用户本轮启动长期同伴牛二狗，先交付面馆初遇、扶起、跟随避让、等候召回与陪送第一单；跑腿/协同战斗、关系记忆/小绿/住房按后两阶段继续，未缩减完整目标。另要求补读大模型游戏角色的高质量实现，并解决决策等待问题。没有得到 PIE 授权，本线程不进入游戏。</p>
+<p>沿玩家操作明确分工后开始实现：按 E 的现有长按交互在服务器确认距离、遮挡与时长，CompanionComponent 写主人 PlayerState；T 原话继续 ConversationComponent → Agent → Gateway → 原后端。模型选择持续安排，服务器复核请求发出时身份与命令版本，可编辑行为树执行；普通闲聊/让路不清 Follow/Stay。参考资料与采用理由见 <a href="#companion-runtime-research-20261114">本轮细读记录</a>。</p>
+<h3>已定位并修正的实现问题</h3>
+<ul>
+<li>现有动作最多5秒，直接延长会阻挡下一轮交谈。新增模式切换动作使用 duration=0，只确认服务器安排；持续导航放在树的默认分支，保留原有短动作协议。</li>
+<li>归属不能从角色身体读取。服务器持有 PlayerState，临时无 Pawn 或乘车只挂起；其他玩家仍能聊天，但没有模式切换候选，执行时也再次查主人。</li>
+<li>旧模型结果核对 command_revision，旧导航终止核对 MoveId。近身让路也要复查交付点净空，避免 Stay 最终停在门口。请求者字段改为 NotReplicated，避免将服务器执行身份误当客户端状态。</li>
+<li>Stay 在入口避让失败后曾复用主人前方候选，可能追到远处主人身边。Build7 将跟随查询与旧目标缓存限定为 Follow；Stay 复用已有附近步行的导航/胶囊检查，并以固定等候锚点和可调 WaitYieldRadius（默认4米）限制让路，失败保持等候并报告原因。连续让路不移动锚点，静态复核未再发现该误召回路径，尚未实机复测。</li>
+<li>断线后取消请求仍会留下旧主人对话。新增 ResetContext 在解除归属时清理对话、经历与主体引用，下一位主人不会接续上一人的私人上下文。</li>
+<li>初遇隐藏时关掉碰撞会让 CharacterMovement 继续受重力下落。已补隐藏时停止移动、触发后恢复 Walking，并为触发增加三维距离和无遮挡检查；Build5 已包含该修复。靠近门口的候选改为按入口净空半径找点，解决原来侧偏150厘米的候选又被220厘米净空全部拒绝的问题。</li>
+</ul>
+<h3>本次证据与未覆盖范围</h3>
+<p>CompanionStage1Build 首轮失败：PlayerState 类型声明、复制宏参数与 const 指针；Build2 发现 UE5.8 的 Pawn 返回类型推导问题；Build3 修复后成功5.36秒。Build4成功25.50秒，包含资产辅助入口、同伴C++回归和前述权限/清理修复；Build5成功5.44秒，包含隐藏下落与入口候选修复；Build6成功7.90秒，包含编辑器导航检查等待异步加载和资产编译的修复；最新Build7成功37.84秒，包含Stay局部避让修复。构建日志在 <code>Saved/Logs/CompanionStage1Build*.log</code>。新增 <code>Delivery.AI.Companion.OwnershipAndCommands</code> 只完成编译，没有运行。</p>
+<p>最新后端命令 <code>python -B -X utf8 -m unittest test_companion_context test_server test_model_context test_streaming test_dialogue_background test_app_server test_action_prompt test_codex_local -q</code>：94项通过，6.550秒，结果在 <code>Saved/Logs/CompanionBackendChecksFinal.log</code>。使用本机替身与本机HTTP服务，没有调用真实模型或TTS。验证的是能力版本1/2兼容、主人权限、持续模式、取消、分段顺序及模型连接配置，不是实际陪伴效果。此前68、84项结果属于重叠模块的较早检查，不重复计数。候选说明裁剪另有8项边界检查，已包含在最新94项中，尚未接入正式提示。</p>
+<p>确认旧后端空闲后，核对完整脚本路径并停止PID39092及其子进程，使用现有 <code>Tools/DeliveryAI/start_backend.ps1 -DialogueLog -StreamAudio</code> 重启到PID10144、端口8769。新进程加载同伴协议与模型连接配置隔离；沿用Sol/low、当前人物声音及分段配置，旧日志由启动脚本归档。Qwen准备日志成功，未发送试听或游戏请求；不能据此宣称真实对话时延通过。</p>
+<p>共享工程另一聊天负责大壮/翠花站位。其变更完整保留，二狗关闭通用站位调整；统一构建完成后由对方报告4项站位/战斗自动化通过，这不是同伴自动化结果。共享编译状态写入 <code>Saved/AIResearch/standing-space-coordination.txt</code>，没有提交或推送。</p>
+<p>资产制作通过项目已有编辑器Python与UE MCP进行：MCP没有行为树节点编辑入口，因此在既有编辑器Toolset增加复制居民树的幂等入口，保存BT图供编辑。初遇外形、老板和编织袋目前使用明确的临时资源；资源生成失败与修正保存在 <code>Saved/AIResearch/CompanionAssets</code>。脚本完成或资源存盘不能证明初遇动画、导航和对话实际正常。</p>
+<h3>资产保存与独立读回结果</h3>
+<p><code>Content/Python/place_companion.py</code> 保存了 <code>/Game/NPC/Companion/BP_Companion_Ergou</code>、<code>DT_CompanionProfiles</code>、<code>DA_CompanionTuning</code>、<code>DA_Voice_Ergou</code>、<code>AI/BT_Companion</code>、<code>AI/BTT_CompanionFollow</code> 与三个袋子占位材质。<code>TestForCharacter</code> 新增二狗及11个独立导航体积；既有面馆、出生点、爷爷、门和居民导航位置保持不变。第一单面馆距出生点约374米，初遇布在面馆路旁，未为演出搬动原地点。</p>
+<p>脚本实际运行15次：10次失败、2次保存、3次独立检查，另有一次启动参数错误未进入脚本。失败包括编辑器属性/API差异、导航不足、异步加载锁、commandlet复制Actor触发引擎断言；切换到完整编辑器延后执行后才保存地图。读回还发现Rotator位置参数顺序错误，已改关键字yaw并修正本轮自建Actor。一次额外临时视觉诊断误将爷爷当Character读取Mesh而中断，后续MCP及正式脚本完成检查。日志保留在 <code>Saved/Logs/CompanionAssets*.log</code>，没有把失败轮计为通过。</p>
+<p>最新固定报告 <code>Saved/AIResearch/CompanionAssets/20261113T205813376823Z/report.json</code>：蓝图状态 <code>BS_UP_TO_DATE</code>，地图实例的 <code>SK_NpcManFace</code>、<code>ABP_NpcBody</code> 与可见性有效；面馆↔出生点路径20/14点、出生点↔爷爷门外3/4点完整。完整门下院内仍为部分路径，终止在门前，未确认门内导航。此前一次检查重编蓝图后的截图缺人物网格；移除只读检查中的重编后，独立加载截图 <code>CompanionEditorFinalNoCompile.png</code> 显示完整本体，尚未证实具体引擎根因。老板在编辑器中显示参考姿势，游戏隐藏和出现逻辑保存在蓝图中，未实播验收。</p>
+<p>正式资源只读检查通过后正常关闭编辑器，MCP的 <code>CompanionFinalPIEState.json</code> 记录PIE为false。成年男居民外形、男声、老板和三色球体袋子仍是临时复用或占位；当时尚未实现远距离补位，后续代码见下方追加记录；不能把资源与静态路线当作完整陪伴验收。</p>
+<h3 id="ergou-stage1-boundaries-20261114">追加：扶起边界、订单持有事实与多人补位</h3>
+<p>复查发现，扶起使用的交谈射线会忽略所有Pawn，E长按流程自身没有补遮挡。招募现改为只忽略交互双方、查询场景/行人/车辆/物理物的严格射线；按实际DownAnimation长度结束后才开放E，避免贴近触发时1秒长按提前打断2.4秒跌倒。现有T继续在倒地/起身时关闭。</p>
+<p>原companion_context只有全局task_phase，不能证明谁拿到了包裹。新增可选task_title与owner_has_package，由主人PlayerState定位当前Pawn；骑车时经Driver回到角色并复用Carry的手持/当前车辆货物查询，确认OwningTask匹配。False仅表示当前没有携带，不能推断丢失、销毁或别人拿走；下车停在无人车辆上的货物不算当前携带。没有新增发货、奖励或固定台词判断。</p>
+<p>本机UE5.8源码显示，原生ServerUpdateCamera只传位置和压缩角度，默认发送还依赖PawnMovement状态；本项目主角与摩托并无这种移动组件。因此GetPlayerViewPoint/PCM缓存不能单独证明远端镜头有效。当前在玩家自己的DeliveryPlayerController增加按需查询RPC，用本机实际投影的四侧视锥检测起点与终点的身体包围盒，附100厘米余量；不把近远裁剪或单条遮挡线当作不可见。无有效视口、旁观/调试/过渡/立体等暂未支持的视角一律拒绝，不跳过该玩家。</p>
+<p>DeliveryCompanionCatchUp.cpp仍由BT的Follow分支调用。落后超过25米时，先确认完整导航路径、落点净空、门口距离及起终点间的连续胶囊扫掠，停止自己的导航，向当前世界全部玩家询问。每轮0.6秒超时；第一轮全员回答后至少再等0.2秒才发第二轮。查询编号、当前Pawn、ViewTarget、控制/视角版本、玩家集合、主人安排和身体位置全部复核。旧回包不能执行移动；任一失败继续正常走路。通过后再次查路径/碰撞，在服务器准确补位，不使用会移动角色的TeleportTo“测试”参数；Stay、骑车、倒地、倾听与其他动作仍不能补位。</p>
+<p>静态审查另发现两轮间隔最初从首次发送起算，慢回包可能让两次实际检查挤到同一帧；已改为从全员回包完成后起算，并将查询超时与轮间等待分开。两次回包仍只能证明采样时不可见，网络途中突然转头的表现必须用真实多人场景检查，不能宣称绝无可见跳变。</p>
+<p>初遇图v2在PlayAnimation后用同一EncounterElapsed执行SetPosition并关闭Notify，晚加入客户端不再从零播放老板动作却提前隐藏。迁移仅修改BP_Companion_Ergou，地图和其他8个同伴资产哈希不变，连续两次重跑幂等。首轮读回因Python引脚包装对象比较误报，改为真实节点路径+引脚名后，独立加载报告 <code>Saved/AIResearch/CompanionAssets/20261113T212304512101Z/report.json</code> 确认版本2与BS_UP_TO_DATE。MCP DSL读图为空文本，实际节点验证来自UE编辑器Graph API，未冒充MCP节点读回成功。</p>
+<p>Build8成功35.13秒，包含补位接口、扶起和包裹上下文。最新后台95项离线检查通过6.490秒，日志 <code>Saved/Logs/CompanionBackendChecksIteration2.log</code>；新增规则检查共享InProgress不覆盖主人当前未持件事实，旧协议仍可省略新字段。同伴C++回归补了真实车辆查询体阻挡及旧GUID/重复回答/换Pawn/视角版本/取消/轮间等待，尚未运行；最终Build9成功9.25秒，包含轮间等待修复和追加C++回归，日志CompanionStage1Build9.log。此次没有PIE、实际E/T或多人窗口操作。</p>
+<p>当前初遇仍是路边固定位置跌倒、老板挥拳与袋子挂身，并未实现完整的“从门内连人带袋扔出”轨迹。年轻专属外形/声音、完整初遇演出与实机验证仍未完成；第二、三阶段目标保持。模型延迟另有四次候选说明裁剪对照，减少了输入token，但未得到稳定提速，正式提示未切换。</p>
+<p>仍未实际按E扶起、按T安排、完成第一单路线、检查乘车恢复或双人窗口。模型选Follow/Fight、C++构建或后台断言均不能替代这些检查。延迟对照另记研究节；没有实测收益的配置隔离不称为加速成功。</p>
+<h3 id="ergou-encounter-motion-20261114">初遇实物门与抛出阶段（继续实施）</h3>
+<p>用户要求继续第一阶段，并明确二狗、面馆老板要与大壮区分；随后纠正为直接使用项目现有模型即可。本轮最终采用SK_NpcBoy与The_Boss，已保存蓝图并接入正式地图，外部新人物方案停止。动画导入失败、修正及独立读回见<a href="#ergou-project-appearance-20261114">项目人物替换</a>。原面馆 <code>ramen_shop_no_brown_diagonals</code> 实际使用 <code>/Game/model/buildings/shop1</code>；原门叶后仍有白墙、红墙裙和门框背板，拆掉装饰门叶不会得到门洞。</p>
+<p>保留原店资产，在 <code>/Game/NPC/Companion/Encounter</code> 制作独立 <code>SM_NoodleShopOpen</code>、<code>SM_NoodleDoor</code> 与可编辑 <code>C_ErgouEjectArc</code>。复建入口为 <code>Content/Python/place_companion.py</code> 的独立 <code>create_noodle_encounter_geometry()</code>；已有新资产默认保留，显式重建先备份。只将完整模型中的12个门叶连通件分离，白墙、红墙裙、木门框分别布尔切洞再拼回；合在一起切曾留下内壁，失败报告保留。原门槛木条仍在，投掷起点提高到Z3190以越过它，落点保持原路边位置。</p>
+<p>材质与Nanite核对发现并修正了首版资产降质：原店完整 <code>SourceModel</code> 有192538个三角，而最初只读调查与首版副本取的是Nanite简化后约1.4万个三角的 <code>RenderData</code>。最终副本改从完整源模型生成，店壳源网格191556三角，独立门1264三角。扣除12个门叶和3个切洞墙体后，其余190578个源三角的位置、实际材质路径与全部UV逐一匹配，缺失0；比较容差为位置0.001厘米、UV 0.00001。检查使用实际TriangleMaterialID，不能把重排后的section序号直接当作材质槽号。证据为 <code>Saved/AIResearch/CompanionDoorAssets/20261114T043805789479Z/full_source_preservation.json</code>。新资产仍启用Nanite；fallback目标仍为Auto，读回店壳fallback为13879三角，因此配置中的相对误差0不能被表述为fallback完全不简化。完整可见源模型的保留与简化碰撞数据是两份不同证据。</p>
+<p>最终独立Commandlet重载先等待周围6类静态网格资源就绪，在正式地图中临时放入同位置的新店壳和门叶；查询忽略旧店实例但包含新店壳，完成后销毁临时Actor且不保存地图。屋顶、侧墙、闭门正控制命中新资产；开90度后双向射线、半径30/半高70厘米胶囊、起点净空和128段曲线路径通过。曲线0/1偏移为0，Z峰值200厘米；门的摆动范围按每5度采样计算，并给占用盒增加10厘米余量。原shop1、原地图、原二狗蓝图及三份新资产在这次只读重载前后哈希一致，报告为 <code>Saved/AIResearch/CompanionDoorAssets/20261114T043802137939Z/report.json</code> 与 <code>readback_latest.json</code>。这些只证明静态投掷净空和源几何保持，不证明步行通过、人物网格不穿插或游戏演出成功。最终日志 <code>Saved/Logs/CompanionDoorAssetsFinalReadback.log</code> 没有PIE或Smoke，脚本完成；既有3条CDO物理材质错误使进程返回1，不能说进程无错误。此前API返回值解包、门旋转参数、重叠墙布尔与门槛阻挡等失败保留于Build1–4，完整源修正为Build5。</p>
+<p>职责现已写入C++：<code>ADeliveryCompanionEncounterScene</code> 保存固定门叶、老板、触发点与起落点，蓝图事件配置门角度和老板动作；门开关前检查整个旋转范围内玩家、载具、物理与动态物件，占用就停在当前角度。<code>ADeliveryCompanionCharacter</code> 复制同一份阶段快照：Dormant → OpeningDoor → Ejecting → Falling → AwaitingHelp → Helping → Joined，OwnerPlayerState仍只由CompanionComponent修改。门实际打开且整条胶囊路径清空后，隐藏角色只做一次起点定位。</p>
+<p>抛出使用本机UE5.8的 <code>FRootMotionSource_MoveToForce</code>，与GAS MoveToForce AbilityTask复用同一底层能力。NPC当前尚无ASC，这里没有临时另造技能系统。CharacterMovement保持碰撞移动，曲线为连线上的厘米偏移；服务器按真实源结束转Falling，再由真实 <code>Landed</code> 确认落地，倒地动画结束后才允许E扶起。来源为本机 <code>RootMotionSource.cpp</code>、<code>CharacterMovementComponent.cpp</code> 与 <code>AbilityTask_ApplyRootMotionMoveToForce.cpp</code> 的源码阅读，不等同于游戏验证。</p>
+<p>多人边界：模拟代理需要主动建立同参数RMS才能接上引擎复制，不能只在服务器Apply；阶段先到、Scene引用或门进度后到时，等待本机门叶到位。客户端等待GameState时钟，不拿未同步本机时间跳过整段；同编号重复通知不重播，旧MOVE_None清除源时允许恢复。取消只移除自己的源，受击走原Combat；已经倒地而被Combat拒绝的重复冲击不再反复清零空中速度。超时未落地只记录失败，不能假设已经落地或传送完成。实际不同Actor复制顺序和帧率影响仍待多人检查。</p>
+<p>本轮已通过MCP确认原编辑器PID37368没有PIE，保存脏资产成功后正常关闭。首次 <code>CompanionEncounterBuild1.log</code> 因局部bHidden遮蔽Actor字段、FName三元表达式类型两处编译错误失败17.33秒，修正后 <code>CompanionEncounterBuild2.log</code> 完整构建成功5.05秒；既有归属与交接回归随新快照更新，并加入“飞行/未落地不能扶起”断言，仅编译未运行。之后补角色销毁隐藏老板/请求关门、开门期间订单结束取消、阻挡时每0.2秒复查路径；最新 <code>CompanionEncounterBuild3.log</code> 成功4.84秒。Build3时Scene与人物仍在制作，后续完成情况见下方项目人物替换；本轮没有启动PIE、Delivery.*自动化、真实模型或TTS，没有提交或推送。</p>
+<p>独立场景蓝图 <code>BP_NoodleEncounter</code> 已创建并在新Commandlet读取为v2/BS_UP_TO_DATE，22个可编辑节点，包含门旋转与老板动画定位，没有PlayAnimation或Delay节点。首次Python Rotator位置参数把Yaw误写成Pitch，保存前后精确校验后迁移为显式关键字：闭门0、开门Yaw90；保留迁移备份与失败记录。最终 <code>Saved/AIResearch/CompanionSceneBlueprint/20261114T044320422295Z/report.json</code> 确认原shop/map/二狗BP哈希不变。此次首次创建时老板组件暂空、Scene尚未接入地图；随后已完成项目模型绑定与正式接线，见下节。<code>Content/Python/setup_companion_encounter.py</code> 负责复建/独立读取，地图脚本 <code>place_companion_encounter.py</code> 先验证两个人物已经替换后才允许保存接线。</p>
+<details><summary>本轮构建命令</summary><pre>&amp; 'D:\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat' DeliveryEditor Win64 Development '-Project=D:/Udev/Delivery/Delivery.uproject' -WaitMutex -NoHotReloadFromIDE '-log=D:/Udev/Delivery/Saved/Logs/CompanionEncounterBuild2.log'</pre></details>
+<h3 id="ergou-project-appearance-20261114">按最新要求复用项目人物：二狗与老板已绑定</h3>
+<p>用户明确纠正“就用项目里的，区分开就行”。二狗采用项目 <code>/Game/Characters/NPC/SK_NpcBoy</code> 的蓝白帽衫造型，老板采用 <code>/Game/Characters/TestDeliveryMan/The_Boss</code> 的红背心造型；不再继续制作外部成人模型。二狗保存独立配置副本 <code>/Game/NPC/Companion/Appearance/SK_ErgouBoy</code>，仍使用原有同骨架的身体动画与注视蓝图，尺寸和网格偏移保持1倍、Z=-70厘米。该模型没有Morph，独立表情配置清空不适用的映射，保留头部注视与倾听姿态；尚无可驱动的眨眼和口型，不能把此限制说成完整表情已保留。人物档案、声音、行为树和调参资产引用不变。</p>
+<p>老板原动画只有一帧，因此以项目既有挥赶动作重定向得到 <code>A_NoodleBossEject</code>，30 FPS、0.866667秒、68骨，与原老板Skeleton一致，不改原模型或骨架。重建入口 <code>Content/Python/retarget_noodle_boss.py</code>，导入绑定入口 <code>Content/Python/import_companion_appearance.py</code>；Blender五帧检查及独立FBX回读用于检查明显变形，不能代替UE实机演出。项目人物并排预览保存在 <code>Saved/AIResearch/CompanionProjectModels/project_boy_and_boss.png</code>，仅作造型辨识，不作游戏尺寸或运行效果证明。</p>
+<p>角色蓝图已移除旧老板SCS与11节点初遇子图，保留背包BeginPlay的8节点；旧图删除前的严格检查因工具隐藏LatentInfo引脚而中止，按实际可见拓扑核对后才保存。独立读回 <code>Saved/AIResearch/CompanionExistingAppearanceBinding/20261114T050000282597Z/report.json</code> 确认角色和Scene均为BS_UP_TO_DATE，新模型及老板动作引用正确，原模型/骨架/居民/UI/地图哈希不变。图标记从2升级为3，老板现在由独立Scene保存，复建脚本必须识别新标记，不能重建旧老板或换回大壮。</p>
+<p><strong>追加动画修正：</strong>首次传统FbxFactory导入虽匹配Skeleton，却没有正确处理源Armature对象变换，UE压缩姿势的头部倒向-Y，前述Blender检查未覆盖这个问题。改用与原The_Boss一致的Interchange流程；最终资产与原模型的导入位移/旋转均为0、比例1，ConvertScene/ConvertSceneUnit为true、ForceFrontXAxis为false，没有叠加猜测的90度旋转。独立进程全27帧压缩姿势检查头部高度145.68–146.60厘米、脚部约9.7–10.1厘米，符合屈膝预备姿态；关闭RootMotion，原Skeleton未改。左手相对胸部前伸峰值在0.200秒，因此蓝图Delay设为0.400秒、Rate=1，与0.600秒开门时长对齐。最后读回 <code>Saved/AIResearch/CompanionExistingAppearanceBinding/20261114T050830091386Z/report.json</code>，失败导入和诊断报告保留。</p>
+<p>老板动作时间源也已修正：开门时使用实际DoorProgress×DoorTravelSeconds，门被挡住时保持预备姿态；抛出后使用DoorTravelSeconds加本次Ejecting阶段经过时间，迟到客户端仍按同步阶段接上。复建脚本已识别marker3，保留现有人物/声音/行为树/调参与SceneRef，不重建旧老板；首次缺二狗蓝图时要求已有独立Boy配置，避免重新生成大壮占位。Python AST检查通过，尚未在空工程验证整套首次复建。</p>
+<p><strong>地图接线已保存：</strong><code>place_companion_encounter.py</code> 依次只读预检、备份后接线、独立进程重载；只保存正式TestForCharacter与DA_CompanionTuning。原店实例换为独立开洞副本，新增唯一BP_NoodleEncounter并绑定原二狗的EncounterScene，曲线C_ErgouEjectArc、时长1.3秒。实际地图实例读回二狗为SK_ErgouBoy、老板为The_Boss，旧随身老板列表为空；门叶SM_NoodleDoor保留BlockAllDynamic/QueryAndPhysics。原有Actor变换和11段导航完全相同，受保护原模型、居民、UI及门几何文件无变化；材质覆盖迁移按材质槽标识匹配，本地图原店没有非空覆盖。</p>
+<p>地图保存报告 <code>Saved/AIResearch/CompanionEncounterPlacement/20261114T051029291011Z/report.json</code>；最终独立重载 <code>20261114T051153874461Z/report.json</code> 为inspected_ready、placement_complete=true、无前置错误/意外文件变化，重载没有再次保存。日志依次为 <code>CompanionEncounterInspect1.log</code>、<code>CompanionEncounterPlace1.log</code>、<code>CompanionEncounterInspectFinal.log</code>。三个Commandlet均因既有3条CDO物理材质初始化错误返回1，脚本结果成功与进程有错误必须分开记录。没有PIE、游戏RPC、导航重建或Delivery.*自动化；静态姿势、碰撞及引用核对均不代表实际初遇、声音、跟随或多人效果已验收。</p>
+<p>最终清理了老板动画中错误的试验标签roll=90，改为实际Interchange配置描述；仅保存该动画元数据，强制重载后27帧压缩姿势哈希、Skeleton、RootMotion、时长与导入设置均不变，其他98个受保护文件未变。证据为 <code>Saved/AIResearch/CompanionBossMetadata/20261114T051417771137Z/report.json</code>。全部Commandlet结束后完整构建DeliveryEditor，<code>Saved/Logs/CompanionEncounterBuild4.log</code> 成功27.39秒，包含门阻挡时老板暂停的C++修复。前述资产读回使用Build4前DLL；Build4只证明编译链接，未进行运行演出验证。只读代码复核未发现确定的新缺陷，不代替多人实机；未提交或推送。</p>
+<pre>&amp; 'D:\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat' DeliveryEditor Win64 Development '-Project=D:/Udev/Delivery/Delivery.uproject' -WaitMutex -NoHotReloadFromIDE '-log=D:/Udev/Delivery/Saved/Logs/CompanionEncounterBuild4.log'</pre>
+<p>本轮收尾重新执行 <code>python -X utf8 Tools/Documentation/check_ai_docs.py</code>：11张图、1440/390/320宽度无溢出，锚点、SVG文本、缩放、打印通过，JS错误为空；两份HTML的ID/内部链接另行检查通过。五份同伴资产脚本AST通过，AGENTS/CLAUDE同伴段落一致。<code>git diff --check</code>无差异错误，仅现有两个源文件LF转CRLF提示。以上是文档/脚本静态检查，不包含游戏操作。</p>
+<h3 id="ergou-adult-model-sources-20261114">外部成人模型调研（已停止采用）</h3>
+<p><strong>最新决定覆盖本段早期候选：</strong>用户要求复用项目已有模型，以下下载仅保留来源与许可证档案，没有导入正式人物，也不继续制作这些候选。最终采用的项目人物与绑定结果见上一节。</p>
+<p>用户要求两人换用其他3D模型，与大壮区分。本轮从作者本人发布的 <a href="https://quaternius.itch.io/universal-base-characters">Universal Base Characters</a> 与 <a href="https://quaternius.itch.io/modular-character-outfits-fantasy">Modular Character Outfits - Fantasy</a> 免费Standard流程下载源包，无账户、购买或付费包访问。两包内的原始 <code>License_Standard.txt</code> 均明确CC0 1.0 Universal与作者Quaternius，连同原README保留；不根据旧目录或网站宣传推断当前全站许可证。作者现行 <a href="https://quaternius.com/license.html">QAL</a> 与这两份具体包内CC0记录分开。</p>
+<p>源文件位于 <code>Design/Art/NPC/Companion/Source/Quaternius</code>。Base包128968391字节、SHA256为 <code>fdbf1804c90dfc1ea03e992bff7da2dfd1a79318e13270a660180f9308455f40</code>；Outfits包294347394字节、SHA256为 <code>c3468b18871cc8c8f05ab14df7712baf22cb9f389cbd870babf130e595187f70</code>。各包 <code>DownloadRecord.json</code> 保存作者URL、免费文件编号和完整清单，<code>ExtractionAudit.json</code> 保存解包后的实际模型路径与引用检查；只解出男性glTF、四种候选头发/眉毛、相关贴图、许可/README与预览，合计109文件。解包拒绝绝对路径、上级路径、盘符、符号链接和覆盖现有文件，原ZIP与glTF均未修改。</p>
+<p>免费Base实际只有Superhero男/女成人整身，没有完整商品介绍中的Regular或Teen；采用男性成人头部，不放大儿童。Outfits免费内容包含Male_Peasant、Male_Ranger完整服装与Body/Arms/Legs/Feet等模块；它们是朴素/冒险服源素材，二狗的日常绿色夹克与长裤、老板的厨房服与围裙仍需本项目适配。Ranger护肩、兜帽、护腕和多余腰带不进入日常造型，围裙须另做；发型候选为Buzzed、SimpleParted与Beard，配Regular眉毛。作者Readme明确服装只搭配Base头部，衣服下保留整身会穿模。</p>
+<p>源文件检查发现：Base、服装与头发均有65个同名UE式骨骼（<code>Head</code>大写），但Base与服装肩臂/髋宽的绑定姿势不同，56个局部节点变换有差异；root到Head的链路局部变换完全相同，Peasant与Ranger整套局部变换相同。记录在 <code>RigCompatibilityAudit.json</code>，只证明源节点关系，不证明动画重定向或蒙皮表现。Base glTF还引用原包中不存在的 <code>T_Hair_1_Normal_png.png</code>、<code>T_Eye_Normal_png.png</code>，同目录已有去掉<code>_png</code>的对应文件，需在派生资产中重连；所选服装与头发外部引用完整。已将精确路径、许可和问题交给造型处理，未在这项下载核查中导入UE或运行游戏。</p>
+<p>未采用来源也保留原因：<a href="https://quaternius.com/packs/ultimatemodularcharacters.html">Ultimate Modular Men</a>官方公开Drive对尝试的模型/许可返回下载限额HTML，未把错误页保存为模型，也未反复绕过；<a href="https://quaternius.com/packs/sushirestaurantkit.html">Sushi Restaurant Kit</a>实际角色清单为熊猫/兔子变体，没有本次需要的成年男厨师，因此排除。下载包预览图尚未在这项核查中完成目视检查；最终脸型、轮廓区分、服装与动画观感由后续Blender候选图和授权范围内游戏验证确认。</p>
+<h3 id="ergou-package-foundation-20261114">第二阶段接口基础：真实包裹交接（实现中）</h3>
+<p>复查发现：PickupPoint、Inventory和爷爷收件原来都直接依赖玩家角色。共享任务只记录全局接听/阶段和最终Deliverer，没有“谁亲自接听”的字段，因此二狗绑定主人不能改变多人抢单规则，也不能据全局AwaitingPickup推断主人亲自接了电话。</p>
+<p>本批先补 <code>IDeliveryPackageCarrierInterface</code>，玩家适配现有Carry/Inventory，二狗的实际持件由Companion组件唯一改写并复制。服务器交接复查同世界、同PlayerState、身体状态、距离与遮挡；包裹上的短暂预约防止同步事件重入，失败尝试恢复原持有人。换手保留同一Actor、任务计时和物品内容，InProgress时不把NotifyAcquired返回false当作接收失败。取件新增绑定ExpectedTask的入口；投递仍由DeliveryTarget/TaskManager和爷爷原DeliveryGate确认，奖励只归OwnerPlayerState。</p>
+<p>接口顺序：先实现持件/预约/服务器交易与旧角色适配，再接模型可用候选、持续委托和行为树分支，最后实现取消/纠正及协同战斗。本批尚未给模型开放取件、帮送或交还，未声称自然语言跑腿已经可用。断线或同伴销毁掉出原包裹，不销毁任务物品；取消安排不清空实际持件。持件期间暂不启用屏外补位，避免仅检查角色包围盒时移动被玩家看见的包裹。表现通过可编辑PackageAnchor，尚未制作正式抱包动作。</p>
+<p>后台收尾：包含显式服务档位配置的101项离线检查通过，6.487秒，见 <code>Saved/Logs/CompanionBackendChecksIteration3.log</code>。PS档位大小写规范化后22项AppServer检查通过；默认保持Sol/low/default，Fast未启用、无新增真实推理/TTS请求。确认旧PID10144与工程路径/端口且此前日志只有预热后，重启到PID53496（8769），声音和分段配置保留。重启脚本中再次用ReadAllText读取重定向日志因文件共享限制报错，PowerShell默认继续执行；已有Get-Content只读证据确认没有请求。后续检查采用共享读取并启用Stop错误策略，不能把失败的再次读取记为成功。</p>
+<p>接口实现后审查修复：玩家旧Slots和车辆旧Cargo的复制/动画回调可能在Owner变更后抢回包裹表现，现只允许当前Owner更新，Package.OnRep_Owner按当前Carrier或Bike重新附着；Owner清空后恢复掉落物理。OwningTask现在由DeliveryItemComponent复制，动态取件不再依赖客户端蓝图默认任务。投递入口补持有人与包裹到交互点的严格遮挡检查，收件人物自体可忽略，建筑墙体保留；取件在构造脚本后再次核对ExpectedTask，失败清理前重新关闭临时物品丢件上报。交接还在源释放和目标接收的同步通知后再次查距离/遮挡，回调中移动或抢件不能绕过原校验。</p>
+<p>构建记录：<code>CompanionStage2Build1.log</code>失败33.78秒，4处新回归TestEqual因ADeliveryTestPackage*与ADeliveryPackageItem*模板类型不一致。统一夹具变量类型后 <code>CompanionStage2Build2.log</code>成功5.09秒，完整DeliveryEditor目标已链接。新增 <code>Delivery.Carry.PackageTransfer</code> 编译覆盖真实实物往返、非主人拒绝、主人手不空、同步回调第三方抢件/目标远移与回滚、取消保留包裹、任务计时不变；本线程未主动执行该测试或其他Delivery.*自动化；普通编辑器默认启动的引擎Smoke自检另记下段，未PIE。</p>
+<p>文档检查：<code>Tools/Documentation/check_ai_docs.py</code>通过11幅图、1440/390/320宽度、内部链接、缩放、打印和脚本错误检查；AIIteration与DeliveryAIPlan额外静态ID/锚点检查通过。以上不代替游戏UI验收。</p>
+<p>最终只读资产报告 <code>Saved/AIResearch/CompanionAssets/Stage2FoundationReadback/report.json</code>：正式BP的状态读取为BS_UP_TO_DATE，本次未请求CompileBlueprint；实例/CDO的PackageAnchor均为(35,0,10)，实际挂胶囊；Carrier接口存在，角色/同伴/任务物品组件复制开关为true，UHT声明中OwnerPlayerState、CarriedPackage、OwningTask带Net，CarriedPackage带RepNotify。MCP公开字段读回成功，私有字段/AttachParent初次查询被工具拒绝，原失败保留，补充来源为编辑器Python与生成的反射声明，不能冒充私有字段MCP成功。9个同伴资产及正式地图前后哈希全部相同，PIE前后为false，编辑器PID62564已正常退出。原始脚本只执行一次；旧blueprint_compiled报告字段改为状态读取命名，离线整理时注明来源，并未为改名重新加载或编译。</p>
+<p><strong>测试范围更正：</strong>此前“未运行任何UE自动化”的表述过宽。本次没有主动执行Delivery.*测试或PIE，但本机UE5.8普通Editor启动默认运行引擎SmokeFilter：<code>LaunchEngineLoop.cpp:4376</code>调用RunSmokeTests，<code>AutomationTest.cpp:544</code>控制普通Editor/Commandlet分支；<code>UnifiedErrorTests.cpp:973</code>的StructuredLogSmoke与启动LogTemp输出匹配。启动另有13条LogAutomationTest Condition failed，具体断言来源尚未确认，保留为启动异常，不计通过或Delivery功能验收。后续纯资产读写优先使用Python Commandlet（该分支跳过默认Smoke），需要普通Editor/MCP时应明确保留此启动自检限制，不再声称完全没有引擎测试。</p>
+<p>接口基础完成时，初遇仍是路边跌倒/老板与袋子占位；后续已接入独立门/老板及抛出流程，见上方最新记录，实机表现仍未验收。静态报告记录了面馆取货点(-5159.86,-20679.71,3086.29)、二狗(-5250.32,-20277.44,3037.60)、老板相对(-170,25,-70)及Down/GetUp/Punch长度2.400/1.533/0.867秒；这些只是编辑器配置，不是试玩结果。随后再接第二阶段持续委托、模型候选与行为树执行；三阶段和延迟目标仍未完成，未提交或推送。</p>
 </section>
 <section id="npc-rivalry-goals-20261114"><h2>11 月 14 日：让争执发展成行动，保留完整对话</h2>
 <h3>这次调整的依据</h3>
@@ -295,9 +961,64 @@ UnrealEditor-Cmd.exe D:/Udev/Delivery/Delivery.uproject -NullRHI -unattended -no
 <p>同批修改还让聊天框先显示模型已返回的有效首句，声音和头顶字幕保留原播放顺序；轻微擦身只短暂回头，不再直接写入撞人事实或强制生气。随后完成了三次旧拱火按钮的实际操作，文字和声音正常返回，但没有打起来，结果与下一轮修复见<a href="#npc-playability-trial-20261114">实际试玩记录</a>。仅准备的五步剧情模拟脚本没有执行，也没有模型结果。</p>
 <p><strong>本轮完成条件：</strong>实际检查结束后，把可玩的版本交给用户验收。只有用户认可当前交谈、冲突和表现，才能结束这个目标。自动化通过不能代替用户认可，本轮不启动二狗或新技能阶段。</p>
 <p class="evidence">构建：<a href="../Saved/Logs/NpcPlayabilityBuild3.log">NpcPlayabilityBuild3.log</a>；首轮：<a href="../Saved/Automation/NpcPlayability/index.json">NpcPlayability/index.json</a>；两项复测：<a href="../Saved/Automation/NpcPlayabilityFollowup/index.json">NpcPlayabilityFollowup/index.json</a>。运行日志分别为 <code>Saved/Logs/NpcPlayabilityTests.log</code> 与 <code>NpcPlayabilityFollowupTests.log</code>。后端命令在 <code>Tools/DeliveryAI</code> 运行：<code>python -B -X utf8 -m unittest test_model_context test_streaming test_server test_dialogue_background -q</code>。</p></div>
-<div id="next-chat-handoff"><h3>二狗实施交接提示词</h3><p>用户要求将下列内容作为新任务的目标。它保留完整二狗范围与本轮未复测项目；复制到新对话后，以那次用户指令安排实施和测试。</p><pre>继续 D:\Udev\Delivery 项目，实施长期陪伴角色“牛二狗”。先读 AGENTS.md、CLAUDE.md，再读 Document/Architecture.md 的“AI 跟班二狗设计”（2026-11-13）、Document/DeliveryAIPlan.html#ergou-design 和 Document/AIIteration.html 的最新记录、ergou-research、pubg-ally-companion。
+<div id="next-chat-handoff"><h3>二狗实施交接提示词</h3><p>用户要求将下列内容作为新任务的目标。它保留完整二狗范围与本轮未复测项目；复制到新对话后，以那次用户指令安排实施和测试。</p><pre>【2026-11-15 试玩已交接，先按本段核对现有实现】
+唯一正式 TestForCharacter 单窗口已交给用户，稳定后台恢复 Luna + native Q8 B，小模型关闭。当前正式代码、资产、服务和前台保持不动，后续实现只放新 Saved 暂存目录，等待用户试玩反馈与统一资源窗口。不要把自动目标续作当成关闭用户游戏、启动新 PIE、执行 Delivery 自动化或真实模型性能测量的授权。完整 E 初遇、成功 V 连麦、首单和多人陪伴仍未验收；具体交付见本文 ergou-playtest-first-delivery。下方 11 月 14 日的构建/窗口等待记录是历史，不表示应重新启动检查。
+试玩后的只读审查补充：普通道具仍用根部 PackageAnchor，不能把 v7 实物交接当成已贴手/有持物动画；玩家 Pawn 销毁时缺少普通库存物品恢复场景的出口；公开地点仅有当前观察快照，离开后尚不能保留来源明确的地点见闻。后两项在新的 Saved 目录准备最小实现，不能改写冻结 v7 集成包或宣称已进入试玩版。
+【本次离线收尾，覆盖旧取物22文件及318b补丁状态】FetchItem/ReturnItem第二批现在23文件（仍6新增），当前patch SHA1f21cca71a58596e3c5bcbd1bbe3eb16c9b883164fe697c5d0f1dafed0151ec8，位于CompanionItems/20261114T140147092364Z/integration。补修普通物品进入KnownSubjects后沿旧LookAt追踪失视目标的旁路：共享CanUseObservedItemTarget覆盖Agent候选/采纳/Start/Tick、Companion执行与BT设置焦点前；BT StopMovement回调后核对原ActionId/PlanRevision/目标/Controller。持物与实见描述改为当时事实，失视记录寿命覆盖旧实见。指定范围独立报告independent_review_look_guard.json；旧patch/审查归档review_v1_before_item_look_guard与rebase_b_20261114T151455932754Z/previous_frozen。仍未应用、编译、启用BP_Axe或调用游戏。原26项纯协议结果不扩大为新增C++运行验证。
+正式BTTask_DeliveryExecuteNpcAction.cpp和DeliveryNpcAgentComponent.cpp的并行追赶冷却/旧动作完成时保留玩家回复修复，已仅在Saved按hunk纳入新before/after：双向组合字节一致，其余21文件不变；composition_proof.json与independent_review_rebase_b.json记录，后者SHA f97f82aa30a82523b8a9d207f8820b5ef41be77a3c9ba754d6ab7bc9efaa0f5c。apply_guarded.py只准备未执行，禁止覆盖旧整文件或自动watch；需重核实时基线并等统一资源窗口，当前正式版本留给输入/开麦构建与后续性能基线，不加入本批取物代码。ConversationSpeech/Component、NpcCharacter及Presentation的开麦/无线声音入口由并行任务修改，本聊天当前没有未落地补丁占用它们。已有主人查询为CompanionComponent::GetOwnerPlayerState/CanCommand，归属仍是PlayerState；旧GetOwnerPawn会随驾驶返回当前Pawn，不能拿它作持久身份。
+公开地点metadata_apply.py（SHA82d56f3c8e71feb3c32654e806a5fbfcabaa3374384215c513bffa537c83645b）和联合静态检查入口已准备，只通过AST/文本保护检查，未跑UE。它们要求真实sampled_clear证据、四字段最小写入、地图备份和独立PID读回；三处进程守门拒绝其他UE/UBT/UHT/LiveCoding。地图公开资料、家居几何补查和普通斧头握持仍待执行。常驻后台需按协调窗口重新加载v7，不能用源码落盘声称服务已生效；本聊天不重启、不调用真实LLM/TTS、不启动PIE/Delivery自动化。
+【22:46 后追加，覆盖下方相应暂存/未编译描述】NPC快通道18文件、普通持物基础24文件、具名街坊目击记忆及地点观察已按关闭守门合入，并完成DeliveryEditor Win64 Development完整构建：160项、129.97秒、Result Succeeded，日志Saved/Logs/CompanionEnvironmentAndCommunicationBuild-20261114.log；45文件实际源码哈希、应用来源及未验证范围记录在Saved/AIResearch/CompanionEnvironment/environment_communication_build.json。未运行新增Delivery自动化、游戏对话或多人验收。普通FetchItem/ReturnItem第二批22文件仍在Saved，保持v7尚未可用的结论。
+二狗DT的ergou.Persona已单表迁移（CompanionPersonaUpdate/20261114T144240747841Z/report.json）并由另一个UE进程独立读回（20261114T144337928147Z/report.json），其他行/字段及受保护包不变。两次Python成功、报告分别saved/read_back_verified；命令行均因已有CDO物理材质初始化3条错误exit1，不称作干净命令行通过。没有重启后台。公开地点和家居几何联合只读脚本已准备，但新并行编辑器PID64180占用时守门阻止启动；没有执行这两项静态查询或保存地图。
+【22:30 后追加，覆盖下方相应未合入描述】NpcMessage/NpcMessageSent 后端四文件已正式合入，14项纯数据/替身检查及独立审查通过，backend_applied.json位于Saved/AIResearch/NpcCommunication/UeFastTextStaging/20261114T135950819356Z；此前model_done.reply_text的9项检查仍保留。没有由本聊天重启后台，UE sender尚在Saved收口。普通/分段播放均需等父链，玩家插话仅取消目标后代；审查追加修复A→B→A父流式完成后待播无人提升，以及频繁GetLease令NPC清理计时不断后推的问题。未编译/实机验证，不宣称已提速。
+地点观察7文件于22:18编辑器/UBT关闭窗口正式合入，CompanionEnvironment/20261114T131931449795Z/applied.json记录；29项纯协议检查通过。本批另在WorldContext.cpp补停用视觉、倒地/隐藏及同World检查，仍待完整构建，地图公开元数据尚未配置。原地点反射变更已应用，勿重复旧patch。普通物品24文件foundation v3位于CompanionItems/20261114T140147092364Z/foundation，SHA eb330eaf45116b835586456d92262a1e7b4d6282770901e117fc8e364190b250，已独立审查并保留地点并改；守门合入因Q4同机测试新开编辑器PID50292停止，尚未正式应用。普通v7 FetchItem/ReturnItem第二批仍Saved，不宣称模型已可调用。
+具名街坊真实交手记忆最新待合入patch是CompanionTownMemory/Staging/20261114T140842727713Z/town_hit_memory.patch，SHA a985a7ca4bd175b6067a2619f6ff7eeeb246b83bba65c4c06e3be94b14edc7cd；仅清醒、当前双方视觉和接触点LOS通过才写入原当局记忆，每个连续交手方向一次、亲密度0，不能扩大解释为已完成城镇关系网。所有暂存变更按当前基线逐hunk合并，不覆盖别的会话代码。本聊天仍不启动PIE、Delivery.*自动化、真实LLM/TTS；UI会话自己的实测不能替代二狗验收。
+【21:20 后最新续作状态，覆盖下方旧“正在暂存/缺背景”描述】用户进一步要求二狗认识周围、自我与城镇关系，边做事边聊天并保持自然在场。NPC受击朝向v2、主角物理对话朝向v2、家居道具中转运行时及配套工具已正式合入并随102项/248.21秒完整目标构建成功；后续原生碰撞通道读回构建7项/10.61秒成功。本次Stay持续活动分类与正确活动名称已随UI任务的统一DeliveryAiInspectorLayoutBuild构建通过：19项/69.08秒，日志明确编译Agent.cpp；Saved/AIResearch/CompanionConversation/stay_activity_build.json记录当前源码与日志hash。当前可见UE仍由另一个UI会话独占试玩，本聊天不关闭、操作、热编译或另开UE，PID按实时进程核对。
+后台NpcProfiles已增加ergou的8段背景和3个口吻示例，原居民及声音不变；居民专用读取/训练入口显式只选原两人，43项纯离线检查通过，完整变更见Saved/AIResearch/CompanionPolish/20261114T130547212267Z。build_seed_data仅读取过滤，保留原LF，未生成训练样本或训练。后台_read_profiles进程缓存未刷新，不宣称运行服务已生效。place_companion.py的PERSONA已去掉无资料的每户全知并允许已知问路，旧DT仍待安全单表迁移。12组/24请求配对二狗评估已在Saved/AIResearch/CompanionPolish/20261114T132114516042Z/bundle_02构造并独立读回，156个唯一候选，非实际游戏记录/模型结果；bundle_01的实物条件偏差已修并保留历史。地点公开元数据与视线观察七文件补丁Saved/AIResearch/CompanionEnvironment/20261114T131931449795Z/observed_places.patch已独立审查并修正const getter，当前SHAc16ea631eb2297053ad86045d9c6e987c660f3af29900dd3bfe84317660c618f；仍未应用反射变更。Persona单表迁移CLI已合入place_companion.py，但未执行资产迁移或独立UE重载。
+家居候选取物入口追加静态检查：第二抱枕入口X9180修复导航投射超差，两Take/Play各9采样通过、Stop共用入口通过，interaction_candidate_entrances.json记录无Actor/包变化。manifest_native_routes_candidate仍calibrated=false，家具与地图ABP实例未安装。inspect_table_final_candidate_margins.py新SHA5051db079ab73882421f5442115e741ffaf4a5022868bd855d09123014e2a898；保留20度全局保守包络并新增条件化分段0/10度，含4cm误差及MotionHalf，尚未UE执行，Take朝向范围不是运行时硬保证。继续禁止本聊天PIE/Simulate/Delivery自动化/真实LLM/TTS请求，另一聊天测试不得算作家居或朝向验收。NPC快文本通道后台已增加model_done.reply_text并通过9项离线mock检查，未重启后台；UE定向投递、父链版本和取消尚待接线，仍未启用提前接话或证明延迟改善。
+【较早朝向准备记录】NPC受击看来源、主角对话转向目标最初按Saved暂存；不要直接旋转主角Actor或摄像机。正式HomeExecution的Take/Place入口转身与服务器朝向复核已随DeliveryConversationAssetFinalBuild通过7项/9.56秒。可见UE由语音/UI会话唯一操作，不关闭/重编或开启自己的PIE。
+【本批合并状态】UI 会话保存并正常关闭 64836 后，已检查无 Editor/UBT 并将道具中转运行时、工具配套、NPC 受击朝向 v2 和主角对话朝向 v2 合入正式工作区，未操作索引。来源分别为 Saved/AIResearch/HomeObjects/PropTransferStaging/20261114T115448677136Z、Staging/PropTransferAssets_20261114T115622667512Z、Saved/AIResearch/NpcHitFacing/Staging/20261114T120905451594Z 与 Saved/AIResearch/ConversationFacing/20261114T122121454470Z；24 份正式文件与审查稿按换行归一后吻合。旧主角 121023 版本未应用；其中 CF-001 已修正：新交谈被服务器提前拒绝时也先推进朝向序号，旧语音 final 不能转回旧目标，原发言/ASR/租约语义保持。统一 DeliverySpeechFocusBuild 已完成：102 项、最多 2 并行，Succeeded，248.21 秒。本聊天未运行朝向/家居自动化或 PIE；UI 会话随后另开其授权的 NullRHI 自动化，等待其退出再安排静态家居检查。桌端全路径已在第六轮静态 commandlet 完成（报告 TableCarryRoutes/20261114T123823174402Z/report.json）：18组中只有南北两端 support10530/stand10370 搭配 via10400 或10410让两抱枕均通过当前零朝向采样；直线路径真实撞桌沿。地图/资产无变化。已保存前五次工具绑定或初始化失败，原生通道读回追加构建7项/10.61秒成功。仍在补重复Take的眼点视线与中转4cm/旋转包络，不可把筛选pass直接当动态搬放完成；家具资产仍未安装，manifest.calibrated仍false。
+【最新构建与剩余路径】高桌重复拿取地面入口、抱枕显式2kg/实际组件读回、五处持续活动交谈暂停接口已接入；统一DeliverySpeechFullBuild首轮115项因另一UI工具TObjectPtr错误失败，修正后DeliverySpeechFullBuildRetry为5项/10.58秒Succeeded，包含最新HomeObjectAssetTools。Saved/AIResearch/HomeObjects/manifest_native_candidates_draft.json仍calibrated=false；尚未安装地图。carry_place_lifecycle_review.json明确桌端直线搬运的中途碰撞缺口，X10395薄枕视线实测受阻；新全路径/站位候选探测脚本准备中，不能只凭终点通过开放摆放槽。另会话正执行获其用户授权的声音/UI检查，本会话不启动可见编辑器或游戏。
+【家居最新追加】拿起缩小/安全恢复、原尺寸候选、按支撑面与各自原尺寸计算摆放落点已接好；CompanionHomeObjectsBuild6.log完整构建4项/39.11秒成功，包含旋转槽尺寸避免二次AABB膨胀。下载动画通过独立QuaterniusAligned源导入yaw=-90修正原90度错向，五段方向与实际ABP 90项静态求值均通过；最新AnimationImport/20261114T105703308360Z/report.json、AnimationGraph/20261114T105816880682Z/validation.json。蓝图默认绑定，地图实例未接线，手持锚仍在校准，不能当实机效果验收。家具保留scale3；60组只读候选找到长桌南北两个能支撑两种原尺寸抱枕的位置，placement_candidates.json保留结果。沙发前软垫本次采样被支撑/碰撞拒绝，高凳/主沙发无可用Sit标定；先如实配置用途。家具包装与地图引用尚未安装。继续遵守无PIE、无Delivery自动化、无真实LLM/TTS的本会话边界；另会话的声音测试不作为本家居验收。
+【16:46（+08）最新续作状态，覆盖下方15:45及更早记录中的未接返程/再次扶起/门洞描述】
+用户最新新增：二狗认识家中真实物件、使用家具与装饰家；允许拿手里缩小、放下变大。HomeObject保存原尺度，原尺寸候选/空间检查、根组件原生复制、取消后保留实物等待安全展开已接源码，并包含在NpcModelSpeechBuild-recheck.log的本次完整构建（6项/8.03秒成功），未实机验收。静态清单已确认house2里sofa/chair/phonograph/bookshelf/2/closet/pillow1/2/vane/2/tv2独立Actor，tv旧标签无mesh。当前家居批次已启用UE5.8 SmartObjects核心、增加HomeObject/BehaviorDefinition/GA_UseHomeObject/CarryProvider、v5候选与可见家具快照；HomeChoices/Character/室内回家接线已落源码，HomeExecution和可编辑资产工具源码已接通并编译，实际资产仍待导入与接线。普通居民继续v4，保留其他会话的连续Fight/ReplyId。离线协议78/78通过；本批首轮编译失败已修正，CompanionHomeObjectsBuild2.log为9项/12.31秒构建成功。资产尚未接到地图、游戏未验收，不能当作已可玩。用户明确新增动画下载成品，不用代码生成动作；已删除未执行的家居姿势生成脚本路线，复用原下载Quaternius的Sitting_Enter/Idle/Exit与Walk_Carry_Loop。源已通过UE导入，首轮原生重定向生成5个独立动画，但压缩读回发现目标骨架140.27397祖先缩放被丢失、肢体尺寸异常；未绑定ABP，须先修复原生重定向适配，不能将资产存在当作效果完成。继续按真实物件→沙发坐起/留声机开关→原枕头搬运摆放；仍需原昵称/食物道歉/小本本等。详情见Architecture二狗家居小节和ergou-home-objects-20261114。不得因早一批车辆构建通过而跳过本批完整编译。
+本批通用车辆流程已覆盖Errand/Follow/ReturnToStay/GoHome，真实交付结算与返程分开，FinishErrand保留原WaitLocation；远处取自己的车按首次完整步行路径单独补预算。Follow停用原隐藏补位传送，主人骑车/换Pawn暂停Follow，独立取送、等候点返程和GoHome继续；取消只清对应Purpose/MoveID，车辆销毁不再传送回旧上车点。仍只用地图专属车，不征用玩家车辆。
+Joined后真实倒地由当前主人按住同一E扶起，Combat新增DownEpisodeId及AssistedRecovery接口，沿原1.6秒起身。归属/落地/距离/LOS/可操作性持续复核，受击取消旧长按，完成站立才记HelpedUp并默认+5。FirstHelp和各重要经历最新累计事实保留；最多24条模型上下文，完整归属去重上限8192，达到则拒绝新记忆/关系结算并一次告警，解除主人清空。重新认主不再编造新主人见过面店首幕，陪同完成事实与记忆共用3D距离/LOS/去重结果。
+静态查询发现地图STATIC导航：面店至家门外约375m完整，门外至屋内只有partial。Home新增可编辑DoorwayLink，默认Null，服务器真实OnDoorBroken开放，正常PathFollowing走门洞，不认领房屋；EndPlay/门销毁禁用解绑。门洞已烘焙并保存。独立重载确认双向关闭不通、开启完整且经过本LinkId，两向518.59cm，最后恢复关闭；Home默认未claimed，角色/房屋数值变换不变。爷爷旧路线Z比门外高44.55cm也已修：XY路线、真实支撑、最大上20/下60cm、胶囊逐帧扫掠/边沿处理，落稳才认领；未实机验台阶。
+CompanionReturnRecoveryBuild.log完整构建成功47actions/43.81s/exit0；编辑器导航工具增补曾漏枚举类名，Build3修复成功6.64s/exit0。首次Setup被AsyncLoadLock阻止构建且未保存；修为等待异步加载/资源编译完后只解除此锁。Setup2保存后旧Transform字符串保护因临时地址假报变化，已改数值。CompanionDoorwayReload.log与CompanionReturnAssetsReload.log独立重载均通过，后者总标记COMPANION_RETURN_ASSETS_AND_ROUTES_RELOADED_OK，涵盖专属车/坐姿/背包/老板/Home及只读路线，包变化为空。Commandlet仍因旧CDO PhysicalMaterial错误exit1，不能宣称干净退出。全批没有PIE、Simulate、Delivery.*自动化、实际游戏按键、主动LLM或TTS请求。
+收尾追加：初次floor sampler在静态mesh碰撞未完成异步编译时误命中屋下Landscape。现inspect_companion_routes先执行Editor.AsyncAssetCompilationFinishAll，强制房屋楼板与完整门命中对照，并记录Actor/Component/重叠/阻挡。完成编译后真实楼板Z2010.2264、门挡射线、排除门畅通；48个搬离采样全命中、取件23候选。CompanionReturnAssetsReload2所有脚本成功，仍有既有CDO错误exit1，不用此前未就绪射线当证据；没有扩大StepDown或改正式碰撞。
+并行性能chat通知其已获用户授权做独立Qwen3-1.7B LoRA并临时停后台/TTS释放显存，另在改居民Agent/BT/Combat/Presentation持续交战。16:45只读检查8769未监听，与其训练停服相符，本线程不得擅自重启或覆盖同函数；稍后按实时状态确认恢复，不能继续写后台始终可用。当前二狗构建结论只对应本批43.81s及6.64s的源码快照，不覆盖并行chat后续未构建修改。
+PUBG Ally已补读正文1–10及附录A–L文字/表格/图注；没有私有源码或完整GDC视频。用户明确不要卡在和平精英官方资料，已扩展精读Mantella c0c1ae6 summaries/actions/句子队列及实时NPC技术说明、AI Town 1b2f7d8架构/异步输入/消息/记忆、Voyager 55e45a8任务循环/critic/skill。具体链接与采用/不采用部分见ergou-return-recovery-20261114。下一批应完成昵称/安静的模型语义安排、真实食物+道歉、小本本、屋内沙发日常，以及带来源听闻/输出版本校验/失败重新规划，不等待一个官方来源。
+本线程未操作Git索引或提交推送；另一性能chat按该处用户授权已提交8d33742和1a4de73，当前二狗/地图等仍未提交。保护其声音、音乐和训练准备改动。用户曾从Rider开启并自行关闭编辑器，本线程未操作该PIE；保持正式后台可用，PID需重新查询，不沿用历史号码。
 
-先检查 Git、编辑器和后端，保护已有改动。二狗目前只有设计，尚无正式类、行为树、动作和验收结果。较新的完整方案覆盖早期“只做跟随”的建议；先沿一次玩家操作说明职责、接口和多人流程，再逐步实现。不要重新进行已经完成的声音下载、试听和长时间性能研究。
+【以下15:45状态为历史】
+【15:45（+08）本批新状态，覆盖下方较早的“正在实现/未构建/旧后台”描述】
+用户最新要求是修面店二狗旁巨大模型、老板换项目卡通老人、二狗用自己的车跑腿。根因已确认：背包BeginPlay附着Spine2继承140.273970倍缩放，38cm袋片可变53.3m。独立SK_ErgouBoy新增ErgouBagAnchor补偿骨骼缩放/参考旋转，三Attach引脚已保存并独立重载；修过MCP引脚修改未置dirty导致首次未落盘的问题。老板正式替换SK_NoodleOwner（项目SK_NpcGrandpa副本）+A_NoodleOwnerEject，不再用The_Boss；地图/蓝图已保存。
+二狗专属车ADeliveryCompanionMotorbike、BP_ErgouMotorbike、A_ErgouRide及地图一对一ErrandVehicle引用已保存，预停面店旁。沿用原车服务器移动/碰撞/复制；二狗仍由原AIController控制，主人仍绑定PlayerState，其他玩家驾驶/货箱/乘坐/召唤入口拒绝。远途跑腿先走到自己的车、骑到停车点、下车再进行原实物交接；包裹Owner仍二狗，骑乘表现挂专属货架，迟到复制不能恢复隐藏原身体。静态坐姿保留骨长，按车座/把手/脚踏校准，四手脚骨点偏差约2–3cm；未验动态转弯/握把/完整路网。一般Follow和GoHome仍沿原步行分支，送达后的返程、远离专属车后的重新取车需要进一步玩法检查，不能说全场景车辆协同已完成。
+协同战斗GAS规则入口/真实命中/重入去重已补齐；当局24条带事件ID事实、亲密度阶段、小绿与GoHome候选采用协议v4（保留旧版本兼容）。院子机会只提供ambient小绿提议候选，模型可以不提议；访客不能指挥。接小绿复用单一E入口，扶起长按/接虫短按随阶段切换，物品经原Inventory交接，没有自动投放虫子。爷爷真实第一单收件→感谢/等待→可取消搬离→走到屋外终点→唯一Home Claim→Finished，地图复用原house2。完整关系事件、昵称、小本本、屋内沙发/日常仍未完成，不称第三阶段全部完成。
+CompanionVehicleHomeBuild首轮缺PlayerState完整类型/Printf格式串失败，Build2修复成功47actions、49.82秒、exit0。新UE回归只编译未运行；57项后台离线检查通过。CompanionDeliveryAssetsReload.log在15:41完成总独立重载，包含GRANDPA_HOME_OK、COMPANION_DELIVERY_ASSETS_RELOADED_OK、外观pose检查；Home默认未claimed且只读过程无包改动。Commandlet进程exit1是既有nativeCDO PhysicalMaterial错误，不写成干净退出；早期并行编辑器时还有8000端口冲突。check_ai_docs通过11SVG及1440/390/320宽度。编辑器已重启PID14084，MCP确认未PIE，并看过面店/车/二狗静态画面与坐姿缩略图；本线程没有游戏按键、PIE/Simulate/Delivery.*自动化或真实模型/TTS调用。
+性能并行chat已按该chat用户授权恢复后台PID58296并报告用户认可加速B声音：当前玩家/NPC默认gpt-6-luna low/default，Qwen talker_mode=cuda_graph，保留原声音和分段UI。本线程读取运行日志确认gpt-6-luna模型选择与后端已监听，未自行调用模型/声音；具体加速测量以性能chat写入的证据为准。协议v4源码在此次后台恢复前已落盘；后续启动仍检查实际进程与日志，不能沿用PID作永久结论。未提交/推送，保护其他chat的性能修改及用户声音归档。
+
+【以下14:43及更早记录为历史】
+14:43（+08）用户反馈试玩时全部NPC无回复，已确认此前正式后台停止，UE日志为8769 Connection refused/TransportFailure。现按原Sol/default、Qwen、DialogueLog和StreamAudio配置恢复，检查时PID51748监听8769，tts_prepared完成，stderr空；旧失败消息需用户重新发言。没有操作用户PIE、主动发送模型/TTS测试请求，未验证恢复后的游戏回复。下方“没有python后台/未自行重启”是此前历史状态，不再作为当前结论。后续先检查实时进程与日志，用户试玩期间保持后台可用。协同战斗GAS源码已有部分未完成修改（NpcAbilities引用的Origin/RuleRevision等尚待补齐），尚未构建；当前编辑器仍运行此前构建，不把CompanionErrandBuild2成功沿用于新源码。用户正在试玩，不关闭编辑器或热编译。
+最终CompanionErrandBuild2成功24.93秒exit0，含初遇按真实取件范围补入口、待取/在送/已完成生命周期、HasSameIndexAndSerialNumber、pending-kill物品查询过滤、长跑腿按阶段首次完整路径补行走时间。新C++回归只编译。用户新增NPC快速通信方向：当前已文本直传，但要等整段语音完成才通知其他NPC；下一步区分提前准备与真正已说/已听的提交，保持打断/玩家抢话/轮数及多人规则，不能直接提前写已听记忆。当前只完成代码调查与方案记录，尚未改通信或声轨。
+
+最新用户指示：先把功能实现完，之后沿用已有性能分析记录处理延迟；不继续用资料搜索或性能微基准延后功能。保持无PIE/Simulate/Delivery.*自动化/真实LLM与TTS的授权边界，不重复询问已明确的流程。
+最新功能为ergou-errand-execution-20261114：能力版本3增加FetchPackage/TakePackage/DeliverPackage/ReturnPackage，持续Errand由Companion保存；Agent核对主人/命令版本/任务与包裹的原始弱引用身份，BT执行真实取件与交接，Target/TaskManager确认投递和奖励。取消保留实物，交谈/倒地只暂停；主人骑车时取件和帮送仍可继续，接件/交还等待主人能接收。旧Follow/Stay继续，声音/分段/UI保留。
+BT_Companion已新增可编辑BTT_CompanionErrand和独立BB_Companion，优先级Unavailable→Listening→HasApprovedAction→HasCompanionErrand→Follow，原图布局保留。Setup2与独立Inspect成功，201个保护文件和地图/11导航不变；两进程exit1为既有3条CDO物理材质错误，不能写成无错误。证据Saved/AIResearch/CompanionErrandAssets/20261114T054627180228Z/execution_summary.json。真实第一单DA是120秒限时/10秒解锁，CSV300/15只警告，不强改资产。
+CompanionErrandBuild1完整构建成功32.21秒；69项离线后台检查6.316秒通过，补充45项0.225秒通过（CompanionErrandBackendBoundaryChecks.log）。两组新C++规则仅编译未执行。初遇资格改查任务管理器保留的已接/配送/完成记录，晚来仍可结识；加入台词事实不把未亲历订单说成一起完成。最终Build2和可发现性修正以上方最新记录为准。
+后续工作以功能为先：完成第一单体验缺口、协同战斗GAS适配、当局记忆/亲密度/小绿/爷爷离开与共用住房；当前这些仍未全部完成。真实跑腿导航、E/T操作、声音与双人表现没有验收。下面较早记录保留历史，若与本段实现冲突，以本段和最新迭代节为准。
+
+此前初遇构建CompanionEncounterBuild4成功27.39秒，含老板按门实际进度暂停的修复；资产独立读回在此之前完成，Build4未进入游戏。错误试验metadata已清理并重载核对，正式人物/地图接线见下段。
+真实门洞、独立老板与抛出初遇已经落盘接入地图：EncounterScene固定老板/门/锚点，Character单一阶段快照及CMC RootMotionSource，真实Landed后允许扶起。Build3成功4.84秒，含销毁清理、订单结束取消与路径预检间隔；规则回归只编译未运行。新门壳/门叶/曲线静态净空重载完成，非门区190578三角的坐标/材质/UV完整保留。用户最新要求直接使用项目模型：二狗采用SK_NpcBoy的独立配置副本SK_ErgouBoy，老板采用The_Boss；旧随身老板组件和子图已移除，角色图标记为3。老板动画经Interchange导入修正，27帧压缩姿势核对，Delay0.4秒对齐0.6秒开门；老板时间随实际门进度/抛出阶段推进。正式地图唯一SceneRef、两位人物实际模型、门碰撞及1.3秒曲线已独立读回，原Actor变换和11段导航不变。外部下载仅保留来源档案，不继续制作。最新证据、失败和限制见ergou-project-appearance-20261114；没有PIE或多人验收。
+本次启动检查没有python后端进程，不再沿用旧PID53496为正在运行证据；未自行重启。后端取消竞争两处修复离线128项通过6.826秒，真实首delta等待仍未解决，详见provider-cancel-race-20261114。
+工程HEAD仍79f4491，当前新增同伴与多批修复尚未提交；保留另一线程的大壮/翠花站位改动及六份无关语音压缩包。第一阶段已实现CompanionCharacter/Component、OwnerPlayerState归属与版本校验、Follow/Stay/Cancel、门口避让、双轮全玩家屏幕外补位和初遇晚加入同步；已有可编辑BP/BT/DA和地图导航。首轮固定路边跌倒占位已替换为独立门/老板与有碰撞的抛出流程；编织袋和抱包表现仍待完善，新Boy模型没有Morph眨眼/口型，不能称完整人物表现已完成。
+此前Build9成功，第二阶段接口CompanionStage2Build2成功5.09秒（首轮仅新测试指针模板编译错误，已修）。C++规则回归仅编译未执行。当时101项后台离线检查通过6.487秒，后续取消竞争修复后128项通过6.826秒。标准档配置Sol/low/default、端口8769和声音/流式设置保留，旧PID53496已不存在，不将它写成当前服务；Fast只提供显式可选接入，未启用、无提速验证。候选说明裁剪四次AB未呈稳定改善，正式提示未切换，真实首delta延迟仍未解决。
+第二阶段早先接口批次已落盘并编译IDeliveryPackageCarrierInterface、Companion真实持件、服务器同主人交接/预约/失败回滚、ExpectedTask取件、Target/Grandpa适配和跨Actor复制表现，当时尚未开放自然语言取件/帮送/交还候选或跑腿BT；当前已补齐执行和资产，见最新跑腿记录。接口基础的详细结果以本文ergou-package-foundation-20261114更新为准；本批只读资产加载完成，Carrier/PackageAnchor/复制声明存在且9资产+map哈希不变；继续前检查构建和读回记录，不能把源码落盘当功能验收。
+本线程没有PIE，没有主动执行Delivery.*自动化，没有真实E/T/多人操作；普通Editor会自动启动引擎Smoke自检，本轮有13条Condition failed，来源和限制见ergou-package-foundation-20261114，后续纯资产读取优先Commandlet。保持这些测试边界；后台离线检查与已明确限定的模型对照不能扩大为游戏试玩或TTS测试。持续委托与真实执行结果本批已接上，继续完善初遇/跟随及共同战斗；三阶段完整目标如下继续保留。
+
+继续 D:\Udev\Delivery 项目，实施长期陪伴角色“牛二狗”。先读 AGENTS.md、CLAUDE.md，再读 Document/Architecture.md 的“AI 跟班二狗设计”（2026-11-13）、Document/DeliveryAIPlan.html#ergou-design 和 Document/AIIteration.html 的最新记录、ergou-research、pubg-ally-companion。
+
+先检查 Git、编辑器和后端，保护已有改动。二狗第一阶段已有正式类、行为树、资产和地图接线，现状以上方续作记录为准，实机验收仍未完成。较新的完整方案覆盖早期“只做跟随”的建议；先沿一次玩家操作说明职责、接口和多人流程，再逐步实现。不要重新进行已经完成的声音下载、试听和长时间性能研究。
 
 上一轮状态：已合并街坊决策指导，改为自然口语；模型自己根据性格、对话和现场选择动作，没有关键词或挑拨次数开打。完整与流式回复的最后一句现在都会被邻居记住，bRequestReply=false 不自动接话，内部 bNeedsReply=false 不作废等待中的回复。听觉失效不再误报离开视线。DeliveryEditor 构建通过，65项后台检查通过；最终模型对照分别在第一、第三玩家轮选 Fight，道歉后收场，但此前双方已拒绝时仍可能继续拒绝。本轮没有运行UE自动化或实际PIE，真实追赶、命中、声音与多人效果未复测，不能把模型选中动作说成实机验收完成。当前提交状态以 git log/status 为准。
 
@@ -1080,6 +1801,210 @@ python -m unittest discover -s Tools/DeliveryAI -p 'test_*.py'</code></pre>
 <p>当前电脑为 12 GB 显存的 RTX 5070 Ti Laptop。训练、语音试做与 UE 试玩分开安排；正式使用时再测模型、TTS 和游戏同时运行。下载、环境准备和训练分别计时，尚无本项目训练时间实测，因此不承诺“训练几分钟就能达到正式效果”。</p>
 <p>无论使用哪种模型，游戏服务器继续确认攻击、抓车和任务结果。人物可以吹牛或误会，系统不能把吹牛当成实际命中，也不能把熟人玩笑一律变成客服式拒绝。是否采用训练版，以新的对话和实际试玩结果决定。</p>
 </section>
+<section id="provider-latency-research-20261114">
+<h2>11 月 14 日：模型首段等待、配置隔离与延迟方案复核</h2>
+<p>用户要求继续解决大模型决策慢的问题。本轮先读正式 <code>app_server.py</code>、<code>codex_local.py</code>、<code>streaming.py</code>、调度与启动配置，再检查真实日志、既有对照和外部实现。保持 <code>gpt-6.1-sol / low</code>、现有人物、声音和逐句播放；未启动 PIE，未调用 TTS，未重启正式后端。以下模型输出与游戏里的实际行动分开记述。</p>
+<h3>真实日志指向首段生成之前</h3>
+<p>只读快照：<code>Saved/Logs/AIResidentBackend.log</code>，读取时间 04:20:00，30926 字节，SHA-256 <code>6dea04eae3f6843f428430207f4168941f340cba11c0bc779204d96caf79b53d</code>。下面两个完整玩家请求的 <code>slot_wait_ms</code> 均为 0；App Server 接受 turn 只占几十到几百毫秒。首个文字 delta 尚未到达时已经过去 7–9 秒，后续首句与首块 PCM 才各增加一小段时间。这支持优先检查模型服务与推理阶段，不支持继续把主要等待归因于 TTS 队列；首块 PCM 也不是声卡实际出声。</p>
+<div class="table-scroll" tabindex="0" aria-label="真实玩家请求延迟拆分"><table><thead><tr><th>请求编号前缀</th><th>turn 接受</th><th>首 delta</th><th>首句</th><th>首块 PCM</th><th>TTS 排队 / 首块合成</th><th>输入 / 缓存 / 推理 token</th></tr></thead><tbody>
+<tr><td>7b38d587</td><td>383 ms</td><td>9314 ms</td><td>9723 ms</td><td>10578 ms</td><td>3 / 851 ms</td><td>10719 / 7040 / 128</td></tr>
+<tr><td>1de8ec30</td><td>79 ms</td><td>7122 ms</td><td>7664 ms</td><td>8436 ms</td><td>3 / 768 ms</td><td>11038 / 4096 / 93</td></tr>
+</tbody></table></div>
+<p>同批另一个玩家请求 <code>228fa9ca</code> 首 delta 为 12568 ms，但本次快照没有完整音频与用量，不能补成一个完整样本。较早归档 <code>AIResidentBackend.log.20261114-034101-788-4743e6e1.bak</code> 的 15 次首 delta 中位数为 2179 ms，多个请求 reasoning 为 0；场景、人物事件与服务时间不同，不能把新旧日志直接当作修改前后对照。</p>
+<h3 id="provider-latency-readonly-audit-20261114">追加只读复核：15 次既有请求与会话复用边界</h3>
+<p>本次只读取当前 <code>server.py</code>、<code>scheduler.py</code>、<code>app_server.py</code>、<code>streaming.py</code>、启动配置、本机已导出的协议 schema 和归档日志；没有编辑生产代码、重启服务、创建推理轮次、调用 TTS 或启动 UE。统计来源固定为 <code>Saved/Logs/AIResidentBackend.log.20261114-045143-361-6f711ed0.bak</code>，30926 字节，SHA-256 <code>6dea04eae3f6843f428430207f4168941f340cba11c0bc779204d96caf79b53d</code>，按 request_id 对齐阶段；它是此前真实请求的再分析，不是新一轮性能对照。</p>
+<div class="table-scroll" tabindex="0" aria-label="15次归档请求的只读延迟统计"><table><thead><tr><th>阶段 / 口径</th><th>有效记录数</th><th>最小 / 中位 / 最大</th></tr></thead><tbody>
+<tr><td>调度等待 scheduler_queue_ms</td><td>15</td><td>0 / 0 / 460 ms</td></tr>
+<tr><td>模型槽等待 slot_wait_ms</td><td>15</td><td>0 / 0 / 0 ms</td></tr>
+<tr><td>连接调用开始 → thread_start 返回</td><td>15</td><td>46 / 60 / 492 ms</td></tr>
+<tr><td>连接调用开始 → turn_start 返回</td><td>15</td><td>55 / 69 / 503 ms</td></tr>
+<tr><td>turn_start 返回 → 首 delta，同请求相减</td><td>15</td><td>2816 / 6776 / 12499 ms</td></tr>
+<tr><td>首 delta → 首个通过解析的完整句子，同请求相减</td><td>13</td><td>96 / 421 / 894 ms</td></tr>
+<tr><td>该轮 cached input / reasoning output token</td><td>11</td><td>缓存 0 / 0 / 7040；推理 0 / 90 / 170</td></tr>
+</tbody></table></div>
+<p><code>thread_start</code> 与 <code>turn_start</code> 是从本次 AppServer.stream 开始累计的时间，包含可能发生的进程/能力初始化，不能相加；上表跨阶段差值只对同一请求都有两个时间点的记录计算。首句有 13 组、用量有 11 组，缺失项不补零，不把这 15 次说成全部完整成功；没有按少量异质请求估算 P95。代码与样本共同表明，主要等待仍在 turn 接受之后、首个可见文本之前。现有通知不能拆清网络与服务传输、远端排队、预填充和隐藏推理各占多少，<strong>不能据此断言某一项就是根因</strong>。</p>
+<p>缓存也不能单独说明速度：既有配置隔离对照中 cached=7040 的请求首 delta 为 14664 ms，而另一无缓存请求为 8112 ms；场景与推理量不同，这不是缓存效果的因果对照。正式输入已将固定规则放入 baseInstructions，人物背景也在 JSON 靠前处；同伴的 companion_context 在 persona 之前，模式或安排编号变化会较早改变这一段前缀。更改顺序可能增加相同前缀，但已有合并提示和候选裁剪均未证明稳定收益，本轮不重复推广、不启用这些候选，也不把输入较短称为提速完成。</p>
+<details><summary>复现上述统计的只读命令（在工程根目录 PowerShell 执行）</summary><pre><code>@'
+from pathlib import Path
+import hashlib, re, statistics
+path = Path('Saved/Logs/AIResidentBackend.log.20261114-045143-361-6f711ed0.bak')
+raw = path.read_bytes()
+print('source_sha256', hashlib.sha256(raw).hexdigest())
+rows = {}
+for line in raw.decode('utf-8').splitlines():
+    request = re.search(r'request=([^ ]+)', line)
+    stage = re.search(r'stage=([^ ]+)', line)
+    if request and stage:
+        rows.setdefault(request[1], {})[stage[1]] = {
+            key: int(value) for key, value in
+            re.findall(r'([a-z_]+)=([0-9]+)(?= |$)', line)}
+def report(label, values):
+    if values:
+        print(label, 'n', len(values), 'min/median/max',
+              min(values), statistics.median(values), max(values))
+for stage, key in [('worker_started', 'scheduler_queue_ms'),
+                   ('model_slot_acquired', 'slot_wait_ms'),
+                   ('model_connection_thread_start', 'connection_ms'),
+                   ('model_connection_turn_start', 'connection_ms'),
+                   ('model_token_usage', 'last_cached_input_tokens'),
+                   ('model_token_usage', 'last_reasoning_output_tokens')]:
+    report(key if stage == 'model_token_usage' else stage,
+           [row[stage][key] for row in rows.values() if key in row.get(stage, {})])
+for label, first, last, clock in [
+    ('turn_to_delta', 'model_connection_turn_start', 'model_connection_first_delta', 'connection_ms'),
+    ('delta_to_sentence', 'model_connection_first_delta', 'first_sentence', 'elapsed_ms')]:
+    report(label, [row[last][clock] - row[first][clock] for row in rows.values()
+                   if clock in row.get(first, {}) and clock in row.get(last, {})])
+'@ | python -B -X utf8 -</code></pre></details>
+<p>现有 benchmark 脚本侧重受控调度或显式模型对照，本次直接保留上面的只读标准库命令，没有新增工具文件或运行任何 benchmark。命令只读取指定归档并向终端输出，不写日志、导入服务适配器或连接端口。</p>
+<h3>持久会话不能直接代替每轮独立快照</h3>
+<p><code>streaming.py</code> 在线程局部对象中复用 AppServer 进程，<code>app_server.py</code> 每轮仍创建 <code>ephemeral=true</code> 的独立 thread，结束后 unsubscribe；进程复用已经存在，不能把每轮 thread_start 当作每轮启动 Codex 进程。工作线程会处理不同 NPC 的请求，直接把它变成一条共用对话会混入其他人物内容。即使按 NPC 分开，<code>model_context</code> 也会按本轮 evidence 重新分配 p0/e0 等短编号，旧轮相同别名可能代表另一人物或事件；历史中还会留下失效候选、旧主人权限、已取消安排以及尚未由游戏确认的答应。持续记忆和任务事实仍由游戏维护，不能靠模型服务隐藏历史补齐。</p>
+<p>本机 <code>Saved/AIResearch/app-server-schema-current/v2</code> 与<a href="https://learn.chatgpt.com/docs/app-server">官方 App Server 协议</a>相互核对：<code>thread/resume</code> 保留已有历史；其 history 参数明确标为 Cloud 专用的不稳定入口，不用于本项目清空会话。<code>thread/revert</code> 只支持持久化分页历史，不支持 ephemeral；旧 thread/rollback 已移除。unsubscribe 也只是取消订阅，最后订阅者退出后还可能等待空闲宽限期才卸载，不能作为“历史已擦除”的确认。故目前没有找到可直接保留现有临时会话语义、又保证低延迟复用的公开清空接口。</p>
+<p>本机 schema 另有实验 <code>thread/sample</code>，要求 threadId、expectedTurnId、prompt；expectedTurnId 必须对应源线程最近已完成、失败或中断的轮次。返回结构包含完整 text、responseId、sourceTurnId 与可选 token 计数；<code>thread/sample/cancel</code> 按 RPC requestId 取消。<a href="https://learn.chatgpt.com/docs/changelog?date=2026-10-15">官方发布记录</a>确认该实验入口存在，但本轮未找到专用 delta 通知或逐句流式契约，不能承诺它保持当前首句即入 TTS 的表现，也没有验证其服务端缓存或延迟收益。</p>
+<p>可测试的下一小步仅为独立可行性探针：使用不含 NPC/玩家事实的固定模板 seed，每次 sample 携带完整当前快照；先检查采样前后源历史与最后轮次未改变，再按明确授权做少量同输入对照、取消与隔离检查。如果采样修改源历史、缺少首段流式输出或没有实际收益，就保留现状。<strong>本轮没有实现或执行此探针，没有任何新提速方案通过验证</strong>；也不将新增 seed 推理或付费档位视作默认授权。后续仍优先第一阶段初遇、跟随与完整第一单的实际体验，研究不能长期挤占试玩交付。</p>
+<h3 id="provider-cancel-race-20261114">取消与模型结束同时发生：修复无谓重启和迟到文本回调</h3>
+<p>在上述只读复核之后，继续检查 <code>AppServer.stream</code> 的取消时序，发现两个可用离线替身稳定复现的问题。其一，玩家取消后已经发出 <code>turn/interrupt</code>，但模型此前恰好自然完成，服务返回本轮 <code>completed</code>；旧代码报 <code>model_completed</code> 并关闭整个 App Server 进程，下次请求失去进程复用。其二，取消发生在阻塞读取通知期间时，刚返回的 delta 仍会交给上层回调。上层语音发送另有取消检查，但适配器本身仍应停止交付旧文本。</p>
+<p>现已在读取通知之后再次检查取消，只向同一轮发送一次中断请求，后续文本不再调用输出回调。取消中的当前 thread/turn 返回 <code>interrupted</code> 或 <code>completed</code> 都确认模型已停止，向调用者返回 <code>cancelled</code> 并保留进程；下一次仍创建独立临时会话，不复用 NPC 对话历史。没有匹配终态、超过三秒取消期限、连接异常或真正失败仍沿原路径关闭进程。计时增加 <code>cancel_requested</code>、<code>cancel_terminal_completed</code> 和 <code>cancel_terminal_interrupted</code>，供后续区分自然结束竞争与其他错误，不记录玩家原话。</p>
+<p>先增加两项针对实际时序的回归，修复前均失败：一项得到 <code>model_completed</code> 而非取消结果，另一项收到了已取消的首句。修复后 AppServer 的 24 项检查通过；包含请求校验、上下文、流式、调度、语音队列和同伴协议的扩展离线检查共 <strong>128 项通过，6.826 秒</strong>，这些数量包含专项检查，不能相加。本次只使用替身、受控线程与本机 fixture HTTP，没有真实模型、语音合成、生产服务启动或 UE 操作。</p>
+<p>这项修复消除了上述特定竞争造成的进程重建，并收紧了取消边界，<strong>没有实测端到端提速，也没有解决既有首 delta 前数秒等待</strong>。既有日志的主要等待仍在服务接受 turn 之后；未把模型、付费服务档位、固定提示或语音参数改成新方案。后续若按授权做真实对照，应分别记录正常请求和取消后下一请求，使用同一人物快照、模型、档位与冷热状态，比较 first_delta 和首句时间，同时核对选中动作与旧文本隔离。</p>
+<p class="evidence">修改范围：<code>Tools/DeliveryAI/app_server.py</code>、<code>test_app_server.py</code>。修前失败：<code>Saved/Logs/CompanionCancellationRaceBefore.log</code>；专项通过：<code>CompanionCancellationRaceAfter.log</code>；扩展检查：<code>CompanionCancellationBackendChecks.log</code>。在 <code>Tools/DeliveryAI</code> 执行 <code>python -B -X utf8 -m unittest test_companion_context test_server test_model_context test_streaming test_dialogue_background test_app_server test_action_prompt test_codex_local test_scheduler test_speech_queue -q</code>；返回码 0。</p>
+<h3 id="smoke-localization-static-20261114">启动 Smoke 的本地化线索，仅完成静态追踪</h3>
+<p>对 <code>Saved/Logs/CompanionStage2AssetReadback.log:1688–1705</code> 追加本机 UE 5.8 源码核查：<code>Runtime/Core/Tests/Experimental/UnifiedError/UnifiedErrorTests.cpp:479–533</code> 中 CreateErrorMessage 与 CreateErrorMessageWithContext 合计 11 个 CHECK，将本地化 <code>FText.ToString()</code> 与硬编码英文比较，没有在这两个测试内切换 invariant culture。<code>UnifiedError.cpp:86–125</code> 使用 NSLOCTEXT 与 FormatToText；同次启动日志已显示“空错误”“整数-7出错”。因此中文文化环境导致这些断言不匹配具备具体源码依据，但日志没有逐断言定位，<strong>不能声称后续 13 条 Condition failed 全部已证实来自这 11 个 CHECK</strong>。</p>
+<p><code>StructuredLogSmoke:973</code> 自身只写结构化日志，没有 CHECK；不能仅因输出相邻就把 13 条错误归给它。<code>AutomationTest.cpp:544–558</code> 说明普通 Editor 默认执行 Smoke，且启动 Smoke 期间关闭堆栈捕获；<code>LaunchEngineLoop.cpp:6905–6908</code> 的 bForceSmokeTests 只用于强制开启。本轮在这些实际入口未找到普通 Editor 的 NoSmoke/SkipSmoke 参数，不修改引擎或伪造跳过选项。Python Commandlet 分支通常跳过默认 Smoke，但 <code>place_companion.py</code> 的资产修改路径明确要求完整编辑器完成导航体积复制，不能为规避自检直接换用它。以上没有运行 UE 或复现测试；13 条仍保留为未定位完的启动异常，不计功能通过。</p>
+<p class="evidence">本次从本页提取并实际执行上面的只读统计代码，结果与表中 15/13/11 组计数和所有区间一致，归档 SHA-256 一致；本页 ID 唯一性、内部锚点及 <code>git diff --check</code> 检查通过。没有新增散落说明文件，没有运行模型、语音或 UE 测试；这些检查不代表性能改善或玩法完成。</p>
+<h3>已修复：NPC 会话不再继承编辑器工具</h3>
+<p><code>mcp_servers={}</code> 在本机配置合并中不能删除继承服务器。当前 CLI 没有 App Server 的 <code>--ignore-user-config</code> 参数，非流式 <code>codex exec</code> 路径已有该隔离参数，未改变它。流式适配器现在通过 <code>config/read</code> 只提取服务器名字，在每个 <code>thread/start.config</code> 内以嵌套表逐项设置 <code>enabled=false</code>，并显式使用空 <code>developerInstructions</code>。不保存、打印或转交配置中的地址、环境值与凭据，不修改用户配置文件。独立临时会话的 MCP 状态显示两个继承服务器工具数均为 0。最初试用带引号的点路径被当前 CLI 拒绝，改成嵌套表后成功。</p>
+<p>同一进程首次使用时分页读取 <code>model/list</code> 并缓存能力；进程关闭时清掉缓存。<code>DELIVERY_CODEX_REASONING_EFFORT</code> 在流式 App Server 路径默认仍为 <code>low</code>，显式配置必须属于模型返回的支持项；可显式设 <code>auto</code> 做最低支持档位的对照，不会猜测 <code>none</code> 有效。本机实际查询显示 Sol 支持 low、medium、high、xhigh、max、ultra，最低已是 low，所以这次不能靠降低推理档位得到收益。能力查询不是模型推理。依据：<a href="https://learn.chatgpt.com/docs/app-server">官方 App Server 协议与 model/list</a>、<a href="https://learn.chatgpt.com/docs/config-file/config-reference">官方配置参考</a>；字段同时用安装中的 CLI 生成 JSON schema 核对，临时 schema 与临时服务已清理。</p>
+<h3>同一 Sol 的 Fast：已接入显式配置，未启用或测速</h3>
+<p>继续只读核查安装中的 App Server schema 与模型目录：Sol 的最低推理档仍是 low；目录另公布 <code>serviceTiers=[{id: priority, name: Fast}]</code>、<code>additionalSpeedTiers=[fast]</code>，默认服务档为空，当前有效全局服务配置为 default。全局推理配置虽为 ultra，项目的每轮请求已经显式发送 low，不能把全局值误当成本项目等待原因。当前账户目录未公布 Ultrafast，不尝试开启。此次只调用能力/配置读取，没有创建模型推理轮次，也未提取、输出或转移登录凭据。</p>
+<p>本机 schema 确认 <code>thread/start.serviceTier</code> 与 <code>turn/start.serviceTierForTurn</code> 可用；后者明确规定 default 为标准速度。<a href="https://learn.chatgpt.com/docs/app-server">官方 App Server 文档</a>与本机字段一致。<a href="https://learn.chatgpt.com/docs/agent-configuration/speed">官方 Codex Speed 文档</a>说明 Sol Fast 以更高用量换取速度；当前公布的订阅内用量倍率与购买额度倍率不同，本轮没有查询账户套餐/账单，不能确定此账户实际倍率或费用。<a href="https://developers.openai.com/api/docs/guides/fast-mode">官方 API Fast 文档</a>确认 fast / priority 别名，但 API 计费与 ChatGPT 登录用量须分别看待。目录的速度说明和官方宣传值都不是 Delivery 的实测结果。</p>
+<p>按本轮授权，在流式 <code>app_server.py</code> 增加项目环境变量 <code>DELIVERY_CODEX_SERVICE_TIER</code>，仅接受 default、fast、priority。缺省显式传 default，避免继承全局付费档；Fast 必须在当前模型的 <code>serviceTiers</code> 中找到 fast 或 priority，发送目录实际公布的 ID。只出现旧的 additionalSpeedTiers 说明不足以放行；未知档位、不支持的模型在创建会话/推理前拒绝。缓存随进程关闭清理，不修改用户配置文件，不替换 Sol/low，不动声音与分段播放。</p>
+<p><code>start_backend.ps1 -ServiceTier fast</code> 或显式项目环境变量可供后续批准的对照使用，<strong>本轮没有执行该启动命令，没有设置 Fast 环境变量，也没有重启正式服务</strong>。未传参数时保留显式环境选择，否则仍 default；参数 default 可覆盖环境中的 Fast。运行中的后端不会被脚本重启或改档。启动选择 Fast 时显示更高用量提示，模型支持情况仍在首次实际调用前校验。这一开关目前只接入 App Server 流式路径，不能据此声称其他 HTTP 或非流式路径已改变。</p>
+<p><code>last_model_settings</code> 与 <code>model_settings</code> JSON 日志分别记录 requested_service_tier 和 thread_service_tier。会话回显缺失时记 null，不猜测确认；标准档请求若回显付费档或未知值，在发送 turn 前拒绝。当前 turn 完成通知没有每轮实际服务/计费档位，因此会话回显不能证明最终远端处理档位，更不能证明已降低首 delta。HTTP/SSE 的项目 URL、API key、模型名环境变量仅检查“存在与否”：当前代理进程及用户/机器持久环境均未发现。未读取现有后端进程内存；不能据此声称其他进程或所有配置源都没有端点。</p>
+<p class="evidence">本批新增 6 项离线用例，检查默认不继承、别名与能力映射、逐模型拒绝、未知档拒绝、未回显不冒认及标准请求异常付费回显。命令 <code>python -m unittest test_app_server test_streaming test_companion_context test_codex_local test_action_prompt</code> 本次实跑 <strong>75 项通过</strong>；PowerShell Parser 对启动脚本语法检查通过，<code>git diff --check</code> 通过。没有新增真实模型、TTS 或游戏调用。后续必须在明确允许增加用量后，用相同场景实际比较首 delta、首句、质量、token 和可见服务档；<strong>目前只交付可审核的配置入口，延迟目标仍未解决</strong>。</p>
+<h3>相同真实上下文 A/B：未证明配置隔离能加速</h3>
+<p>新增 <code>Tools/DeliveryAI/benchmark_app_server_isolation.py</code>，读取已有 <code>NpcDialogue.ndjson</code> 的两份完整 <code>model_context</code>，确认提示词 SHA-256 与记录相同。旧实现从提交 <code>79f4491</code> 读取；两版用各自的临时 App Server，顺序为旧/新、新/旧，共 4 次有效推理，均为 Sol/low，不走正式端口或语音。模型输入保持原来的短编号；校验侧恢复稳定 UUID 后使用正式解析器与动作检查。</p>
+<div class="table-scroll" tabindex="0" aria-label="相同上下文的配置隔离对照"><table><thead><tr><th>场景 / 版本</th><th>首 delta / 首句</th><th>输入 / 缓存 / 推理 token</th><th>模型选择与人工阅读</th></tr></thead><tbody>
+<tr><td>当面比较谁厉害 · 旧</td><td>12029 / 12463 ms</td><td>10710 / 0 / 138</td><td>LookAt:p2；嘴硬接话，没有宣称命中</td></tr>
+<tr><td>同上下文 · 隔离</td><td>14664 / 14688 ms</td><td>10651 / 7040 / 190</td><td>同为 LookAt:p2；回应人物比较，没有新增事实</td></tr>
+<tr><td>吃亏后继续被起哄 · 隔离</td><td>8112 / 8540 ms</td><td>10970 / 0 / 122</td><td>Flee:p1；表示不再硬碰，台词与逃离意图一致</td></tr>
+<tr><td>同上下文 · 旧</td><td>9289 / 9708 ms</td><td>11029 / 3200 / 114</td><td>同为 Flee:p1；拒绝继续挨打，未冒称已经逃脱</td></tr>
+</tbody></table></div>
+<p>每对只减少 59 个输入 token，第一场反而更慢，第二场较快；缓存与推理 token 也不同。每条件仅一次，不估计 P95、稳定成功率或加速百分比。4 次通过协议检查，两个场景的动作/对象一致，仅支持本批文字与候选一致性；没有检查实际移动、出拳、逃跑、听感或多人。保留配置隔离的职责修复，<strong>模型延迟仍未解决</strong>。</p>
+<p>测试器第一次直接把日志短编号交给 UUID 校验，前两次返回被测试器拒绝，缺少最终用量；已终止当时的独立测试进程树，再离线核对 35 个记录候选，修复重放编号后才执行上表。失败记录 <code>Saved/AIResearch/app-server-isolation-20261114.json</code> 不计入有效 A/B。有效记录为 <code>Saved/AIResearch/app-server-isolation-20261114-valid.json</code>，保存完整台词、请求和提示词哈希、阶段时间及 token。离线命令 <code>python -m unittest test_app_server -v</code>：16 项通过，覆盖继承配置不泄漏、分页与分页循环、档位能力、取消复用、迟到消息和用量隔离；不代替性能或玩法验收。</p>
+<h3>复核旧实验，避免重复走无效路径</h3>
+<p><code>dialogue-prompt-first-comparison.json</code> 已有 32 次真实调用：固定两个人物、四个场景、Sol/Luna 与 current/short_v1；Sol 每版 8 次的首句中位数从 2985.5 ms 变成 6262 ms，精简版 7 次更慢，输入合计少 3320 token，却有 517 个 reasoning token，原版为 0。因此不能按“字少就快”重用旧精简版。Luna 当前版中位数 2168 ms，较快，但四次扫路纠正均弄错说话人与纠正，且会把人物示例当成现场事实；<code>dialogue-persona-only-comparison.json</code> 的 16 次对照仍未修好关键纠正。<code>dialogue-luna-short-context.json</code> 的 8 次小样本也有重复旧误解与提前声称松车，不能只取速度。旧精简规则早于 Fight、Flee 与多人发言对象约束，不具备当前完整语义。</p>
+<p>目前正式流式说明共 4457 字符，其中人物决策指导 1147、背景规则 491；旧提示实验 current 为 1750 字符。随后保留完整人物、背景、证据、候选与新动作规则，只合并重复的“完成事实 / 新旧消息 / 输出”说明，实际 8 次对照见下节；最后一场按二狗实施范围改为主人变更持续安排。不得为了响应快把理解、追随安排或争执决策改成关键词，也不因一个短样本就默认切到 Luna。</p>
+<h3>继续实测：合并重复说明仍未得到稳定收益</h3>
+<p>按用户的延迟目标继续做独立试验，新增 <code>benchmark_prompt_deduplication.py</code>，默认只准备；显式 <code>--run</code> 才推理。保留完整现场、人物、所有动作含义与服务器完成约束，只合并旧消息/完整回复、重复事件与输出格式说明，4457→4301 字符。二狗场景追加完整 <code>COMPANION_INSTRUCTIONS</code>，两版一致；它是符合正式协议 2 的构造上下文，明确 <code>requester_is_owner=true</code>、当前 Follow、旧跟随已经接受、主人新话“你先在这等着，我拿完回来叫你”，不冒充从 UE 采集的真实请求。</p>
+<div class="table-scroll" tabindex="0" aria-label="四场景重复说明合并对照"><table><thead><tr><th>场景</th><th>当前 / 合并首句</th><th>当前 / 合并首 delta</th><th>当前 / 合并 reasoning token</th><th>内容核对</th></tr></thead><tbody>
+<tr><td>真实当面比较</td><td>11369 / 17329 ms</td><td>11135 / 16917 ms</td><td>177 / 273</td><td>两版都对玩家 p2 说话、LookAt:p2，嘴硬接话且未声称命中；仍不能算已互殴</td></tr>
+<tr><td>真实吃亏后起哄</td><td>8879 / 7313 ms</td><td>8392 / 7017 ms</td><td>114 / 118</td><td>两版都向玩家 p2 回应、Flee:p1 离开翠花，未宣称已经逃脱</td></tr>
+<tr><td>扫路纠正</td><td>9005 / 15084 ms</td><td>8441 / 14325 ms</td><td>138 / 199</td><td>都承认听错；当前看玩家解释，合并版看邻居用“你”接话。旧请求没有发言对象字段，实际收话人回退存在风险，不能只按候选合法判断对象表现相同</td></tr>
+<tr><td>二狗跟随改等候</td><td>2680 / 2907 ms</td><td>2262 / 2434 ms</td><td>0 / 0</td><td>两版均 Stay、duration=0、target 为空、对主人 p0 说话；没有选短 Wait 或继续旧 Follow，没有答应取件或提前报完成</td></tr>
+</tbody></table></div>
+<p>4 个场景各两版，共 8 次，均 Sol/low，按场景交替先后顺序。每次输入减少 130 token，3 个场景首句更慢；只保留为研究结果，<strong>正式提示词没有替换</strong>。每条件一次，不统计 P95；缓存与推理量不同，不能给字数变化下因果结论。较简单的同伴安排 reasoning 为 0、首句约 2.7–2.9 秒，复杂争执仍有 7–17 秒等待，继续记录为未解决。没有为了速度改成关键词或换成已有理解退化的模型。</p>
+<p>记录 <code>Saved/AIResearch/prompt-deduplication-20261114.json</code> 保存两版全文、四份上下文、全部 token/阶段时间、8 条逐项人工评语与不采用理由；非盲评，没有用户试听、动作执行或多人检查，二狗召回/取消/上下车/访客越权未在这 8 次中测。临时服务已退出，正式后端未重启。流式连接测试补齐“能力已经发现”的假对象后，先跑 <code>test_app_server test_streaming</code> 的 46 项，再联合运行 <code>python -m unittest test_app_server test_streaming test_companion_context test_codex_local</code>，共 60 项通过；HTTP 回归使用测试服务与模拟模型，没有新真实模型或 TTS 调用。差异空白检查与两个新增研究锚点唯一性检查通过。</p>
+<p class="evidence">中断实验遗留的 <code>%TEMP%/delivery-npc-server-tl9h6qtn</code> 工作目录清理命令被工具自动审批以 <code>blocked by policy</code> 拒绝，未改用其他方式绕过。随后只读确认两个 benchmark 脚本的活动进程数为 0；这项拒绝不涉及正式后端或项目资产。</p>
+<h3>外部方案的阅读范围与接入取舍</h3>
+<div class="table-scroll" tabindex="0" aria-label="延迟资料与公开实现"><table><thead><tr><th>原始资料</th><th>本轮已读与适用部分</th><th>不采用或仍待验证</th></tr></thead><tbody>
+<tr><td><a href="https://developers.openai.com/api/docs/guides/latency-optimization">OpenAI 延迟指南</a>、<a href="https://developers.openai.com/api/docs/guides/prompt-caching">Prompt caching</a></td><td>阅读正文相关原则：按阶段测量、减少串行调用、输出与声音重叠、保持可复用前缀并记录真实 cache 用量。项目已经是一次模型判断、首句即入 TTS，不额外加第二次审查模型。</td><td>提示词变短通常不等价于首 token 大幅下降；此次 cached=7040 仍有 14 秒首 delta。缓存不能复用旧行动结果，不能替代本轮世界状态，也不能保证请求低延迟。</td></tr>
+<tr><td><a href="https://github.com/ggml-org/llama.cpp/blob/ded522f8304554317e7ff8f88698dbbbca5425aa/tools/server/README.md">llama.cpp server</a>，读取时提交 <code>ded522f</code>，MIT</td><td>细读服务器文档的 chat completions、stream、cache_prompt、reasoning、结构约束与 timings 段落。它已有 SSE、KV 前缀复用、JSON 约束、prompt/predicted/cache 计时；项目现有 <code>llm</code> HTTP 适配可作为试接入口，无需重写对话/UI。</td><td>只读所列文档与仓库元数据，未验证推理源码或本机速度。PATH 未发现 llama-server、Ollama、LM Studio。部署还需要模型授权、显存与 Qwen TTS 竞争测试；不能把 README 能力当作 12 GB 本机的达标结果，也不能用单对象 JSON schema 直接约束当前多行 JSON 协议。</td></tr>
+<tr><td><a href="https://github.com/sgl-project/sglang/tree/d38c87c4fd801f4f466780100340b609f8a337cf">SGLang</a>，读取时提交 <code>d38c87c</code>，Apache-2.0；<a href="https://docs.sglang.io/docs/advanced_features/session_radix_cache">会话缓存</a>、<a href="https://docs.sglang.io/docs/advanced_features/speculative_decoding">推测解码</a>、<a href="https://docs.sglang.io/docs/advanced_features/structured_outputs">结构输出</a></td><td>完整读会话缓存短文，细读后两篇概述、兼容接口与约束。相同 session_id 只保护可复用 KV，不自动保存或重建对话；每次仍应发送当轮权威上下文。关闭、取消与退出要解除会话引用。</td><td>未运行或通读推理源码。EAGLE 等需要对应草稿模型和额外显存，收益依赖模型与负载；不能用于远端 Codex 服务，也不自动解决首段前的推理耗时。当前不引入新训练/部署依赖。</td></tr>
+</tbody></table></div>
+<p>这些是有公开实现的可替换后端候选，不是本项目已集成或已加速的能力。先解决可复现的首 delta 与上下文负担，再在同一质量门槛下比较后端；已有配音、句间缓冲和轻量界面不作为这次优化的牺牲项。</p>
+<h3>后续可以小步实现的评估边界</h3>
+<p><strong>按服务器可用能力提供动作说明：</strong>把已有动作含义分成可读配置片段，按完整 candidates 中的动作集合注入。保留全部候选及顺序，始终保留主人权限、发言对象、新旧请求、服务器确认与取消规则；历史中出现过的相关动作结果仍保留事实解释。第一阶段如果本轮确实只提供 Follow/Stay/Cancel 与少量短动作，就不必附当前不可用的长篇 Fight/Flee 执行说明；如果本轮全部动作可用，便没有这部分收益。选择依据是服务器候选与事件类型，不解析玩家关键词，不强制开打。这沿用 PUBG Ally 的分层执行与可执行工具边界，但其生产系统源码未公开，本项目仍需独立比较。</p>
+<p><strong>保留记录，只精简模型表示：</strong>现有 <code>compact_context</code> 已保留候选引用、新事件、最近自述、最新玩家话与 reply_to 链，不能再仅按“最后几条”丢掉连续安排。可以评估让 pending 指向已经保留的 evidence，避免同一句原话在 JSON 中再复制一遍；候选保持全量与顺序，用统一字段说明加紧凑元组表达 action/target/duration/evidence。服务器校验和原始记录继续使用完整结构，模型只回索引，旧协议通过版本开关保留。先离线核对每个原编号/时长/证据均能无损恢复，再比较同场景理解、动作对象、token 与首 delta。它只能减少重复表示，不保证消除推理等待。</p>
+<p><strong>缓存与记忆保持不同职责：</strong>按人物与能力集合保持静态说明的顺序，动态事件放在后面，记录实际 cachedInputTokens；不把先前的一句答应缓存成新请求结果。llama.cpp 的 cache_prompt 和 SGLang 的 session cache 给出了可检查的实现接口，但后者明确不替应用重建上下文。当前继续独立临时会话，后续当局记忆仍由游戏维护完整事实与活动安排，不依赖推理服务隐藏历史。下次只选少量实际能力子集与反例做质量门槛对照；本轮不追加模型批次或新推理依赖，优先交付二狗第一阶段可试玩版本。</p>
+</section>
+<section id="action-prompt-offline-20261114">
+<h2>11 月 14 日：按当前技能准备说明的离线候选</h2>
+<p>延续上节的延迟调查，本次只做离线实现和审计，<strong>没有新增真实模型、TTS 或游戏调用，候选方案没有接入生产</strong>。保留已实施的 App Server 隔离与前两批实验记录，不更换模型，也不采用失败的重复说明合并版。</p>
+<p>正式提示仍由 2819 字符主段、491 字符背景规则、1147 字符人物决策组成，共 4457 字符；二狗另外追加完整同伴指导。新增纯函数 <code>action_prompt.select_action_instructions(instructions, allowed_actions, candidates)</code>：先要求完整能力列表和候选有效一致，再从已经审阅的七组技能说明中省略本轮没有候选的动作。<code>allowed_actions</code> 是能力范围，完整 <code>candidates</code> 决定当前哪些动作确有可选目标与参数；不裁候选、不改顺序、目标、时长或证据，不阅读玩家关键词，更不替模型决定态度或行动。</p>
+<p>Wait/LookAt/MoveTo 与 HoldVehicle/ReleaseVehicle/LieDown/GetUp 的合并段只拆成同义的单项说明；Pace、MoveAside、StrikeOnce、Fight、Flee 保留各自完整执行说明，只有无候选时才省略。人物、关系、背景、连续对话、发言对象、完整回复判定、ActionFinished、SelfCombat、FleeStarted 及全部 <code>COMPANION_INSTRUCTIONS</code> 逐字保留。即使访客只能 Wait，也保留主人权限、持续 Follow/Stay、取消和上下车说明，避免失去当前安排的含义。未知能力、候选不匹配、空候选、原段落改动或重复时，整次返回原提示，并报告原因，供后续人工复核。</p>
+<div class="table-scroll" tabindex="0" aria-label="技能说明离线规模变化"><table><thead><tr><th>固定上下文</th><th>省略字符 / UTF-8 字节</th><th>省略的技能说明</th></tr></thead><tbody>
+<tr><td>真实慢请求 7b38d587</td><td>97 / 199</td><td>MoveTo、HoldVehicle、ReleaseVehicle、GetUp</td></tr>
+<tr><td>真实慢请求 1de8ec30</td><td>313 / 779</td><td>MoveTo、StrikeOnce、HoldVehicle、ReleaseVehicle、GetUp、Fight</td></tr>
+<tr><td>扫路纠正，仅 Wait/LookAt</td><td>612 / 1552</td><td>其他普通技能执行说明</td></tr>
+<tr><td>二狗 Follow→Stay，含全部三个持续安排候选</td><td>627 / 1581</td><td>LookAt 及其余普通技能；全部同伴指导保留</td></tr>
+<tr><td>访客自称主人，仅 Wait 可选</td><td>627 / 1581</td><td>同上；保留真实主人与先前跟随记录，当前说话人为另一名玩家</td></tr>
+<tr><td>所有已知技能均有候选</td><td>0 / 0</td><td>原提示逐字不变</td></tr>
+</tbody></table></div>
+<p>以上是准确的字符、UTF-8 字节变化；没有对应模型的离线 tokenizer，<strong>token 数待后续真实对照读取，不按字符比例推算</strong>。旧日志没有保存原始 allowed_actions，审计明确用协议已知能力全集作允许上限，恢复 UUID 后通过服务器协议校验；这不能被描述成还原了当时的能力字段。二狗与访客是构造的协议 2 上下文，并非新的 UE 采集请求。</p>
+<p><code>audit_action_prompt.py</code> 不提供联网运行开关，只生成 <code>Saved/AIResearch/action-prompt-offline-20261114.json</code>：保存五份固定上下文、原/新全文及 SHA-256、完整候选数、能力来源、删减清单与上下文未修改的检查结果，可供后续独立 A/B 使用。8 项新测试检查全技能原文不变、只改技能说明、保留可用 Fight 完整规则与历史战斗解释、同伴权限不删、多目标顺序、玩家原话不改变技能集合，以及未知/漂移说明的保守返回。本次命令 <code>python -m unittest test_action_prompt test_app_server test_streaming test_companion_context test_codex_local</code>，实跑 <strong>68 项全部通过</strong>；<code>python Tools/DeliveryAI/audit_action_prompt.py</code> 离线审计通过，<code>git diff --check</code> 通过。这个计数只对应本次五个模块，不复用其他批次数字。</p>
+<p>没有在 App Server 内部隐藏改写提示：当前 <code>model_context</code> 不携带 allowed_actions，而且 <code>dialogue_log</code> 在上层记录提示哈希，内部改写会使记录不再代表模型实际输入。后续若采用，应由 <code>run_job</code> 在统一准备与记录最终提示的位置调用，再让相同说明进入全部适配器；本轮未修改 streaming/TTS。按候选变化的说明还可能改变缓存前缀，较短输入不保证更快。静态规则与数据未变也不证明模型表现不变，仍需同场景核对理解、动作对象、完整对话、实际 token/cache 和首 delta，再决定是否启用。</p>
+</section>
+<section id="action-prompt-ab-20261114">
+<h2>11 月 14 日：技能说明候选的四次真实对照</h2>
+<p>在上述离线审计之后，按用户授权增加严格有界的后台模型证据。新增 <code>benchmark_action_prompt.py</code>，默认只准备；显式 <code>--run</code> 固定调用四次，不重试、不补跑，已有尝试记录时拒绝覆盖或再次执行。05:05 的这批顺序为扫路原版→候选版、二狗候选版→原版，均为 <code>gpt-6.1-sol / low</code>；两场各自保留完全相同的完整上下文和候选。工具通过 <code>action_prompt</code> 准备说明，先核对离线审计哈希，再使用正式 SentenceParser 与服务器校验，不连接 TTS、UE 或正式后端。</p>
+<p>对照完成后，正式同伴指导另补充 <code>task_title</code> 与 <code>owner_has_package</code> 的可选类型校验，并明确共享 task_phase 不能推断主人已拿件。上表使用冻结的当时上下文与 instructions，<strong>不包含这一后续必要指导</strong>；已有结果仍只代表当时输入，本轮未为此追加模型调用。</p>
+<div class="table-scroll" tabindex="0" aria-label="技能说明四次真实对照"><table><thead><tr><th>场景 / 版本</th><th>首 delta</th><th>首句</th><th>输入 / cached / reasoning token</th><th>模型建议</th></tr></thead><tbody>
+<tr><td>扫路纠正 · 原版</td><td>8690 ms</td><td>9531 ms</td><td>9360 / 0 / 131</td><td>LookAt:p0，向玩家解释；Calm</td></tr>
+<tr><td>扫路纠正 · 候选版</td><td>9090 ms</td><td>9378 ms</td><td>8858 / 0 / 127</td><td>LookAt:p0，向玩家解释；Angry</td></tr>
+<tr><td>二狗 Follow→Stay · 候选版</td><td>2344 ms</td><td>2780 ms</td><td>9173 / 3200 / 0</td><td>Stay，duration=0，target 为空，speech_target=p0</td></tr>
+<tr><td>二狗 Follow→Stay · 原版</td><td>2483 ms</td><td>2896 ms</td><td>9601 / 0 / 0</td><td>同上，完整台词也相同</td></tr>
+</tbody></table></div>
+<p>本批实际输入分别减少 502 和 428 token，但复杂场景首 delta 慢了 400 ms；两场首句只相差 153 和 116 ms。扫路原版说两句、候选版说一句，二狗的缓存命中也不同；首次原版还包含 339 ms 进程与能力初始化。每条件仅一次，不能把这些差值全部归因于说明裁剪，也不能证明稳定加速。<strong>继续保持生产不激活，延迟问题没有宣布解决</strong>。</p>
+<p>逐条人工阅读后，两版扫路回复均承认把“扫”听成“管”，看向玩家并用第三人称解释，避免了上一批第二人称可能指向邻居的疑点；候选版因被挤兑而生气，符合已有原话，没有添加新发生的事。两版二狗都接住主人最新“在这等着”，覆盖旧 Follow 意图，选持续 Stay 而非短 Wait，没有把稍后召回理解成现在跟随，也没有承诺取件或报告任务完成。全部四次通过协议检查；这仅是文本与行动建议核对，没有声音、导航、归属、交接或多人执行证据，二狗上下文仍明确属于构造的正式协议 2 场景。</p>
+<h3>可见输出前仍是主要等待，通知不足以拆出模型内部耗时</h3>
+<p>为了继续定位实际瓶颈，独立工具只追加协议通知类型、到达时间与次数，不保存推理正文，不改变执行。扫路原版的 reasoning 开始与完成通知均在 8580 ms 到达，候选版均在 8956 ms 到达，距首 delta 只有约 110–134 ms。这不表示推理只用了一瞬间，反而说明不能拿这些通知拆出先前等待中的服务排队、预填充和内部推理。四次没有收到 <code>model/safetyBuffering/updated</code>，仅记为本批观察，不据此推定全部服务策略。首 delta 后完整首句仍需约 288–841 ms；改首句交付至多触及这部分，不能把它当作消除前面 8–9 秒等待的方案。</p>
+<p>下一项可实施评估应针对模型调用层：沿用现有 <code>llm</code> HTTP/SSE 适配，在已经合法配置、能提供同模型的纯推理端点可用时，与 App Server 分别记录请求接受、首输出、真实输入/cache/reasoning 用量；若模型不同，就按模型质量比较，不能称为单纯传输 A/B。此前最小 <code>ok?</code> 隔离诊断仍有约 4.5k 输入 token，提示通用代理包装也有输入成本，但本轮 MCP 隔离只减 59 token，不能推定移除包装必然解决等待。已读 llama.cpp/SGLang 的 SSE 与服务计时接口可支持这类测量；没有新端点时先保留当前方案，不读取或转移 Codex 凭据，不引入关键词判定、强制开打或未经质量验证的更弱模型。这是下一项研究边界，本轮未额外部署或调用。</p>
+<p class="evidence">记录 <code>Saved/AIResearch/action-prompt-ab-20261114.json</code> 保存四份最终 instructions 全文与哈希、两个原始模型上下文、准备/服务器校验数据、阶段时间、实际用量、通知统计、源码哈希和四条人工评语。离线预检确认固定四次、同场景输入完全相同、只记录通知元信息并排除旧会话；实际执行完成 4/4、无失败或补跑。结束后验证四份终态与用量齐全，并用模拟服务断言再次执行会在创建服务前拒绝且不改报告。<code>git diff --check</code> 通过；本批没有修改生产 helper、适配器、声音或 streaming，也没有操作此前被拒清理的临时目录，独立服务在 finally 中正常关闭。</p>
+</section>
+<section id="companion-runtime-research-20261114">
+<h2>11 月 14 日：把大模型同伴研究落到二狗的连续操作</h2>
+<p class="meta">本轮重新阅读原论文、开发者访谈与部分公开源码 · 第一阶段设计依据 · 未启动 PIE</p>
+<p>本轮从“扶起二狗 → 陪同第一单 → 叫他等候 → 闲聊 → 召回”的连续过程检查方案。研究要解决的是旧指令复活、只答应却不执行、聊天打断跟随、错误记住物品归属和多人越权，不把接入某个框架或模型选中动作当作效果完成。下面区分外部资料事实、本项目采用的规则与尚待实施验证的工作；具体交付状态以本页对应实施记录为准。</p>
+<h3>重新核对的原始资料与阅读范围</h3>
+<div class="table-scroll"><table><thead><tr><th>资料</th><th>本轮实际阅读</th><th>可确认的内容与边界</th></tr></thead><tbody>
+<tr><td><a href="https://arxiv.org/html/2609.29837v1#S3">PUBG Ally，2026，v1</a></td><td>第 3 节完整正文；附录 B、C 完整正文；第 7 节的多步取物、记忆和失败说明</td><td>模型事件循环与实时执行分开；未完成约定跨轮保留，易变现场重新读取；临时动作与持续模式分开，结束和抢占返回结果。自研 JSON 行为树针对运行时注入及研究端/客户端共用数据，不是要求其他游戏重写 UE 行为树。未取得或审查 Ally 生产源码，也未复现实验。</td></tr>
+<tr><td><a href="https://developer.nvidia.com/blog/how-krafton-built-pubg-ally-a-co-playable-character-powered-by-nvidia-ace/">KRAFTON 研发负责人/项目经理访谈，NVIDIA，2026-06-25</a></td><td>访谈正文全文，跳过页面的自动生成摘要作为依据</td><td>开发者说明实时反应交给行为树、模型按需读取引擎事实，记忆有当局与跨局两个时间尺度；用自动检查和真实玩家反馈分别评估。未观看页面嵌入的完整 GDC 录像。其本地模型、硬件与响应时间不作为 Delivery 已达成的结果。</td></tr>
+<tr><td><a href="https://attend.gdcevents.gdconf.com/event/gdc-festival-of-gaming-2026/planning/UGxhbm5pbmdfNDMxOTMwMQ%3D%3D">和平精英 AI Companion System，GDC 2026 官方议程</a></td><td>官方议程与讲者信息全文；检索官方论文、原始幻灯片与录像入口</td><td>官方说明四项能力：执行指令、自由交谈、记忆、养成；动作伴随行为与语音反馈，记忆影响后续行为。未找到可核验的 GameMate 技术报告，也未取得完整录像/幻灯片。此前第三方整理稿中的意图模型、三段记忆和专家规则仍按二手资料标记，不能升级为已读官方实现。</td></tr>
+<tr><td><a href="https://arxiv.org/html/2305.16291#S2.SS3">Voyager，2023，v2</a>；<a href="https://github.com/MineDojo/Voyager/blob/55e45a880755d0c8c66ca7fb5fe7962ac8974f89/voyager/voyager.py">voyager.py</a>、<a href="https://github.com/MineDojo/Voyager/blob/55e45a880755d0c8c66ca7fb5fe7962ac8974f89/voyager/agents/critic.py">critic.py</a></td><td>论文 2.3、附录 A.5 和第 4 节；源码的 step/rollout/learn 相关路径、critic 全文，固定提交 55e45a8</td><td>执行反馈与错误进入下一轮修正，并有重试上限；critic 会调用模型判断 success。该判定与代码生成适合其开放探索试验，不能代替 Delivery 的包裹交接、命中或奖励确认。MIT 仓库只作源码阅读，没有引入依赖或运行 Minecraft。</td></tr>
+<tr><td><a href="https://arxiv.org/html/2304.03442#S4">Generative Agents，2023，v2</a>；<a href="https://github.com/joonspk-research/generative_agents/blob/fe05a71d3e4ed7d10bf68aa4eda6dd995ec070f4/reverie/backend_server/persona/cognitive_modules/retrieve.py">retrieve.py</a>、<a href="https://github.com/joonspk-research/generative_agents/blob/fe05a71d3e4ed7d10bf68aa4eda6dd995ec070f4/reverie/backend_server/persona/cognitive_modules/reflect.py">reflect.py</a></td><td>论文 4.1–4.3、6.5.2、7.2；检索与反思函数，固定提交 fe05a71</td><td>记忆按新近、重要与相关性检索，反思保存证据节点；论文也报告漏取记忆、添细节和过分客气。公开代码的检索权重另有实现取值，不能把论文的等权描述当作源码原样配置。Apache-2.0 仓库只读，未运行或复制全量反思系统。</td></tr>
+<tr><td><a href="https://arxiv.org/html/2504.17950#S3">MINDcraft / MineCollab，2025，v1</a>；<a href="https://arxiv.org/html/2504.17950#S10">失败样本</a></td><td>第 3 节完整正文和附录第 10 节完整失败样本；作者项目页</td><td>高层动作工具减轻底层控制负担；交谈和执行需要协调。失败样本显示物品持有人混淆、交接后又要回来、计划传达不完整。论文声明评估用冻结版本，不能把当前仓库等同于论文版本。本轮未检查其完整源码、未运行基准。</td></tr>
+</tbody></table></div>
+<p>筛选结果：先采用“持续意图与实时状态分开、执行反馈闭环、有限动作接口、事实可追溯”这些能解决现有问题的部分。没有新增 ACE、Inworld、Mineflayer、向量数据库或训练依赖；没有发现必须替换现有 Agent/Gateway/行为树的理由。跟随前侧站位、避开门口与所有玩家可见性仍属于 Delivery 的场景设计，以上论文没有给出能直接移植的 UE 导航算法。</p>
+<h3>第一阶段的具体接入边界</h3>
+<p>以下是结合本项目源码作出的实施约定，不是外部项目的原样实现。<code>ADeliveryCompanionCharacter</code> 沿用 NPC 的表现和对话入口；<code>UDeliveryCompanionComponent</code> 保存服务器主人关系及持续模式；<code>UDeliveryNpcAgentComponent</code> 仍保存事件、请求和短动作；可编辑的 <code>BT_Companion</code> 是唯一发起移动的执行流程。模式不是一段无限延长的台词动作。</p>
+<div class="table-scroll"><table><thead><tr><th>玩家操作或现场变化</th><th>服务器保留什么</th><th>模型与行为树怎样配合</th><th>检查点</th></tr></thead><tbody>
+<tr><td>扶起后说“跟着我”，再聊面馆</td><td>主人 PlayerState、Follow 模式；聊天与模式分别保存</td><td>LLM 理解跟随意图并选合法动作。设置模式后，BT 持续找当前主人和可走位置；普通 Wait/LookAt/台词完成不取消 Follow</td><td>不能每隔 5 秒重新请求 Follow，也不能因聊天结束退回未招募状态</td></tr>
+<tr><td>先说“等一下”，紧接着说“回来”</td><td>最新主人发言编号、命令版本、当前模式；原话继续留作对话证据</td><td>新意图仍由模型理解。晚到的旧回复需核对版本，不能把更新后的 Follow 改回 Stay；取消和替换要停止旧导航</td><td>模型请求编号、动作编号与导航请求不得混用；旧回调只结束自己的任务</td></tr>
+<tr><td>等候期间继续闲聊，或其他玩家叫他走</td><td>Stay 锚点与主人关系保持；旁人的发言有自己的来源</td><td>旁人可聊天，候选和最终执行都做主人权限检查；闲聊不自动改跟随模式，不将昵称或模型输出当身份</td><td>不能只在提示词写“只听主人”；服务器必须拒绝越权修改</td></tr>
+<tr><td>主人骑车、下车或暂时失去 Pawn</td><td>PlayerState 归属及玩家原来要求的模式；暂时挂起原因独立保存</td><td>上车立即停跟随但保持归属；下车只恢复原先 Follow。若此前主动 Stay，下车后仍等候；重新取得当前身体与路径</td><td>不要把自动等车和玩家命令等候混成一个不可区分状态；不能凭旧身体的 GetPlayerState 找主人</td></tr>
+<tr><td>门口拥挤、玩家小幅挪动、路径不可达</td><td>当前目标、下一次重寻路时机和失败原因</td><td>沿现有导航做完整路径与胶囊空间检查，使用移动阈值避免细碎调整；让路是执行修正，不额外调用模型决定每一步</td><td>任何临时 MoveAside/Listen 收尾不得停止更新版本的跟随导航；失败应如实回报，不能隔墙传送</td></tr>
+<tr><td>沿第一单路线到取货点、破门、送达</td><td>现有 TaskManager 的实际状态与已确认事件编号</td><td>第一阶段陪同并可评论实际经过；取件、发奖继续由原玩法执行。后续跑腿才增加对应候选</td><td>“我陪你到了”与“我替你送达”是不同事实；不能从对白或到达地点推导奖励</td></tr>
+</tbody></table></div>
+<p>现有源码风险：<code>BTTask_DeliveryExecuteNpcAction::OnTaskFinished</code> 会停止控制器移动，然后结束自己的动作。因此不能在同伴组件 Tick 内另开一套 MoveTo 与短动作争抢。执行者需要按当前分支及请求编号处理终止；跟随恢复由行为树重新读取模式。长任务的接受、进行、完成、失败和取消分别记录，模式设置成功也不代表已经走到主人身旁。</p>
+<h3>连续指令与反馈先怎样做到可信</h3>
+<p>模型请求应同时看到“谁在说话、是不是主人、当前模式、为何暂停、当前动作及最近实际结果”。这些字段由服务器构造，不能把另一位玩家的自称或 NPC 自己的台词升级成归属。只提供已经实现且此刻有权执行的候选，执行前再查一次；合法候选是建议时的快照，不是永久授权。后台失败保留当前可执行模式，报告没有理解完成，不能暗中用关键词把“回来”“算了”转换为动作。</p>
+<p>按指令编号保存最小的未完成约定，例如“主人要求在此等候，尚未召回”，与短期视觉坐标分开。位置、门状态、主人当前 Pawn 和物品占用在执行前刷新。已经取消的约定留下取消结果，不能被对话摘要重新放回待办。新玩家发言和关键执行失败不得被普通观察刷出队列；频繁位置变化合并为最新观察，避免每一步都唤醒模型。</p>
+<p>第一阶段不需要用模型生成全天计划或多个协作 Agent。Follow/Stay 是可中断的持续模式；第二阶段才为“去取件再回来”保存受支持的步骤、任务号、包裹号与返回结果。下一步由模型结合真实结果选择，服务器维护可执行边界和取消条件；不把“取到”提示词视为实际持有包裹。</p>
+<h3>第二、三阶段保留的扩展</h3>
+<ul>
+<li><strong>跑腿：</strong>物品交接用任务号、包裹实例、主人 PlayerState 和动作编号核验；导航到达后仍需现有取件/交付接口确认。失败结果区分无路、已被领取、已交付、门未破、主人无空间与取消，返回模型继续判断，防止重复领取和无意义来回交还。</li>
+<li><strong>共同战斗：</strong>主人受击/攻击触发二狗帮忙是已确认游戏规则。BT/GAS 执行、命中窗口与真实受击仍由服务器管理；倒地等即时反应不等待模型。街坊是否还手继续由各自模型判断，不能将同伴的固定护主扩展为全体 NPC 固定攻击。</li>
+<li><strong>当局记忆：</strong>将已确认事实、玩家说过的话与模型写的小本本分开。事实包含事件编号、涉及玩家、来源、时间和任务；小本本引用这些编号并检查引用存在，不能改写亲密度、战斗次数或任务结果。亲密度只有游戏事件修改，模型获得阶段与相关事实，不获得随意修改数值的入口。</li>
+<li><strong>主动性：</strong>发言和动作分别安排。二狗可安静陪同，关键失败可以简短解释；重复观察不触发重复说话。长期记忆检索、反思和跨局存档暂不引入，首版仍按已确认的当局范围执行。</li>
+</ul>
+<h3>用同一段玩家过程验证，避免只看模型答案</h3>
+<p>实现后的少量后台检查应覆盖：两名玩家同时扶起只有一位成功；主人/旁人使用相同指令的权限差异；Stay 后闲聊仍 Stay；Follow → Stay → Follow 的旧回包不逆转最新意图；骑车暂停与手动等候可区分；旧动作完成不停止新导航；世界退出后不再应用回复。后台测试可以证明规则，不能证明二狗不挡路、声音自然或行为有趣。</p>
+<p>目前没有启动 PIE，没有实际按 E/T，没有验证第一单路线的导航或双人表现。得到用户明确授权后，再在相同路线记录实际操作次数、站位、路径失败、召回到达、声音字幕及另一位玩家画面；模型选择 Follow、Fight 或自动化通过都不代替这一层验收。上轮 79f4491 的构建及后台结果保持历史标记，不能作为本轮实现已通过的证据。</p>
+<h3>第二阶段续读：多步委托、纠正与取消的证据边界</h3>
+<p>本次是为取件、帮送、交还与协同战斗补充的只读研究。PUBG Ally 已在前文阅读，本次回查 v1 的 3.2、3.3、附录 B/C 与 7.3；F.A.C.U.L. 的 v2 也已在本页早期延迟节引用。本次先细读 <a href="https://arxiv.org/html/2511.13112v1">F.A.C.U.L. v1</a> 的 Overview、Domain-Aligned LLM、Scene Recognition、附录算法 2、Case Study、Failure Cases 与表 5，再对照 <a href="https://arxiv.org/html/2511.13112v2">v2</a> 的失败说明与表 5。上述案例在所核对的两个版本中均可定位；未做全文版本差异审查，未复现论文实验。研究判断与 Delivery 实装状态分别记录。</p>
+<p><a href="https://arxiv.org/html/2609.29837v1#S3.SS2">PUBG Ally 3.2</a> 将未完成事项跨模型轮次保留，并重新观察易变现场；<a href="https://arxiv.org/html/2609.29837v1">附录 C</a> 描述执行中动作去重、未确认请求重发、完成/失败/中断反馈，以及退出子树时的清理。7.3 的多步取物段同时记录了失败：玩家已不想要该物品，角色仍继续寻找。已读章节未给出 Delivery 所需的取消版本协议或主人 PlayerState 权限实现；配对单个人类与专用语音输入不能替代服务器身份校验。该失败应成为本项目连续指令的反例，不能因为论文有成功跑腿案例就假定取消已解决。</p>
+<p>F.A.C.U.L. 表 5 包含去旅馆、召回、再去先前地点的连续指代，也包含指定一个队友等候、其余队友移动，以及停火后继续移动。Scene Recognition 用标签候选结合距离、方向和空间关系解析对象；Failure Cases 列出技能未提供、场景语义标签不足、精细三维指代无法解析。Delivery 可借其对象消歧与连续指令验收思路；其 BERT 高置信指令直接执行和 LLM 生成 Python 的流程不纳入当前方案，当前仍由大模型判断语言与行动，有限技能交给行为树/GAS 执行。</p>
+<p>可用源码再次核实：<a href="https://sites.google.com/view/FACUL-demo">作者项目页</a>的 Code and Datasets 链接指向 <a href="https://github.com/tencent-facul/code">tencent-facul/code</a>，本次访问显示仓库为空。<a href="https://ojs.aaai.org/index.php/AAAI/article/view/38842">AAAI 正式页面</a>访问被拒，实际阅读来源为上述 arXiv HTML；未绕过限制，未审查或集成 F.A.C.U.L. 生产源码。<a href="https://www.tencent.com/en-us/articles/2202068.html">腾讯开发负责人文章</a>可确认其项目背景，但只作为辅助介绍，不承担接口或性能验证。</p>
+<p>和平精英本次继续查官方开发者、GDC/Vault 与公开视频文字入口，仍只取得 <a href="https://attend.gdcevents.gdconf.com/event/gdc-festival-of-gaming-2026/planning/UGxhbm5pbmdfNDMxOTMwMQ%3D%3D">官方议程与讲者资料</a>，未取得可完整阅读的技术正文、原始幻灯片或录像转录。记录为“本次未取得”，不推断资料不存在，也不把第三方报道升级为已读实现。另完整读 Inworld 的 <a href="https://docs.inworld.ai/realtime/usage/tool-calling">工具调用文档</a>，并读 <a href="https://docs.inworld.ai/realtime/usage/managing-conversations">会话中断章节</a>；可借调用编号关联结果、避免重复触发后续回复。由此得到本项目约束：模型生成取消与游戏动作取消各有执行者，必须分别确认。其 <a href="https://docs.inworld.ai/character-studio-deprecation">旧 Character Studio 已退役</a>，新版 UE 模板入口需登录，本轮未读取模板源码或引入依赖。</p>
+<div class="table-scroll"><table><thead><tr><th>Delivery 第二阶段采用项</th><th>具体边界</th><th>后续验收场景</th></tr></thead><tbody>
+<tr><td>服务器保存委托与真实持有人</td><td>在现有同伴职责内保存主人、委托号、版本、步骤、任务/包裹/目的地与状态；模型保留原意、约定和纠正，取件/交还/奖励仍经已有物品与任务接口确认</td><td>去取件再回来；主人持物或在车上时交还；另一玩家已拿走包裹</td></tr>
+<tr><td>取消与替换使旧结果失效</td><td>新安排更新版本，旧模型回复、导航结束和交接回调只处理自己的版本；取消停止未来步骤，已实际持有的包裹不能凭空退回、丢弃或销毁</td><td>取件途中说算了；拿到后说回来；旧取件回调晚于取消到达</td></tr>
+<tr><td>结果区分失败、中断与完成</td><td>无路、目标失效、物品占用、空间不足及战斗抢占各有结果；未收到确认不能重复交接，模型据新事实决定重试、换目标、等待或解释</td><td>门未破、路径断开、主人换 Pawn；战斗结束时检查原委托是否仍有效</td></tr>
+<tr><td>主人权限由真实请求来源校验</td><td>其他玩家可以交流，改委托、收包裹和改变归属必须核对实际控制器/PlayerState；昵称、自称和模型字段均不能授权</td><td>主人与访客说相同跑腿指令；访客声称主人委托；上下车后继续交还</td></tr>
+</tbody></table></div>
+<p class="evidence">本补充只写研究与采用边界，没有新增模型/TTS 调用、运行 UE、构建或测试。接口和运行效果以随后实现、服务器验证及明确授权的实际操作验收为准；外部论文的时延、成功率和演示表现不作为 Delivery 的结果。</p>
+</section>
 <section id="pubg-ally-companion">
 <h2>PUBG Ally：算法、训练与 Delivery 应用</h2>
 <p class="meta">2026-11-13 · 论文阅读与 Delivery 设计记录 · 跟班玩法尚未实现</p>
@@ -1318,5 +2243,114 @@ python -m unittest discover -s Tools/DeliveryAI -p 'test_*.py'</code></pre>
 <p><strong>限制：</strong>正式采用和读回使用 CPU / NullRHI 检查，没有在 UE 游戏画面中验收眉形强度、光照和观看距离。此前 Blender 远景预览中的变化较弱，这一点仍需要试玩确认。</p>
 <p class="evidence">正式备份与结果：Saved/AIResearch/NpcWomanBrowsCandidate/UEImport/20261113T081133332496Z；独立读回：20261113T081223540772Z；汇总：ue-promote-latest.json、ue-formal-readback.json；Preview 归档：preview-archive.json。</p>
 <p class="evidence">候选与图片：<a href="../Saved/AIResearch/NpcWomanBrowsCandidate/review-status.json">review-status.json</a>；几何：<a href="../Saved/AIResearch/NpcWomanBrowsCandidate/v3-geometry-check.json">v3-geometry-check.json</a>；三次导入及文件保护：<a href="../Saved/AIResearch/NpcWomanBrowsCandidate/ue-import-stopped.json">ue-import-stopped.json</a>。日志分别为 Saved/Logs/NpcWomanBrowCandidateImport.log、NpcWomanBrowCandidateRetry.log、NpcWomanBrowCandidateInterchange.log。上述链接指向本地检查文件，转发文档时需要一并保留。</p>
+</section>
+<section id="model-response-comparison-20261114">
+<h2>2026-11-14：用实际对话比较模型回复速度</h2>
+<p>玩家反馈的等待有两部分：模型先想好要说什么，语音服务再把这句话读出来。本节只检查第一部分，没有启动游戏、合成声音或修改正式模型设置。语音连续性另行记录，不能用这里的时间代替玩家实际听见声音的时间。</p>
+<h3>先检查已有优化</h3>
+<p>当前后端已经复用模型连接，并优先处理玩家发言。之前还比较过合并重复提示、只保留当前可用动作的说明。合并提示从 4457 字减到 4301 字，四个场景中三个更慢；删去不可用动作说明后，两次对照分别只快了约 0.15 秒和 0.12 秒。样本很少，不能据此确认提速，因此没有把这些实验当成已经解决等待。</p>
+<p>接下来比较现有账号能够实际调用的 GPT-6.1 Sol 与 GPT-6 Luna，服务档位都明确使用 default。这里没有承诺某个档位免费，也没有启用付费加速。OpenAI 的模型目录用于发现选项，实际请求成功才能确认本次可用；模型选择仍要同时检查速度和回复内容。<a href="https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server">官方 App Server 说明</a>、<a href="https://developers.openai.com/api/docs/guides/deployment-checklist">模型与推理参数说明</a>。</p>
+<h3>用最近试玩的两条原话重放</h3>
+<p>选择了游戏日志中的大壮挑拨对话，以及主人对二狗说“帮我送货”的请求。保留当时的人物名单、性格、对话记录和候选动作；核对后，提示内容的哈希也与原请求一致。二狗按当时的能力版本 3 校验接件动作，没有把新版本的能力补进旧场景。</p>
+<div class="table-scroll"><table><thead><tr><th>实际场景</th><th>Sol 原日志：首句</th><th>Luna low：首句</th><th>Luna medium：首句</th><th>动作结果</th></tr></thead><tbody>
+<tr><td>玩家问大壮和翠花谁厉害，翠花已经当面叫阵</td><td>7.605 秒</td><td>3.638 秒</td><td>3.088 秒</td><td>三次都选择 Fight，目标都是翠花</td></tr>
+<tr><td>主人携带包裹，对二狗说“帮我送货”</td><td>12.538 秒</td><td>3.116 秒</td><td>2.524 秒</td><td>三次都选择 TakePackage，先接过主人的包裹</td></tr>
+</tbody></table></div>
+<p><strong>比较范围：</strong>Sol 的两条记录来自之前的实际试玩，Luna 是本轮后台重放，每个场景和档位各一次。输入与提示相同，但请求时间、网络和缓存情况不同，因此这组结果说明 Luna 值得继续试用，不能当作稳定的提速比例。四次 Luna 回复都通过了正式动作与收话人校验。</p>
+<h3>还要检查台词是否符合实际行动</h3>
+<p>大壮在 low 档位回复“我当然比她厉害！翠花，光说不算，来比划两下，输了可别赖账！”，并选择向翠花动手。medium 回复“光说可不算，来，咱俩比划比划！”，也选择同一动作。这两条能接住当前争执，但尚未证明连续多轮对话、逃跑和收场都稳定。</p>
+<p>二狗在 low 档位回复“好，我接过这单，给你拿着。”，与只接件、继续原有跟随安排一致。medium 回复“好，大哥，我接过这单就认真送。”，容易让玩家以为已经安排了独立配送；实际选择的 TakePackage 不会自动送到目的地。这个差别需要保留在验收记录中，不能因为这次快了约 0.6 秒就采用 medium。</p>
+<p>更早一组六场景对照中，Luna 有三条旧协议请求被拒绝；它们没有人物名单，模型却填写了收话人编号。一次复测还误解了“扫路”和“管路”的纠正。旧协议问题需要修，但不能用这些缺少名单的场景直接断言当前游戏请求不可用。本轮补测的两条完整名单请求均通过；两批结果分别保存，不把失败记录删除。</p>
+<h3>本轮结论与下一步</h3>
+<p>较轻的模型在这些真实场景重放中的首句等待约为 2.5～3.6 秒。完成对照后，试玩默认已切换为 Luna low，并与加速 B 语音一起通过一次完整后端请求检查。普通聊天、误会纠正、挑拨、认错和二狗安排仍要继续在游戏里检查，特别注意“答应做什么”是否与所选动作一致。这里没有给模型加入按挑拨次数出拳的规则，实际动作仍由模型选择、游戏服务器校验。</p>
+<p>试玩沿用现有启动脚本，当前默认值与以下命令一致。玩家发言与 NPC 接话都使用 Luna，推理保持 low，服务档位保持 default；两种已认可的 Qwen B 音色照常使用。脚本若检测到后端已经运行，只会报告现有进程，不会替它更换模型。模型与声音均可通过现有参数恢复。</p>
+<pre><code>$env:DELIVERY_CODEX_REASONING_EFFORT = 'low'
+&amp; 'D:\Udev\Delivery\Tools\DeliveryAI\start_backend.ps1' -Model gpt-6-luna -PlayerModel gpt-6-luna -ServiceTier default -SpeechProvider qwen -DialogueLog -StreamAudio</code></pre>
+<p>需要对照原模型时，统一重启后把 <code>-Model</code> 与 <code>-PlayerModel</code> 都改回 <code>gpt-6.1-sol</code>；其余参数相同。验收以后台记录的 <code>model_settings</code> 和实际人物回复为准，不能只看启动命令。</p>
+<p>官方 Responses API 文档说明 GPT-6 Luna 支持 none 推理档位，但本机 Codex 目录当前只公布 low 起，现有桥接也按该目录检查。本轮只使用已经公布的 low 和 medium，没有把另一个接口的参数直接填进当前调用。两种档位本次都报告 0 个推理输出 token；单次 medium 更快可能来自正常波动，不能据此说提高推理档位会加速。</p>
+<p class="evidence">脚本：<code>Tools/DeliveryAI/benchmark_reply_models.py</code>，默认只准备场景，显式加 <code>--run</code> 才调用模型。实际日志重放支持 <code>--request-id</code>，保存原输入、提示哈希、公开回复、校验结果、阶段耗时和用量。生产模型、语音设置、人物配置均未由本节实验修改。</p>
+<p class="evidence">结果：<a href="../Saved/AIResearch/reply-models-live-luna-low-20261114.json">完整名单 · low</a>、<a href="../Saved/AIResearch/reply-models-live-luna-medium-20261114.json">完整名单 · medium</a>、<a href="../Saved/AIResearch/reply-models-20261114.json">此前六场景对照</a>、<a href="../Saved/AIResearch/reply-models-legacy-rejection-20261114.json">旧协议拒绝原因</a>。原请求分别为 <code>22f2c67b-481d-3871-70ed-b3ad5764b896</code> 与 <code>18707099-438f-8901-856c-bc9b0a44f68f</code>。</p>
+</section>
+<section id="local-npc-model-comparison-20261114">
+<h2>2026-11-14：本地小模型与上下文缓存试验</h2>
+<p>为了确认本地推理能否进一步缩短等待，独立启动了 Qwen3-1.7B Q4_K_M，使用 llama.cpp b10000。此次只在 CPU 上运行，等语音基准结束后才开始，没有同时占用语音所用的 GPU。它是未针对 Delivery 训练的通用小模型，不能称作已经实现了 PUBG Ally 那样的游戏专用模型。</p>
+<h3>完整提示先计数，超过上限就停止</h3>
+<p>继续使用上一节的两条真实请求。按本地模型自己的模板和分词器计数，完整提示分别需要 4437 和 4357 个 token，还需要给回答预留空间，超过本次服务的 4096 上限。因此没有把完整提示送去推理，也没有自动丢弃前面的记录。</p>
+<p>试验版只缩短共用行为说明，人物性格、生活背景、全部事件、候选动作和例句仍原样保留，游戏输入 JSON 的哈希不变。缩短后分别为 2339 和 2259 个 token，另预留 256 个输出 token。模型必须返回现有四个字段，并且只能选当前候选和有效收话人；这些格式限制不会替它判断应该打谁或接什么话。</p>
+<h3>缓存确实省计算，但回复内容没有通过</h3>
+<div class="table-scroll"><table><thead><tr><th>场景</th><th>首次首句</th><th>立即重复同一输入</th><th>缓存情况</th><th>实际内容</th></tr></thead><tbody>
+<tr><td>大壮被挑拨，翠花已经当面叫阵</td><td>9.759 秒</td><td>2.014 秒</td><td>重复时复用 2338 个 token，只重新处理 1 个</td><td>第一次选 LookAt，第二次选 LieDown；两次都逐字复述翠花之前的挑战</td></tr>
+<tr><td>主人对二狗说“帮我送货”</td><td>8.363 秒</td><td>1.921 秒</td><td>重复时复用 2258 个 token，只重新处理 1 个</td><td>两次都选 Wait，并重说“谢谢扶我起来，往后我就认你这个大哥了。”</td></tr>
+</tbody></table></div>
+<p>四条回答都符合 JSON 和候选动作格式，但没有达到对话要求。二狗没有接住当前送货请求，大壮重复别人的台词，第二次还一边叫阵一边选择躺下。格式限制可以防止非法动作，不能保证模型理解人物、记住刚才的话，或让台词与动作配合。</p>
+<p>缓存的收益有具体记录：首次大壮请求处理输入用了约 7.83 秒，立即重复后约 0.049 秒；二狗从约 6.21 秒降到 0.046 秒。但这是<strong>完全相同输入紧接着重复</strong>的情况，不能当成 NPC 轮流说话、事件不断变化时的常态。回答本身仍需要约两秒生成，而且固定随机种子也没有保证两次选择相同动作。</p>
+<h3>采用范围</h3>
+<p>本次小模型保留为独立试验，不接入正式玩法，试验服务已停止。当前试玩采用上一节的 Luna low，多轮自然对话与游戏表现仍需检查。本地路线的下一步应先积累真实的“人物、现场、回复与动作”示例，纠正重复台词、误解指令和动作不一致的问题，再评估训练或游戏领域蒸馏。把模型放到本地和使用缓存只是工程条件，不能代替这些能力。</p>
+<p class="evidence">脚本：<code>Tools/DeliveryAI/benchmark_local_npc.py</code>；<a href="../Saved/AIResearch/local-npc-model-comparison-20261114.json">四次结果、完整输入和质量检查</a>；<a href="../Saved/AIResearch/LocalNpcModel/qwen3-1.7b/installation.json">模型与运行程序版本及文件校验</a>。采样温度 0.7、top_p 0.8、top_k 20，关闭 thinking，固定随机种子。只有 <code>--run</code> 才执行推理，默认只准备输入并检查长度。</p>
+<p class="evidence">计时使用本机流式接口，首句表示完整 JSON 通过正式解析与动作校验的时间，不含语音、UE 播放或网络复制。本次模型与共用提示都发生了变化，不能把所有差异归因于模型大小；没有进行游戏内或多人验收，也没有修改正式模型默认值。</p>
+</section>
+<section id="player-speech-input-20261114">
+<h2>2026-11-14：本机玩家语音与发送反馈</h2>
+<p>玩家希望直接对 NPC 说话，同时指出原对话配色不舒服、点击发送没有反馈、发送后输入框还占着旧文字。本轮将文字和语音统一到同一条交谈入口：输入只提交发言，服务器检查对象、距离和轮次，模型结合正在做的事情选择下一步。</p>
+<h3>语音会增加多少等待</h3>
+<p>需要区分“玩家说话的时间”和“松键后的额外等待”。录音结束后才上传整段、开始识别、请求模型，会把这些步骤串起来。本方案在按住期间持续做本机流式识别，松键后只完成收尾并发送最终文字，随后沿用现有模型首句、TTS 分段和播放链路。这样新增的等待主要是识别收尾，而模型和声音仍可能占主要部分。</p>
+<p>不能把其他产品宣传的毫秒数当成本项目结果。此前同一条 8.03 秒普通话样本在不同分块/采样率下总计算约 356～395 毫秒、finish 约 26～31 毫秒，初始化约 1.92 秒。默认热词复测两次为总计算 421.959 / 406.933 毫秒、finish 34.224 / 29.058 毫秒，初始化 2.095 秒；总计算已包含 finish。初始化安排在开启后的准备阶段，识别在按住期间持续处理。这些是离线快送样本，不能当作真实麦克风、游戏并行负载、真人口音或外放场景的松键到首声 P50/P95。原始报告分别为 <code>Saved/DeliverySpeech/HotwordCheck/previous_native_test_metrics.json</code> 与 <code>default_hotwords_metrics.json</code>。</p>
+<div class="table-scroll"><table><thead><tr><th>候选</th><th>采用判断</th><th>代价与限制</th></tr></thead><tbody>
+<tr><td>sherpa-onnx 中文流式 Zipformer</td><td>首版本采用，固定 v2.0.1 与模型哈希，CPU 单线程，独立 C ABI</td><td>需要包体、冷启动和准确率验证；专有名字使用热词，不用关键词决定 NPC 行为</td></tr>
+<tr><td>FunASR 本地服务</td><td>保留对照方案，未引入 Python 服务到游戏运行时</td><td>服务和模型依赖更重，仍需在当前硬件比较效果及运维成本</td></tr>
+<tr><td>whisper.cpp</td><td>保留多语言对照，本轮未替换已跑通的流式中文链路</td><td>分块与重复片段处理、模型大小和端点等待需要单独评估</td></tr>
+<tr><td>阿里云 Fun-ASR / 火山云语音</td><td>保留可选云适配，首版不配置密钥或上传录音</td><td>新增网络、凭据与计费依赖，实际尾延迟和识别率需相同场景对照</td></tr>
+</tbody></table></div>
+<p>已阅读依据：<a href="https://k2-fsa.github.io/sherpa/onnx/pretrained_models/online-transducer/index.html">sherpa 流式模型说明</a>、<a href="https://github.com/k2-fsa/sherpa-onnx/releases/tag/v2.0.1">v2.0.1 发布</a>、<a href="https://github.com/modelscope/FunASR">FunASR 官方仓库</a>、<a href="https://github.com/ggml-org/whisper.cpp">whisper.cpp 官方仓库</a>、<a href="https://help.aliyun.com/zh/model-studio/fun-asr-realtime-websocket-api">Fun-ASR WebSocket 协议</a>。只确认文档与适配条件，未宣称已经在本项目实测所有候选。</p>
+<h3>外放、按住说话与取消</h3>
+<p>玩家明确要求支持外放，因此接入本机 UE 所带 WebRTC 音频处理，使用本玩家 World 的音频设备主混音作为回声参考。显式开启语音后，麦克风可在本机保持回声消除预热；未按住时的采样直接丢弃，不保存、不上传、也不进入识别器。默认关闭，开启后有持续可见的麦克风状态与关闭入口。</p>
+<p>按住 V 或面板中的“按住说话”开始，松开发送，输入框打字时 V 仍作为文字。面板打开时使用面板目标，关闭后选择镜头瞄准的 NPC。按下时仅取消该玩家上一轮回复；持续走路、打架、送货和家居安排是否改变，仍由模型选择并由游戏确认。新能力版本 6 加入 ContinueCurrent，服务器保存动作和安排快照，模型继续时只更新回复，不重置动作计时、目标或委托。</p>
+<p>每轮输入都有本机序号与服务器签发的编号。重复 final 只确认原轮次，旧取消和晚到的 ASR 结果不能覆盖新轮；其他玩家不能抢占当前录音。关闭面板、换目标、失去焦点、换 Pawn、设备变化、超时和结束世界均有退出路径。远端只接收通过服务器校验的最终文字，识别中的半句话只在本机显示。</p>
+<h3>改用特效表达发送反馈</h3>
+<p>按玩家反馈，正常发送不显示“发送中”“已送达”。灰蓝白橙方案随后按新要求改为深蓝灰、灰白与浅蓝强调：发送按钮轻弹，玩家原话淡入，三点呼吸表示等待；收到回应、失败或取消后停止。提交被本机接受时立即清空输入框，玩家可以继续写下一句；失败才显示原因与重试入口，重试不会覆盖新草稿。控件树和三段动画保存在可编辑 Widget Blueprint 中，C++ 只监听事件与播放动画。</p>
+<figure><a href="../Design/Art/UI/Voice/conversation-feedback-v2.png"><img src="../Design/Art/UI/Voice/conversation-feedback-v2.png" alt="灰蓝白橙的对话反馈概念图" loading="lazy" style="max-width:760px;width:100%;height:auto"></a><figcaption>采用的反馈方向，概念图不是游戏验收截图</figcaption></figure>
+<p>第一版米黄与深色方案未采用，保留原图以记录调整原因。上图与提示词位于 <code>Design/Art/UI/Voice/conversation-feedback-v2.png</code>、<code>conversation-feedback-v2.prompt.txt</code>，属于中间迭代。最新蓝灰与分层面板参考是 <code>Design/Art/UI/Voice/ai-inspector-bluegray-v1.png</code> 和同名提示词，均通过内置 image_gen 生成；采用与游戏快捷栏接近的蓝灰层次。用户随后指定正式标题为精确拼写 <strong>LLM NPC OBESERVATION</strong>，因此参考图的旧标题仅保留为历史。正式布局仍需在游戏窗口检查遮挡、阅读距离与不同分辨率。</p>
+<h3>LLM NPC OBESERVATION：展示真实输入、选择与执行</h3>
+<p>常驻面板保持紧凑，F6 展开概览、感知输入、候选执行、语音耗时和最近轮次五页；避开 UE 的 F8 退出角色控制。HUD 沿用 UI Controller 与正式 WBP 分工，处理器最多保存本机最近 8 轮快照，查看历史有明确标识，不覆盖最新回包。只显示真实事件，不逐 token 假装进度，也不编造模型理由或思维链。</p>
+<p>游戏在人物看到或听到事件时记录当时已知的位置、观测时间与信息时效。观察页读取发给后端的真实请求中的事件、已知人物和候选；有观测位置时显示 XYZ（cm），没有时保持缺失，不扫描全场补齐人物现在的坐标。这些内容标为游戏观察记录，说明游戏当时掌握了哪些信息。</p>
+<p>后端会压缩上下文，小模型还会继续筛选；当前 compact_context 和小模型 prepare 没有把这些位置与时间送入模型。因此只有后端实际报告的输入事件、对象和候选数量才标为模型已读，未报告时保持未知。页面展示结构化事实，不将它们称为统一浮点观察向量，也不推测模型理由或思维链。</p>
+<p>模型建议、服务器接受或拒绝、真实活动结果分别显示，ContinueCurrent 只更新回复，不显示成重新执行活动。model_done、响应传输结束和回复实际结束也分开记录。后端仅实际测到才提供模型名、路由、各段耗时或 token，缺值明确未提供；首句文字耗时不称出声延迟。</p>
+<p>观察经 owner PC 订阅，带 World、目标、Pawn、独立代次和版本检查。换目标、失去观察、销毁和退出解除绑定并清历史，Shipping 不启动演示订阅。InspectorLifecycle 检查不同玩家隔离、旧代次/世界/版本拒绝、8 轮历史上限与退出清理；DecisionTrace 检查真实事件记录。这些自动化不能代替 F6、分页和历史按钮的实际操作。</p>
+<p>本批正式 DeliveryEditor 构建成功，72 项构建动作耗时 211.30 秒。随后 9 项自动化全部通过：ConversationContext、ConversationFeedback、DecisionTrace、InspectorLifecycle、ModelSpeechSeparation、PlayerInterruption，以及语音 FinalBoundaries、KeyOwnership、WorldLeases。8 项无警告；ConversationContext 有 2 条警告，分别是缺 GameplayCueNotifyPaths 配置而搜索整个 /Game/，以及音频生成器尚未就绪而跳过字符 0。日志与报告为 <code>Saved/Logs/DeliveryAiInspectorBuild.log</code>、<code>Saved/Automation/DeliveryAiInspector/index.json</code>。</p>
+<p>此后 4 个 C++ 文件的增量编译及链接完成，<code>DeliveryAiInspectorFinalBuild.log</code> 记录 7 项构建动作、10.93 秒。<code>Saved/Automation/DeliveryAiInspectorFinal/index.json</code> 的 DecisionTrace 单项复测通过，带 1 条相同的 GameplayCue 路径配置警告；没有把上一轮 9 项算作本次再次执行。</p>
+<p>最新布局构建 <code>DeliveryAiInspectorLayoutBuild.log</code> 成功，19 项、69.08 秒；<code>DeliveryAiInspectorLayoutAssets.log</code> 中三个 WBP 与两个输入资产共 5 项保存后加载成功，无 UI ensure，仍因启动阶段 3 条既有物理 CDO 错误退出 1。960×720 实际游戏窗口已修正地图遮挡，标题独占一行、字号 18。五页点击、F6 展开收起、选择历史与返回最新均已实际操作成功；其他分辨率未检查。客户端没有继承主机观察对象，后来独立选中大壮。画面见 <a href="../Saved/DeliverySpeech/UIPlaytest/server-history-selected.png">历史选择</a>与<a href="../Saved/DeliverySpeech/UIPlaytest/server-model-luna.png">实际模型信息</a>。</p>
+<h3>本轮证据与尚未覆盖范围</h3>
+<p>原生 DLL 11 项检查通过；识别工作线程 39 项、纯轮次状态 30 项检查通过；音频处理覆盖六种格式和轮次、取消、设备切换边界。默认热词“二狗 / 小绿 / 斧头 / 快递”另做两次真实解码通过，尚未量化热词准确率收益。发现全零 PCM 会产生“我们”的幻觉，现已拒绝该输入；短词“好”等正常发言仍允许，未靠最小字数隐藏识别问题。</p>
+<p>后端 9 项新协议检查和 101 项已有 server、streaming、model completion、上下文检查通过，保留旧能力版本与 stream_protocol_version=2。正式组件、会话、UI 与协议已完成整工程编译。首次集成测试 9/13 通过，发现台词早于动作启动、失败回执顺序以及测试玩家缺 PlayerState；修正后完整构建 60 项/136.82 秒成功，15/15 集成检查通过，其中 3 项带测试配置或故意注入音频错误的警告。识别运行包约 57.2 MiB，已部署 DLL、模型、许可和构建记录，开发 SDK 不随游戏部署。</p>
+<p>正式 WBP 与语音 IA/IMC 均已保存。生成器修复动画 GUID、已删除变量与孤立按钮文字后，最终四个资产创建、加载成功，没有 UMG ensure；该资产命令仍因启动阶段 3 条物理 CDO 的 GEngine 未初始化错误退出 1，尚不能报告整条命令无错误。相关日志为 <code>Saved/Logs/DeliveryVoiceWidgetsFinal.log</code>。只读源码链和 10 月 22 日旧日志指向原破门类构造时应用碎片物理材质，不能归因本次语音修改；本轮未改破门物理，也未进行调用栈验证。</p>
+<p>早期双人试玩被后台电话关闭时提交的 GameOnly 抢走输入。HUD 修复后只在自己的原生前台窗口且焦点属于本 SViewport 时提交输入模式；后台保留最新模式，关闭控件前先切模式，退出世界不再请求焦点。补丁随完整目标 102 项/248.21 秒构建通过，随后 6 项针对性自动化成功，其中 ConversationFeedback 带 1 条 GameplayCue 路径配置警告；报告 <code>Saved/Automation/DeliverySpeechFocus/index.json</code>。下述实际操作接续该修复，不把自动化当作窗口焦点验收。</p>
+<p><strong>较早一轮实际操作：</strong>双人 PIE 共点击发送 3 次。北京时间 21:24:54.108，主机挑衅被接受（SpeechId <code>69E059A84FCCE8BA69C03EA1611525DE</code>），输入立即清空、三点出现，随后可直接写下一句，回复没有覆盖新草稿；21:26:09.911，主机和解因目标 Unavailable 被拒绝，失败原因和重试入口可见；21:30:10.466，客户端独立选中大壮后和解被接受（<code>6F67F48841A14832FC2DFF85C2D56BD6</code>），输入清空。对应日志 UTC 为 13:24、13:26、13:30。本轮真实模型为 gpt-6-luna，使用两种 B 音色，训练模型未接入这轮 UI。现场有多次 NpcPunch 命中，但不能把每个动作都归因于这三次请求。截图：<a href="../Saved/DeliverySpeech/UIPlaytest/server-send-cleared.png">主机发送清空</a>、<a href="../Saved/DeliverySpeech/UIPlaytest/server-next-draft-kept.png">新草稿保留</a>、<a href="../Saved/DeliverySpeech/UIPlaytest/server-failure-retry-visible.png">失败与重试入口</a>、<a href="../Saved/DeliverySpeech/UIPlaytest/client-send-cleared.png">客户端发送清空</a>。</p>
+<p><strong>此前失败与当前修复：</strong>客户端和解句音频长 8.08 秒，超过当时 8 秒上限，UE 播放记录为 0/0，仍不能记为完整播放或成功和解。21:30:23 开启麦克风时首包后出现 AudioFailure 的<a href="../Saved/DeliverySpeech/UIPlaytest/client-microphone-start-failed.png">失败画面</a>保留。首包不连续处理与诊断日志修复、12 秒 TTS 有界协议现已随 <code>DeliverySpeechTwelveSecondBuild.log</code> 构建成功，20 项、55.97 秒；<code>Saved/Automation/DeliverySpeechTwelveSecond/index.json</code> 的 12 项全部通过、无警告，覆盖音频 5 项、codec 6 项和句内协议 1 项。后续超过旧 8 秒上限的完整实播结果见下，未改写此前失败记录。</p>
+<p><strong>麦克风实际操作：</strong>北京时间 21:48:38.399，客户端点击开启；21:48:38.466 收到 WASAPI 48 kHz float 首包不连续标记，丢弃该包并重置，<code>apm_status=0</code>，界面保持 Ready。随后实际按住并松开一次录音按钮，提示“没有听清，请重试”；现场没有真实人声，不计为识别成功。21:49:20.664 点击关闭后，回声参考监听注销。日志为 <code>Saved/Logs/DeliverySpeechMicRecoveryPlaytest.log</code>（UTC 13:48–13:49）；画面见<a href="../Saved/DeliverySpeech/UIPlaytest/client-microphone-ready.png">麦克风就绪</a>与<a href="../Saved/DeliverySpeech/UIPlaytest/client-microphone-empty-turn.png">无有效人声的一轮</a>。这次确认开启、无有效文字反馈与关闭清理，尚未验收真人识别或回声消除效果。</p>
+<p><strong>历史退出异常与本次结果：</strong>同一 <code>DeliverySpeechMicRecoveryPlaytest.log</code> 在 UTC 13:53:55.325 请求 CloseEditor，13:54:03.091 于 <code>UConsole::InputKey_InputLine</code>（引擎 <code>Console.cpp:1021</code>）发生 EXCEPTION_ACCESS_VIOLATION，调用栈包含 OnKeyUp。SaveAssets 此前已返回 true，麦克风于 13:49:20 关闭，未见 SpeechAudioFault。调用栈提示游戏控制台执行 QUIT_EDITOR 销毁 PIE 后继续处理本次按键，这是原因推断，未验证引擎修复。后续卡通界面试玩保存后先用 UE MCP StopPIE，确认无 PIE 后在下一次 Slate tick 调用原生 QuitEditor，<code>DeliveryCartoonDialoguePlaytest.log</code> 于 UTC 14:18:25.049 正常关闭、未见 critical。本次退出方式成功，未改引擎，也不将历史崩溃记为通过。</p>
+<p>针对玩家“对话框可以卡通点”和“配色不大清晰”的反馈，内置 image_gen 生成了<a href="../Design/Art/UI/Voice/cartoon-dialogue-bluegray-v1.png">蓝灰卡通参考图</a>，完整提示保存于同名 <code>.prompt.txt</code>。采用不透明浅蓝白对白底、深海军蓝字和圆润深蓝描边，底部输入与浅蓝发送按钮分层，继续保留三点反馈和深蓝灰 Inspector。参考基于实际截图的布局，属于设计稿，不是实机结果。</p>
+<p>NPC 字幕新增正式路径 <code>/Game/UI/Conversation/WBP_NpcCaption</code>，由编辑器生成器保存可编辑的原生圆角底：底色 <code>#EEF4F8</code>、文字 <code>#172C43</code>、描边 <code>#29465E</code>，保留 380 换行宽度。<code>DeliveryNpcCaptionWidget</code> 仅绑定文本控件、缓存早到文字并在 NativeConstruct 后应用；Presentation 加载 WBP，保持 Screen 空间、相对人物 100 cm 高度和原声音播放，缺资产时不运行时拼备用树。底部玩家原话与输入也采用不透明底，发送按钮改为浅蓝底深色字。</p>
+<p><code>Content/Python/create_conversation_widget.py</code> 默认保留已有布局，显式 <code>--replace-layout</code> 才重建 Conversation 与 NpcCaption，保存后逐一 load 检查。本批 <code>DeliveryCartoonDialogueBuild.log</code> 构建成功，12 项、40.64 秒；重建后两份 uasset 已保存，<code>DeliveryCartoonDialogueAssetsRetry.log</code> 记录两项 <code>CONVERSATION_ASSET_OK</code> 与 Python script successfully，未见 UMG ensure 或编译错误。commandlet 仍因既有 3 项物理 CDO 错误退出 1，不能记为整体无错误。</p>
+<p>首次资产命令的双引号被 PowerShell 重复处理，<code>DeliveryCartoonDialogueAssets.log</code> 报 <code>-Script argument not specified</code>，未改动资产；改用 Start-Process 原样传递 Arguments 后完成保存与加载检查。</p>
+<p><strong>本轮卡通界面与长句实播：</strong>重启后的双人 PIE 使用真实 gpt-6-luna、native KV1024 BOTH 与正式 12 秒协议，小模型未启用。UTC 14:12:27.752，PC0 实际点击 Send 向翠花发送，SpeechId 为 <code>053CA4BD49FF9B4EA5AB27A29809FDBE</code>，两句在 role 3/1 均完整读出；14:15:20.631，PC1 同样实际点击发送，SpeechId 为 <code>9176AEB14ED9B0F844FA43A4C54C2B5C</code>。两次输入都立即清空，近白底深色字的玩家原话气泡与三点可见；主机实际看到正式 NPC 新气泡，文字清楚。</p>
+<p>客户端请求的一句，turn <code>FE31B4EE428426C47ED0078AEB29D76D</code>，源 PCM 为 8.64 秒，两端均为 <code>consumed=416640 total=416640</code>；按 24 kHz、单声道、16 位计算，含 Opus 尾部补零为 8.68 秒，确实覆盖旧 8 秒上限。两端于 UTC 14:15:33.086 / 33.126 完成，33.178 记录 reply_completed。两轮服务器接受至 UE audio_play 约 4.00 秒、3.53 秒，客户端请求在接收端约 3.56 秒，仍有等待；这些是播放器阶段计时，不是扬声器出声时间，也不是语音识别增量或 P95。日志为 <code>Saved/Logs/DeliveryCartoonDialoguePlaytest.log</code>。</p>
+<p>画面：<a href="../Saved/DeliverySpeech/UIPlaytest/cartoon-server-idle.png">主机界面</a>、<a href="../Saved/DeliverySpeech/UIPlaytest/cartoon-server-sent-cleared.png">主机发送清空</a>、<a href="../Saved/DeliverySpeech/UIPlaytest/cartoon-server-npc-caption.png">正式 NPC 气泡</a>、<a href="../Saved/DeliverySpeech/UIPlaytest/cartoon-client-sent-cleared.png">客户端发送清空</a>、<a href="../Saved/DeliverySpeech/UIPlaytest/cartoon-client-model-record.png">实际模型与请求记录</a>，最后一张将模型与请求号分两行显示。客户端现场镜头贴近人物身体遮住 NPC，不能据此宣布完整视角或阅读距离回归通过。</p>
+<p>本轮录音为 <code>Saved/AIResearch/InspectorPlaytestAudio/cartoon_server.wav</code>（UTC 14:12:14.694–14:14:13.196）及 <code>cartoon_client.wav</code>（14:14:35.029–14:17:46.756）。同目录 <code>cartoon_capture_check.json</code> 确认文件分别为 118.464 秒、191.68 秒，均为 48 kHz、双声道、16 位且含非零音频。录音采集 UE 主混音，不是麦克风或扬声器 loopback；文件检查不代表人工听感验收。</p>
+<p>主机主混音录音 <code>Saved/AIResearch/InspectorPlaytestAudio/server_luna_ui.wav</code> 为 215.317 秒、48 kHz 双声道 16 位，采集区间 UTC 13:28:56.204–13:32:31.571（北京时间 21:28:56.204–21:32:31.571）。这是 UE 主混音，不是麦克风或扬声器 loopback；首轮挑衅不在录音范围内，也不能证明客户端失败句完整播放。</p>
+<p>并行接入核对还发现环境零台词没有播放结束回调，旧逻辑会残留回复。现于传输结束后清理无需玩家动作回执的零台词记录，保留玩家动作确认与其他正在播放的声音；Fight/Flee/Wait、迟到消息和去重回归已通过。当前动作描述去掉无条件“仍在追近、出拳和受击”的文字，动作与剩余时间继续如实发送，实际受击只来自真实事件，避免误导小模型训练与推断。</p>
+<p><strong>待验收：</strong>真人准确率、普通话与口音、连续两轮和打断、NPC 外放 AEC 与双讲、其他分辨率与阅读距离、完整多人输入、两玩家争用、上下车、换世界及打包加载。已完成的麦克风开关、一次无真实人声的按住/松开、两轮合计五次 Send 点击与面板操作不能替代这些检查，回车发送也未单独确认。相同场景仍需至少 30 轮文字/语音对照，分别记录识别完成、模型首句、首段声音和实际播放时间，同时保留识别错误和人物行为结果；未通过前不宣布语音可玩验收完成。</p>
+<p class="evidence">可复现记录：<code>Saved/DeliverySpeech/native_test_metrics.json</code>、<code>HotwordCheck/default_hotwords_metrics.json</code>、<code>RecognizerCheck</code>、<code>ComponentCheck</code>、<code>ConversationCheck/checks.json</code>；主方案见 <a href="Architecture.md">Architecture.md 玩家语音章节</a>。本段明确区分已阅读、已实现、独立验证与尚未完成的游戏验收。</p>
+</section>
+<section id="companion-open-mic-20261114">
+<h2>二狗持续连麦与移动输入残留（2026-11-14，已接入，真人验收待完成）</h2>
+<p>试玩后用户反馈有时没有按键仍向前走，可能与打开对话框或点击 UI 后松键有关，尚不能把回忆当作确定复现。源码发现 IA_Move 缺 Canceled 清零、Completed 仍读取事件值，旧移动停止只走 Unreliable 且服务器无过期保护。修复增加显式停止、UI/窗口失焦清键、带序号的可靠停止与 0.75 秒服务器输入续期保护，不调整步态、速度或物理手感。需要构建、输入自动化与真实 W/T/点击/切窗检查后再判定解决。</p>
+<p>用户将交互明确为开麦与自己的二狗持续说话，二狗远处跑腿也保持队友语音；附近 NPC 只旁听玩家身边的声音，算力优先主对话。现有 ASR→LLM→TTS 可保留，正常界面移除识别草稿和按住松开流程；不把这一交互改动描述为原生音频大模型。连麦会话与每句服务器轮次分开，安静时不占 NPC 录音、不发模型请求；开口后只取消本人旧回复，活动仍由游戏与 LLM 决定。</p>
+<p><strong>选型依据：</strong>已阅读本机 UE WebRTC5414 的 RNN VAD 头文件与实现接口，并用库符号确认实现存在，采用独立 <a href="https://webrtc.googlesource.com/src/+/187a4363c03da3226722e01a1fbf0a8278434883/modules/audio_processing/agc2/vad_wrapper.cc">VoiceActivityDetectorWrapper</a> 分析 AEC 后的 10 ms 音频，不启用 AGC、不新增依赖或模型下载。sherpa 在线 <a href="https://k2-fsa.github.io/sherpa/ncnn/endpoint.html">endpoint 规则</a>基于尾部 blank，当前运行包未开启，不能代替是否有人声的判断；本批保持 DLL ABI，采用本机 VAD 自动结束一句。</p>
+<p>初始分句参数为 250 ms 预卷、100 ms 连续人声确认、800 ms 尾部静音、包含预卷的 14 秒软分段，保留原 15 秒硬界。旧 final 被游戏线程领取且服务器返回接收结果后才接下一识别段，下一段净化音频最多缓冲 2 秒，过载明确失败。联查曾发现只等本机 final 会让下一次起声覆盖尚未拿到服务器许可、或正在等待原有一秒发送间隔的前一句；现复用本地轮次保存至精确回执，广播重入与重复许可不重发，超时、关闭和换 Pawn 清理等待。以上是待实测参数，不是真人延迟结果；800 ms 停顿判断还受 VAD 拖尾和游戏帧影响，不能与离线约 30 ms 收尾混写成整体实时延迟。</p>
+<p>服务器按 PlayerState 验证二狗归属，同一世界的主人才可绕过现场距离接入；自己的随从对主人保持网络相关性。每句复制明确 RadioListener，主人本机不做距离衰减，其他玩家仍听现场空间声音；补发缓存再验归属、世界和期限。玩家原话最多交给身边两个能听见的 NPC 作为不需回复的事实，二狗连麦回复也不自动引发周围角色串联调用。后台继续复用现有玩家高于闲聊的调度，其他玩家正在执行的请求保持原语义。</p>
+<p class="evidence" id="companion-open-mic-validation">本批构建：首编暴露 TObjectPtr 推导、RPC 测试参数、控制器局部变量遮蔽和 B 线程 CandidateDuration 测试适配问题，修正后 DeliveryEditor 29 actions / 76.26 秒通过；随后两处测试夹具修正整编 5 actions / 8.18 秒通过。27 项自动化首次 25 通过、2 失败；修正裸控制器未标记本机、直接改 Off 内部状态未清旧提示的前提后，仅重跑这两项且通过，保留原断言。最终 27 项覆盖均通过，5 项带空音频、超时故障场景或无骨骼夹具警告。已有 16k 中文 WAV 经真实 AEC→RNN→分句集成通过，不代表真人麦克风或外放双讲。</p>
+<p>正式脚本 <code>Content/Python/create_conversation_widget.py --replace-layout</code> 保存并加载 3 个 WBP 和 2 个输入资产。命令行退出码 1 来自既有 3 条物理材质 CDO 初始化错误；所有资产检查标记成功且无新 UMG ensure。记录：<code>Saved/Logs/DeliveryOpenMicAssets.log</code>、<code>DeliveryOpenMicBuild2.log</code>、<code>DeliveryOpenMicBuild3.log</code>、<code>DeliveryOpenMicTests.log</code>、<code>DeliveryOpenMicRetest.log</code>；自动化 JSON 分别位于 <code>Saved/Automation/DeliveryOpenMic</code>、<code>DeliveryOpenMicRetest</code>。</p>
+<p>约五分钟前台操作：960×720 双人 PIE 主机 W+T 一次和 W 一次；客户端 W+T 两次，第一次未取得游戏焦点而未打开，点击画面后成功。实际点击输入框、发送、关闭并切窗，这些观察中没有持续前行；主机发送一条后立即清空且显示点状/按钮反馈。主机 V 一次、客户端连麦按钮一次均显示先结识二狗。<a href="../Saved/DeliverySpeech/open_mic_send_feedback.png">主机发送画面</a>与<a href="../Saved/DeliverySpeech/open_mic_client_entry.png">客户端入口画面</a>保留本次结果，日志为 <code>DeliveryOpenMicPlay.log</code>。</p>
+<p>临时准备已结识测试场景的 Python 先遇到 GetControlledPawn 脚本名称适配，再被 OwnerPlayerState 的受保护属性访问拒绝，未写入归属或绕过正式校验；没有成功启动本批真实麦克风。本次不宣布真人连麦、远处声音、外放双讲或原始间歇移动 bug 完整验收。后续通过正式 E 结识并站立后再按 V，检查自然连续两轮、短答、改口、噪声、打断及不同距离；长按失焦松键、手柄、丢包与上下车仍需实机复测。未测连麦与打字的同场景性能差，不能宣称已经降低等待。</p>
 </section>
 <footer>与方案文档使用相同版式，支持离线阅读。持续记录本项目的实际结果，不把外部演示指标当作本项目性能。</footer></main></div><script>document.getElementById('print').addEventListener('click',()=>window.print());</script></body></html>
