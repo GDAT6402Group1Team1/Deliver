@@ -29,6 +29,7 @@ ERRAND_INSTRUCTIONS = '''能力版本3允许从实际候选中选择 FetchPackag
 FetchPackage 去当前订单取件点拿件，再带回交给主人；TakePackage 接过主人手中或从已登记停放车辆后箱取出这单包裹，随后按原来的 Follow/Stay 安排携带，不自动代送；DeliverPackage 按当前订单去取件点取件、从主人接件或继续携带已有的同一单包裹，再送到游戏确认的目的地；ReturnPackage 只把你已经持有的包裹交还主人，不去取新件。这些流程能否开始由候选决定，距离、交接、送达和奖励由游戏服务器确认
 companion_context.has_package 表示你是否实际持有包裹，owner_has_package 表示主人手中或已登记车辆里是否有这单包裹；两者分开，不能用全世界 task_phase 推断谁拿着件。errand_action 是当前或最近一次委托，errand_phase 是执行阶段，errand_status 是执行状态，errand_reason 是服务器报告的停止或失败原因；空字符串表示没有该信息，不补造成功、丢件或发奖
 新指令按 command_revision 取代旧委托，取消和失败不会自动丢弃已持包裹。结合当前持件状态、最新主人原话和执行报告选择下一步；只说同意、动作被接受或 ActionFinished 正常结束都不表示取件、交还、送达或发奖已经发生，后续确认结果才可作为事实
+errand_status 为 Running 且游戏告知暂时受阻时，继续保留原委托和已携带实物，除非主人明确改安排。CompanionVehicleNoRoute、CompanionVehicleParkingBlocked、VehicleBlocked 表示当前车路或车位不通，游戏会重新检查。CompanionDismountBlocked 表示没有安全位置下车。WaitingAtGrandpaDoor 表示正在爷爷家门外等门打开。CargoHandoffInterrupted 表示开箱交接暂时中断，原包裹仍在主人一侧。主人问进展时可以简短说明卡在哪，不要说已经下车、丢件或送达
 '''
 
 

@@ -22,6 +22,8 @@
 #include "Task/World/DeliveryItemComponent.h"
 #include "Task/World/DeliveryPickupPointComponent.h"
 #include "Task/World/DeliveryTargetComponent.h"
+#include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/DeliveryVehicleSummonComponent.h"
 #include "World/DeliveryLocationComponent.h"
 #include "UObject/UnrealType.h"
 #include "Engine/Engine.h"
@@ -202,6 +204,8 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
     TestEqual(TEXT("暂停未丢弃同伴原实物"), Npc->GetCarriedTaskPackage(), Package);
     TestEqual(TEXT("暂停未替主人丢掉普通物品"), Owner->GetInventoryComponent()->GetHeldItem(), Held);
     const auto BusyReturn = Snapshot();
+    TestEqual(TEXT("暂停仍向模型报告正在交还"), BusyReturn.CompanionErrandStatus, FString(TEXT("Running")));
+    TestEqual(TEXT("暂停快照携带当前真实原因"), BusyReturn.CompanionErrandReason, FString(TEXT("OwnerHandsBusy")));
     TestFalse(TEXT("访客不能取消暂停中的委托"), Apply(EDeliveryNpcAction::CancelCompanionTask, StrangerState, BusyReturn));
     TestFalse(TEXT("开始前的旧版本不能取消暂停中的委托"), Apply(EDeliveryNpcAction::CancelCompanionTask, OwnerState, BeforeBusyReturn));
     if (!TestTrue(TEXT("当前主人可以取消暂停中的委托"), Apply(EDeliveryNpcAction::CancelCompanionTask, OwnerState, BusyReturn))) return false;
@@ -212,6 +216,9 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
     TestEqual(TEXT("取消保留同一份实物"), Npc->GetCarriedTaskPackage(), Package);
     TestEqual(TEXT("取消不改变实物所有者"), Package->GetOwner(), static_cast<AActor*>(Npc));
     TestEqual(TEXT("取消不清掉主人原手物"), Owner->GetInventoryComponent()->GetHeldItem(), Held);
+    const auto AfterCancel=Snapshot();
+    TestTrue(TEXT("已取消的旧暂停从新快照消失"), AfterCancel.CompanionSuspensionReason.IsEmpty());
+    TestEqual(TEXT("取消之后报告真实结束状态"), AfterCancel.CompanionErrandStatus, FString(TEXT("Cancelled")));
     CheckNotDelivered();
 
     Owner->GetInventoryComponent()->ConsumeHeldItem(Held);
@@ -220,6 +227,7 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
     Companion->UpdateErrand();
     TestEqual(TEXT("新委托实际交还取消时保留的原实物"), Owner->GetCarriedTaskPackage(), Package);
     TestNull(TEXT("最后交还后同伴不再持件"), Npc->GetCarriedTaskPackage());
+    TestEqual(TEXT("新委托交还成功后旧暂停不会覆盖实际结果"), Snapshot().CompanionErrandReason, FString(TEXT("PackageReturned")));
     CheckNotDelivered();
 
     // 地点通过实际组件注册，包裹丢失后仍有合法的取件与帮送候选
@@ -382,19 +390,64 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
     // 用同一委托转移、交付及结算；测试直接布置站位，路径和画面由试玩检查
     const int32 DeliveryReward = Tasks->PreviewReward(Task).FinalReward;
     TestTrue(TEXT("正对照奖励配置非零"), DeliveryReward > 0);
+    // 先复现开箱被打断，再验证主人升级为代送会重新申请同一个包裹
+    auto* Bike=World->SpawnActor<ADeliveryMotorbike>(FVector(2600,0,88),FRotator::ZeroRotator);
+    auto* Summon=Owner->FindComponentByClass<UDeliveryVehicleSummonComponent>();
+    if (!TestNotNull(TEXT("生成真实主人车辆"),Bike) || !TestNotNull(TEXT("主人车辆登记组件存在"),Summon)) return false;
+    Summon->RegisterVehicle(Bike);
+    if (!TestTrue(TEXT("把原包裹放进登记车辆"),Owner->ReleaseTaskPackage(Package) && Bike->AttachCargoForPlayer(Package,OwnerState))) return false;
+    Npc->SetActorLocation(Bike->GetTaskPackageTransferPoint()-FVector(150,0,0),false,nullptr,ETeleportType::TeleportPhysics);
+    if (!TestTrue(TEXT("主人先要求接件"),Apply(EDeliveryNpcAction::TakePackage,OwnerState,Snapshot()))) return false;
+    Companion->UpdateErrand();
+    const FGuid Interrupted=Companion->ErrandCargoHandoffId;
+    if (!TestTrue(TEXT("实际开箱已接收"),Interrupted.IsValid())) return false;
+    const FVector NearCargo=Npc->GetActorLocation();
+    Npc->SetActorLocation(NearCargo-FVector(500,0,0),false,nullptr,ETeleportType::TeleportPhysics);
+    Bike->UpdateTrunkAnimation(.1f);
+    Companion->UpdateErrand();
+    TestTrue(TEXT("开箱被打断保留原委托"),Companion->HasActiveErrand());
+    TestEqual(TEXT("模型看到开箱暂时中断"),Snapshot().CompanionErrandReason,FString(TEXT("CargoHandoffInterrupted")));
+    TestEqual(TEXT("取消开箱动画保留车中原包裹"),Bike->GetCargo(),Package);
     const auto BeforeDeliver = Snapshot();
+    Npc->SetActorLocation(NearCargo,false,nullptr,ETeleportType::TeleportPhysics);
     if (!TestTrue(TEXT("指定步行后开始帮送同一件实物"), Companion->ApplyCommand(EDeliveryNpcAction::DeliverPackage,
         OwnerState, BeforeDeliver.CompanionCommandRevision, BeforeDeliver.CompanionTask.Get(),
         BeforeDeliver.CompanionPackage.Get(), EDeliveryCompanionTravelMode::Walk))) return false;
     Companion->UpdateErrand();
-    TestEqual(TEXT("帮送先从主人接到同一个包裹"), Npc->GetCarriedTaskPackage(), Package);
+    const FGuid Replacement=Companion->ErrandCargoHandoffId;
+    if (!TestTrue(TEXT("新委托为原包裹开箱并分配新编号"),Replacement.IsValid() && Replacement!=Interrupted)) return false;
+    Bike->CancelCargoHandoff(Interrupted);
+    Bike->UpdateTrunkAnimation(10.f);
+    Companion->UpdateErrand();
+    TestEqual(TEXT("帮送先从主人车上接到同一个包裹"), Npc->GetCarriedTaskPackage(), Package);
+    TestNull(TEXT("实际转移后后备箱为空"),Bike->GetCargo());
+    Bike->Destroy();
     CheckNotDelivered();
     Npc->SetActorLocation(FVector(1980, 0, 88), false, nullptr, ETeleportType::TeleportPhysics);
     Companion->UpdateErrand();
     TestTrue(TEXT("二狗到门外地址仍保留委托"), Companion->HasActiveErrand());
     CheckNotDelivered();
+    const auto RejectRelease=[&]()
+    {
+        TestFalse(TEXT("解除携带时的重复结算被拒绝"),Tasks->TryCompleteDelivery(Task,OwnerState));
+        return false;
+    };
+    TestFalse(TEXT("实物释放失败时不结算"),Tasks->CompleteDelivery(Task,OwnerState,Npc,FGameplayTag(),RejectRelease));
+    CheckNotDelivered();
+    int32 Confirmations=0;
+    const FDelegateHandle Confirmation=Delivery->OnDeliveryConfirmed.AddLambda([&](UDeliveryTaskDefinition* ReceivedTask,AActor* Received,APlayerState* Player)
+    {
+        ++Confirmations;
+        TestTrue(TEXT("收件通知仍能看到同一件原包裹"),ReceivedTask==Task && Received==Package && Player==OwnerState);
+        TestNull(TEXT("收件通知前已清掉同伴持件"),Npc->GetCarriedTaskPackage());
+        TestNull(TEXT("收件通知中实物已解除原归属"),Received->GetOwner());
+    });
     Npc->SetActorLocation(FVector(2240, 0, 88), false, nullptr, ETeleportType::TeleportPhysics);
     Companion->UpdateErrand();
+    Delivery->OnDeliveryConfirmed.Remove(Confirmation);
+    TestEqual(TEXT("实物收件只通知一次"),Confirmations,1);
+    TestEqual(TEXT("主人在远处时仍准确记住是二狗代送"),Companion->GetDeliveryTogetherCount(),1);
+    TestNull(TEXT("同步通知结束后清除实际送件者的临时引用"),Tasks->GetCompletingPackageCarrier(Task));
     TestEqual(TEXT("真实收件人收下包裹后二狗才报告送达"), Companion->GetErrand().Reason, FName(TEXT("Delivered")));
     TestFalse(TEXT("实际交付后原物品已销毁"), IsValid(Package));
     TestEqual(TEXT("只有真实收件才完成订单"), Tasks->GetTaskStatus(Task), EDeliveryTaskStatus::Completed);

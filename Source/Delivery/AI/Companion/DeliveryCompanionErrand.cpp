@@ -206,6 +206,7 @@ void UDeliveryCompanionComponent::CancelPackageHandoff()
     const FGuid OldId=ErrandCargoHandoffId;
     ErrandCargoVehicle.Reset();
     ErrandCargoHandoffId.Invalidate();
+    NextCargoHandoffAt=0.;
     if (IsValid(Bike) && OldId.IsValid()) Bike->CancelCargoHandoff(OldId);
 }
 
@@ -286,12 +287,18 @@ void UDeliveryCompanionComponent::FinishErrand(EDeliveryNpcActionStatus Status,F
         EDeliveryNpcEvidenceSource::ActionResult);
 }
 
-void UDeliveryCompanionComponent::ReportErrandPause(FName Reason)
+void UDeliveryCompanionComponent::ReportErrandPause(FName Reason,bool bKeepMounted)
 {
     if (!HasActiveErrand() || !GetOwner() || !GetOwner()->HasAuthority()) return;
     const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
     const int32 Revision=CommandRevision, ErrandRevision=Errand.CommandRevision;
-    StopErrandMovement();
+    if (bKeepMounted && IsUsingErrandVehicle())
+    {
+        // 当前阶段仍在骑行，停止旧路线并保留同一件货物，等待下一轮找停车位
+        bVehicleHasDriveGoal=false;
+        ErrandVehicle->StopDriving();
+    }
+    else StopErrandMovement();
     if (!WeakThis.IsValid() || !HasActiveErrand() || CommandRevision!=Revision || Errand.CommandRevision!=ErrandRevision) return;
     SetSuspension(Reason);
     if (LastErrandPause==Reason) return;
@@ -309,18 +316,36 @@ AActor* UDeliveryCompanionComponent::ResolveErrandLocation(bool bPickup) const
 bool UDeliveryCompanionComponent::MoveForErrand(const FVector& Goal,float ReachRadius,AActor* InteractionTarget)
 {
     auto* Npc=GetCompanion();
-    auto* AI=Cast<AAIController>(Npc->GetController());
+    auto* AI=Npc?Cast<AAIController>(Npc->GetController()):nullptr;
     auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
     if (!AI || !Nav || Goal.ContainsNaN()) return false;
+    const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
+    const TWeakObjectPtr<ADeliveryCompanionCharacter> WeakNpc(Npc);
+    const TWeakObjectPtr<AAIController> WeakAI(AI);
+    const TWeakObjectPtr<AActor> Target(InteractionTarget);
+    const int32 Revision=CommandRevision;
+    const auto Phase=Errand.Phase;
+    const auto IsCurrent=[&]()
+    {
+        return WeakThis.IsValid() && WeakNpc.IsValid() && !Npc->IsActorBeingDestroyed() && WeakAI.IsValid() &&
+            Npc->GetController()==AI && (!InteractionTarget || (Target.IsValid() && !Target->IsActorBeingDestroyed())) &&
+            HasActiveErrand() && CommandRevision==Revision && Errand.CommandRevision==Revision && Errand.Phase==Phase;
+    };
+    const auto HasReachedApproach=[&](const FVector& Destination)
+    {
+        const FVector Feet=Npc->GetNavAgentLocation();
+        return FVector::Dist2D(Feet,Destination)<45 && FMath::Abs(Feet.Z-Destination.Z)<60 &&
+            FVector::Dist(Npc->GetActorLocation(),Goal)<=ReachRadius &&
+            HasClearErrandApproach(Npc,Npc->GetActorLocation(),Goal,InteractionTarget);
+    };
     const double Now=GetWorld()->GetTimeSeconds();
     const bool bGoalUnchanged=bHasErrandDestination && FVector::Dist(Goal,ErrandGoal)<GetTuning().RepathDistance;
     if (bGoalUnchanged)
     {
-        if (AI->GetMoveStatus()!=EPathFollowingStatus::Idle && bErrandOwnsNavigation) return false;
-        if (FVector::Dist2D(Npc->GetNavAgentLocation(),ErrandDestination)<45 &&
-            FMath::Abs(Npc->GetNavAgentLocation().Z-ErrandDestination.Z)<60 &&
-            FVector::Dist(Npc->GetActorLocation(),Goal)<=ReachRadius &&
-            HasClearErrandApproach(Npc,Npc->GetActorLocation(),Goal,InteractionTarget)) return true;
+        const auto* Following=AI->GetPathFollowingComponent();
+        if (bErrandOwnsNavigation && Following && Following->GetCurrentRequestId()==ErrandMoveId &&
+            AI->GetMoveStatus()!=EPathFollowingStatus::Idle) return false;
+        if (HasReachedApproach(ErrandDestination)) return true;
     }
     if (Now<NextErrandNavigationAt) return false;
     NextErrandNavigationAt=Now+GetTuning().NavigationInterval;
@@ -342,16 +367,11 @@ bool UDeliveryCompanionComponent::MoveForErrand(const FVector& Goal,float ReachR
         Request.SetReachTestIncludesAgentRadius(false);
         Request.SetReachTestIncludesGoalRadius(false);
         Request.SetAllowPartialPath(false);
-        const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
-        const TWeakObjectPtr<ADeliveryCompanionCharacter> WeakNpc(Npc);
-        const int32 Revision=CommandRevision;
-        const auto Phase=Errand.Phase;
         const auto Result=AI->MoveTo(Request);
         // 换路径可同步结束旧请求，回调已经换委托时不能写回旧路或尝试交接
-        if (!WeakThis.IsValid() || !WeakNpc.IsValid() || WeakNpc->IsActorBeingDestroyed() ||
-            !HasActiveErrand() || CommandRevision!=Revision || Errand.CommandRevision!=Revision ||
-            Errand.Phase!=Phase) return false;
+        if (!IsCurrent()) return false;
         if (Result.Code==EPathFollowingRequestResult::Failed) continue;
+        if (Result.Code==EPathFollowingRequestResult::AlreadyAtGoal && !HasReachedApproach(Projected.Location)) continue;
         if (!bErrandTravelBudgetAdded)
         {
             // 长路线补足正常行走时间，每阶段只补一次，反复重算或堵路不能无限延长委托
@@ -372,7 +392,9 @@ bool UDeliveryCompanionComponent::MoveForErrand(const FVector& Goal,float ReachR
         LastErrandPause=NAME_None;
         return Result.Code==EPathFollowingRequestResult::AlreadyAtGoal;
     }
+    // 停止也会触发同步回调，暂停只能由仍然对应的委托写入
     StopErrandMovement();
+    if (!IsCurrent()) return false;
     bHasErrandDestination=false;
     NextErrandNavigationAt=Now+GetTuning().BlockedRetrySeconds;
     ReportErrandPause(TEXT("ErrandPathBlocked"));
@@ -408,10 +430,29 @@ void UDeliveryCompanionComponent::UpdateErrand()
         FName Reason;
         if (!IsValid(Bike) || !Bike->GetCargoHandoffResult(ErrandCargoHandoffId,bComplete,bSucceeded,Reason))
         { FinishErrand(EDeliveryNpcActionStatus::Failed,TEXT("CargoHandoffLost")); return; }
-        LastErrandUpdateAt=GetWorld()->GetTimeSeconds();
-        if (!bComplete) return;
+        const double Now=GetWorld()->GetTimeSeconds();
+        if (LastErrandUpdateAt>0.) ErrandActiveSeconds+=FMath::Clamp(float(Now-LastErrandUpdateAt),0.f,1.f);
+        LastErrandUpdateAt=Now;
+        if (!bComplete)
+        {
+            if (ErrandActiveSeconds>=ErrandTimeLimitSeconds)
+                FinishErrand(EDeliveryNpcActionStatus::Failed,TEXT("ErrandTimedOut"));
+            return;
+        }
         ErrandCargoHandoffId.Invalidate();
         ErrandCargoVehicle.Reset();
+        // 动画被环境打断且原货还在主人这一侧，保留委托并重新校验停稳和距离
+        if (!bSucceeded && Reason==TEXT("CargoHandoffCancelled") && Errand.Phase==EDeliveryCompanionErrandPhase::ReceiveFromOwner &&
+            IsValid(Errand.Package) && PackageTask(Errand.Package)==Errand.Task && GetCommandPackage()==Errand.Package &&
+            !GetCarriedTaskPackage())
+        {
+            if (ErrandActiveSeconds>=ErrandTimeLimitSeconds)
+            { FinishErrand(EDeliveryNpcActionStatus::Failed,TEXT("ErrandTimedOut")); return; }
+            Errand.Reason=NAME_None;
+            ReportErrandPause(TEXT("CargoHandoffInterrupted"));
+            if (IsCurrent()) NextCargoHandoffAt=GetWorld()->GetTimeSeconds()+.5;
+            return;
+        }
         if (!bSucceeded || GetCarriedTaskPackage()!=Errand.Package || PackageTask(GetCarriedTaskPackage())!=Errand.Task)
         { FinishErrand(EDeliveryNpcActionStatus::Failed,bSucceeded?FName(TEXT("PackageHandoffStateChanged")):Reason); return; }
         if (Errand.Action==EDeliveryNpcAction::DeliverPackage)
@@ -440,6 +481,8 @@ void UDeliveryCompanionComponent::UpdateErrand()
     if (Errand.Phase==EDeliveryCompanionErrandPhase::ReturnToOwner && !OwnerCarrier->CanReceiveTaskPackage(Errand.Package))
     { ReportErrandPause(TEXT("OwnerHandsBusy")); return; }
     const double Now=GetWorld()->GetTimeSeconds();
+    if (Errand.Phase==EDeliveryCompanionErrandPhase::ReceiveFromOwner && Now<NextCargoHandoffAt)
+    { LastErrandUpdateAt=Now; return; }
     const float Dt=LastErrandUpdateAt>0?FMath::Clamp(static_cast<float>(Now-LastErrandUpdateAt),0.f,1.f):0.f;
     LastErrandUpdateAt=Now;
     ErrandActiveSeconds+=Dt;

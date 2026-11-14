@@ -8,6 +8,7 @@
  */
 
 #include "Task/DeliveryTaskManagerComponent.h"
+#include "Misc/ScopeExit.h"
 
 #include "Delivery.h"
 #include "Game/DeliveryStartupFlow.h"
@@ -352,17 +353,37 @@ bool UDeliveryTaskManagerComponent::TryAcquireItem(UDeliveryTaskDefinition* Task
 bool UDeliveryTaskManagerComponent::TryCompleteDelivery(UDeliveryTaskDefinition* Task,
                                                         APlayerState* Deliverer)
 {
+	return CompleteDelivery(Task,Deliverer,nullptr,FGameplayTag(),[] { return true; });
+}
+
+const AActor* UDeliveryTaskManagerComponent::GetCompletingPackageCarrier(const UDeliveryTaskDefinition* Task) const
+{
+	const auto* Carrier=CompletingDeliveries.Find(Task);
+	return Carrier?Carrier->Get():nullptr;
+}
+
+bool UDeliveryTaskManagerComponent::CompleteDelivery(UDeliveryTaskDefinition* Task,APlayerState* Deliverer,
+                                                     AActor* Carrier,FGameplayTag DeliveryEvent,
+                                                     TFunctionRef<bool()> ReleasePackage)
+{
 	if (!GetOwner() || !GetOwner()->HasAuthority() || !Task)
 	{
 		return false;
 	}
 
 	FDeliveryTaskState* State = FindState(Task);
-	if (!State || State->Status != EDeliveryTaskStatus::InProgress)
+	if (!State || State->Status != EDeliveryTaskStatus::InProgress || CompletingDeliveries.Contains(Task))
 	{
 		return false;
 	}
 
+	// 摘下持件可能同步通知库存监听者，期间同一订单只接受这一次交付
+	CompletingDeliveries.Add(Task,Carrier);
+	ON_SCOPE_EXIT { CompletingDeliveries.Remove(Task); };
+	if (!ReleasePackage() || !IsValid(GetOwner()) || GetOwner()->IsActorBeingDestroyed()) return false;
+	State=FindState(Task);
+	if (!State || State->Status!=EDeliveryTaskStatus::InProgress) return false;
+	if (DeliveryEvent.IsValid()) State->SpecialEvents.AddUnique(DeliveryEvent);
 	State->CompleteServerTime = GetServerTimeSeconds();
 	State->Deliverer = Deliverer;
 

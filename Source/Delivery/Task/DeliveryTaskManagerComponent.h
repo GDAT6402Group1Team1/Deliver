@@ -10,6 +10,7 @@
 class APlayerState;
 class UDeliveryPhoneCallQueueComponent;
 class UDeliveryTaskDefinition;
+class UDeliveryTargetComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeliveryTaskStatusChanged, UDeliveryTaskDefinition*, Task,
                                              EDeliveryTaskStatus, NewStatus);
@@ -30,6 +31,8 @@ class DELIVERY_API UDeliveryTaskManagerComponent : public UActorComponent
 	GENERATED_BODY()
 	friend class FDeliveryStartupTaskGateTest;
 	friend class FDeliveryPackageTransferTest;
+	friend class UDeliveryTargetComponent;
+	friend class FDeliveryCompanionErrandTest;
 
   public:
 	UDeliveryTaskManagerComponent();
@@ -80,6 +83,8 @@ class DELIVERY_API UDeliveryTaskManagerComponent : public UActorComponent
 	/** 服务器：在正确的收件人处完成交付；奖励结算给 Deliverer，任务对所有人结束 */
 	UFUNCTION(BlueprintCallable, Category = "Task")
 	bool TryCompleteDelivery(UDeliveryTaskDefinition* Task, APlayerState* Deliverer);
+	// 仅在本次真实交付的同步完成通知期间可用
+	const AActor* GetCompletingPackageCarrier(const UDeliveryTaskDefinition* Task) const;
 
 	/** 服务器：上报一个影响奖励的特殊事件（沿途恶作剧、完好送达之类）；重复的 Tag 只记一次 */
 	UFUNCTION(BlueprintCallable, Category = "Task")
@@ -184,6 +189,9 @@ class DELIVERY_API UDeliveryTaskManagerComponent : public UActorComponent
 
 	FDeliveryTaskState* FindState(const UDeliveryTaskDefinition* Task);
 	const FDeliveryTaskState* FindState(const UDeliveryTaskDefinition* Task) const;
+	bool CompleteDelivery(UDeliveryTaskDefinition* Task, APlayerState* Deliverer, AActor* Carrier,
+	                      FGameplayTag DeliveryEvent, TFunctionRef<bool()> ReleasePackage);
+	TMap<const UDeliveryTaskDefinition*, TWeakObjectPtr<AActor>> CompletingDeliveries;
 
 	/** 服务器改状态的唯一入口，负责广播 */
 	void SetTaskStatus(FDeliveryTaskState& State, EDeliveryTaskStatus NewStatus);

@@ -58,6 +58,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn, public IDeliveryPackageCar
 	friend class FDeliveryResidentIntegrationTest;
 	friend class FDeliveryResidentPIECommand;
 	friend class FDeliveryMotorbikeTrunkTest;
+	friend class FDeliveryCompanionErrandTest;
 	friend class FDeliveryMotorbikeObstacleTest;
 
   public:

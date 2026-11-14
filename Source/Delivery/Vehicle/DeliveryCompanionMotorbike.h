@@ -41,6 +41,9 @@ public:
     // 自动到站与跟随等候共用真实停车容差，单位厘米
     float GetParkingAcceptanceRadius() const { return FMath::Max(20.f,ParkingRadius); }
     UFUNCTION(BlueprintPure,Category="Companion|车辆") FVector GetBoardingLocation() const;
+    FVector GetOppositeBoardingLocation() const;
+    // 核对身体中心到座椅的距离、高差和遮挡，供寻路及实际上车共用
+    bool CanBoardFromLocation(const FVector& PawnLocation) const;
     bool CanParkAt(const FVector& Goal) const;
 
     UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="Companion|骑乘") TObjectPtr<USceneComponent> CompanionSeat;
@@ -61,6 +64,7 @@ public:
     virtual void Tick(float DeltaSeconds) override;
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out) const override;
+    virtual bool IsNetRelevantFor(const AActor* RealViewer,const AActor* ViewTarget,const FVector& SrcLocation) const override;
 protected:
     virtual void BeginPlay() override;
     virtual bool AllowsPlayerUse() const override { return false; }
@@ -69,6 +73,7 @@ protected:
     virtual AActor* GetAutonomousHornDriver() const override;
     virtual void UpdateAutonomousDriveInput(float DeltaSeconds,float& OutThrottle,float& OutSteer) override;
 private:
+    friend class FDeliveryCompanionRulesTest;
     UPROPERTY(ReplicatedUsing=OnRep_CompanionRide) TObjectPtr<ADeliveryNpcCharacter> ReservedCompanion;
     UPROPERTY(ReplicatedUsing=OnRep_CompanionRide) bool bMounted=false;
     UFUNCTION() void OnRep_CompanionRide();
@@ -99,6 +104,7 @@ private:
     void RefreshCompanionPackage(ADeliveryNpcCharacter* Companion);
     bool FindDismountLocation(FVector& OutLocation) const;
     bool FindFooting(const FVector& Near,FVector& OutLocation) const;
-    bool IsParkSpaceClear(const FVector& Goal,FVector* OutVehicleCenter=nullptr) const;
+    bool IsParkSpaceClear(const FVector& Goal,const FQuat& Heading,FVector* OutVehicleCenter=nullptr) const;
+    bool HasClearDrivingSegment(const FVector& From,const FVector& To,const FQuat& Heading) const;
     void ReleaseForEndPlay(EEndPlayReason::Type Reason);
 };

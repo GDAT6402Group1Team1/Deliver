@@ -10,8 +10,10 @@
 #include "Task/World/DeliveryPickupPointComponent.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Character/DeliveryCharacter.h"
+#include "Vehicle/DeliveryCompanionMotorbike.h"
 #include "World/DeliveryLocationRegistry.h"
 #include "Animation/AnimSequence.h"
+#include "Components/SceneComponent.h"
 #include "Curves/CurveVector.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
@@ -89,6 +91,18 @@ void ADeliveryCompanionCharacter::ResetForNewOwner()
 
 void ADeliveryCompanionCharacter::OnRep_Encounter()
 {
+    const auto* AttachedBike=Cast<ADeliveryCompanionMotorbike>(GetAttachParentActor());
+    if (Encounter.Phase==EDeliveryCompanionEncounterPhase::Joined &&
+        (Companion->IsUsingErrandVehicle() || (AttachedBike && AttachedBike->CompanionSeat==GetRootComponent()->GetAttachParent())))
+    {
+        // 初遇与座椅分开复制，原身体维持骑乘状态，专属车继续显示骑姿替身
+        RemoveEjectionMotion();
+        SetActorHiddenInGame(true);
+        SetActorEnableCollision(false);
+        if (GetCharacterMovement()->MovementMode!=MOVE_None) GetCharacterMovement()->DisableMovement();
+        UpdateEncounterPresentation();
+        return;
+    }
     const bool bEncounterHidden=Encounter.Phase==EDeliveryCompanionEncounterPhase::Dormant || Encounter.Phase==EDeliveryCompanionEncounterPhase::OpeningDoor;
     SetActorHiddenInGame(bEncounterHidden);
     SetActorEnableCollision(!bEncounterHidden);

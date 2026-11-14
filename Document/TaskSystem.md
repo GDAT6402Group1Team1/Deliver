@@ -34,7 +34,7 @@
 较高优先级的黑板条件会中断低优先级分支，收件可中断回复或破门反应。退出 PIE、销毁和切图时解绑门、
 任务与交付确认事件，注销动态敲门交互，清除查找任务管理器的定时器并停止行为树和搬离移动
 
-2026-11-14 新增收件后的搬离与共享房屋：`DeliveryTargetComponent.OnDeliveryConfirmed` 只在服务器真实任务结算成功、解除当前实物持件后且包裹销毁前通知爷爷。单独看到任务 Completed 或模型台词不会触发房屋解锁；TaskManager 仍唯一发放原任务奖励。爷爷锁存本件 Task_001 的交付事实，感谢和等待结束后沿 SharedHome 可编辑地面路线扫掠移动，遇家具、门、玩家、车辆、缺地面或缺配置进入带原因的 Waiting 并重试。取消立即停步；不销毁或瞬移爷爷来代替走完。
+收件后由 `DeliveryTargetComponent.OnDeliveryConfirmed` 通知爷爷。服务器先解除实物携带，再结算任务，包裹在收件通知结束后销毁。解除携带失败时不会推进任务或发奖。同一个订单在交付期间拒绝同步重复结算。爷爷以本件 Task_001 的收件事实开始搬离流程，感谢和等待结束后沿 SharedHome 可编辑的地面路线走出房屋，遇阻时暂停并重试。
 
 `ADeliveryHome` 标记现有房屋，同 World 只保留一个有效地点，不按玩家另造建筑。地图显式连接 `Grandpa.SharedHome`、`Home.FormerResident` 与 `Home.ExistingHouse`；`DepartureRoute` 保存搬离平面路线，运行时按真实地板高度扫掠移动，`ReturnAnchor` 保存二狗回家的等候点。爷爷实际走到屋外终点并落稳后才由 `TryClaimAfterDeparture` 写入并复制 `bClaimed/ClaimEventId/ClaimedServerTime`，随后 BT 进入 Finished，爷爷留在终点且不再执行旧屋内往返。全体和晚加入玩家读取同一房屋状态；二狗通过 `FindSharedHome/IsClaimed/TryGetReturnLocation` 查询已解锁锚点，当前位置为门外等候点，尚无沙发或屋内日常行为。
 
@@ -546,9 +546,8 @@ Use case: stylized-concept. Asset type: a single small currency icon for the rew
 
 玩家到收件人处交互
   └ TargetComponent::TryDeliver(ItemActor, PS)
-      └ TaskManager::TryCompleteDelivery() → 结算奖励 → Completed → ReevaluateUnlocks()
-          └ 销毁快递 Actor；OnTaskCompleted 带 FinalReward 和 Deliverer 广播给两端
-              └ 后续任务若解锁 → 立刻进电话队列
+      └ 校验并解除实物携带 → TaskManager 确认 Completed，按 Deliverer 结算并检查后续解锁
+          └ 收件组件通知实际收件人 → 销毁同一个快递 Actor
 ```
 
 ---

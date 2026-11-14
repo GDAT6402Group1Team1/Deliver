@@ -197,13 +197,11 @@ bool UDeliveryCompanionComponent::RecordAssistedRecovery(FGuid DownEpisode,APawn
     return true;
 }
 
-bool UDeliveryCompanionComponent::RecordDeliveryMemory(UDeliveryTaskDefinition* Task,APlayerState* Deliverer)
+bool UDeliveryCompanionComponent::RecordDeliveryMemory(UDeliveryTaskDefinition* Task,APlayerState* Deliverer,bool bDeliveredByCompanion)
 {
     const auto* Manager=UDeliveryTaskManagerComponent::Get(this);
     if (!GetOwner()->HasAuthority() || !Task || Deliverer!=OwnerPlayerState || RememberedDeliveries.Contains(Task) ||
         !Manager || Manager->GetTaskStatus(Task)!=EDeliveryTaskStatus::Completed) return false;
-    const auto* Package=GetCarriedTaskPackage();
-    const bool bDeliveredByCompanion=Package && Package->GetDeliveryItemComponent()->OwningTask==Task;
     auto* OwnerPawn=GetOwnerPawn();
     const bool bNearby=OwnerPawn && FVector::DistSquared(OwnerPawn->GetActorLocation(),GetOwner()->GetActorLocation())<=FMath::Square(900.f) &&
         DeliveryNpcConversationTrace::HasClearPath(GetOwner(),OwnerPawn);

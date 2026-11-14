@@ -228,7 +228,7 @@ private:
     bool bRideWhileFollowing=false;
     bool RecordMemory(FGuid EventId,FName Kind,const FString& Description,int32 AffinityDelta);
     void RecordRecruitMemory();
-    bool RecordDeliveryMemory(UDeliveryTaskDefinition* Task,APlayerState* Deliverer);
+    bool RecordDeliveryMemory(UDeliveryTaskDefinition* Task,APlayerState* Deliverer,bool bDeliveredByCompanion);
     void RecordOwnerPunch(FGuid PunchId,bool bWasDown);
     void ClearCompanionMemories();
     void UpdateGoHome();
@@ -344,11 +344,12 @@ private:
         EDeliveryCompanionTravelMode RequestedTravelMode=EDeliveryCompanionTravelMode::Unspecified);
     void FinishErrand(EDeliveryNpcActionStatus Status,FName Reason);
     void SetErrandPhase(EDeliveryCompanionErrandPhase Phase);
-    void ReportErrandPause(FName Reason);
+    void ReportErrandPause(FName Reason,bool bKeepMounted=false);
     bool MoveForErrand(const FVector& Goal,float ReachRadius,AActor* InteractionTarget);
     AActor* ResolveErrandLocation(bool bPickup) const;
     UFUNCTION() void OnRep_CarriedPackage();
     UFUNCTION() void OnCarriedPackageDestroyed(AActor* DestroyedActor);
+    void BindTaskCompletion();
     UFUNCTION() void OnTaskCompleted(UDeliveryTaskDefinition* Task,const FDeliveryRewardBreakdown& Reward,APlayerState* Deliverer);
     UPROPERTY(Replicated) TObjectPtr<APlayerState> OwnerPlayerState;
     UPROPERTY(Replicated) EDeliveryCompanionMode Mode=EDeliveryCompanionMode::Unrecruited;
@@ -425,6 +426,7 @@ private:
     FName LastErrandPause;
     // 只取消本次从主人车辆接货的交接，不影响后来开始的装卸
     TWeakObjectPtr<ADeliveryMotorbike> ErrandCargoVehicle;
+    double NextCargoHandoffAt=0.;
     FGuid ErrandCargoHandoffId;
     void CancelPackageHandoff();
     bool bErrandOwnsNavigation=false;
@@ -433,6 +435,8 @@ private:
     FVector LastDestination=FVector::ZeroVector;
     FVector LastOwnerPosition=FVector::ZeroVector;
     FVector WaitLocation=FVector::ZeroVector;
+    // 下车点受阻时，在实际落脚后记录等候位置
+    bool bCaptureWaitLocationOnFoot=false;
     double NextNavigationAt=0;
     bool bOwnsNavigation=false;
     FAIRequestID FollowMoveId=FAIRequestID::InvalidRequest;

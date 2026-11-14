@@ -247,7 +247,64 @@ bool FDeliveryCompanionRulesTest::RunTest(const FString&)
     TravelSpawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     auto* OwnBike=World->SpawnActor<ADeliveryCompanionMotorbike>(FVector(3000,0,88),FRotator::ZeroRotator,TravelSpawn);
     if (!TestNotNull(TEXT("测试使用独立同伴车"),OwnBike)) return false;
+    TestTrue(TEXT("地图专属车登记给二狗"),OwnBike->InitializeForCompanion(Npc));
+    const FVector FarView=OwnBike->GetActorLocation()+FVector(1000000,0,0);
+    const auto BikeRelevantFor=[&](const APlayerController* Player)
+    {
+        return OwnBike->IsNetRelevantFor(Player,Player->GetPawn(),FarView);
+    };
+    const bool bParkedRelevantToOwner=BikeRelevantFor(Owner);
+    const bool bParkedRelevantToStranger=BikeRelevantFor(Stranger);
+    TestFalse(TEXT("远距离停放专属车使用普通网络裁剪"),bParkedRelevantToOwner);
+    // 模拟角色已挂到车座、车的骑乘快照尚未读取时，收到迟到的 Joined 阶段
+    TestTrue(TEXT("测试身体挂在实际专属车座椅"),Npc->AttachToComponent(OwnBike->CompanionSeat,FAttachmentTransformRules::KeepWorldTransform));
+    Npc->OnRep_Encounter();
+    TestTrue(TEXT("迟到的结识快照保持骑乘身体隐藏"),Npc->IsHidden());
+    TestFalse(TEXT("迟到的结识快照保持骑乘身体无碰撞"),Npc->GetActorEnableCollision());
+    TestEqual(TEXT("迟到的结识快照不会让车上身体开始走路"),Npc->GetCharacterMovement()->MovementMode.GetValue(),MOVE_None);
+    Npc->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+    Npc->OnRep_Encounter();
+    TestFalse(TEXT("离开座椅后结识快照允许人物显示"),Npc->IsHidden());
+    TestEqual(TEXT("离开座椅后仍能恢复步行"),Npc->GetCharacterMovement()->MovementMode.GetValue(),MOVE_Walking);
+    OwnBike->bMounted=true;
+    TestTrue(TEXT("二狗骑远后仍向主人同步作为小地图位置来源的专属车"),BikeRelevantFor(Owner));
+    TestEqual(TEXT("二狗骑车不改变旁人的距离裁剪"),BikeRelevantFor(Stranger),bParkedRelevantToStranger);
+    OwnBike->bMounted=false;
+    TestEqual(TEXT("下车后恢复专属车原有的距离裁剪"),BikeRelevantFor(Owner),bParkedRelevantToOwner);
     Companion->ErrandVehicle=OwnBike;
+    const auto MakeRoadBox=[&](const FVector& Location,const FVector& Extent)
+    {
+        auto* Actor=World->SpawnActor<AActor>();
+        auto* Box=NewObject<UBoxComponent>(Actor);
+        Actor->SetRootComponent(Box);
+        Box->SetBoxExtent(Extent);
+        Box->SetCollisionProfileName(TEXT("BlockAll"));
+        Box->RegisterComponent();
+        Actor->SetActorLocation(Location);
+        return Actor;
+    };
+    const FVector FirstSide=OwnBike->GetBoardingLocation();
+    const FVector OppositeSide=OwnBike->GetOppositeBoardingLocation();
+    const FVector Seat=OwnBike->CompanionSeat->GetComponentLocation();
+    const FVector EyeOffset=Npc->GetPawnViewLocation()-Npc->GetActorLocation();
+    TestTrue(TEXT("无遮挡时可从常用侧上车"),OwnBike->CanBoardFromLocation(FirstSide));
+    TestTrue(TEXT("无遮挡时可从另一侧上车"),OwnBike->CanBoardFromLocation(OppositeSide));
+    auto* BoardingWall=MakeRoadBox((FirstSide+EyeOffset+Seat)*.5,FVector(100,5,110));
+    TestFalse(TEXT("人在上车距离内也不能隔墙上车"),OwnBike->CanBoardFromLocation(FirstSide));
+    TestTrue(TEXT("常用侧被挡时另一侧仍可上车"),OwnBike->CanBoardFromLocation(OppositeSide));
+    BoardingWall->Destroy();
+    const FVector RoadPoint(3400,0,55);
+    auto* Road=MakeRoadBox(FVector(3500,0,-25),FVector(600,200,25));
+    auto* Wall=MakeRoadBox(FVector(3500,75,75),FVector(300,12,75));
+    const FQuat AlongRoad=FQuat::Identity;
+    const FQuat AcrossRoad=FRotator(0,90,0).Quaternion();
+    TestTrue(TEXT("车沿道路到达时停车位有车宽及四角支撑"),OwnBike->IsParkSpaceClear(RoadPoint,AlongRoad));
+    TestFalse(TEXT("横着到达同一停车位时车头碰墙"),OwnBike->IsParkSpaceClear(RoadPoint,AcrossRoad));
+    const FVector Ahead=RoadPoint+FVector(250,0,0);
+    TestTrue(TEXT("沿墙行驶的车身扫掠通过"),OwnBike->HasClearDrivingSegment(RoadPoint,Ahead,AlongRoad));
+    TestFalse(TEXT("提前抄过转角的车身扫掠被墙挡住"),OwnBike->HasClearDrivingSegment(RoadPoint,Ahead+FVector(0,120,0),AlongRoad));
+    Wall->Destroy();
+    Road->Destroy();
     auto* OwnerBike=World->SpawnActor<ADeliveryMotorbike>(FVector(4000,0,88),FRotator::ZeroRotator,TravelSpawn);
     if (!TestNotNull(TEXT("测试使用主人车辆"),OwnerBike)) return false;
     for (int32 Step=0;Step<40;++Step)
@@ -264,6 +321,18 @@ bool FDeliveryCompanionRulesTest::RunTest(const FString&)
     Companion->SampleFollowBikeRoute(nullptr);
     TestTrue(TEXT("离开当前车辆清除车位记录"),Companion->FollowRoute.IsEmpty());
     OwnerBike->Destroy();
+    TestTrue(TEXT("主人先明确安排骑专属车跟随"),Companion->ApplyCommand(EDeliveryNpcAction::Follow,
+        Owner->PlayerState,Companion->GetCommandRevision(),nullptr,nullptr,EDeliveryCompanionTravelMode::OwnVehicle));
+    for (const auto Action:{EDeliveryNpcAction::Stay,EDeliveryNpcAction::CancelCompanionTask})
+    {
+        TestTrue(TEXT("主人可以暂停骑车跟随"),Companion->ApplyCommand(Action,Owner->PlayerState,Companion->GetCommandRevision()));
+        TestEqual(TEXT("暂停后原地等候"),Companion->GetMode(),EDeliveryCompanionMode::Stay);
+        TestTrue(TEXT("召回时可以沿用既定方式"),Companion->ApplyCommand(EDeliveryNpcAction::Follow,
+            Owner->PlayerState,Companion->GetCommandRevision()));
+        FDeliveryNpcDecisionRequest Recall;
+        Companion->ExtendTravelDecisionRequest(Recall,Owner->PlayerState);
+        TestEqual(TEXT("未重选方式的召回恢复骑自己的车"),Recall.CompanionTravelMode,FString(TEXT("OwnVehicle")));
+    }
     for (const auto Travel:{EDeliveryCompanionTravelMode::Walk,EDeliveryCompanionTravelMode::OwnVehicle,EDeliveryCompanionTravelMode::Automatic})
     {
         TestTrue(TEXT("主人取得实际出行候选"),Agent->BuildDecisionRequest(FGuid::NewGuid(),TravelChoices));
@@ -271,11 +340,17 @@ bool FDeliveryCompanionRulesTest::RunTest(const FString&)
         TestTrue(TEXT("主人可以提交明确出行选择"),Companion->ApplyCommand(EDeliveryNpcAction::Follow,
             Owner->PlayerState,Companion->GetCommandRevision(),nullptr,nullptr,Travel));
         TestEqual(TEXT("服务器记录主人选择"),Companion->GetTravelMode(),Travel);
+        TestEqual(TEXT("只有明确安排骑专属车跟随才启用跟车"),Companion->bRideWhileFollowing,Travel==EDeliveryCompanionTravelMode::OwnVehicle);
         TestFalse(TEXT("访客不能改主人的出行方式"),Companion->ApplyCommand(EDeliveryNpcAction::Follow,
             Stranger->PlayerState,Companion->GetCommandRevision(),nullptr,nullptr,EDeliveryCompanionTravelMode::Walk));
         TestEqual(TEXT("访客被拒后选择不变"),Companion->GetTravelMode(),Travel);
     }
     Agent->CancelPlan(TEXT("TravelChoiceTest"));
+    Companion->ApplyTravelInstruction(EDeliveryCompanionTravelMode::OwnVehicle);
+    FDeliveryNpcDecisionRequest AfterErrandChoice;
+    Companion->ExtendTravelDecisionRequest(AfterErrandChoice,Owner->PlayerState);
+    TestEqual(TEXT("单独指定骑车跑腿不会开始跟车"),AfterErrandChoice.CompanionTravelMode,FString(TEXT("Walk")));
+    Companion->ApplyTravelInstruction(EDeliveryCompanionTravelMode::Automatic);
     for (const auto Action:{EDeliveryNpcAction::Stay,EDeliveryNpcAction::CancelCompanionTask})
     {
         TestTrue(TEXT("等候和取消仍可接收"),Companion->ApplyCommand(Action,Owner->PlayerState,Companion->GetCommandRevision()));

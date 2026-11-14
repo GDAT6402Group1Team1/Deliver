@@ -2,7 +2,6 @@
 
 #include "Task/World/DeliveryTargetComponent.h"
 #include "Inventory/DeliveryPackageItem.h"
-#include "Carry/DeliveryCarryComponent.h"
 #include "Carry/DeliveryPackageCarrierInterface.h"
 #include "AbilitySystem/DeliverGameplayTags.h"
 
@@ -15,7 +14,6 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerState.h"
 #include "Inventory/DeliveryHandheldItem.h"
-#include "Inventory/DeliveryInventoryComponent.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
@@ -203,11 +201,11 @@ FVector UDeliveryTargetComponent::GetDeliveryPoint(FVector FromLocation) const
     return Owner->GetActorLocation();
 }
 
-// 完成任务后解除快递携带关系，再销毁已交付物品
+// 先确认实物已解除携带，再结算并销毁已交付物品
 bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Player)
 {
     // 货仍归车辆持有时必须先在车尾取出，不能隔着后备箱直接交付
-    if (!GetOwner() || !GetOwner()->HasAuthority() || !ItemActor ||
+    if (!GetOwner() || !GetOwner()->HasAuthority() || !IsValid(Player) || Player->GetWorld()!=GetWorld() || Player->IsInactive() || !ItemActor ||
         Cast<ADeliveryMotorbike>(ItemActor->GetOwner()) || !CanAcceptDelivery(ItemActor, Player))
     {
         return false;
@@ -216,62 +214,43 @@ bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Playe
     UDeliveryTaskManagerComponent *Manager = UDeliveryTaskManagerComponent::Get(this);
     if (!Manager) return false;
     UDeliveryTaskDefinition* DeliveredTask=ExpectedTask;
-    auto* Carrier = Cast<IDeliveryPackageCarrierInterface>(ItemActor->GetOwner());
-    auto* TransferItem = Carrier ? ItemActor->FindComponentByClass<UDeliveryItemComponent>() : nullptr;
-    if (Carrier && (!TransferItem || !TransferItem->BeginTransfer(ItemActor->GetOwner()))) return false;
+    auto* Holder=ItemActor->GetOwner();
+    auto* Carrier=Cast<IDeliveryPackageCarrierInterface>(Holder);
+    auto* TransferItem=ItemActor->IsA<ADeliveryHandheldItem>()?ItemActor->FindComponentByClass<UDeliveryItemComponent>():nullptr;
+    if (TransferItem && !TransferItem->BeginTransfer(GetOwner())) return false;
     const TWeakObjectPtr<UDeliveryItemComponent> ReservedItem = TransferItem;
     ON_SCOPE_EXIT
     {
         if (ReservedItem.IsValid()) ReservedItem->EndTransfer();
     };
-    // 只在这份外卖确实通过交付校验后计入事件，丢失或销毁的旧外卖不遗留奖励
-    if (const auto* Package = Cast<ADeliveryPackageItem>(ItemActor); Package && Package->ContainsCaterpillar())
-        Manager->ReportSpecialEvent(ExpectedTask, TAG_Event_Delivery_Caterpillar);
-    if (!Manager->TryCompleteDelivery(ExpectedTask, Player))
-    {
-        return false;
-    }
-
-    bool bPhysicalReleased=true;
-    if (ADeliveryPackageItem *Package = Cast<ADeliveryPackageItem>(ItemActor))
+    const TWeakObjectPtr<UDeliveryTargetComponent> WeakTarget(this);
+    const TWeakObjectPtr<AActor> WeakItem(ItemActor);
+    auto* Package=Cast<ADeliveryPackageItem>(ItemActor);
+    const FGameplayTag DeliveryEvent=Package && Package->ContainsCaterpillar()?
+        TAG_Event_Delivery_Caterpillar.GetTag():FGameplayTag();
+    bool bReleased=false;
+    const auto ReleasePackage=[&]()
     {
         if (Carrier)
         {
-            bPhysicalReleased=Carrier->ReleaseTaskPackage(Package);
+            if (!Carrier->ReleaseTaskPackage(Package) || !WeakItem.IsValid() || WeakItem->GetOwner()) return false;
+            bReleased=true;
+            WeakItem->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
         }
-        else
-        {
-            ADeliveryCharacter *Holder = Cast<ADeliveryCharacter>(Package->GetOwner());
-            if (const ADeliveryMotorbike *Vehicle = Cast<ADeliveryMotorbike>(Package->GetOwner()))
-            {
-                Holder = Vehicle->GetDriver();
-            }
-            if (Holder)
-                Holder->GetCarryComponent()->ReleasePackage(Package);
-            else if (ADeliveryMotorbike *Vehicle = Cast<ADeliveryMotorbike>(Package->GetOwner()))
-                Vehicle->ReleaseCargo();
-        }
-    }
-    else if (ADeliveryHandheldItem *Handheld = Cast<ADeliveryHandheldItem>(ItemActor))
+        return WeakTarget.IsValid() && IsValid(WeakTarget->GetOwner()) && !WeakTarget->GetOwner()->IsActorBeingDestroyed() &&
+            WeakItem.IsValid() && !WeakItem->IsActorBeingDestroyed() && (!Carrier || !WeakItem->GetOwner());
+    };
+    if (!Manager->CompleteDelivery(DeliveredTask,Player,Carrier?Holder:nullptr,DeliveryEvent,ReleasePackage))
     {
-        // 快递此刻挂在谁名下，就从那边摘干净再销毁
-        // 必须摘：直接 Destroy 的话持有方还留着一个指向已销毁 Actor 的指针，
-        // `HasCargo()` / 背包槽位会继续报"有货"，下一件快递就领不到了
-        if (ADeliveryCharacter *Holder = Cast<ADeliveryCharacter>(Handheld->GetOwner()))
-        {
-            if (UDeliveryInventoryComponent *Inventory = Holder->GetInventoryComponent())
-            {
-                Inventory->ConsumeHeldItem(Handheld);
-            }
-        }
-        else if (ADeliveryMotorbike *Bike = Cast<ADeliveryMotorbike>(Handheld->GetOwner()))
-        {
-            Bike->ReleaseCargo();
-        }
+        // 监听者可在解除携带期间销毁收件点，失败时把仍在场的原包裹留给玩家
+        if (bReleased && WeakItem.IsValid() && !WeakItem->IsActorBeingDestroyed() && !WeakItem->GetOwner())
+            CastChecked<ADeliveryPackageItem>(WeakItem.Get())->DropFromInventory(WeakItem->GetActorLocation(),FVector::ZeroVector);
+        return false;
     }
 
-    if (bPhysicalReleased && IsValid(ItemActor)) OnDeliveryConfirmed.Broadcast(DeliveredTask, ItemActor, Player);
-    if (IsValid(ItemActor)) ItemActor->Destroy();
+    if (WeakTarget.IsValid() && IsValid(WeakTarget->GetOwner()) && !WeakTarget->GetOwner()->IsActorBeingDestroyed() && WeakItem.IsValid())
+        OnDeliveryConfirmed.Broadcast(DeliveredTask, WeakItem.Get(), Player);
+    if (WeakItem.IsValid()) WeakItem->Destroy();
 
     return true;
 }
