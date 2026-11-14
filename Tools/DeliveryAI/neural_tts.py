@@ -47,6 +47,10 @@ def load_voice_config(config_path=None):
             or config.get('schema_version') != 1 or config.get('sample_rate') != 24000
             or config.get('max_pcm_bytes') != 384000 or config.get('max_text_chars') != 120):
         raise NeuralTtsError('neural_tts_invalid_config')
+    talker_mode = os.environ.get('DELIVERY_TTS_TALKER_MODE', config.get('talker_mode', 'official'))
+    if talker_mode not in ('official', 'cuda_graph'):
+        raise NeuralTtsError('neural_tts_invalid_talker_mode')
+    config['talker_mode'] = talker_mode
     voices = config.get('voices')
     if (not isinstance(voices, dict) or set(voices) != {'male', 'female'}
             or voices['male'] != {'provider': 'qwen', 'speaker': 'Uncle_Fu'}):
@@ -92,6 +96,8 @@ def neural_voice_identities(config):
             continue
         identity = {'provider': entry['provider'], 'speaker': entry['speaker'],
                     'model_revision': entry.get('model_revision', config['model_revision'])}
+        if config.get('talker_mode', 'official') != 'official':
+            identity['talker_mode'] = config['talker_mode']
         if entry['provider'] == 'qwen_base':
             identity.update(reference_sha256=entry['reference_sha256'],
                             reference_text_sha256=hashlib.sha256(entry['reference_text'].encode('utf-8')).hexdigest())

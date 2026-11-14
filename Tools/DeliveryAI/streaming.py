@@ -603,8 +603,8 @@ def run_job(job, provider, validate, fallback):
         if provider == 'codex-local':
             # 玩家插话和 NPC 接话都需要分清人物关系，仍允许分别指定模型
             player_request = job.context.get('request_source') == 'player'
-            model = (os.environ.get('DELIVERY_CODEX_PLAYER_MODEL') or 'gpt-6.1-sol') if player_request else (
-                os.environ.get('DELIVERY_CODEX_MODEL') or 'gpt-6.1-sol')
+            model = (os.environ.get('DELIVERY_CODEX_PLAYER_MODEL') or 'gpt-6-luna') if player_request else (
+                os.environ.get('DELIVERY_CODEX_MODEL') or 'gpt-6-luna')
             print(f"latency request={job.key[2]} stage=model_selected "
                   f"source={'player' if player_request else 'ambient'} model={json.dumps(model)}", flush=True)
             if not hasattr(_local, 'model'):

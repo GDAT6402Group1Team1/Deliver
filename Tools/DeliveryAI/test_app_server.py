@@ -57,6 +57,15 @@ class AppServerTests(unittest.TestCase):
         self.on_start = lambda thread, turn: None
         self.on_interrupt = lambda thread, turn: None
         self.on_thread = lambda: None
+        self.thread_tier_override = 'echo'
+        self.config_result = {'config': {'mcp_servers': {'editor.tool': {'url': 'not-retained', 'env': {'KEY': 'not-retained'}}},
+                                        'developer_instructions': 'not-retained'}}
+        self.catalog_pages = {None: {'data': [{'id': model, 'model': model,
+            'supportedReasoningEfforts': [{'reasoningEffort': 'low'}, {'reasoningEffort': 'high'}],
+            'defaultReasoningEffort': 'high', 'serviceTiers': [{'id': 'priority', 'name': 'Fast'}],
+            'defaultServiceTier': 'priority'} for model in ('gpt-6-luna', 'gpt-6.1-sol')], 'nextCursor': None}}
+        patch.dict(os.environ, {'DELIVERY_CODEX_REASONING_EFFORT': 'auto', 'DELIVERY_CODEX_SERVICE_TIER': 'default'}).start()
+        self.print = patch('app_server.print', create=True).start()
         self.kill = patch('app_server.subprocess.run').start()
         self.spawn = patch('app_server.subprocess.Popen', side_effect=AssertionError('unexpected_process')).start()
         self.addCleanup(patch.stopall)
@@ -64,10 +73,16 @@ class AppServerTests(unittest.TestCase):
     def respond(self, message):
         self.calls.append(message)
         method = message['method']
-        if method == 'thread/start':
+        if method == 'config/read':
+            self.service.events.put({'id': message['id'], 'result': self.config_result})
+        elif method == 'model/list':
+            self.service.events.put({'id': message['id'], 'result': self.catalog_pages[message['params'].get('cursor')]})
+        elif method == 'thread/start':
             self.turn_count += 1
             self.on_thread()
-            self.service.events.put({'id': message['id'], 'result': {'thread': {'id': f'thread-{self.turn_count}'}}})
+            tier = message['params']['serviceTier'] if self.thread_tier_override == 'echo' else self.thread_tier_override
+            self.service.events.put({'id': message['id'], 'result': {'thread': {'id': f'thread-{self.turn_count}'},
+                                                                    'serviceTier': tier}})
         elif method == 'turn/start':
             thread, turn = message['params']['threadId'], f'turn-{self.turn_count}'
             self.service.events.put({'id': message['id'], 'result': {'turn': {'id': turn}}})
@@ -88,6 +103,118 @@ class AppServerTests(unittest.TestCase):
             self.assertEqual(self.kill.call_args.args[0], ['taskkill', '/PID', '123456', '/T', '/F'])
         else:
             self.process.kill.assert_called_once()
+
+    def test_session_disables_inherited_mcp_without_copying_configuration_values(self):
+        self.on_start = self.completed_reply
+        for _ in range(2):
+            self.service.stream('玩家发言', '角色规则', threading.Event(), lambda _: None, model='gpt-6.1-sol')
+        starts = [call['params'] for call in self.calls if call['method'] == 'thread/start']
+        for params in starts:
+            self.assertEqual(params['config'], {'mcp_servers': {'editor.tool': {'enabled': False}}})
+            self.assertEqual(params['developerInstructions'], '')
+            self.assertEqual(params['baseInstructions'], '角色规则')
+        self.assertNotIn('not-retained', json.dumps(self.service.session_config))
+        self.assertEqual(sum(call['method'] == 'config/read' for call in self.calls), 1)
+        self.assertEqual(sum(call['method'] == 'model/list' for call in self.calls), 1)
+        self.assertEqual(self.service.last_model_settings,
+                         {'model': 'gpt-6.1-sol', 'effort': 'low', 'disabled_mcp_count': 1,
+                          'requested_service_tier': 'default', 'thread_service_tier': 'default'})
+
+    def test_default_tier_does_not_inherit_paid_global_or_catalog_default(self):
+        self.config_result['config']['service_tier'] = 'priority'
+        self.on_start = self.completed_reply
+        with patch.dict(os.environ):
+            os.environ.pop('DELIVERY_CODEX_SERVICE_TIER')
+            self.service.stream('玩家发言', '角色规则', threading.Event(), lambda _: None, model='gpt-6.1-sol')
+        starts = {call['method']: call['params'] for call in self.calls if call['method'] in ('thread/start', 'turn/start')}
+        self.assertEqual(starts['thread/start']['serviceTier'], 'default')
+        self.assertEqual(starts['turn/start']['serviceTierForTurn'], 'default')
+        self.assertEqual(starts['turn/start']['effort'], 'low')
+        self.assertEqual(self.config_result['config']['service_tier'], 'priority')
+
+    def test_fast_alias_sends_only_advertised_tier_and_records_thread_echo(self):
+        self.on_start = self.completed_reply
+        for option, advertised in (('fast', 'priority'), ('priority', 'fast'), ('fast', 'fast')):
+            with self.subTest(option=option, advertised=advertised):
+                for item in self.catalog_pages[None]['data']:
+                    item['serviceTiers'] = [{'id': advertised, 'name': 'Fast'}]
+                self.service.model_catalog = None
+                with patch.dict(os.environ, {'DELIVERY_CODEX_SERVICE_TIER': option}):
+                    self.service.stream('玩家发言', '角色规则', threading.Event(), lambda _: None, model='gpt-6.1-sol')
+                starts = {call['method']: call['params'] for call in self.calls if call['method'] in ('thread/start', 'turn/start')}
+                self.assertEqual(starts['thread/start']['serviceTier'], advertised)
+                self.assertEqual(starts['turn/start']['serviceTierForTurn'], advertised)
+                self.assertEqual(self.service.last_model_settings['requested_service_tier'], advertised)
+                self.assertEqual(self.service.last_model_settings['thread_service_tier'], advertised)
+                logged = json.loads(self.print.call_args.args[0].removeprefix('model_settings '))
+                self.assertEqual(logged, self.service.last_model_settings)
+
+    def test_fast_requires_this_models_advertised_service_tier(self):
+        self.catalog_pages[None]['data'][1]['serviceTiers'] = []
+        self.catalog_pages[None]['data'][1]['additionalSpeedTiers'] = ['fast']
+        with patch.dict(os.environ, {'DELIVERY_CODEX_SERVICE_TIER': 'fast'}):
+            with self.assertRaisesRegex(ValueError, 'unsupported_model_service_tier'):
+                self.service.stream('玩家发言', '角色规则', threading.Event(), lambda _: None, model='gpt-6.1-sol')
+        self.assertFalse(any(call['method'] in ('thread/start', 'turn/start') for call in self.calls))
+        self.assert_process_closed()
+        self.assertEqual(self.service.model_service_tiers, {})
+
+    def test_unknown_tier_never_starts_thread_or_turn(self):
+        with patch.dict(os.environ, {'DELIVERY_CODEX_SERVICE_TIER': 'ultrafast'}):
+            with self.assertRaisesRegex(ValueError, 'unsupported_model_service_tier'):
+                self.service.stream('玩家发言', '角色规则', threading.Event(), lambda _: None)
+        self.assertFalse(any(call['method'] in ('thread/start', 'turn/start') for call in self.calls))
+        self.assert_process_closed()
+
+    def test_missing_thread_tier_is_not_reported_as_confirmed(self):
+        self.thread_tier_override = None
+        self.on_start = self.completed_reply
+        self.service.stream('玩家发言', '角色规则', threading.Event(), lambda _: None)
+        self.assertEqual(self.service.last_model_settings['requested_service_tier'], 'default')
+        self.assertIsNone(self.service.last_model_settings['thread_service_tier'])
+
+    def test_unexpected_paid_thread_tier_stops_before_model_turn(self):
+        self.thread_tier_override = 'priority'
+        with self.assertRaisesRegex(ValueError, 'unexpected_model_service_tier'):
+            self.service.stream('玩家发言', '角色规则', threading.Event(), lambda _: None)
+        self.assertFalse(any(call['method'] == 'turn/start' for call in self.calls))
+        self.assertEqual(self.service.last_model_settings['requested_service_tier'], 'default')
+        self.assertEqual(self.service.last_model_settings['thread_service_tier'], 'priority')
+        self.assert_process_closed()
+
+    def test_effort_uses_supported_catalog_options_and_reads_all_pages(self):
+        self.catalog_pages[None] = {'data': [], 'nextCursor': 'next-page'}
+        self.catalog_pages['next-page'] = {'data': [{'id': 'catalog-id', 'model': 'test-model',
+            'supportedReasoningEfforts': [{'reasoningEffort': 'high'}, {'reasoningEffort': 'minimal'}],
+            'defaultReasoningEffort': 'high'}], 'nextCursor': None}
+        self.on_start = self.completed_reply
+        self.service.stream('玩家发言', '角色规则', threading.Event(), lambda _: None, model='test-model')
+        turn = next(call for call in self.calls if call['method'] == 'turn/start')
+        self.assertEqual(turn['params']['effort'], 'minimal')
+        self.assertEqual(sum(call['method'] == 'model/list' for call in self.calls), 2)
+
+    def test_explicit_unsupported_effort_never_starts_inference(self):
+        with patch.dict(os.environ, {'DELIVERY_CODEX_REASONING_EFFORT': 'none'}):
+            with self.assertRaisesRegex(ValueError, 'unsupported_model_reasoning_effort'):
+                self.service.stream('玩家发言', '角色规则', threading.Event(), lambda _: None, model='gpt-6.1-sol')
+        self.assertFalse(any(call['method'] in ('thread/start', 'turn/start') for call in self.calls))
+        self.assert_process_closed()
+
+    def test_explicit_supported_effort_is_preserved(self):
+        self.on_start = self.completed_reply
+        with patch.dict(os.environ, {'DELIVERY_CODEX_REASONING_EFFORT': 'high'}):
+            self.service.stream('玩家发言', '角色规则', threading.Event(), lambda _: None, model='gpt-6.1-sol')
+        turn = next(call for call in self.calls if call['method'] == 'turn/start')
+        self.assertEqual(turn['params']['effort'], 'high')
+
+    def test_catalog_cursor_cycle_closes_process_without_inference(self):
+        self.catalog_pages[None] = self.catalog_pages['again'] = {'data': [], 'nextCursor': 'again'}
+        with self.assertRaisesRegex(ValueError, 'invalid_model_catalog_cursor'):
+            self.service.stream('玩家发言', '角色规则', threading.Event(), lambda _: None)
+        self.assertFalse(any(call['method'] == 'turn/start' for call in self.calls))
+        self.assert_process_closed()
+        self.assertIsNone(self.service.session_config)
+        self.assertIsNone(self.service.model_catalog)
 
     def test_confirmed_interrupt_waits_for_own_terminal_and_reuses_process(self):
         cancel = threading.Event()
@@ -152,6 +279,58 @@ class AppServerTests(unittest.TestCase):
             with self.assertRaises(TimeoutError):
                 self.service.stream('玩家发言', '规则', cancel, lambda _: cancel.set())
         self.assert_process_closed()
+
+    def test_completed_turn_racing_interrupt_reuses_process_without_delivering_more_text(self):
+        cancel = threading.Event()
+        replies = []
+        stages = []
+
+        def start(thread, turn):
+            self.service.events.put(notification('item/agentMessage/delta', thread, turn, delta='首句'))
+            # 模型先完成，取消请求随后到达，合法的终态仍是 completed
+            self.service.events.put(notification('item/agentMessage/delta', thread, turn, delta='取消后的旧句'))
+            self.service.events.put(terminal(thread, turn, 'completed'))
+
+        def received(text):
+            replies.append(text)
+            cancel.set()
+
+        self.on_start = start
+        with self.assertRaisesRegex(RuntimeError, '^cancelled$'):
+            self.service.stream('玩家发言', '规则', cancel, received,
+                                measure=lambda stage, _: stages.append(stage))
+        self.assertEqual(replies, ['首句'])
+        self.assertEqual(stages[-3:], ['cancel_requested', 'model_terminal', 'cancel_terminal_completed'])
+        self.assertIs(self.service.process, self.process)
+        self.kill.assert_not_called()
+        self.assertEqual(sum(call['method'] == 'turn/interrupt' for call in self.calls), 1)
+        self.on_start = self.completed_reply
+        self.service.stream('下一句话', '规则', threading.Event(), replies.append)
+        self.assertEqual(replies, ['首句', '新回复'])
+        self.spawn.assert_not_called()
+
+    def test_cancel_during_read_does_not_deliver_the_returned_delta(self):
+        cancel = threading.Event()
+        replies = []
+        self.on_start = lambda thread, turn: self.service.events.put(
+            notification('item/agentMessage/delta', thread, turn, delta='已取消的首句'))
+        self.on_interrupt = lambda thread, turn: self.service.events.put(terminal(thread, turn, 'interrupted'))
+        original_read = self.service._read
+
+        def read(deadline, token=None):
+            message = original_read(deadline, token)
+            # 对应取消发生在阻塞读中、消息刚到达的时序
+            if message.get('method') == 'item/agentMessage/delta':
+                cancel.set()
+            return message
+
+        with patch.object(self.service, '_read', side_effect=read):
+            with self.assertRaisesRegex(RuntimeError, '^cancelled$'):
+                self.service.stream('玩家发言', '规则', cancel, replies.append)
+        self.assertEqual(replies, [])
+        self.assertIs(self.service.process, self.process)
+        self.kill.assert_not_called()
+        self.assertEqual(sum(call['method'] == 'turn/interrupt' for call in self.calls), 1)
 
     def test_old_thread_and_turn_content_is_not_delivered(self):
         def start(thread, turn):

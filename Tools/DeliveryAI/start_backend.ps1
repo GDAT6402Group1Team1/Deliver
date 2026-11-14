@@ -1,8 +1,11 @@
 param(
     [ValidateSet('codex-local', 'fixture', 'llm', 'jev', 'hybrid')]
     [string]$Provider = 'codex-local',
-    [string]$Model = 'gpt-6.1-sol',
-    [string]$PlayerModel = 'gpt-6.1-sol',
+    [string]$Model = 'gpt-6-luna',
+    [string]$PlayerModel = 'gpt-6-luna',
+    # Fast 会增加用量，只有显式指定参数或项目环境变量才启用
+    [ValidateSet('default', 'fast', 'priority')]
+    [string]$ServiceTier = 'default',
     [ValidateSet('qwen', 'windows')]
     [string]$SpeechProvider = 'qwen',
     [ValidateRange(1024, 65535)]
@@ -72,6 +75,9 @@ if ($listeners.Count -gt 0) {
         if ($PSBoundParameters.ContainsKey('StreamAudio')) {
             Write-Host '本次未改变运行中的音频分段设置。请先按项目流程确认并停止本工程后端，再带此开关启动；脚本不会自动重启服务'
         }
+        if ($PSBoundParameters.ContainsKey('ServiceTier')) {
+            Write-Host '本次未改变运行中的模型服务档位；脚本不会自动重启服务'
+        }
         return
     }
     throw "端口 $Port 已被其他进程占用，未启动或停止任何服务"
@@ -84,6 +90,18 @@ if (-not $PSBoundParameters.ContainsKey('PlayerModel') -and $env:DELIVERY_CODEX_
     $PlayerModel = $env:DELIVERY_CODEX_PLAYER_MODEL
 }
 $env:DELIVERY_CODEX_PLAYER_MODEL = $PlayerModel
+if (-not $PSBoundParameters.ContainsKey('ServiceTier') -and $env:DELIVERY_CODEX_SERVICE_TIER) {
+    $ServiceTier = $env:DELIVERY_CODEX_SERVICE_TIER
+}
+# 参数校验忽略大小写，传给 Python 前统一为协议使用的小写值
+$ServiceTier = $ServiceTier.ToLowerInvariant()
+if ($ServiceTier -notin @('default', 'fast', 'priority')) {
+    throw 'DELIVERY_CODEX_SERVICE_TIER 只支持 default、fast 或 priority'
+}
+$env:DELIVERY_CODEX_SERVICE_TIER = $ServiceTier
+if ($ServiceTier -ne 'default') {
+    Write-Host '已显式请求 Fast 模型服务档位，会增加用量；具体倍率依账户计费方式而定，适配器将在模型调用前核对支持项'
+}
 $env:DELIVERY_AI_DIALOGUE_LOG = if ($DialogueLog) { '1' } else { '' }
 $env:DELIVERY_TTS_PROVIDER = $SpeechProvider
 if ($SpeechProvider -eq 'qwen') {
@@ -104,9 +122,12 @@ foreach ($logPath in @($stdoutPath, $stderrPath)) {
     }
 }
 
-# 未传开关时沿用环境变量，显式传入 false 时关闭分段
+# 默认启用分段声音；已有环境设置和显式参数仍可关闭
 if ($PSBoundParameters.ContainsKey('StreamAudio')) {
     $env:DELIVERY_AI_STREAM_AUDIO = if ($StreamAudio) { '1' } else { '0' }
+}
+elseif (-not (Test-Path Env:DELIVERY_AI_STREAM_AUDIO)) {
+    $env:DELIVERY_AI_STREAM_AUDIO = '1'
 }
 
 # 单独后台进程，不设置开机启动，不依赖当前 PowerShell 窗口继续存在

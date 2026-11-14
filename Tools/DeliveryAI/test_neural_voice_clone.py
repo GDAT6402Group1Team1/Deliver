@@ -62,6 +62,10 @@ class FakeBaseModel:
 
 class NeuralVoiceCloneTests(unittest.TestCase):
     def setUp(self):
+        # 本组只检查参考声音和 Code Predictor；Talker Graph 由专用测试覆盖
+        environment = patch.dict('os.environ', {'DELIVERY_TTS_TALKER_MODE': 'official'})
+        environment.start()
+        self.addCleanup(environment.stop)
         folder = PROJECT_ROOT/'Saved/AIResearch/FemaleVoiceIntegration'
         folder.mkdir(parents=True, exist_ok=True)
         temporary = tempfile.TemporaryDirectory(prefix='cpu-test-', dir=folder)

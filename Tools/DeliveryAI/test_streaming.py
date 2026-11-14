@@ -299,6 +299,9 @@ class ModelConnectionTests(unittest.TestCase):
         service=AppServer()
         process=Mock();process.poll.return_value=None;process.stdin=io.StringIO()
         service.process=process;service.folder=SimpleNamespace(name='npc-test-folder');service.events=queue.Queue()
+        # 本例检查已建立连接的复用，首次能力发现单独由 test_app_server 覆盖
+        service.session_config={'mcp_servers':{}}
+        service.model_catalog={name:(('low',),'low') for name in ('configured-player','configured-ambient')}
         for first_id,thread_id,turn_id in ((1,'player-thread','player-turn'),(4,'ambient-thread','ambient-turn')):
             service.events.put({'id':first_id,'result':{'thread':{'id':thread_id}}})
             service.events.put({'id':first_id+1,'result':{'turn':{'id':turn_id}}})
@@ -366,7 +369,7 @@ class ModelSelectionTests(unittest.TestCase):
             with patch('streaming._local',threading.local()),patch('streaming.AppServer',side_effect=Model) as factory,patch('builtins.print') as logs:
                 for settings,cases in (
                     ({'DELIVERY_CODEX_MODEL':'','DELIVERY_CODEX_PLAYER_MODEL':''},
-                     [('player','gpt-6.1-sol'),('ambient','gpt-6.1-sol'),(None,'gpt-6.1-sol')]),
+                     [('player','gpt-6-luna'),('ambient','gpt-6-luna'),(None,'gpt-6-luna')]),
                     ({'DELIVERY_CODEX_MODEL':'custom-ambient','DELIVERY_CODEX_PLAYER_MODEL':'custom-player'},
                      [('player','custom-player'),('ambient','custom-ambient')])):
                     with patch.dict('os.environ',settings):
@@ -383,8 +386,8 @@ class ModelSelectionTests(unittest.TestCase):
                 self.assertEqual(factory.call_count,1)
                 choices=[call.args[0] for call in logs.call_args_list if 'stage=model_selected' in call.args[0]]
                 self.assertEqual(len(choices),5)
-                self.assertIn('source=player model="gpt-6.1-sol"',choices[0])
-                self.assertIn('source=ambient model="gpt-6.1-sol"',choices[1])
+                self.assertIn('source=player model="gpt-6-luna"',choices[0])
+                self.assertIn('source=ambient model="gpt-6-luna"',choices[1])
         finally:close_resources()
 
     def test_external_llm_keeps_its_existing_provider(self):

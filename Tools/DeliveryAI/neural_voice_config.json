@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "talker_mode": "cuda_graph",
   "python_path": "Saved/AIResearch/TtsEvaluation/qwen/.venv/Scripts/python.exe",
   "model_path": "Saved/AIResearch/TtsEvaluation/qwen/model",
   "installation_path": "Saved/AIResearch/TtsEvaluation/qwen/installation.json",

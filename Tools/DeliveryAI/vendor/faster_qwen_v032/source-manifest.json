@@ -36,8 +36,16 @@
       "bytes": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "origin": "Empty local package initializer"
+    },
+    {
+      "path": "talker_graph.py",
+      "source_path": "faster_qwen3_tts/talker_graph.py",
+      "url": "https://raw.githubusercontent.com/andimarafioti/faster-qwen3-tts/a70afc0f81f7f5f8801c3227968f1102f43f211c/faster_qwen3_tts/talker_graph.py",
+      "bytes": 8840,
+      "sha256": "2e402ef29d80b076481ab55dc6d20f1c55cae56604b5c3540c24a13f674b3d73",
+      "git_blob_sha1": "e16da26f0b57afb7b3e6dc3d6a790a278256b384"
     }
   ],
-  "download_bytes": 12095,
-  "scope": "Delivery Qwen worker; fixed source, original MIT license retained; FP32 sampling is applied by a runtime wrapper"
+  "download_bytes": 20935,
+  "scope": "Delivery Qwen worker; fixed PredictorGraph and TalkerGraph sources; original MIT license retained"
 }

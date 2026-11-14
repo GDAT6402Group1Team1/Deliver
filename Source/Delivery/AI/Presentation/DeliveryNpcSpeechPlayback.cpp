@@ -528,7 +528,14 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
         Local.CaptionProgress=GetDisplayedSpeechProgress();
         // 句末通知可能先于剩余音频到达，已知总长时也要检查本机是否真正播完
         if (bGenerating && RecordedWave && !bHasBufferedAudio)
-            Local.bRebuffering=!Local.State.bAudioComplete || GetConsumedVoiceBytes()<Local.TotalBytes;
+        {
+            const bool bNeedsMoreAudio=!Local.State.bAudioComplete || GetConsumedVoiceBytes()<Local.TotalBytes;
+            // 记录游戏帧观察到的缺音，和后台生成时间一起定位句中停顿
+            if (bNeedsMoreAudio && !Local.bRebuffering)
+                UE_LOG(LogTemp,Log,TEXT("NpcLatency turn=%s stage=audio_buffer_empty role=%d received=%d queued=%d complete=%d"),
+                    *Local.State.TurnId.ToString(),int32(GetOwner()->GetLocalRole()),Local.Pcm.Num(),Local.QueuedBytes,int32(Local.State.bAudioComplete));
+            Local.bRebuffering=bNeedsMoreAudio;
+        }
         const float ConfiguredResume=VoiceSet?VoiceSet->StreamingResumeBufferSeconds:.32f;
         const float ResumeSeconds=FMath::IsFinite(ConfiguredResume)?FMath::Clamp(ConfiguredResume,.08f,1.f):.32f;
         const int32 ResumeBytes=int32(Local.State.SampleRate*ResumeSeconds)*2;
@@ -539,6 +546,9 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
         {
             // 短暂缺音后先积累一小段，再沿用同一个声音对象接着播放
             RecordedWave->QueueAudio(Local.Pcm.GetData()+Local.QueuedBytes,PendingBytes);
+            UE_LOG(LogTemp,Log,TEXT("NpcLatency turn=%s stage=audio_buffer_fill role=%d bytes=%d buffered_ms=%d resumed=%d"),
+                *Local.State.TurnId.ToString(),int32(GetOwner()->GetLocalRole()),PendingBytes,
+                int32(RecordedWave->GetAvailableAudioByteCount()*500.0/FMath::Max(1,Local.State.SampleRate)),int32(Local.bRebuffering));
             Local.QueuedBytes=Local.Pcm.Num();
             Local.bRebuffering=false;
         }
