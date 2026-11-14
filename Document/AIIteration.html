@@ -13,11 +13,53 @@
     @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
     @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
     .finding{border-left:3px solid #426f9d;background:#f3f7fc;padding:12px 18px;margin:18px 0}.evidence{color:#536579;font-size:14px}nav a{line-height:1.55}</style></head>
-<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="#speech-continuity-20261114">语音加速与试玩记录</a><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#npc-rivalry-goals-20261114">拱火与完整记忆</a><a href="#next-chat-handoff">二狗交接提示词</a><a href="#npc-natural-perception-20261114">自然口语与感知记录</a><a href="#npc-contact-ui-v4-20261114">命中与 v4 界面</a><a href="#light-dialogue-ui-20261114">v3 界面历史</a><a href="#npc-playability-result-20261114">互殴与道歉让路</a><a href="#npc-playability-trial-20261114">旧按钮失败记录</a><a href="#silent-action-feedback">无台词动作的交谈反馈</a><a href="#model-speech-streaming">真实回复分段与缓冲</a><a href="#reply-waiting-feedback">交谈等待与反馈调整</a><a href="#speech-streaming-comparison">分段对照与停顿表现</a><a href="#sentence-audio-playback">句内语音播放</a><a href="#sentence-audio-integration">分段接口与编码</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
+<body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 研究与迭代</div><nav><a href="#dialogue-music-balance-20261114">对白与背景音乐</a><a href="#decision-latency-next-20261114">决策等待与后续方案</a><a href="#speech-continuity-20261114">语音加速与试玩记录</a><a href="DeliveryAIPlan.html">返回方案文档</a><a href="#npc-rivalry-goals-20261114">拱火与完整记忆</a><a href="#next-chat-handoff">二狗交接提示词</a><a href="#npc-natural-perception-20261114">自然口语与感知记录</a><a href="#npc-contact-ui-v4-20261114">命中与 v4 界面</a><a href="#light-dialogue-ui-20261114">v3 界面历史</a><a href="#npc-playability-result-20261114">互殴与道歉让路</a><a href="#npc-playability-trial-20261114">旧按钮失败记录</a><a href="#silent-action-feedback">无台词动作的交谈反馈</a><a href="#model-speech-streaming">真实回复分段与缓冲</a><a href="#reply-waiting-feedback">交谈等待与反馈调整</a><a href="#speech-streaming-comparison">分段对照与停顿表现</a><a href="#sentence-audio-playback">句内语音播放</a><a href="#sentence-audio-integration">分段接口与编码</a><a href="#b-voice-latency-next">B 音色与首声等待</a><a href="#reply-pipeline-repair">回复丢失与短反应音</a><a href="#npc-fight">有限互殴与受击</a><a href="#npc-body-animation">身体动作过渡</a><a href="#cuihua-b-production">翠花 B 正式声音</a><a href="#iteration-1">交谈延迟：初步测量与改进</a><a href="#iteration-2">人物表情：模型检查与制作方案</a><a href="#cuihua-brow-candidate">翠花眉形：候选与导入</a><a href="#iteration-3">验证记录</a><a href="#npc-background-voice">人物背景与女声</a><a href="#npc-role-training">角色对话研究</a><a href="#pubg-ally-companion">PUBG Ally：算法与跟班</a><a href="#ergou-research">跟班二狗：设计依据</a><a href="#iteration-4">AI 方案选择：按玩法分工</a><a href="#iteration-5">动画与代码设计：选择依据</a><a href="#iteration-6">对话界面：视觉方案与 UMG 实现</a><a href="#iteration-7">交谈、动作与人物声音</a><a href="#iteration-8">中文人物语音：独立对照与试听</a><a href="#iteration-9">性能测试与当前限制</a></nav></aside><main>
 <header><div class="meta">AI / 交谈、语音与表情 / 2026-11-14</div><h1>研究与迭代记录</h1><p>记录每次修改的原因、参考依据和测试结果。先说明问题与结论，再展开实现和验证过程。</p>
 <div class="finding"><strong>最新进展：</strong>大壮与翠花的加速 B 已获试听认可并用于试玩。启用 GPU 计算复用、后台发送和模型启动预热，对话默认使用 Luna low。用户反馈声音已较顺畅，下一步调整对白与背景声比例并继续减少决策等待。<a href="#speech-continuity-20261114">查看修改与实测记录</a>。</div>
 <div class="notice">当前角色命名为大壮、翠花。下方历史记录中的大军、小芳是同两名角色的旧称，原始录音与测量结果保留。有限追打、翠花眉形和 B 音色短反应已加入；轻拳误用倒地片段已修正，本次单人实际受击保持站立。翠花已采用用户认可的 B 加速版；句内音频已接到 UE 接收、编码和播放流程，八项专项通过。句内分段已接入试玩，开播缓冲为 1.28 秒。一次真实模型到 UE 播放器的检查通过，两句完整且没有再次等待音频；随后语音生成中的打断检查也通过。用户已试听并认可分段 B 样本；游戏中的空间音量、画面与真实多人效果仍需验收。倾听和失败反馈已修复并通过六项专项检查。动作是否有趣、声音与多人画面是否合适，仍需实际试玩。</div>
 <div class="actions"><a href="DeliveryAIPlan.html">当前方案</a><a href="#iteration-1">交谈延迟</a><a href="#iteration-2">人物表情</a><a href="#iteration-3">验证记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header>
+<section id="dialogue-music-balance-20261114"><h2>11 月 14 日：调整对白与背景音乐的音量</h2>
+<p>用户认可加速 B 的试玩效果，但觉得人声偏小、背景声太大。先将已认可的版本保存并推送为 <a href="https://github.com/GDAT6402Group1Team1/Deliver/commit/8d33742bacbe56782c5f914d4b792dac68c3a4e1">8d33742</a>，再单独调整背景音乐。二狗尚未完成的源码、地图和资源没有混入这次提交。</p>
+<p>读取正式资产后确认，玩家控制器的 MusicVolume 为 0.45，大壮、翠花和二狗的完整对白音量均为 1.0。这次把 <code>BP_DeliveryManPC → Music → MusicVolume</code> 改为 0.22，约降低 6.2 dB；对白、短反应音、声音方向和距离衰减保留原值。修改仍在蓝图参数中可编辑，没有重做声音或放大音频采样。</p>
+<p>在独立编辑器进程中重新加载资产，确认音乐音量为 0.22，其他已记录参数一致。没有进入游戏或代替用户试听。首次只读脚本把 UE 的布尔字段名写错，未保存任何资产；修正后完成保存和重载。两次后续命令行进程仍因项目已有的 CDO 物理材质错误返回 1；Python 资产检查与保存记录成功，不能把它写成进程无错误退出。</p>
+<p>下一步可以采用 UE 的 Passive Sound Mix：将对白和音乐放入不同 SoundClass，让附近实际播放的对白自动压低音乐，说完再恢复。UE 提供触发音量阈值，可以避免远处几乎听不见的声音影响音乐。当前程序生成的对白还没有指定 SoundClass，这部分需要接入后再试听，尚未实现。<a href="https://dev.epicgames.com/documentation/en-us/unreal-engine/sound-classes-in-unreal-engine">Epic：Sound Classes 与 Passive Sound Mix</a>；实现细节另核对本机 UE 5.8 的 AudioDevice.cpp。</p>
+<p class="evidence">调整工具：<code>Content/Python/tune_dialogue_music.py</code>，默认只读，加 <code>-ApplyDialogueMusicBalance</code> 才保存；原资产备份、修改前后参数及重载结果位于 <code>Saved/AIResearch/DialogueMusicBalance</code>。日志：<code>Saved/Logs/DialogueMusicApply.log</code>、<code>Saved/Logs/DialogueMusicReload.log</code>。</p>
+</section>
+<section id="decision-latency-next-20261114">
+  <p class="meta">Delivery · 2026 年 11 月 14 日 · 试玩版本 <code>8d33742</code></p>
+  <h2>NPC 决策等待分析</h2>
+  <p>最新日志中，玩家在 16:07 向翠花说话后，本地请求没有排队，连接也已经准备好。创建会话和开始生成用了 88 毫秒，之后约 1.89 秒才收到模型的第一段内容；再过 826 毫秒，完整的第一句才准备好。游戏服务器从发出请求到批准动作，共用了约 3.15 秒。</p>
+  <p>所以，当前主要等待发生在模型开始输出之前，以及动作等台词写完的这段时间。日志还不能把前者细分为网络传输、远端排队或模型计算。声音也有独立的等待：这一轮语音多排了 1.28 秒，首块声音在后端收到请求后约 5.22 秒才返回，不能全算成模型决策耗时。</p>
+  <p class="finding">这是最近一轮的具体记录，不代表平均速度或最慢情况。最新五次完成的请求均没有推理输出 token；其中一次命中 7,168 个缓存 token，其余四次没有。现有样本不足以证明缓存带来了稳定提速。</p>
+
+  <h3>已有能力与下一步</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>方法</th><th>本项目如何使用</th><th>限制</th></tr></thead>
+      <tbody>
+        <tr><td><span class="state">已存在</span>玩家优先、常驻连接、分句播放</td><td>继续保留。玩家发言后立即进入倾听，完整句子准备好就交给语音合成。</td><td>本轮模型排队为零，继续增加线程不能直接消除远端开始输出前的等待。</td></tr>
+        <tr><td><span class="state">建议下一轮</span>先返回完整动作决定</td><td>同一次模型生成先给出动作、目标和情绪，服务器检查通过后开始动作；随后返回完整台词。</td><td>这是我们针对现有代码提出的工程方案，并非论文已经测出的结论。需升级协议，不能执行半截 JSON；收益也不能超过实际省下的等待。</td></tr>
+        <tr><td><span class="state">建议下一轮</span>让重复内容更容易复用</td><td>固定人物编号，把规则和人物背景放在前面，新事件与候选动作放在后面；历史过长时整批移除旧记录。</td><td>当前每轮按事件顺序重新分配人物编号。调整后要比较缓存用量与首段输出时间，新建会话并不必然无法使用缓存。</td></tr>
+        <tr><td><span class="state">建议下一轮</span>完善等待期间的动作衔接</td><td>检查已有转头、倾听和小动作是否清晰持续，收到决定后自然衔接追赶、让路或说话。</td><td>改善的是玩家看到的反应，不会让模型计算更快。不能把完整台词切成几个词来制造速度感。</td></tr>
+        <tr><td><span class="state">需要训练与独立部署</span>游戏专用小模型</td><td>保留真实对话、现场与动作结果，纠正重复回答、找错对象、选错动作等问题，再训练小模型。自建服务时评估 SGLang 的缓存和结构化生成。</td><td>现有通用 1.7B 对照仍会重复旧话、选错动作，不能直接替换 Luna。SGLang 也不能直接加速远端 Luna。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>实施顺序</h3>
+  <p>下一轮先把“动作决定完成”单独计时，再对照先动作、后台词的协议；保持人物性格、自然完整的句子和服务器检查。随后验证稳定输入是否缩短首段输出时间。专用小模型先积累纠错样本，再决定是否训练，不把下载模型当成完成接入。</p>
+  <p>本轮只检查日志、代码和资料，没有新增模型实验，也没有改动正式协议。实现动作先返回时，还要明确“稍后有台词”和“本次保持安静”的区别，避免现有空台词检查拒绝动作，或动作结束时过早结束整段交谈。当前二狗任务也在使用这些接口，后续会一起检查兼容性。</p>
+
+  <h3>参考资料</h3>
+  <ol class="sources">
+    <li><a href="https://developers.openai.com/api/docs/guides/latency-optimization">OpenAI：Latency Optimization</a> — 区分首段输出与完整响应，按实际瓶颈优化。</li>
+    <li><a href="https://developers.openai.com/api/docs/guides/prompt-caching">OpenAI：Prompt Caching</a> — 保持输入前缀稳定，并检查实际缓存用量。</li>
+    <li><a href="https://developers.openai.com/api/docs/guides/structured-outputs">OpenAI：Structured Outputs</a> — 结构化结果与流式处理；不能代替游戏规则检查。</li>
+    <li><a href="https://arxiv.org/html/2609.29837v1">PUBG Ally: A Conversational Embodied Agent as an AI Teammate</a> — 第 3.2 节的上下文排列，第 4 节的真实交互数据和教师纠错。</li>
+    <li><a href="https://github.com/sgl-project/sglang">SGLang 官方仓库</a> — 自建模型服务的缓存复用与结构化生成；适用于后续独立评估。</li>
+  <li><a href="https://github.com/mlc-ai/xgrammar">XGrammar 官方仓库</a> — 为自建推理提供高效的结构化生成；能约束格式，无法替代人物理解和动作判断。</li></ol>
+  <p class="meta">本机依据：Saved/Logs/AIResidentBackend.log、Saved/Logs/Delivery.log；玩家请求编号 886b919b-4441-4757-fd6d-54ad31ad62cf。</p>
+</section>
 <section id="speech-continuity-20261114"><h2>11 月 14 日：句中断音与回复等待</h2>
 <div class="finding"><strong>试玩配置已接入：</strong>用户已试听并认可两种加速 B。语音配置采用 <code>talker_mode=cuda_graph</code>，启动时先在后台预热两种声音；玩家交谈和 NPC 接话默认使用 Luna low，服务档位保持 default。模型和参考音频仍为原来的 B。编辑器关闭时的真实 HTTP 检查通过；当前没有完成游戏画面渲染与声音同时运行的验收。</div>
 <p>玩家反馈一句话说几个词就停一下，语气也被打断。日志中有一段约 4.04 秒的声音，合成用了 15.15 秒，游戏从开播到结束用了 10.32 秒。这组数据说明生成和播放没有顺畅衔接，但尚未单独测出每次缺音的时长。同一请求的模型首句约 12.54 秒，排队接近零，因此模型等待和语音生成需要分别处理。</p>
