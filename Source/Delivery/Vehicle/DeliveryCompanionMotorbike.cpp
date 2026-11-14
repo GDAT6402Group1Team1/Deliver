@@ -205,7 +205,8 @@ bool ADeliveryCompanionMotorbike::SetDriveDestination(const FVector& Goal,bool b
     NewPath->EnableRecalculationOnInvalidation(ENavigationOptionFlag::Enable);
     if (!bKeepDrivingWhileReplanning || !bDriving)
     {
-        StopDriving();
+        // 跟随调用者已经设置当前主人车辆，接受新绕线路段时继续用它的车速
+        if (!bKeepDrivingWhileReplanning) StopDriving();
         ProgressLocation=GetActorLocation();
         LastProgressTime=GetWorld()->GetTimeSeconds();
     }
@@ -253,6 +254,12 @@ bool ADeliveryCompanionMotorbike::TrySetDirectFollowDestination(const FVector& G
     bArrived=false;
     DriveFailure=NAME_None;
     return true;
+}
+
+bool ADeliveryCompanionMotorbike::HasActiveDriveRoute() const
+{
+    return bDriving && DriveFailure.IsNone() && (bDrivingDirect ||
+        (DrivePath && DrivePath->IsValid() && !DrivePath->IsPartial()));
 }
 
 void ADeliveryCompanionMotorbike::StopDriving()
@@ -322,7 +329,8 @@ void ADeliveryCompanionMotorbike::UpdateAutonomousDriveInput(float DeltaSeconds,
         const double Gap=FVector::Dist2D(Here,Bike->GetActorLocation())-FollowDistance;
         const float OwnerSpeed=FMath::Abs(Bike->GetCurrentSpeed());
         const float Extra=FMath::Clamp(float(Gap*.7),-OwnerSpeed,FollowCatchUpSpeed);
-        DesiredSpeed=FMath::Max(0.f,OwnerSpeed+Extra);
+        // 此时组件仍要求完成绕行或靠边停车，不能仅因两车直线距离近就停在墙的另一侧
+        DesiredSpeed=FMath::Max(120.f,OwnerSpeed+Extra);
         // 开阔路段按车距控制速度，导航绕行仍在路径末端减速
         if (bDrivingDirect && Gap>150.) Approach=1.f;
     }

@@ -248,6 +248,22 @@ bool FDeliveryCompanionRulesTest::RunTest(const FString&)
     auto* OwnBike=World->SpawnActor<ADeliveryCompanionMotorbike>(FVector(3000,0,88),FRotator::ZeroRotator,TravelSpawn);
     if (!TestNotNull(TEXT("测试使用独立同伴车"),OwnBike)) return false;
     Companion->ErrandVehicle=OwnBike;
+    auto* OwnerBike=World->SpawnActor<ADeliveryMotorbike>(FVector(4000,0,88),FRotator::ZeroRotator,TravelSpawn);
+    if (!TestNotNull(TEXT("测试使用主人车辆"),OwnerBike)) return false;
+    for (int32 Step=0;Step<40;++Step)
+    {
+        OwnerBike->SetActorLocation(FVector(4000+Step*200,0,88));
+        Companion->SampleFollowBikeRoute(OwnerBike);
+    }
+    TestEqual(TEXT("跟车只保留最近的车位"),Companion->FollowRoute.Num(),32);
+    Companion->SampleFollowBikeRoute(OwnerBike);
+    TestEqual(TEXT("停车时不重复添加同一车位"),Companion->FollowRoute.Num(),32);
+    OwnerBike->SetActorLocation(FVector(19000,0,88));
+    Companion->SampleFollowBikeRoute(OwnerBike);
+    TestEqual(TEXT("位置突变清除原路线"),Companion->FollowRoute.Num(),1);
+    Companion->SampleFollowBikeRoute(nullptr);
+    TestTrue(TEXT("离开当前车辆清除车位记录"),Companion->FollowRoute.IsEmpty());
+    OwnerBike->Destroy();
     for (const auto Travel:{EDeliveryCompanionTravelMode::Walk,EDeliveryCompanionTravelMode::OwnVehicle,EDeliveryCompanionTravelMode::Automatic})
     {
         TestTrue(TEXT("主人取得实际出行候选"),Agent->BuildDecisionRequest(FGuid::NewGuid(),TravelChoices));

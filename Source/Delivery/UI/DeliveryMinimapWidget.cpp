@@ -1,4 +1,6 @@
 #include "UI/DeliveryMinimapWidget.h"
+#include "AI/Companion/DeliveryCompanionCharacter.h"
+#include "AI/Companion/DeliveryCompanionComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 
@@ -8,9 +10,11 @@
 #include "Task/Tracking/DeliveryTaskTrackerComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 #include "Rendering/DrawElements.h"
 #include "Rendering/SlateRenderer.h"
 #include "Styling/CoreStyle.h"
@@ -19,6 +23,13 @@
 
 namespace DeliveryMinimapDrawing
 {
+FVector2f ProjectOffset(const FVector& Delta)
+{
+	const double North = FMath::DegreesToRadians(UDeliveryMapSettings::GetMapNorthWorldYaw());
+	const double Cos = FMath::Cos(North), Sin = FMath::Sin(North);
+	return FVector2f(Delta.Y * Cos - Delta.X * Sin, Delta.X * Cos + Delta.Y * Sin);
+}
+
 // 纹理直接映射到圆形三角扇，没有方形背景漏出，也无需额外遮罩材质
 void Disc(FSlateWindowElementList& Elements, int32 Layer, const FGeometry& Geometry, FVector2f Centre,
           float Radius, const FSlateBrush& Brush, FColor Color)
@@ -74,6 +85,45 @@ void DirectionMarker(FSlateWindowElementList& Elements, int32 Layer, const FGeom
 	FSlateDrawElement::MakeCustomVerts(Elements, Layer,
 	                                   FSlateApplication::Get().GetRenderer()->GetResourceHandle(White),
 	                                   Vertices, Indices, nullptr, 0, 0);
+}
+
+void WorldMarker(FSlateWindowElementList& Elements, int32 Layer, const FGeometry& Geometry,
+                 FVector2f Centre, FVector2f OffsetCm, float MapRadius, float MapWorldWidth,
+                 float MarkerScale, FColor Fill, bool bDiamond)
+{
+	const float PixelsPerCm = 2.f * MapRadius / MapWorldWidth;
+	FVector2f Offset(OffsetCm.X * PixelsPerCm, -OffsetCm.Y * PixelsPerCm);
+	const float Dot = (bDiamond ? 7.5f : 5.5f) * MarkerScale;
+	const float MaxLength = FMath::Max(1.f, MapRadius - 15.f * MarkerScale - 2.f);
+	const float Length = Offset.Size();
+	const FColor Edge(2, 12, 30);
+	if (Length > MaxLength)
+	{
+		Offset *= MaxLength / Length;
+		const float Heading = FMath::RadiansToDegrees(FMath::Atan2(Offset.X, -Offset.Y));
+		DirectionMarker(Elements, Layer, Geometry, Centre + Offset, Heading, MarkerScale * .62f, Edge, Edge);
+		DirectionMarker(Elements, Layer + 1, Geometry, Centre + Offset, Heading, MarkerScale * .48f, Fill, Fill);
+		return;
+	}
+	const FVector2f At = Centre + Offset;
+	const FSlateBrush& White = *FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
+	if (bDiamond)
+	{
+		const auto Diamond = [&](int32 DrawLayer, float Extent, FColor Color)
+		{
+			const TArray<FVector2f> Points = {At + FVector2f(0, -Extent), At + FVector2f(Extent, 0),
+				At + FVector2f(0, Extent), At + FVector2f(-Extent, 0), At + FVector2f(0, -Extent)};
+			FSlateDrawElement::MakeLines(Elements, DrawLayer, Geometry.ToPaintGeometry(), Points,
+				ESlateDrawEffect::None, FLinearColor(Color), true, 2.5f * MarkerScale);
+		};
+		Diamond(Layer, Dot + 2.f * MarkerScale, Edge);
+		Diamond(Layer + 1, Dot, Fill);
+	}
+	else
+	{
+		Disc(Elements, Layer, Geometry, At, Dot + 1.8f, White, Edge);
+		Disc(Elements, Layer + 1, Geometry, At, Dot, White, Fill);
+	}
 }
 }
 
@@ -172,6 +222,8 @@ void UDeliveryMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	EnsureCapture();
 	APawn* Pawn = GetOwningPlayerPawn();
+	bHasMapCompanion = false;
+	bHasMapTarget = false;
 	if (!Capture || !Pawn)
 		return;
 
@@ -190,7 +242,6 @@ void UDeliveryMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 	// 换到地图空间再存：图上的"上"是世界 yaw MapNorthWorldYaw，"右"是它 +90
 	// 把世界偏移投影到这两根轴上，Paint 里就只剩"乘个比例尺 + 夹到圆内"，
 	// 不用再碰朝向——朝向这件事只在这里算一次，和相机读的是同一个值
-	bHasMapTarget = false;
 	if (const UDeliveryTaskTrackerComponent* Tracker =
 	        UDeliveryTaskTrackerComponent::FindTracker(GetOwningPlayer()))
 	{
@@ -198,18 +249,11 @@ void UDeliveryMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 		FName LocationId;
 		if (Tracker->GetTrackedTaskDestination(Destination, LocationId))
 		{
-			const float NorthRad = FMath::DegreesToRadians(UDeliveryMapSettings::GetMapNorthWorldYaw());
-			const float NorthCos = FMath::Cos(NorthRad), NorthSin = FMath::Sin(NorthRad);
-			const FVector Delta = Destination - Pawn->GetActorLocation();
-
-			// 图上"上"= (cos N, sin N)，"右"= (−sin N, cos N)：和相机那边
-			// FRotator(-90, N, 0) 推出来的镜头 up/right 是同一组向量
-			TargetMapOffsetCm =
-			    FVector2f(static_cast<float>(Delta.X) * -NorthSin + static_cast<float>(Delta.Y) * NorthCos,
-				          static_cast<float>(Delta.X) * NorthCos + static_cast<float>(Delta.Y) * NorthSin);
+			TargetMapOffsetCm = DeliveryMinimapDrawing::ProjectOffset(Destination - Pawn->GetActorLocation());
 			bHasMapTarget = true;
 		}
 	}
+	UpdateCompanionMarker(InDeltaTime);
 
 	Capture->OrthoWidth = FMath::Max(1000.f, MapWorldWidth);
 	// 每帧重设旋转：改项目设置里的 MapNorthWorldYaw 立刻生效，不用重编也不用重开关卡
@@ -240,6 +284,42 @@ void UDeliveryMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 	{
 		CaptureElapsed = 0.f;
 		Capture->CaptureScene();
+	}
+}
+
+void UDeliveryMinimapWidget::UpdateCompanionMarker(float DeltaTime)
+{
+	const auto* Player = GetOwningPlayer();
+	const auto* PlayerState = Player ? Player->PlayerState.Get() : nullptr;
+	const auto* Pawn = GetOwningPlayerPawn();
+	const auto IsOwnedCompanion = [&](const ADeliveryCompanionCharacter* Npc)
+	{
+		return IsValid(Npc) && !Npc->IsActorBeingDestroyed() && Npc->GetWorld() == GetWorld() &&
+			Npc->Companion->GetOwnerPlayerState() == PlayerState;
+	};
+	if (!IsValid(PlayerState) || PlayerState->IsInactive())
+	{
+		MapCompanion.Reset();
+		return;
+	}
+	if (!IsOwnedCompanion(MapCompanion.Get()))
+	{
+		MapCompanion.Reset();
+		CompanionSearchElapsed += DeltaTime;
+		if (CompanionSearchElapsed < .5f) return;
+		CompanionSearchElapsed = 0.f;
+		for (TActorIterator<ADeliveryCompanionCharacter> It(GetWorld()); It; ++It)
+		{
+			if (!IsOwnedCompanion(*It)) continue;
+			MapCompanion = *It;
+			break;
+		}
+	}
+	if (const auto* Npc = MapCompanion.Get())
+	{
+		// 骑乘显示替身时真实二狗随座椅复制位置，沿用同一个标记
+		CompanionMapOffsetCm = DeliveryMinimapDrawing::ProjectOffset(Npc->GetActorLocation() - Pawn->GetActorLocation());
+		bHasMapCompanion = true;
 	}
 }
 
@@ -277,48 +357,14 @@ int32 UDeliveryMinimapWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 	DirectionMarker(OutDrawElements, Base + 6, AllottedGeometry, Centre, MarkerHeading, MarkerScale,
 	                FColor(239, 58, 44), FColor(183, 32, 26));
 
-	// —— 任务目的地 ——
-	
-	// 用地图直径除以覆盖的世界宽度，将世界距离换算成屏幕距离
-	if (bHasMapTarget && MapWorldWidth > 1.f)
-	{
-		const float PixelsPerCm = (2.f * MapRadius) / MapWorldWidth;
-		// 屏幕 Y 向下，地图空间 Y 向上，所以这里取负
-		FVector2f Offset(TargetMapOffsetCm.X * PixelsPerCm, -TargetMapOffsetCm.Y * PixelsPerCm);
-
-		const float Dot = 5.5f * MarkerScale;
-		// 留出标记自身的半径，否则夹到边缘时有一半露在圆外面
-		const float MaxLength = FMath::Max(1.f, MapRadius - Dot - 2.f);
-		const float Length = Offset.Size();
-		const bool bOutside = Length > MaxLength;
-		if (bOutside && Length > KINDA_SMALL_NUMBER)
-		{
-			Offset *= MaxLength / Length;
-		}
-
-		const FVector2f At = Centre + Offset;
-		// 设置任务标记的描边和填充颜色
-		const FColor Edge(2, 12, 30);
-		const FColor Fill(255, 150, 30);
-
-		if (bOutside)
-		{
-			// 超出地图范围时用三角形指向目标
-			// 箭头以屏幕上方为零度，因此用 atan2(dx, -dy) 计算方向
-			const float Heading = FMath::RadiansToDegrees(FMath::Atan2(Offset.X, -Offset.Y));
-			DirectionMarker(OutDrawElements, Base + 7, AllottedGeometry, At, Heading, MarkerScale * 0.62f,
-			                Edge, Edge);
-			DirectionMarker(OutDrawElements, Base + 8, AllottedGeometry, At, Heading, MarkerScale * 0.48f,
-			                Fill, Fill);
-		}
-		else
-		{
-			Disc(OutDrawElements, Base + 7, AllottedGeometry, At, Dot + 1.8f, White, Edge);
-			Disc(OutDrawElements, Base + 8, AllottedGeometry, At, Dot, White, Fill);
-		}
-	}
-
-	return Base + 8;
+	const float WorldWidth = FMath::Max(1000.f, MapWorldWidth);
+	if (bHasMapTarget)
+		WorldMarker(OutDrawElements, Base + 7, AllottedGeometry, Centre, TargetMapOffsetCm, MapRadius,
+			WorldWidth, MarkerScale, FColor(255, 150, 30), false);
+	if (bHasMapCompanion)
+		WorldMarker(OutDrawElements, Base + 9, AllottedGeometry, Centre, CompanionMapOffsetCm, MapRadius,
+			WorldWidth, MarkerScale, CompanionMarkerColor, true);
+	return Base + 10;
 }
 
 // 释放地图显示资源并恢复需要恢复的场景状态
@@ -339,5 +385,8 @@ void UDeliveryMinimapWidget::NativeDestruct()
 	}
 	LegacyCaptures.Reset();
 	LastPawn.Reset();
+	MapCompanion.Reset();
+	bHasMapCompanion = false;
+	CompanionSearchElapsed = .5f;
 	Super::NativeDestruct();
 }

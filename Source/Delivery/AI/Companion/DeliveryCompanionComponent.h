@@ -50,6 +50,8 @@ struct DELIVERY_API FDeliveryCompanionErrand
     UPROPERTY(BlueprintReadOnly) TObjectPtr<ADeliveryPackageItem> Package;
     // 普通物品的安排目标，不代表实际持有，实际持物仍只有 CarriedPackage 一个槽
     UPROPERTY(BlueprintReadOnly) TWeakObjectPtr<ADeliveryHandheldItem> Item;
+    // 就近取还在本次委托里按步行执行，保留主人的远行设置
+    bool bLocalItemTransfer=false;
     UPROPERTY(BlueprintReadOnly) int32 CommandRevision=0;
     UPROPERTY(BlueprintReadOnly) FName Reason;
 };
@@ -215,10 +217,12 @@ private:
     void StopVehicleTravel(EDeliveryCompanionTravelPurpose Purpose);
     void StopVehicleApproach();
     void StopWalkingForVehicle();
+    void SampleFollowBikeRoute(ADeliveryMotorbike* Bike);
     void ReportVehiclePause(FName Reason);
     void ReleaseErrandVehicle();
     void ApplyTravelInstruction(EDeliveryCompanionTravelMode NewMode);
-    bool CanTakeNearbyPackage() const;
+    bool CanTransferNearbyPackage(EDeliveryNpcAction Action) const;
+    bool CanWalkForNearbyItem(const FDeliveryCompanionItemChoice& Choice) const;
     UPROPERTY(Replicated) EDeliveryCompanionTravelMode TravelMode=EDeliveryCompanionTravelMode::Unspecified;
     // 只有主人接受为跟随指令的骑车安排才能启动跟车，跑腿的出行选择独立
     bool bRideWhileFollowing=false;
@@ -398,6 +402,9 @@ private:
     bool bVehicleOwnsApproach=false;
     bool bVehicleHasDriveGoal=false;
     FVector VehicleParkingGoal=FVector::ZeroVector;
+    // 服务器保留主人刚驶过的车位，供转角和无导航区域继续跟随
+    TWeakObjectPtr<ADeliveryMotorbike> FollowRouteBike;
+    TArray<FVector> FollowRoute;
     double NextVehicleNavigationAt=0;
     // 保留旧反射名，实际为唯一单手持物槽；任务查询仅返回其中的 Package 子类
     // 只有服务器交接接口改写，取消安排不会删除实际携带物

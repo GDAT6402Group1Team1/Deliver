@@ -6,6 +6,7 @@
 
 class USceneCaptureComponent2D;
 class UTextureRenderTarget2D;
+class ADeliveryCompanionCharacter;
 
 /** WBP_Minimap 的原生父类：圆形实时地图、边框和居中方向标记 */
 UCLASS()
@@ -42,6 +43,10 @@ class DELIVERY_API UDeliveryMinimapWidget : public UUserWidget
 	          meta = (ClampMin = "2", ClampMax = "20"))
 	float BorderWidth = 6.f;
 
+	// 同伴标记的填充颜色，使用同一地图比例及边缘方向规则
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Companion")
+	FColor CompanionMarkerColor = FColor(50, 214, 255);
+
   protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
@@ -56,6 +61,7 @@ class DELIVERY_API UDeliveryMinimapWidget : public UUserWidget
 	// 场景采集管理
 	void EnsureCapture();
 	void SuspendLegacyCaptures();
+	void UpdateCompanionMarker(float DeltaTime);
 
 	// 采集组件与纹理
 	UPROPERTY(Transient)
@@ -82,6 +88,10 @@ class DELIVERY_API UDeliveryMinimapWidget : public UUserWidget
 	 */
 	FVector2f TargetMapOffsetCm = FVector2f::ZeroVector;
 	bool bHasMapTarget = false;
+	FVector2f CompanionMapOffsetCm = FVector2f::ZeroVector;
+	TWeakObjectPtr<ADeliveryCompanionCharacter> MapCompanion;
+	float CompanionSearchElapsed = .5f;
+	bool bHasMapCompanion = false;
 	float CaptureElapsed = 1.f;
 	float LegacyScanElapsed = 1.f;
 	TWeakObjectPtr<APawn> LastPawn;

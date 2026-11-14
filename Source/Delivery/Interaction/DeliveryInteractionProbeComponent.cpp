@@ -85,7 +85,9 @@ void UDeliveryInteractionProbeComponent::TickComponent(float DeltaTime, ELevelTi
     FocusedPickup = Pickup;
     FocusedGeneral = General;
     FocusedAction = Action;
-    SetPickupHighlight(Pickup ? Pickup->GetOwner() : nullptr);
+    AActor* PickupActor=Pickup?Pickup->GetOwner():nullptr;
+    // 固定取件点可以挂在整栋建筑上，只显示交互提示，避免给外墙整体染色
+    SetPickupHighlight(UDeliveryPickupPointComponent::FindOn(PickupActor)?nullptr:PickupActor);
 
     // 左键目标比 F 优先：手上有货走到车尾时，该出现的是"左键装货"而不是"按 F 驾驶"
     UDeliveryInteractableComponent *PromptTarget = Action ? Action : (Pickup ? Pickup : General);
@@ -203,7 +205,7 @@ UDeliveryInteractableComponent *UDeliveryInteractionProbeComponent::FindPreferre
 // 保存目标原显示设置，再开启交互高亮
 void UDeliveryInteractionProbeComponent::SetPickupHighlight(AActor *Actor)
 {
-    if (HighlightedActor.Get() == Actor)
+    if (HighlightedActor.Get() == Actor && (Actor || HighlightStates.IsEmpty()))
         return;
     RestorePickupHighlight();
     HighlightedActor = Actor;

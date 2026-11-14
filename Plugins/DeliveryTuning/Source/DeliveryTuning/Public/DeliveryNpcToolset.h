@@ -27,6 +27,8 @@ public:
     UFUNCTION(BlueprintCallable, Category="Delivery|NPC", meta=(AICallable)) static FString GetNpcMorphStats(USkeletalMesh* Mesh, FName MorphName, int32 LODIndex = 0);
     UFUNCTION(meta=(AICallable)) static FString InspectResidentWorlds();
     UFUNCTION(meta=(AICallable)) static bool ConfigureResidentPIE(int32 Players);
+    // 在本地 PIE 视口发送键盘按下和松开，用于验证实际长按与移动输入
+    UFUNCTION(meta=(AICallable)) static bool HoldCompanionPlaytestKey(FName Key,float Seconds);
     // 联调入口只发布实际台词，不伪造模型建议或绕过执行校验
     UFUNCTION(meta=(AICallable)) static FString SpeakInResidentPIE(FString Text);
     // 从指定本地玩家经过正式交谈入口发送文本，服务端仍校验距离和遮挡

@@ -87,10 +87,33 @@ void UDeliveryCompanionComponent::ReleaseErrandVehicle()
     VehicleLegRevision=-1;
     bVehicleLegComplete=false;
     bVehicleHasDriveGoal=false;
+    FollowRouteBike.Reset();
+    FollowRoute.Reset();
     NextVehicleNavigationAt=0;
     StopVehicleApproach();
     if (!WeakThis.IsValid() || CommandRevision!=Revision || VehicleTravelPurpose!=EDeliveryCompanionTravelPurpose::None) return;
     EnsureOnFoot();
+}
+
+void UDeliveryCompanionComponent::SampleFollowBikeRoute(ADeliveryMotorbike* Bike)
+{
+    if (FollowRouteBike.Get()!=Bike)
+    {
+        FollowRoute.Reset();
+        FollowRouteBike=Bike;
+    }
+    if (!IsValid(Bike) || Bike->IsActorBeingDestroyed()) { FollowRoute.Reset(); return; }
+    const FVector Position=Bike->GetActorLocation();
+    if (Position.ContainsNaN()) return;
+    if (!FollowRoute.IsEmpty())
+    {
+        const double Distance=FVector::Dist(Position,FollowRoute.Last());
+        if (Distance<180.) return;
+        // 换车或位置突变后的记录不能和旧轨迹连接
+        if (Distance>2400.) FollowRoute.Reset();
+        else if (FollowRoute.Num()==32) FollowRoute.RemoveAt(0,1,EAllowShrinking::No);
+    }
+    FollowRoute.Add(Position);
 }
 
 void UDeliveryCompanionComponent::ReportVehiclePause(FName Reason)
@@ -139,9 +162,10 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& Goal,float 
     };
     // 未指定出行时先步行跟随，远程跑腿等待安排
     const bool bUnspecified=TravelMode==EDeliveryCompanionTravelMode::Unspecified;
-    const bool bTakeNearby=bForErrand && Errand.Action==EDeliveryNpcAction::TakePackage && CanTakeNearbyPackage();
+    const bool bTransferNearby=bForErrand && CanTransferNearbyPackage(Errand.Action);
+    const bool bLocalItemTransfer=bForErrand && Errand.bLocalItemTransfer;
     if (bUnspecified && Purpose!=EDeliveryCompanionTravelPurpose::Follow &&
-        Purpose!=EDeliveryCompanionTravelPurpose::ReturnToStay && !bTakeNearby)
+        Purpose!=EDeliveryCompanionTravelPurpose::ReturnToStay && !bTransferNearby && !bLocalItemTransfer)
     {
         StopWalkingForVehicle();
         if (!IsCurrent()) return false;
@@ -152,7 +176,7 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& Goal,float 
     const bool bOwnVehicleAvailable=IsValid(ErrandVehicle) && ErrandVehicle->GetWorld()==GetWorld() &&
         (!ErrandVehicle->GetReservedCompanion() || ErrandVehicle->GetReservedCompanion()==Npc);
     const bool bWalk=bFollowing?!bKeepMountedFollow:
-        TravelMode==EDeliveryCompanionTravelMode::Walk || bUnspecified ||
+        bLocalItemTransfer || TravelMode==EDeliveryCompanionTravelMode::Walk || bUnspecified ||
         (TravelMode==EDeliveryCompanionTravelMode::Automatic && !bOwnVehicleAvailable);
     if (bWalk)
     {
@@ -183,6 +207,7 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& Goal,float 
         if (!IsCurrent()) return false;
         if (!bOnFoot) { SetSuspension(TEXT("CompanionDismountBlocked")); return false; }
     }
+    if (bKeepMountedFollow) SampleFollowBikeRoute(Cast<ADeliveryMotorbike>(GetOwnerPawn()));
     const float Distance=FVector::Dist2D(Npc->GetActorLocation(),Goal);
     // 跟车使用近距离停车间距，独立出行采用车辆的默认起骑距离
     const float PreferredDistance=(bKeepMountedFollow || TravelMode==EDeliveryCompanionTravelMode::OwnVehicle)?
@@ -376,29 +401,59 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& Goal,float 
         }
         const FVector Behind=Goal+FollowOffset*PreferredDistance;
         const FVector ToBehind=(Behind-Here).GetSafeNormal2D();
-        // 远处的停车点还没法确认时，可以先跑完一段已扫掠的近路，下次再继续跟车
+        const auto TryFollowSegment=[&](const FVector& Destination)
+        {
+            if (!ErrandVehicle->TrySetDirectFollowDestination(Destination)) return false;
+            if (!IsCurrent() || !IsUsingErrandVehicle()) return true;
+            VehicleLegGoal=Goal;
+            // 中途目标到达时还要继续接近主人，仍以实际停车目标判断跟到
+            VehicleParkingGoal=Behind;
+            bVehicleHasDriveGoal=true;
+            SetSuspension(NAME_None);
+            return true;
+        };
         const double Remaining=FVector::Dist2D(Here,Behind);
+        const double MinimumStep=ErrandVehicle->GetParkingAcceptanceRadius()+60.;
+        if (Remaining>MinimumStep && TryFollowSegment(Here+ToBehind*FMath::Min(Remaining,2200.))) return false;
+
+        // 直追车尾受阻时优先沿车已经通过的位置，避开弯道内侧的墙
+        double Traveled=0.;
+        FVector Later=Goal;
+        int32 Attempts=0;
+        for (int32 Index=FollowRoute.Num()-1;Index>=0;--Index)
+        {
+            const FVector Point=FollowRoute[Index];
+            Traveled+=FVector::Dist2D(Later,Point);
+            Later=Point;
+            if (Traveled<PreferredDistance || FVector::Dist2D(Here,Point)<=MinimumStep ||
+                FVector::Dist2D(Here,Point)>2200.) continue;
+            // 已偏离路线时允许向后接入一个点，但不能向旧车位一路倒追
+            if (Traveled>FVector::Dist2D(Here,Goal)+2200. || Attempts==6) break;
+            ++Attempts;
+            if (TryFollowSegment(Point))
+            {
+                if (IsCurrent() && IsUsingErrandVehicle()) FollowRoute.RemoveAt(0,Index,EAllowShrinking::No);
+                return false;
+            }
+        }
+
+        // 远处的停车点还没法确认时，可以先跑完一段已扫掠的近路，下次再继续跟车
         double PreviousStep=0.;
         for (const double Limit:{2200.,1100.,550.})
         {
             const double Step=FMath::Min(Remaining,Limit);
-            if (Step<=ErrandVehicle->GetParkingAcceptanceRadius()+60.) break;
+            if (Step<=MinimumStep) break;
+            const bool bAlreadyTriedStraight=PreviousStep==0.;
             if (Step==PreviousStep) continue;
             PreviousStep=Step;
             // 先试直行，再试仍能缩短车距的两侧路线
             const bool bRoomToBypass=Step>=550. && Remaining>=PreferredDistance;
             for (const float Angle:{0.f,25.f,-25.f,50.f,-50.f})
             {
+                if (Angle==0.f && bAlreadyTriedStraight) continue;
                 if (Angle!=0.f && !bRoomToBypass) break;
                 const FVector Nearby=Here+ToBehind.RotateAngleAxis(Angle,FVector::UpVector)*Step;
-                if (!ErrandVehicle->TrySetDirectFollowDestination(Nearby)) continue;
-                if (!IsCurrent() || !IsUsingErrandVehicle()) return false;
-                VehicleLegGoal=Goal;
-                // 中途目标到达时还要继续接近主人，仍以实际停车目标判断跟到
-                VehicleParkingGoal=Behind;
-                bVehicleHasDriveGoal=true;
-                SetSuspension(NAME_None);
-                return false;
+                if (TryFollowSegment(Nearby)) return false;
             }
         }
         // 主人可能站在台阶或路缘，找他周围可安全停车的位置
@@ -438,6 +493,9 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& Goal,float 
             SetSuspension(NAME_None);
             return false;
         }
+        // 主人移动后的新目标暂时不可达时，先走完仍有效的当前路段
+        if (ErrandVehicle->GetWorld()==GetWorld() && bVehicleHasDriveGoal && ErrandVehicle->HasActiveDriveRoute())
+            return false;
         const FName Failure=!bFoundGround?FName(TEXT("CompanionVehicleFollowGroundMissing")):
             !bFoundParking?FName(TEXT("CompanionVehicleFollowParkingBlocked")):
             FName(TEXT("CompanionVehicleNoRoute"));

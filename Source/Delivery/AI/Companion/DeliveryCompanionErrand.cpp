@@ -480,13 +480,19 @@ void UDeliveryCompanionComponent::UpdateErrand()
             {
                 const FVector Outside=Home->ReturnAnchor->GetComponentLocation();
                 constexpr float OutsideReach=140.f;
-                // 门外已站稳就继续等，保留暂停原因与原包裹，不重复停车或重发站位
-                if (LastErrandPause==TEXT("WaitingAtGrandpaDoor") && !IsUsingErrandVehicle() &&
-                    FVector::Dist2D(Npc->GetNavAgentLocation(),Outside)<=OutsideReach+45.f &&
-                    FMath::Abs(Npc->GetNavAgentLocation().Z-Outside.Z)<=60.f)
+                const FVector Feet=Npc->GetNavAgentLocation();
+                const FVector AnchorAtBodyHeight=Outside+(Npc->GetActorLocation()-Feet);
+                // 车停稳且二狗已站在同一高度的门外，保留包裹并等待门破
+                if (!IsUsingErrandVehicle() && FVector::Dist2D(Feet,Outside)<=OutsideReach &&
+                    FMath::Abs(Feet.Z-Outside.Z)<=60.f &&
+                    HasClearErrandApproach(Npc,Npc->GetActorLocation(),AnchorAtBodyHeight,nullptr))
                 {
-                    SetSuspension(TEXT("WaitingAtGrandpaDoor"));
-                    LastErrandUpdateAt=0;
+                    if (LastErrandPause!=TEXT("WaitingAtGrandpaDoor")) ReportErrandPause(TEXT("WaitingAtGrandpaDoor"));
+                    if (IsCurrent())
+                    {
+                        SetSuspension(TEXT("WaitingAtGrandpaDoor"));
+                        LastErrandUpdateAt=0;
+                    }
                     return;
                 }
                 const bool bReady=UpdateVehicleTravel(Outside,OutsideReach,EDeliveryCompanionTravelPurpose::Errand);
@@ -515,11 +521,11 @@ void UDeliveryCompanionComponent::UpdateErrand()
     const bool bInReach=(bNeedsOwner?FVector::Dist(Npc->GetActorLocation(),Goal)<=220:
         Pickup?Interaction->CanInteract(Npc):Delivery->CanAcceptDelivery(Errand.Package,OwnerPlayerState)) &&
         HasClearErrandApproach(Npc,Npc->GetActorLocation(),Goal,InteractionTarget);
-    const bool bAtDestination=bInReach || MoveForErrand(Goal,ReachRadius,InteractionTarget);
+    if (!bInReach) MoveForErrand(Goal,ReachRadius,InteractionTarget);
     if (!IsCurrent()) return;
     // 路线重试也算本次执行时间；BT中断和等主人恢复时则重置采样起点
     LastErrandUpdateAt=Now;
-    if (!bAtDestination) { ErrandInteractionSeconds=0; return; }
+    if (!bInReach) { ErrandInteractionSeconds=0; return; }
     StopErrandMovement();
     if (!IsCurrent()) return;
     LastErrandUpdateAt=Now;

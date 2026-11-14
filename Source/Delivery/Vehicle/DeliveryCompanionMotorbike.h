@@ -22,6 +22,7 @@ public:
     bool SetDriveDestination(const FVector& Goal,bool bKeepDrivingWhileReplanning=false);
     // 主人骑车时，在短距离畅通路段直接跟车
     bool TrySetDirectFollowDestination(const FVector& Goal);
+    bool HasActiveDriveRoute() const;
     void SetFollowBike(ADeliveryMotorbike* Bike,float DesiredDistance);
     void ReportFollowBlocked();
     bool CanSoundFollowHorn() const;

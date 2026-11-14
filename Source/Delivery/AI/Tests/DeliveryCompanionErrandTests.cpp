@@ -55,6 +55,7 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
     Task->TaskId = TEXT("CompanionErrand_Test");
     Task->PickupLocationId = TEXT("CompanionErrand_Pickup");
     Task->DeliveryLocationId = TEXT("CompanionErrand_Delivery");
+    Task->ReceiverNpcId = TEXT("CompanionErrand_Receiver");
     Task->BaseReward = 125;
     Task->TimeLimitSeconds = 120;
     // 反射只设置相当于关卡蓝图的任务配置，运行进度由接听和取件接口推进
@@ -111,6 +112,7 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
     {
         FDeliveryNpcDecisionRequest Request;
         Companion->ExtendDecisionRequest(Request, OwnerState);
+        Companion->ExtendTravelDecisionRequest(Request, OwnerState);
         return Request;
     };
     const auto Apply = [&](EDeliveryNpcAction Action, APlayerState* Requester, const FDeliveryNpcDecisionRequest& Request)
@@ -175,6 +177,8 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
     CheckNotDelivered();
 
     const auto BeforeReturn = Snapshot();
+    TestTrue(TEXT("近处归还提供无需另选出行的候选"), BeforeReturn.Candidates.ContainsByPredicate([](const auto& Candidate)
+    { return Candidate.Action==EDeliveryNpcAction::ReturnPackage && Candidate.TravelMode==EDeliveryCompanionTravelMode::Unspecified; }));
     if (!TestTrue(TEXT("当前快照开始交还"), Apply(EDeliveryNpcAction::ReturnPackage, OwnerState, BeforeReturn))) return false;
     Companion->UpdateErrand();
     TestEqual(TEXT("Return 把同一个实物交还主人"), Owner->GetCarriedTaskPackage(), Package);
@@ -232,8 +236,11 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
         return Actor;
     };
     auto* PickupActor = MakeLocation(Task->PickupLocationId, FVector(1000, 0, 88));
-    auto* DeliveryActor = MakeLocation(Task->DeliveryLocationId, FVector(2000, 0, 88));
+    auto* AddressActor = MakeLocation(Task->DeliveryLocationId, FVector(2000, 0, 88));
+    auto* DeliveryActor = MakeLocation(Task->ReceiverNpcId, FVector(2300, 0, 88));
     if (!TestNotNull(TEXT("登记真实取件地点"), PickupActor) || !TestNotNull(TEXT("登记真实收件地点"), DeliveryActor)) return false;
+    if (!TestNotNull(TEXT("登记单独的门外地址"), AddressActor)) return false;
+    TestFalse(TEXT("只有门外地址时没有合法的送件候选"), Companion->CanArrangeErrand(EDeliveryNpcAction::DeliverPackage, OwnerState));
     auto* Pickup = NewObject<UDeliveryPickupPointComponent>(PickupActor);
     PickupActor->AddInstanceComponent(Pickup);
     Pickup->RegisterComponent();
@@ -260,7 +267,7 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
         Agent->BeginListening(Owner, Speech.EventId);
         if (!Agent->ObserveEvent(Speech) || !Agent->BuildDecisionRequest(FGuid::NewGuid(), Request)) return false;
         const auto* Candidate = Request.Candidates.FindByPredicate([](const auto& Item)
-        { return Item.Action == EDeliveryNpcAction::DeliverPackage && !Item.TargetId.IsValid(); });
+        { return Item.Action == EDeliveryNpcAction::DeliverPackage && !Item.TargetId.IsValid() && Item.TravelMode == EDeliveryCompanionTravelMode::Walk; });
         if (!Candidate) return false;
         // 只替代模型传输，不伪造服务器候选、任务状态或提议采纳结果
         Agent->ActiveRequest = Request;
@@ -372,10 +379,25 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
     TestFalse(TEXT("接过小绿仍没有自动投放外卖"),Package->ContainsCaterpillar());
     CheckNotDelivered();
 
-    // 用真实结算作为钱包订阅的正对照；此处不验证收件点交互、路径或画面
+    // 用同一委托转移、交付及结算；测试直接布置站位，路径和画面由试玩检查
     const int32 DeliveryReward = Tasks->PreviewReward(Task).FinalReward;
     TestTrue(TEXT("正对照奖励配置非零"), DeliveryReward > 0);
-    TestTrue(TEXT("只有任务系统确认交付才完成订单"), Tasks->TryCompleteDelivery(Task, OwnerState));
+    const auto BeforeDeliver = Snapshot();
+    if (!TestTrue(TEXT("指定步行后开始帮送同一件实物"), Companion->ApplyCommand(EDeliveryNpcAction::DeliverPackage,
+        OwnerState, BeforeDeliver.CompanionCommandRevision, BeforeDeliver.CompanionTask.Get(),
+        BeforeDeliver.CompanionPackage.Get(), EDeliveryCompanionTravelMode::Walk))) return false;
+    Companion->UpdateErrand();
+    TestEqual(TEXT("帮送先从主人接到同一个包裹"), Npc->GetCarriedTaskPackage(), Package);
+    CheckNotDelivered();
+    Npc->SetActorLocation(FVector(1980, 0, 88), false, nullptr, ETeleportType::TeleportPhysics);
+    Companion->UpdateErrand();
+    TestTrue(TEXT("二狗到门外地址仍保留委托"), Companion->HasActiveErrand());
+    CheckNotDelivered();
+    Npc->SetActorLocation(FVector(2240, 0, 88), false, nullptr, ETeleportType::TeleportPhysics);
+    Companion->UpdateErrand();
+    TestEqual(TEXT("真实收件人收下包裹后二狗才报告送达"), Companion->GetErrand().Reason, FName(TEXT("Delivered")));
+    TestFalse(TEXT("实际交付后原物品已销毁"), IsValid(Package));
+    TestEqual(TEXT("只有真实收件才完成订单"), Tasks->GetTaskStatus(Task), EDeliveryTaskStatus::Completed);
     TestEqual(TEXT("真实完成后主人钱包才入账"), OwnerWallet->GetBalance(), OriginalBalance + DeliveryReward);
     TestEqual(TEXT("真实完成仍不奖励旁观玩家"), StrangerWallet->GetBalance(), StrangerBalance);
     TestFalse(TEXT("重复完成不能再次结算"), Tasks->TryCompleteDelivery(Task, OwnerState));

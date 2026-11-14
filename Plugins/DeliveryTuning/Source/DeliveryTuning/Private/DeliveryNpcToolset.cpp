@@ -32,6 +32,9 @@
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Conversation/DeliveryConversationComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/LocalPlayer.h"
+#include "GameFramework/InputDeviceLibrary.h"
 #include "InputKeyEventArgs.h"
 #include "TimerManager.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
@@ -999,6 +1002,30 @@ bool UDeliveryNpcToolset::ConfigureResidentPIE(int32 Players)
     if (GEditor->PlayWorld || Players<1 || Players>3) return false;
     auto* Settings=GetMutableDefault<ULevelEditorPlaySettings>();
     Settings->SetPlayNumberOfClients(Players); Settings->SetPlayNetMode(PIE_ListenServer); Settings->SetRunUnderOneProcess(true); return true;
+}
+
+bool UDeliveryNpcToolset::HoldCompanionPlaytestKey(FName KeyName,float Seconds)
+{
+    static const TSet<FName> Keys={TEXT("E"),TEXT("W"),TEXT("A"),TEXT("S"),TEXT("D")};
+    if (!GEditor || !GEditor->PlayWorld || !Keys.Contains(KeyName) || !FMath::IsFinite(Seconds) || Seconds<.15f || Seconds>15.f)
+        return false;
+    auto* World=GEditor->PlayWorld.Get();
+    auto* PC=World->GetFirstPlayerController();
+    auto* ViewportClient=World->GetGameViewport();
+    const auto* Player=PC?PC->GetLocalPlayer():nullptr;
+    if (!Player || !PC->GetPawn() || !ViewportClient || !ViewportClient->Viewport) return false;
+    const FInputDeviceId Device=UInputDeviceLibrary::GetPrimaryInputDeviceForUser(Player->GetPlatformUserId());
+    const FKey Key(KeyName);
+    if (!Device.IsValid() || PC->IsInputKeyDown(Key)) return false;
+    // 走实际视口与 Enhanced Input，计时使用当前游戏世界，退出 PIE 时一起清理
+    ViewportClient->InputKey(FInputKeyEventArgs::CreateSimulated(Key,IE_Pressed,1.f,-1,Device,false,ViewportClient->Viewport));
+    FTimerHandle Release;
+    World->GetTimerManager().SetTimer(Release,FTimerDelegate::CreateWeakLambda(ViewportClient,[ViewportClient,Key,Device]()
+    {
+        if (ViewportClient->Viewport)
+            ViewportClient->InputKey(FInputKeyEventArgs::CreateSimulated(Key,IE_Released,0.f,-1,Device,false,ViewportClient->Viewport));
+    }),Seconds,false);
+    return true;
 }
 
 FString UDeliveryNpcToolset::SpeakInResidentPIE(FString Text)

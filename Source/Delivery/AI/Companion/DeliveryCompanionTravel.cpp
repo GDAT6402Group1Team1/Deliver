@@ -1,5 +1,6 @@
 #include "AI/Companion/DeliveryCompanionComponent.h"
 #include "AI/Companion/DeliveryCompanionCharacter.h"
+#include "Character/DeliveryCharacter.h"
 #include "Vehicle/DeliveryCompanionMotorbike.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
 #include "Carry/DeliveryPackageCarrierInterface.h"
@@ -22,16 +23,18 @@ void UDeliveryCompanionComponent::ApplyTravelInstruction(EDeliveryCompanionTrave
         TravelMode=NewMode;
 }
 
-bool UDeliveryCompanionComponent::CanTakeNearbyPackage() const
+bool UDeliveryCompanionComponent::CanTransferNearbyPackage(EDeliveryNpcAction Action) const
 {
+    const bool bReturning=Action==EDeliveryNpcAction::ReturnPackage;
+    if (!bReturning && Action!=EDeliveryNpcAction::TakePackage) return false;
     const auto* Npc=GetCompanion();
-    const auto* CarrierPawn=GetOwnerPackageCarrier();
+    const APawn* CarrierPawn=bReturning?Cast<ADeliveryCharacter>(GetOwnerPawn()):GetOwnerPackageCarrier();
     const auto* Carrier=Cast<IDeliveryPackageCarrierInterface>(CarrierPawn);
-    const auto* Package=Carrier?Carrier->GetCarriedTaskPackage():nullptr;
+    const auto* Package=bReturning?GetCarriedTaskPackage():Carrier?Carrier->GetCarriedTaskPackage():nullptr;
     if (!Npc || !CanCommand(OwnerPlayerState) || !IsValid(CarrierPawn) || !IsValid(Package) ||
         CarrierPawn->GetWorld()!=GetWorld() || Carrier->GetTaskPlayerState()!=OwnerPlayerState) return false;
     const FVector Goal=Carrier->GetTaskPackageTransferPoint();
-    if (Goal.ContainsNaN() || FVector::DistSquared(Npc->GetActorLocation(),Goal)>FMath::Square(240.f)) return false;
+    if (Goal.ContainsNaN() || FVector::DistSquared(Npc->GetActorLocation(),Goal)>FMath::Square(220.f)) return false;
     FCollisionQueryParams Query(SCENE_QUERY_STAT(CompanionNearbyPackage),false,Npc);
     Query.AddIgnoredActor(CarrierPawn);
     Query.AddIgnoredActor(Package);
@@ -44,8 +47,11 @@ bool UDeliveryCompanionComponent::CanTakeNearbyPackage() const
 void UDeliveryCompanionComponent::ExtendTravelDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const
 {
     Request.RequestedCapabilityVersion=8;
-    const auto CurrentMode=Mode==EDeliveryCompanionMode::Follow && !HasActiveErrand()?
-        (bRideWhileFollowing?EDeliveryCompanionTravelMode::OwnVehicle:EDeliveryCompanionTravelMode::Walk):TravelMode;
+    auto CurrentMode=TravelMode;
+    if (HasActiveErrand() && Errand.bLocalItemTransfer)
+        CurrentMode=EDeliveryCompanionTravelMode::Walk;
+    else if (Mode==EDeliveryCompanionMode::Follow && !HasActiveErrand())
+        CurrentMode=bRideWhileFollowing?EDeliveryCompanionTravelMode::OwnVehicle:EDeliveryCompanionTravelMode::Walk;
     Request.CompanionTravelMode=StaticEnum<EDeliveryCompanionTravelMode>()->GetNameStringByValue(int64(CurrentMode));
     Request.bCompanionOwnVehicleAvailable=IsValid(ErrandVehicle) && ErrandVehicle->GetWorld()==GetWorld() &&
         (!ErrandVehicle->GetReservedCompanion() || ErrandVehicle->GetReservedCompanion()==GetOwner());
@@ -56,9 +62,10 @@ void UDeliveryCompanionComponent::ExtendTravelDecisionRequest(FDeliveryNpcDecisi
     for (const auto& Candidate:Original)
     {
         if (!AllowsTravelChoice(Candidate.Action)) { Request.Candidates.Add(Candidate); continue; }
-        // 初次跟随默认步行，单纯接过手边货物也不替主人决定远行方式
+        // 手边的货物与普通道具可以当场取还
         if (TravelMode!=EDeliveryCompanionTravelMode::Unspecified || Candidate.Action==EDeliveryNpcAction::Follow ||
-            (Candidate.Action==EDeliveryNpcAction::TakePackage && CanTakeNearbyPackage()))
+            CanTransferNearbyPackage(Candidate.Action) ||
+            (Candidate.ItemChoice.IsValid() && CanWalkForNearbyItem(*Candidate.ItemChoice)))
             Request.Candidates.Add(Candidate);
         for (const auto Choice:{EDeliveryCompanionTravelMode::Walk,EDeliveryCompanionTravelMode::OwnVehicle,EDeliveryCompanionTravelMode::Automatic})
         {

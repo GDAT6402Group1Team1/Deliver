@@ -28,10 +28,30 @@ namespace
     }
 }
 
+bool UDeliveryCompanionComponent::CanWalkForNearbyItem(const FDeliveryCompanionItemChoice& Choice) const
+{
+    auto* Npc=GetCompanion();
+    auto* Item=Choice.Item.Get();
+    auto* Receiver=Cast<ADeliveryCharacter>(GetOwnerPawn());
+    if (!IsValid(Npc) || !IsValid(Item) || !IsValid(Receiver) || Receiver->IsActorBeingDestroyed()) return false;
+    constexpr double LocalItemDistance=240.;
+    const FVector Origin=Npc->GetActorLocation();
+    const FVector ReceiverPosition=Receiver->GetActorLocation();
+    if (FVector::DistSquared(Origin,ReceiverPosition)>FMath::Square(LocalItemDistance) ||
+        !ClearItemApproach(Npc,Receiver,Item,ReceiverPosition)) return false;
+    if (Choice.bReturnItem) return true;
+    FVector ItemPosition;
+    return CanSeeWorldItem(Item,ItemPosition) &&
+        FVector::DistSquared(Origin,ItemPosition)<=FMath::Square(LocalItemDistance);
+}
+
 bool UDeliveryCompanionComponent::ApplyItemChoice(const FDeliveryCompanionItemChoice& Choice,APlayerState* Requester,int32 ExpectedRevision,
     EDeliveryCompanionTravelMode RequestedTravelMode)
 {
     if (!CanApplyItemChoice(Choice,Requester,ExpectedRevision)) return false;
+    const bool bWalkLocally=RequestedTravelMode==EDeliveryCompanionTravelMode::Unspecified && CanWalkForNearbyItem(Choice);
+    if (RequestedTravelMode==EDeliveryCompanionTravelMode::Unspecified && TravelMode==EDeliveryCompanionTravelMode::Unspecified && !bWalkLocally)
+        return false;
     const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
     const TWeakObjectPtr<ADeliveryHandheldItem> Target=Choice.Item;
     const bool bHadErrand=HasActiveErrand();
@@ -46,12 +66,14 @@ bool UDeliveryCompanionComponent::ApplyItemChoice(const FDeliveryCompanionItemCh
     if (!StillCurrent()) return false;
     CancelAssist(TEXT("OwnerChangedArrangement"));
     if (!StillCurrent() || !CanArrangeItem(Choice.bReturnItem?EDeliveryNpcAction::ReturnItem:EDeliveryNpcAction::FetchItem,Target.Get(),Requester)) return false;
+    if (bWalkLocally && !CanWalkForNearbyItem(Choice)) return false;
     ++CommandRevision;
     ApplyTravelInstruction(RequestedTravelMode);
     Errand={}; Errand.Action=Choice.bReturnItem?EDeliveryNpcAction::ReturnItem:EDeliveryNpcAction::FetchItem;
     Errand.Status=EDeliveryNpcActionStatus::Running;
     Errand.Phase=Choice.bReturnItem?EDeliveryCompanionErrandPhase::ReturnToOwner:EDeliveryCompanionErrandPhase::GoToPickup;
     Errand.Item=Target; Errand.CommandRevision=CommandRevision;
+    Errand.bLocalItemTransfer=bWalkLocally;
     ItemLastSeenLocation=Choice.ObservedLocation; ItemLastSeenAt=Choice.ObservedAt;
     ErrandActiveSeconds=0; ErrandTimeLimitSeconds=GetTuning().ErrandTimeoutSeconds;
     bErrandTravelBudgetAdded=false; bErrandVehicleApproachBudgetAdded=false;

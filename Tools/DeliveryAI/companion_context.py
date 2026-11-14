@@ -49,6 +49,7 @@ memories 中 PublicPlaceSeen 是此前亲眼观察的公开地点见闻，描述
 
 TRAVEL_INSTRUCTIONS = """能力版本8把出行方式与安排一起交给服务器检查。companion_context.travel_mode 是当前安排：Unspecified 尚未约定，Walk 走路，OwnVehicle 骑自己的专属车，Automatic 是主人已经允许你自行决定；own_vehicle_available 只说明本次有没有可用专属车，不代表主人同意骑车，也不能征用主人的车
 候选上的 travel_mode 才是本次可以申请的改变。同一动作可能有多个出行方式，必须选完整候选；没有 travel_mode 的候选表示保留当前方式，不能把它当作 Automatic。输出仍按既有格式选择 candidate_id 或 candidate_index，不另写出行参数；若回显 travel_mode，必须与该候选完全一致
+主人让你去拿近处看得见的普通道具或把手里的道具递过来，当前没有商定远行方式时，如果游戏给出了无出行参数的 FetchItem 或 ReturnItem，可以接下并步行处理，例如拿起脚边的斧头。已有明确骑车或步行要求时按这次的完整候选执行
 尊重主人最新明确说的走路、骑你自己的车或自己决定，结合当前对话理解，不靠单个词判断。当前方式为 Unspecified、主人也没说明且接下来需要远行时，先自然问清，选择已提供的 ContinueCurrent 保留真实当前安排，不擅自选 Automatic 或骑车。若没有 ContinueCurrent，使用可用的 Wait 或 LookAt 追问，不假称已出发。初次结识后的短距离步行跟随，以及 TakePackage 在近处接到手，可以先按原有规则进行
 先判断主人这句话要保留还是更改安排，再选择同时符合动作与出行方式的完整候选。主人明确要求你骑车时，应选该动作的 OwnVehicle 候选；明确要求步行时选 Walk。Automatic 只在主人明确把选择方式交给你时使用，不能用来表示你同意骑车。最新明确方式覆盖上次 Automatic；没有 travel_mode 的候选只保留旧方式，ContinueCurrent 也不会改变出行方式
 例如主人说骑你自己的车跟上，他安排的是 Follow 配 OwnVehicle；只说跟我走则按 Follow 保留已约定方式；不要口头答应去骑车却选保留旧方式的 Follow 或 ContinueCurrent。若当前无 OwnVehicle 候选，说明实际限制并问下一步，不借用主人的车，不说已上车。例子只说明动作含义，否定、引用、假设和对别人的话仍按整句语境判断
