@@ -44,10 +44,15 @@ class DELIVERY_API ADeliveryCompanionCharacter : public ADeliveryNpcCharacter, p
     friend class FDeliveryPackageTransferTest;
 public:
     ADeliveryCompanionCharacter();
+    // 用本机播放调整原音色，1 为原调
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|同伴|语音",meta=(ClampMin="0.95",ClampMax="1.08"))
+    float DialoguePitch=1.045f;
     UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="Delivery|同伴") TObjectPtr<UDeliveryCompanionComponent> Companion;
     UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="Delivery|同伴") TObjectPtr<UDeliveryInteractableComponent> HelpInteractable;
     // 挂点由角色蓝图调整，物品继续使用原包裹模型与复制
     UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="Delivery|同伴") TObjectPtr<USceneComponent> PackageAnchor;
+    // 普通道具挂实际手骨，锚点始终零位移和 1 倍世界缩放，物品蓝图保存握持偏移
+    UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="Delivery|同伴") TObjectPtr<USceneComponent> HandheldAnchor;
     virtual ADeliveryHandheldItem* GetCarriedHandheldItem() const override;
     virtual APlayerState* GetHandheldOwnerPlayerState() const override;
     virtual bool CanHandleHandheldItem() const override;
@@ -90,6 +95,7 @@ public:
     virtual bool CanExecuteGameplayRule(EDeliveryNpcAction Action,AActor* Target,int32 RuleRevision) const override;
     virtual void ExtendDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const override;
     virtual bool ExecuteAction(const FDeliveryNpcPublicState& State) override;
+    virtual void StopAction(FGuid ActionId) override;
     // 蓝图配置老板、编织袋等初遇表现，服务器时间供迟到客户端接上进度
     UFUNCTION(BlueprintImplementableEvent,Category="Delivery|初遇") void OnEncounterStarted();
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out) const override;
@@ -106,6 +112,8 @@ private:
     void OnCombatDownChanged(FGuid DownEpisode);
     void OnCombatRecoveryFinished(FGuid DownEpisode,APawn* Helper);
     void UpdateHelpInteraction();
+    // 这个短动作只拥有对白与注视，结束时不能清掉同伴导航
+    FGuid PassiveActionId;
     FGuid LastMeleePunchId;
     bool bWasDownBeforeMelee=false;
     UFUNCTION() void OnRep_Encounter();

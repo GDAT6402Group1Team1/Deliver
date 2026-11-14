@@ -2,6 +2,7 @@
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
+#include "Combat/DeliveryCollisionChannels.h"
 #include "AIController.h"
 #include "Carry/DeliveryPackageCarrierInterface.h"
 #include "Carry/DeliveryHandheldCarrierInterface.h"
@@ -87,7 +88,64 @@ bool ADeliveryCompanionMotorbike::CanCompanionRide() const
     const auto* Npc=GetReservedCompanion();
     return Npc && !Npc->IsActorBeingDestroyed() && Npc->GetWorld()==GetWorld() &&
         Cast<AAIController>(Npc->GetController()) && Npc->Combat && !Npc->IsKnockedDown() &&
-        !Npc->Combat->IsReactingToHit() && Npc->Agent && !Npc->Agent->IsListening() && !Npc->Agent->HasActiveAction();
+        !Npc->Combat->IsReactingToHit() && Npc->Agent && !Npc->Agent->ShouldPauseForConversation() &&
+        (!Npc->Agent->HasActiveAction() || Npc->Agent->CanContinueCompanionMovement());
+}
+
+void ADeliveryCompanionMotorbike::ReceiveHorn(float Multiplier)
+{
+    ReceiveHornFrom(Multiplier,nullptr,nullptr);
+}
+
+void ADeliveryCompanionMotorbike::ReceiveHornFrom(float Multiplier,AActor* Vehicle,AActor* SourceDriver)
+{
+    if (HasAuthority() && IsMounted() && Vehicle!=this)
+        if (auto* Npc=GetReservedCompanion()) Npc->ReceiveHornFrom(Multiplier,Vehicle,SourceDriver);
+}
+
+AActor* ADeliveryCompanionMotorbike::GetAutonomousHornDriver() const
+{
+    return IsMounted() && FollowHornEndsAt>GetWorld()->GetTimeSeconds()?GetReservedCompanion():nullptr;
+}
+
+void ADeliveryCompanionMotorbike::ReportFollowBlocked()
+{
+    if (!HasAuthority() || !IsMounted()) return;
+    auto* Npc=GetReservedCompanion();
+    if (!IsValid(Npc)) return;
+    const double Now=GetWorld()->GetTimeSeconds();
+    LastFollowBlock=Now;
+    if (Now<NextBlockObservation || Npc->Agent->IsDecisionPending()) return;
+    NextBlockObservation=Now+10.;
+    Npc->ObserveFact(TEXT("CompanionFollowBlocked"),nullptr,TEXT("跟随路段暂时过不去，正在找能绕开的路线"),EDeliveryNpcEvidenceSource::ActionResult);
+}
+
+bool ADeliveryCompanionMotorbike::CanSoundFollowHorn() const
+{
+    if (!HasAuthority() || !IsMounted() || !CollisionBox || bDismountPending || !CanCompanionRide()) return false;
+    const double Now=GetWorld()->GetTimeSeconds();
+    if (Now-LastFollowBlock>3. || Now<NextFollowHorn) return false;
+    const FVector Here=GetActorLocation();
+    FHitResult Hit;
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(CompanionHornBlocker),false,this);
+    Query.AddIgnoredActor(ReservedCompanion);
+    const FCollisionShape Shape=FCollisionShape::MakeSphere(38.f);
+    if (!GetWorld()->SweepSingleByChannel(Hit,Here,Here+GetActorForwardVector()*350.,FQuat::Identity,
+        CollisionBox->GetCollisionObjectType(),Shape,Query,
+        FCollisionResponseParams(CollisionBox->GetCollisionResponseToChannels()))) return false;
+    const auto* Component=Hit.GetComponent();
+    return IsValid(Component) && (Component->GetCollisionObjectType()==DeliveryCollision::Pedestrian ||
+        Component->GetCollisionObjectType()==ECC_Vehicle);
+}
+
+bool ADeliveryCompanionMotorbike::TrySoundFollowHorn()
+{
+    if (!CanSoundFollowHorn()) return false;
+    const double Now=GetWorld()->GetTimeSeconds();
+    NextFollowHorn=Now+8.;
+    FollowHornEndsAt=Now+.3;
+    SetHornActive(true);
+    return true;
 }
 
 FVector ADeliveryCompanionMotorbike::GetBoardingLocation() const
@@ -129,33 +187,93 @@ bool ADeliveryCompanionMotorbike::TryMount(ADeliveryNpcCharacter* Companion)
     return true;
 }
 
-bool ADeliveryCompanionMotorbike::BuildPath(const FVector& Goal)
+bool ADeliveryCompanionMotorbike::SetDriveDestination(const FVector& Goal,bool bKeepDrivingWhileReplanning)
 {
-    DrivePath=UNavigationSystemV1::FindPathToLocationSynchronously(GetWorld(),GetActorLocation(),Goal,ReservedCompanion);
-    if (!DrivePath || !DrivePath->IsValid() || DrivePath->IsPartial() || DrivePath->PathPoints.Num()<2)
-    { DrivePath=nullptr; return false; }
-    DrivePath->EnableRecalculationOnInvalidation(ENavigationOptionFlag::Enable);
+    if (!HasAuthority()) return false;
+    const auto Reject=[&](FName Reason)
+    {
+        if (!bKeepDrivingWhileReplanning) FailDrive(Reason);
+        return false;
+    };
+    if (!IsMounted() || bDismountPending || !CanCompanionRide()) return Reject(TEXT("CompanionUnavailable"));
+    if (Goal.ContainsNaN() || !CanParkAt(Goal)) return Reject(TEXT("ParkingBlocked"));
+
+    // 路线确认后再替换当前路线，移动主人重新定点时保留现有车速和卡住计时
+    auto* NewPath=UNavigationSystemV1::FindPathToLocationSynchronously(GetWorld(),GetActorLocation(),Goal,ReservedCompanion);
+    if (!NewPath || !NewPath->IsValid() || NewPath->IsPartial() || NewPath->PathPoints.Num()<2)
+        return Reject(TEXT("PathUnavailable"));
+    NewPath->EnableRecalculationOnInvalidation(ENavigationOptionFlag::Enable);
+    if (!bKeepDrivingWhileReplanning || !bDriving)
+    {
+        StopDriving();
+        ProgressLocation=GetActorLocation();
+        LastProgressTime=GetWorld()->GetTimeSeconds();
+    }
+    DrivePath=NewPath;
+    bDrivingDirect=false;
     PathPointIndex=1;
+    DriveGoal=Goal;
+    bDriving=true;
+    bArrived=false;
+    DriveFailure=NAME_None;
     return true;
 }
 
-bool ADeliveryCompanionMotorbike::SetDriveDestination(const FVector& Goal)
+bool ADeliveryCompanionMotorbike::TrySetDirectFollowDestination(const FVector& Goal)
 {
-    if (!HasAuthority()) return false;
-    StopDriving(); bArrived=false; DriveFailure=NAME_None;
-    if (!IsMounted() || bDismountPending || !CanCompanionRide()) { FailDrive(TEXT("CompanionUnavailable")); return false; }
-    if (Goal.ContainsNaN() || !CanParkAt(Goal)) { FailDrive(TEXT("ParkingBlocked")); return false; }
-    if (!BuildPath(Goal)) { FailDrive(TEXT("PathUnavailable")); return false; }
-    DriveGoal=Goal; bDriving=true;
-    ProgressLocation=GetActorLocation(); LastProgressTime=GetWorld()->GetTimeSeconds();
+    if (!HasAuthority() || !IsMounted() || bDismountPending || !CanCompanionRide() || Goal.ContainsNaN()) return false;
+    const FVector Here=GetActorLocation();
+    const double Distance=FVector::Dist2D(Here,Goal);
+    if (Distance<20 || Distance>2400 || FMath::Abs(Goal.Z-Here.Z)>180) return false;
+    const int32 Samples=FMath::CeilToInt(Distance/150.);
+    FVector Previous=Here;
+    const FQuat Heading=(Goal-Here).GetSafeNormal2D().Rotation().Quaternion();
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(CompanionDirectFollow),false,this);
+    Query.AddIgnoredActor(ReservedCompanion);
+    if (!CollisionBox) return false;
+    const FCollisionShape Shape=FCollisionShape::MakeBox(CollisionBox->GetScaledBoxExtent());
+    for (int32 Index=1;Index<=Samples;++Index)
+    {
+        FVector Center;
+        if (!IsParkSpaceClear(FMath::Lerp(Here,Goal,double(Index)/Samples),&Center) ||
+            FMath::Abs(Center.Z-Previous.Z)>65 ||
+            GetWorld()->SweepTestByChannel(Previous,Center,Heading,CollisionBox->GetCollisionObjectType(),
+                Shape,Query,FCollisionResponseParams(CollisionBox->GetCollisionResponseToChannels()))) return false;
+        Previous=Center;
+    }
+    if (!bDriving)
+    {
+        ProgressLocation=Here;
+        LastProgressTime=GetWorld()->GetTimeSeconds();
+    }
+    DrivePath=nullptr;
+    DriveGoal=Previous;
+    bDrivingDirect=true;
+    bDriving=true;
+    bArrived=false;
+    DriveFailure=NAME_None;
     return true;
 }
 
 void ADeliveryCompanionMotorbike::StopDriving()
 {
     if (!HasAuthority()) return;
-    bDriving=false; DrivePath=nullptr; PathPointIndex=1;
+    FollowBike.Reset();
+    bDriving=false; bDrivingDirect=false; DrivePath=nullptr; PathPointIndex=1;
     StopAutonomousMotion();
+}
+
+void ADeliveryCompanionMotorbike::SetFollowBike(ADeliveryMotorbike* Bike,float DesiredDistance)
+{
+    if (!HasAuthority() || Bike==this || (Bike && Bike->GetWorld()!=GetWorld())) return;
+    FollowBike=Bike;
+    FollowDistance=DesiredDistance;
+}
+
+float ADeliveryCompanionMotorbike::GetForwardSpeedLimit() const
+{
+    const auto* Bike=FollowBike.Get();
+    return Bike?FMath::Max(MaxSpeed,FMath::Abs(Bike->GetCurrentSpeed())+FollowCatchUpSpeed):MaxSpeed;
 }
 
 void ADeliveryCompanionMotorbike::FailDrive(FName Reason)
@@ -168,11 +286,11 @@ void ADeliveryCompanionMotorbike::UpdateAutonomousDriveInput(float DeltaSeconds,
     OutThrottle=OutSteer=0;
     if (!HasAuthority() || !bDriving) return;
     if (!CanCompanionRide()) { FailDrive(TEXT("CompanionInterrupted")); return; }
-    if (!DrivePath || !DrivePath->IsValid() || DrivePath->IsPartial())
+    if (!bDrivingDirect && (!DrivePath || !DrivePath->IsValid() || DrivePath->IsPartial()))
     { FailDrive(TEXT("PathInvalidated")); return; }
     const FVector Here=GetActorLocation();
     const float Remaining=FVector::Dist2D(Here,DriveGoal);
-    if (Remaining<=FMath::Max(20.f,ParkingRadius))
+    if (Remaining<=GetParkingAcceptanceRadius())
     {
         if (!CanParkAt(Here)) { FailDrive(TEXT("ParkingBlocked")); return; }
         StopDriving(); bArrived=true; DriveFailure=NAME_None;
@@ -183,17 +301,32 @@ void ADeliveryCompanionMotorbike::UpdateAutonomousDriveInput(float DeltaSeconds,
     { ProgressLocation=Here; LastProgressTime=Now; }
     else if (Now-LastProgressTime>FMath::Max(1.f,BlockedTimeout))
     { FailDrive(TEXT("VehicleBlocked")); return; }
-    const auto& Points=DrivePath->PathPoints;
-    if (!Points.IsValidIndex(PathPointIndex)) { FailDrive(TEXT("PathInvalidated")); return; }
-    while (PathPointIndex<Points.Num()-1 && FVector::Dist2D(Here,Points[PathPointIndex])<FMath::Max(50.f,LookAheadDistance))
-        ++PathPointIndex;
-    const FVector Toward=(Points[PathPointIndex]-Here).GetSafeNormal2D();
+    FVector Aim=DriveGoal;
+    if (!bDrivingDirect)
+    {
+        const auto& Points=DrivePath->PathPoints;
+        if (!Points.IsValidIndex(PathPointIndex)) { FailDrive(TEXT("PathInvalidated")); return; }
+        while (PathPointIndex<Points.Num()-1 && FVector::Dist2D(Here,Points[PathPointIndex])<FMath::Max(50.f,LookAheadDistance))
+            ++PathPointIndex;
+        Aim=Points[PathPointIndex];
+    }
+    const FVector Toward=(Aim-Here).GetSafeNormal2D();
     const float Angle=FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw,Toward.Rotation().Yaw);
     OutSteer=FMath::Clamp(Angle/45.f,-1.f,1.f);
     // 近停车点和急弯前降低油门，位移始终由原车的碰撞移动完成
     const float Corner=FMath::GetMappedRangeValueClamped(FVector2D(20,100),FVector2D(1,.25f),FMath::Abs(Angle));
-    const float Approach=FMath::Clamp(Remaining/500.f,.15f,1.f);
-    OutThrottle=FMath::Clamp(TravelSpeed/FMath::Max(MaxSpeed,1.f),.05f,1.f)*Corner*Approach;
+    float Approach=FMath::Clamp(Remaining/500.f,.15f,1.f);
+    float DesiredSpeed=TravelSpeed;
+    if (const auto* Bike=FollowBike.Get())
+    {
+        const double Gap=FVector::Dist2D(Here,Bike->GetActorLocation())-FollowDistance;
+        const float OwnerSpeed=FMath::Abs(Bike->GetCurrentSpeed());
+        const float Extra=FMath::Clamp(float(Gap*.7),-OwnerSpeed,FollowCatchUpSpeed);
+        DesiredSpeed=FMath::Max(0.f,OwnerSpeed+Extra);
+        // 开阔路段按车距控制速度，导航绕行仍在路径末端减速
+        if (bDrivingDirect && Gap>150.) Approach=1.f;
+    }
+    OutThrottle=FMath::Clamp(DesiredSpeed/FMath::Max(GetForwardSpeedLimit(),1.f),0.f,1.f)*Corner*Approach;
 }
 
 bool ADeliveryCompanionMotorbike::IsParkSpaceClear(const FVector& Goal,FVector* OutVehicleCenter) const
@@ -268,6 +401,8 @@ bool ADeliveryCompanionMotorbike::FindDismountLocation(FVector& OutLocation) con
 bool ADeliveryCompanionMotorbike::TryDismount()
 {
     if (!HasAuthority()) return false;
+    FollowHornEndsAt=0.;
+    SetHornActive(false);
     StopDriving();
     if (!bMounted) { bDismountPending=false; return true; }
     bDismountPending=true;

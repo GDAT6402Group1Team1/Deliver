@@ -164,7 +164,8 @@ private:
     uint64 LocalVoiceSequence=0;
     FDeliveryConversationTurnHandle LocalVoiceHandle;
     TWeakObjectPtr<ADeliveryNpcCharacter> LocalVoiceTarget;
-    TWeakObjectPtr<class APawn> LocalVoicePawn;
+    FDeliverySpeechPlayerContext LocalVoiceContext;
+    double LocalVoiceContextPendingSince=-1;
     FString FinalVoiceText;
     bool bVoiceTextReady=false;
     bool bVoiceSubmissionSent=false;
@@ -190,6 +191,7 @@ private:
     void PruneVoiceTurns();
     static constexpr int32 MaxVoiceTurns=8;
     friend class FDeliveryConversationVoiceTargetTest;
+    friend class FDeliveryConversationVehicleVoiceTest;
     friend class FDeliveryNpcVoiceLinkTest;
     friend class FDeliveryAiInspectorLifecycleTest;
 };

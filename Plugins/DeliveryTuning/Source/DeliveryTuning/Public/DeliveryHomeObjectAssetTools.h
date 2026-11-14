@@ -12,6 +12,9 @@ class DELIVERYTUNING_API UDeliveryHomeObjectAssetTools : public UBlueprintFuncti
 {
     GENERATED_BODY()
 public:
+    // 仅等待编辑器的资源加载与编译，返回 true 表示两者都已结束，不推进世界或保存资源
+    UFUNCTION(BlueprintCallable,Category="Delivery|Editor|Home")
+    static bool FinishPendingEditorAssets();
     // 读真实组件、材质、坐标和用途，不创建占用、不调用 BeginPlay
     UFUNCTION(BlueprintCallable,Category="Delivery|Editor|Home")
     static FString InspectFurniture(AActor* Actor);

@@ -76,12 +76,31 @@ void UDeliveryConversationTurnSubsystem::PruneInvalidLeases()
     TArray<FExpired> Expired;
     for (auto It = Leases.CreateIterator(); It; ++It)
     {
-        const auto& Lease = It.Value();
+        auto& Lease = It.Value();
         auto* Owner = Lease.Owner.Get();
         auto* Npc = Lease.Npc.Get();
         EDeliveryConversationLeaseEnd Reason = EDeliveryConversationLeaseEnd::TimedOut;
         bool bExpired = Now >= Lease.Deadline;
-        if (!IsValidOwner(Owner) || Owner->GetPawn() != Lease.PawnAtBegin.Get())
+        bool bOwnerMatches = false;
+        if (Lease.bVoice)
+        {
+            const auto State = Lease.VoiceContext.Check(Owner);
+            if (Lease.VoiceContextPendingSince >= 0 &&
+                Now-Lease.VoiceContextPendingSince >= FDeliverySpeechPlayerContext::TransitionGraceSeconds)
+                bOwnerMatches = false;
+            else if (State == EDeliverySpeechPlayerContextState::Pending)
+            {
+                if (Lease.VoiceContextPendingSince < 0) Lease.VoiceContextPendingSince = Now;
+                bOwnerMatches = Now-Lease.VoiceContextPendingSince < FDeliverySpeechPlayerContext::TransitionGraceSeconds;
+            }
+            else
+            {
+                Lease.VoiceContextPendingSince = -1;
+                bOwnerMatches = State == EDeliverySpeechPlayerContextState::Valid;
+            }
+        }
+        else bOwnerMatches = IsValidOwner(Owner) && Owner->GetPawn() == Lease.PawnAtBegin.Get();
+        if (!bOwnerMatches)
         {
             bExpired = true;
             Reason = EDeliveryConversationLeaseEnd::OwnerChanged;
@@ -111,18 +130,25 @@ EDeliveryConversationTurnResult UDeliveryConversationTurnSubsystem::TryBegin(APl
     ADeliveryNpcCharacter* Npc, FGuid Token, uint64 InputSequence, FDeliveryConversationTurnHandle& OutHandle,
     TArray<FDeliveryConversationTurnLease>& OutReplaced)
 {
-    return BeginInternal(Owner, Npc, Token, InputSequence, false, OutHandle, OutReplaced);
+    return BeginInternal(Owner, Npc, Token, InputSequence, false, false, OutHandle, OutReplaced);
 }
 
 EDeliveryConversationTurnResult UDeliveryConversationTurnSubsystem::TryBeginText(APlayerController* Owner,
     ADeliveryNpcCharacter* Npc, FGuid Token, uint64 InputSequence, FDeliveryConversationTurnHandle& OutHandle,
     TArray<FDeliveryConversationTurnLease>& OutReplaced)
 {
-    return BeginInternal(Owner, Npc, Token, InputSequence, true, OutHandle, OutReplaced);
+    return BeginInternal(Owner, Npc, Token, InputSequence, true, false, OutHandle, OutReplaced);
+}
+
+EDeliveryConversationTurnResult UDeliveryConversationTurnSubsystem::TryBeginVoice(APlayerController* Owner,
+    ADeliveryNpcCharacter* Npc, FGuid Token, uint64 InputSequence, FDeliveryConversationTurnHandle& OutHandle,
+    TArray<FDeliveryConversationTurnLease>& OutReplaced)
+{
+    return BeginInternal(Owner, Npc, Token, InputSequence, false, true, OutHandle, OutReplaced);
 }
 
 EDeliveryConversationTurnResult UDeliveryConversationTurnSubsystem::BeginInternal(APlayerController* Owner,
-    ADeliveryNpcCharacter* Npc, FGuid Token, uint64 InputSequence, bool bText,
+    ADeliveryNpcCharacter* Npc, FGuid Token, uint64 InputSequence, bool bText, bool bVoice,
     FDeliveryConversationTurnHandle& OutHandle, TArray<FDeliveryConversationTurnLease>& OutReplaced)
 {
     check(IsInGameThread());
@@ -132,6 +158,8 @@ EDeliveryConversationTurnResult UDeliveryConversationTurnSubsystem::BeginInterna
     PruneInvalidLeases();
     if (!IsValidOwner(Owner) || !IsValid(Npc) || Npc->IsActorBeingDestroyed() || Npc->GetWorld() != GetWorld() ||
         !Token.IsValid() || InputSequence == 0) return EDeliveryConversationTurnResult::Invalid;
+    FDeliverySpeechPlayerContext VoiceContext;
+    if (bVoice && !VoiceContext.Capture(Owner)) return EDeliveryConversationTurnResult::Invalid;
 
     const TWeakObjectPtr<ADeliveryNpcCharacter> NpcKey(Npc);
     const TWeakObjectPtr<APlayerController> OwnerKey(Owner);
@@ -165,6 +193,8 @@ EDeliveryConversationTurnResult UDeliveryConversationTurnSubsystem::BeginInterna
     NewLease.ClientToken = Token;
     NewLease.Owner = Owner;
     NewLease.PawnAtBegin = Owner->GetPawn();
+    NewLease.VoiceContext = VoiceContext;
+    NewLease.bVoice = bVoice;
     NewLease.Npc = Npc;
     NewLease.Phase = bText ? EDeliveryConversationTurnPhase::FinalPending : EDeliveryConversationTurnPhase::Recording;
     NewLease.StartedAt = Now;
@@ -180,12 +210,32 @@ EDeliveryConversationTurnResult UDeliveryConversationTurnSubsystem::BeginInterna
 }
 
 FDeliveryConversationTurnLease* UDeliveryConversationTurnSubsystem::FindOwned(APlayerController* Owner,
+    const FDeliveryConversationTurnHandle& Handle, bool bAllowPendingVoice)
+{
+    if (!IsServerWorld() || !IsValid(Owner) || Owner->GetWorld()!=GetWorld() || !Owner->HasAuthority() ||
+        !Handle.IsValid() || Handle.WorldEpoch != WorldEpoch) return nullptr;
+    for (auto& Pair : Leases)
+    {
+        auto& Lease = Pair.Value;
+        if (Lease.Owner != Owner || !(Lease.Handle == Handle)) continue;
+        if (Lease.bVoice)
+        {
+            const auto State = Lease.VoiceContext.Check(Owner);
+            if (State == EDeliverySpeechPlayerContextState::Valid ||
+                (bAllowPendingVoice && State == EDeliverySpeechPlayerContextState::Pending)) return &Lease;
+        }
+        else if (IsValidOwner(Owner) && Lease.PawnAtBegin == Owner->GetPawn()) return &Lease;
+    }
+    return nullptr;
+}
+
+EDeliverySpeechPlayerContextState UDeliveryConversationTurnSubsystem::GetVoiceContextState(APlayerController* Owner,
     const FDeliveryConversationTurnHandle& Handle)
 {
-    if (!IsValidOwner(Owner) || !Handle.IsValid() || Handle.WorldEpoch != WorldEpoch) return nullptr;
-    for (auto& Pair : Leases)
-        if (Pair.Value.Owner == Owner && Pair.Value.Handle == Handle && Pair.Value.PawnAtBegin == Owner->GetPawn()) return &Pair.Value;
-    return nullptr;
+    if (!IsServerWorld()) return EDeliverySpeechPlayerContextState::Invalid;
+    PruneInvalidLeases();
+    const auto* Lease = FindOwned(Owner,Handle,true);
+    return Lease && Lease->bVoice ? Lease->VoiceContext.Check(Owner) : EDeliverySpeechPlayerContextState::Invalid;
 }
 
 EDeliveryConversationTurnResult UDeliveryConversationTurnSubsystem::FinishRecording(APlayerController* Owner,
@@ -194,7 +244,8 @@ EDeliveryConversationTurnResult UDeliveryConversationTurnSubsystem::FinishRecord
     check(IsInGameThread());
     if (!IsServerWorld()) return EDeliveryConversationTurnResult::Invalid;
     PruneInvalidLeases();
-    auto* Lease = FindOwned(Owner, Handle);
+    // 结束录音只确定五秒文字期限，身份暂未复制完整时仍不允许提交文字
+    auto* Lease = FindOwned(Owner, Handle, true);
     if (!Lease) return EDeliveryConversationTurnResult::Stale;
     if (Lease->Phase == EDeliveryConversationTurnPhase::FinalPending) return EDeliveryConversationTurnResult::AlreadyActive;
     if (Lease->Phase != EDeliveryConversationTurnPhase::Recording) return EDeliveryConversationTurnResult::WrongPhase;

@@ -6,13 +6,20 @@
 #include "Misc/ScopeExit.h"
 #include "Delivery.h"
 
+FVector IDeliveryPackageCarrierInterface::GetTaskPackageTransferPoint() const
+{
+    const auto* Actor = Cast<AActor>(_getUObject());
+    return Actor ? Actor->GetActorLocation() : FVector::ZeroVector;
+}
+
 namespace DeliveryPackageTransfer
 {
-bool TryTransfer(AActor* From, AActor* To, FName& Reason)
+bool TryTransfer(AActor* From, AActor* To, FName& Reason,
+    ADeliveryPackageItem* ExpectedPackage, TFunction<bool()> CanContinue)
 {
     Reason = NAME_None;
     if (!IsInGameThread()) { Reason = TEXT("WrongThread"); return false; }
-    if (!IsValid(From) || !IsValid(To) || From == To)
+    if (!IsValid(From) || !IsValid(To) || From == To || From->IsActorBeingDestroyed() || To->IsActorBeingDestroyed())
     { Reason = TEXT("InvalidCarrier"); return false; }
     if (!From->HasAuthority() || !To->HasAuthority())
     { Reason = TEXT("NotAuthority"); return false; }
@@ -29,15 +36,15 @@ bool TryTransfer(AActor* From, AActor* To, FName& Reason)
     { Reason = TEXT("CarrierUnavailable"); return false; }
     auto* Package = Source->GetCarriedTaskPackage();
     auto* Item = IsValid(Package) ? Package->GetDeliveryItemComponent() : nullptr;
-    if (!Item || Package->GetWorld() != From->GetWorld() || Package->GetOwner() != From)
+    if ((ExpectedPackage && Package != ExpectedPackage) || !Item || Package->IsActorBeingDestroyed() || Package->GetWorld() != From->GetWorld() || Package->GetOwner() != From)
     { Reason = TEXT("PackageOwnershipMismatch"); return false; }
     if (Item->IsTransferInProgress()) { Reason = TEXT("TransferBusy"); return false; }
     if (!Receiver->CanReceiveTaskPackage(Package))
     { Reason = TEXT("ReceiverUnavailable"); return false; }
     const auto ReachabilityFailure = [&]() -> FName
     {
-        const FVector FromLocation = From->GetActorLocation();
-        const FVector ToLocation = To->GetActorLocation();
+        const FVector FromLocation = Source->GetTaskPackageTransferPoint();
+        const FVector ToLocation = Receiver->GetTaskPackageTransferPoint();
         if (FromLocation.ContainsNaN() || ToLocation.ContainsNaN() ||
             FVector::DistSquared(FromLocation, ToLocation) > FMath::Square(240.f)) return TEXT("OutOfRange");
         FCollisionQueryParams Query(SCENE_QUERY_STAT(PackageTransfer), false, From);
@@ -52,6 +59,13 @@ bool TryTransfer(AActor* From, AActor* To, FName& Reason)
     };
     Reason = ReachabilityFailure();
     if (!Reason.IsNone()) return false;
+    if (CanContinue && !CanContinue()) { Reason = TEXT("ArrangementChanged"); return false; }
+    if (!IsValid(From) || !IsValid(To) || From->IsActorBeingDestroyed() || To->IsActorBeingDestroyed() ||
+        !IsValid(Player) || Player->IsInactive() || !IsValid(Package) || Package->IsActorBeingDestroyed() ||
+        Package->GetOwner() != From || Source->GetCarriedTaskPackage() != Package ||
+        Source->GetTaskPlayerState() != Player || Receiver->GetTaskPlayerState() != Player ||
+        !Source->CanHandleTaskPackage() || !Receiver->CanHandleTaskPackage())
+    { Reason = TEXT("CarrierChangedDuringTransfer"); return false; }
     if (!Item->BeginTransfer(To)) { Reason = TEXT("TransferBusy"); return false; }
     ON_SCOPE_EXIT { if (IsValid(Item)) Item->EndTransfer(); };
 
@@ -63,7 +77,10 @@ bool TryTransfer(AActor* From, AActor* To, FName& Reason)
     };
     const auto IdentityStillValid = [&]()
     {
-        return IsValid(From) && IsValid(To) && IsValid(Player) && !Player->IsInactive() &&
+        return IsValid(From) && !From->IsActorBeingDestroyed() && IsValid(To) && !To->IsActorBeingDestroyed() &&
+            From->GetWorld() == To->GetWorld() && IsValid(Player) && !Player->IsInactive() &&
+            (!CanContinue || CanContinue()) && IsValid(From) && !From->IsActorBeingDestroyed() &&
+            IsValid(To) && !To->IsActorBeingDestroyed() &&
             Source->GetTaskPlayerState() == Player && Receiver->GetTaskPlayerState() == Player &&
             Source->CanHandleTaskPackage() && Receiver->CanHandleTaskPackage();
     };
@@ -74,7 +91,7 @@ bool TryTransfer(AActor* From, AActor* To, FName& Reason)
         if (HasPackage(From)) return false;
         // 接收接口可能已经入手才报告失败，先摘下该实物，再尝试回到原持有者
         if (HasPackage(To)) Receiver->ReleaseTaskPackage(Package);
-        if (IsValid(Package) && !Package->GetOwner() && IsValid(Item) && IsValid(From))
+        if (IsValid(Package) && !Package->GetOwner() && IsValid(Item) && IsValid(From) && !From->IsActorBeingDestroyed())
         {
             // 两步之间没有广播或外部调用，预约不会在同步回调中暴露给第三方
             Item->EndTransfer();

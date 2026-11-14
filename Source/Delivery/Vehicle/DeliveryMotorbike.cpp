@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/DeliveryVehicleSummonComponent.h"
 #include "AI/Actions/DeliveryVehicleHoldComponent.h"
 #include "Vehicle/DeliveryTrunkPassengerComponent.h"
 #include "Vehicle/DeliveryHornReceiver.h"
@@ -32,6 +33,7 @@
 #include "Engine/OverlapResult.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameplayEffect.h"
 #include "AbilitySystem/DeliverAttributeSet.h"
@@ -767,24 +769,28 @@ void ADeliveryMotorbike::OnRep_Cargo()
 // 把当前快递固定到箱内挂点；装好之后整件藏起来
 void ADeliveryMotorbike::ApplyCargoPresentation()
 {
+    const TWeakObjectPtr<ADeliveryMotorbike> WeakThis(this);
     RefreshCargoPresentation(GetCargo());
-    ApplyTrunkPresentation();
+    if (WeakThis.IsValid() && !IsActorBeingDestroyed()) ApplyTrunkPresentation();
 }
 
 void ADeliveryMotorbike::RefreshCargoPresentation(ADeliveryPackageItem* Package)
 {
-	if (IsValid(Package) && Package->GetOwner() == this && CargoPivot)
-	{
-		Package->SetVehicleCargoPresentation(CargoPivot);
-		/**
-		 * 箱子关着的时候把快递藏起来
-		 *
-		 * 它在一个关好的箱子里，看不见才是对的；而且快递比箱子内腔大时
-		 * 不藏就会穿出箱盖。装卸动画期间由 UpdateTrunkAnimation 临时显示。
-		 */
-		Package->SetActorHiddenInGame(TrunkPhase == EDeliveryTrunkPhase::Idle);
-		Package->SetActorRelativeLocation(FVector::ZeroVector);
-	}
+    if (!IsValid(Package) || Package->GetOwner() != this || !CargoPivot) return;
+    const TWeakObjectPtr<ADeliveryMotorbike> WeakThis(this);
+    const TWeakObjectPtr<ADeliveryPackageItem> WeakPackage(Package);
+    const auto StillOwned = [&]()
+    {
+        return WeakThis.IsValid() && !IsActorBeingDestroyed() && WeakPackage.IsValid() &&
+            !Package->IsActorBeingDestroyed() && Package->GetOwner() == this &&
+            (!HasAuthority() || GetCargo() == Package);
+    };
+    Package->SetVehicleCargoPresentation(CargoPivot);
+    if (!StillOwned()) return;
+    // 箱子关好后隐藏实物，装卸时间线负责临时显示
+    Package->SetActorHiddenInGame(TrunkPhase == EDeliveryTrunkPhase::Idle);
+    if (!StillOwned()) return;
+    Package->SetActorRelativeLocation(FVector::ZeroVector);
 }
 
 // 返回仍然有效的货架快递
@@ -792,45 +798,49 @@ ADeliveryPackageItem* ADeliveryMotorbike::GetCargo() const
 {
 	// 有效性检查需要快递类的完整类型，因此实现放在此文件
 	
-	return IsValid(Cargo) ? Cargo.Get() : nullptr;
+	return IsValid(Cargo) && Cargo->GetOwner() == this ? Cargo.Get() : nullptr;
 }
 
 // 在服务器登记货物归属并固定到货架
 bool ADeliveryMotorbike::AttachCargo(ADeliveryPackageItem* Package)
 {
-	if (!HasAuthority() || HasCargo() || HasTrunkPassenger() || !IsValid(Package) || !CargoPivot ||
-        Package->GetWorld() != GetWorld() || Package->GetOwner())
-	{
-		return false;
-	}
-	const auto* Item = Package->GetDeliveryItemComponent();
-    if (Item && Item->IsTransferInProgress() && !Item->CanBeAcquiredBy(this)) return false;
-
-	Cargo = Package;
-	// 将快递归属设为车辆，防止被当作无人持有的地面物品
-	
-	Package->SetOwner(this);
-	ApplyCargoPresentation();
-
-	return true;
+    // 旧蓝图调用没有装货者身份，只保存实物，不授予同伴取货权限
+    return AttachCargoForPlayer(Package, nullptr);
 }
 
-// 清空货架并解除物品归属，后续去向交给调用方处理
+bool ADeliveryMotorbike::AttachCargoForPlayer(ADeliveryPackageItem* Package, APlayerState* Player)
+{
+    if (!HasAuthority() || IsActorBeingDestroyed() || HasCargo() || HasTrunkPassenger() ||
+        !IsValid(Package) || Package->IsActorBeingDestroyed() || !CargoPivot ||
+        Package->GetWorld() != GetWorld() || Package->GetOwner() ||
+        (Player && (!IsValid(Player) || Player->IsInactive() || Player->GetWorld() != GetWorld()))) return false;
+    const auto* Item = Package->GetDeliveryItemComponent();
+    if (Item && Item->IsTransferInProgress() && !Item->CanBeAcquiredBy(this)) return false;
+    TWeakObjectPtr<ADeliveryMotorbike> WeakThis(this);
+    TWeakObjectPtr<ADeliveryPackageItem> WeakPackage(Package);
+    Cargo = Package;
+    CargoPlayer = Player;
+    Package->SetOwner(this);
+    if (!WeakThis.IsValid() || IsActorBeingDestroyed() || !WeakPackage.IsValid() ||
+        GetCargo() != Package || Package->GetOwner() != this) return false;
+    ApplyCargoPresentation();
+    return WeakThis.IsValid() && !IsActorBeingDestroyed() && WeakPackage.IsValid() &&
+        GetCargo() == Package && Package->GetOwner() == this;
+}
+
+// 先清货架与装货身份，再解除实物归属；本次同步交接授权独立存到事务结束
 ADeliveryPackageItem* ADeliveryMotorbike::ReleaseCargo()
 {
-	ADeliveryPackageItem* Released = GetCargo();
-	// 清除已失效的快递引用，允许车辆接收下一件快递
-	Cargo = nullptr;
-	if (!HasAuthority() || !Released)
-	{
-		return nullptr;
-	}
-	Released->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-	Released->SetOwner(nullptr);
-
-	// 只解除车辆关系，后续位置和物理状态由接收快递的调用方决定
-	
-	return Released;
+    if (!HasAuthority()) return nullptr;
+    ADeliveryPackageItem* Released = GetCargo();
+    Cargo = nullptr;
+    CargoPlayer.Reset();
+    if (!Released) return nullptr;
+    TWeakObjectPtr<ADeliveryPackageItem> WeakPackage(Released);
+    Released->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+    if (!WeakPackage.IsValid() || Released->GetOwner() != this) return nullptr;
+    Released->SetOwner(nullptr);
+    return WeakPackage.IsValid() && !Released->GetOwner() ? Released : nullptr;
 }
 
 void ADeliveryMotorbike::HandleInteractRequested(APawn* Interactor)
@@ -907,6 +917,10 @@ bool ADeliveryMotorbike::TryEnter(ADeliveryCharacter* NewDriver)
 	TrafficImpactCount = 0;
 	LastImpactTime = -1000.0f;
 	ApplyDriverPresentation();
+    if (IsValid(NewDriver))
+    {
+        if (auto* Summon=NewDriver->FindComponentByClass<UDeliveryVehicleSummonComponent>()) Summon->RegisterVehicle(this);
+    }
 	MulticastVehicleEvent(EDeliveryEvent::VehicleEntered);
 	return true;
 }
@@ -920,7 +934,7 @@ bool ADeliveryMotorbike::SummonTo(const FVector& DesiredLocation, float DesiredY
 	// 不清的话那一帧会算出一段巨大的"路径"，把沿途的路人全部撞飞
 	bHasPedestrianSweepLocation = false;
 	UWorld* World = GetWorld();
-	if (!AllowsPlayerUse() || !HasAuthority() || !World || Driver || HasTrunkPassenger() || (ResidentHold && ResidentHold->IsHeld()))
+	if (!AllowsPlayerUse() || !HasAuthority() || !World || Driver || HasTrunkPassenger() || IsTrunkBusy() || (ResidentHold && ResidentHold->IsHeld()))
 	{
 		return false;
 	}
@@ -1466,7 +1480,12 @@ void ADeliveryMotorbike::HornReleased(const FInputActionValue& Value)
 
 void ADeliveryMotorbike::ServerRequestHorn_Implementation(bool bActive)
 {
-	bActive = bActive && IsValid(Driver) && GetController();
+	SetHornActive(bActive && IsValid(Driver) && GetController());
+}
+
+void ADeliveryMotorbike::SetHornActive(bool bActive)
+{
+	if (!HasAuthority()) return;
 	if (bHornActive == bActive) return;
 	bHornActive = bActive;
 	HornScanElapsed = 0.2f;
@@ -1492,9 +1511,10 @@ void ADeliveryMotorbike::OnRep_HornActive()
 void ADeliveryMotorbike::UpdateHorn(float DeltaSeconds)
 {
 	if (!HasAuthority()) return;
-	if (!IsValid(Driver) || !GetController())
+	AActor* HornDriver=IsValid(Driver) && GetController()?static_cast<AActor*>(Driver.Get()):GetAutonomousHornDriver();
+	if (!IsValid(HornDriver))
 	{
-		ServerRequestHorn_Implementation(false);
+		SetHornActive(false);
 		return;
 	}
 	if (!bHornActive) return;
@@ -1519,12 +1539,12 @@ void ADeliveryMotorbike::UpdateHorn(float DeltaSeconds)
 		    (Actor->GetActorLocation()-GetActorLocation()).GetSafeNormal2D()) < MinDot) continue;
 		FCollisionQueryParams Sight(SCENE_QUERY_STAT(MotorbikeHornSight), false, this);
 		Sight.AddIgnoredActor(Actor);
-		Sight.AddIgnoredActor(Driver);
+		Sight.AddIgnoredActor(HornDriver);
         Sight.AddIgnoredActor(TrunkPassenger);
 		FHitResult Wall;
 		if (GetWorld()->LineTraceSingleByChannel(Wall, GetActorLocation()+FVector(0,0,70),
 		    Actor->GetActorLocation()+FVector(0,0,70), ECC_Visibility, Sight)) continue;
-		if (auto* Receiver = Cast<IDeliveryHornReceiver>(Actor)) Receiver->ReceiveHornFrom(HornPedestrianSpeedMultiplier,this,Driver);
+		if (auto* Receiver = Cast<IDeliveryHornReceiver>(Actor)) Receiver->ReceiveHornFrom(HornPedestrianSpeedMultiplier,this,HornDriver);
 		if (auto* Traffic = Actor->FindComponentByClass<UDeliveryTrafficCarComponent>())
 		{
 			Traffic->RequestHornSpeedBoost(HornTrafficSpeedMultiplier);
@@ -1961,7 +1981,7 @@ void ADeliveryMotorbike::UpdateSpeed(float DeltaSeconds)
 	// 油门方向和当前车速反着来 = 刹车，用大得多的减速度，手感上按一下就明显慢下来
 	const bool bOpposing = (Throttle * CurrentSpeed) < -UE_KINDA_SMALL_NUMBER;
 	const float Rate = bOpposing ? BrakeDeceleration : ThrottleAcceleration;
-	const float Target = (Throttle > 0.0f ? MaxSpeed * Throttle : MaxReverseSpeed * Throttle) * (ResidentHold ? ResidentHold->GetSpeedScale() : 1.f);
+	const float Target = (Throttle > 0.0f ? GetForwardSpeedLimit() * Throttle : MaxReverseSpeed * Throttle) * (ResidentHold ? ResidentHold->GetSpeedScale() : 1.f);
 	CurrentSpeed = FMath::FInterpConstantTo(CurrentSpeed, Target, DeltaSeconds, Rate);
 }
 

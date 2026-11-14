@@ -174,3 +174,37 @@ TArray<FName> UDeliveryLocationRegistry::GetRegisteredIds() const
 
 	return Result;
 }
+
+namespace
+{
+FString NpcPlaceText(const FText& Value,int32 Limit)
+{
+    FString Result;
+    for (TCHAR Character:Value.ToString())
+    {
+        Result.AppendChar(Character>=32 && Character!=127?Character:TCHAR(' '));
+        if (Result.Len()>=Limit) break;
+    }
+    return Result.TrimStartAndEnd();
+}
+}
+
+void UDeliveryLocationRegistry::CollectPublicNpcPlaces(TArray<FPublicNpcPlace>& Out) const
+{
+    Out.Reset();
+    for (FName Id:GetRegisteredIds())
+    {
+        const auto Components=ResolveAllComponents(Id);
+        if (Components.Num()!=1) continue;
+        const auto* Location=Components[0];
+        if (!IsValid(Location) || !Location->IsRegistered() || Location->GetWorld()!=GetWorld() ||
+            Location->LocationId!=Id || !Location->bDescribeToNpcs || !IsValid(Location->GetOwner()) ||
+            Location->GetOwner()->IsHidden() || Location->GetOwner()->IsActorBeingDestroyed()) continue;
+        FPublicNpcPlace Place;
+        Place.Name=NpcPlaceText(Location->NpcDisplayName,64);
+        if (Place.Name.IsEmpty()) continue;
+        Place.Description=NpcPlaceText(Location->NpcDescription,160);
+        Out.Add(MoveTemp(Place));
+        if (Out.Num()>=8) break;
+    }
+}

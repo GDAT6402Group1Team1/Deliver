@@ -8,6 +8,12 @@
 
 class UDeliveryLocationComponent;
 
+struct FPublicNpcPlace
+{
+    FString Name;
+    FString Description;
+};
+
 /**
  * 通过地点编号查找关卡中的对象，避免界面每次更新都遍历关卡
  * 同一编号可登记多个对象，默认返回最先登记的对象，也可查询全部结果
@@ -55,6 +61,9 @@ class DELIVERY_API UDeliveryLocationRegistry : public UWorldSubsystem
 	/** 关卡里现在注册了哪些 ID；调试和"策划表里的 ID 有没有对应的点"这类校验用 */
 	UFUNCTION(BlueprintPure, Category = "Delivery|Location")
 	TArray<FName> GetRegisteredIds() const;
+
+    // 提供作者公开给居民的地点资料，和现场感知分开
+    void CollectPublicNpcPlaces(TArray<FPublicNpcPlace>& Out) const;
 
   private:
 	// 登记数据与失效清理

@@ -124,6 +124,7 @@ void ADeliveryMotorbike::RefreshPassengerPresentation(float DeltaSeconds)
 
 void ADeliveryMotorbike::EndPlay(const EEndPlayReason::Type Reason)
 {
+    if (HasAuthority()) CancelCargoHandoff(CargoHandoffId);
     if (HasAuthority() && IsValid(TrunkPassenger) && TrunkPassenger->TrunkPassenger)
         TrunkPassenger->TrunkPassenger->Release(Reason == EEndPlayReason::Destroyed);
     // 驾驶权已在 Destroyed 交还，这里只解除各端表现缓存

@@ -49,9 +49,11 @@ void UDeliveryNpcPresentationComponent::TickExpression(float DeltaTime)
     const FName ActionEmotion=GetActionEmotion();
     FName Pose=TEXT("Calm");
     if (Npc->IsKnockedDown()) Pose=TEXT("Down");
-    else if (Npc->Combat->IsReactingToHit()) Pose=TEXT("Surprised");
+    else if (Npc->Combat->IsReactingToHit() && (!Npc->Look || !Npc->Look->HitExpression.IsNone()))
+        Pose=Npc->Look?Npc->Look->HitExpression:FName(TEXT("Surprised"));
     else if (Display.bActive) Pose=Display.Emotion;
     else if (IsShowingListeningReaction()) Pose=TEXT("Listening");
+    else if (Npc->Look && Npc->Look->IsStartled() && !Npc->Look->StartleExpression.IsNone()) Pose=Npc->Look->StartleExpression;
     // 快步上前或踱步时也保留这次决定的表情，不能等声音开始才看出生气
     else if (!ActionEmotion.IsNone() && ActionEmotion!=TEXT("Calm")) Pose=ActionEmotion;
     else if (Npc->Agent->IsListening() || Npc->Agent->IsDecisionPending() || IsWaitingForSpeechPlayback()) Pose=TEXT("Thinking");

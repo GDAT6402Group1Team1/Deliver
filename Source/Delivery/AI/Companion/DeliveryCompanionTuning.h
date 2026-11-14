@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "DeliveryCompanionTuning.generated.h"
+class UGA_CompanionItemTransfer;
 class UCurveVector;
 class ADeliveryCaterpillarItem;
 
@@ -11,6 +12,16 @@ class DELIVERY_API UDeliveryCompanionTuning : public UDataAsset
 {
     GENERATED_BODY()
 public:
+    // 限制查询附近物品的开销，实际可见范围同时受既有 Sight 配置限制
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Companion|Items",meta=(ClampMin="100",ClampMax="3000",Units="cm"))
+    float ItemSightRadius=1200.f;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Companion|Items",meta=(ClampMin="0.2",ClampMax="2",Units="s"))
+    float ItemObservationInterval=.5f;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Companion|Items",meta=(ClampMin="1",ClampMax="8"))
+    int32 MaximumSeenItems=8;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Companion|Items")
+    TSubclassOf<UGA_CompanionItemTransfer> ItemTransferAbility;
+
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="初遇",meta=(ClampMin="200",Units="cm")) float EncounterRadius=900;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="初遇",meta=(ClampMin="0.3",ClampMax="3",Units="s")) float HelpHoldSeconds=1;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="初遇",meta=(ClampMin="0.3",ClampMax="5",Units="s")) float HelpRecoverySeconds=1.6f;
@@ -19,14 +30,15 @@ public:
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="初遇|抛出",meta=(ClampMin="0.3",ClampMax="5",Units="s")) float EjectionDuration=1.3f;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="初遇|抛出",meta=(ClampMin="2",ClampMax="30",Units="s")) float DoorWaitSeconds=10;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="初遇|抛出",meta=(ClampMin="10",ClampMax="100",Units="cm")) float EjectionArrivalTolerance=50;
-    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="跟随",meta=(ClampMin="200",ClampMax="400",Units="cm")) float LeadDistance=280;
-    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="跟随",meta=(ClampMin="80",ClampMax="250",Units="cm")) float SideDistance=150;
-    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="跟随",meta=(ClampMin="50",ClampMax="200",Units="cm")) float RepathDistance=100;
+    // 保留原属性名与已保存数值，Follow 现在用它配置主人身后的距离
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="跟随",meta=(DisplayName="跟随后距",ClampMin="140",ClampMax="400",Units="cm",ToolTip="行走跟随时与主人保持的后方距离")) float LeadDistance=190;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="跟随",meta=(ClampMin="80",ClampMax="250",Units="cm")) float SideDistance=95;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="跟随",meta=(ClampMin="50",ClampMax="200",Units="cm")) float RepathDistance=65;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="跟随",meta=(ClampMin="100",ClampMax="300",Units="cm")) float YieldDistance=150;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="跟随",meta=(ClampMin="100",ClampMax="400",Units="cm")) float DestinationClearance=220;
     // 等候期间只能在原位置附近让路，不能借避让追到远处主人身边
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="等候",meta=(ClampMin="200",ClampMax="600",Units="cm")) float WaitYieldRadius=400;
-    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="跟随",meta=(ClampMin="0.2",ClampMax="2",Units="s")) float NavigationInterval=.5f;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="跟随",meta=(ClampMin="0.2",ClampMax="2",Units="s")) float NavigationInterval=.35f;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="跟随",meta=(ClampMin="1",ClampMax="15",Units="s")) float BlockedRetrySeconds=3;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="补位",meta=(ClampMin="1500",ClampMax="10000",Units="cm")) float CatchUpDistance=2500;
     // 包围盒加余量后再检查屏幕外，查询期间停止自身移动

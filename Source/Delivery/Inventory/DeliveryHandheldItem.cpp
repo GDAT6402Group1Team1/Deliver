@@ -1,4 +1,4 @@
-﻿// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Carry/DeliveryHandheldCarrierInterface.h"
@@ -184,37 +184,68 @@ void ADeliveryHandheldItem::HandleInteract(APawn *Interactor)
     }
 }
 
+// 回调里的新表现或新主人优先，旧调用立即停止
+bool ADeliveryHandheldItem::IsPresentationOperationCurrent(uint64 Operation,const UStaticMeshComponent* ExpectedMesh,
+    const TWeakObjectPtr<AActor>& ExpectedOwner) const
+{
+    return !IsActorBeingDestroyed() && Operation==PresentationOperation && IsValid(ExpectedMesh) &&
+        ItemMesh==ExpectedMesh && GetRootComponent()==ExpectedMesh && IsValid(InteractableComponent) &&
+        TWeakObjectPtr<AActor>(GetOwner()).HasSameIndexAndSerialNumber(ExpectedOwner);
+}
+
 // 根据手持或收纳状态调整物品附着、碰撞和可见性
 void ADeliveryHandheldItem::SetInventoryPresentation(bool bInHand, bool bInInventory,
                                                      USceneComponent *HandParent)
 {
+    if (bInHand && !IsValid(HandParent)) return;
+    const uint64 Operation=++PresentationOperation;
+    const TWeakObjectPtr<ADeliveryHandheldItem> WeakThis(this);
+    const TWeakObjectPtr<UStaticMeshComponent> WeakMesh(ItemMesh);
+    TWeakObjectPtr<AActor> ExpectedOwner(GetOwner());
+    const auto IsCurrent=[WeakThis,WeakMesh,Operation,&ExpectedOwner]()
+    {
+        return WeakThis.IsValid() && WeakThis->IsPresentationOperationCurrent(Operation,WeakMesh.Get(),ExpectedOwner);
+    };
+    if (!IsCurrent()) return;
+
     if (HasAuthority())
         SetReplicateMovement(false);
+    if (!IsCurrent()) return;
     // 改变附着关系前先停止物理模拟
     // 物品可能刚从隐藏的背包槽取出，因此需要恢复可见状态
 
     ItemMesh->SetSimulatePhysics(false);
+    if (!IsCurrent()) return;
     ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    if (!IsCurrent()) return;
     SetActorEnableCollision(false);
+    if (!IsCurrent()) return;
     SetActorHiddenInGame(!bInHand);
+    if (!IsCurrent()) return;
     ItemMesh->SetVisibility(bInHand, true);
+    if (!IsCurrent()) return;
     InteractableComponent->bInteractEnabled = false;
 
     if (bInHand && HandParent)
     {
         DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+        if (!IsCurrent()) return;
+        if (!IsValid(HandParent)) return;
         HeldAnchor = HandParent;
         bHeldPresentationActive = true;
         SetActorTickEnabled(true);
+        if (!IsCurrent()) return;
         // 拾取时立即对齐，此后在物理更新完成后平滑跟随，减少手部抖动
         UpdateHeldTransform(0.0f, true);
     }
     else if (bInInventory)
     {
         DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+        if (!IsCurrent()) return;
         bHeldPresentationActive = false;
         HeldAnchor.Reset();
         SetActorTickEnabled(false);
+        if (!IsCurrent()) return;
     }
 }
 
@@ -224,26 +255,40 @@ void ADeliveryHandheldItem::SetVehicleCargoPresentation(USceneComponent *CargoPa
     SetAttachedCarryPresentation(CargoParent);
 }
 
-void ADeliveryHandheldItem::SetAttachedCarryPresentation(USceneComponent *CargoParent)
+void ADeliveryHandheldItem::SetAttachedCarryPresentation(USceneComponent *CargoParent,
+    const FVector& RelativeOffset,const FRotator& RelativeRotation)
 {
-    if (!CargoParent)
+    if (!IsValid(CargoParent) || CargoParent->GetWorld()!=GetWorld() || CargoParent==GetRootComponent() ||
+        RelativeOffset.ContainsNaN() || RelativeRotation.ContainsNaN()) return;
+    const uint64 Operation=++PresentationOperation;
+    const TWeakObjectPtr<ADeliveryHandheldItem> WeakThis(this);
+    const TWeakObjectPtr<UStaticMeshComponent> WeakMesh(ItemMesh);
+    TWeakObjectPtr<AActor> ExpectedOwner(GetOwner());
+    const auto IsCurrent=[WeakThis,WeakMesh,Operation,&ExpectedOwner]()
     {
-        return;
-    }
+        return WeakThis.IsValid() && WeakThis->IsPresentationOperationCurrent(Operation,WeakMesh.Get(),ExpectedOwner);
+    };
+    if (!IsCurrent()) return;
 
     // 位置由附着关系决定，不该再被移动复制覆盖一遍——两边各写一次会打架，
     // 表现是客户端上的快递在车上微微抖动
     if (HasAuthority())
         SetReplicateMovement(false);
+    if (!IsCurrent()) return;
 
     // 模拟中的根组件附着不可靠，必须先停物理再改附着（和手上那套同一个理由）
     ItemMesh->SetSimulatePhysics(false);
+    if (!IsCurrent()) return;
     ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    if (!IsCurrent()) return;
     SetActorEnableCollision(false);
+    if (!IsCurrent()) return;
 
     // 绑在车上是看得见的，和塞进背包不一样
     SetActorHiddenInGame(false);
+    if (!IsCurrent()) return;
     ItemMesh->SetVisibility(true, true);
+    if (!IsCurrent()) return;
 
     // 车上的货不给按 E："拿走别人车上的快递"不是现在要做的玩法，
     // 而留着可交互会让提示浮窗在骑车时一直糊在屏幕上
@@ -253,29 +298,61 @@ void ADeliveryHandheldItem::SetAttachedCarryPresentation(USceneComponent *CargoP
     bHeldPresentationActive = false;
     HeldAnchor.Reset();
     SetActorTickEnabled(false);
+    if (!IsCurrent()) return;
 
     DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-    AttachToComponent(CargoParent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+    if (!IsCurrent()) return;
+    if (!IsValid(CargoParent) || CargoParent->GetWorld()!=GetWorld()) return;
+    const TWeakObjectPtr<USceneComponent> WeakParent(CargoParent);
+    if (!AttachToComponent(CargoParent, FAttachmentTransformRules::SnapToTargetNotIncludingScale)) return;
+    if (!IsCurrent() || !WeakParent.IsValid() || ItemMesh->GetAttachParent()!=WeakParent.Get()) return;
+    // 只写偏移与朝向，SnapNotIncludingScale 保留同一实物原有世界尺寸
+    ItemMesh->SetRelativeLocationAndRotation(RelativeOffset,RelativeRotation,false,nullptr,ETeleportType::TeleportPhysics);
+    if (!IsCurrent() || !WeakParent.IsValid() || ItemMesh->GetAttachParent()!=WeakParent.Get()) return;
 }
 
 // 解除收纳状态，恢复碰撞和物理并设置丢出速度
 void ADeliveryHandheldItem::DropFromInventory(const FVector &WorldLocation, const FVector &InitialVelocity)
 {
+    if (WorldLocation.ContainsNaN() || InitialVelocity.ContainsNaN()) return;
+    const uint64 Operation=++PresentationOperation;
+    const TWeakObjectPtr<ADeliveryHandheldItem> WeakThis(this);
+    const TWeakObjectPtr<UStaticMeshComponent> WeakMesh(ItemMesh);
+    TWeakObjectPtr<AActor> ExpectedOwner(GetOwner());
+    const auto IsCurrent=[WeakThis,WeakMesh,Operation,&ExpectedOwner]()
+    {
+        return WeakThis.IsValid() && WeakThis->IsPresentationOperationCurrent(Operation,WeakMesh.Get(),ExpectedOwner);
+    };
+    if (!IsCurrent()) return;
+
     DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+    if (!IsCurrent()) return;
     bHeldPresentationActive = false;
     HeldAnchor.Reset();
     SetActorTickEnabled(false);
+    if (!IsCurrent()) return;
+    ExpectedOwner.Reset();
     SetOwner(nullptr);
+    if (!IsCurrent()) return;
     if (HasAuthority())
         SetReplicateMovement(true);
+    if (!IsCurrent()) return;
     SetActorHiddenInGame(false);
+    if (!IsCurrent()) return;
     ItemMesh->SetVisibility(true, true);
+    if (!IsCurrent()) return;
     SetActorEnableCollision(true);
+    if (!IsCurrent()) return;
     SetActorLocation(WorldLocation, false, nullptr, ETeleportType::TeleportPhysics);
+    if (!IsCurrent()) return;
     ItemMesh->SetCollisionProfileName(TEXT("PhysicsActor"));
+    if (!IsCurrent()) return;
     ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    if (!IsCurrent()) return;
     ItemMesh->SetSimulatePhysics(true);
+    if (!IsCurrent()) return;
     ItemMesh->SetPhysicsLinearVelocity(InitialVelocity);
+    if (!IsCurrent()) return;
     InteractableComponent->bInteractEnabled = true;
 }
 

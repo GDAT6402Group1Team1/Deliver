@@ -74,6 +74,8 @@ public:
     UFUNCTION(BlueprintPure, Category="Delivery|AI") bool HasActiveAction() const;
     // 只读当前持续安排，短身体反应结束后让位给原来的执行分支
     bool HasCompanionActivity() const;
+    // Wait 与 LookAt 只负责交谈，行为树继续执行主人的同行、跑腿或家居安排
+    bool CanContinueCompanionMovement() const;
     // 模型交战和逃跑可在执行中请求下一步，服务器护主规则不走这个入口
     bool CanUpdateRunningAction() const;
     double GetActionTimeRemaining() const;
@@ -133,6 +135,8 @@ public:
     bool BuildDecisionRequest(FGuid WorldEpoch, FDeliveryNpcDecisionRequest& OutRequest);
     void ReceiveDecision(FGuid RequestId, const FDeliveryNpcDecisionProposal* Proposal, FName Error);
     FGuid GetNpcId() const { return NpcId; }
+    FGuid FindKnownSubjectId(const AActor* Actor) const;
+    bool HasObservationEvent(FGuid EventId) const;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
@@ -169,6 +173,9 @@ private:
         bool bPlainText=false;
         bool bOwnsAction=false;
         bool bPlayerReply=false;
+        // 独立关联真实获救事件，玩家插话后仍保留原 MessageId
+        FGuid JoinedEventId;
+        TWeakObjectPtr<APlayerState> JoinedOwner;
         FGuid ReplyId;
         FGuid MessageId;
         FGuid ActionId;
@@ -205,6 +212,16 @@ private:
     bool IsActivitySnapshotCurrent(const FDeliveryNpcDecisionRequest& Request) const;
     bool AcceptContinueCurrent(const FDeliveryNpcDecisionProposal& Proposal,FName& Reason);
     void RemoveReply(FGuid ReplyId,FName Reason);
+    bool IsJoinedResponseOwnerCurrent() const;
+    void BindJoinedResponse(FReply& Reply,const FDeliveryNpcDecisionRequest& Request) const;
+    FGuid GetJoinedResponseEvent(const FDeliveryNpcDecisionRequest& Request) const;
+    void DeferJoinedResponse();
+    // 保留未说完的初遇回应，最多主动尝试三次，之后等自然交谈机会
+    FGuid PendingJoinedEvent;
+    TWeakObjectPtr<APlayerState> PendingJoinedOwner;
+    double JoinedResponseExpiresAt=0;
+    double NextJoinedResponseRetryAt=0;
+    int32 JoinedResponseAttempts=0;
     void FinishDecisionWait(FGuid RequestId, bool bSucceeded, int32 SentenceCount);
     void PruneEvidence();
     bool CanLookAt(AActor* Target) const;

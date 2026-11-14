@@ -5,12 +5,15 @@ import uuid
 
 HOME_ACTIONS = ('HomeAction',)
 HOME_USES = ('Sit', 'PlayAudio', 'StopAudio', 'TakeProp', 'PlaceProp')
+TRAVEL_MODES = ('Walk', 'OwnVehicle', 'Automatic')
+TRAVEL_ACTIONS = ('Follow', 'FetchPackage', 'TakePackage', 'DeliverPackage', 'ReturnPackage',
+                  'GoHome', 'FetchItem', 'ReturnItem')
 MAX_HOME_OBJECTS = 24
 MAX_HOME_SLOTS = 16
 REQUEST_FIELDS = ('protocol_version', 'capability_version', 'world_epoch', 'npc_id',
                   'request_id', 'context_revision', 'plan_revision')
 
-CANDIDATE_INSTRUCTIONS = """能力版本5和6的每个候选都有本次请求内唯一的 candidate_id；完整动作JSON必须原样带回所选候选的 candidate_id，不能沿用上一轮编号或降低能力版本
+CANDIDATE_INSTRUCTIONS = """能力版本5及以后的每个候选都有本次请求内唯一的 candidate_id；完整动作JSON必须原样带回所选候选的 candidate_id，不能沿用上一轮编号或降低能力版本
 如果本次接口要求 candidate_index，仍只填写所选候选的下标，接口会保留该候选的原始编号；不得另写物体、用途、目的地或执行结果
 """
 
@@ -23,7 +26,7 @@ companion_context.home_objects 是游戏明确配置或实际感知到的家居�
 
 
 def candidate_instructions(context):
-    return CANDIDATE_INSTRUCTIONS if context.get('capability_version') in (5, 6) else ''
+    return CANDIDATE_INSTRUCTIONS if context.get('capability_version') in (5, 6, 7, 8) else ''
 
 
 def _valid_id(value):
@@ -40,7 +43,7 @@ def _text(value, limit, *, empty=False):
 
 def validate_home_objects(context):
     """返回本请求的对象表；不查询或修改 UE 世界，旧协议保持原样"""
-    if context.get('capability_version') not in (5, 6) or 'companion_context' not in context:
+    if context.get('capability_version') not in (5, 6, 7, 8) or 'companion_context' not in context:
         return {}
     companion = context['companion_context']
     if not isinstance(companion, dict):
@@ -110,9 +113,26 @@ def _home_choice(context, candidate, objects):
     return object_id, use, destination, slot_id
 
 
+def validate_candidate_travel(context, candidate):
+    """未提供出行方式表示保留游戏当前安排，不能当作允许自行选择"""
+    if 'travel_mode' not in candidate:
+        return None
+    mode = candidate['travel_mode']
+    if (context.get('capability_version') != 8 or candidate.get('action') not in TRAVEL_ACTIONS
+            or not isinstance(mode, str) or mode not in TRAVEL_MODES):
+        raise ValueError('invalid candidate travel mode')
+    companion = context.get('companion_context', {})
+    if (not isinstance(companion, dict) or companion.get('requester_is_owner') is not True
+            or context.get('request_source', 'ambient') != 'player'):
+        raise ValueError('travel mode requires current owner request')
+    if mode == 'OwnVehicle' and companion.get('own_vehicle_available') is not True:
+        raise ValueError('own vehicle is unavailable')
+    return mode
+
+
 def validate_v5_candidates(context):
     """候选编号仅在当前请求中解析，同一安排不能用多个编号重复提供"""
-    if context.get('capability_version') not in (5, 6):
+    if context.get('capability_version') not in (5, 6, 7, 8):
         return {}
     objects = validate_home_objects(context)
     candidates = context.get('candidates')
@@ -128,12 +148,13 @@ def validate_v5_candidates(context):
         action, target = candidate.get('action'), candidate.get('target_id')
         if not isinstance(action, str) or not isinstance(target, str):
             raise ValueError('invalid candidate action or target')
+        travel_mode = validate_candidate_travel(context, candidate)
         if action == 'HomeAction':
             meaning = (action, target, *_home_choice(context, candidate, objects))
         else:
             if 'home' in candidate:
                 raise ValueError('non-home candidate has home choice')
-            meaning = (action, target)
+            meaning = (action, target, travel_mode)
         if meaning in meanings:
             raise ValueError('duplicate candidate meaning')
         meanings.add(meaning)
@@ -143,7 +164,7 @@ def validate_v5_candidates(context):
 
 def validate_v5_selection(context, decision, *, checking_candidate=False):
     """返回需要带给 UE 的编号，执行参数仍由 UE 保存的同一候选快照提供"""
-    if context.get('capability_version') not in (5, 6):
+    if context.get('capability_version') not in (5, 6, 7, 8):
         return {}
     # 模型可省略信封，由后端回填；一旦提供就不能偷换请求或降低版本
     for key in REQUEST_FIELDS:
@@ -168,4 +189,6 @@ def validate_v5_selection(context, decision, *, checking_candidate=False):
         raise ValueError('duration exceeds selected candidate')
     if 'home' in decision and ('home' not in offered or decision['home'] != offered['home']):
         raise ValueError('decision home choice differs from selected candidate')
+    if 'travel_mode' in decision and ('travel_mode' not in offered or decision['travel_mode'] != offered['travel_mode']):
+        raise ValueError('decision travel mode differs from selected candidate')
     return {'candidate_id': candidate_id}

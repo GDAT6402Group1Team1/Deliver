@@ -286,6 +286,7 @@ def compact_context(context):
                      for item in evidence if item['event_id'] in keep]
     people = {context.get('self_subject_id', '')}
     people.update(item.get('target_id', '') for item in candidates)
+    people.add(context.get('companion_context', {}).get('held_item_id', ''))
     for item in kept_evidence:
         people.update((item.get('subject_id', ''), item.get('addressee_id', '')))
     current_message = None
@@ -297,11 +298,12 @@ def compact_context(context):
             pending_message = {key: last_player[key] for key in fields if key in last_player}
     companion = ({'companion_context': dict(context['companion_context'])}
                  if 'companion_context' in context else {})
+    familiar_places = ({'familiar_places': context['familiar_places']} if context.get('familiar_places') else {})
     activity = {key: dict(context[key]) for key in ('current_action', 'current_activity')
-                if context.get('capability_version') == 6 and isinstance(context.get(key), dict)}
+                if context.get('capability_version') in (6, 7, 8) and isinstance(context.get(key), dict)}
     if 'current_action' in activity:
         people.add(activity['current_action'].get('target_id', ''))
-    return {**character_background(context), **companion, **activity,
+    return {**character_background(context), **companion, **familiar_places, **activity,
             'persona': context['persona'], 'self_name': context.get('self_name', ''),
             'self_subject_id': context.get('self_subject_id', ''),
             'subjects': [dict(item) for item in context.get('subjects', []) if item['subject_id'] in people],
@@ -353,6 +355,8 @@ def model_context(context):
     for item in result['candidates']:
         item['target_id'] = alias(item['target_id'], subjects, 'p')
         item['evidence_ids'] = [alias(value, events, 'e') for value in item['evidence_ids']]
+    if 'held_item_id' in result.get('companion_context', {}):
+        result['companion_context']['held_item_id'] = alias(result['companion_context']['held_item_id'], subjects, 'p')
     if 'current_action' in result:
         result['current_action']['target_id'] = alias(result['current_action']['target_id'], subjects, 'p')
     return result
@@ -459,6 +463,9 @@ class SentenceParser:
             if type(index) is not int or not 0 <= index < len(candidates):
                 raise ReplyFormatError('invalid_candidate')
             action = {**candidates[index], 'speech': speech, 'emotion': item.get('emotion')}
+            # 不能悄悄忽略模型回显的另一种出行方式，交给同一候选校验明确拒绝
+            if 'travel_mode' in item:
+                action['travel_mode'] = item['travel_mode']
             if 'speech_target_id' in item:
                 target = item['speech_target_id']
                 if not isinstance(target, str):
@@ -707,7 +714,7 @@ def run_job(job, provider, validate, fallback):
         elif provider == 'llm':
             model = os.environ.get('DELIVERY_AI_MODEL', '')
             diagnostics['decision_route'] = 'player_dialogue' if diagnostics['request_source'] == 'player' else 'ambient_dialogue'
-            if 'companion_context' in job.context or job.context.get('capability_version') == 6:
+            if 'companion_context' in job.context or job.context.get('capability_version') in (6, 7, 8):
                 stream_api(prompt, job.cancel, parser.feed, instructions=instructions)
             else:
                 stream_api(prompt, job.cancel, parser.feed)

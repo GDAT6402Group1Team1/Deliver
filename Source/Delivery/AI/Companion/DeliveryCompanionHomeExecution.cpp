@@ -197,6 +197,14 @@ bool UDeliveryCompanionComponent::AlignForHome(const FTransform& Use)
     auto* Npc=GetCompanion();
     auto* AI=Npc?Cast<AAIController>(Npc->GetController()):nullptr;
     if (!Npc || !AI || Use.ContainsNaN()) return false;
+    if (HomeSeatRuntime.ArrangementId.IsValid() && HomeSeatRuntime.ArrangementId==HomeState.ArrangementId &&
+        HomeState.SeatMotion.bActive && !HomeState.SeatMotion.bMoving && !Npc->IsKnockedDown() &&
+        Npc->GetCharacterMovement()->MovementMode==MOVE_Flying)
+    {
+        // 到座位或准备离开时只借用原 CMC 渐转，退出仍由座位资源记录恢复旧开关
+        Npc->GetCharacterMovement()->bOrientRotationToMovement=false;
+        Npc->GetCharacterMovement()->bUseControllerDesiredRotation=true;
+    }
     HomeFocusPoint=Npc->GetActorLocation()+Use.GetRotation().GetForwardVector().GetSafeNormal2D()*300.f;
     AI->SetFocalPoint(HomeFocusPoint,EAIFocusPriority::Gameplay);
     bHomeOwnsFocus=true;
@@ -358,7 +366,7 @@ bool UDeliveryCompanionComponent::StartHomeUse(const UDeliveryHomeUseRequest& Re
     if (!Object || !Object->GetUseTransforms(Claim,Entrance,Use,Exit) ||
         FVector::Dist2D(Npc->GetNavAgentLocation(),Entrance.GetLocation())>FMath::Max(HomeUseReachTolerance,12.f) ||
         FMath::Abs(Npc->GetNavAgentLocation().Z-Entrance.GetLocation().Z)>15.f ||
-        ((bTaking || HomeState.Operation==EDeliveryHomeOperation::PlaceProp) &&
+        ((bTaking || HomeState.Operation==EDeliveryHomeOperation::PlaceProp || HomeState.Operation==EDeliveryHomeOperation::Sit) &&
             (FMath::Abs(FMath::FindDeltaAngleDegrees(Npc->GetActorRotation().Yaw,Entrance.Rotator().Yaw))>HomeUseYawTolerance ||
                 Npc->GetVelocity().Size2D()>=5.f)) ||
         (!bTaking && HomeState.Operation==EDeliveryHomeOperation::PlaceProp && !IsHomePropAtHand()) ||
@@ -379,7 +387,17 @@ bool UDeliveryCompanionComponent::StartHomeUse(const UDeliveryHomeUseRequest& Re
         RefreshHomeCarryPose();
     }
     else if (HomeState.Operation==EDeliveryHomeOperation::Sit)
-    { SetHomePhase(EDeliveryCompanionHomePhase::EnterUse); SetHomePose(nullptr,false,false); }
+    {
+        const auto* Definition=Object->GetUseDefinition(Claim);
+        SetHomePhase(EDeliveryCompanionHomePhase::EnterUse);
+        UAnimSequence* Clip=Definition?(Definition->SeatMountAnimation?Definition->SeatMountAnimation.Get():Definition->EnterAnimation.Get()):nullptr;
+        if (!BeginHomeSeatMove(Use,Clip,Reason))
+        {
+            if (IsCurrentHome(Request.ArrangementId)) FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason);
+            return false;
+        }
+        if (!Definition->SeatMountAnimation) SetHomePose(nullptr,false,false);
+    }
     else if (HomeState.Operation==EDeliveryHomeOperation::PlaceProp)
     {
         auto* Source=ActiveHomeChoice.SourceObject.Get();
@@ -419,7 +437,8 @@ void UDeliveryCompanionComponent::BeginLeavingHomeUse(FName Reason)
     SetHomePhase(EDeliveryCompanionHomePhase::LeaveUse);
     const auto* Object=HomeUseClaim.Object.Get();
     const auto* Definition=Object?Object->GetUseDefinition(HomeUseClaim):nullptr;
-    SetHomePose(Definition?Definition->ExitAnimation.Get():nullptr,false,false);
+    // 仍在攀上时先完成本次受扫掠约束的移动，再站起离开，不能在半空瞬移到出口
+    if (!HomeState.SeatMotion.bMoving) SetHomePose(Definition?Definition->ExitAnimation.Get():nullptr,false,false);
 }
 
 void UDeliveryCompanionComponent::CancelHomeArrangement(FName Reason,bool bForce)
@@ -456,9 +475,12 @@ void UDeliveryCompanionComponent::FinishHomeArrangement(EDeliveryCompanionHomePh
     else
         Description=FString::Printf(TEXT("我对%s的家居安排已经停止：%s。没有完成的搬动或摆放仍留在现场，不能算作成功。"),*SourceName,*HomeStopDescription(Reason));
     TGuardValue<bool> Changing(bChangingHomeArrangement,true);
+    const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
     StopHomeMovement();
     // 先改变本次状态，释放 SO、物理和能力时的旧回调只能看到已经结束的安排
     HomeState.Phase=Phase; HomeState.Reason=Reason;
+    ReleaseHomeSeatMove(true);
+    if (!WeakThis.IsValid() || !IsValid(GetOwner()) || HomeState.ArrangementId!=OldId) return;
     bHomeUseStarted=false; bPlacingHomeProp=false;
     ClearHomePropTransfer();
     ReleasedPlacementProp.Reset(); PlacementReleasedAt=0; PlacementStableSince=0;
@@ -701,7 +723,9 @@ void UDeliveryCompanionComponent::UpdateHomeArrangement()
     TickHomeLifecycle();
     if (!HasActiveHomeArrangement()) return;
     const FGuid Id=HomeState.ArrangementId;
-    if (Npc->Agent->ShouldPauseForConversation() || Npc->Agent->HasActiveAction() || (Npc->Combat && Npc->Combat->IsReactingToHit()))
+    if (Npc->Agent->ShouldPauseForConversation() ||
+        (Npc->Agent->HasActiveAction() && !Npc->Agent->CanContinueCompanionMovement()) ||
+        (Npc->Combat && Npc->Combat->IsReactingToHit()))
     { StopHomeMovement(); SetSuspension(TEXT("OtherBehavior")); return; }
     if (!EnsureOnFoot()) { StopHomeMovement(); SetSuspension(TEXT("CompanionDismountBlocked")); return; }
     const double Now=GetWorld()->GetTimeSeconds();
@@ -732,7 +756,7 @@ void UDeliveryCompanionComponent::UpdateHomeArrangement()
         LastHomeUpdateAt=Now;
         if (!bReached || !IsCurrentHome(Id)) return;
         // 到点后先按家具入口转身，实际手持位置才与已检查的朝向一致
-        if ((bAtSource || HomeState.Operation==EDeliveryHomeOperation::PlaceProp) && !AlignForHome(Entrance)) return;
+        if ((bAtSource || HomeState.Operation==EDeliveryHomeOperation::PlaceProp || HomeState.Operation==EDeliveryHomeOperation::Sit) && !AlignForHome(Entrance)) return;
         // 转身后先等真实持件回到当前手前，不能拿转身前的位置直接开始桌面路线
         if (!bAtSource && HomeState.Operation==EDeliveryHomeOperation::PlaceProp && !IsHomePropAtHand())
         { SetSuspension(TEXT("HomePropReturningToHand")); return; }
@@ -746,16 +770,21 @@ void UDeliveryCompanionComponent::UpdateHomeArrangement()
     }
     if (HomeState.Phase==EDeliveryCompanionHomePhase::EnterUse)
     {
-        if (HomeState.PoseAnimation!=Definition->EnterAnimation)
+        if (HomeState.SeatMotion.bMoving)
         {
-            const bool bReached=MoveForHome(Use.GetLocation(),HomeUseReachTolerance);
+            if (!UpdateHomeSeatMove(Use,Reason))
+            {
+                if (IsCurrentHome(Id) && !Reason.IsNone()) FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason);
+                return;
+            }
             if (!IsCurrentHome(Id)) return;
-            if (!bReached || !AlignForHome(Use)) { LastHomeUpdateAt=Now; return; }
-            SetHomePose(Definition->EnterAnimation,false,false);
         }
+        if (!AlignForHome(Use) || !IsCurrentHome(Id)) return;
+        if (HomeState.PoseAnimation!=Definition->EnterAnimation) SetHomePose(Definition->EnterAnimation,false,false);
         const double Length=Definition->EnterAnimation?Definition->EnterAnimation->GetPlayLength():0;
         if (GetHomeServerTime()-HomeState.PoseStartedServerTime>=Length)
         {
+            Npc->GetCharacterMovement()->bUseControllerDesiredRotation=false;
             SetHomePhase(EDeliveryCompanionHomePhase::Using); SetHomePose(Definition->Animation,true,false);
             const FString Description=FString::Printf(TEXT("我走到%s的%s，完成坐下过渡，现在正在这个座位上休息。"),
                 *HomeObjectName(Object),*Definition->DisplayName.ToString().Left(64));
@@ -768,28 +797,47 @@ void UDeliveryCompanionComponent::UpdateHomeArrangement()
     {
         if (!bHomeExitAnimationFinished)
         {
+            if (HomeState.SeatMotion.bMoving)
+            {
+                if (!UpdateHomeSeatMove(Use,Reason))
+                {
+                    if (IsCurrentHome(Id) && !Reason.IsNone()) FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason);
+                    return;
+                }
+                if (!IsCurrentHome(Id)) return;
+                SetHomePose(Definition->ExitAnimation,false,false);
+            }
             const double Length=Definition->ExitAnimation?Definition->ExitAnimation->GetPlayLength():0;
-            if (GetHomeServerTime()-HomeState.PoseStartedServerTime<Length) return;
-            bHomeExitAnimationFinished=true; SetHomePose(nullptr,false,false);
+            if (Definition->SeatDismountAnimation && GetHomeServerTime()-HomeState.PoseStartedServerTime<Length) return;
+            if (!AlignForHome(Exit) || !IsCurrentHome(Id)) return;
+            UAnimSequence* Clip=Definition->SeatDismountAnimation?Definition->SeatDismountAnimation.Get():Definition->ExitAnimation.Get();
+            if (!BeginHomeSeatMove(Exit,Clip,Reason))
+            {
+                if (!IsCurrentHome(Id)) return;
+                SetSuspension(Reason);
+                if (LastHomePause!=Reason)
+                {
+                    LastHomePause=Reason;
+                    Npc->ObserveFact(TEXT("HomeExitBlocked"),Object->GetOwner(),TEXT("我已准备离开座位，但退出路线被挡住；我还保留这个座位，尚未开始下一项安排。"),EDeliveryNpcEvidenceSource::ActionResult);
+                }
+                return;
+            }
+            bHomeExitAnimationFinished=true;
         }
-        const bool bReached=MoveForHome(Exit.GetLocation(),HomeUseReachTolerance);
-        if (!IsCurrentHome(Id)) return;
-        if (bReached && AlignForHome(Exit))
-        { FinishHomeArrangement(EDeliveryCompanionHomePhase::Cancelled,HomeLeaveReason); return; }
-        if (SuspensionReason==TEXT("HomePathBlocked") && LastHomePause!=TEXT("HomeExitBlocked"))
+        if (UpdateHomeSeatMove(Exit,Reason))
         {
-            LastHomePause=TEXT("HomeExitBlocked");
-            Npc->ObserveFact(TEXT("HomeExitBlocked"),Object->GetOwner(),TEXT("我已准备离开座位，但退出路线被挡住；我还保留这个座位，尚未开始下一项安排。"),EDeliveryNpcEvidenceSource::ActionResult);
+            if (IsCurrentHome(Id)) FinishHomeArrangement(EDeliveryCompanionHomePhase::Cancelled,HomeLeaveReason);
         }
+        else if (IsCurrentHome(Id) && !Reason.IsNone()) FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason);
         return;
     }
     if (HomeState.Phase==EDeliveryCompanionHomePhase::Using)
     {
         if (HomeState.Operation==EDeliveryHomeOperation::Sit)
         {
-            if (FVector::Dist2D(Npc->GetNavAgentLocation(),Use.GetLocation())>FMath::Max(15.f,HomeUseReachTolerance*2))
-                BeginLeavingHomeUse(TEXT("HomeSeatPositionChanged"));
-            else AlignForHome(Use);
+            if (!HomeState.SeatMotion.bActive || Npc->GetCharacterMovement()->MovementMode!=MOVE_Flying ||
+                FVector::Dist(Npc->GetActorLocation(),HomeState.SeatMotion.Target)>FMath::Max(15.f,HomeUseReachTolerance*2))
+                FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomeSeatPositionChanged"));
             return;
         }
         if (Now-HomePhaseStartedAt<Definition->UseSeconds) return;
@@ -899,6 +947,7 @@ void UDeliveryCompanionComponent::ShutdownHomeExecution()
 {
     bHomeEndingPlay=true;
     CancelHomeArrangement(TEXT("CompanionEndPlay"),true);
+    ReleaseHomeSeatMove(true);
     const auto Handle=HomeAbilityHandle;
     HomeAbilityHandle={};
     auto* ASC=HomeAbilitySystem.Get(); HomeAbilitySystem.Reset();

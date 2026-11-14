@@ -6,6 +6,7 @@
 
 class APlayerState;
 class UAnimSequence;
+class UPrimitiveComponent;
 
 // 物件清单只包含实际感知和已实现的用途，不向模型发送 UObject 或 SO 句柄
 struct FDeliveryNpcHomeSlotView
@@ -48,6 +49,40 @@ enum class EDeliveryCompanionHomePhase : uint8
     None, GoToObject, TakeProp, GoToDestination, EnterUse, Using, PlaceProp, LeaveUse, Completed, Failed, Cancelled
 };
 
+// 服务器给出本次座位移动，模拟代理创建同参数 RMS，由 CMC 负责位移和碰撞
+USTRUCT()
+struct FDeliveryCompanionSeatMotion
+{
+    GENERATED_BODY()
+    UPROPERTY() FGuid ArrangementId;
+    UPROPERTY() int32 Revision=0;
+    UPROPERTY() TObjectPtr<AActor> Seat;
+    UPROPERTY() FVector Start=FVector::ZeroVector;
+    UPROPERTY() FVector Target=FVector::ZeroVector;
+    UPROPERTY() double StartedServerTime=0;
+    UPROPERTY() float Duration=0;
+    UPROPERTY() bool bActive=false;
+    UPROPERTY() bool bMoving=false;
+};
+
+// 仅保存这个组件实际接管的资源，复制状态与本机 RMS 编号分开
+struct FDeliveryCompanionSeatRuntime
+{
+    FGuid ArrangementId;
+    TWeakObjectPtr<AActor> Seat;
+    TWeakObjectPtr<UPrimitiveComponent> Capsule;
+    FName MotionName;
+    uint16 MotionId=0;
+    int32 AppliedRevision=0;
+    int32 FinishedRevision=0;
+    uint8 PreviousMovementMode=0;
+    uint8 PreviousCustomMode=0;
+    bool bAddedMoveIgnore=false;
+    bool bSavedMovement=false;
+    bool bSavedOrientToMovement=false;
+    bool bSavedControllerRotation=false;
+};
+
 // 所有人看到同一动作与实物结果，槽位是否可用仍由服务器 Smart Objects 判断
 USTRUCT(BlueprintType)
 struct FDeliveryCompanionHomeState
@@ -64,4 +99,5 @@ struct FDeliveryCompanionHomeState
     UPROPERTY(BlueprintReadOnly) double PoseStartedServerTime=0;
     UPROPERTY(BlueprintReadOnly) bool bLoopPose=false;
     UPROPERTY(BlueprintReadOnly) bool bUpperBodyPose=false;
+    UPROPERTY() FDeliveryCompanionSeatMotion SeatMotion;
 };

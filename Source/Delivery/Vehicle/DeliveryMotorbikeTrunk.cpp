@@ -6,11 +6,13 @@
 // DeliveryMotorbike.cpp 已经很长，而这两件事（尺寸、后备箱）各自是独立的一小块。
 
 #include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/DeliveryVehicleSummonComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Delivery.h"
 #include "Engine/StaticMesh.h"
+#include "GameFramework/PlayerState.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Inventory/DeliveryPackageItem.h"
@@ -169,12 +171,32 @@ bool ADeliveryMotorbike::BeginTrunkLoad(ADeliveryCharacter* Character)
 		return false;
 	}
 
-	// 先清背包槽位再固定到车上，避免同一件快递同时属于背包和车辆
-	if (!Inventory->ConsumeHeldItem(Package) || !AttachCargo(Package))
-	{
-		return false;
-	}
+    const TWeakObjectPtr<ADeliveryMotorbike> WeakThis(this);
+    const TWeakObjectPtr<ADeliveryCharacter> WeakCharacter(Character);
+    const TWeakObjectPtr<ADeliveryPackageItem> WeakPackage(Package);
+    const TWeakObjectPtr<APlayerState> LoadingPlayer(Character->GetTaskPlayerState());
+    if (!LoadingPlayer.IsValid() || LoadingPlayer->IsInactive() || LoadingPlayer->GetWorld() != GetWorld()) return false;
+    const FVector DropLocation=Character->GetActorLocation() +
+        Character->GetActorForwardVector().GetSafeNormal2D()*Inventory->GetDropForwardDistance() + FVector::UpVector*Inventory->GetDropUpOffset();
+    // 清槽通知可能改变角色或车辆，只有本次实际装货成功才写入玩家登记
+    if (!Inventory->ConsumeHeldItem(Package)) return false;
+    if (!WeakThis.IsValid() || IsActorBeingDestroyed() || !WeakCharacter.IsValid() ||
+        !WeakPackage.IsValid() || Character->GetTaskPlayerState() != LoadingPlayer.Get() ||
+        !LoadingPlayer.IsValid() || LoadingPlayer->IsInactive() || Driver || IsTrunkBusy() ||
+        !AttachCargoForPlayer(Package, LoadingPlayer.Get()))
+    {
+        if (WeakPackage.IsValid() && !Package->GetOwner())
+        {
+            if (WeakCharacter.IsValid() && LoadingPlayer.IsValid() && Character->GetTaskPlayerState()==LoadingPlayer.Get())
+                Character->TryReceiveTaskPackage(Package);
+            if (WeakPackage.IsValid() && !Package->GetOwner()) Package->DropFromInventory(DropLocation,FVector::ZeroVector);
+        }
+        return false;
+    }
 
+    if (!WeakThis.IsValid() || IsActorBeingDestroyed() || !WeakCharacter.IsValid() ||
+        !WeakPackage.IsValid() || GetCargo() != Package) return false;
+    if (auto* Summon=Character->FindComponentByClass<UDeliveryVehicleSummonComponent>()) Summon->RegisterVehicle(this);
 	TrunkPendingReceiver.Reset();
 	MulticastTrunkAction(EDeliveryTrunkPhase::Loading);
 
@@ -247,6 +269,16 @@ void ADeliveryMotorbike::ApplyTrunkLidAlpha(float Alpha)
  */
 void ADeliveryMotorbike::UpdateTrunkAnimation(float DeltaSeconds)
 {
+    if (HasAuthority() && CargoHandoffId.IsValid())
+    {
+        const FGuid Id = CargoHandoffId;
+        const TWeakObjectPtr<ADeliveryMotorbike> WeakThis(this);
+        if (!IsCargoHandoffCurrent(Id))
+        {
+            if (WeakThis.IsValid()) CancelCargoHandoff(Id);
+            return;
+        }
+    }
 	if (TrunkPhase == EDeliveryTrunkPhase::Idle)
 	{
 		return;
@@ -285,26 +317,52 @@ void ADeliveryMotorbike::UpdateTrunkAnimation(float DeltaSeconds)
 		return;
 	}
 
+    if (HasAuthority() && CargoHandoffId.IsValid())
+    {
+        CompleteCargoHandoff();
+        return;
+    }
+
 	// 时间线走完：收尾
 	const EDeliveryTrunkPhase Finished = TrunkPhase;
 	TrunkPhase = EDeliveryTrunkPhase::Idle;
 	TrunkElapsed = 0.0f;
 	ApplyTrunkLidAlpha(0.0f);
 
-	if (Finished == EDeliveryTrunkPhase::Unloading && HasAuthority())
-	{
-		ADeliveryCharacter* Receiver = TrunkPendingReceiver.Get();
-		TrunkPendingReceiver.Reset();
-		ADeliveryPackageItem* Released = ReleaseCargo();
-		// 不放取件音效——这是从自己车上拿回来，不是又领了一件
-		if (IsValid(Released) && (!IsValid(Receiver) ||
-		                          !Receiver->ReceiveTaskPackage(Released, /* 播放反馈= */ false)))
-		{
-			// 交不回去（背包满了、人晕了）就留在箱子里，走回来再按一次
-			AttachCargo(Released);
-			UE_LOG(LogDelivery, Log, TEXT("%s：后备箱取货失败，快递留在车上。"), *GetName());
-		}
-	}
+    const TWeakObjectPtr<ADeliveryMotorbike> WeakThis(this);
+    if (Finished == EDeliveryTrunkPhase::Unloading && HasAuthority())
+    {
+        const TWeakObjectPtr<ADeliveryCharacter> Receiver=TrunkPendingReceiver;
+        TrunkPendingReceiver.Reset();
+        const TWeakObjectPtr<APlayerState> LoadingPlayer(GetCargoPlayerState());
+        // 记录箱口当前真实位置，回装失败时恢复这件实物，不能用旧拾取点
+        const FVector ReleaseLocation=GetCargo()?GetCargo()->GetActorLocation():GetTaskPackageTransferPoint();
+        const TWeakObjectPtr<ADeliveryPackageItem> Released(ReleaseCargo());
+        const bool bReceived=WeakThis.IsValid() && !IsActorBeingDestroyed() && Released.IsValid() && Receiver.IsValid() &&
+            Receiver->ReceiveTaskPackage(Released.Get(),false);
+        if (!bReceived && Released.IsValid())
+        {
+            if (!Released->GetOwner() && WeakThis.IsValid() && !IsActorBeingDestroyed())
+                AttachCargoForPlayer(Released.Get(),LoadingPlayer.Get());
+            const bool bRestored=WeakThis.IsValid() && !IsActorBeingDestroyed() && Released.IsValid() &&
+                GetCargo()==Released.Get() && Released->GetOwner()==this;
+            if (bRestored)
+            {
+                UE_LOG(LogDelivery,Log,TEXT("%s：后备箱取货失败，原包裹已确认留在车上。"),*GetNameSafe(WeakThis.Get()));
+            }
+            else if (Released.IsValid() && !Released->GetOwner())
+            {
+                Released->DropFromInventory(ReleaseLocation,FVector::ZeroVector);
+                UE_LOG(LogDelivery,Warning,TEXT("后备箱取货回装失败，已为无人持有的原包裹请求恢复箱口处的物理掉落：%s"),*GetNameSafe(Released.Get()));
+            }
+            else
+            {
+                UE_LOG(LogDelivery,Warning,TEXT("后备箱取货回调改变了原包裹归属，保留当前实际持有者：%s"),
+                    Released.IsValid()?*GetNameSafe(Released->GetOwner()):TEXT("包裹已销毁"));
+            }
+        }
+    }
+    if (!WeakThis.IsValid() || IsActorBeingDestroyed()) return;
 
 	// 装好之后把快递藏进关好的箱子；取货失败重新入箱时同样要藏
 	ApplyCargoPresentation();

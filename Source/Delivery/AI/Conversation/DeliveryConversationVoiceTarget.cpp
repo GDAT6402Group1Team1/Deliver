@@ -4,8 +4,7 @@
 #include "AI/Companion/DeliveryCompanionComponent.h"
 #include "AbilitySystem/DeliverGameplayTags.h"
 #include "AbilitySystemComponent.h"
-#include "Character/DeliveryCharacter.h"
-#include "UI/DeliveryHUD.h"
+#include "AbilitySystemInterface.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
@@ -41,28 +40,35 @@ ADeliveryNpcCharacter* UDeliveryConversationComponent::ResolveVoiceCompanion() c
 
 bool UDeliveryConversationComponent::CanVoiceTalkTo(const ADeliveryNpcCharacter* Resident) const
 {
-    const auto* PC=Cast<APlayerController>(GetOwner());
-    APawn* Pawn=PC?PC->GetPawn():nullptr;
-    if (!IsOwnedVoiceCompanion(Resident,PC,GetWorld()) || !IsValid(Pawn) || Pawn->IsActorBeingDestroyed() ||
-        Pawn->GetWorld()!=GetWorld() || Pawn->GetController()!=PC || Resident->IsKnockedDown()) return false;
-    if (const auto* Character=ADeliveryHUD::ResolveCharacter(Pawn))
-        if (const auto* ASC=Character->GetAbilitySystemComponent();ASC && ASC->HasMatchingGameplayTag(TAG_State_Stunned)) return false;
+    auto* PC=Cast<APlayerController>(GetOwner());
+    FDeliverySpeechPlayerContext Context;
+    if (!IsOwnedVoiceCompanion(Resident,PC,GetWorld()) || !Context.Capture(PC) || Resident->IsKnockedDown()) return false;
+    // 骑车后原角色的 PlayerState 会清空，受击状态仍由同一玩家的 PlayerState 保存
+    if (const auto* AbilityOwner=Cast<IAbilitySystemInterface>(PC->PlayerState.Get()))
+        if (const auto* ASC=AbilityOwner->GetAbilitySystemComponent();ASC && ASC->HasMatchingGameplayTag(TAG_State_Stunned)) return false;
     // 队友连麦不依赖距离和视线，跑腿途中保留原来的活动与移动
     return true;
 }
 
 bool UDeliveryConversationComponent::IsVoiceTurn(const FDeliveryConversationTurnHandle& Handle) const
 {
-    const auto* Turns=GetWorld()?GetWorld()->GetSubsystem<UDeliveryConversationTurnSubsystem>():nullptr;
-    const auto* Voice=Handle.IsValid()?VoiceTurns.Find(Handle.Token):nullptr;
-    return GetOwner() && GetOwner()->HasAuthority() && Turns && Handle.WorldEpoch==Turns->GetWorldEpoch() &&
-        Voice && Voice->Handle==Handle && IsOwnedVoiceCompanion(Voice->Npc.Get(),Cast<APlayerController>(GetOwner()),GetWorld());
+    auto* Turns=GetWorld()?GetWorld()->GetSubsystem<UDeliveryConversationTurnSubsystem>():nullptr;
+    // 租约查询可能清理旧轮次并通知外层，先复制记录以免持有失效的映射指针
+    const FVoiceTurn Voice=VoiceTurns.FindRef(Handle.Token);
+    auto* PC=Cast<APlayerController>(GetOwner());
+    if (!PC || !PC->HasAuthority() || !Turns || Handle.WorldEpoch!=Turns->GetWorldEpoch() ||
+        !Voice.Handle.IsValid() || !(Voice.Handle==Handle) || !IsOwnedVoiceCompanion(Voice.Npc.Get(),PC,GetWorld())) return false;
+    FDeliveryConversationTurnLease Lease;
+    return Turns->GetLease(Voice.Npc.Get(),Lease) && Lease.Owner.Get()==PC && Lease.Handle==Handle && Lease.bVoice &&
+        Lease.VoiceContext.Check(PC)!=EDeliverySpeechPlayerContextState::Invalid;
 }
 
 bool UDeliveryConversationComponent::IsVoiceReplyMessage(FGuid MessageId,const ADeliveryNpcCharacter* ExpectedNpc) const
 {
-    const auto* Voice=VoiceTurns.Find(MessageId);
-    return Voice && (!ExpectedNpc || Voice->Npc.Get()==ExpectedNpc) && IsVoiceTurn(Voice->Handle);
+    const FVoiceTurn Voice=VoiceTurns.FindRef(MessageId);
+    auto* Turns=GetWorld()?GetWorld()->GetSubsystem<UDeliveryConversationTurnSubsystem>():nullptr;
+    return Voice.Handle.IsValid() && (!ExpectedNpc || Voice.Npc.Get()==ExpectedNpc) && IsVoiceTurn(Voice.Handle) && Turns &&
+        Turns->GetVoiceContextState(Cast<APlayerController>(GetOwner()),Voice.Handle)==EDeliverySpeechPlayerContextState::Valid;
 }
 
 void UDeliveryConversationComponent::PruneVoiceTurns()

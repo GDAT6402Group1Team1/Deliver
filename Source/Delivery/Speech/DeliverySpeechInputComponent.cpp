@@ -83,6 +83,18 @@ struct FDeliverySpeechInputBridge
         return true;
     }
 
+    // 仅游戏线程访问；结束通知重入时若控制关系正在复制，保留已经取出的唯一 final
+    bool PollRecognition(FDeliverySpeechRecognitionEvent& Event)
+    {
+        if (DeferredFinal.IsSet())
+        {
+            Event = MoveTemp(DeferredFinal.GetValue());
+            DeferredFinal.Reset();
+            return true;
+        }
+        return Recognizer->Poll(Event);
+    }
+
     const uint64 Generation;
     TSharedPtr<FDeliverySpeechRecognizer, ESPMode::ThreadSafe> Recognizer =
         MakeShared<FDeliverySpeechRecognizer, ESPMode::ThreadSafe>();
@@ -92,6 +104,7 @@ struct FDeliverySpeechInputBridge
     std::atomic<uint64> EndedTurn{0};
     FCriticalSection DetectionMutex;
     TArray<uint64> Detections;
+    TOptional<FDeliverySpeechRecognitionEvent> DeferredFinal;
     FCriticalSection ErrorMutex;
     bool bHasError = false;
     uint64 FailedTurnId = 0;
@@ -120,8 +133,9 @@ bool UDeliverySpeechInputComponent::EnableVoice()
         PublishState();
         return false;
     }
-    const auto* PC = Cast<APlayerController>(GetOwner());
-    if (!PC || !PC->IsLocalController() || !IsValid(PC->GetPawn()) || !HasLocalViewportFocus())
+    auto* PC = Cast<APlayerController>(GetOwner());
+    FDeliverySpeechPlayerContext NewContext;
+    if (!PC || !PC->IsLocalController() || !HasLocalViewportFocus() || !NewContext.Capture(PC))
     {
         StatusText = TEXT("请在当前游戏窗口中开启语音");
         PublishState();
@@ -144,7 +158,8 @@ bool UDeliverySpeechInputComponent::EnableVoice()
     bContinuousMode = true;
     ConnectedNpc = Companion;
     bRecognizerReady = false;
-    SessionPawn = PC->GetPawn();
+    SessionContext = MoveTemp(NewContext);
+    ContextPendingSince = -1;
     PartialText.Reset();
     LastError.Reset();
     StatusText = TEXT("正在准备语音");
@@ -210,12 +225,13 @@ bool UDeliverySpeechInputComponent::BeginHold(ADeliveryNpcCharacter* Npc)
     check(IsInGameThread());
     if (bContinuousMode) return false;
     if (!bVoiceEnabled || !IsVoiceReady() || !Bridge || !AudioCapture) return false;
-    const auto* PC = Cast<APlayerController>(GetOwner());
-    if (!PC || !SessionPawn.IsValid() || PC->GetPawn() != SessionPawn.Get() || !HasLocalViewportFocus())
+    const auto ContextState = CheckSessionContext(FPlatformTime::Seconds());
+    if (ContextState == EDeliverySpeechPlayerContextState::Invalid || !HasLocalViewportFocus())
     {
         CloseVoice(TEXT("操作已切换，语音已关闭"));
         return false;
     }
+    if (ContextState == EDeliverySpeechPlayerContextState::Pending) return false;
     if (!CanTalkTo(Npc))
     {
         StatusText = TEXT("请靠近可以交谈的人物");
@@ -248,8 +264,8 @@ void UDeliverySpeechInputComponent::FinishHold()
     check(IsInGameThread());
     if (bContinuousMode) return;
     if (!IsHolding()) return;
-    const auto* PC = Cast<APlayerController>(GetOwner());
-    if (!PC || !SessionPawn.IsValid() || PC->GetPawn() != SessionPawn.Get())
+    const auto ContextState = CheckSessionContext(FPlatformTime::Seconds());
+    if (ContextState == EDeliverySpeechPlayerContextState::Invalid)
     {
         CloseVoice(TEXT("控制人物已切换，语音已关闭"));
         return;
@@ -259,7 +275,7 @@ void UDeliverySpeechInputComponent::FinishHold()
         CloseVoice(TEXT("已离开游戏窗口，语音已关闭"));
         return;
     }
-    if (!CanTalkTo(ActiveNpc.Get()))
+    if (ContextState == EDeliverySpeechPlayerContextState::Valid && !CanTalkTo(ActiveNpc.Get()))
     {
         CancelHold();
         return;
@@ -339,6 +355,7 @@ void UDeliverySpeechInputComponent::ClearActiveTurn(const FDeliverySpeechTurnTok
     if (Bridge)
     {
         Bridge->CurrentTurn.store(0);
+        Bridge->DeferredFinal.Reset();
         Bridge->Recognizer->CancelTurn(ActiveNativeTurnId);
     }
     if (AudioCapture) AudioCapture->CancelTurn(ActiveNativeTurnId);
@@ -365,7 +382,8 @@ void UDeliverySpeechInputComponent::StopSessionResources()
     UnbindDeviceNotifications();
     if (Bridge) Bridge->Recognizer->RequestStop();
     bRecognizerReady = false;
-    SessionPawn.Reset();
+    SessionContext.Reset();
+    ContextPendingSince = -1;
     ConnectedNpc.Reset();
     bContinuousMode = false;
 }
@@ -390,7 +408,8 @@ void UDeliverySpeechInputComponent::TickComponent(float DeltaTime, ELevelTick Ti
         return;
     }
     const auto* PC = Cast<APlayerController>(GetOwner());
-    if (!PC || !PC->IsLocalController() || !SessionPawn.IsValid() || PC->GetPawn() != SessionPawn.Get())
+    const auto ContextState = CheckSessionContext(FPlatformTime::Seconds());
+    if (!PC || !PC->IsLocalController() || ContextState == EDeliverySpeechPlayerContextState::Invalid)
     {
         CloseVoice(TEXT("控制人物已切换，语音已关闭"));
         return;
@@ -414,12 +433,14 @@ void UDeliverySpeechInputComponent::TickComponent(float DeltaTime, ELevelTick Ti
         FailSession(Failure, FailureText(Failure));
         return;
     }
-    if (bContinuousMode && !CanTalkTo(ConnectedNpc.Get()))
+    if (bContinuousMode && (!ConnectedNpc.IsValid() ||
+        (ContextState == EDeliverySpeechPlayerContextState::Valid && !CanTalkTo(ConnectedNpc.Get()))))
     {
         CloseVoice(TEXT("与同伴的语音连接已结束"));
         return;
     }
-    if (TurnState.HasActiveTurn() && !CanTalkTo(ActiveNpc.Get()))
+    if (TurnState.HasActiveTurn() && (!ActiveNpc.IsValid() ||
+        (ContextState == EDeliverySpeechPlayerContextState::Valid && !CanTalkTo(ActiveNpc.Get()))))
     {
         CancelHold();
         return;
@@ -438,10 +459,13 @@ void UDeliverySpeechInputComponent::TickComponent(float DeltaTime, ELevelTick Ti
         return;
     }
 
+    // 上下车复制未齐时保持音频线程和既有期限，最终文字与下一句都等控制关系完整后再领取
+    if (ContextState == EDeliverySpeechPlayerContextState::Pending) return;
+
     // 委托可能关闭或重新开启组件，始终用这次会话快照检查后续事件
     const auto PollBridge = Bridge;
     FDeliverySpeechRecognitionEvent Event;
-    while (bVoiceEnabled && Bridge == PollBridge && PollBridge->Recognizer->Poll(Event))
+    while (bVoiceEnabled && Bridge == PollBridge && PollBridge->PollRecognition(Event))
     {
         if (Event.Kind == EDeliverySpeechRecognitionEvent::Ready)
         {
@@ -474,9 +498,15 @@ void UDeliverySpeechInputComponent::TickComponent(float DeltaTime, ELevelTick Ti
         {
             PollContinuousEnd();
             if (!bVoiceEnabled || Bridge != PollBridge) return;
-            if (!HasLocalViewportFocus() || PC->GetPawn() != SessionPawn.Get())
+            const auto FinalContext = CheckSessionContext(FPlatformTime::Seconds());
+            if (!HasLocalViewportFocus() || FinalContext == EDeliverySpeechPlayerContextState::Invalid)
             {
                 CloseVoice(TEXT("操作已切换，语音已关闭"));
+                return;
+            }
+            if (FinalContext == EDeliverySpeechPlayerContextState::Pending)
+            {
+                PollBridge->DeferredFinal = MoveTemp(Event);
                 return;
             }
             if (!CanTalkTo(ActiveNpc.Get()))
@@ -513,7 +543,8 @@ void UDeliverySpeechInputComponent::TickComponent(float DeltaTime, ELevelTick Ti
     const auto* Conversation = PC->FindComponentByClass<UDeliveryConversationComponent>();
     // 上一句等许可或服务器回执时保留检测编号与音频，避免新起声取消尚未送达的完整文字
     if (bVoiceEnabled && Bridge == PollBridge && bContinuousMode && IsVoiceReady() &&
-        Conversation && !Conversation->HasPendingVoiceSubmission())
+        Conversation && !Conversation->HasPendingVoiceSubmission() &&
+        CheckSessionContext(FPlatformTime::Seconds()) == EDeliverySpeechPlayerContextState::Valid)
     {
         uint64 DetectionId = 0;
         if (PollBridge->TakeDetection(DetectionId)) BeginDetectedSpeech(DetectionId);
@@ -531,6 +562,7 @@ FString UDeliverySpeechInputComponent::ConnectedStatus() const
 bool UDeliverySpeechInputComponent::BeginDetectedSpeech(uint64 DetectionId)
 {
     if (!bVoiceEnabled || !bContinuousMode || !Bridge || !AudioCapture || !CanTalkTo(ConnectedNpc.Get())) return false;
+    if (CheckSessionContext(FPlatformTime::Seconds()) != EDeliverySpeechPlayerContextState::Valid) return false;
     const auto* PC = Cast<APlayerController>(GetOwner());
     const auto* Conversation = PC ? PC->FindComponentByClass<UDeliveryConversationComponent>() : nullptr;
     if (!Conversation || Conversation->HasPendingVoiceSubmission()) return false;
@@ -569,6 +601,24 @@ void UDeliverySpeechInputComponent::PollContinuousEnd()
     }
     OnHoldReleased.Broadcast(Token);
     PublishState();
+}
+
+EDeliverySpeechPlayerContextState UDeliverySpeechInputComponent::CheckSessionContext(double Now)
+{
+    const auto State = SessionContext.Check(Cast<APlayerController>(GetOwner()));
+    if (State == EDeliverySpeechPlayerContextState::Invalid) return State;
+    // 先检查已开始的等待，长帧后字段刚好补齐也不能复活已超时的会话
+    if (ContextPendingSince >= 0 && (!FMath::IsFinite(Now) || Now < ContextPendingSince ||
+        Now - ContextPendingSince >= FDeliverySpeechPlayerContext::TransitionGraceSeconds))
+        return EDeliverySpeechPlayerContextState::Invalid;
+    if (State == EDeliverySpeechPlayerContextState::Valid)
+    {
+        ContextPendingSince = -1;
+        return State;
+    }
+    if (!FMath::IsFinite(Now)) return EDeliverySpeechPlayerContextState::Invalid;
+    if (ContextPendingSince < 0) ContextPendingSince = Now;
+    return EDeliverySpeechPlayerContextState::Pending;
 }
 
 bool UDeliverySpeechInputComponent::HasLocalViewportFocus() const

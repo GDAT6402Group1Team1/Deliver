@@ -145,7 +145,7 @@ def verify_installed_configuration(item, observed):
                     'use_seconds','maximum_prop_half_extent','placement_tolerance','placement_angle_tolerance','maximum_support_gap'):
             if key in expected and not close_numbers(expected[key], actual.get(key)):
                 raise RuntimeError('槽位实际参数与 manifest 不同，需审阅并显式 Replace：'+item['label']+'/'+expected['slot_id']+'/'+key)
-        for key in ('enter_animation','animation','exit_animation','sound'):
+        for key in ('enter_animation','animation','exit_animation','seat_mount_animation','seat_dismount_animation','sound'):
             if package_name(expected.get(key) or '') != package_name(actual.get(key) or ''):
                 raise RuntimeError('槽位实际资源引用与 manifest 不同：'+item['label']+'/'+expected['slot_id']+'/'+key)
 
@@ -553,6 +553,20 @@ def validate_manifest(manifest, home, entries, baseline, setup):
             if slot['operation'] == 'Sit' and any(package_name(slot.get(field, '')) != package_name(imported[role]) for field, role in
                                                  (('enter_animation', 'SitDown'), ('animation', 'Sit'), ('exit_animation', 'StandUp'))):
                 raise RuntimeError('座位引用与成品动画清单不一致')
+            if slot['operation'] == 'Sit':
+                for key in ('seat_mount_animation', 'seat_dismount_animation'):
+                    path = slot.get(key, '')
+                    if path and (not isinstance(path, str) or not path.startswith('/Game/NPC/Companion/Home/') or '..' in path):
+                        raise RuntimeError('上下座位动作必须来自明确导入的独立成品资源：'+item['label']+'/'+key)
+                    if path:
+                        clip = load(path)
+                        if (not isinstance(clip, unreal.AnimSequence) or
+                            object_path(clip.get_editor_property('skeleton')) != baseline['skeleton'] or
+                            unreal.EditorAssetLibrary.get_metadata_tag(clip, 'DeliverySeatAnimation') != '1' or
+                            unreal.EditorAssetLibrary.get_metadata_tag(clip, 'SourceBasisAlignment') != 'source_y_forward_to_x_forward_v1' or
+                            clip.get_editor_property('enable_root_motion') or not clip.get_editor_property('force_root_lock') or
+                            clip.get_editor_property('root_motion_root_lock') != unreal.RootMotionRootLock.ANIM_FIRST_FRAME):
+                            raise RuntimeError('上下座位成品骨架、来源或根锁定不符：'+path)
     for field in ('mesh', 'skeleton', 'idle', 'mesh_relative_transform'):
         if not close_numbers(recorded[field], baseline[field]):
             raise RuntimeError('人物动画基准已变化：' + field)
@@ -604,6 +618,8 @@ def main(setup=False, replace=False, manifest_file=None):
         baseline, mesh = animation_baseline()
         manifest = json.loads(Path(manifest_file).read_text(encoding='utf-8-sig')) if manifest_file else None
         animations = manifest['animations']['assets'] if manifest else ANIMATIONS
+        if not unreal.DeliveryHomeObjectAssetTools.finish_pending_editor_assets():
+            raise RuntimeError('场景资源加载或编译尚未完成，停止室内检查')
         interior = call_json(unreal.DeliveryHomeObjectAssetTools.inspect_interior_anchor(
             home, home.get_editor_property('interior_anchor').get_world_location()))
         report.update(house=house, furniture={label: item['data'] for label, item in entries.items()}, animation_baseline=baseline,
@@ -611,6 +627,15 @@ def main(setup=False, replace=False, manifest_file=None):
         report['companion_before'] = inspect_companion_binding(actors)
         report['imported_animations'] = inspect_imported_animations(mesh, animations)
         protected = protected_files(project, entries, baseline, animations, setup)
+        if manifest:
+            for item in manifest.get('objects', []):
+                for slot in item.get('slots', []):
+                    for key in ('seat_mount_animation', 'seat_dismount_animation'):
+                        if slot.get(key):
+                            file = source_file(project, slot[key])
+                            if not file.is_file():
+                                raise RuntimeError('上下座位成品尚未导入：'+slot[key])
+                            protected[str(file)] = sha256(file)
         report['protected_before'] = protected
         draft = manifest_draft(home, entries, baseline)
         (output/'manifest_draft.json').write_text(json.dumps(draft, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -626,6 +651,9 @@ def main(setup=False, replace=False, manifest_file=None):
         if setup:
             original_furnishings = list(home.get_editor_property('furnishings'))
             proposed = unreal.Vector(*manifest['interior_anchor_world'])
+            # 动画和蓝图预检会启动新的资源编译，等本轮加载完成再查询真实碰撞
+            if not unreal.DeliveryHomeObjectAssetTools.finish_pending_editor_assets():
+                raise RuntimeError('本轮资源加载或编译仍未完成，停止室内检查与写入')
             check = call_json(unreal.DeliveryHomeObjectAssetTools.inspect_interior_anchor(home, proposed))
             if not check['valid']:
                 raise RuntimeError('室内落脚点的地面、胶囊或完整门洞路径检查失败')

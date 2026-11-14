@@ -1,5 +1,6 @@
 #include "AI/BehaviorTree/BTTask_DeliveryCompanionFollow.h"
 #include "AI/Companion/DeliveryCompanionComponent.h"
+#include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "GameFramework/Pawn.h"
@@ -24,12 +25,20 @@ void UBTTask_DeliveryCompanionFollow::TickTask(UBehaviorTreeComponent& OwnerComp
 }
 EBTNodeResult::Type UBTTask_DeliveryCompanionFollow::AbortTask(UBehaviorTreeComponent& OwnerComp,uint8* Memory)
 {
-    if (Companion.IsValid()) Companion->StopFollowMovement();
+    if (Companion.IsValid())
+    {
+        const auto* Agent=Companion->GetOwner()->FindComponentByClass<UDeliveryNpcAgentComponent>();
+        if (!Agent || !Agent->CanContinueCompanionMovement()) Companion->StopFollowMovement();
+    }
     return EBTNodeResult::Aborted;
 }
 void UBTTask_DeliveryCompanionFollow::OnTaskFinished(UBehaviorTreeComponent& OwnerComp,uint8* Memory,EBTNodeResult::Type Result)
 {
-    if (Companion.IsValid()) Companion->StopFollowMovement();
+    if (Companion.IsValid())
+    {
+        const auto* Agent=Companion->GetOwner()->FindComponentByClass<UDeliveryNpcAgentComponent>();
+        if (!Agent || !Agent->CanContinueCompanionMovement()) Companion->StopFollowMovement();
+    }
     Companion.Reset();
     Super::OnTaskFinished(OwnerComp,Memory,Result);
 }

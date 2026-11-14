@@ -1,5 +1,6 @@
 #include "AI/BehaviorTree/BTTask_DeliveryCompanionErrand.h"
 #include "AI/Companion/DeliveryCompanionComponent.h"
+#include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "GameFramework/Pawn.h"
@@ -28,12 +29,22 @@ void UBTTask_DeliveryCompanionErrand::TickTask(UBehaviorTreeComponent& OwnerComp
 }
 EBTNodeResult::Type UBTTask_DeliveryCompanionErrand::AbortTask(UBehaviorTreeComponent& OwnerComp,uint8* Memory)
 {
-    if (Companion.IsValid()) Companion->StopErrandMovement();
+    if (Companion.IsValid())
+    {
+        const auto* Agent=Companion->GetOwner()->FindComponentByClass<UDeliveryNpcAgentComponent>();
+        // 被动对白接续同一委托，不能中止开箱、交接技能或本次导航
+        if (!Agent || !Agent->CanContinueCompanionMovement()) Companion->StopErrandMovement();
+    }
     return EBTNodeResult::Aborted;
 }
 void UBTTask_DeliveryCompanionErrand::OnTaskFinished(UBehaviorTreeComponent& OwnerComp,uint8* Memory,EBTNodeResult::Type Result)
 {
-    if (Companion.IsValid()) Companion->StopErrandMovement();
+    if (Companion.IsValid())
+    {
+        const auto* Agent=Companion->GetOwner()->FindComponentByClass<UDeliveryNpcAgentComponent>();
+        // 被动对白接续同一委托，不能中止开箱、交接技能或本次导航
+        if (!Agent || !Agent->CanContinueCompanionMovement()) Companion->StopErrandMovement();
+    }
     Companion.Reset();
     Super::OnTaskFinished(OwnerComp,Memory,Result);
 }

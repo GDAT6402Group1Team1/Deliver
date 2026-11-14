@@ -40,9 +40,9 @@ struct FObservedPlaceCandidate
 };
 }
 
-void UDeliveryCompanionComponent::ExtendWorldDecisionRequest(FDeliveryNpcDecisionRequest& Request) const
+void UDeliveryCompanionComponent::CollectObservedPlaces(TArray<FObservedPublicPlace>& Out) const
 {
-    Request.CompanionObservedPlaces.Reset();
+    Out.Reset();
     const auto* Npc=GetCompanion();
     UWorld* World=GetWorld();
     if (!IsValid(Npc) || !Npc->HasAuthority() || !World || Npc->GetWorld()!=World ||
@@ -52,7 +52,7 @@ void UDeliveryCompanionComponent::ExtendWorldDecisionRequest(FDeliveryNpcDecisio
     const auto* Sight=Perception?Perception->GetSenseConfig<UAISenseConfig_Sight>():nullptr;
     const auto* Registry=World->GetSubsystem<UDeliveryLocationRegistry>();
     // 停用视觉或离开本世界时，本次上下文不能继续声称看见公开地点
-    if (!Sight || !Registry || Controller->GetWorld()!=World || Perception->GetWorld()!=World ||
+    if (!Sight || !Registry || !IsValid(Controller) || Controller->GetPawn()!=Npc || Controller->GetWorld()!=World || Perception->GetWorld()!=World ||
         !Perception->IsRegistered() || !Perception->IsSenseEnabled(UAISense_Sight::StaticClass()) ||
         !FMath::IsFinite(Sight->SightRadius) || Sight->SightRadius<=0 ||
         !FMath::IsFinite(Sight->PeripheralVisionAngleDegrees) ||
@@ -74,7 +74,7 @@ void UDeliveryCompanionComponent::ExtendWorldDecisionRequest(FDeliveryNpcDecisio
         for (auto* Location:Registry->ResolveAllComponents(RegisteredId))
         {
             const auto* PlaceActor=IsValid(Location)?Location->GetOwner():nullptr;
-            if (!IsValid(PlaceActor) || PlaceActor==Npc || PlaceActor->IsHidden() ||
+            if (!IsValid(PlaceActor) || PlaceActor==Npc || PlaceActor->IsHidden() || PlaceActor->IsActorBeingDestroyed() ||
                 Location->GetWorld()!=World || PlaceActor->GetWorld()!=World || !Location->IsRegistered() ||
                 Location->LocationId!=RegisteredId || !Location->bDescribeToNpcs ||
                 PublicPlaceText(Location->NpcDisplayName,64).IsEmpty()) continue;
@@ -105,18 +105,27 @@ void UDeliveryCompanionComponent::ExtendWorldDecisionRequest(FDeliveryNpcDecisio
     // 公开观察点应在可见空处，连终点命中也拒绝，不忽略建筑或门
     const FCollisionQueryParams Params(SCENE_QUERY_STAT(CompanionObservedPlace),false,Npc);
     const int32 QueryCount=FMath::Min(Nearby.Num(),MaxPlaceSightQueries);
-    for (int32 Index=0;Index<QueryCount && Request.CompanionObservedPlaces.Num()<MaxObservedPlaces;++Index)
+    for (int32 Index=0;Index<QueryCount && Out.Num()<MaxObservedPlaces;++Index)
     {
         const auto& Candidate=Nearby[Index];
         const auto* Location=Candidate.Location.Get();
         if (!Location) continue;
         FHitResult Hit;
         if (World->LineTraceSingleByChannel(Hit,Eye,Candidate.Anchor,ECC_Visibility,Params)) continue;
-        FDeliveryNpcObservedPlace Place;
-        Place.PlaceId=FString::Printf(TEXT("place_%d"),Request.CompanionObservedPlaces.Num());
-        Place.Name=PublicPlaceText(Location->NpcDisplayName,64);
-        Place.Description=PublicPlaceText(Location->NpcDescription,160);
-        Place.DistanceCm=static_cast<float>(FMath::Sqrt(Candidate.DistanceSquared));
-        Request.CompanionObservedPlaces.Add(MoveTemp(Place));
+        FObservedPublicPlace Place;
+        Place.Location=Candidate.Location;
+        Place.View.PlaceId=FString::Printf(TEXT("place_%d"),Out.Num());
+        Place.View.Name=PublicPlaceText(Location->NpcDisplayName,64);
+        Place.View.Description=PublicPlaceText(Location->NpcDescription,160);
+        Place.View.DistanceCm=static_cast<float>(FMath::Sqrt(Candidate.DistanceSquared));
+        Out.Add(MoveTemp(Place));
     }
+}
+
+void UDeliveryCompanionComponent::ExtendWorldDecisionRequest(FDeliveryNpcDecisionRequest& Request) const
+{
+    TArray<FObservedPublicPlace> Observed;
+    CollectObservedPlaces(Observed);
+    Request.CompanionObservedPlaces.Reset();
+    for (auto& Place:Observed) Request.CompanionObservedPlaces.Add(MoveTemp(Place.View));
 }

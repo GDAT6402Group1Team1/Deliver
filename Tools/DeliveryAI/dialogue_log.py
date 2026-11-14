@@ -29,6 +29,9 @@ def record(request_id, source, model, original, context, proposal, sentences, er
     candidates = context.get('candidates', [])
     combat = bool(candidates) and all(isinstance(item, str) for item in candidates)
     chosen = None
+    chosen_candidate_id = None
+    chosen_travel_mode = None
+    chosen_resolution = 'no_proposal' if proposal is None else 'unresolved_no_match'
     if combat:
         target = context.get('current_action', {}).get('target') or ''
         labels = {action: f"{action}:{'-' if action == 'Wait' else target or '-'}" for action in candidates}
@@ -36,15 +39,38 @@ def record(request_id, source, model, original, context, proposal, sentences, er
             expected = '' if proposal.get('action') == 'Wait' else original.get('current_action', {}).get('target_id')
             if (proposal.get('target_id') or '') == expected:
                 chosen = labels.get(proposal.get('action'))
+                if chosen is not None:
+                    chosen_resolution = 'resolved_combat'
         candidate_labels = list(labels.values())
     else:
         candidate_labels = [f"{item.get('action')}:{item.get('target_id') or '-'}" for item in candidates]
     if proposal is not None and not combat:
-        for index, item in enumerate(original.get('candidates', [])):
-            if item.get('action') == proposal.get('action') and (item.get('target_id') or '') == (proposal.get('target_id') or ''):
-                if index < len(candidate_labels):
-                    chosen = candidate_labels[index]
-                break
+        # 出行变体共用动作和目标，日志按实际候选身份匹配，不能拿第一个变体代替
+        candidate_id = proposal.get('candidate_id')
+        matches = [(index, item) for index, item in enumerate(original.get('candidates', []))
+                   if (not candidate_id or item.get('candidate_id') == candidate_id)
+                   and item.get('action') == proposal.get('action')
+                   and (item.get('target_id') or '') == (proposal.get('target_id') or '')
+                   and ('travel_mode' not in proposal or item.get('travel_mode') == proposal['travel_mode'])]
+        if len(matches) > 1:
+            chosen_resolution = 'unresolved_ambiguous_candidates'
+        elif len(matches) == 1:
+            index, selected = matches[0]
+            selected_id = selected.get('candidate_id')
+            # 保留模型短目标名；有编号时也按编号找到模型看到的同一候选
+            visible = [(i, item) for i, item in enumerate(candidates)
+                       if selected_id and item.get('candidate_id') == selected_id]
+            if selected_id and any(item.get('candidate_id') for item in candidates):
+                index = visible[0][0] if len(visible) == 1 else -1
+            if (0 <= index < len(candidate_labels)
+                    and candidates[index].get('action') == selected.get('action')
+                    and candidates[index].get('travel_mode') == selected.get('travel_mode')):
+                chosen = candidate_labels[index]
+                chosen_candidate_id = selected_id
+                chosen_travel_mode = selected.get('travel_mode')
+                chosen_resolution = 'resolved_candidate_id' if candidate_id else 'resolved_unique_fields'
+            else:
+                chosen_resolution = 'unresolved_context_candidate'
     pending = context.get('pending_player_message', original.get('pending_player_message'))
     evidence = context.get('events', []) if combat else context.get('evidence', [])
     original_events = original.get('evidence', [])
@@ -72,6 +98,9 @@ def record(request_id, source, model, original, context, proposal, sentences, er
         'evidence': recorded_evidence,
         'candidates': candidate_labels,
         'chosen': chosen,
+        'chosen_candidate_id': chosen_candidate_id,
+        'chosen_travel_mode': chosen_travel_mode,
+        'chosen_resolution': chosen_resolution,
         'emotion': None if proposal is None else proposal.get('emotion'),
         'speech': sentences,
         'error': error,

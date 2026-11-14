@@ -22,6 +22,7 @@ class DELIVERY_API UDeliveryInventoryComponent : public UActorComponent
   public:
 	UDeliveryInventoryComponent();
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// 槽位约定与变化通知
@@ -52,6 +53,10 @@ class DELIVERY_API UDeliveryInventoryComponent : public UActorComponent
 
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool HasBackpackSpace() const;
+
+    // 交接失败恢复实物时复用当前库存的掉落偏移
+    float GetDropForwardDistance() const { return DropForwardDistance; }
+    float GetDropUpOffset() const { return DropUpOffset; }
 
 	UFUNCTION(BlueprintPure, Category = "Inventory|UI")
 	float GetFullFeedbackAlpha() const;

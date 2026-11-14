@@ -12,7 +12,7 @@ current_action 和 current_activity 描述现在仍在发生的事。只能在�
 
 
 def continuation_instructions(context):
-    return CONTINUE_INSTRUCTIONS if context.get('capability_version') == 6 else ''
+    return CONTINUE_INSTRUCTIONS if context.get('capability_version') in (6, 7, 8) else ''
 
 
 def _id(value, empty=False):
@@ -61,7 +61,7 @@ def validate_current_activity(context, actions):
 def validate_continuation(context, action, checking_candidate=False):
     if action.get('action') != 'ContinueCurrent':
         return
-    if context.get('capability_version') != 6:
+    if context.get('capability_version') not in (6, 7, 8):
         raise ValueError('continue requires capability version 6')
     if context.get('current_action') is None and context.get('current_activity') is None:
         raise ValueError('continue requires current activity')

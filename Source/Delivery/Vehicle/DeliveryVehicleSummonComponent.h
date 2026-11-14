@@ -30,6 +30,11 @@ class DELIVERY_API UDeliveryVehicleSummonComponent : public UActorComponent
 	UFUNCTION(BlueprintCallable, Category = "Vehicle|Summon")
 	void RequestSummon();
 
+    // 只在实际召唤、驾驶或装货成功后登记；查询不会选取附近别人的车
+    void RegisterVehicle(ADeliveryMotorbike* Bike);
+    ADeliveryMotorbike* GetRegisteredVehicle() const;
+
+
 	// 冷却查询
 	/** 还要等多少秒才能再召唤；0 = 现在就能按 */
 	UFUNCTION(BlueprintPure, Category = "Vehicle|Summon")
@@ -62,6 +67,8 @@ class DELIVERY_API UDeliveryVehicleSummonComponent : public UActorComponent
     FDeliveryCooldownChanged OnCooldownChanged;
 
   private:
+	TWeakObjectPtr<ADeliveryMotorbike> RegisteredVehicle;
+
 	// 服务器召唤与车辆查询
 	UFUNCTION(Server, Reliable)
 	void ServerSummon();

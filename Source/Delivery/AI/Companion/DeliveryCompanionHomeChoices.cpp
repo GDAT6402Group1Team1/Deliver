@@ -4,6 +4,11 @@
 #include "World/DeliveryHomeObjectComponent.h"
 #include "Grab/DeliveryGrabbableComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "AIController.h"
+#include "AIHelpers.h"
+#include "Perception/AIPerceptionComponent.h"
+#include "Perception/AISenseConfig_Sight.h"
+#include "Perception/AISense_Sight.h"
 #include "GameFramework/PlayerState.h"
 #include "Engine/World.h"
 
@@ -25,14 +30,31 @@ namespace
     {
         const auto* Actor=IsValid(Object)?Object->GetOwner():nullptr;
         const auto* Home=IsValid(Object)?Object->Home.Get():nullptr;
-        if (!IsValid(Npc) || !IsValid(Actor) || !IsValid(Home) || Actor->IsActorBeingDestroyed() || Actor->IsHidden() ||
-            Actor->GetWorld()!=Npc->GetWorld() || !Home->ContainsFurniture(Object)) return false;
+        if (!IsValid(Npc) || !Npc->HasAuthority() || !Npc->GetWorld() || Npc->IsActorBeingDestroyed() ||
+            Npc->IsHidden() || Npc->IsKnockedDown() || !IsValid(Actor) || !IsValid(Home) ||
+            Actor->IsActorBeingDestroyed() || Actor->IsHidden() || Object->GetWorld()!=Npc->GetWorld() ||
+            Actor->GetWorld()!=Npc->GetWorld() || Home->GetWorld()!=Npc->GetWorld() ||
+            !Object->IsRegistered() || !Home->ContainsFurniture(Object)) return false;
+        const auto* Controller=Cast<AAIController>(Npc->GetController());
+        const auto* Perception=IsValid(Controller)?Controller->GetAIPerceptionComponent():nullptr;
+        const auto* Sight=IsValid(Perception)?Perception->GetSenseConfig<UAISenseConfig_Sight>():nullptr;
+        // 家具也沿当前视觉观察，停用视觉或背对物件不能继续声称亲眼看见
+        if (!Sight || Controller->GetPawn()!=Npc || Controller->GetWorld()!=Npc->GetWorld() ||
+            Perception->GetWorld()!=Npc->GetWorld() || !Perception->IsRegistered() ||
+            !Perception->IsSenseEnabled(UAISense_Sight::StaticClass()) ||
+            !FMath::IsFinite(Sight->SightRadius) || Sight->SightRadius<=0 ||
+            !FMath::IsFinite(Sight->PeripheralVisionAngleDegrees) ||
+            !FMath::IsFinite(Sight->PointOfViewBackwardOffset) || Sight->PointOfViewBackwardOffset<0 || Sight->PointOfViewBackwardOffset>3000 ||
+            !FMath::IsFinite(Sight->NearClippingRadius) || Sight->NearClippingRadius<0 || Sight->NearClippingRadius>6000) return false;
         const FBox Bounds=Actor->GetComponentsBoundingBox(true);
         if (!Bounds.IsValid || Bounds.Min.ContainsNaN() || Bounds.Max.ContainsNaN() || Bounds.GetExtent().GetMax()<=0 ||
             !FMath::IsFinite(Home->ObjectSightRadius)) return false;
-        const FVector Eye=Npc->GetPawnViewLocation();
-        const float Radius=FMath::Clamp(Home->ObjectSightRadius,100.f,3000.f);
+        FVector Eye=FVector::ZeroVector,Direction=FVector::ZeroVector;
+        Perception->GetLocationAndDirection(Eye,Direction);
+        if (Eye.ContainsNaN() || Direction.ContainsNaN() || !Direction.Normalize()) return false;
+        const float Radius=FMath::Min(Sight->SightRadius,FMath::Clamp(Home->ObjectSightRadius,100.f,3000.f));
         if (Bounds.ComputeSquaredDistanceToPoint(Eye)>FMath::Square(Radius)) return false;
+        const float PeripheralCos=FMath::Cos(FMath::DegreesToRadians(FMath::Clamp(Sight->PeripheralVisionAngleDegrees,0.f,180.f)));
         const FVector Center=Bounds.GetCenter();
         const FVector Extent=Bounds.GetExtent()*.7f;
         FCollisionQueryParams Params(SCENE_QUERY_STAT(CompanionHomeSight),false,Npc);
@@ -40,8 +62,12 @@ namespace
         for (const FVector Offset:{FVector::ZeroVector,FVector(Extent.X,0,0),FVector(-Extent.X,0,0),
             FVector(0,Extent.Y,0),FVector(0,-Extent.Y,0),FVector(0,0,Extent.Z)})
         {
+            const FVector Point=Center+Offset;
+            if (FVector::DistSquared(Eye,Point)>FMath::Square(Radius) ||
+                !FAISystem::CheckIsTargetInSightCone(Eye,Direction,PeripheralCos,Sight->PointOfViewBackwardOffset,
+                    FMath::Square(Sight->NearClippingRadius),FMath::Square(Radius+Sight->PointOfViewBackwardOffset),Point)) continue;
             FHitResult Hit;
-            if (!Npc->GetWorld()->LineTraceSingleByChannel(Hit,Eye,Center+Offset,ECC_Visibility,Params) || Hit.GetActor()==Actor)
+            if (!Npc->GetWorld()->LineTraceSingleByChannel(Hit,Eye,Point,ECC_Visibility,Params) || Hit.GetActor()==Actor)
                 return true;
         }
         return false;

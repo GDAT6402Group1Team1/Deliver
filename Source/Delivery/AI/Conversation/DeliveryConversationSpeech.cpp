@@ -129,7 +129,7 @@ void UDeliveryConversationComponent::ResetLocalVoice()
 {
     LocalVoiceToken={}; LocalVoiceSequence=0; LocalVoiceHandle={}; LocalVoiceTarget.Reset();
     KeyVoiceToken={};
-    LocalVoicePawn.Reset(); LocalVoiceDeadline=0;
+    LocalVoiceContext.Reset(); LocalVoiceContextPendingSince=-1; LocalVoiceDeadline=0;
     FinalVoiceText.Reset(); bVoiceTextReady=false; bVoiceSubmissionSent=false; bVoiceReleased=false;
     SetComponentTickEnabled(false);
 }
@@ -139,7 +139,8 @@ void UDeliveryConversationComponent::HandleVoiceStarted(const FDeliverySpeechTur
     if (LocalVoiceToken.IsValid()) ServerCancelVoice(LocalVoiceToken.Id,LocalVoiceSequence);
     ResetLocalVoice();
     LocalVoiceToken=Token; LocalVoiceTarget=Resident; LocalVoiceSequence=NextInputSequence();
-    if (const auto* PC=Cast<APlayerController>(GetOwner())) LocalVoicePawn=PC->GetPawn();
+    if (!LocalVoiceContext.Capture(Cast<APlayerController>(GetOwner())))
+    { RejectLocalVoice(TEXT("Unavailable"),false); return; }
     LocalVoiceDeadline=FPlatformTime::Seconds()+UDeliveryConversationTurnSubsystem::RecordingTimeoutSeconds;
     LastVoiceInputError=NAME_None; VoiceErrorExpiresAt=0;
     SetComponentTickEnabled(true);
@@ -171,6 +172,18 @@ void UDeliveryConversationComponent::HandleVoiceText(const FDeliverySpeechTurnTo
 void UDeliveryConversationComponent::SubmitReadyVoiceText()
 {
     if (!bVoiceTextReady || bVoiceSubmissionSent || !LocalVoiceHandle.IsValid() || !LocalVoiceTarget.IsValid()) return;
+    const double Now=FPlatformTime::Seconds();
+    if (Now>=LocalVoiceDeadline) { RejectLocalVoice(TEXT("Expired"),true); return; }
+    if (LocalVoiceContextPendingSince>=0 && Now-LocalVoiceContextPendingSince>=FDeliverySpeechPlayerContext::TransitionGraceSeconds)
+    { RejectLocalVoice(TEXT("Unavailable"),true); return; }
+    const auto ContextState=LocalVoiceContext.Check(Cast<APlayerController>(GetOwner()));
+    if (ContextState==EDeliverySpeechPlayerContextState::Pending)
+    {
+        if (LocalVoiceContextPendingSince<0) LocalVoiceContextPendingSince=Now;
+        return;
+    }
+    if (ContextState==EDeliverySpeechPlayerContextState::Invalid) { RejectLocalVoice(TEXT("Unavailable"),true); return; }
+    LocalVoiceContextPendingSince=-1;
     // 广播前标记已发，保留原轮次至接收回执，避免下一句取消服务器正在等限频的 final
     const auto Handle=LocalVoiceHandle;
     const auto Token=LocalVoiceToken;
@@ -192,9 +205,21 @@ void UDeliveryConversationComponent::TickComponent(float DeltaTime,ELevelTick Ti
     if (bEndingPlay || !LocalVoiceToken.IsValid()) { SetComponentTickEnabled(false); return; }
     const auto* PC=Cast<APlayerController>(GetOwner());
     const auto* Speech=GetSpeechInput();
-    if (FPlatformTime::Seconds()>=LocalVoiceDeadline) RejectLocalVoice(TEXT("Expired"),true);
-    else if (!PC || PC->GetPawn()!=LocalVoicePawn.Get() || !CanVoiceTalkTo(LocalVoiceTarget.Get()) || !Speech || !Speech->IsVoiceEnabled())
-        RejectLocalVoice(TEXT("Unavailable"),true);
+    const double Now=FPlatformTime::Seconds();
+    const auto ContextState=LocalVoiceContext.Check(PC);
+    if (Now>=LocalVoiceDeadline) { RejectLocalVoice(TEXT("Expired"),true); return; }
+    if (LocalVoiceContextPendingSince>=0 && Now-LocalVoiceContextPendingSince>=FDeliverySpeechPlayerContext::TransitionGraceSeconds)
+    { RejectLocalVoice(TEXT("Unavailable"),true); return; }
+    if (!Speech || !Speech->IsVoiceEnabled() || ContextState==EDeliverySpeechPlayerContextState::Invalid)
+    { RejectLocalVoice(TEXT("Unavailable"),true); return; }
+    if (ContextState==EDeliverySpeechPlayerContextState::Pending)
+    {
+        if (LocalVoiceContextPendingSince<0) LocalVoiceContextPendingSince=Now;
+        return;
+    }
+    LocalVoiceContextPendingSince=-1;
+    if (!CanVoiceTalkTo(LocalVoiceTarget.Get())) { RejectLocalVoice(TEXT("Unavailable"),true); return; }
+    SubmitReadyVoiceText();
 }
 
 void UDeliveryConversationComponent::RejectLocalVoice(FName Reason,bool bNotifyServer)
@@ -246,7 +271,7 @@ void UDeliveryConversationComponent::ServerBeginVoice_Implementation(ADeliveryNp
     { ClientVoiceRejected(ClientToken,InputSequence,TEXT("Busy")); return; }
     FDeliveryConversationTurnHandle Handle;
     TArray<FDeliveryConversationTurnLease> Replaced;
-    const auto Result=Turns->TryBegin(PC,Resident,ClientToken,InputSequence,Handle,Replaced);
+    const auto Result=Turns->TryBeginVoice(PC,Resident,ClientToken,InputSequence,Handle,Replaced);
     if (Result!=EDeliveryConversationTurnResult::Accepted && Result!=EDeliveryConversationTurnResult::AlreadyActive)
     { ClientVoiceRejected(ClientToken,InputSequence,Result==EDeliveryConversationTurnResult::Busy?TEXT("Busy"):TEXT("Expired")); return; }
     if (Result==EDeliveryConversationTurnResult::Accepted)
@@ -268,6 +293,13 @@ void UDeliveryConversationComponent::ServerFinishVoice_Implementation(FGuid Clie
     const auto Handle=ServerVoiceHandle;
     const auto Target=ServerVoiceTarget;
     auto* Turns=GetWorld()->GetSubsystem<UDeliveryConversationTurnSubsystem>();
+    // 结束通知只启动原来的文字期限；现有身份暂缺复制字段时不清掉整句
+    if (Turns && Turns->GetVoiceContextState(Cast<APlayerController>(GetOwner()),Handle)==EDeliverySpeechPlayerContextState::Pending &&
+        Target.IsValid() && !Target->IsKnockedDown() && IsVoiceTurn(Handle))
+    {
+        Turns->FinishRecording(Cast<APlayerController>(GetOwner()),Handle);
+        return;
+    }
     if (!Turns || !CanVoiceTalkTo(Target.Get()) ||
         (Turns->FinishRecording(Cast<APlayerController>(GetOwner()),Handle)!=EDeliveryConversationTurnResult::Accepted))
     {
@@ -297,9 +329,25 @@ void UDeliveryConversationComponent::ServerSubmitVoice_Implementation(ADeliveryN
 {
     if (!(Handle==ServerVoiceHandle) || Resident!=ServerVoiceTarget.Get())
     { return; }
+    auto* Turns=GetWorld()->GetSubsystem<UDeliveryConversationTurnSubsystem>();
+    const auto ContextState=Turns?Turns->GetVoiceContextState(Cast<APlayerController>(GetOwner()),Handle):EDeliverySpeechPlayerContextState::Invalid;
+    if (ContextState==EDeliverySpeechPlayerContextState::Pending && IsVoiceTurn(Handle) &&
+        IsValid(Resident) && !Resident->IsKnockedDown())
+    {
+        if (DeferredVoiceHandle==Handle) return;
+        const FString Message=Text.TrimStartAndEnd();
+        if (!Message.IsEmpty() && Message.Len()<=256)
+        {
+            // 复用一个待发槽，等待期间租约的身份宽限与文字期限都继续计时
+            DeferredVoiceHandle=Handle; DeferredVoiceTarget=Resident; DeferredVoiceText=Message;
+            GetWorld()->GetTimerManager().SetTimer(VoiceSubmitTimer,this,
+                &UDeliveryConversationComponent::FlushDeferredVoiceSubmission,.05f,false);
+            return;
+        }
+    }
     if (!IsVoiceTurn(Handle) || !CanVoiceTalkTo(Resident))
     {
-        if (auto* Turns=GetWorld()->GetSubsystem<UDeliveryConversationTurnSubsystem>())
+        if (Turns)
             Turns->Cancel(Cast<APlayerController>(GetOwner()),Handle);
         VoiceTurns.Remove(Handle.Token);
         ResetServerVoice(Handle);
@@ -312,7 +360,6 @@ void UDeliveryConversationComponent::ServerSubmitVoice_Implementation(ADeliveryN
     // 短答保留同一份服务器轮次，最多等原有的一秒间隔，不丢弃或无限排队
     if (WaitSeconds>0 && WaitSeconds<=1.1 && !Message.IsEmpty() && Message.Len()<=256 && CanVoiceTalkTo(Resident))
     {
-        auto* Turns=GetWorld()->GetSubsystem<UDeliveryConversationTurnSubsystem>();
         if (Turns && Turns->ValidateFinal(Cast<APlayerController>(GetOwner()),Resident,Handle)==EDeliveryConversationTurnResult::Accepted)
         {
             DeferredVoiceHandle=Handle; DeferredVoiceTarget=Resident; DeferredVoiceText=Message;
@@ -323,7 +370,7 @@ void UDeliveryConversationComponent::ServerSubmitVoice_Implementation(ADeliveryN
     }
     if (WaitSeconds>0 && !Message.IsEmpty())
     {
-        if (auto* Turns=GetWorld()->GetSubsystem<UDeliveryConversationTurnSubsystem>())
+        if (Turns)
             Turns->Cancel(Cast<APlayerController>(GetOwner()),Handle);
         VoiceTurns.Remove(Handle.Token);
         ClientResult(TEXT("TooFast"),Handle.Token);

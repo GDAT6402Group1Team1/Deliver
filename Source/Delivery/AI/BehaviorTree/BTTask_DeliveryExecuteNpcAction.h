@@ -36,6 +36,7 @@ private:
     double FinishAt = 0;
     double StrikeFinishAt = 0;
     bool bStrikeStarted = false;
+    bool bKeepsCompanionMovement=false;
     FVector WalkOrigin=FVector::ZeroVector;
     FVector WalkDestination=FVector::ZeroVector;
     bool bReturningToOrigin=false;

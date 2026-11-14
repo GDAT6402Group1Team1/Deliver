@@ -1,10 +1,15 @@
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
+#include "World/DeliveryLocationRegistry.h"
+#include "Inventory/DeliveryHandheldItem.h"
+#include "Carry/DeliveryHandheldCarrierInterface.h"
+#include "Inventory/DeliveryInventoryItemComponent.h"
 #include "AI/Conversation/DeliveryConversationTurnSubsystem.h"
 #include "AI/Conversation/DeliveryNpcConversationTrace.h"
 #include "AI/Conversation/DeliveryConversationComponent.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Companion/DeliveryCompanionComponent.h"
+#include "AI/Companion/DeliveryCompanionCharacter.h"
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "AI/Network/DeliveryAiSettings.h"
@@ -61,6 +66,11 @@ namespace
         {
             const bool bHomeAction=Candidate.Action==EDeliveryNpcAction::HomeAction;
             if (bHomeAction!=Candidate.HomeChoice.IsValid()) return false;
+            const bool bItemAction=DeliveryNpc::IsCompanionItemErrand(Candidate.Action);
+            if (bItemAction!=Candidate.ItemChoice.IsValid()) return false;
+            if (bItemAction && (!Request.bPlayerRequest || !IsValid(Requester) || !Candidate.TargetId.IsValid() ||
+                Candidate.ItemChoice->SubjectId!=Candidate.TargetId ||
+                Candidate.ItemChoice->bReturnItem!=(Candidate.Action==EDeliveryNpcAction::ReturnItem))) return false;
             if (bHomeAction)
             {
                 if (!Request.bPlayerRequest || !IsValid(Requester) || Candidate.TargetId.IsValid()) return false;
@@ -77,6 +87,13 @@ namespace
             }
             if (CandidateIds.Contains(Candidate.CandidateId)) return false;
             CandidateIds.Add(Candidate.CandidateId);
+            if (bItemAction)
+            {
+                Candidate.ItemChoice=MakeShared<FDeliveryCompanionItemChoice>(*Candidate.ItemChoice);
+                Candidate.ItemChoice->CandidateId=Candidate.CandidateId;
+                Candidate.ItemChoice->RequestId=Request.RequestId;
+                Candidate.ItemChoice->Requester=Requester;
+            }
             if (bHomeAction)
             {
                 // 按值复制再绑定本次请求，不能改到组件缓存或另一次请求的共享快照
@@ -299,7 +316,10 @@ void UDeliveryNpcAgentComponent::TraceAction(FGuid ActionId, FName Stage)
         !IsDecisionTraceCurrent(DecisionTrace.WorldEpoch,DecisionTrace.RequestId)) return;
     DecisionTrace.Stage=Stage;
     const auto Status=PublicState.Status;
+    const bool bFollowAccepted=Status==EDeliveryNpcActionStatus::Succeeded &&
+        PublicState.Action==EDeliveryNpcAction::Follow && PublicState.Reason==TEXT("CompanionModeChanged");
     DecisionTrace.ExecutionResult=Status==EDeliveryNpcActionStatus::Running?TEXT("执行中"):
+        bFollowAccepted?TEXT("已接下指令，持续跟随"):
         Status==EDeliveryNpcActionStatus::Succeeded?TEXT("动作已完成"):
         Status==EDeliveryNpcActionStatus::Cancelled?TEXT("动作已取消"):TEXT("动作失败");
     if (!PublicState.Reason.IsNone()) DecisionTrace.RejectionReason=TraceText(PublicState.Reason.ToString(),96);
@@ -312,7 +332,8 @@ void UDeliveryNpcAgentComponent::PruneEvidence()
     const double Now = GetWorld()->GetTimeSeconds();
     auto IsReferenced = [this](const FDeliveryNpcEvidence& Item)
     {
-        return (ActiveRequest.RequestId.IsValid() && ActiveRequest.Evidence.ContainsByPredicate(
+        return (Item.EventId==PendingJoinedEvent && IsJoinedResponseOwnerCurrent()) ||
+            (ActiveRequest.RequestId.IsValid() && ActiveRequest.Evidence.ContainsByPredicate(
             [&Item](const auto& Sent) { return Sent.EventId==Item.EventId; })) ||
             (HasActiveAction() && ActionEvidenceIds.Contains(Item.EventId));
     };
@@ -400,6 +421,22 @@ bool UDeliveryNpcAgentComponent::ObserveEvent(const FDeliveryNpcObservation& Obs
     };
     Item.SubjectId = RememberSubject(Observation.Subject);
     Item.AddresseeId = RememberSubject(Observation.Addressee);
+    // 只有服务器已完成认主的真实结果才能安排主动回应
+    if (Item.Kind==TEXT("CompanionJoined") && Item.Source==EDeliveryNpcEvidenceSource::ActionResult)
+    {
+        const auto* Npc=Cast<ADeliveryCompanionCharacter>(GetOwner());
+        auto* OwnerState=Npc?Npc->Companion->GetOwnerPlayerState():nullptr;
+        const auto* PC=IsValid(OwnerState)?OwnerState->GetPlayerController():nullptr;
+        if (Npc && Npc->GetEncounterState().Phase==EDeliveryCompanionEncounterPhase::Joined &&
+            Observation.bNeedsReply && IsValid(Observation.Subject) && Npc->Companion->CanCommand(OwnerState) &&
+            PC && PC->GetPawn()==Observation.Subject)
+        {
+            PendingJoinedEvent=EventId; PendingJoinedOwner=OwnerState;
+            JoinedResponseExpiresAt=Item.ExpiresAt; JoinedResponseAttempts=0;
+            NextJoinedResponseRetryAt=GetWorld()->GetTimeSeconds()+4;
+            UE_LOG(LogDeliveryNpcAgent,Log,TEXT("CompanionJoined response pending npc=%s event=%s"),*GetNameSafe(Npc),*EventId.ToString());
+        }
+    }
     Evidence.Add(MoveTemp(Item));
     PruneEvidence();
     RecentEventIds.Add(EventId);
@@ -429,6 +466,7 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
         }
         ObserveEvent(Body);
     }
+    if (auto* Companion=GetOwner()->FindComponentByClass<UDeliveryCompanionComponent>()) Companion->RefreshItemObservations();
     PruneEvidence();
     if (!NpcId.IsValid()) NpcId = FGuid::NewGuid();
     OutRequest = {};
@@ -453,6 +491,9 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
     OutRequest.PlanRevision = ++NextPlanRevision;
     OutRequest.Persona = Persona.Left(1024);
     OutRequest.bPlayerRequest = bPlayerRequest;
+    if (bPlayerRequest)
+        if (const auto* Locations=UDeliveryLocationRegistry::Get(this))
+            Locations->CollectPublicNpcPlaces(OutRequest.FamiliarPlaces);
     RequestPlayerState=bPlayerRequest && PlayerReplyController.IsValid()?PlayerReplyController->PlayerState:nullptr;
     OutRequest.RequesterPC=bPlayerRequest?PlayerReplyController.Get():nullptr;
     OutRequest.RequesterPlayerState=RequestPlayerState;
@@ -487,6 +528,13 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
         }
         else if (Actor->IsA<ADeliveryMotorbike>())
         { Subject.Name = TEXT("电瓶车"); Subject.Kind = TEXT("vehicle"); }
+        else if (const auto* Item=Cast<ADeliveryHandheldItem>(Actor); Item && Item->GetItemComponent())
+        {
+            Subject.Name=Item->GetItemComponent()->DisplayName.ToString(); Subject.Kind=TEXT("other");
+            for (TCHAR& Character:Subject.Name) if (Character<32) Character=TEXT(' ');
+            Subject.Name=Subject.Name.TrimStartAndEnd();
+            if (Subject.Name.IsEmpty()) Subject.Name=TEXT("道具");
+        }
         else { Subject.Name = TEXT("附近的对象"); Subject.Kind = TEXT("other"); }
         Subject.Name = Subject.Name.Left(64);
         OutRequest.Subjects.Add(MoveTemp(Subject));
@@ -494,6 +542,8 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
     OutRequest.Evidence = Evidence;
     AttachNpcMessageContext(OutRequest);
     OutRequest.LastDecisionEventIds = LastDecisionEventIds;
+    // 模型读过事件还不等于已经回应，下一次请求仍保留这条未说完的真实经历
+    OutRequest.LastDecisionEventIds.Remove(GetJoinedResponseEvent(OutRequest));
     OutRequest.AllowedActions.Add(EDeliveryNpcAction::Wait);
     for (const auto& Pair : KnownSubjects)
         if (CanLookAt(Pair.Value.Get())) { OutRequest.AllowedActions.Add(EDeliveryNpcAction::LookAt); break; }
@@ -522,7 +572,7 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
     }
     if (bPlayerRequest)
     {
-        OutRequest.RequestedCapabilityVersion=6;
+        OutRequest.RequestedCapabilityVersion=FMath::Max(OutRequest.RequestedCapabilityVersion,6);
         if (const auto* Companion=GetOwner()->FindComponentByClass<UDeliveryCompanionComponent>())
         {
             OutRequest.bRunningCompanion=HasCompanionActivity();
@@ -532,6 +582,8 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
             OutRequest.RunningCompanionOwner=Companion->GetOwnerPlayerState();
             OutRequest.RunningHomeArrangement=Companion->GetHomeState().ArrangementId;
             OutRequest.RunningHomeProp=Companion->GetHomeState().CarriedProp.Get();
+            OutRequest.RunningHeldItem=Companion->GetCarriedItem();
+            OutRequest.RunningErrandItem=Companion->GetErrand().Item.Get();
             if (!OutRequest.RunningActionId.IsValid() && OutRequest.bRunningCompanion)
                 OutRequest.RunningAction=OutRequest.bRunningErrand?Companion->GetErrand().Action:
                     OutRequest.bRunningHome?EDeliveryNpcAction::HomeAction:
@@ -560,6 +612,11 @@ bool UDeliveryNpcAgentComponent::RequestDecision()
     auto* Gateway = GetWorld()->GetSubsystem<UDeliveryAiGatewaySubsystem>();
     if (!Gateway || !BuildDecisionRequest(Gateway->GetWorldEpoch(), ActiveRequest)) return false;
     if (!Gateway->Enqueue(this, ActiveRequest)) { ActiveRequest = {}; return false; }
+    if (!ActiveRequest.bPlayerRequest && GetJoinedResponseEvent(ActiveRequest).IsValid())
+    {
+        ++JoinedResponseAttempts;
+        NextJoinedResponseRetryAt=GetWorld()->GetTimeSeconds()+4*JoinedResponseAttempts;
+    }
     bDecisionPending=true; GetOwner()->ForceNetUpdate();
     return true;
 }
@@ -649,11 +706,88 @@ void UDeliveryNpcAgentComponent::CancelDecision()
     Replies.Reset();
 }
 
+bool UDeliveryNpcAgentComponent::IsJoinedResponseOwnerCurrent() const
+{
+    const auto* Npc=Cast<ADeliveryCompanionCharacter>(GetOwner());
+    return IsAuthority() && PendingJoinedEvent.IsValid() && PendingJoinedOwner.IsValid() &&
+        Npc && !Npc->IsActorBeingDestroyed() && Npc->GetEncounterState().Phase==EDeliveryCompanionEncounterPhase::Joined &&
+        Npc->Companion->GetOwnerPlayerState()==PendingJoinedOwner.Get() && Npc->Companion->CanCommand(PendingJoinedOwner.Get());
+}
+
+FGuid UDeliveryNpcAgentComponent::GetJoinedResponseEvent(const FDeliveryNpcDecisionRequest& Request) const
+{
+    if (!IsJoinedResponseOwnerCurrent() || Request.ParentNpcMessage.IsValid() ||
+        GetWorld()->GetTimeSeconds()>=JoinedResponseExpiresAt) return {};
+    // 主人插话时把救助经历交给同一回复，旁人的交谈不结清主人的初遇回应
+    if (Request.bPlayerRequest && (!Request.bPendingPlayerMessage || !Request.PlayerMessageId.IsValid() ||
+        !Request.RequesterPC.IsValid() || !Request.RequesterPlayerState.HasSameIndexAndSerialNumber(PendingJoinedOwner) ||
+        Request.RequesterPC->PlayerState!=PendingJoinedOwner.Get())) return {};
+    return Request.Evidence.ContainsByPredicate([this](const auto& Fact)
+    { return Fact.EventId==PendingJoinedEvent && Fact.Kind==TEXT("CompanionJoined") &&
+        Fact.Source==EDeliveryNpcEvidenceSource::ActionResult; })?PendingJoinedEvent:FGuid();
+}
+
+void UDeliveryNpcAgentComponent::BindJoinedResponse(FReply& Reply,const FDeliveryNpcDecisionRequest& Request) const
+{
+    const FGuid Event=GetJoinedResponseEvent(Request);
+    if (!Event.IsValid()) return;
+    // 仍由模型选说话对象，给其他人或自言自语的台词不能代替对主人的回应
+    const auto* PC=PendingJoinedOwner->GetPlayerController();
+    if (!PC || !IsValid(PC->GetPawn()) || PC->GetPawn()->GetWorld()!=GetWorld() || PublicState.SpeechTarget!=PC->GetPawn()) return;
+    Reply.JoinedEventId=Event;
+    Reply.JoinedOwner=PendingJoinedOwner;
+}
+
+void UDeliveryNpcAgentComponent::DeferJoinedResponse()
+{
+    if (!IsAuthority() || !PendingJoinedEvent.IsValid()) return;
+    const TWeakObjectPtr<UDeliveryNpcAgentComponent> WeakThis(this);
+    NextJoinedResponseRetryAt=GetWorld()->GetTimeSeconds()+6;
+    const bool bJoinedRequest=!ActiveRequest.bPlayerRequest && !ActiveRequest.ParentNpcMessage.IsValid() &&
+        ActiveRequest.Evidence.ContainsByPredicate([this](const auto& Fact){ return Fact.EventId==PendingJoinedEvent; });
+    const FGuid DeferredRequest=bJoinedRequest?ActiveRequest.RequestId:FGuid();
+    TArray<FGuid> DeferredReplies;
+    for (const auto& Pair:Replies) if (Pair.Value.JoinedEventId.IsValid()) DeferredReplies.Add(Pair.Value.ReplyId);
+    // 先撤下旧请求，再取消声音，取消回调不能恢复旧初遇回复
+    if (DeferredRequest.IsValid())
+    {
+        ActiveRequest={}; bDecisionPending=false; bDecisionQueued=false; RequestPlayerState.Reset();
+        if (auto* Gateway=GetWorld()->GetSubsystem<UDeliveryAiGatewaySubsystem>()) Gateway->CancelRequest(this,DeferredRequest);
+    }
+    if (!WeakThis.IsValid() || !IsAuthority()) return;
+    if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->Presentation->CancelReplies(DeferredReplies);
+    if (!WeakThis.IsValid() || !IsAuthority()) return;
+    for (const FGuid& Reply:DeferredReplies)
+    {
+        RemoveReply(Reply,TEXT("PlayerInterruptedJoining"));
+        if (!WeakThis.IsValid() || !IsAuthority()) return;
+    }
+    if (DeferredReplies.Contains(PublicState.GetReplyId()))
+    {
+        PublicState.Speech.Reset(); PublicState.ReplyToEventId.Invalidate(); PublicState.bStreamSpeech=false;
+        PublishState();
+    }
+}
+
 bool UDeliveryNpcAgentComponent::HasCompanionActivity() const
 {
     const auto* Companion=GetOwner()->FindComponentByClass<UDeliveryCompanionComponent>();
     // 等候仍要回位和避让，聊天继续保留主人的持续安排
     return Companion && (Companion->HasActiveErrand() || Companion->HasActiveHomeArrangement() ||
+        Companion->GetMode()==EDeliveryCompanionMode::Follow || Companion->GetMode()==EDeliveryCompanionMode::Stay ||
+        Companion->GetMode()==EDeliveryCompanionMode::GoHome);
+}
+
+bool UDeliveryNpcAgentComponent::CanContinueCompanionMovement() const
+{
+    const auto* Npc=Cast<ADeliveryCompanionCharacter>(GetOwner());
+    const auto* Companion=Npc?Npc->Companion.Get():nullptr;
+    return IsAuthority() && HasActiveAction() && PublicState.Origin==EDeliveryNpcActionOrigin::Model &&
+        (PublicState.Action==EDeliveryNpcAction::Wait || PublicState.Action==EDeliveryNpcAction::LookAt ||
+            PublicState.Action==EDeliveryNpcAction::SoundFollowHorn) &&
+        Npc && !Npc->IsKnockedDown() && !Npc->Combat->IsReactingToHit() && Companion &&
+        Companion->CanCommand(Companion->GetOwnerPlayerState()) &&
+        (Companion->HasActiveErrand() || Companion->HasActiveHomeArrangement() ||
         Companion->GetMode()==EDeliveryCompanionMode::Follow || Companion->GetMode()==EDeliveryCompanionMode::Stay ||
         Companion->GetMode()==EDeliveryCompanionMode::GoHome);
 }
@@ -686,6 +820,8 @@ bool UDeliveryNpcAgentComponent::CanStartReplySpeech(FGuid ReplyId) const
     for (const auto& Pair:Replies)
         if (Pair.Value.ReplyId==ReplyId)
         {
+            if (!Pair.Value.bPlayerReply && Pair.Value.JoinedEventId.IsValid() && (!IsJoinedResponseOwnerCurrent() ||
+                Pair.Value.JoinedEventId!=PendingJoinedEvent || !Pair.Value.JoinedOwner.HasSameIndexAndSerialNumber(PendingJoinedOwner))) return false;
             if (!CanStartReplyMessageAudio(ReplyId)) return false;
             return Pair.Value.bActionStarted ||
                 (Pair.Value.ActionId==PublicState.ActionId &&
@@ -768,6 +904,8 @@ bool UDeliveryNpcAgentComponent::BeginListening(AActor* Speaker, FGuid MessageId
     ListeningStartedAt = ServerTime();
     ListeningUntil = FPlatformTime::Seconds() + 30;
     bPlayerRequest = true;
+    DeferJoinedResponse();
+    if (!IsAuthority() || PlayerReplyMessage!=MessageId || PlayerReplyController.Get()!=Requester) return false;
     if (auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner()))
         Npc->Presentation->PlayReaction(EDeliveryNpcVoiceReaction::HeardPlayer,MessageId);
     GetOwner()->ForceNetUpdate();
@@ -796,6 +934,7 @@ bool UDeliveryNpcAgentComponent::ReceiveStreamDecision(FGuid RequestId, const FD
     TraceValidation(TraceWorldEpoch,RequestId,true,NAME_None);
     PublicState.bStreamSpeech = true;
     FReply Reply;
+    BindJoinedResponse(Reply,ActiveRequest);
     Reply.ReplyId=PublicState.GetReplyId(); Reply.MessageId=PublicState.ReplyToEventId;
     Reply.ActionId=PublicState.ActionId; Reply.Action=PublicState.Action;
     Reply.Target=PublicState.Target; Reply.bHadTarget=IsValid(PublicState.Target);
@@ -846,6 +985,24 @@ void UDeliveryNpcAgentComponent::CancelReply(FGuid ReplyId)
 
 void UDeliveryNpcAgentComponent::FinishReplyPlayback(FGuid ReplyId)
 {
+    if (IsJoinedResponseOwnerCurrent())
+        for (const auto& Pair:Replies)
+        {
+            const auto& Reply=Pair.Value;
+            // 沿本轮主 MessageId 验证整轮 SelfSpeech，获救关联不替换玩家发言或语音轮次
+            // 结清的是对主人的回应机会，是否说得自然仍需实际听感检查
+            if (Reply.ReplyId==ReplyId && Reply.JoinedEventId==PendingJoinedEvent &&
+                Reply.JoinedOwner.HasSameIndexAndSerialNumber(PendingJoinedOwner) && Reply.SentenceCount>0 &&
+                Evidence.ContainsByPredicate([this,&Reply](const auto& Fact)
+                { return Fact.SubjectId==NpcId && Fact.Kind==TEXT("SelfSpeech") && Fact.Source==EDeliveryNpcEvidenceSource::ActionResult &&
+                    Reply.MessageId.IsValid() && Fact.ReplyToEventId==Reply.MessageId && !Fact.Description.TrimStartAndEnd().IsEmpty(); }))
+            {
+                UE_LOG(LogDeliveryNpcAgent,Log,TEXT("CompanionJoined response played npc=%s event=%s reply=%s"),
+                    *GetNameSafe(GetOwner()),*PendingJoinedEvent.ToString(),*ReplyId.ToString());
+                PendingJoinedEvent.Invalidate(); PendingJoinedOwner.Reset();
+                break;
+            }
+        }
     for (const auto& Pair:Replies)
         if (Pair.Value.ReplyId==ReplyId && IsDecisionTraceCurrent(DecisionTrace.WorldEpoch,Pair.Key))
         {
@@ -897,6 +1054,8 @@ void UDeliveryNpcAgentComponent::ReceiveSentence(FGuid RequestId, const FDeliver
 bool UDeliveryNpcAgentComponent::CanReceiveReply(FGuid RequestId) const
 {
     const auto* Reply=Replies.Find(RequestId);
+    if (Reply && !Reply->bPlayerReply && Reply->JoinedEventId.IsValid() && (!IsJoinedResponseOwnerCurrent() ||
+        Reply->JoinedEventId!=PendingJoinedEvent || !Reply->JoinedOwner.HasSameIndexAndSerialNumber(PendingJoinedOwner))) return false;
     return IsAuthority() && !bChangingPlan && Reply && !Reply->bTransferFinished;
 }
 
@@ -995,6 +1154,7 @@ void UDeliveryNpcAgentComponent::FinishReply(FGuid RequestId,bool bSucceeded,int
 void UDeliveryNpcAgentComponent::FinishDecisionWait(FGuid RequestId,bool bSucceeded,int32 SentenceCount)
 {
     if (ActiveRequest.RequestId!=RequestId) return;
+    const bool bJoinedRetryLimit=!ActiveRequest.bPlayerRequest && GetJoinedResponseEvent(ActiveRequest).IsValid() && JoinedResponseAttempts>=3;
     const bool bFinishingCurrentPlayer=!bPlayerRequest ||
         (ActiveRequest.PlayerMessageId.IsValid() && ActiveRequest.PlayerMessageId==PlayerReplyMessage);
     // 动作失败后，表现组件可能已经停止对白；是否零台词仍以本次后台结束通知为准
@@ -1018,7 +1178,8 @@ void UDeliveryNpcAgentComponent::FinishDecisionWait(FGuid RequestId,bool bSuccee
         if (!bAwaitingAction) { PlayerReplyMessage.Invalidate(); PlayerReplyController.Reset(); }
         EndListening();
     }
-    OnDecisionFinished.Broadcast(bSucceeded ? NAME_None : FName(TEXT("TransportFailure")));
+    OnDecisionFinished.Broadcast(bSucceeded ? NAME_None :
+        FName(bJoinedRetryLimit?TEXT("JoinedResponseDeferred"):TEXT("TransportFailure")));
     // 播放上一句期间有人接话，等这句结束后继续处理，不让完成通知清掉新话
     if (bContinueConversation && bSucceeded)
         if (auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->WakeDecision();
@@ -1042,6 +1203,10 @@ bool UDeliveryNpcAgentComponent::IsRespondingToAttackFrom(const AActor* Attacker
 
 bool UDeliveryNpcAgentComponent::CanLookAt(AActor* Target) const
 {
+    // 已知名称不授权跟踪实物当前位置，二狗的普通道具候选沿用当前视觉守门
+    if (const auto* Companion=GetOwner()->FindComponentByClass<UDeliveryCompanionComponent>())
+        if (const auto* Item=Cast<ADeliveryHandheldItem>(Target); DeliveryHandheldTransfer::IsOrdinaryItem(Item) &&
+            !Companion->CanUseObservedItemTarget(Item)) return false;
     const auto* Pawn = Cast<APawn>(GetOwner());
     if (!Pawn || !Cast<AAIController>(Pawn->GetController()) || !IsValid(Target) || Target == GetOwner() ||
         Target->GetWorld() != GetWorld() || FVector::DistSquared(Target->GetActorLocation(), GetOwner()->GetActorLocation()) >
@@ -1121,9 +1286,22 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
         if (!FMath::IsFinite(Proposal.Duration) || Proposal.Duration>DeliveryNpc::CandidateDuration(SelectedCandidate->Action))
         { Reason=TEXT("InvalidDuration"); return false; }
     }
+    const FGuid JoinedEvent=GetJoinedResponseEvent(ActiveRequest);
+    if (JoinedEvent.IsValid() && !ActiveRequest.bPlayerRequest)
+    {
+        const auto* PC=PendingJoinedOwner->GetPlayerController();
+        APawn* Listener=PC?PC->GetPawn():nullptr;
+        if (!IsValid(Listener) || Listener->GetWorld()!=GetWorld())
+        { Reason=TEXT("JoinedOwnerUnavailable"); return false; }
+        if (Proposal.Speech.TrimStartAndEnd().IsEmpty())
+        { Reason=TEXT("MissingJoinedReply"); return false; }
+        if (Proposal.bHasSpeechTarget && Proposal.SpeechTargetId.IsValid() && KnownSubjects.FindRef(Proposal.SpeechTargetId).Get()!=Listener)
+        { Reason=TEXT("JoinedReplyTargetChanged"); return false; }
+    }
     if (Proposal.Action==EDeliveryNpcAction::ContinueCurrent)
         return AcceptContinueCurrent(Proposal,Reason);
     TSharedPtr<FDeliveryCompanionHomeChoice> AcceptedHomeChoice;
+    TSharedPtr<FDeliveryCompanionItemChoice> AcceptedItemChoice;
     Reason = TEXT("InvalidDuration");
     if ((Proposal.Action==EDeliveryNpcAction::Fight || Proposal.Action==EDeliveryNpcAction::Flee) &&
         (!FMath::IsFinite(Proposal.Duration) || Proposal.Duration<UDeliveryNpcCombatComponent::StrikeDuration || Proposal.Duration>DeliveryNpc::MaxDecisionDuration(Proposal.Action))) return false;
@@ -1133,7 +1311,13 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
             !Evidence.ContainsByPredicate([&Id](const auto& Item) { return Item.EventId == Id; })) return false;
     AActor* Target = nullptr;
     Reason = TEXT("InvalidTarget");
-    if (Proposal.Action == EDeliveryNpcAction::LookAt || Proposal.Action == EDeliveryNpcAction::MoveTo ||
+    if (DeliveryNpc::IsCompanionItemErrand(Proposal.Action))
+    {
+        Target=KnownSubjects.FindRef(Proposal.TargetId).Get();
+        if (!SelectedCandidate || !SelectedCandidate->ItemChoice.IsValid() || !IsValid(Target) ||
+            SelectedCandidate->ItemChoice->Item.Get()!=Target) return false;
+    }
+    else if (Proposal.Action == EDeliveryNpcAction::LookAt || Proposal.Action == EDeliveryNpcAction::MoveTo ||
         Proposal.Action == EDeliveryNpcAction::StrikeOnce || Proposal.Action == EDeliveryNpcAction::Fight || Proposal.Action == EDeliveryNpcAction::Flee || Proposal.Action == EDeliveryNpcAction::HoldVehicle || Proposal.Action == EDeliveryNpcAction::MoveAside)
     {
         Target = KnownSubjects.FindRef(Proposal.TargetId).Get();
@@ -1151,10 +1335,20 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
             Reason=TEXT("StaleCompanionCommand");
             if (Current.CompanionCommandRevision!=ActiveRequest.CompanionCommandRevision) return false;
             // 弱引用的普通相等会把两个失效对象看作相同，任务快照须保留原对象身份
-            if (DeliveryNpc::IsCompanionErrand(Proposal.Action) &&
+            if (DeliveryNpc::IsCompanionErrand(Proposal.Action) && !DeliveryNpc::IsCompanionItemErrand(Proposal.Action) &&
                 (!Current.CompanionTask.HasSameIndexAndSerialNumber(ActiveRequest.CompanionTask) ||
                     !Current.CompanionPackage.HasSameIndexAndSerialNumber(ActiveRequest.CompanionPackage)))
             { Reason=TEXT("CompanionTaskOrPackageChanged"); return false; }
+            if (DeliveryNpc::IsCompanionItemErrand(Proposal.Action))
+            {
+                const auto* Companion=GetOwner()->FindComponentByClass<UDeliveryCompanionComponent>();
+                const auto& Choice=*SelectedCandidate->ItemChoice;
+                Reason=TEXT("StaleItemChoice");
+                if (!Companion || Choice.CandidateId!=Proposal.CandidateId || Choice.RequestId!=ActiveRequest.RequestId ||
+                    !Choice.Requester.HasSameIndexAndSerialNumber(RequestPlayerState) ||
+                    !Companion->CanApplyItemChoice(Choice,RequestPlayerState.Get(),ActiveRequest.CompanionCommandRevision)) return false;
+                AcceptedItemChoice=MakeShared<FDeliveryCompanionItemChoice>(Choice);
+            }
             if (Proposal.Action==EDeliveryNpcAction::HomeAction)
             {
                 Reason=TEXT("StaleHomeChoice");
@@ -1216,6 +1410,11 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
             { return RejectStale(TEXT("SpeechTargetChanged")); }
         }
     }
+    if (JoinedEvent.IsValid() && !ActiveRequest.bPlayerRequest)
+    {
+        PlayerMessage=JoinedEvent;
+        SpeechTarget=PendingJoinedOwner->GetPlayerController()->GetPawn();
+    }
     // v1-5 保留原来的交战续期语义，v6 只有明确的 ContinueCurrent 可以保留活动
     const bool bKeepAction=ActiveRequest.RequestedCapabilityVersion<6 && bUpdatingAction && PublicState.Action==Proposal.Action && PublicState.Target==Target;
     const double Now=GetWorld()->GetTimeSeconds();
@@ -1266,9 +1465,11 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
     PublicState.Origin = EDeliveryNpcActionOrigin::Model;
     PublicState.Requester=RequestPlayerState.Get();
     PublicState.CompanionCommandRevision=ActiveRequest.CompanionCommandRevision;
+    PublicState.CompanionTravelMode=SelectedCandidate?SelectedCandidate->TravelMode:EDeliveryCompanionTravelMode::Unspecified;
     PublicState.CompanionTask=ActiveRequest.CompanionTask.Get();
     PublicState.CompanionPackage=ActiveRequest.CompanionPackage.Get();
     PublicState.HomeChoice=MoveTemp(AcceptedHomeChoice);
+    PublicState.ItemChoice=MoveTemp(AcceptedItemChoice);
     PublicState.Target = Target;
     PublicState.SpeechTarget = SpeechTarget;
     PublicState.Speech=Proposal.Speech.Left(120);
@@ -1310,6 +1511,11 @@ bool UDeliveryNpcAgentComponent::IsActivitySnapshotCurrent(const FDeliveryNpcDec
             !Request.CompanionPackage.HasSameIndexAndSerialNumber(Current.CompanionPackage)) return false;
         if (Request.bRunningHome && (Request.RunningHomeArrangement!=Companion->GetHomeState().ArrangementId ||
             !Request.RunningHomeProp.HasSameIndexAndSerialNumber(TWeakObjectPtr<AActor>(Companion->GetHomeState().CarriedProp.Get())))) return false;
+        if (Request.RequestedCapabilityVersion>=7 &&
+            (!Request.RunningHeldItem.HasSameIndexAndSerialNumber(TWeakObjectPtr<AActor>(Companion->GetCarriedItem())) ||
+             !Request.RunningErrandItem.HasSameIndexAndSerialNumber(TWeakObjectPtr<AActor>(Companion->GetErrand().Item.Get())) ||
+             (!Request.RunningHeldItem.IsExplicitlyNull() && !Request.RunningHeldItem.IsValid()) ||
+             (!Request.RunningErrandItem.IsExplicitlyNull() && !Request.RunningErrandItem.IsValid()))) return false;
         if (Request.bRunningCompanion && !HasCompanionActivity()) return false;
     }
     return Request.RunningActionId.IsValid() || Request.bRunningCompanion;
@@ -1337,6 +1543,11 @@ bool UDeliveryNpcAgentComponent::AcceptContinueCurrent(const FDeliveryNpcDecisio
         if (Proposal.SpeechTargetId.IsValid() && (!IsValid(Listener) || !Cast<APawn>(Listener) ||
             Listener==GetOwner() || Listener->GetWorld()!=GetWorld())) { Reason=TEXT("InvalidSpeechTarget"); return false; }
     }
+    if (const FGuid JoinedEvent=GetJoinedResponseEvent(ActiveRequest); JoinedEvent.IsValid() && !ActiveRequest.bPlayerRequest)
+    {
+        ReplyTo=JoinedEvent;
+        Listener=PendingJoinedOwner->GetPlayerController()->GetPawn();
+    }
     LastDecisionEventIds.Reset(ActiveRequest.Evidence.Num());
     for (const auto& Item:ActiveRequest.Evidence) LastDecisionEventIds.Add(Item.EventId);
     // 只更新本轮回复，不重新执行 GAS/BT，也不延长原来的活动期限
@@ -1360,6 +1571,13 @@ void UDeliveryNpcAgentComponent::ReceiveDecision(FGuid RequestId, const FDeliver
     const auto RequestedPlayerController=ActiveRequest.RequesterPC;
     TOptional<FReply> AcceptedReply;
     bool bAccepted = Error.IsNone() && Proposal && TryAcceptProposal(*Proposal, Error);
+    // 初遇主动请求用尽后保留事件，不让通用传输重试再叠加一轮
+    if (!bAccepted && !ActiveRequest.bPlayerRequest && GetJoinedResponseEvent(ActiveRequest).IsValid() && JoinedResponseAttempts>=3)
+    {
+        UE_LOG(LogDeliveryNpcAgent,Warning,TEXT("CompanionJoined response deferred npc=%s event=%s reason=%s attempts=%d"),
+            *GetNameSafe(GetOwner()),*PendingJoinedEvent.ToString(),*Error.ToString(),JoinedResponseAttempts);
+        Error=TEXT("JoinedResponseDeferred");
+    }
     TraceValidation(TraceWorldEpoch,RequestId,bAccepted,Error);
     const bool bRetry = bDecisionQueued && !bAccepted;
     const bool bContinueConversation = bDecisionQueued && bAccepted;
@@ -1371,6 +1589,7 @@ void UDeliveryNpcAgentComponent::ReceiveDecision(FGuid RequestId, const FDeliver
     if (bAccepted)
     {
         FReply Reply;
+        BindJoinedResponse(Reply,ActiveRequest);
         Reply.ReplyId=PublicState.GetReplyId(); Reply.MessageId=PublicState.ReplyToEventId;
         Reply.RequesterPC=ActiveRequest.RequesterPC; Reply.RequesterPlayerState=ActiveRequest.RequesterPlayerState;
         Reply.ActionId=PublicState.ActionId; Reply.Action=PublicState.Action;
@@ -1687,7 +1906,9 @@ void UDeliveryNpcAgentComponent::RecordActionReply()
     Reply.Kind=TEXT("ActionReply"); Reply.Source=EDeliveryNpcEvidenceSource::ActionResult;
     Reply.Subject=GetOwner(); Reply.Addressee=IsValid(PublicState.SpeechTarget)?PublicState.SpeechTarget.Get():nullptr;
     Reply.ReplyToEventId=PublicState.ReplyToEventId; Reply.Lifetime=60;
-    Reply.Description=FString::Printf(TEXT("%s 动作已完成，这次没有台词"),*DeliveryNpc::ActionName(PublicState.Action));
+    Reply.Description=PublicState.Action==EDeliveryNpcAction::Follow && PublicState.Reason==TEXT("CompanionModeChanged")?
+        TEXT("Follow 指令已接收，持续跟随主人，这次没有台词"):
+        FString::Printf(TEXT("%s 动作已完成，这次没有台词"),*DeliveryNpc::ActionName(PublicState.Action));
     ObserveEvent(Reply);
     if (PlayerReplyMessage!=Reply.ReplyToEventId) return;
     auto* Controller=PlayerReplyController.Get();
@@ -1716,6 +1937,7 @@ void UDeliveryNpcAgentComponent::ResetContext(FName Reason)
 {
     if (!IsAuthority()) return;
     CancelPlan(Reason);
+    PendingJoinedEvent.Invalidate(); PendingJoinedOwner.Reset(); JoinedResponseAttempts=0;
     Evidence.Reset(); KnownSubjects.Reset(); RecentEventIds.Reset(); LastDecisionEventIds.Reset();
     ActionEvidenceIds.Reset(); ActionTargetId.Invalidate(); ActionConversationDepth=0;
     ++ContextRevision;
@@ -1729,7 +1951,9 @@ void UDeliveryNpcAgentComponent::TickComponent(float DeltaTime, ELevelTick TickT
     if (!IsAuthority()) return;
     TArray<FGuid> OrphanedReplies;
     for (const auto& Pair:Replies)
-        if (!Pair.Value.RequesterPC.IsExplicitlyNull() && !Pair.Value.RequesterPC.IsValid()) OrphanedReplies.Add(Pair.Value.ReplyId);
+        if ((!Pair.Value.RequesterPC.IsExplicitlyNull() && !Pair.Value.RequesterPC.IsValid()) ||
+            (!Pair.Value.bPlayerReply && Pair.Value.JoinedEventId.IsValid() && (!IsJoinedResponseOwnerCurrent() || Pair.Value.JoinedEventId!=PendingJoinedEvent ||
+                !Pair.Value.JoinedOwner.HasSameIndexAndSerialNumber(PendingJoinedOwner)))) OrphanedReplies.Add(Pair.Value.ReplyId);
     if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()); Npc && !OrphanedReplies.IsEmpty()) Npc->Presentation->CancelReplies(OrphanedReplies);
     for (const FGuid& ReplyId:OrphanedReplies) RemoveReply(ReplyId,TEXT("RequesterLost"));
     if (ActiveRequest.bPlayerRequest && !ActiveRequest.RequesterPC.IsValid())
@@ -1739,9 +1963,19 @@ void UDeliveryNpcAgentComponent::TickComponent(float DeltaTime, ELevelTick TickT
         if (auto* Gateway=GetWorld()->GetSubsystem<UDeliveryAiGatewaySubsystem>()) Gateway->CancelRequest(this,RequestId);
         PlayerReplyMessage.Invalidate(); PlayerReplyController.Reset(); bPlayerRequest=false; EndListening();
     }
+    const auto* VoiceConversation=PlayerReplyController.IsValid()
+        ? PlayerReplyController->FindComponentByClass<UDeliveryConversationComponent>():nullptr;
+    const bool bLinkedVoice=ListeningMessage.IsValid() && VoiceConversation &&
+        VoiceConversation->IsVoiceReplyMessage(ListeningMessage,Cast<ADeliveryNpcCharacter>(GetOwner()));
+    // 同一玩家上下车时倾听跟随当前控制对象，连麦使用服务器原轮次而非现场距离
+    if (bLinkedVoice && PlayerReplyController.IsValid() && ListeningSpeaker!=PlayerReplyController->GetPawn())
+    {
+        ListeningSpeaker=PlayerReplyController->GetPawn();
+        GetOwner()->ForceNetUpdate();
+    }
     if (ListeningMessage.IsValid() && (!IsValid(ListeningSpeaker) || FPlatformTime::Seconds() > ListeningUntil || ListeningSpeaker->GetWorld() != GetWorld() ||
-        (PlayerReplyController.IsValid() && PlayerReplyController->GetPawn()!=ListeningSpeaker) ||
-        FVector::DistSquared(GetOwner()->GetActorLocation(), ListeningSpeaker->GetActorLocation()) > FMath::Square(900.f)))
+        (!bLinkedVoice && ((PlayerReplyController.IsValid() && PlayerReplyController->GetPawn()!=ListeningSpeaker) ||
+        FVector::DistSquared(GetOwner()->GetActorLocation(), ListeningSpeaker->GetActorLocation()) > FMath::Square(900.f)))))
     {
         if (auto* Requester=PlayerReplyController.Get()) InterruptPlayerReply(Requester);
         else EndListening();
@@ -1755,6 +1989,19 @@ void UDeliveryNpcAgentComponent::TickComponent(float DeltaTime, ELevelTick TickT
         TryFinishAction(PublicState.ActionId, EDeliveryNpcActionStatus::Failed, TEXT("ExecutorTimeout"));
     else if (PublicState.Status == EDeliveryNpcActionStatus::Running && PublicState.Action == EDeliveryNpcAction::LookAt && !CanLookAt(PublicState.Target))
         TryFinishAction(PublicState.ActionId, EDeliveryNpcActionStatus::Cancelled, TEXT("TargetUnavailable"));
+    // 初遇回应最多主动补两次，玩家录音、发言和正在播放的回复始终优先
+    if (IsJoinedResponseOwnerCurrent() && JoinedResponseAttempts<3 &&
+        GetWorld()->GetTimeSeconds()<JoinedResponseExpiresAt && GetWorld()->GetTimeSeconds()>=NextJoinedResponseRetryAt &&
+        !bChangingPlan && !bPlayerRequest && !IsListening() && !IsDecisionPending() && !HasActiveAction() &&
+        Replies.IsEmpty() && !IsPlayerInputBeingRecorded())
+    {
+        auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+        if (Npc && !Npc->IsKnockedDown() && !Npc->Combat->IsReactingToHit() && !Npc->Presentation->HasPendingSpeech())
+        {
+            NextJoinedResponseRetryAt=GetWorld()->GetTimeSeconds()+4;
+            Npc->WakeDecision();
+        }
+    }
     // 模型完成上一轮选择后开始考虑下一步，当前动作和对白继续进行
     if (CanUpdateRunningAction() && !IsDecisionPending() && GetWorld()->GetTimeSeconds()>=NextActionDecisionAt)
     {
@@ -1784,6 +2031,7 @@ void UDeliveryNpcAgentComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 {
     // 退出时先禁止新请求，再取消剩余操作，不再通知即将销毁的表现组件
     bEndingPlay = true;
+    PendingJoinedEvent.Invalidate(); PendingJoinedOwner.Reset();
     InvalidateNpcMessageTurns(TEXT("EndPlay"),true);
     if (auto* Turns=BoundNpcTurns.Get()) Turns->OnNpcMessagesInvalidated.RemoveAll(this);
     BoundNpcTurns.Reset();
@@ -1831,4 +2079,18 @@ void UDeliveryNpcAgentComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
     DecisionTrace={}; TraceQueuedAt=-1; TraceDispatchedAt=-1;
     OnDecisionTraceChanged.Clear();
     Super::EndPlay(EndPlayReason);
+}
+
+FGuid UDeliveryNpcAgentComponent::FindKnownSubjectId(const AActor* Actor) const
+{
+    if (!IsValid(Actor) || Actor->GetWorld()!=GetWorld()) return FGuid();
+    for (const auto& Pair:KnownSubjects) if (Pair.Value.Get()==Actor) return Pair.Key;
+    return FGuid();
+}
+
+bool UDeliveryNpcAgentComponent::HasObservationEvent(FGuid EventId) const
+{
+    const double Now=GetWorld()?GetWorld()->GetTimeSeconds():0;
+    return EventId.IsValid() && Evidence.ContainsByPredicate([&](const auto& Item)
+        { return Item.EventId==EventId && Item.ExpiresAt>Now; });
 }

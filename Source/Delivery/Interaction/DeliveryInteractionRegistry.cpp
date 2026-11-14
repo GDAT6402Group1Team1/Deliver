@@ -60,3 +60,19 @@ UDeliveryInteractableComponent* UDeliveryInteractionRegistry::FindNearest(
     }
     return Best;
 }
+
+void UDeliveryInteractionRegistry::GetRegisteredInRadius(const FVector& Origin,float Radius,
+    TArray<UDeliveryInteractableComponent*>& OutCandidates) const
+{
+    OutCandidates.Reset();
+    if (!GetWorld() || Origin.ContainsNaN() || !FMath::IsFinite(Radius) || Radius<=0) return;
+    for (const auto& Entry:Entries)
+    {
+        auto* Interaction=Entry.Get();
+        auto* Actor=Interaction?Interaction->GetOwner():nullptr;
+        if (!IsValid(Actor) || Actor->IsActorBeingDestroyed() || Actor->GetWorld()!=GetWorld() || Actor->IsHidden() ||
+            !Interaction->bInteractEnabled || !Interaction->IsRegistered()) continue;
+        const FVector Point=Interaction->GetInteractionPoint(Origin);
+        if (!Point.ContainsNaN() && FVector::DistSquared(Origin,Point)<=FMath::Square(Radius)) OutCandidates.AddUnique(Interaction);
+    }
+}

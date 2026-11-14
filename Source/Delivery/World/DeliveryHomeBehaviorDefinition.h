@@ -32,6 +32,9 @@ public:
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|表现") TObjectPtr<UAnimSequence> EnterAnimation;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|表现") TObjectPtr<UAnimSequence> Animation;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|表现") TObjectPtr<UAnimSequence> ExitAnimation;
+    // 高座位先播放已制作的攀上动作，再坐下；离开时先站起，再播放离座动作
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|座位") TObjectPtr<UAnimSequence> SeatMountAnimation;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|座位") TObjectPtr<UAnimSequence> SeatDismountAnimation;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|表现") TObjectPtr<USoundBase> Sound;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|表现",meta=(ClampMin="0.1",ClampMax="30",Units="s")) float UseSeconds=1;
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|条件") bool bAllowWithTaskPackage=false;

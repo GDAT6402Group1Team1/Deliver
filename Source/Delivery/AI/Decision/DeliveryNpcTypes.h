@@ -1,8 +1,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "World/DeliveryLocationRegistry.h"
 #include "AI/Conversation/DeliveryNpcMessageTypes.h"
 #include "AI/Companion/DeliveryCompanionHomeTypes.h"
+#include "AI/Companion/DeliveryCompanionItemTypes.h"
 #include "DeliveryNpcTypes.generated.h"
 class APlayerState;
 class APlayerController;
@@ -11,7 +13,7 @@ class ADeliveryPackageItem;
 
 // 只允许模型选择游戏已经实现的动作
 UENUM(BlueprintType)
-enum class EDeliveryNpcAction : uint8 { None, Wait, LookAt, MoveTo, StrikeOnce, HoldVehicle, ReleaseVehicle, LieDown, GetUp, Pace, MoveAside, Fight, Flee, Follow, Stay, CancelCompanionTask, FetchPackage, TakePackage, DeliverPackage, ReturnPackage, OfferCaterpillar, GoHome, HomeAction, ContinueCurrent };
+enum class EDeliveryNpcAction : uint8 { None, Wait, LookAt, MoveTo, StrikeOnce, HoldVehicle, ReleaseVehicle, LieDown, GetUp, Pace, MoveAside, Fight, Flee, Follow, Stay, CancelCompanionTask, FetchPackage, TakePackage, DeliverPackage, ReturnPackage, OfferCaterpillar, GoHome, HomeAction, ContinueCurrent, FetchItem, ReturnItem, SoundFollowHorn };
 
 UENUM(BlueprintType)
 enum class EDeliveryNpcActionStatus : uint8 { Idle, Accepted, Running, Succeeded, Failed, Cancelled };
@@ -22,6 +24,10 @@ enum class EDeliveryNpcActionOrigin : uint8 { Model, GameplayRule };
 
 UENUM(BlueprintType)
 enum class EDeliveryNpcEvidenceSource : uint8 { Seen, Heard, ToldBy, ActionResult };
+
+// 主人确认的出行安排，Unspecified 表示本次没有改变原来的选择
+UENUM(BlueprintType)
+enum class EDeliveryCompanionTravelMode : uint8 { Unspecified, Walk, OwnVehicle, Automatic };
 
 // 记录 NPC 实际看到、听到或被告知的事件，未感知的信息不加入记录
 USTRUCT(BlueprintType)
@@ -76,11 +82,13 @@ struct DELIVERY_API FDeliveryNpcPublicState
     // 仅服务器持有，动作权限不取决于台词面向谁
     UPROPERTY(Transient,NotReplicated) TObjectPtr<APlayerState> Requester = nullptr;
     int32 CompanionCommandRevision = 0;
+    EDeliveryCompanionTravelMode CompanionTravelMode=EDeliveryCompanionTravelMode::Unspecified;
     // 由服务器复制本次请求快照，模型不能指定或替换实物和订单
     UPROPERTY(Transient,NotReplicated) TObjectPtr<UDeliveryTaskDefinition> CompanionTask = nullptr;
     UPROPERTY(Transient,NotReplicated) TObjectPtr<ADeliveryPackageItem> CompanionPackage = nullptr;
     // 仅服务器保存选中的实物与槽位快照，不复制 Smart Objects 句柄
     TSharedPtr<FDeliveryCompanionHomeChoice> HomeChoice;
+    TSharedPtr<FDeliveryCompanionItemChoice> ItemChoice;
 };
 
 // 发送给后端的数据只保存编号和描述，不保存 UE 对象引用
@@ -108,6 +116,8 @@ struct FDeliveryNpcCandidate
     FGuid TargetId;
     TArray<FGuid> EvidenceIds;
     TSharedPtr<FDeliveryCompanionHomeChoice> HomeChoice;
+    TSharedPtr<FDeliveryCompanionItemChoice> ItemChoice;
+    EDeliveryCompanionTravelMode TravelMode=EDeliveryCompanionTravelMode::Unspecified;
 };
 
 // 只介绍 NPC 已经遇见的人物，不包含其他人的私有记忆
@@ -142,7 +152,7 @@ struct DELIVERY_API FDeliveryNpcDecisionRequest
     // 只在服务器核对：回复必须仍属于发请求时的那段行动
     FGuid RunningActionId;
     static constexpr int32 ProtocolVersion = 1;
-    static constexpr int32 CapabilityVersion = 6;
+    static constexpr int32 CapabilityVersion = 8;
     // 普通居民继续使用版本4，同伴有家居上下文时显式请求版本5
     int32 RequestedCapabilityVersion = 4;
     // 发言归属和活动快照只由服务器填写，不相信模型选择的说话对象
@@ -163,6 +173,8 @@ struct DELIVERY_API FDeliveryNpcDecisionRequest
     TWeakObjectPtr<APlayerState> RunningCompanionOwner;
     FGuid RunningHomeArrangement;
     TWeakObjectPtr<AActor> RunningHomeProp;
+    TWeakObjectPtr<AActor> RunningHeldItem;
+    TWeakObjectPtr<AActor> RunningErrandItem;
     FGuid WorldEpoch;
     FGuid NpcId;
     FGuid RequestId;
@@ -199,6 +211,7 @@ struct DELIVERY_API FDeliveryNpcDecisionRequest
     TArray<FDeliveryNpcCompanionMemory> CompanionMemories;
     TArray<FDeliveryNpcHomeObjectView> HomeObjects;
     TArray<FDeliveryNpcObservedPlace> CompanionObservedPlaces;
+    TArray<FPublicNpcPlace> FamiliarPlaces;
     bool bRequesterIsCompanionOwner = false;
     FString CompanionMode;
     FString CompanionSuspensionReason;
@@ -206,8 +219,13 @@ struct DELIVERY_API FDeliveryNpcDecisionRequest
     FString CompanionTaskId;
     FString CompanionTaskPhase;
     FString CompanionTaskTitle;
+    FString CompanionTaskDescription;
+    FString CompanionTravelMode;
+    bool bCompanionOwnVehicleAvailable=false;
     bool bCompanionOwnerHasPackage = false;
     bool bCompanionHasPackage = false;
+    FGuid CompanionHeldItemId;
+    FString CompanionHeldItemName;
     FString CompanionErrandAction;
     FString CompanionErrandPhase;
     FString CompanionErrandStatus;
@@ -286,6 +304,7 @@ namespace DeliveryNpc
     DELIVERY_API FString ActionName(EDeliveryNpcAction Action);
     DELIVERY_API bool IsCompanionCommand(EDeliveryNpcAction Action);
     DELIVERY_API bool IsCompanionErrand(EDeliveryNpcAction Action);
+    DELIVERY_API bool IsCompanionItemErrand(EDeliveryNpcAction Action);
     // 候选允许的最长时长，持续同伴安排返回0
     DELIVERY_API float CandidateDuration(EDeliveryNpcAction Action);
     DELIVERY_API FString EncodeRequest(const FDeliveryNpcDecisionRequest& Request);

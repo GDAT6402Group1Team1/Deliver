@@ -1,5 +1,9 @@
 #include "AI/Presentation/DeliveryNpcLookComponent.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Actions/DeliveryNpcCombatComponent.h"
+#include "AI/Companion/DeliveryCompanionComponent.h"
+#include "AI/Decision/DeliveryNpcAgentComponent.h"
+#include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "Combat/DeliveryImpactReceiver.h"
 #include "Character/DeliveryCharacter.h"
 #include "Components/CapsuleComponent.h"
@@ -48,7 +52,25 @@ double UDeliveryNpcLookComponent::ServerTime() const
 
 bool UDeliveryNpcLookComponent::CanLook() const
 {
-    if (!IsValid(GetOwner())) return false;
+    if (!IsValid(GetOwner()) || GetOwner()->IsActorBeingDestroyed() || GetOwner()->IsHidden()) return false;
+    if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()))
+    {
+        if (!Npc->Agent || !Npc->Combat || !Npc->Presentation || Npc->Combat->IsRecovering() ||
+            Npc->Combat->IsStriking() || Npc->Combat->IsReactingToHit() || Npc->GetHeldVehicle()) return false;
+        const auto State=Npc->Agent->GetPublicState();
+        // 关注路人让位于模型安排、搬运和交谈，不等它们结束后补播旧反应
+        if ((Npc->Agent->HasActiveAction() && State.Action!=EDeliveryNpcAction::Wait) ||
+            Npc->Agent->IsListening() ||
+            Npc->Presentation->HasPendingSpeech() || Npc->Presentation->GetDisplayedSpeech().bActive) return false;
+        if (const auto* Companion=Npc->FindComponentByClass<UDeliveryCompanionComponent>())
+        {
+            if (Companion->HasActiveErrand() || Companion->HasActiveHomeArrangement() || Companion->IsUsingErrandVehicle() ||
+                Companion->GetCarriedItem() || Companion->GetCarriedTaskPackage() || Companion->GetHomeState().CarriedProp ||
+                Companion->GetMode()==EDeliveryCompanionMode::GoHome) return false;
+            // 跟随途中和回到等候点时继续看路；已经站定且空手时可以看一眼路人
+            if (Companion->GetMode()!=EDeliveryCompanionMode::Unrecruited && Npc->GetVelocity().SizeSquared2D()>FMath::Square(20.f)) return false;
+        }
+    }
     if (const auto* Receiver=Cast<IDeliveryImpactReceiver>(GetOwner()); Receiver && Receiver->IsKnockedDown()) return false;
     if (const auto* Walker=Cast<ADeliveryPedestrian>(GetOwner()); Walker && Walker->IsStandingUp()) return false;
     return true;
@@ -57,12 +79,39 @@ bool UDeliveryNpcLookComponent::CanLook() const
 AActor* UDeliveryNpcLookComponent::GetLookTarget() const
 {
     AActor* Target=LookState.Target.Get();
-    if (!CanLook() || !IsValid(Target) || Target->IsActorBeingDestroyed() || Target->GetWorld()!=GetWorld() || ServerTime()>=LookState.EndTime ||
-        FVector::DistSquared(GetOwner()->GetActorLocation(),Target->GetActorLocation())>FMath::Square(FMath::Max(NoticeDistance,ReleaseDistance))) return nullptr;
+    const float Limit=LookState.bStartled?FMath::Clamp(StartleDistance,50.f,600.f):FMath::Max(NoticeDistance,ReleaseDistance);
+    if (!CanLook() || !IsValid(Target) || Target->IsActorBeingDestroyed() || Target->IsHidden() ||
+        Target->GetWorld()!=GetWorld() || ServerTime()>=LookState.EndTime ||
+        !FMath::IsFinite(Limit) || FVector::DistSquared(GetOwner()->GetActorLocation(),Target->GetActorLocation())>FMath::Square(Limit)) return nullptr;
     return Target;
 }
 
 bool UDeliveryNpcLookComponent::IsAfterBrush() const { return GetLookTarget() && LookState.bAfterBrush; }
+bool UDeliveryNpcLookComponent::IsStartled() const { return LookState.bStartled && GetLookTarget(); }
+
+bool UDeliveryNpcLookComponent::TryStartle(AActor* Source)
+{
+    if (!GetWorld() || !GetOwner() || !GetOwner()->HasAuthority() || !bStartleAtHorn || !CanLook() ||
+        !IsValid(Source) || Source==GetOwner() || Source->IsActorBeingDestroyed() || Source->IsHidden() ||
+        Source->GetWorld()!=GetWorld() || !FMath::IsFinite(StartleDistance) || !FMath::IsFinite(StartleDuration) ||
+        !FMath::IsFinite(StartleCooldown)) return false;
+    const double Now=ServerTime();
+    if (Now<NextStartleAt || FVector::DistSquared(GetOwner()->GetActorLocation(),Source->GetActorLocation())>
+        FMath::Square(FMath::Clamp(StartleDistance,50.f,600.f))) return false;
+    const auto* Capsule=GetOwner()->FindComponentByClass<UCapsuleComponent>();
+    const FVector Eyes=Capsule?Capsule->GetComponentLocation()+FVector(0,0,Capsule->GetScaledCapsuleHalfHeight()*.7f):GetOwner()->GetActorLocation();
+    FHitResult Hit;
+    FCollisionQueryParams Sight(SCENE_QUERY_STAT(NpcStartleSight),false,GetOwner());
+    if (GetWorld()->LineTraceSingleByChannel(Hit,Eyes,GetLookPoint(Source),ECC_Visibility,Sight) && Hit.GetActor()!=Source) return false;
+    LookState.Target=Source;
+    LookState.EndTime=Now+FMath::Clamp(StartleDuration,.2f,2.f);
+    LookState.bAfterBrush=false;
+    LookState.bStartled=true;
+    NextStartleAt=Now+FMath::Clamp(StartleCooldown,1.f,60.f);
+    NextAttentionAt=FMath::Max(NextAttentionAt,LookState.EndTime);
+    GetOwner()->ForceNetUpdate();
+    return true;
+}
 
 FVector UDeliveryNpcLookComponent::GetLookPoint(const AActor* Target)
 {
@@ -76,10 +125,12 @@ void UDeliveryNpcLookComponent::StartLook(AActor* Player,bool bAfterBrush,double
 {
     if (!GetOwner()->HasAuthority() || !CanLook() || !IsValid(Player) || Player->GetWorld()!=GetWorld()) return;
     // 正在看向刚擦身的玩家时，不被另一个普通经过的人抢走视线
-    if (!bAfterBrush && IsAfterBrush()) return;
+    if (IsStartled() || (!bAfterBrush && (IsAfterBrush() || Now<NextAttentionAt))) return;
     LookState.Target=Player;
     LookState.EndTime=Now+FMath::Max(.2f,bAfterBrush?BrushLookDuration:LookDuration);
     LookState.bAfterBrush=bAfterBrush;
+    LookState.bStartled=false;
+    NextAttentionAt=Now+FMath::Clamp(AttentionInterval,.2f,10.f);
     GetOwner()->ForceNetUpdate();
     // 轻擦只让人物回头看一眼，身体接近不能说明玩家有意撞人
     // 拳击和车撞由实际命中记录，交谈也不因这次注视重新请求回复
@@ -96,7 +147,16 @@ void UDeliveryNpcLookComponent::TickComponent(float DeltaTime,ELevelTick TickTyp
 {
     Super::TickComponent(DeltaTime,TickType,Function);
     if (!GetOwner()->HasAuthority()) return;
-    if (!CanLook()) { ClearLook(); return; }
+    if (!CanLook())
+    {
+        ClearLook();
+        bRefreshVisits=true;
+        bHasOwnerPosition=false;
+        return;
+    }
+    // 忙碌结束后先重建当前位置，期间已经发生的经过和轻擦不再补播
+    const bool bSkipOldVisits=bRefreshVisits;
+    bRefreshVisits=false;
     if (!GetLookTarget()) ClearLook();
     const double Now=ServerTime();
     const FVector Origin=GetOwner()->GetActorLocation();
@@ -135,7 +195,7 @@ void UDeliveryNpcLookComponent::TickComponent(float DeltaTime,ELevelTick TickTyp
     {
         const float Distance=FVector::DistSquared(Origin,Player->GetActorLocation());
         auto& Visit=PlayerVisits.FindOrAdd(Player);
-        const FVector SampledVelocity=Visit.bHasPosition && DeltaTime>SMALL_NUMBER?(Player->GetActorLocation()-Visit.LastPosition)/DeltaTime:FVector::ZeroVector;
+        const FVector SampledVelocity=!bSkipOldVisits && Visit.bHasPosition && DeltaTime>SMALL_NUMBER?(Player->GetActorLocation()-Visit.LastPosition)/DeltaTime:FVector::ZeroVector;
         Visit.LastPosition=Player->GetActorLocation();
         Visit.bHasPosition=true;
         const FVector Direction=(Player->GetActorLocation()-Origin).GetSafeNormal2D();
@@ -144,10 +204,10 @@ void UDeliveryNpcLookComponent::TickComponent(float DeltaTime,ELevelTick TickTyp
         const bool bTouching=Touching.Contains(Player);
         const bool bGentle=(PlayerBodyVelocity(Player,SampledVelocity)-OwnerVelocity).Size2D()<=BrushMaxSpeed;
         const bool bBrush=bTouching && !Visit.bTouching && bGentle && Now>=Visit.NextBrush;
-        const bool bPassing=bNearby && !Visit.bNearby && Now>=Visit.NextLook;
+        const bool bPassing=bNoticePassersby && bNearby && !Visit.bNearby && Now>=Visit.NextLook;
         Visit.bNearby=bNearby;
         Visit.bTouching=bTouching;
-        if (!bBrush && !bPassing) continue;
+        if (bSkipOldVisits || (!bBrush && !bPassing)) continue;
         // 普通过路只看前方和侧面；擦身可以引起回头，但动画仍限制转头角度
         FHitResult Hit;
         FCollisionQueryParams Sight(SCENE_QUERY_STAT(NpcLookSight),false,GetOwner());
@@ -177,5 +237,8 @@ void UDeliveryNpcLookComponent::EndPlay(const EEndPlayReason::Type Reason)
     LookState={};
     PlayerVisits.Reset();
     bHasOwnerPosition=false;
+    bRefreshVisits=false;
+    NextAttentionAt=0;
+    NextStartleAt=0;
     Super::EndPlay(Reason);
 }

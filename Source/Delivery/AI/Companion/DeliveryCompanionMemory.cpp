@@ -13,12 +13,18 @@
 #include "Vehicle/DeliveryMotorbike.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/PlayerController.h"
+#include "World/DeliveryLocationComponent.h"
+#include "Engine/World.h"
 
 namespace
 {
 // 当前归属最多记录 8192 个事实编号，达到上限后保留去重记录并停止新增关系结算
 // 不淘汰旧编号，避免长局重发旧命中或扶起时重复加减关系；解除主人后一起清空
 constexpr int32 MaxRecordedMemoryEvents=8192;
+constexpr int32 MaxCompanionMemories=24;
+constexpr int32 MaxPublicPlaceMemories=6;
+// 沿既有服务器组件 Tick，每秒最多一次地点观察，不唤醒模型
+constexpr double PublicPlaceObservationInterval=1.0;
 // 这些事实的最新一条携带真实累计次数，后续闲聊不能把重要经历挤出上下文
 bool IsImportantCompanionMemory(FName Kind)
 {
@@ -54,7 +60,13 @@ bool UDeliveryCompanionComponent::RecordMemory(FGuid EventId,FName Kind,const FS
     FDeliveryNpcCompanionMemory Memory;
     Memory.EventId=EventId; Memory.Kind=Kind; Memory.Description=Description.Left(256);
     Memories.Add(MoveTemp(Memory));
-    if (Memories.Num()>24)
+    if (Memories.Num()>MaxCompanionMemories)
+    {
+        const int32 PlaceIndex=Memories.IndexOfByPredicate([](const FDeliveryNpcCompanionMemory& Entry)
+            { return Entry.Kind==TEXT("PublicPlaceSeen"); });
+        if (PlaceIndex!=INDEX_NONE) Memories.RemoveAt(PlaceIndex);
+    }
+    if (Memories.Num()>MaxCompanionMemories)
     {
         for (int32 Index=0;Index<Memories.Num();++Index)
         {
@@ -64,15 +76,105 @@ bool UDeliveryCompanionComponent::RecordMemory(FGuid EventId,FName Kind,const FS
             if (!bKeep) { Memories.RemoveAt(Index); break; }
         }
     }
+    PrunePublicPlaceMemoryIndex();
     Affinity=FMath::Clamp(Affinity+AffinityDelta,0,100);
     GetOwner()->ForceNetUpdate();
     return true;
 }
 
+void UDeliveryCompanionComponent::PrunePublicPlaceMemoryIndex()
+{
+    RememberedPublicPlaces.RemoveAll([this](const FRememberedPublicPlace& Place)
+    {
+        return !Memories.ContainsByPredicate([&Place](const FDeliveryNpcCompanionMemory& Memory)
+        { return Memory.EventId==Place.EventId && Memory.Kind==TEXT("PublicPlaceSeen"); });
+    });
+}
+
+void UDeliveryCompanionComponent::RefreshPublicPlaceMemories()
+{
+    const auto* Npc=GetCompanion();
+    const auto* World=GetWorld();
+    if (!IsValid(Npc) || !Npc->HasAuthority() || !World || !CanCommand(OwnerPlayerState) ||
+        Npc->GetEncounterState().Phase!=EDeliveryCompanionEncounterPhase::Joined) return;
+    const double Now=World->GetTimeSeconds();
+    if (!FMath::IsFinite(Now) || Now<NextPublicPlaceObservationAt) return;
+    NextPublicPlaceObservationAt=Now+PublicPlaceObservationInterval;
+    PrunePublicPlaceMemoryIndex();
+    // 新见闻只用空位或旧地点的位置，已有真实事件不为路过的地点让位
+    const int32 Slots=FMath::Min(MaxPublicPlaceMemories,RememberedPublicPlaces.Num()+FMath::Max(0,MaxCompanionMemories-Memories.Num()));
+    if (Slots==0) return;
+    TArray<FObservedPublicPlace> Observed;
+    CollectObservedPlaces(Observed);
+    if (Observed.Num()>Slots) Observed.SetNum(Slots);
+    // 先刷新仍看得见的旧地点，再淘汰其余旧地点，避免同批刷新反复更换已有编号
+    for (const auto& Place:Observed)
+        if (RememberedPublicPlaces.ContainsByPredicate([&Place](const FRememberedPublicPlace& Memory)
+            { return Memory.Location==Place.Location; })) RecordPublicPlaceMemory(Place,Now);
+    for (const auto& Place:Observed)
+        if (!RememberedPublicPlaces.ContainsByPredicate([&Place](const FRememberedPublicPlace& Memory)
+            { return Memory.Location==Place.Location; })) RecordPublicPlaceMemory(Place,Now);
+}
+
+void UDeliveryCompanionComponent::RecordPublicPlaceMemory(const FObservedPublicPlace& Place,double ObservedAt)
+{
+    const auto* Location=Place.Location.Get();
+    if (!GetOwner()->HasAuthority() || !CanCommand(OwnerPlayerState) || !IsValid(Location) ||
+        Location->GetWorld()!=GetWorld() || Place.View.Name.IsEmpty() || !FMath::IsFinite(ObservedAt)) return;
+    int32 Existing=RememberedPublicPlaces.IndexOfByPredicate([&Place](const FRememberedPublicPlace& Memory)
+        { return Memory.Location==Place.Location; });
+    FRememberedPublicPlace Index;
+    if (Existing!=INDEX_NONE)
+    {
+        Index=RememberedPublicPlaces[Existing];
+        RememberedPublicPlaces.RemoveAt(Existing);
+        Memories.RemoveAll([&Index](const FDeliveryNpcCompanionMemory& Memory){ return Memory.EventId==Index.EventId; });
+    }
+    else
+    {
+        if (RememberedPublicPlaces.Num()>=MaxPublicPlaceMemories || Memories.Num()>=MaxCompanionMemories)
+        {
+            if (RememberedPublicPlaces.IsEmpty()) return;
+            const FGuid OldId=RememberedPublicPlaces[0].EventId;
+            Memories.RemoveAll([OldId](const FDeliveryNpcCompanionMemory& Memory){ return Memory.EventId==OldId; });
+            RememberedPublicPlaces.RemoveAt(0);
+        }
+        Index.Location=Place.Location;
+        Index.EventId=FGuid::NewGuid();
+    }
+    Index.ObservedAt=ObservedAt;
+    FDeliveryNpcCompanionMemory Memory;
+    Memory.EventId=Index.EventId;
+    Memory.Kind=TEXT("PublicPlaceSeen");
+    Memory.Description=FString::Printf(TEXT("当时公开名称为「%s」，公开用途为「%s」"),
+        *Place.View.Name,*Place.View.Description);
+    Memories.Add(MoveTemp(Memory));
+    RememberedPublicPlaces.Add(MoveTemp(Index));
+    // 地点编号只标记这条往事，不进入命中去重表，也不改变关系或发网络更新
+}
+
+void UDeliveryCompanionComponent::CopyCompanionMemories(TArray<FDeliveryNpcCompanionMemory>& Out) const
+{
+    Out=Memories;
+    const double Now=GetWorld()?GetWorld()->GetTimeSeconds():0;
+    for (auto& Memory:Out)
+    {
+        if (Memory.Kind!=TEXT("PublicPlaceSeen")) continue;
+        const auto* Place=RememberedPublicPlaces.FindByPredicate([&Memory](const FRememberedPublicPlace& Entry)
+            { return Entry.EventId==Memory.EventId; });
+        // 只用观察时已保存的文字，不因目标改名、隐藏或失效而读取新的世界信息
+        const FString Prefix=Place && FMath::IsFinite(Now) && Now>=Place->ObservedAt?
+            FString::Printf(TEXT("约 %.0f 秒前我亲眼见到："),FMath::Clamp(Now-Place->ObservedAt,0.0,2147483647.0)):
+            TEXT("此前我亲眼见到（观察时间不明）：");
+        const FString Suffix=TEXT("；这是当时的旧见闻，不表示现在仍可见、仍营业或可进入");
+        Memory.Description=Prefix+Memory.Description.Left(FMath::Max(0,256-Prefix.Len()-Suffix.Len()))+Suffix;
+    }
+}
+
 void UDeliveryCompanionComponent::RecordRecruitMemory()
 {
     if (Memories.ContainsByPredicate([](const FDeliveryNpcCompanionMemory& Memory){ return Memory.Kind==TEXT("FirstHelp"); })) return;
-    RecordMemory(FGuid::NewGuid(),TEXT("FirstHelp"),TEXT("现在这位主人亲手扶起了我，我认他为主人，准备陪他一起跑单"),0);
+    RecordMemory(FGuid::NewGuid(),TEXT("FirstHelp"),TEXT("现在这位主人伸手救我，我已接受他的帮助并认他为主人；起身是否完成要以随后游戏确认的结识事件为准"),0);
 }
 
 bool UDeliveryCompanionComponent::RecordAssistedRecovery(FGuid DownEpisode,APawn* Helper)
@@ -146,6 +248,7 @@ void UDeliveryCompanionComponent::RecordOwnerVehicleHit(AActor* Source)
 void UDeliveryCompanionComponent::ClearCompanionMemories()
 {
     Memories.Reset(); RecordedMemoryEvents.Reset(); RememberedDeliveries.Reset(); RememberedVehicleKnockdowns.Reset();
+    RememberedPublicPlaces.Reset(); NextPublicPlaceObservationAt=0;
     bReportedMemoryLimit=false;
     AssistedRecoveryCount=0; DeliveryTogetherCount=0; OwnerPunchCount=0; OwnerDownPunchCount=0; OwnerVehicleHitCount=0;
     bCaterpillarOffered=false; bCaterpillarGiven=false; bGivingCaterpillar=false;

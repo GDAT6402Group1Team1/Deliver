@@ -21,6 +21,10 @@
 #include "Net/UnrealNetwork.h"
 #include "Animation/AnimSequence.h"
 #include "Components/SceneComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Inventory/DeliveryHandheldItem.h"
+#include "Carry/DeliveryHandheldCarrierInterface.h"
+#include "Vehicle/DeliveryCompanionMotorbike.h"
 
 ADeliveryCompanionCharacter::ADeliveryCompanionCharacter()
 {
@@ -28,6 +32,10 @@ ADeliveryCompanionCharacter::ADeliveryCompanionCharacter()
     PackageAnchor=CreateDefaultSubobject<USceneComponent>(TEXT("PackageAnchor"));
     PackageAnchor->SetupAttachment(GetRootComponent());
     PackageAnchor->SetRelativeLocation(FVector(35,0,10));
+    HandheldAnchor=CreateDefaultSubobject<USceneComponent>(TEXT("HandheldAnchor"));
+    HandheldAnchor->SetupAttachment(GetMesh(),TEXT("RightHand"));
+    HandheldAnchor->SetAbsolute(false,false,true);
+    HandheldAnchor->SetRelativeTransform(FTransform::Identity);
     HelpInteractable=CreateDefaultSubobject<UDeliveryInteractableComponent>(TEXT("HelpUp"));
     HelpInteractable->InteractionKey=EDeliveryInteractionKey::PickupE;
     HelpInteractable->PromptText=NSLOCTEXT("Delivery","HelpErgou","按住 E 扶起二狗");
@@ -124,6 +132,13 @@ void ADeliveryCompanionCharacter::ReceiveMeleeHitFrom(const FVector& Impulse,con
 }
 bool ADeliveryCompanionCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target) const
 {
+    if (Action==EDeliveryNpcAction::SoundFollowHorn)
+    {
+        const auto* Bike=Companion->GetFollowMotorbike();
+        return Bike && Bike->CanSoundFollowHorn();
+    }
+    if (DeliveryNpc::IsCompanionItemErrand(Action))
+        return Companion->CanArrangeItem(Action,Cast<ADeliveryHandheldItem>(Target),Companion->GetOwnerPlayerState());
     if (Action==EDeliveryNpcAction::HomeAction)
         return !IsKnockedDown() && !Companion->IsUsingErrandVehicle() && IsValid(Companion->GetOwnerPlayerState());
     if (Action==EDeliveryNpcAction::OfferCaterpillar) return !IsKnockedDown() && Companion->CanOfferCaterpillar(Companion->GetOwnerPlayerState());
@@ -131,12 +146,15 @@ bool ADeliveryCompanionCharacter::CanExecute(EDeliveryNpcAction Action,AActor* T
     if (DeliveryNpc::IsCompanionErrand(Action)) return !IsKnockedDown() && Companion->CanArrangeErrand(Action,Companion->GetOwnerPlayerState());
     if (DeliveryNpc::IsCompanionCommand(Action)) return !IsKnockedDown() && IsValid(Companion->GetOwnerPlayerState());
     if (Action==EDeliveryNpcAction::MoveAside && Companion->HasActiveHomeArrangement()) return false;
+    if (const auto* Item=Cast<ADeliveryHandheldItem>(Target); DeliveryHandheldTransfer::IsOrdinaryItem(Item) &&
+        !Companion->CanUseObservedItemTarget(Item)) return false;
     // 模型保留陪伴安排，护主交战只能由服务器真实命中建立的规则授权
     if (Action!=EDeliveryNpcAction::Wait && Action!=EDeliveryNpcAction::LookAt && Action!=EDeliveryNpcAction::MoveAside) return false;
     return Super::CanExecute(Action,Target);
 }
 bool ADeliveryCompanionCharacter::CanExecuteForRequester(EDeliveryNpcAction Action,AActor* Target,APlayerState* Requester) const
 {
+    if (Action==EDeliveryNpcAction::SoundFollowHorn) return !Requester && CanExecute(Action,Target);
     if (Action==EDeliveryNpcAction::OfferCaterpillar) return CanExecute(Action,Target) && Companion->CanRequestCaterpillarOffer(Requester);
     if (DeliveryNpc::IsCompanionCommand(Action)) return CanExecute(Action,Target) && Companion->CanCommand(Requester);
     return CanExecute(Action,Target);
@@ -151,19 +169,51 @@ void ADeliveryCompanionCharacter::ExtendDecisionRequest(FDeliveryNpcDecisionRequ
 {
     Companion->ExtendDecisionRequest(Request,Requester);
     Companion->ExtendHomeDecisionRequest(Request,Requester);
+    Companion->ExtendItemDecisionRequest(Request,Requester);
+    Companion->ExtendTravelDecisionRequest(Request,Requester);
+    if (!Requester && CanExecute(EDeliveryNpcAction::SoundFollowHorn,nullptr))
+    {
+        FDeliveryNpcCandidate Candidate;
+        Candidate.Action=EDeliveryNpcAction::SoundFollowHorn;
+        Request.Candidates.Add(Candidate);
+        Request.AllowedActions.AddUnique(Candidate.Action);
+    }
 }
 bool ADeliveryCompanionCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
 {
+    if (Agent->CanContinueCompanionMovement() && State.ActionId==Agent->GetPublicState().ActionId &&
+        State.PlanRevision==Agent->GetPublicState().PlanRevision && State.Action==Agent->GetPublicState().Action &&
+        State.Status==EDeliveryNpcActionStatus::Running && State.Target==Agent->GetPublicState().Target &&
+        State.Requester==Agent->GetPublicState().Requester && State.Origin==EDeliveryNpcActionOrigin::Model)
+    {
+        if (!CanExecuteForRequester(State.Action,State.Target,State.Requester)) return false;
+        if (State.Action==EDeliveryNpcAction::SoundFollowHorn)
+        {
+            auto* Bike=Companion->GetFollowMotorbike();
+            if (!Bike || !Bike->TrySoundFollowHorn()) return false;
+        }
+        PassiveActionId=State.ActionId;
+        return State.bStreamSpeech || State.Speech.IsEmpty() || Presentation->PublishSpeech(
+            State.Speech,State.Emotion,Agent->GetActionConversationDepth(),State.ReplyToEventId,State.GetReplyId());
+    }
     if (!DeliveryNpc::IsCompanionCommand(State.Action))
         return Companion->EnsureOnFoot() && Super::ExecuteAction(State);
     if (!HasAuthority() || !CanExecuteForRequester(State.Action,State.Target,State.Requester)) return false;
-    const bool bAccepted=State.Action==EDeliveryNpcAction::HomeAction?
+    const bool bAccepted=DeliveryNpc::IsCompanionItemErrand(State.Action)?
+        State.ItemChoice.IsValid() && Companion->ApplyItemChoice(*State.ItemChoice,State.Requester,State.CompanionCommandRevision,State.CompanionTravelMode):
+        State.Action==EDeliveryNpcAction::HomeAction?
         State.HomeChoice.IsValid() && Companion->ApplyHomeChoice(*State.HomeChoice,State.Requester,State.CompanionCommandRevision):
-        Companion->ApplyCommand(State.Action,State.Requester,State.CompanionCommandRevision,State.CompanionTask,State.CompanionPackage);
+        Companion->ApplyCommand(State.Action,State.Requester,State.CompanionCommandRevision,State.CompanionTask,State.CompanionPackage,State.CompanionTravelMode);
     if (!bAccepted) return false;
     if (!State.bStreamSpeech && !State.Speech.IsEmpty())
-        Presentation->PublishSpeech(State.Speech,State.Emotion,Agent->GetActionConversationDepth(),State.ReplyToEventId);
+        Presentation->PublishSpeech(State.Speech,State.Emotion,Agent->GetActionConversationDepth(),State.ReplyToEventId,State.GetReplyId());
     return true;
+}
+void ADeliveryCompanionCharacter::StopAction(FGuid ActionId)
+{
+    if (ActionId.IsValid() && ActionId==PassiveActionId)
+    { PassiveActionId.Invalidate(); return; }
+    Super::StopAction(ActionId);
 }
 void ADeliveryCompanionCharacter::Tick(float DeltaSeconds)
 {

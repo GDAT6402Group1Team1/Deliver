@@ -24,6 +24,9 @@
 #include "Task/World/DeliveryPickupPoint.h"
 #include "Task/World/DeliveryPickupPointComponent.h"
 #include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/DeliveryCompanionMotorbike.h"
+#include "Inventory/DeliveryPackageItem.h"
+#include "Task/World/DeliveryItemComponent.h"
 #include "World/DeliveryLocationComponent.h"
 #include "World/DeliveryLocationRegistry.h"
 #include "UObject/UnrealType.h"
@@ -136,7 +139,167 @@ bool FDeliveryCompanionRulesTest::RunTest(const FString&)
     TestFalse(TEXT("其他玩家没有取消候选"),Request.AllowedActions.Contains(EDeliveryNpcAction::CancelCompanionTask));
     Npc->Agent->CancelPlan(TEXT("TestFinished"));
 
+    // 被动短动作沿用 Stay/Follow，只有真实移动或身体受阻才让位
+    auto* Agent=Npc->Agent.Get();
+    for (const auto Passive:{EDeliveryNpcAction::Wait,EDeliveryNpcAction::LookAt})
+    {
+        Agent->PublicState={}; Agent->PublicState.ActionId=FGuid::NewGuid();
+        Agent->PublicState.Action=Passive; Agent->PublicState.Status=EDeliveryNpcActionStatus::Running;
+        TestTrue(TEXT("普通 Wait/LookAt 不停止原等候安排"),Agent->CanContinueCompanionMovement());
+        Agent->PublicState.Origin=EDeliveryNpcActionOrigin::GameplayRule;
+        TestFalse(TEXT("服务器身体规则不冒充被动交谈"),Agent->CanContinueCompanionMovement());
+        Agent->PublicState.Origin=EDeliveryNpcActionOrigin::Model;
+        Npc->Encounter.Phase=EDeliveryCompanionEncounterPhase::AwaitingHelp;
+        TestFalse(TEXT("倒地时短动作不能继续导航"),Agent->CanContinueCompanionMovement());
+        Npc->Encounter.Phase=EDeliveryCompanionEncounterPhase::Joined;
+    }
+    Agent->PublicState.Action=EDeliveryNpcAction::MoveAside;
+    TestFalse(TEXT("真实让路仍独占短动作移动"),Agent->CanContinueCompanionMovement());
+    Agent->PublicState={};
+
+    // 获救回应绑定真实事件和主人，不伪造玩家发言，也不把模型文字当播放完成
+    FDeliveryNpcObservation Joined;
+    Joined.EventId=FGuid::NewGuid(); Joined.Kind=TEXT("CompanionJoined");
+    Joined.Subject=Owner->GetPawn(); Joined.Source=EDeliveryNpcEvidenceSource::ActionResult;
+    Joined.Description=TEXT("玩家刚才亲手扶我起身，我已认他为主人"); Joined.Lifetime=60;
+    TestTrue(TEXT("记录已认主的真实救助结果"),Agent->ObserveEvent(Joined));
+    TestTrue(TEXT("真实事件进入主动回复上下文"),Agent->BuildDecisionRequest(FGuid::NewGuid(),Request));
+    TestFalse(TEXT("主动获救回应没有伪造玩家输入"),Request.bPlayerRequest);
+    TestEqual(TEXT("请求绑定原获救事件"),Agent->GetJoinedResponseEvent(Request),Joined.EventId);
+    Agent->ActiveRequest=Request;
+    const auto* WaitCandidate=Request.Candidates.FindByPredicate([](const auto& Candidate)
+        { return Candidate.Action==EDeliveryNpcAction::Wait; });
+    if (!TestNotNull(TEXT("获救后仍由模型选择实际候选"),WaitCandidate)) return false;
+    FDeliveryNpcDecisionProposal JoiningReply;
+    JoiningReply.CapabilityVersion=Request.RequestedCapabilityVersion;
+    JoiningReply.WorldEpoch=Request.WorldEpoch; JoiningReply.NpcId=Request.NpcId; JoiningReply.RequestId=Request.RequestId;
+    JoiningReply.ContextRevision=Request.ContextRevision; JoiningReply.PlanRevision=Request.PlanRevision;
+    JoiningReply.CandidateId=WaitCandidate->CandidateId; JoiningReply.Action=WaitCandidate->Action;
+    JoiningReply.TargetId=WaitCandidate->TargetId; JoiningReply.EvidenceIds=WaitCandidate->EvidenceIds; JoiningReply.Duration=1;
+    TestFalse(TEXT("静默 Wait 不能消耗获救回应"),Agent->TryAcceptProposal(JoiningReply,Reason));
+    TestEqual(TEXT("获救静默失败可解释"),Reason,FName(TEXT("MissingJoinedReply")));
+    const FGuid NewPlayerMessage=FGuid::NewGuid();
+    TestTrue(TEXT("新玩家发言优先于旧获救请求"),Agent->BeginListening(Owner->GetPawn(),NewPlayerMessage));
+    TestFalse(TEXT("玩家插话撤下旧初遇请求"),Agent->ActiveRequest.RequestId.IsValid());
+    TestEqual(TEXT("玩家插话保留未说完的获救经历"),Agent->PendingJoinedEvent,Joined.EventId);
+    TestEqual(TEXT("新玩家发言编号保持独立"),Agent->PlayerReplyMessage,NewPlayerMessage);
+    Agent->InterruptPlayerReply(Owner);
+    Agent->ActiveRequest=Request; Agent->JoinedResponseAttempts=3;
+    Agent->ReceiveDecision(Request.RequestId,nullptr,TEXT("TransportFailure"));
+    TestFalse(TEXT("第三次失败不叠加通用自动重试"),Npc->IsDecisionRetryScheduled());
+    TestEqual(TEXT("重试用尽仍未冒充已回应"),Agent->PendingJoinedEvent,Joined.EventId);
+    UDeliveryNpcAgentComponent::FReply Playback;
+    Playback.ReplyId=FGuid::NewGuid(); Playback.MessageId=Joined.EventId; Playback.JoinedEventId=Joined.EventId;
+    Playback.JoinedOwner=Owner->PlayerState; Playback.SentenceCount=1;
+    Agent->ActiveRequest={}; Agent->Replies.Add(FGuid::NewGuid(),Playback);
+    Agent->FinishReplyPlayback(Playback.ReplyId);
+    TestEqual(TEXT("仅完成回调且没有真实 SelfSpeech 不算说完"),Agent->PendingJoinedEvent,Joined.EventId);
+    Playback.ReplyId=FGuid::NewGuid(); Agent->Replies.Add(FGuid::NewGuid(),Playback);
+    FDeliveryNpcObservation Spoken;
+    Spoken.Kind=TEXT("SelfSpeech"); Spoken.Subject=Npc; Spoken.Addressee=Owner->GetPawn();
+    Spoken.Source=EDeliveryNpcEvidenceSource::ActionResult; Spoken.ReplyToEventId=Joined.EventId;
+    Spoken.Description=TEXT("这句话只作为测试中的模型回复"); Spoken.Lifetime=60;
+    TestTrue(TEXT("表现完成才记录真实说话结果"),Agent->ObserveEvent(Spoken));
+    Agent->FinishReplyPlayback(Playback.ReplyId);
+    TestFalse(TEXT("对应整轮播放完成后撤下初遇待答"),Agent->PendingJoinedEvent.IsValid());
+
+    // 主人插话后的回复保留自己的主消息，同时带上未回应救助的独立关联
+    Joined.EventId=FGuid::NewGuid();
+    TestTrue(TEXT("第二个独立救助用例记录成功"),Agent->ObserveEvent(Joined));
+    const FGuid OwnerQuestion=FGuid::NewGuid();
+    TestTrue(TEXT("主人新问题优先处理"),Agent->BeginListening(Owner->GetPawn(),OwnerQuestion));
+    FDeliveryNpcDecisionRequest PlayerRequest;
+    TestTrue(TEXT("玩家请求仍带真实救助经历"),Agent->BuildDecisionRequest(FGuid::NewGuid(),PlayerRequest));
+    TestEqual(TEXT("只给主人回应关联救助"),Agent->GetJoinedResponseEvent(PlayerRequest),Joined.EventId);
+    auto StrangerRequest=PlayerRequest;
+    StrangerRequest.RequesterPC=Stranger; StrangerRequest.RequesterPlayerState=Stranger->PlayerState;
+    TestFalse(TEXT("旁人回复不会结清主人的救助回应"),Agent->GetJoinedResponseEvent(StrangerRequest).IsValid());
+    Agent->PublicState.SpeechTarget=Owner->GetPawn();
+    UDeliveryNpcAgentComponent::FReply OwnerReply;
+    OwnerReply.ReplyId=FGuid::NewGuid(); OwnerReply.MessageId=OwnerQuestion;
+    OwnerReply.bPlayerReply=true; OwnerReply.SentenceCount=1;
+    Agent->BindJoinedResponse(OwnerReply,PlayerRequest);
+    TestEqual(TEXT("关联救助不替换玩家消息编号"),OwnerReply.MessageId,OwnerQuestion);
+    TestEqual(TEXT("玩家回复保存独立救助编号"),OwnerReply.JoinedEventId,Joined.EventId);
+    Agent->Replies.Add(FGuid::NewGuid(),OwnerReply);
+    Agent->FinishReplyPlayback(OwnerReply.ReplyId);
+    TestEqual(TEXT("玩家回复未实际说完时不结清"),Agent->PendingJoinedEvent,Joined.EventId);
+    OwnerReply.ReplyId=FGuid::NewGuid(); Agent->Replies.Add(FGuid::NewGuid(),OwnerReply);
+    Spoken.EventId=FGuid::NewGuid(); Spoken.ReplyToEventId=OwnerQuestion;
+    Spoken.Description=TEXT("这句测试回复先回答主人当前的问题");
+    TestTrue(TEXT("完整台词仍关联玩家原话"),Agent->ObserveEvent(Spoken));
+    Agent->FinishReplyPlayback(OwnerReply.ReplyId);
+    TestFalse(TEXT("主人回复说完后不再额外主动感谢一次"),Agent->PendingJoinedEvent.IsValid());
+    TestEqual(TEXT("附带救助回应不消耗主动重试次数"),Agent->JoinedResponseAttempts,0);
+    Agent->ResetContext(TEXT("JoiningTestFinished"));
+
     auto* Companion=Npc->Companion.Get();
+    const auto HasTravelCandidate=[](const FDeliveryNpcDecisionRequest& Choices,EDeliveryNpcAction Action,EDeliveryCompanionTravelMode Travel)
+    {
+        return Choices.Candidates.ContainsByPredicate([&](const auto& Candidate)
+            { return Candidate.Action==Action && Candidate.TravelMode==Travel; });
+    };
+    TestTrue(TEXT("主人询问出行方式"),Agent->BeginListening(Owner->GetPawn(),FGuid::NewGuid()));
+    FDeliveryNpcDecisionRequest TravelChoices;
+    TestTrue(TEXT("没有专属车时仍可构造请求"),Agent->BuildDecisionRequest(FGuid::NewGuid(),TravelChoices));
+    TestFalse(TEXT("没有专属车不提供 OwnVehicle"),HasTravelCandidate(TravelChoices,EDeliveryNpcAction::Follow,EDeliveryCompanionTravelMode::OwnVehicle));
+    FActorSpawnParameters TravelSpawn;
+    TravelSpawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    auto* OwnBike=World->SpawnActor<ADeliveryCompanionMotorbike>(FVector(3000,0,88),FRotator::ZeroRotator,TravelSpawn);
+    if (!TestNotNull(TEXT("测试使用独立同伴车"),OwnBike)) return false;
+    Companion->ErrandVehicle=OwnBike;
+    for (const auto Travel:{EDeliveryCompanionTravelMode::Walk,EDeliveryCompanionTravelMode::OwnVehicle,EDeliveryCompanionTravelMode::Automatic})
+    {
+        TestTrue(TEXT("主人取得实际出行候选"),Agent->BuildDecisionRequest(FGuid::NewGuid(),TravelChoices));
+        TestTrue(TEXT("明确出行方式出现在实际候选中"),HasTravelCandidate(TravelChoices,EDeliveryNpcAction::Follow,Travel));
+        TestTrue(TEXT("主人可以提交明确出行选择"),Companion->ApplyCommand(EDeliveryNpcAction::Follow,
+            Owner->PlayerState,Companion->GetCommandRevision(),nullptr,nullptr,Travel));
+        TestEqual(TEXT("服务器记录主人选择"),Companion->GetTravelMode(),Travel);
+        TestFalse(TEXT("访客不能改主人的出行方式"),Companion->ApplyCommand(EDeliveryNpcAction::Follow,
+            Stranger->PlayerState,Companion->GetCommandRevision(),nullptr,nullptr,EDeliveryCompanionTravelMode::Walk));
+        TestEqual(TEXT("访客被拒后选择不变"),Companion->GetTravelMode(),Travel);
+    }
+    Agent->CancelPlan(TEXT("TravelChoiceTest"));
+    for (const auto Action:{EDeliveryNpcAction::Stay,EDeliveryNpcAction::CancelCompanionTask})
+    {
+        TestTrue(TEXT("等候和取消仍可接收"),Companion->ApplyCommand(Action,Owner->PlayerState,Companion->GetCommandRevision()));
+        TestEqual(TEXT("等候和取消不清出行选择"),Companion->GetTravelMode(),EDeliveryCompanionTravelMode::Automatic);
+    }
+    APawn* PreviousOwnerPawn=Owner->GetPawn();
+    auto* SwappedPawn=MakePawn(FVector(100,0,88));
+    Owner->Possess(SwappedPawn);
+    TestEqual(TEXT("同PlayerState换Pawn保留出行选择"),Companion->GetTravelMode(),EDeliveryCompanionTravelMode::Automatic);
+    Owner->Possess(PreviousOwnerPawn); SwappedPawn->Destroy();
+    Companion->ErrandVehicle=nullptr; OwnBike->Destroy();
+
+    // 同一世界补一份真实持件状态，只测远处接货不能借未指定方式直接出发
+    auto* TravelState=World->SpawnActor<AGameStateBase>(); World->SetGameState(TravelState);
+    auto* TravelTasks=NewObject<UDeliveryTaskManagerComponent>(TravelState); TravelState->AddInstanceComponent(TravelTasks);
+    auto* TravelTask=NewObject<UDeliveryTaskDefinition>(TravelState);
+    TravelTask->TaskId=TEXT("CompanionTravel_CarriedPackage"); TravelTask->TimeLimitSeconds=120;
+    auto* TravelDefinitions=FindFProperty<FArrayProperty>(TravelTasks->GetClass(),TEXT("TaskDefinitions"));
+    if (!TestNotNull(TEXT("复用原任务配置字段"),TravelDefinitions)) return false;
+    TravelDefinitions->ContainerPtrToValuePtr<TArray<TObjectPtr<UDeliveryTaskDefinition>>>(TravelTasks)->Add(TravelTask);
+    TravelTasks->RegisterComponent();
+    if (!TestTrue(TEXT("远处接货测试使用真实接单入口"),TravelTasks->StartTaskTimerFromAcceptedCall(TravelTask))) return false;
+    auto* CarryingPlayer=World->SpawnActor<ADeliveryCharacter>(FVector(2000,0,88),FRotator::ZeroRotator,TravelSpawn);
+    if (!TestNotNull(TEXT("创建真实持件玩家"),CarryingPlayer)) return false;
+    Owner->Possess(CarryingPlayer); CarryingPlayer->GetActiveRagdoll()->StopRagdoll();
+    CarryingPlayer->SetActorLocation(FVector(2000,0,88),false,nullptr,ETeleportType::TeleportPhysics);
+    auto* TravelPackage=World->SpawnActor<ADeliveryTestPackage>(FVector(2000,0,150),FRotator::ZeroRotator,TravelSpawn);
+    if (!TestNotNull(TEXT("创建同一份实际任务包裹"),TravelPackage)) return false;
+    TravelPackage->GetDeliveryItemComponent()->OwningTask=TravelTask;
+    if (!TestTrue(TEXT("真实接收接口写入持件关系"),CarryingPlayer->TryReceiveTaskPackage(TravelPackage))) return false;
+    Companion->TravelMode=EDeliveryCompanionTravelMode::Unspecified;
+    TestTrue(TEXT("真实持件人确实远于就近豁免"),FVector::Dist(Npc->GetActorLocation(),CarryingPlayer->GetTaskPackageTransferPoint())>240.f);
+    TestTrue(TEXT("远处持件仍允许提出接件委托"),Companion->CanArrangeErrand(EDeliveryNpcAction::TakePackage,Owner->PlayerState));
+    TestTrue(TEXT("主人询问远处接货"),Agent->BeginListening(CarryingPlayer,FGuid::NewGuid()));
+    TestTrue(TEXT("远处接货构造真实候选"),Agent->BuildDecisionRequest(FGuid::NewGuid(),TravelChoices));
+    TestFalse(TEXT("未指定方式的远处Take不能直接出发"),HasTravelCandidate(TravelChoices,EDeliveryNpcAction::TakePackage,EDeliveryCompanionTravelMode::Unspecified));
+    TestTrue(TEXT("主人仍可明确选步行接货"),HasTravelCandidate(TravelChoices,EDeliveryNpcAction::TakePackage,EDeliveryCompanionTravelMode::Walk));
+    Agent->CancelPlan(TEXT("TravelTestFinished"));
+    CarryingPlayer->ReleaseTaskPackage(TravelPackage); TravelPackage->Destroy();
+    Owner->Possess(PreviousOwnerPawn); CarryingPlayer->Destroy();
     TestTrue(TEXT("主人重新安排跟随以检查补位回包"),Companion->ApplyCommand(
         EDeliveryNpcAction::Follow,Owner->PlayerState,Companion->GetCommandRevision()));
     // 这里只构造服务器待答挑战并检查协议，不生成视口，也不把回答当成画面验证

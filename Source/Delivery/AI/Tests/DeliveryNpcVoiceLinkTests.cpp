@@ -8,6 +8,8 @@
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Network/DeliveryAiSettings.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
+#include "Character/DeliveryCharacter.h"
+#include "Vehicle/DeliveryMotorbike.h"
 #include "Components/AudioComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -46,7 +48,10 @@ bool FDeliveryNpcVoiceLinkTest::RunTest(const FString&)
     if (!Companion || !Neighbor || !SecondCompanion || !Owner || !Other) return false;
     Owner->PlayerState=World->SpawnActor<APlayerState>();
     Other->PlayerState=World->SpawnActor<APlayerState>();
-    Owner->Possess(World->SpawnActor<APawn>(FVector::ZeroVector,FRotator::ZeroRotator,Spawn));
+    auto* PlayerCharacter=World->SpawnActor<ADeliveryCharacter>(FVector::ZeroVector,FRotator::ZeroRotator,Spawn);
+    auto* Bike=World->SpawnActor<ADeliveryMotorbike>(FVector(100,0,90),FRotator::ZeroRotator,Spawn);
+    if (!PlayerCharacter || !Bike) return false;
+    Owner->Possess(PlayerCharacter);
     Other->Possess(World->SpawnActor<APawn>(FVector(200,0,90),FRotator::ZeroRotator,Spawn));
     auto* Conversation=NewObject<UDeliveryConversationComponent>(Owner);
     Owner->AddInstanceComponent(Conversation); Conversation->RegisterComponent();
@@ -70,6 +75,29 @@ bool FDeliveryNpcVoiceLinkTest::RunTest(const FString&)
     TestEqual(TEXT("服务器解析本句主人"),View->ResolveRadioListener(Handle.Token),Owner->PlayerState.Get());
     TestNull(TEXT("普通NPC不能借用连麦消息"),Neighbor->Presentation->ResolveRadioListener(Handle.Token));
     Conversation->HandleVoiceReleased(LocalToken);
+
+    // 只构造已完成的控制关系，不把反射设置驾驶员当作真实上车操作验收
+    const auto* DriverProperty=FindFProperty<FObjectPropertyBase>(ADeliveryMotorbike::StaticClass(),TEXT("Driver"));
+    if (!TestNotNull(TEXT("驾驶员复制字段"),DriverProperty)) return false;
+    auto* Turns=World->GetSubsystem<UDeliveryConversationTurnSubsystem>();
+    if (!TestNotNull(TEXT("服务器交谈轮次"),Turns) ||
+        !TestTrue(TEXT("等待回复使用同一语音轮次"),Turns->CommitFinal(Owner,Companion,Handle,Handle.Token))) return false;
+    TestTrue(TEXT("远处主人开始连麦倾听"),Companion->Agent->BeginListening(PlayerCharacter,Handle.Token));
+    static_cast<UActorComponent*>(Companion->Agent.Get())->TickComponent(.01f,LEVELTICK_All,nullptr);
+    TestTrue(TEXT("连麦不被现场900cm距离取消"),Companion->Agent->IsListening());
+    DriverProperty->SetObjectPropertyValue_InContainer(Bike,PlayerCharacter);
+    PlayerCharacter->AttachToActor(Bike,FAttachmentTransformRules::KeepWorldTransform);
+    Owner->Possess(Bike);
+    static_cast<UActorComponent*>(Companion->Agent.Get())->TickComponent(.01f,LEVELTICK_All,nullptr);
+    TestTrue(TEXT("上车保持原回复归属"),Conversation->IsVoiceReplyMessage(Handle.Token,Companion));
+    TestEqual(TEXT("车上倾听跟随当前控制对象"),Companion->Agent->GetListeningSpeaker(),static_cast<AActor*>(Bike));
+    DriverProperty->SetObjectPropertyValue_InContainer(Bike,nullptr);
+    PlayerCharacter->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+    Owner->Possess(PlayerCharacter);
+    static_cast<UActorComponent*>(Companion->Agent.Get())->TickComponent(.01f,LEVELTICK_All,nullptr);
+    TestTrue(TEXT("下车保持原回复归属"),Conversation->IsVoiceReplyMessage(Handle.Token,Companion));
+    TestEqual(TEXT("下车倾听回到原人物"),Companion->Agent->GetListeningSpeaker(),static_cast<AActor*>(PlayerCharacter));
+    Companion->Agent->EndListening();
 
     FDeliveryNpcCompleteReply Reply;
     Reply.ReplyId=FGuid::NewGuid(); Reply.MessageId=Handle.Token;

@@ -214,6 +214,12 @@ void ADeliveryPedestrian::ReceiveHorn(float SpeedMultiplier)
 	}
 }
 
+void ADeliveryPedestrian::ReceiveHornFrom(float Multiplier,AActor* Vehicle,AActor* Driver)
+{
+	ReceiveHorn(Multiplier);
+	if (Look) Look->TryStartle(Vehicle);
+}
+
 void ADeliveryPedestrian::BeginWalk(ADeliveryPedestrianRoute* InRoute, USkeletalMesh* InMesh,
                                     UAnimSequence* InWalkAnim, float InStartDistance, bool bInForward,
                                     float InSpeed, float InAnimReferenceSpeed)

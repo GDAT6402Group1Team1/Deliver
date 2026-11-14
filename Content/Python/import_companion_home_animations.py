@@ -6,6 +6,7 @@
 -ImportAlignedCompanionHomeAnimationSources：原生导入偏航 -90 度的独立源副本
 -RebuildAlignedCompanionHomeAnimations -HomeAnimationManifest="..."：备份并重建本批五个动作
 -InspectAlignedCompanionHomeAnimations：只读独立对齐源及前向校验
+-RetargetCompanionSeatAnimations：只创建独立攀上、跳上和落地成品副本，既有五段动作保持原样
 
 三个阶段分开运行，先读取导入结果再确认 manifest.imported_names_confirmed=true
 只使用 UE IK Rig / IK Retargeter / run_batch_retarget，不编写或生成肢体动作轨道
@@ -658,6 +659,109 @@ def retarget(manifest, source_info, target, idle, aligned=False, results=None):
     return results
 
 
+def retarget_seat_animations():
+    """使用已经核对过的 Library2 原生 IK Rig，不写源骨架或既有五段动画"""
+    editor_guard(True)
+    project = Path(unreal.Paths.project_dir()).resolve()
+    output = project/'Saved/AIResearch/HomeObjects/SeatAnimations'/datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    output.mkdir(parents=True, exist_ok=False)
+    folder = ROOT+'/Animation'
+    clips = {'ClimbSeat': ('ClimbUp_1m_RM', 'A_ErgouClimbSeat'),
+             'JumpSeat': ('NinjaJump_Start', 'A_ErgouJumpSeat'),
+             'LeaveSeat': ('NinjaJump_Land', 'A_ErgouLeaveSeat')}
+    report = {'status': 'preparing', 'pie_started': False, 'world_tick': False, 'map_saved': False,
+              'procedural_animation_generated': False, 'clips': {}}
+    protected = [project/'Content/Level/TestForCharacter.umap', asset_file(project, COMPANION)]
+    for directory in ('Characters', 'NPC/Companion/Appearance', 'NPC/Companion/Animation',
+                      'NPC/Companion/Home/Source', 'NPC/Companion/Home/Retarget', 'NPC/Residents', 'NPC/Grandpa'):
+        protected.extend((project/'Content'/directory).rglob('*.uasset'))
+    before = {str(path): digest(path) for path in protected if path.is_file()}
+    try:
+        source_info = local_sources(project)
+        info = source_info['Library2']
+        report['source'] = info
+        before[info['absolute_file']] = info['sha256']
+        before[info['absolute_license']] = info['license_sha256']
+        target, idle = target_data()
+        target_skeleton = target.get_editor_property('skeleton')
+        source_mesh = unreal.load_asset(ALIGNED_SOURCE_ROOT+'/Library2/Quaternius_AnimationLibrary2_Standard')
+        retargeter = unreal.load_asset(ALIGNED_RIG_ROOT+'/RTG_HomeLibrary2ToErgou')
+        source_rig = unreal.load_asset(ALIGNED_RIG_ROOT+'/IK_HomeLibrary2')
+        target_rig = unreal.load_asset(ALIGNED_RIG_ROOT+'/IK_ErgouHome')
+        if not isinstance(source_mesh, unreal.SkeletalMesh) or not retargeter or not source_rig or not target_rig:
+            raise RuntimeError('缺少已校验的独立 Aligned 网格或 IK 资产')
+        controller = unreal.IKRetargeterController.get_controller(retargeter)
+        source_side, target_side = unreal.RetargetSourceOrTarget.SOURCE, unreal.RetargetSourceOrTarget.TARGET
+        if (controller.get_ik_rig(source_side) != source_rig or controller.get_ik_rig(target_side) != target_rig or
+            unreal.IKRigController.get_controller(source_rig).get_skeletal_mesh() != source_mesh or
+            unreal.IKRigController.get_controller(target_rig).get_skeletal_mesh() != target):
+            raise RuntimeError('已校验 IK 资产指向变化，拒绝修改或重建它们')
+        for asset in (retargeter, source_rig, target_rig):
+            if unreal.EditorAssetLibrary.get_metadata_tag(asset, RETARGET_TAG) != VERSION:
+                raise RuntimeError('IK 资产归属变化')
+        if (unreal.EditorAssetLibrary.get_metadata_tag(source_mesh, SOURCE_TAG) != VERSION or
+            unreal.EditorAssetLibrary.get_metadata_tag(source_mesh, 'SourceBasisAlignment') != ALIGNMENT_VERSION or
+            unreal.EditorAssetLibrary.get_metadata_tag(source_mesh, 'SourceSHA256') != info['sha256']):
+            raise RuntimeError('Library2 来源或对齐版本变化')
+        report['basis_checks'] = verify_aligned_sources(inspect_sources(ALIGNED_SOURCE_ROOT), target, idle)
+        report['target_mesh'] = object_path(target)
+        sources = {}
+        for role, (original, name) in clips.items():
+            candidates = [unreal.load_asset(ALIGNED_SOURCE_ROOT+'/Library2/'+candidate)
+                          for candidate in imported_clip_names('Library2', original)]
+            candidates = [asset for asset in candidates if isinstance(asset, unreal.AnimSequence)]
+            if len(candidates) != 1:
+                raise RuntimeError('成品源动作名称必须唯一：'+original)
+            source = candidates[0]
+            if (source.get_editor_property('skeleton') != source_mesh.get_editor_property('skeleton') or
+                unreal.EditorAssetLibrary.get_metadata_tag(source, SOURCE_TAG) != VERSION or
+                unreal.EditorAssetLibrary.get_metadata_tag(source, 'SourceBasisAlignment') != ALIGNMENT_VERSION or
+                unreal.EditorAssetLibrary.get_metadata_tag(source, 'SourceSHA256') != info['sha256']):
+                raise RuntimeError('成品动作骨架、来源或对齐版本不符：'+original)
+            existing = unreal.load_asset(folder+'/'+name)
+            if existing:
+                if (not isinstance(existing, unreal.AnimSequence) or
+                    unreal.EditorAssetLibrary.get_metadata_tag(existing, 'DeliverySeatAnimation') != '1' or
+                    unreal.EditorAssetLibrary.get_metadata_tag(existing, 'SourceAnimation') != object_path(source) or
+                    unreal.EditorAssetLibrary.get_metadata_tag(existing, 'SourceSHA256') != info['sha256'] or
+                    existing.get_editor_property('skeleton') != target_skeleton or
+                    not existing.get_editor_property('force_root_lock') or existing.get_editor_property('enable_root_motion')):
+                    raise RuntimeError('目标已有不同资源，停止且保留：'+folder+'/'+name)
+            sources[role] = (source, existing)
+        report['backups'] = backup(project, output, [folder+'/'+name for _, name in clips.values()])
+        for role, (original, name) in clips.items():
+            source, asset = sources[role]
+            existed = asset is not None
+            if not existed:
+                asset = run_native_retarget(source, source_mesh, target, retargeter, folder, name)
+                set_retarget_metadata(asset, source, info, original, retargeter, True)
+                # 用资产根锁定保留作者相对姿势，世界位移只交给 CMC RMS
+                asset.set_editor_property('force_root_lock', True)
+                asset.set_editor_property('root_motion_root_lock', unreal.RootMotionRootLock.ANIM_FIRST_FRAME)
+                unreal.EditorAssetLibrary.set_metadata_tag(asset, 'DeliverySeatAnimation', '1')
+                save_asset(asset)
+            if asset.get_editor_property('skeleton') != target_skeleton:
+                raise RuntimeError('目标成品动作未使用二狗原骨架')
+            report['clips'][role] = {'path': object_path(asset), 'source': object_path(source),
+                'status': 'existing_preserved' if existed else 'native_retargeted',
+                'readback': pose_snapshot(asset, target, True),
+                'authored_direction_check': verify_retarget_direction(role, source, source_mesh, asset, target, 'Library2'),
+                'force_root_lock': bool(asset.get_editor_property('force_root_lock')),
+                'root_motion_root_lock': str(asset.get_editor_property('root_motion_root_lock')),
+                'sha256': digest(asset_file(project, object_path(asset)))}
+        report['status'] = 'retargeted_needs_seat_geometry_and_visual_acceptance'
+    except Exception as error:
+        report.update(status='failed', error=repr(error))
+        raise
+    finally:
+        after = {path: digest(Path(path)) if Path(path).is_file() else None for path in before}
+        report.update(protected_before=before, protected_after=after, protected_unchanged=before == after)
+        (output/'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+        unreal.log('HOME_SEAT_ANIMATION_REPORT='+str(output/'report.json'))
+        if before != after:
+            raise RuntimeError('受保护模型、骨架、源动作、原图、五段动作或地图发生变化')
+
+
 def main(import_source=False, run_retarget=False, manifest_file=None, aligned=False):
     editor_guard(import_source or run_retarget)
     if import_source and run_retarget:
@@ -742,4 +846,9 @@ if __name__ == '__main__':
     if ('-inspectcompanionhomeanimations' in lower or aligned_inspect) and (importing or retargeting):
         raise RuntimeError('Inspect 不能和写入阶段并用')
     match = re.search(r'(?:^|\s)-HomeAnimationManifest=(?:"([^"]+)"|(\S+))', command, re.IGNORECASE)
-    main(importing, retargeting, (match.group(1) or match.group(2)) if match else None, aligned_import or aligned_rebuild or aligned_inspect)
+    if '-retargetcompanionseatanimations' in lower:
+        if importing or retargeting or aligned_inspect or '-inspectcompanionhomeanimations' in lower:
+            raise RuntimeError('座位成品副本必须单独运行，不能合并其它读写阶段')
+        retarget_seat_animations()
+    else:
+        main(importing, retargeting, (match.group(1) or match.group(2)) if match else None, aligned_import or aligned_rebuild or aligned_inspect)

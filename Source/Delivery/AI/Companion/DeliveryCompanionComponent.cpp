@@ -5,6 +5,7 @@
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "AI/Conversation/DeliveryNpcConversationTrace.h"
 #include "Character/DeliveryCharacter.h"
+#include "Carry/DeliveryPackageCarrierInterface.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Task/Tracking/DeliveryTaskTrackerComponent.h"
 #include "Task/DeliveryTaskManagerComponent.h"
@@ -22,6 +23,8 @@
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogDeliveryCompanion,Log,All);
+
 UDeliveryCompanionComponent::UDeliveryCompanionComponent()
 {
     SetIsReplicatedByDefault(true);
@@ -37,6 +40,7 @@ void UDeliveryCompanionComponent::BeginPlay()
 {
     Super::BeginPlay();
     if (!GetOwner()->HasAuthority()) SetComponentTickEnabled(false);
+    UpdateHomeSeatPresentation();
 }
 bool UDeliveryCompanionComponent::CanRecruit(APawn* Helper) const
 {
@@ -79,11 +83,11 @@ APawn* UDeliveryCompanionComponent::GetOwnerPawn() const
     return PC && PC->GetWorld()==GetWorld()?PC->GetPawn():nullptr;
 }
 bool UDeliveryCompanionComponent::ApplyCommand(EDeliveryNpcAction Action,APlayerState* Requester,int32 ExpectedRevision,
-    UDeliveryTaskDefinition* ExpectedTask,ADeliveryPackageItem* ExpectedPackage)
+    UDeliveryTaskDefinition* ExpectedTask,ADeliveryPackageItem* ExpectedPackage,EDeliveryCompanionTravelMode RequestedTravelMode)
 {
     if (!GetOwner()->HasAuthority() || bChangingHomeArrangement || ExpectedRevision!=CommandRevision || !DeliveryNpc::IsCompanionCommand(Action)) return false;
     // 家居必须携带当次真实候选，不能把空 HomeAction 当成通用等候命令
-    if (Action==EDeliveryNpcAction::HomeAction) return false;
+    if (Action==EDeliveryNpcAction::HomeAction || DeliveryNpc::IsCompanionItemErrand(Action)) return false;
     if (Action==EDeliveryNpcAction::OfferCaterpillar)
     {
         if (!CanRequestCaterpillarOffer(Requester)) return false;
@@ -95,12 +99,23 @@ bool UDeliveryCompanionComponent::ApplyCommand(EDeliveryNpcAction Action,APlayer
     }
     if (!CanCommand(Requester)) return false;
     if (Action==EDeliveryNpcAction::GoHome && !CanGoHome(Requester)) return false;
+    const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
+    const TWeakObjectPtr<APlayerState> WeakRequester(Requester);
+    int32 WorkingRevision=ExpectedRevision;
+    const auto StillCurrent=[&]()
+    {
+        return WeakThis.IsValid() && IsValid(GetOwner()) && !GetOwner()->IsActorBeingDestroyed() &&
+            WeakRequester.IsValid() && CanCommand(WeakRequester.Get()) && CommandRevision==WorkingRevision;
+    };
     if (DeliveryNpc::IsCompanionErrand(Action))
     {
-        const bool bStarted=StartErrand(Action,Requester,ExpectedRevision,ExpectedTask,ExpectedPackage);
+        const bool bStarted=StartErrand(Action,Requester,ExpectedRevision,ExpectedTask,ExpectedPackage,RequestedTravelMode);
         if (bStarted)
         {
+            if (!WeakThis.IsValid() || !WeakRequester.IsValid() || !CanCommand(WeakRequester.Get())) return false;
+            WorkingRevision=CommandRevision;
             CancelAssist(TEXT("OwnerChangedArrangement"));
+            if (!StillCurrent()) return false;
             bCaterpillarOffered=false; CaterpillarOpportunityId.Invalidate(); bAnnouncedCaterpillarOpportunity=true;
         }
         return bStarted;
@@ -109,17 +124,30 @@ bool UDeliveryCompanionComponent::ApplyCommand(EDeliveryNpcAction Action,APlayer
     const bool bKeepTakenProp=(Action==EDeliveryNpcAction::Follow || Action==EDeliveryNpcAction::Stay) &&
         !HasActiveHomeArrangement() && OwnsHomeSource(HomeTakeClaim.Object.Get());
     if (!bKeepTakenProp) CancelHomeArrangement(TEXT("OwnerChangedArrangement"));
+    if (!StillCurrent()) return false;
     bCaterpillarOffered=false;
     CaterpillarOpportunityId.Invalidate();
     bAnnouncedCaterpillarOpportunity=true;
     CancelAssist(TEXT("OwnerChangedArrangement"));
-    if (HasActiveErrand()) FinishErrand(EDeliveryNpcActionStatus::Cancelled,TEXT("OwnerChangedArrangement"));
+    if (!StillCurrent()) return false;
+    if (HasActiveErrand())
+    {
+        FinishErrand(EDeliveryNpcActionStatus::Cancelled,TEXT("OwnerChangedArrangement"));
+        // 只接受这次结束旧委托增加的一次修订，回调里的后来安排优先
+        ++WorkingRevision;
+        if (!StillCurrent() || HasActiveErrand()) return false;
+    }
     StopFollowMovement();
+    if (!StillCurrent() || (Action==EDeliveryNpcAction::GoHome && !CanGoHome(WeakRequester.Get()))) return false;
+    if (Action!=EDeliveryNpcAction::Follow) bRideWhileFollowing=false;
+    else if (RequestedTravelMode!=EDeliveryCompanionTravelMode::Unspecified)
+        bRideWhileFollowing=RequestedTravelMode==EDeliveryCompanionTravelMode::OwnVehicle;
     Mode=Action==EDeliveryNpcAction::Follow?EDeliveryCompanionMode::Follow:
         Action==EDeliveryNpcAction::GoHome?EDeliveryCompanionMode::GoHome:EDeliveryCompanionMode::Stay;
     WaitLocation=GetCompanion()->GetNavAgentLocation();
     ++CommandRevision;
     bHasFollowDestination=false;
+    ApplyTravelInstruction(RequestedTravelMode);
     NextNavigationAt=0;
     SetSuspension(NAME_None);
     GetOwner()->ForceNetUpdate();
@@ -132,7 +160,7 @@ void UDeliveryCompanionComponent::ExtendDecisionRequest(FDeliveryNpcDecisionRequ
     Request.CompanionOwnerName=IsValid(OwnerPlayerState)?OwnerPlayerState->GetPlayerName().Left(64):TEXT("");
     Request.CompanionRelationshipStage=GetRelationshipStage();
     Request.bCanOfferCaterpillar=HasCaterpillarOpportunity();
-    Request.CompanionMemories=Memories;
+    CopyCompanionMemories(Request.CompanionMemories);
     Request.bRequesterIsCompanionOwner=CanCommand(Requester);
     Request.CompanionCommandRevision=CommandRevision;
     Request.CompanionMode=StaticEnum<EDeliveryCompanionMode>()->GetNameStringByValue(static_cast<int64>(Mode));
@@ -148,11 +176,9 @@ void UDeliveryCompanionComponent::ExtendDecisionRequest(FDeliveryNpcDecisionRequ
     {
         Request.CompanionTaskId=Task->TaskId.ToString();
         Request.CompanionTaskTitle=Task->DisplayName.ToString().Left(128);
-        // 只查询主人当前手中或正在驾驶车辆上的包裹，不由共享订单阶段推断持有人
-        const auto* Pawn=GetOwnerPawn();
-        const auto* Bike=Cast<ADeliveryMotorbike>(Pawn);
-        const auto* Character=Bike?Bike->GetDriver():Cast<ADeliveryCharacter>(Pawn);
-        const auto* Package=Character?Character->GetCarriedTaskPackage():nullptr;
+        // 由持件接口核对主人手中或已登记车辆的实物，不从共享订单进度猜测
+        const auto* OwnerCarrier=Cast<IDeliveryPackageCarrierInterface>(GetOwnerPackageCarrier());
+        const auto* Package=OwnerCarrier?OwnerCarrier->GetCarriedTaskPackage():nullptr;
         const auto* Item=IsValid(Package)?Package->GetDeliveryItemComponent():nullptr;
         Request.bCompanionOwnerHasPackage=Item && Item->OwningTask==Task;
         if (const auto* Manager=UDeliveryTaskManagerComponent::Get(this))
@@ -188,13 +214,27 @@ void UDeliveryCompanionComponent::ExtendDecisionRequest(FDeliveryNpcDecisionRequ
 }
 void UDeliveryCompanionComponent::StopFollowMovement()
 {
-    if (!GetOwner()->HasAuthority()) return;
+    if (!GetOwner() || !GetOwner()->HasAuthority()) return;
+    const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
+    const TWeakObjectPtr<ADeliveryCompanionCharacter> WeakNpc(GetCompanion());
+    const TWeakObjectPtr<APlayerState> ExpectedOwner(OwnerPlayerState);
+    const int32 Revision=CommandRevision;
+    const auto StillCurrent=[&]()
+    {
+        return WeakThis.IsValid() && WeakNpc.IsValid() && GetCompanion()==WeakNpc.Get() &&
+            CommandRevision==Revision && TWeakObjectPtr<APlayerState>(OwnerPlayerState).HasSameIndexAndSerialNumber(ExpectedOwner);
+    };
+    // 取消移动可能同步触发新安排，后续清理只能继续处理同一版命令
     StopHomeMovement();
+    if (!StillCurrent()) return;
     StopVehicleTravel(EDeliveryCompanionTravelPurpose::Follow);
+    if (!StillCurrent()) return;
     StopVehicleTravel(EDeliveryCompanionTravelPurpose::ReturnToStay);
+    if (!StillCurrent()) return;
     StopVehicleTravel(EDeliveryCompanionTravelPurpose::GoHome);
+    if (!StillCurrent()) return;
     CancelCatchUp();
-    if (!bOwnsNavigation) return;
+    if (!StillCurrent() || !bOwnsNavigation) return;
     const FAIRequestID OldId=FollowMoveId;
     FollowMoveId=FAIRequestID::InvalidRequest;
     bOwnsNavigation=false;
@@ -206,10 +246,13 @@ void UDeliveryCompanionComponent::SetSuspension(FName Reason)
 {
     if (SuspensionReason==Reason) return;
     SuspensionReason=Reason;
+    UE_LOG(LogDeliveryCompanion,Log,TEXT("CompanionSuspension npc=%s revision=%d mode=%d reason=%s"),
+        *GetNameSafe(GetOwner()),CommandRevision,int32(Mode),*Reason.ToString());
     GetOwner()->ForceNetUpdate();
 }
 void UDeliveryCompanionComponent::ReleaseOwner()
 {
+    ShutdownItemExecution();
     CancelHomeArrangement(TEXT("OwnerLost"),true);
     GetCompanion()->CancelAssistedHelp();
     CancelAssist(TEXT("OwnerLost"));
@@ -224,6 +267,8 @@ void UDeliveryCompanionComponent::ReleaseOwner()
     GetCompanion()->Agent->ResetContext(TEXT("CompanionOwnerLost"));
     GetCompanion()->Presentation->CancelSpeech();
     OwnerPlayerState=nullptr; Mode=EDeliveryCompanionMode::Unrecruited;
+    TravelMode=EDeliveryCompanionTravelMode::Unspecified;
+    bRideWhileFollowing=false;
     ++CommandRevision; bHasFollowDestination=false; bReportedBlocked=false;
     SetSuspension(NAME_None);
     GetCompanion()->ResetForNewOwner();
@@ -232,6 +277,7 @@ void UDeliveryCompanionComponent::ReleaseOwner()
 void UDeliveryCompanionComponent::TickComponent(float Dt,ELevelTick Type,FActorComponentTickFunction* Fn)
 {
     Super::TickComponent(Dt,Type,Fn);
+    UpdateHomeSeatPresentation();
     if (!GetOwner()->HasAuthority()) return;
     if (!BoundTaskManager.IsValid())
         if (auto* Manager=UDeliveryTaskManagerComponent::Get(this))
@@ -242,17 +288,18 @@ void UDeliveryCompanionComponent::TickComponent(float Dt,ELevelTick Type,FActorC
     if (Mode!=EDeliveryCompanionMode::Unrecruited && (!IsValid(OwnerPlayerState) || OwnerPlayerState->IsInactive() ||
         OwnerPlayerState->GetWorld()!=GetWorld() || !IsValid(OwnerPlayerState->GetPlayerController()))) ReleaseOwner();
     RefreshOwnerCombatSubscription();
+    RefreshItemObservations();
     TickHomeLifecycle();
+    RefreshPublicPlaceMemories();
     UpdateAssist();
     UpdateCaterpillarOpportunity();
     if (IsValid(OwnerPlayerState))
     {
         const auto* Pawn=GetOwnerPawn();
         if (GetCompanion()->IsKnockedDown()) SetSuspension(TEXT("Down"));
-        else if (GetCompanion()->Agent->ShouldPauseForConversation() || GetCompanion()->Agent->HasActiveAction()) SetSuspension(TEXT("OtherBehavior"));
-        // 只有跟随等主人恢复步行，独立送取、返回等候点和回家保持自己的安排
+        else if (GetCompanion()->Agent->ShouldPauseForConversation() || (GetCompanion()->Agent->HasActiveAction() && !GetCompanion()->Agent->CanContinueCompanionMovement())) SetSuspension(TEXT("OtherBehavior"));
+        // 控制权切换期间保留归属，恢复 Pawn 后按原出行安排继续跟随
         else if (!HasActiveErrand() && !HasActiveHomeArrangement() && Mode==EDeliveryCompanionMode::Follow && !Pawn) SetSuspension(TEXT("OwnerChangingPawn"));
-        else if (!HasActiveErrand() && !HasActiveHomeArrangement() && Mode==EDeliveryCompanionMode::Follow && Pawn && Pawn->IsA<ADeliveryMotorbike>()) SetSuspension(TEXT("OwnerRiding"));
     }
 }
 bool UDeliveryCompanionComponent::IsDestinationClear(const FVector& Destination) const
@@ -274,59 +321,34 @@ bool UDeliveryCompanionComponent::IsOutsideTaskEntrance(const FVector& Destinati
 }
 bool UDeliveryCompanionComponent::FindFollowDestination(APawn* Pawn,FVector& Out) const
 {
-    // 等候不能借用主人前方的候选，否则主人走远后会被避让逻辑自动召回
+    // Follow 的位置只围绕主人，订单入口只作为避让限制
     if (Mode!=EDeliveryCompanionMode::Follow) return false;
     auto* Npc=GetCompanion();
     auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-    if (!Nav || !Pawn) return false;
+    if (!Npc || !Nav || !Pawn) return false;
     const auto& Config=GetTuning();
-    FVector Forward=Pawn->GetVelocity().GetSafeNormal2D();
-    if (Forward.IsNearlyZero()) Forward=Pawn->GetActorForwardVector().GetSafeNormal2D();
-    const bool bFollowingBehind=Affinity<50;
-    FVector Lead=Pawn->GetActorLocation()+Forward*(bFollowingBehind?-FMath::Max(Config.YieldDistance+80.f,180.f):Config.LeadDistance);
-    FVector TaskDestination; FName LocationId;
-    const auto* Tracker=UDeliveryTaskTrackerComponent::FindTracker(OwnerPlayerState);
-    const bool bHasTask=Tracker && Tracker->GetTrackedTaskDestination(TaskDestination,LocationId);
-    if (bHasTask && !bFollowingBehind)
-    {
-        auto* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Pawn->GetActorLocation(),TaskDestination,Npc);
-        if (Route && Route->IsValid() && !Route->IsPartial() && Route->PathPoints.Num()>1)
-        {
-            float Remaining=Config.LeadDistance;
-            Lead=Route->PathPoints[0];
-            for (int32 Index=1;Index<Route->PathPoints.Num();++Index)
-            {
-                const FVector Segment=Route->PathPoints[Index]-Lead;
-                const float Length=Segment.Size();
-                if (Length>Remaining) { Forward=Segment.GetSafeNormal2D(); Lead+=Segment.GetSafeNormal()*Remaining; break; }
-                Remaining-=Length; Lead=Route->PathPoints[Index]; Forward=Segment.GetSafeNormal2D();
-            }
-        }
-    }
+    const FVector OwnerPosition=Pawn->GetActorLocation();
+    const FVector Velocity=Pawn->GetVelocity();
+    FVector Forward=Velocity.SizeSquared2D()>=FMath::Square(30.f)?
+        Velocity.GetSafeNormal2D():Pawn->GetActorForwardVector().GetSafeNormal2D();
+    if (Forward.IsNearlyZero()) Forward=FVector::ForwardVector;
     const FVector Right=FVector::CrossProduct(FVector::UpVector,Forward).GetSafeNormal();
+    const float FollowDistance=FMath::Max(Config.LeadDistance,Config.YieldDistance+25.f);
+    const FVector Behind=OwnerPosition-Forward*FollowDistance;
+    const float Side=FVector::DotProduct(Npc->GetActorLocation()-OwnerPosition,Right)>=0.f?1.f:-1.f;
     TArray<FVector> Candidates;
-    // 主人在入口附近时绕入口选点，侧偏必须大于入口净空，不能固定150厘米后又按220厘米拒绝
-    if (bHasTask && FVector::Dist2D(Lead,TaskDestination)<Config.DestinationClearance)
-    {
-        FVector Away=(Pawn->GetActorLocation()-TaskDestination).GetSafeNormal2D();
-        if (Away.IsNearlyZero()) Away=-Forward;
-        const float ClearRadius=Config.DestinationClearance+Npc->GetSimpleCollisionRadius()+40;
-        for (float Angle:{60.f,-60.f,0.f,100.f,-100.f})
-            Candidates.Add(TaskDestination+Away.RotateAngleAxis(Angle,FVector::UpVector)*ClearRadius);
-    }
-    else
-    {
-        for (float Scale:{1.f,-1.f,.5f,-.5f}) Candidates.Add(Lead+Right*Config.SideDistance*Scale);
-        // 窄路两侧放不下身体时，仍可沿路线保持前方距离
-        Candidates.Add(Lead);
-    }
+    // 优先留在当前一侧，窄路改为后方，入口被挡时才选择主人侧面
+    for (float Scale:{1.f,.5f,-1.f,-.5f}) Candidates.Add(Behind+Right*Config.SideDistance*Side*Scale);
+    Candidates.Add(Behind);
+    Candidates.Add(OwnerPosition+Right*FollowDistance*Side);
+    Candidates.Add(OwnerPosition-Right*FollowDistance*Side);
     for (const FVector& Desired:Candidates)
     {
         FNavLocation Projected;
         if (!Nav->ProjectPointToNavigation(Desired,Projected,FVector(80,80,250),&Npc->GetNavAgentPropertiesRef()) ||
             !IsDestinationClear(Projected.Location) ||
-            FVector::Dist2D(Projected.Location,Pawn->GetActorLocation())<Config.YieldDistance ||
-            (bHasTask && FVector::Dist2D(Projected.Location,TaskDestination)<Config.DestinationClearance)) continue;
+            FVector::Dist2D(Projected.Location,OwnerPosition)<Config.YieldDistance ||
+            !IsOutsideTaskEntrance(Projected.Location)) continue;
         auto* Path=Nav->FindPathToLocationSynchronously(GetWorld(),Npc->GetNavAgentLocation(),Projected.Location,Npc);
         if (!Path || !Path->IsValid() || Path->IsPartial()) continue;
         Out=Projected.Location; return true;
@@ -371,8 +393,7 @@ void UDeliveryCompanionComponent::UpdateFollow()
     if (!IsValid(OwnerPlayerState)) Block=TEXT("NoOwner");
     else if (Npc->IsKnockedDown()) Block=TEXT("Down");
     else if (Mode==EDeliveryCompanionMode::Follow && !Pawn) Block=TEXT("OwnerChangingPawn");
-    else if (Mode==EDeliveryCompanionMode::Follow && Pawn->IsA<ADeliveryMotorbike>()) Block=TEXT("OwnerRiding");
-    else if (Npc->Agent->ShouldPauseForConversation() || Npc->Agent->HasActiveAction()) Block=TEXT("OtherBehavior");
+    else if (Npc->Agent->ShouldPauseForConversation() || (Npc->Agent->HasActiveAction() && !Npc->Agent->CanContinueCompanionMovement())) Block=TEXT("OtherBehavior");
     if (!Block.IsNone() || !AI)
     { StopFollowMovement(); bHasFollowDestination=false; SetSuspension(Block); return; }
     // 远处同行与返程沿真实路径取回自己的车，不用隐藏补位跳过旅程
@@ -424,6 +445,29 @@ void UDeliveryCompanionComponent::UpdateFollow()
     FVector Destination;
     const bool bTooClose=Pawn && FVector::DistSquared2D(Pawn->GetActorLocation(),Npc->GetActorLocation())<FMath::Square(GetTuning().YieldDistance);
     const bool bBlocksEntrance=!IsOutsideTaskEntrance(Npc->GetNavAgentLocation());
+    const float FollowDistance=FMath::Max(GetTuning().LeadDistance,GetTuning().YieldDistance+25.f);
+    const float NearbyDistance=FVector2D(FollowDistance,GetTuning().SideDistance).Size()+25.f;
+    // 主人已停下且身边有空间时就地陪伴，避免为了固定队形绕到另一侧
+    if (Mode==EDeliveryCompanionMode::Follow && Pawn && !bTooClose && !bBlocksEntrance &&
+        Pawn->GetVelocity().SizeSquared2D()<FMath::Square(30.f) &&
+        FVector::DistSquared2D(Pawn->GetActorLocation(),Npc->GetActorLocation())<=FMath::Square(NearbyDistance) &&
+        FMath::Abs(Pawn->GetActorLocation().Z-Npc->GetActorLocation().Z)<=180.f &&
+        IsDestinationClear(Npc->GetNavAgentLocation()) && AI->LineOfSightTo(Pawn))
+    {
+        const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
+        const TWeakObjectPtr<ADeliveryCompanionCharacter> WeakNpc(Npc);
+        const TWeakObjectPtr<APlayerState> ExpectedOwner(OwnerPlayerState);
+        const TWeakObjectPtr<APawn> ExpectedPawn(Pawn);
+        const int32 Revision=CommandRevision;
+        StopFollowMovement();
+        if (!WeakThis.IsValid() || !WeakNpc.IsValid() || !ExpectedOwner.IsValid() || !ExpectedPawn.IsValid() ||
+            CommandRevision!=Revision || OwnerPlayerState!=ExpectedOwner.Get() || GetOwnerPawn()!=ExpectedPawn.Get() ||
+            Mode!=EDeliveryCompanionMode::Follow || WeakNpc->IsActorBeingDestroyed()) return;
+        bHasFollowDestination=false;
+        bReportedBlocked=false;
+        SetSuspension(NAME_None);
+        return;
+    }
     bool bFound=false;
     if (bTooClose || bBlocksEntrance)
     {
@@ -459,11 +503,17 @@ void UDeliveryCompanionComponent::UpdateFollow()
         }
         return;
     }
-    if (bOwnsNavigation && FVector::DistSquared2D(Destination,LastDestination)<FMath::Square(60.f) && AI->GetMoveStatus()!=EPathFollowingStatus::Idle) return;
+    const float GoalChangeTolerance=Mode==EDeliveryCompanionMode::Follow?40.f:60.f;
+    if (bOwnsNavigation && FVector::DistSquared2D(Destination,LastDestination)<FMath::Square(GoalChangeTolerance) && AI->GetMoveStatus()!=EPathFollowingStatus::Idle) return;
     FAIMoveRequest Move(Destination);
     Move.SetAcceptanceRadius(40); Move.SetAllowPartialPath(false);
     Move.SetReachTestIncludesAgentRadius(false); Move.SetReachTestIncludesGoalRadius(false);
     const auto Result=AI->MoveTo(Move);
+    UE_LOG(LogDeliveryCompanion,Log,TEXT("CompanionFollowMove npc=%s revision=%d result=%d move=%u from=%s goal=%s owner=%s travel=%s"),
+        *GetNameSafe(Npc),CommandRevision,int32(Result.Code),Result.MoveId.GetID(),
+        *Npc->GetNavAgentLocation().ToCompactString(),*Destination.ToCompactString(),
+        Pawn?*Pawn->GetActorLocation().ToCompactString():TEXT("none"),
+        *StaticEnum<EDeliveryCompanionTravelMode>()->GetNameStringByValue(int64(TravelMode)));
     bOwnsNavigation=Result.Code==EPathFollowingRequestResult::RequestSuccessful;
     FollowMoveId=bOwnsNavigation?Result.MoveId:FAIRequestID::InvalidRequest;
     bHasFollowDestination=Result.Code!=EPathFollowingRequestResult::Failed;
@@ -487,6 +537,11 @@ void UDeliveryCompanionComponent::OnTaskCompleted(UDeliveryTaskDefinition* Task,
 }
 void UDeliveryCompanionComponent::EndPlay(const EEndPlayReason::Type Reason)
 {
+    Memories.RemoveAll([](const FDeliveryNpcCompanionMemory& Memory)
+        { return Memory.Kind==TEXT("PublicPlaceSeen"); });
+    RememberedPublicPlaces.Reset();
+    NextPublicPlaceObservationAt=0;
+    ShutdownItemExecution();
     ShutdownHomeExecution();
     if (auto* Npc=GetCompanion()) Npc->CancelAssistedHelp();
     CancelAssist(TEXT("CompanionEndPlay"));
@@ -516,5 +571,6 @@ void UDeliveryCompanionComponent::GetLifetimeReplicatedProps(TArray<FLifetimePro
     DOREPLIFETIME(UDeliveryCompanionComponent,CarriedPackage);
     DOREPLIFETIME(UDeliveryCompanionComponent,Errand);
     DOREPLIFETIME(UDeliveryCompanionComponent,ErrandVehicle);
+    DOREPLIFETIME(UDeliveryCompanionComponent,TravelMode);
     DOREPLIFETIME(UDeliveryCompanionComponent,HomeState);
 }

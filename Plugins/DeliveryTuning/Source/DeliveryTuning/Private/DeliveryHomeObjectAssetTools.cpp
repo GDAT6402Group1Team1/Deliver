@@ -212,6 +212,8 @@ bool PrepareSlots(const TSharedPtr<FJsonObject>& Config,TArray<FPreparedSlot>& O
         if (Data->TryGetStringField(TEXT("enter_animation"),Path)) Definition->EnterAnimation=LoadObject<UAnimSequence>(nullptr,*Path);
         if (Data->TryGetStringField(TEXT("animation"),Path)) Definition->Animation=LoadObject<UAnimSequence>(nullptr,*Path);
         if (Data->TryGetStringField(TEXT("exit_animation"),Path)) Definition->ExitAnimation=LoadObject<UAnimSequence>(nullptr,*Path);
+        if (Data->TryGetStringField(TEXT("seat_mount_animation"),Path)) Definition->SeatMountAnimation=LoadObject<UAnimSequence>(nullptr,*Path);
+        if (Data->TryGetStringField(TEXT("seat_dismount_animation"),Path)) Definition->SeatDismountAnimation=LoadObject<UAnimSequence>(nullptr,*Path);
         if (Data->TryGetStringField(TEXT("sound"),Path)) Definition->Sound=LoadObject<USoundBase>(nullptr,*Path);
         Definition->bUsePropTransferPoint=false;
         Definition->PropTransferOffset=FVector::ZeroVector;
@@ -365,6 +367,8 @@ FString UDeliveryHomeObjectAssetTools::InspectFurniture(AActor* Actor)
                 Entry->SetStringField(TEXT("enter_animation"),Use->EnterAnimation?Use->EnterAnimation->GetPathName():TEXT(""));
                 Entry->SetStringField(TEXT("animation"),Use->Animation?Use->Animation->GetPathName():TEXT(""));
                 Entry->SetStringField(TEXT("exit_animation"),Use->ExitAnimation?Use->ExitAnimation->GetPathName():TEXT(""));
+                Entry->SetStringField(TEXT("seat_mount_animation"),Use->SeatMountAnimation?Use->SeatMountAnimation->GetPathName():TEXT(""));
+                Entry->SetStringField(TEXT("seat_dismount_animation"),Use->SeatDismountAnimation?Use->SeatDismountAnimation->GetPathName():TEXT(""));
                 Entry->SetStringField(TEXT("sound"),Use->Sound?Use->Sound->GetPathName():TEXT(""));
                 Entry->SetNumberField(TEXT("approach_radius"),Use->ApproachRadius);
                 Entry->SetNumberField(TEXT("use_radius"),Use->UseRadius);
@@ -582,6 +586,16 @@ AActor* UDeliveryHomeObjectAssetTools::InstallFurniture(AActor* SourceActor,UBlu
     Metadata->Modify(); Metadata->Home=Home; Metadata->ObjectId=ObjectId;
     NewActor->MarkPackageDirty();
     return NewActor;
+}
+
+bool UDeliveryHomeObjectAssetTools::FinishPendingEditorAssets()
+{
+    if (!GEditor || GEditor->PlayWorld) return false;
+    UWorld* World=GEditor->GetEditorWorldContext().World();
+    if (!World || World->HasBegunPlay() || World->WorldType!=EWorldType::Editor) return false;
+    FlushAsyncLoading();
+    FAssetCompilingManager::Get().FinishAllCompilation();
+    return !IsAsyncLoading() && FAssetCompilingManager::Get().GetNumRemainingAssets()==0;
 }
 
 FString UDeliveryHomeObjectAssetTools::InspectInteriorAnchor(ADeliveryHome* Home,FVector ProposedWorldLocation)

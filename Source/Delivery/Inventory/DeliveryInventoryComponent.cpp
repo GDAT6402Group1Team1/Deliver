@@ -4,6 +4,7 @@
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Carry/DeliveryHandheldCarrierInterface.h"
 #include "Grab/DeliveryGrabbableComponent.h"
+#include "Engine/World.h"
 #include "AbilitySystemComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Character/DeliveryCharacter.h"
@@ -30,6 +31,44 @@ void UDeliveryInventoryComponent::BeginPlay()
 	Super::BeginPlay();
 	Slots.SetNum(SlotCount);
 	ApplyPresentation();
+}
+
+// 角色销毁时只释放仍由本库存实际持有的普通道具，任务包裹沿原任务规则处理
+void UDeliveryInventoryComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    ADeliveryCharacter* Character=GetCharacter();
+    const TWeakObjectPtr<ADeliveryCharacter> PreviousOwner(Character);
+    const TWeakObjectPtr<UWorld> PreviousWorld(GetWorld());
+    TArray<TWeakObjectPtr<ADeliveryHandheldItem>> ItemsToDrop;
+    FVector DropOrigin=FVector::ZeroVector;
+    if (EndPlayReason==EEndPlayReason::Destroyed && IsValid(Character) &&
+        Character->HasAuthority() && Character->IsActorBeingDestroyed())
+    {
+        // 隐藏背包道具可能仍在旧拾取点，沿现有丢物偏移取当前角色胶囊位置
+        const FVector Forward=Character->GetActorForwardVector().GetSafeNormal2D();
+        DropOrigin=Character->GetActorLocation()+Forward*DropForwardDistance+FVector::UpVector*DropUpOffset;
+        for (auto& Slot:Slots)
+        {
+            auto* Item=Slot.Get();
+            if (!DeliveryHandheldTransfer::IsOrdinaryItem(Item) || Item->GetOwner()!=Character ||
+                Item->GetWorld()!=GetWorld()) continue;
+            ItemsToDrop.AddUnique(TWeakObjectPtr<ADeliveryHandheldItem>(Item));
+            Slot=nullptr;
+        }
+    }
+    // 退出时先解除旧 UI 监听，清槽和掉落都不广播库存变化
+    OnInventoryChanged.Clear();
+    Super::EndPlay(EndPlayReason);
+    // Super 和前一件道具的碰撞回调可能销毁或转移后面的物品，逐件重查真实归属
+    for (const auto& WeakItem:ItemsToDrop)
+    {
+        auto* Item=WeakItem.Get();
+        if (!PreviousOwner.IsValid() || !PreviousWorld.IsValid() ||
+            !DeliveryHandheldTransfer::IsOrdinaryItem(Item) || Item->GetWorld()!=PreviousWorld.Get() ||
+            Item->GetOwner()!=PreviousOwner.Get()) continue;
+        Item->DropFromInventory(DropOrigin,FVector::ZeroVector);
+        if (WeakItem.IsValid() && !WeakItem->IsActorBeingDestroyed()) WeakItem->ForceNetUpdate();
+    }
 }
 
 // 向客户端同步物品槽位

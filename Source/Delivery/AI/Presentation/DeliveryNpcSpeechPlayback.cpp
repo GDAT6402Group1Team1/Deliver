@@ -773,7 +773,8 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
         }
         const float ConfiguredResume=VoiceSet?VoiceSet->StreamingResumeBufferSeconds:.32f;
         const float ResumeSeconds=FMath::IsFinite(ConfiguredResume)?FMath::Clamp(ConfiguredResume,.08f,1.f):.32f;
-        const int32 ResumeBytes=int32(Local.State.SampleRate*ResumeSeconds)*2;
+        const float Pitch=RecordedVoice?RecordedVoice->PitchMultiplier:1.f;
+        const int32 ResumeBytes=FMath::CeilToInt(Local.State.SampleRate*ResumeSeconds*Pitch)*2;
         const int32 PendingBytes=Local.Pcm.Num()-Local.QueuedBytes;
         const bool bHasWholeTail=Local.State.bAudioComplete && Local.TotalBytes>0 && Local.Pcm.Num()==Local.TotalBytes;
         const bool bCanResume=!Local.bRebuffering || PendingBytes>=ResumeBytes || bHasWholeTail;
@@ -799,7 +800,10 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
     const float DefaultStart=GetDefault<UDeliveryNpcVoiceSet>()->StreamingStartBufferSeconds;
     const float ConfiguredStart=VoiceSet?VoiceSet->StreamingStartBufferSeconds:DefaultStart;
     const float StartSeconds=bGenerating?(FMath::IsFinite(ConfiguredStart)?FMath::Clamp(ConfiguredStart,.16f,2.f):DefaultStart):.12f;
-    int32 InitialBuffer=int32(Local.State.SampleRate*StartSeconds)*2;
+    const auto* Companion=Cast<ADeliveryCompanionCharacter>(GetOwner());
+    const float Pitch=Companion && FMath::IsFinite(Companion->DialoguePitch)?
+        FMath::Clamp(Companion->DialoguePitch,.95f,1.08f):1.f;
+    int32 InitialBuffer=FMath::CeilToInt(Local.State.SampleRate*StartSeconds*Pitch)*2;
     if (Local.TotalBytes>0) InitialBuffer=FMath::Min(InitialBuffer,Local.TotalBytes);
     if ((!bGenerating && Local.TotalBytes<=0) || Local.Pcm.Num()<InitialBuffer || ServerTime()<Local.State.StartTime) return;
     if (!RecordedVoice)
@@ -811,6 +815,7 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
     }
     RecordedVoice->Stop();
     ConfigureRecordedVoice(IsLocalRadioListener(Local.State));
+    RecordedVoice->SetPitchMultiplier(Pitch);
     RecordedWave=NewObject<USoundWaveProcedural>(this);
     RecordedWave->SetSampleRate(Local.State.SampleRate); RecordedWave->NumChannels=1;
     RecordedWave->Duration=INDEFINITELY_LOOPING_DURATION;

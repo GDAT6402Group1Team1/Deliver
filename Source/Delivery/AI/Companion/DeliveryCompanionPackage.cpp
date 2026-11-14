@@ -10,6 +10,7 @@
 #include "Engine/World.h"
 #include "Vehicle/DeliveryCompanionMotorbike.h"
 #include "Components/SceneComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 
 ADeliveryPackageItem* ADeliveryCompanionCharacter::GetCarriedTaskPackage() const
 {
@@ -40,23 +41,91 @@ void ADeliveryCompanionCharacter::ApplyTaskPackagePresentation(ADeliveryPackageI
 {
     ApplyHandheldItemPresentation(Package);
 }
-void ADeliveryCompanionCharacter::ApplyHandheldItemPresentation(ADeliveryHandheldItem* Package)
+void ADeliveryCompanionCharacter::ApplyHandheldItemPresentation(ADeliveryHandheldItem* Item)
 {
-    if (!IsValid(Package) || Package->IsActorBeingDestroyed() || Package->GetOwner()!=this ||
-        Package->GetWorld()!=GetWorld() || Companion->GetCarriedItem()!=Package) return;
-    USceneComponent* Anchor=PackageAnchor;
-    // 两种引用的复制到达顺序不固定，已附着的专属车也能提供当前挂点
-    const auto* Bike=Cast<ADeliveryCompanionMotorbike>(GetAttachParentActor());
-    if (!Bike && Companion) Bike=Companion->ErrandVehicle;
-    if (IsValid(Bike) && Bike->GetWorld()==GetWorld() && Bike->IsMounted() && Bike->GetReservedCompanion()==this)
-        Anchor=Bike->CompanionCargoAnchor;
-    if (!IsValid(Anchor) || (Package->GetRootComponent()->GetAttachParent()==Anchor &&
-        !Package->IsHidden() && !Package->GetActorEnableCollision())) return;
+    if (!IsValid(Companion) || !IsValid(Item) || Item->IsActorBeingDestroyed() || IsActorBeingDestroyed() ||
+        Item->GetOwner()!=this || Item->GetWorld()!=GetWorld() || Companion->GetCarriedItem()!=Item ||
+        !IsValid(Item->GetRootComponent())) return;
+    const auto FindMountedBike=[](const ADeliveryCompanionCharacter* Npc)->ADeliveryCompanionMotorbike*
+    {
+        const auto Matches=[Npc](const ADeliveryCompanionMotorbike* Bike)
+        {
+            return IsValid(Bike) && !Bike->IsActorBeingDestroyed() && Bike->GetWorld()==Npc->GetWorld() &&
+                Bike->IsMounted() && Bike->GetReservedCompanion()==Npc;
+        };
+        auto* Attached=Cast<ADeliveryCompanionMotorbike>(Npc->GetAttachParentActor());
+        if (Matches(Attached)) return Attached;
+        auto* Reserved=Npc->Companion->ErrandVehicle.Get();
+        return Matches(Reserved)?Reserved:nullptr;
+    };
+    const TWeakObjectPtr<ADeliveryCompanionMotorbike> ExpectedBike(FindMountedBike(this));
+    const FVector OriginalWorldScale=Item->GetActorScale3D();
+    if (OriginalWorldScale.ContainsNaN()) return;
     const TWeakObjectPtr<ADeliveryCompanionCharacter> WeakThis(this);
-    const TWeakObjectPtr<ADeliveryHandheldItem> WeakPackage(Package);
-    Package->SetAttachedCarryPresentation(Anchor);
-    if (WeakThis.IsValid() && WeakPackage.IsValid() && !WeakThis->IsActorBeingDestroyed() &&
-        WeakPackage->GetOwner()==WeakThis.Get() && HasAuthority()) WeakPackage->ForceNetUpdate();
+    const TWeakObjectPtr<ADeliveryHandheldItem> WeakItem(Item);
+    const auto IsCurrent=[WeakThis,WeakItem,ExpectedBike,FindMountedBike]()
+    {
+        return WeakThis.IsValid() && WeakItem.IsValid() && !WeakThis->IsActorBeingDestroyed() &&
+            !WeakItem->IsActorBeingDestroyed() && WeakItem->GetOwner()==WeakThis.Get() &&
+            WeakItem->GetWorld()==WeakThis->GetWorld() && IsValid(WeakThis->Companion) &&
+            WeakThis->Companion->GetCarriedItem()==WeakItem.Get() && IsValid(WeakItem->GetRootComponent()) &&
+            TWeakObjectPtr<ADeliveryCompanionMotorbike>(FindMountedBike(WeakThis.Get())).HasSameIndexAndSerialNumber(ExpectedBike);
+    };
+    USceneComponent* Anchor=PackageAnchor;
+    FVector Offset=FVector::ZeroVector;
+    FRotator Rotation=FRotator::ZeroRotator;
+    bool bGripUnavailable=false;
+    // 两种引用的复制到达顺序不固定，已附着的专属车也能提供当前挂点
+    if (ExpectedBike.IsValid())
+    {
+        Anchor=ExpectedBike->CompanionCargoAnchor;
+    }
+    else if (DeliveryHandheldTransfer::IsOrdinaryItem(Item))
+    {
+        auto* NpcMesh=GetMesh();
+        const TWeakObjectPtr<USceneComponent> Grip(HandheldAnchor);
+        if (IsValid(NpcMesh) && Grip.IsValid() && !Item->NpcHandSocket.IsNone() &&
+            NpcMesh->DoesSocketExist(Item->NpcHandSocket) && !Item->NpcHeldOffset.ContainsNaN() &&
+            !Item->NpcHeldRotation.ContainsNaN())
+        {
+            bool bAttached=true;
+            if (Grip->GetAttachParent()!=NpcMesh || Grip->GetAttachSocketName()!=Item->NpcHandSocket)
+                bAttached=Grip->AttachToComponent(NpcMesh,FAttachmentTransformRules::SnapToTargetNotIncludingScale,Item->NpcHandSocket);
+            if (!IsCurrent() || !Grip.IsValid() || HandheldAnchor!=Grip.Get()) return;
+            if (bAttached)
+            {
+                if (Grip->IsUsingAbsoluteLocation() || Grip->IsUsingAbsoluteRotation() || !Grip->IsUsingAbsoluteScale())
+                    Grip->SetAbsolute(false,false,true);
+                if (!IsCurrent() || !Grip.IsValid()) return;
+                if (!Grip->GetRelativeTransform().Equals(FTransform::Identity))
+                    Grip->SetRelativeTransform(FTransform::Identity);
+                if (!IsCurrent() || !Grip.IsValid()) return;
+                Anchor=Grip.Get();
+                Offset=Item->NpcHeldOffset;
+                Rotation=Item->NpcHeldRotation;
+            }
+            else bGripUnavailable=true;
+        }
+        else bGripUnavailable=true;
+    }
+    if (!IsCurrent() || !IsValid(Anchor)) return;
+    // 锚点配置被修正时也保持附着中实物的当前尺寸，不保存或乘第二份缩放状态
+    if (!Item->GetActorScale3D().Equals(OriginalWorldScale))
+    {
+        Item->SetActorScale3D(OriginalWorldScale);
+        if (!IsCurrent() || !IsValid(Anchor)) return;
+    }
+    const auto* Root=Item->GetRootComponent();
+    // 同一父节点不足以说明已贴手，切换道具配置后仍核对 socket、偏移与朝向
+    if (Root->GetAttachParent()==Anchor && Root->GetAttachSocketName().IsNone() &&
+        Root->GetRelativeLocation().Equals(Offset,.01f) && Root->GetRelativeRotation().Equals(Rotation,.01f) &&
+        !Item->IsHidden() && !Item->GetActorEnableCollision()) return;
+    // 缺配置只在需要重新附着时提示，保留原安全挂点，不在动画每帧输出
+    if (bGripUnavailable)
+        UE_LOG(LogTemp,Warning,TEXT("CompanionItemGripUnavailable npc=%s item=%s socket=%s; keeping package anchor"),
+            *GetName(),*Item->GetName(),*Item->NpcHandSocket.ToString());
+    Item->SetAttachedCarryPresentation(Anchor,Offset,Rotation);
+    if (IsCurrent() && HasAuthority()) Item->ForceNetUpdate();
 }
 
 ADeliveryPackageItem* UDeliveryCompanionComponent::GetCarriedTaskPackage() const

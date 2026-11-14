@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
+#include "Carry/DeliveryPackageCarrierInterface.h"
 #include "Vehicle/DeliveryRiderPose.h"
 #include "Events/DeliveryEventComponent.h"
 #include "DeliveryMotorbike.generated.h"
@@ -43,7 +44,7 @@ enum class EDeliveryTrunkPhase : uint8
  */
 UCLASS()
 
-class DELIVERY_API ADeliveryMotorbike : public APawn
+class DELIVERY_API ADeliveryMotorbike : public APawn, public IDeliveryPackageCarrierInterface
 {
 	GENERATED_BODY()
 	friend class UDeliveryTrunkPassengerComponent;
@@ -117,6 +118,28 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	UFUNCTION(BlueprintCallable, Category = "Motorbike|货物")
 	bool AttachCargo(ADeliveryPackageItem* Package);
 
+    // 成功装货时记录本件包裹的玩家身份，上下车不改变这份事实
+    bool AttachCargoForPlayer(ADeliveryPackageItem* Package, APlayerState* Player);
+    APlayerState* GetCargoPlayerState() const;
+    void RegisterPlayerUse(APlayerState* Player);
+    APlayerState* GetRegisteredPlayer() const;
+
+    virtual ADeliveryPackageItem* GetCarriedTaskPackage() const override;
+    virtual APlayerState* GetTaskPlayerState() const override;
+    virtual bool CanHandleTaskPackage() const override;
+    virtual bool CanReceiveTaskPackage(ADeliveryPackageItem* Package) const override;
+    virtual bool TryReceiveTaskPackage(ADeliveryPackageItem* Package) override;
+    virtual bool ReleaseTaskPackage(ADeliveryPackageItem* Package) override;
+    virtual void ApplyTaskPackagePresentation(ADeliveryPackageItem* Package) override;
+    virtual FVector GetTaskPackageTransferPoint() const override;
+
+    // 接受请求只开始原开箱时间线，成功仍以同一实物的服务器交接为准
+    FGuid RequestCargoHandoff(APawn* Receiver, ADeliveryPackageItem* ExpectedPackage,
+        APlayerState* Player, TFunction<bool()> CanContinue);
+    bool GetCargoHandoffResult(FGuid Id, bool& bComplete, bool& bSucceeded, FName& Reason) const;
+    void CancelCargoHandoff(FGuid Id);
+
+
     // Owner 先于货架指针复制到达时，也能按当前归属恢复包裹表现
     void RefreshCargoPresentation(ADeliveryPackageItem* Package);
 
@@ -156,7 +179,7 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	UFUNCTION(BlueprintPure, Category = "Motorbike|后备箱")
 	bool IsTrunkBusy() const
 	{
-		return TrunkPhase != EDeliveryTrunkPhase::Idle || IsPassengerTransitioning();
+		return bCompletingCargoHandoff || CargoHandoffId.IsValid() || TrunkPhase != EDeliveryTrunkPhase::Idle || IsPassengerTransitioning();
 	}
 
 	/** 服务器：把角色手上的快递装进后备箱，并开始开盖动画 */
@@ -218,6 +241,9 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	virtual bool AllowsPlayerUse() const { return true; }
 	virtual bool HasAutonomousDriver() const { return false; }
 	virtual void UpdateAutonomousDriveInput(float DeltaSeconds, float& OutThrottle, float& OutSteer) {}
+	virtual float GetForwardSpeedLimit() const { return MaxSpeed; }
+	void SetHornActive(bool bActive);
+	virtual AActor* GetAutonomousHornDriver() const { return nullptr; }
 	// 服务器取消自主驾驶时立即清空推进速度，不改变贴地与碰撞算法
 	void StopAutonomousMotion();
 	// 车体组件与固定槽位
@@ -1076,6 +1102,23 @@ class DELIVERY_API ADeliveryMotorbike : public APawn
 	 */
 	UPROPERTY(ReplicatedUsing = OnRep_Cargo)
 	TObjectPtr<ADeliveryPackageItem> Cargo;
+
+    // 服务器授权事实：登记车辆与本件装货身份分别核对，不使用 Pawn 当前控制权猜测
+    TWeakObjectPtr<APlayerState> RegisteredPlayer;
+    TWeakObjectPtr<APlayerState> CargoPlayer;
+    TWeakObjectPtr<APlayerState> CargoTransferPlayer;
+    TWeakObjectPtr<APawn> CargoHandoffReceiver;
+    TWeakObjectPtr<ADeliveryPackageItem> CargoHandoffPackage;
+    TFunction<bool()> CargoHandoffCanContinue;
+    FGuid CargoHandoffId;
+    FGuid LastCargoHandoffId;
+    FName LastCargoHandoffReason;
+    bool bLastCargoHandoffSucceeded = false;
+    bool bCompletingCargoHandoff = false;
+    bool IsCargoHandoffCurrent(FGuid Id) const;
+    void CompleteCargoHandoff();
+    void FinishCargoHandoff(FGuid Id, bool bSucceeded, FName Reason);
+
 
 	// 后备箱运行时状态
 	/** 当前动画阶段；只在本机推进，开始由多播同步，所以不需要复制 */

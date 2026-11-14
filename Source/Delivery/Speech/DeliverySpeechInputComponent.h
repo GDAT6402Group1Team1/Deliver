@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "Speech/DeliverySpeechTurn.h"
 #include "Speech/DeliverySpeechAudioCapture.h"
+#include "Speech/DeliverySpeechPlayerContext.h"
 #include "DeliverySpeechInputComponent.generated.h"
 
 class ADeliveryNpcCharacter;
@@ -108,7 +109,9 @@ protected:
 
 private:
     friend class FDeliveryConversationVoiceKeyTest;
+    friend class FDeliverySpeechVehicleContextTest;
     bool HasLocalViewportFocus() const;
+    EDeliverySpeechPlayerContextState CheckSessionContext(double Now);
     bool CanTalkTo(ADeliveryNpcCharacter* Npc) const;
     bool BeginDetectedSpeech(uint64 DetectionId);
     void PollContinuousEnd();
@@ -126,7 +129,8 @@ private:
     FDeliverySpeechTurnState TurnState;
     TUniquePtr<FDeliverySpeechAudioCapture> AudioCapture;
     TSharedPtr<FDeliverySpeechInputBridge, ESPMode::ThreadSafe> Bridge;
-    TWeakObjectPtr<APawn> SessionPawn;
+    FDeliverySpeechPlayerContext SessionContext;
+    double ContextPendingSince = -1;
     TWeakObjectPtr<ADeliveryNpcCharacter> ActiveNpc;
     TWeakObjectPtr<ADeliveryNpcCharacter> ConnectedNpc;
     TWeakObjectPtr<UAudioDeviceNotificationSubsystem> DeviceNotifications;

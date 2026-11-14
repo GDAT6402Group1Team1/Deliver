@@ -7,6 +7,7 @@
 #include "DeliveryHandheldItem.generated.h"
 
 class APawn;
+class UAnimSequence;
 class UDeliveryInteractableComponent;
 class UDeliveryInventoryItemComponent;
 class UStaticMeshComponent;
@@ -54,7 +55,19 @@ class DELIVERY_API ADeliveryHandheldItem : public AActor
      */
     void SetVehicleCargoPresentation(USceneComponent *CargoParent);
     // 动画角色的携带挂点与车辆货架共用附着表现，不进入玩家物理手掌跟随
-    void SetAttachedCarryPresentation(USceneComponent* CarryParent);
+    void SetAttachedCarryPresentation(USceneComponent* CarryParent,
+        const FVector& RelativeOffset=FVector::ZeroVector,const FRotator& RelativeRotation=FRotator::ZeroRotator);
+
+    // 动画 NPC 使用独立握持配置，偏移在不继承骨骼缩放的手部坐标中按厘米应用
+    UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Item|NPC握持")
+    FName NpcHandSocket=TEXT("RightHand");
+    UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Item|NPC握持",meta=(Units="cm"))
+    FVector NpcHeldOffset=FVector::ZeroVector;
+    UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Item|NPC握持")
+    FRotator NpcHeldRotation=FRotator::ZeroRotator;
+    // 留空保持原行走手势，指定动画须与实际 NPC 网格使用同一骨架
+    UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Item|NPC握持")
+    TObjectPtr<UAnimSequence> NpcCarryAnimation;
 
     UFUNCTION(BlueprintPure, Category = "Item")
 
@@ -96,6 +109,11 @@ class DELIVERY_API ADeliveryHandheldItem : public AActor
     float HeldRotationFollowSpeed = 24.0f;
 
   private:
+    // 本机表现调用号区分碰撞回调里的再次拿起或掉落，不复制、不保存第二份物品归属
+    uint64 PresentationOperation=0;
+    bool IsPresentationOperationCurrent(uint64 Operation,const UStaticMeshComponent* ExpectedMesh,
+                                        const TWeakObjectPtr<AActor>& ExpectedOwner) const;
+
     // 本机握持更新
     void UpdateHeldTransform(float DeltaSeconds, bool bSnap);
     void LimitAxeGroundPenetration(FVector& Location, FQuat& Rotation, const FQuat& UprightGrip) const;

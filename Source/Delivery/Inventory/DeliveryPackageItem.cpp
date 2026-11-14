@@ -1,4 +1,4 @@
-﻿// 实现带任务身份的手持快递物品
+// 实现带任务身份的手持快递物品
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Inventory/DeliveryPackageItem.h"
@@ -96,7 +96,13 @@ void ADeliveryPackageItem::BeginPlay()
 
 void ADeliveryPackageItem::RefreshCarrierPresentation()
 {
-    if (auto* Carrier = Cast<IDeliveryPackageCarrierInterface>(GetOwner()))
+    if (auto* Bike = Cast<ADeliveryMotorbike>(GetOwner()))
+    {
+        // 车辆装卸仍由 Cargo 复制恢复，持件接口只负责服务器交接
+        bHadCarrierPresentation = false;
+        Bike->RefreshCargoPresentation(this);
+    }
+    else if (auto* Carrier = Cast<IDeliveryPackageCarrierInterface>(GetOwner()))
     {
         bHadCarrierPresentation = true;
         Carrier->ApplyTaskPackagePresentation(this);
@@ -106,12 +112,6 @@ void ADeliveryPackageItem::RefreshCarrierPresentation()
         bHadCarrierPresentation = false;
         // 掉落恢复物理；服务器后续的移动复制继续提供实际落点
         DropFromInventory(GetActorLocation(), FVector::ZeroVector);
-    }
-    else if (auto* Bike = Cast<ADeliveryMotorbike>(GetOwner()))
-    {
-        // 车辆装卸沿用原来的Cargo复制，不让旧携带者重新改附着
-        bHadCarrierPresentation = false;
-        Bike->RefreshCargoPresentation(this);
     }
     else if (GetOwner())
     {

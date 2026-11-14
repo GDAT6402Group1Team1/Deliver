@@ -4,6 +4,8 @@
 #include "Inventory/DeliveryPackageItem.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/DeliveryVehicleSummonComponent.h"
+#include "GameFramework/PlayerState.h"
 
 // 查询角色正在驾驶的车辆，排除单纯附着在车上的情况
 ADeliveryMotorbike *UDeliveryCarryComponent::GetVehicle() const
@@ -76,22 +78,28 @@ bool UDeliveryCarryComponent::TryReceivePackage(ADeliveryPackageItem *Package, b
 
     if (ADeliveryMotorbike *Bike = GetVehicle())
     {
-        if (!Bike->AttachCargo(Package))
+        const TWeakObjectPtr<UDeliveryCarryComponent> WeakThis(this);
+        const TWeakObjectPtr<ADeliveryCharacter> WeakCharacter(Character);
+        const TWeakObjectPtr<ADeliveryMotorbike> WeakBike(Bike);
+        const TWeakObjectPtr<ADeliveryPackageItem> WeakPackage(Package);
+        const TWeakObjectPtr<APlayerState> LoadingPlayer(GetPlayerState());
+        if (!LoadingPlayer.IsValid() || !Bike->AttachCargoForPlayer(Package, LoadingPlayer.Get())) return false;
+
+        // 任务通知可同步下车或换货，只撤回本次实际装入的这一件
+        if (Item && !Item->NotifyAcquired(LoadingPlayer.Get()))
         {
+            if (WeakBike.IsValid() && WeakPackage.IsValid() && Bike->GetCargo()==Package) Bike->ReleaseCargo();
             return false;
         }
-
-        // 先把快递放到车上，再更新任务；任务不允许接取时，将快递从车辆卸下
-        if (Item && !Item->NotifyAcquired(GetPlayerState()))
+        if (!WeakThis.IsValid() || !WeakCharacter.IsValid() || !WeakBike.IsValid() || !WeakPackage.IsValid() ||
+            Character->IsActorBeingDestroyed() || Bike->IsActorBeingDestroyed() || Bike->GetCargo()!=Package ||
+            Package->GetOwner()!=Bike || !LoadingPlayer.IsValid() || GetPlayerState()!=LoadingPlayer.Get()) return false;
+        // 通知中若已改骑另一辆车，保留那次较新的登记
+        if (!GetVehicle() || GetVehicle()==Bike)
         {
-            Bike->ReleaseCargo();
-
-            return false;
+            if (auto* Summon=Character->FindComponentByClass<UDeliveryVehicleSummonComponent>()) Summon->RegisterVehicle(Bike);
         }
-
-        if (bPlayFeedback)
-            Character->ClientPickupSucceeded();
-
+        if (bPlayFeedback) Character->ClientPickupSucceeded();
         return true;
     }
 

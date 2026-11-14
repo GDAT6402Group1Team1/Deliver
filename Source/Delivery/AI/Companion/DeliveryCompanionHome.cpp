@@ -19,7 +19,8 @@ void UDeliveryCompanionComponent::UpdateGoHome()
 {
     auto* Npc=GetCompanion();
     auto* AI=Npc?Cast<AAIController>(Npc->GetController()):nullptr;
-    if (!AI || Npc->IsKnockedDown() || Npc->Agent->ShouldPauseForConversation() || Npc->Agent->HasActiveAction())
+    if (!AI || Npc->IsKnockedDown() || Npc->Agent->ShouldPauseForConversation() ||
+        (Npc->Agent->HasActiveAction() && !Npc->Agent->CanContinueCompanionMovement()))
     { StopFollowMovement(); return; }
     const auto* Home=ADeliveryHome::FindSharedHome(this);
     FVector Destination,ParkingApproach;

@@ -12,6 +12,8 @@
 #include "UI/DeliverySpeechStatusWidget.h"
 #include "Components/SceneComponent.h"
 #include "Components/TextBlock.h"
+#include "Character/DeliveryCharacter.h"
+#include "Vehicle/DeliveryMotorbike.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -207,7 +209,7 @@ bool FDeliveryConversationVoiceBoundaryTest::RunTest(const FString&)
         Conversation->LocalVoiceSequence=Sequence;
         Conversation->LastLocalInputSequence=Sequence;
         Conversation->LocalVoiceTarget=Npc;
-        Conversation->LocalVoicePawn=PC->GetPawn();
+        Conversation->LocalVoiceContext.Capture(PC);
         Conversation->LocalVoiceDeadline=FPlatformTime::Seconds()+15;
         return Conversation->LocalVoiceToken.Id;
     };
@@ -309,6 +311,20 @@ bool FDeliveryConversationVoiceBoundaryTest::RunTest(const FString&)
     TestTrue(TEXT("回执超时同时清除本机闸门和服务器延迟槽"),!Conversation->HasPendingVoiceSubmission() &&
         !Conversation->bVoiceSubmissionSent && !Conversation->DeferredVoiceHandle.IsValid() &&
         !Fixture.World->GetTimerManager().IsTimerActive(Conversation->VoiceSubmitTimer));
+
+    const auto LateClient=SeedLocal(7);
+    Conversation->ServerBeginVoice_Implementation(Npc,LateClient,7,0,nullptr);
+    const auto LateHandle=Conversation->ServerVoiceHandle;
+    Conversation->ServerFinishVoice_Implementation(LateClient,7);
+    Conversation->LocalVoiceHandle={};
+    Conversation->HandleVoiceText(Conversation->LocalVoiceToken,Npc,TEXT("本机已超时的原句"));
+    const int32 BeforeLateGrant=Submitted;
+    TestEqual(TEXT("迟到许可测试的服务器期限仍有效"),Turns->ValidateFinal(PC,Npc,LateHandle),EDeliveryConversationTurnResult::Accepted);
+    Conversation->LocalVoiceDeadline=FPlatformTime::Seconds()-1;
+    Conversation->ClientVoiceGranted_Implementation(LateClient,7,LateHandle);
+    TestTrue(TEXT("晚到许可不能抢在Tick前提交已过本机期限的final"),Submitted==BeforeLateGrant &&
+        !Conversation->HasPendingVoiceSubmission() && !Turns->GetLease(Npc,Lease));
+    TestEqual(TEXT("迟到许可明确报告本机期限已到"),Conversation->GetVoiceInputError(),FName(TEXT("Expired")));
     Conversation->OnVoiceInputError.Clear(); Conversation->OnSubmitted.Clear();
     return true;
 }
@@ -439,7 +455,7 @@ bool FDeliveryConversationVoiceTargetTest::RunTest(const FString&)
         Conversation->LocalVoiceSequence=++Sequence;
         Conversation->LastLocalInputSequence=Sequence;
         Conversation->LocalVoiceTarget=Target;
-        Conversation->LocalVoicePawn=PC->GetPawn();
+        Conversation->LocalVoiceContext.Capture(PC);
         Conversation->LocalVoiceDeadline=FPlatformTime::Seconds()+15;
         Conversation->ServerBeginVoice_Implementation(Target,Conversation->LocalVoiceToken.Id,Sequence,0,nullptr);
         return Conversation->ServerVoiceHandle;
@@ -528,6 +544,158 @@ bool FDeliveryConversationVoiceTargetTest::RunTest(const FString&)
     TestTrue(TEXT("重新查询可找到有效归属"),Conversation->ResolveVoiceCompanion()==Companion);
     Companion->Destroy();
     TestNull(TEXT("目标销毁不留下缓存"),Conversation->ResolveVoiceCompanion());
+    return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryConversationVehicleVoiceTest,"Delivery.Speech.Conversation.VehicleContinuity",
+    EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
+bool FDeliveryConversationVehicleVoiceTest::RunTest(const FString&)
+{
+    FConversationTestWorld Fixture;
+    if (!TestNotNull(TEXT("建立上下车语音测试世界"),Fixture.World)) return false;
+    auto* PC=Fixture.MakePlayer();
+    FActorSpawnParameters Spawn;
+    Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    auto* Character=Fixture.World->SpawnActor<ADeliveryCharacter>(FVector(0,0,100),FRotator::ZeroRotator,Spawn);
+    auto* Bike=Fixture.World->SpawnActor<ADeliveryMotorbike>(FVector(200,0,100),FRotator::ZeroRotator,Spawn);
+    if (!TestNotNull(TEXT("建立原角色"),Character) || !TestNotNull(TEXT("建立真实车辆"),Bike)) return false;
+    Character->SetActorTickEnabled(false); Bike->SetActorTickEnabled(false);
+    PC->Possess(Character);
+    auto* Npc=Fixture.MakeCompanion(PC,400);
+    auto* Conversation=NewObject<UDeliveryConversationComponent>(PC);
+    PC->AddInstanceComponent(Conversation); Conversation->RegisterComponent();
+    auto* Turns=Fixture.World->GetSubsystem<UDeliveryConversationTurnSubsystem>();
+    auto* DriverProperty=FindFProperty<FObjectPropertyBase>(ADeliveryMotorbike::StaticClass(),TEXT("Driver"));
+    if (!TestNotNull(TEXT("取得车辆驾驶员复制字段"),DriverProperty) || !Npc || !Turns) return false;
+    // 只准备服务器已完成交接后的关系，使用真实 Possess，不冒充 F 上下车操作验收
+    auto Enter=[&]()
+    {
+        DriverProperty->SetObjectPropertyValue_InContainer(Bike,Character);
+        Character->AttachToActor(Bike,FAttachmentTransformRules::KeepWorldTransform);
+        PC->Possess(Bike);
+    };
+    auto Exit=[&]()
+    {
+        DriverProperty->SetObjectPropertyValue_InContainer(Bike,nullptr);
+        Character->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+        PC->Possess(Character);
+    };
+    uint64 Sequence=0;
+    int32 Submitted=0;
+    Conversation->OnSubmitted.AddLambda([&](ADeliveryNpcCharacter*,FGuid,const FString&){ ++Submitted; });
+    auto Begin=[&]()
+    {
+        Conversation->ResetLocalVoice();
+        Conversation->LocalVoiceToken={FGuid::NewGuid(),1};
+        Conversation->LocalVoiceSequence=++Sequence;
+        Conversation->LastLocalInputSequence=Sequence;
+        Conversation->LocalVoiceTarget=Npc;
+        Conversation->LocalVoiceContext.Capture(PC);
+        Conversation->LocalVoiceDeadline=FPlatformTime::Seconds()+15;
+        Conversation->ServerBeginVoice_Implementation(Npc,Conversation->LocalVoiceToken.Id,Sequence,0,nullptr);
+        return Conversation->ServerVoiceHandle;
+    };
+    FDeliveryConversationTurnLease Lease;
+    const auto Walking=Begin();
+    if (!TestTrue(TEXT("步行取得真实语音租约"),Walking.IsValid() && Turns->GetLease(Npc,Lease))) return false;
+    const double RecordingDeadline=Lease.Deadline;
+    Enter();
+    TestTrue(TEXT("上车后保存同一原角色与录音编号"),Turns->GetLease(Npc,Lease) && Lease.Handle==Walking &&
+        Lease.Deadline==RecordingDeadline && Conversation->LocalVoiceContext.Check(PC)==EDeliverySpeechPlayerContextState::Valid);
+    TestTrue(TEXT("驾驶状态仍允许与主人二狗连麦"),Conversation->CanVoiceTalkTo(Npc));
+    Conversation->HandleVoiceReleased(Conversation->LocalVoiceToken);
+    Conversation->NextSendAt=0;
+    Conversation->HandleVoiceText(Conversation->LocalVoiceToken,Npc,TEXT("这句话从步行说到车上"));
+    TestTrue(TEXT("跨上车的整句话进入回复阶段"),Turns->GetLease(Npc,Lease) && Lease.Handle==Walking &&
+        Lease.Phase==EDeliveryConversationTurnPhase::AwaitingReply && Conversation->IsVoiceReplyMessage(Walking.Token,Npc));
+    const double ReplyDeadline=Lease.Deadline;
+    Exit();
+    TestTrue(TEXT("等待回复时下车保留原回复与期限"),Turns->GetLease(Npc,Lease) && Lease.Handle==Walking &&
+        Lease.Deadline==ReplyDeadline && Conversation->IsVoiceReplyMessage(Walking.Token,Npc));
+
+    Enter();
+    const auto Driving=Begin();
+    Conversation->HandleVoiceReleased(Conversation->LocalVoiceToken);
+    Turns->GetLease(Npc,Lease);
+    const double FinalDeadline=Lease.Deadline;
+    const int32 BeforePending=Submitted;
+    PC->UnPossess();
+    TestEqual(TEXT("短暂控制器空窗只表示等待"),Turns->GetVoiceContextState(PC,Driving),EDeliverySpeechPlayerContextState::Pending);
+    TestFalse(TEXT("身份未完整时不能把消息作为合法远程对白"),Conversation->IsVoiceReplyMessage(Driving.Token,Npc));
+    Conversation->HandleVoiceText(Conversation->LocalVoiceToken,Npc,TEXT("下车时的句尾仍保留"));
+    TestTrue(TEXT("final 在空窗期间保留且尚未提交"),Conversation->HasPendingVoiceSubmission() &&
+        !Conversation->bVoiceSubmissionSent && Submitted==BeforePending && Turns->GetLease(Npc,Lease) && Lease.Deadline==FinalDeadline);
+    Exit();
+    Conversation->NextSendAt=FPlatformTime::Seconds()+.5;
+    Conversation->SubmitReadyVoiceText();
+    TestTrue(TEXT("回调中身份恢复后立即清过渡计时，不让旧计时取消待回执final"),
+        Conversation->LocalVoiceContextPendingSince<0 && Conversation->DeferredVoiceHandle==Driving);
+    Conversation->NextSendAt=0;
+    Conversation->FlushDeferredVoiceSubmission();
+    TestTrue(TEXT("同原角色控制恢复后提交原句一次"),Submitted==BeforePending+1 &&
+        !Conversation->HasPendingVoiceSubmission() && Conversation->IsVoiceReplyMessage(Driving.Token,Npc));
+
+    const auto InFlight=Begin();
+    const auto InFlightClient=Conversation->ServerVoiceClientToken;
+    PC->UnPossess();
+    Conversation->ServerFinishVoice_Implementation(InFlightClient,InFlight.InputSequence);
+    TestTrue(TEXT("已建立轮次在空窗收到结束仍启动五秒期限"),Turns->GetLease(Npc,Lease) &&
+        Lease.Phase==EDeliveryConversationTurnPhase::FinalPending);
+    const double InFlightDeadline=Lease.Deadline;
+    Conversation->ServerFinishVoice_Implementation(InFlightClient,InFlight.InputSequence);
+    TestTrue(TEXT("重复结束不会延长等待期限"),Turns->GetLease(Npc,Lease) && Lease.Deadline==InFlightDeadline);
+    TestEqual(TEXT("空窗禁止直接校验最终文本"),Turns->ValidateFinal(PC,Npc,InFlight),EDeliveryConversationTurnResult::Stale);
+    Conversation->ServerSubmitVoice_Implementation(Npc,TEXT("已在网络中的原句"),InFlight);
+    TestTrue(TEXT("已到服务器的原句进入唯一有界待发槽"),Conversation->DeferredVoiceHandle==InFlight &&
+        Turns->GetLease(Npc,Lease) && Lease.Deadline==InFlightDeadline);
+    PC->Possess(Character);
+    Conversation->NextSendAt=0;
+    Conversation->FlushDeferredVoiceSubmission();
+    TestTrue(TEXT("身份恢复后原句只进入一次正式发言上下文"),Conversation->IsVoiceReplyMessage(InFlight.Token,Npc));
+    FDeliveryNpcDecisionRequest Request;
+    Npc->Agent->BuildDecisionRequest(InFlight.WorldEpoch,Request);
+    TestEqual(TEXT("网络中原句不重复"),Request.Evidence.FilterByPredicate([&](const auto& Fact)
+        { return Fact.EventId==InFlight.Token && Fact.Description==TEXT("已在网络中的原句"); }).Num(),1);
+
+    Begin();
+    Conversation->HandleVoiceReleased(Conversation->LocalVoiceToken);
+    PC->UnPossess();
+    Conversation->HandleVoiceText(Conversation->LocalVoiceToken,Npc,TEXT("两秒后才恢复的本机原句"));
+    TestTrue(TEXT("第一次遇到复制空窗立即记录起点"),Conversation->LocalVoiceContextPendingSince>=0);
+    Conversation->LocalVoiceContextPendingSince=FPlatformTime::Seconds()-FDeliverySpeechPlayerContext::TransitionGraceSeconds-.01;
+    PC->Possess(Character);
+    const int32 BeforeLateRestore=Submitted;
+    Conversation->SubmitReadyVoiceText();
+    TestTrue(TEXT("本机长帧后恢复Valid也不能绕过已到的两秒期限"),Submitted==BeforeLateRestore &&
+        !Conversation->HasPendingVoiceSubmission() && !Turns->GetLease(Npc,Lease));
+
+    const auto Expiring=Begin();
+    PC->UnPossess();
+    TestTrue(TEXT("第一次缺少控制对象保留有限等待"),Turns->GetLease(Npc,Lease));
+    Turns->Leases.FindChecked(TWeakObjectPtr<ADeliveryNpcCharacter>(Npc)).VoiceContextPendingSince=
+        FPlatformTime::Seconds()-FDeliverySpeechPlayerContext::TransitionGraceSeconds-.01;
+    PC->Possess(Character);
+    TestFalse(TEXT("空窗超过两秒后才恢复控制也释放旧占用"),Turns->GetLease(Npc,Lease));
+    TestFalse(TEXT("超时后恢复控制也不会复活旧语音"),Conversation->IsVoiceReplyMessage(Expiring.Token,Npc));
+
+    const auto Replaced=Begin();
+    PC->Possess(Fixture.MakePawn());
+    TestFalse(TEXT("同PC换成另一人物立即释放原轮次"),Turns->GetLease(Npc,Lease));
+    TestFalse(TEXT("换人不继承旧语音来源"),Conversation->IsVoiceReplyMessage(Replaced.Token,Npc));
+    PC->Possess(Character);
+    const auto Foreign=Begin();
+    Enter();
+    auto* OtherCharacter=Fixture.World->SpawnActor<ADeliveryCharacter>(FVector(800,0,100),FRotator::ZeroRotator,Spawn);
+    DriverProperty->SetObjectPropertyValue_InContainer(Bike,OtherCharacter);
+    TestFalse(TEXT("车辆明确属于其他驾驶员时不使用宽限"),Turns->GetLease(Npc,Lease));
+    TestFalse(TEXT("其他驾驶员车辆不认作原玩家连麦"),Conversation->IsVoiceReplyMessage(Foreign.Token,Npc));
+    DriverProperty->SetObjectPropertyValue_InContainer(Bike,Character);
+    Exit();
+    Enter();
+    const auto Destroyed=Begin();
+    Character->Destroy();
+    TestFalse(TEXT("车仍受控但原角色销毁时旧回复失效"),Turns->GetLease(Npc,Lease));
+    TestFalse(TEXT("原角色弱引用失效不能回退到仅比较车辆Pawn"),Conversation->IsVoiceReplyMessage(Destroyed.Token,Npc));
+    Conversation->OnSubmitted.Clear();
     return true;
 }
 #endif

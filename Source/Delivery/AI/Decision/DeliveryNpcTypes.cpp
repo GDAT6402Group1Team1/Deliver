@@ -39,11 +39,17 @@ bool DeliveryNpc::IsCompanionCommand(EDeliveryNpcAction Action)
 bool DeliveryNpc::IsCompanionErrand(EDeliveryNpcAction Action)
 {
     return Action==EDeliveryNpcAction::FetchPackage || Action==EDeliveryNpcAction::TakePackage ||
-        Action==EDeliveryNpcAction::DeliverPackage || Action==EDeliveryNpcAction::ReturnPackage;
+        Action==EDeliveryNpcAction::DeliverPackage || Action==EDeliveryNpcAction::ReturnPackage || IsCompanionItemErrand(Action);
+}
+
+bool DeliveryNpc::IsCompanionItemErrand(EDeliveryNpcAction Action)
+{
+    return Action==EDeliveryNpcAction::FetchItem || Action==EDeliveryNpcAction::ReturnItem;
 }
 
 float DeliveryNpc::CandidateDuration(EDeliveryNpcAction Action)
 {
+    if (Action==EDeliveryNpcAction::SoundFollowHorn) return .3f;
     if (IsCompanionCommand(Action) || Action==EDeliveryNpcAction::ContinueCurrent) return 0.f;
     const bool bNeedsMovementTime=Action==EDeliveryNpcAction::StrikeOnce || Action==EDeliveryNpcAction::Fight ||
         Action==EDeliveryNpcAction::Pace || Action==EDeliveryNpcAction::MoveAside || Action==EDeliveryNpcAction::Flee;
@@ -53,9 +59,10 @@ float DeliveryNpc::CandidateDuration(EDeliveryNpcAction Action)
 FString DeliveryNpc::ActionName(EDeliveryNpcAction Action)
 {
     if (Action==EDeliveryNpcAction::ContinueCurrent) return TEXT("ContinueCurrent");
+    if (Action==EDeliveryNpcAction::SoundFollowHorn) return TEXT("SoundFollowHorn");
     if (Action == EDeliveryNpcAction::Wait) return TEXT("Wait");
     if (Action == EDeliveryNpcAction::LookAt) return TEXT("LookAt");
-    for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp,EDeliveryNpcAction::Pace,EDeliveryNpcAction::MoveAside,EDeliveryNpcAction::Fight,EDeliveryNpcAction::Flee,EDeliveryNpcAction::Follow,EDeliveryNpcAction::Stay,EDeliveryNpcAction::CancelCompanionTask,EDeliveryNpcAction::FetchPackage,EDeliveryNpcAction::TakePackage,EDeliveryNpcAction::DeliverPackage,EDeliveryNpcAction::ReturnPackage,EDeliveryNpcAction::OfferCaterpillar,EDeliveryNpcAction::GoHome,EDeliveryNpcAction::HomeAction})
+    for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp,EDeliveryNpcAction::Pace,EDeliveryNpcAction::MoveAside,EDeliveryNpcAction::Fight,EDeliveryNpcAction::Flee,EDeliveryNpcAction::Follow,EDeliveryNpcAction::Stay,EDeliveryNpcAction::CancelCompanionTask,EDeliveryNpcAction::FetchPackage,EDeliveryNpcAction::TakePackage,EDeliveryNpcAction::DeliverPackage,EDeliveryNpcAction::ReturnPackage,EDeliveryNpcAction::OfferCaterpillar,EDeliveryNpcAction::GoHome,EDeliveryNpcAction::HomeAction,EDeliveryNpcAction::FetchItem,EDeliveryNpcAction::ReturnItem})
         if (Action==Value) return StaticEnum<EDeliveryNpcAction>()->GetNameStringByValue(int64(Value));
     return TEXT("None");
 }
@@ -71,6 +78,15 @@ FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
     Root->SetNumberField(TEXT("context_revision"), Request.ContextRevision);
     Root->SetNumberField(TEXT("plan_revision"), Request.PlanRevision);
     Root->SetStringField(TEXT("persona"), Request.Persona);
+    TArray<TSharedPtr<FJsonValue>> FamiliarPlaces;
+    for (const auto& Place:Request.FamiliarPlaces)
+    {
+        auto Item=MakeShared<FJsonObject>();
+        Item->SetStringField(TEXT("name"),Place.Name);
+        Item->SetStringField(TEXT("description"),Place.Description);
+        FamiliarPlaces.Add(MakeShared<FJsonValueObject>(Item));
+    }
+    if (!FamiliarPlaces.IsEmpty()) Root->SetArrayField(TEXT("familiar_places"),FamiliarPlaces);
     if (!Request.ProfileId.IsEmpty()) Root->SetStringField(TEXT("profile_id"), Request.ProfileId);
     Root->SetStringField(TEXT("self_name"), Request.SelfName);
     Root->SetStringField(TEXT("self_subject_id"), Request.SelfSubjectId.IsValid() ? Id(Request.SelfSubjectId) : TEXT(""));
@@ -82,9 +98,20 @@ FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
         Companion->SetStringField(TEXT("mode"),Request.CompanionMode);
         Companion->SetStringField(TEXT("suspension_reason"),Request.CompanionSuspensionReason);
         Companion->SetNumberField(TEXT("command_revision"),Request.CompanionCommandRevision);
+        if (Request.RequestedCapabilityVersion>=7)
+        {
+            Companion->SetStringField(TEXT("held_item_id"),Request.CompanionHeldItemId.IsValid()?Id(Request.CompanionHeldItemId):TEXT(""));
+            Companion->SetStringField(TEXT("held_item_name"),Request.CompanionHeldItemName);
+        }
         Companion->SetStringField(TEXT("task_id"),Request.CompanionTaskId);
         Companion->SetStringField(TEXT("task_phase"),Request.CompanionTaskPhase);
         Companion->SetStringField(TEXT("task_title"),Request.CompanionTaskTitle);
+        if (Request.RequestedCapabilityVersion>=8)
+        {
+            Companion->SetStringField(TEXT("travel_mode"),Request.CompanionTravelMode);
+            Companion->SetBoolField(TEXT("own_vehicle_available"),Request.bCompanionOwnVehicleAvailable);
+            Companion->SetStringField(TEXT("task_description"),Request.CompanionTaskDescription);
+        }
         Companion->SetBoolField(TEXT("owner_has_package"),Request.bCompanionOwnerHasPackage);
         Companion->SetBoolField(TEXT("has_package"),Request.bCompanionHasPackage);
         Companion->SetStringField(TEXT("errand_action"),Request.CompanionErrandAction);
@@ -230,6 +257,8 @@ FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
             }
         }
         Item->SetStringField(TEXT("action"),ActionName(Entry.Action));
+        if (Request.RequestedCapabilityVersion>=8 && Entry.TravelMode!=EDeliveryCompanionTravelMode::Unspecified)
+            Item->SetStringField(TEXT("travel_mode"),StaticEnum<EDeliveryCompanionTravelMode>()->GetNameStringByValue(int64(Entry.TravelMode)));
         Item->SetStringField(TEXT("target_id"),Entry.TargetId.IsValid()?Id(Entry.TargetId):TEXT(""));
         Item->SetNumberField(TEXT("duration"),CandidateDuration(Entry.Action));
         TArray<TSharedPtr<FJsonValue>> Refs;
@@ -269,13 +298,16 @@ bool DeliveryNpc::DecodeProposal(const FString& Json, FDeliveryNpcDecisionPropos
     if (!Root->TryGetStringField(TEXT("action"), Action)) return false;
     if (Action == TEXT("Wait")) Parsed.Action = EDeliveryNpcAction::Wait;
     else if (Action==TEXT("ContinueCurrent") && Capability>=6) Parsed.Action=EDeliveryNpcAction::ContinueCurrent;
+    else if (Action==TEXT("SoundFollowHorn") && Capability>=8) Parsed.Action=EDeliveryNpcAction::SoundFollowHorn;
     else if (Action == TEXT("LookAt")) Parsed.Action = EDeliveryNpcAction::LookAt;
     else
     {
-        for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp,EDeliveryNpcAction::Pace,EDeliveryNpcAction::MoveAside,EDeliveryNpcAction::Fight,EDeliveryNpcAction::Flee,EDeliveryNpcAction::Follow,EDeliveryNpcAction::Stay,EDeliveryNpcAction::CancelCompanionTask,EDeliveryNpcAction::FetchPackage,EDeliveryNpcAction::TakePackage,EDeliveryNpcAction::DeliverPackage,EDeliveryNpcAction::ReturnPackage,EDeliveryNpcAction::OfferCaterpillar,EDeliveryNpcAction::GoHome,EDeliveryNpcAction::HomeAction})
+        for (auto Value : {EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::StrikeOnce,EDeliveryNpcAction::HoldVehicle,EDeliveryNpcAction::ReleaseVehicle,EDeliveryNpcAction::LieDown,EDeliveryNpcAction::GetUp,EDeliveryNpcAction::Pace,EDeliveryNpcAction::MoveAside,EDeliveryNpcAction::Fight,EDeliveryNpcAction::Flee,EDeliveryNpcAction::Follow,EDeliveryNpcAction::Stay,EDeliveryNpcAction::CancelCompanionTask,EDeliveryNpcAction::FetchPackage,EDeliveryNpcAction::TakePackage,EDeliveryNpcAction::DeliverPackage,EDeliveryNpcAction::ReturnPackage,EDeliveryNpcAction::OfferCaterpillar,EDeliveryNpcAction::GoHome,EDeliveryNpcAction::HomeAction,EDeliveryNpcAction::FetchItem,EDeliveryNpcAction::ReturnItem})
             if (Action==ActionName(Value)) Parsed.Action=Value;
         if (Parsed.Action==EDeliveryNpcAction::None) { Reason=TEXT("UnsupportedAction"); return false; }
     }
+    if (Capability<7 && IsCompanionItemErrand(Parsed.Action)) return false;
+    if (IsCompanionItemErrand(Parsed.Action) && !Parsed.TargetId.IsValid()) return false;
     if (Capability<2 && IsCompanionCommand(Parsed.Action)) return false;
     if (Capability<3 && IsCompanionErrand(Parsed.Action)) return false;
     if (Capability<4 && (Parsed.Action==EDeliveryNpcAction::OfferCaterpillar || Parsed.Action==EDeliveryNpcAction::GoHome)) return false;

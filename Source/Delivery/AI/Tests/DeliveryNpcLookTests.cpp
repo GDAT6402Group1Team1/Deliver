@@ -16,6 +16,8 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/WorldSettings.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "UObject/UnrealType.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcLookTest,"Delivery.AI.PlayerGlance",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -70,17 +72,17 @@ bool FDeliveryNpcLookTest::RunTest(const FString&)
     Player->SetActorLocation(FVector(55,0,0)); Check();
     TestNull(TEXT("分离后立刻再次轻擦不会重复反应"),Look->GetLookTarget());
 
-    Look->PlayerVisits.Reset(); Look->ClearLook();
+    Look->PlayerVisits.Reset(); Look->ClearLook(); Look->NextAttentionAt=0;
     Player->SetActorLocation(FVector(-250,0,0)); Check();
     TestNull(TEXT("玩家在背后时不强行拧头"),Look->GetLookTarget());
     Player->SetActorLocation(FVector(200,100,0)); Check();
     TestEqual(TEXT("同次经过从背后绕到侧前方时仍可看一眼"),Look->GetLookTarget(),static_cast<AActor*>(Player));
 
-    Look->PlayerVisits.Reset(); Look->ClearLook();
+    Look->PlayerVisits.Reset(); Look->ClearLook(); Look->NextAttentionAt=0;
     Player->SetActorLocation(FVector(100,0,0)); Check();
     Player->SetActorLocation(FVector(45,0,0)); Check();
     TestFalse(TEXT("快速进入接触范围不误报轻擦"),Look->IsAfterBrush());
-    Look->PlayerVisits.Reset(); Look->ClearLook();
+    Look->PlayerVisits.Reset(); Look->ClearLook(); Look->NextAttentionAt=0;
     Player->SetActorLocation(FVector(145,0,0)); Check();
     Owner->SetActorLocation(FVector(100,0,0)); Check();
     TestFalse(TEXT("玩家静止但NPC快速靠近也按相对速度排除轻擦"),Look->IsAfterBrush());
@@ -90,10 +92,28 @@ bool FDeliveryNpcLookTest::RunTest(const FString&)
     auto* Box=NewObject<UBoxComponent>(Wall); Wall->SetRootComponent(Box);
     Box->SetBoxExtent(FVector(10,100,120)); Box->SetCollisionProfileName(TEXT("BlockAll")); Box->RegisterComponent();
     Wall->SetActorLocation(FVector(120,0,0)); Player->SetActorLocation(FVector(250,0,0));
-    Look->PlayerVisits.Reset(); Look->ClearLook(); Check();
+    Look->PlayerVisits.Reset(); Look->ClearLook(); Look->NextAttentionAt=0; Check();
     TestNull(TEXT("墙挡住玩家时不隔墙看人"),Look->GetLookTarget());
     Wall->Destroy(); Check();
     TestEqual(TEXT("没有遮挡时可再次关注"),Look->GetLookTarget(),static_cast<AActor*>(Player));
+
+    // 多个玩家轮流经过也不能让 NPC 不停换目标；这次没看的人不会排队补看
+    auto* OtherPlayer=World->SpawnActor<APawn>();
+    auto* OtherBody=NewObject<UCapsuleComponent>(OtherPlayer);
+    OtherPlayer->SetRootComponent(OtherBody); OtherBody->RegisterComponent();
+    OtherPlayer->SetActorLocation(FVector(200,100,0));
+    Look->StartLook(OtherPlayer,false,Look->ServerTime());
+    TestEqual(TEXT("第二个过路人不立即抢走注视"),Look->GetLookTarget(),static_cast<AActor*>(Player));
+    Look->LookState.EndTime=Look->ServerTime()-1;
+    Look->ClearLook();
+    Look->StartLook(OtherPlayer,false,Look->ServerTime());
+    TestNull(TEXT("上一眼结束后仍保留整体间隔"),Look->GetLookTarget());
+    Look->NextAttentionAt=0;
+    Look->bNoticePassersby=false;
+    Look->PlayerVisits.Reset(); Check();
+    TestNull(TEXT("人物可以不关注普通过路人"),Look->GetLookTarget());
+    Look->bNoticePassersby=true;
+    OtherPlayer->Destroy();
 
     // 使用真实 NPC 的感知和表现组件，轻擦不能新增冲突事实或打断正在说的话
     const FVector NpcPosition(1000,0,0);
@@ -139,6 +159,81 @@ bool FDeliveryNpcLookTest::RunTest(const FString&)
     TestTrue(TEXT("读取交谈中的模型上下文"),Npc->Agent->BuildDecisionRequest(Epoch,DuringSpeech));
     TestEqual(TEXT("说话时轻擦也不新增冲突事实"),DuringSpeech.ContextRevision,BeforeBrush.ContextRevision);
 
+    TestFalse(TEXT("对白期间鸣笛不抢表情"),Npc->Look->TryStartle(Player));
+    TestTrue(TEXT("跳过受惊后原句继续播放"),Npc->Presentation->GetSpeech().bActive &&
+        Npc->Presentation->GetSpeech().TurnId==TalkingTurn);
+    Npc->Presentation->CancelSpeech();
+    Npc->Look->ClearLook();
+    Npc->Look->NextStartleAt=0;
+    Npc->Presentation->Expressions->Poses.FindOrAdd(TEXT("Surprised")).MorphWeights.Add(TEXT("FaceSurprised"),1.f);
+    Player->SetActorLocation(NpcPosition+FVector(200,0,0));
+    FDeliveryNpcDecisionRequest BeforeStartle,AfterStartle;
+    TestTrue(TEXT("读取受惊前的上下文"),Npc->Agent->BuildDecisionRequest(Epoch,BeforeStartle));
+    TestTrue(TEXT("空闲时近处声源可以引起受惊"),Npc->Look->TryStartle(Player));
+    TestTrue(TEXT("受惊标记供各客户端查询"),Npc->Look->IsStartled());
+    Npc->Presentation->TickExpression(1.f);
+    TestTrue(TEXT("复用正式模型的受惊表情"),Npc->GetMesh()->GetMorphTarget(TEXT("FaceSurprised"))>.5f);
+    TestTrue(TEXT("读取受惊后的上下文"),Npc->Agent->BuildDecisionRequest(Epoch,AfterStartle));
+    TestEqual(TEXT("小反应不新增事实或作废模型请求"),AfterStartle.ContextRevision,BeforeStartle.ContextRevision);
+    TestFalse(TEXT("小反应本身不安排模型请求"),Npc->Agent->IsDecisionPending());
+    TestFalse(TEXT("连续鸣笛不重复延长反应"),Npc->Look->TryStartle(Player));
+    Npc->Look->LookState.EndTime=Npc->Look->ServerTime()-1;
+    TestFalse(TEXT("迟到客户端不会播放已经结束的受惊"),Npc->Look->IsStartled());
+    Npc->Look->ClearLook();
+    TestFalse(TEXT("表情结束后仍有鸣笛冷却"),Npc->Look->TryStartle(Player));
+    Npc->Look->NextStartleAt=0;
+    Player->SetActorLocation(NpcPosition+FVector(300,0,0));
+    TestFalse(TEXT("较远的鸣笛不引起小反应"),Npc->Look->TryStartle(Player));
+    Player->SetActorLocation(NpcPosition+FVector(200,0,0));
+    Npc->Look->bStartleAtHorn=false;
+    TestFalse(TEXT("人物配置可以关闭鸣笛反应"),Npc->Look->TryStartle(Player));
+    Npc->Look->bStartleAtHorn=true;
+    auto* StartleWall=World->SpawnActor<AActor>();
+    auto* StartleBox=NewObject<UBoxComponent>(StartleWall); StartleWall->SetRootComponent(StartleBox);
+    StartleBox->SetBoxExtent(FVector(10,100,120)); StartleBox->SetCollisionProfileName(TEXT("BlockAll")); StartleBox->RegisterComponent();
+    StartleWall->SetActorLocation(NpcPosition+FVector(100,0,0));
+    TestFalse(TEXT("不会隔墙盯住声源"),Npc->Look->TryStartle(Player));
+    StartleWall->Destroy();
+
+    // 这里只提供同步状态来检查表现优先级，不用它代替游戏中的动作验收
+    auto* StateProperty=FindFProperty<FStructProperty>(UDeliveryNpcAgentComponent::StaticClass(),TEXT("PublicState"));
+    if (!TestNotNull(TEXT("动作复制字段存在"),StateProperty)) return false;
+    auto* Action=StateProperty->ContainerPtrToValuePtr<FDeliveryNpcPublicState>(Npc->Agent);
+    const FDeliveryNpcPublicState SavedAction=*Action;
+    const FGuid BusyId=FGuid::NewGuid();
+    const FVector MovingVelocity(100,0,0);
+    Npc->GetCharacterMovement()->Velocity=MovingVelocity;
+    for (const auto Status:{EDeliveryNpcActionStatus::Accepted,EDeliveryNpcActionStatus::Running})
+        for (const auto Kind:{EDeliveryNpcAction::LookAt,EDeliveryNpcAction::MoveTo,EDeliveryNpcAction::Fight,
+            EDeliveryNpcAction::Flee,EDeliveryNpcAction::Follow,EDeliveryNpcAction::TakePackage,EDeliveryNpcAction::DeliverPackage})
+        {
+            Action->ActionId=BusyId; Action->Status=Status; Action->Action=Kind;
+            TestFalse(TEXT("已接受或正在执行的动作优先于受惊"),Npc->Look->TryStartle(Player));
+            Npc->Look->StartLook(Player,true,Npc->Look->ServerTime());
+            TestNull(TEXT("忙碌时轻擦也不抢走注视"),Npc->Look->GetLookTarget());
+            TestEqual(TEXT("原动作编号保持不变"),Action->ActionId,BusyId);
+            TestEqual(TEXT("没有暂停或改写移动速度"),Npc->GetCharacterMovement()->Velocity,MovingVelocity);
+        }
+    *Action=SavedAction;
+    Npc->GetCharacterMovement()->Velocity=FVector::ZeroVector;
+    TestTrue(TEXT("重新空闲后新事件可引起受惊"),Npc->Look->TryStartle(Player));
+    Action->ActionId=BusyId; Action->Status=EDeliveryNpcActionStatus::Running; Action->Action=EDeliveryNpcAction::Fight;
+    Npc->Look->TickComponent(.2f,LEVELTICK_All,nullptr);
+    *Action=SavedAction;
+    TestFalse(TEXT("动作接管后不会补播旧受惊"),Npc->Look->IsStartled());
+    Npc->Look->PlayerVisits.Reset();
+    Npc->Look->NextAttentionAt=0;
+    Npc->Look->TickComponent(.2f,LEVELTICK_All,nullptr);
+    TestNull(TEXT("忙碌期间经过的人不会在结束后补算新事件"),Npc->Look->GetLookTarget());
+    Npc->Look->TickComponent(.2f,LEVELTICK_All,nullptr);
+    TestNull(TEXT("重建采样后玩家站在原地仍不重复关注"),Npc->Look->GetLookTarget());
+    Npc->Look->NextStartleAt=0;
+    TestTrue(TEXT("开始检查目标失效"),Npc->Look->TryStartle(Player));
+    Player->SetActorHiddenInGame(true);
+    TestFalse(TEXT("目标隐藏后不继续注视"),Npc->Look->IsStartled());
+    Player->SetActorHiddenInGame(false);
+    Npc->Look->ClearLook();
+
     // 真正的命中继续记录，不能因减少擦身反应而失去攻击感知
     Npc->Combat->ReceiveFightHit(Player,FGuid::NewGuid());
     FDeliveryNpcDecisionRequest AfterHit;
@@ -146,6 +241,13 @@ bool FDeliveryNpcLookTest::RunTest(const FString&)
     TestTrue(TEXT("真正打中仍保留受击事实"),AfterHit.Evidence.ContainsByPredicate(
         [](const FDeliveryNpcEvidence& Fact){ return Fact.Kind==TEXT("LightMeleeHit"); }));
     TestTrue(TEXT("真正打中仍播放受击动作"),Npc->Combat->IsReactingToHit());
+    Npc->Look->HitExpression=TEXT("Angry");
+    Npc->Presentation->TickExpression(1.f);
+    TestTrue(TEXT("受击后按人物配置显示表情"),Npc->GetMesh()->GetMorphTarget(TEXT("EyesAngry"))>.5f);
+    Npc->Look->HitExpression=NAME_None;
+    Npc->Presentation->TickExpression(1.f);
+    TestFalse(TEXT("关闭额外受击表情后不残留愤怒"),Npc->GetMesh()->GetMorphTarget(TEXT("EyesAngry"))>.01f);
+    TestTrue(TEXT("关闭表情不取消真实受击动作"),Npc->Combat->IsReactingToHit());
     Npc->Destroy();
     Player->Destroy();
     TestNull(TEXT("目标销毁后查询立即失效"),Look->GetLookTarget());

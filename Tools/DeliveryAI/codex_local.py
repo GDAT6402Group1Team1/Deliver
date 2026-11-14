@@ -56,5 +56,7 @@ def choose(context, instructions, runner=subprocess.run):
         index = response.get("candidate_index")
         if type(index) is not int or not 0 <= index < len(candidates):
             raise ValueError("invalid_candidate_index")
+        if 'travel_mode' in response and ('travel_mode' not in candidates[index] or response['travel_mode'] != candidates[index]['travel_mode']):
+            raise ValueError('decision travel mode differs from selected candidate')
         speech_target = {key: response[key] for key in ('speech_target_id',) if key in response}
         return {**candidates[index], "speech": response.get("speech"), "emotion": response.get("emotion"), **speech_target}

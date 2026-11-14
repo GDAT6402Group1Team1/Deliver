@@ -6,15 +6,19 @@
 #include "Character/DeliveryCharacter.h"
 #include "Inventory/DeliveryPackageItem.h"
 #include "Interaction/DeliveryInteractableComponent.h"
+#include "NPC/DeliveryGrandpa.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
 #include "Task/DeliveryTaskManagerComponent.h"
 #include "Task/Tracking/DeliveryTaskTrackerComponent.h"
+#include "Task/World/DeliveryBreakableDoor.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "Task/World/DeliveryPickupPointComponent.h"
 #include "Task/World/DeliveryTargetComponent.h"
 #include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/DeliveryVehicleSummonComponent.h"
 #include "Vehicle/DeliveryCompanionMotorbike.h"
 #include "World/DeliveryLocationRegistry.h"
+#include "World/DeliveryHome.h"
 #include "AIController.h"
 #include "NavigationSystem.h"
 #include "NavigationPath.h"
@@ -48,6 +52,20 @@ namespace
     {
         const auto* Registry=UDeliveryLocationRegistry::Get(Context);
         if (!Registry || !IsValid(Task)) return nullptr;
+        if (!bPickup && !Task->ReceiverNpcId.IsNone())
+        {
+            // 门外地址用于引导，订单指定的收件人才持有交付组件
+            AActor* Receiver=nullptr;
+            for (auto* Actor:Registry->ResolveAllActors(Task->ReceiverNpcId))
+            {
+                if (!IsValid(Actor) || Actor->IsActorBeingDestroyed() || Actor->GetWorld()!=Context->GetWorld()) continue;
+                const auto* Target=Actor->FindComponentByClass<UDeliveryTargetComponent>();
+                if (!Target || Target->ExpectedTask!=Task) continue;
+                if (Receiver) return nullptr;
+                Receiver=Actor;
+            }
+            return Receiver;
+        }
         for (auto* Actor:Registry->ResolveAllActors(bPickup?Task->PickupLocationId:Task->DeliveryLocationId))
         {
             if (!IsValid(Actor) || Actor->GetWorld()!=Context->GetWorld()) continue;
@@ -71,8 +89,16 @@ bool UDeliveryCompanionComponent::HasActiveErrand() const
 APawn* UDeliveryCompanionComponent::GetOwnerPackageCarrier() const
 {
     auto* Pawn=GetOwnerPawn();
-    if (auto* Bike=Cast<ADeliveryMotorbike>(Pawn)) return Bike->GetDriver();
-    return Pawn;
+    auto* RidingBike=Cast<ADeliveryMotorbike>(Pawn);
+    auto* Character=RidingBike?RidingBike->GetDriver():Cast<ADeliveryCharacter>(Pawn);
+    if (!IsValid(Character) || Character->GetWorld()!=GetWorld() || Character->GetTaskPlayerState()!=OwnerPlayerState) return nullptr;
+    // 手持实物优先；骑车时 Carry 返回车上的货物，须继续用真实车辆作为转出方
+    if (auto* Package=Character->GetCarriedTaskPackage(); IsValid(Package) && Package->GetOwner()==Character) return Character;
+    const auto* Summon=Character->FindComponentByClass<UDeliveryVehicleSummonComponent>();
+    auto* Bike=Summon?Summon->GetRegisteredVehicle():nullptr;
+    if (Bike && Bike->GetCargoPlayerState()==OwnerPlayerState && Bike->GetCargo()) return Bike;
+    if (RidingBike && Character->GetCarriedTaskPackage()) return nullptr;
+    return Character;
 }
 
 ADeliveryPackageItem* UDeliveryCompanionComponent::GetCommandPackage() const
@@ -112,16 +138,45 @@ bool UDeliveryCompanionComponent::CanArrangeErrand(EDeliveryNpcAction Action,APl
 }
 
 bool UDeliveryCompanionComponent::StartErrand(EDeliveryNpcAction Action,APlayerState* Requester,int32 ExpectedRevision,
-    UDeliveryTaskDefinition* ExpectedTask,ADeliveryPackageItem* ExpectedPackage)
+    UDeliveryTaskDefinition* ExpectedTask,ADeliveryPackageItem* ExpectedPackage,EDeliveryCompanionTravelMode RequestedTravelMode)
 {
-    if (!GetOwner()->HasAuthority() || ExpectedRevision!=CommandRevision || !CanArrangeErrand(Action,Requester) ||
+    auto* Npc=GetCompanion();
+    if (!IsValid(Npc) || Npc->IsActorBeingDestroyed() || !Npc->HasAuthority() ||
+        ExpectedRevision!=CommandRevision || !CanArrangeErrand(Action,Requester) ||
         !IsValid(ExpectedTask) || ExpectedTask!=GetCommandTask() || ExpectedPackage!=GetCommandPackage()) return false;
-    // 先核对新请求再停止旧安排，迟到或无效的建议不能破坏正在执行的委托
+    const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
+    const TWeakObjectPtr<ADeliveryCompanionCharacter> WeakNpc(Npc);
+    const TWeakObjectPtr<APlayerState> WeakRequester(Requester);
+    const TWeakObjectPtr<UDeliveryTaskDefinition> WeakTask(ExpectedTask);
+    const TWeakObjectPtr<ADeliveryPackageItem> WeakPackage(ExpectedPackage);
+    const bool bExpectedPackage=ExpectedPackage!=nullptr;
+    int32 AcceptedRevision=ExpectedRevision;
+    const auto StillCurrent=[&]()
+    {
+        return WeakThis.IsValid() && WeakNpc.IsValid() && !Npc->IsActorBeingDestroyed() &&
+            WeakRequester.IsValid() && WeakTask.IsValid() && CommandRevision==AcceptedRevision &&
+            (!bExpectedPackage || WeakPackage.IsValid()) && CanArrangeErrand(Action,WeakRequester.Get()) &&
+            GetCommandTask()==WeakTask.Get() && GetCommandPackage()==WeakPackage.Get();
+    };
+    // 每次取消都可能同步触发新安排，迟到的旧调用不能继续覆盖新指令或出行偏好
     CancelHomeArrangement(TEXT("OwnerChangedArrangement"));
-    if (HasActiveErrand()) FinishErrand(EDeliveryNpcActionStatus::Cancelled,TEXT("ReplacedByOwner"));
+    if (!StillCurrent()) return false;
+    if (HasActiveErrand())
+    {
+        const int32 OldErrandRevision=Errand.CommandRevision;
+        FinishErrand(EDeliveryNpcActionStatus::Cancelled,TEXT("ReplacedByOwner"));
+        if (!WeakThis.IsValid() || !WeakNpc.IsValid() || Npc->IsActorBeingDestroyed()) return false;
+        // 只接纳这次结束旧委托自身产生的一次修订，回调中的新安排优先
+        ++AcceptedRevision;
+        if (Errand.CommandRevision!=OldErrandRevision || Errand.Status!=EDeliveryNpcActionStatus::Cancelled ||
+            Errand.Reason!=TEXT("ReplacedByOwner") || !StillCurrent()) return false;
+    }
     StopFollowMovement();
+    if (!StillCurrent()) return false;
     StopErrandMovement();
+    if (!StillCurrent()) return false;
     ++CommandRevision;
+    ApplyTravelInstruction(RequestedTravelMode);
     Errand={};
     Errand.Action=Action;
     Errand.Status=EDeliveryNpcActionStatus::Running;
@@ -145,10 +200,28 @@ bool UDeliveryCompanionComponent::StartErrand(EDeliveryNpcAction Action,APlayerS
     return true;
 }
 
+void UDeliveryCompanionComponent::CancelPackageHandoff()
+{
+    auto* Bike=ErrandCargoVehicle.Get();
+    const FGuid OldId=ErrandCargoHandoffId;
+    ErrandCargoVehicle.Reset();
+    ErrandCargoHandoffId.Invalidate();
+    if (IsValid(Bike) && OldId.IsValid()) Bike->CancelCargoHandoff(OldId);
+}
+
 void UDeliveryCompanionComponent::StopErrandMovement()
 {
     if (!GetOwner() || !GetOwner()->HasAuthority()) return;
+    const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
+    const int32 Revision=CommandRevision, ErrandRevision=Errand.CommandRevision;
+    const auto StillCurrent=[&]() { return WeakThis.IsValid() && CommandRevision==Revision && Errand.CommandRevision==ErrandRevision; };
+    CancelPackageHandoff();
+    if (!StillCurrent()) return;
+    CancelItemUse();
+    // 取消技能和导航都会同步通知外部，旧停止不能清掉回调中新接的安排
+    if (!StillCurrent()) return;
     StopVehicleTravel(EDeliveryCompanionTravelPurpose::Errand);
+    if (!StillCurrent()) return;
     LastErrandUpdateAt=0;
     if (!bErrandOwnsNavigation) return;
     const FAIRequestID OldId=ErrandMoveId;
@@ -162,7 +235,11 @@ void UDeliveryCompanionComponent::StopErrandMovement()
 
 void UDeliveryCompanionComponent::SetErrandPhase(EDeliveryCompanionErrandPhase Phase)
 {
+    if (!HasActiveErrand() || !GetOwner() || !GetOwner()->HasAuthority()) return;
+    const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
+    const int32 Revision=CommandRevision, ErrandRevision=Errand.CommandRevision;
     StopErrandMovement();
+    if (!WeakThis.IsValid() || !HasActiveErrand() || CommandRevision!=Revision || Errand.CommandRevision!=ErrandRevision) return;
     Errand.Phase=Phase;
     Errand.Reason=NAME_None;
     ErrandInteractionSeconds=0;
@@ -177,18 +254,30 @@ void UDeliveryCompanionComponent::SetErrandPhase(EDeliveryCompanionErrandPhase P
 
 void UDeliveryCompanionComponent::FinishErrand(EDeliveryNpcActionStatus Status,FName Reason)
 {
-    if (!HasActiveErrand() || !GetOwner()->HasAuthority()) return;
+    if (!HasActiveErrand() || !GetOwner() || !GetOwner()->HasAuthority()) return;
+    const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
+    const int32 Revision=CommandRevision, ErrandRevision=Errand.CommandRevision;
     StopErrandMovement();
+    if (!WeakThis.IsValid() || !HasActiveErrand() || CommandRevision!=Revision || Errand.CommandRevision!=ErrandRevision) return;
     Errand.Status=Status;
     Errand.Phase=EDeliveryCompanionErrandPhase::Idle;
     Errand.Reason=Reason;
     Errand.Package=nullptr;
+    Errand.Item.Reset();
     ++CommandRevision;
     bHasFollowDestination=false;
     NextNavigationAt=0;
     // 实际订单在此结束，之后按原持续安排返程，保留主人指定的等候点
     SetSuspension(NAME_None);
     GetOwner()->ForceNetUpdate();
+    if (DeliveryNpc::IsCompanionItemErrand(Errand.Action))
+    {
+        GetCompanion()->ObserveFact(TEXT("CompanionItemErrandFinished"),GetOwnerPawn(),
+            FString::Printf(TEXT("游戏确认二狗的普通道具 %s 安排结束：%s，原因 %s。二狗当前%s实物；只有 ItemReturnedToOwner 表示同一件物品已实际进入主人库存，没有订单交付或奖励。"),
+                *DeliveryNpc::ActionName(Errand.Action),*StaticEnum<EDeliveryNpcActionStatus>()->GetNameStringByValue(static_cast<int64>(Status)),
+                *Reason.ToString(),GetCarriedItem()?TEXT("仍持有"):TEXT("未持有")),EDeliveryNpcEvidenceSource::ActionResult);
+        return;
+    }
     // 只根据同步物品接口的实际结果报告，接受委托、走到附近均不算取件或交付成功
     GetCompanion()->ObserveFact(TEXT("CompanionErrandFinished"),GetOwnerPawn(),
         FString::Printf(TEXT("游戏确认二狗的 %s 委托已结束：%s，原因 %s，订单 %s。当前二狗%s实际包裹；只有 Delivered 表示已完成投递并由任务系统处理奖励。"),
@@ -199,12 +288,16 @@ void UDeliveryCompanionComponent::FinishErrand(EDeliveryNpcActionStatus Status,F
 
 void UDeliveryCompanionComponent::ReportErrandPause(FName Reason)
 {
+    if (!HasActiveErrand() || !GetOwner() || !GetOwner()->HasAuthority()) return;
+    const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
+    const int32 Revision=CommandRevision, ErrandRevision=Errand.CommandRevision;
     StopErrandMovement();
+    if (!WeakThis.IsValid() || !HasActiveErrand() || CommandRevision!=Revision || Errand.CommandRevision!=ErrandRevision) return;
     SetSuspension(Reason);
     if (LastErrandPause==Reason) return;
     LastErrandPause=Reason;
     GetCompanion()->ObserveFact(TEXT("CompanionErrandPaused"),GetOwnerPawn(),
-        FString::Printf(TEXT("当前跑腿暂时停下：%s。委托和实际包裹仍保留，没有确认交接或送达；条件恢复后继续，主人也可以改安排。"),*Reason.ToString()),
+        FString::Printf(TEXT("当前跑腿暂时停下：%s。委托和实际携带的物品仍保留，没有确认交接或送达；条件恢复后继续，主人也可以改安排。"),*Reason.ToString()),
         EDeliveryNpcEvidenceSource::ActionResult);
 }
 
@@ -220,7 +313,7 @@ bool UDeliveryCompanionComponent::MoveForErrand(const FVector& Goal,float ReachR
     auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
     if (!AI || !Nav || Goal.ContainsNaN()) return false;
     const double Now=GetWorld()->GetTimeSeconds();
-    const bool bGoalUnchanged=bHasErrandDestination && FVector::Dist2D(Goal,ErrandGoal)<GetTuning().RepathDistance;
+    const bool bGoalUnchanged=bHasErrandDestination && FVector::Dist(Goal,ErrandGoal)<GetTuning().RepathDistance;
     if (bGoalUnchanged)
     {
         if (AI->GetMoveStatus()!=EPathFollowingStatus::Idle && bErrandOwnsNavigation) return false;
@@ -249,7 +342,15 @@ bool UDeliveryCompanionComponent::MoveForErrand(const FVector& Goal,float ReachR
         Request.SetReachTestIncludesAgentRadius(false);
         Request.SetReachTestIncludesGoalRadius(false);
         Request.SetAllowPartialPath(false);
+        const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
+        const TWeakObjectPtr<ADeliveryCompanionCharacter> WeakNpc(Npc);
+        const int32 Revision=CommandRevision;
+        const auto Phase=Errand.Phase;
         const auto Result=AI->MoveTo(Request);
+        // 换路径可同步结束旧请求，回调已经换委托时不能写回旧路或尝试交接
+        if (!WeakThis.IsValid() || !WeakNpc.IsValid() || WeakNpc->IsActorBeingDestroyed() ||
+            !HasActiveErrand() || CommandRevision!=Revision || Errand.CommandRevision!=Revision ||
+            Errand.Phase!=Phase) return false;
         if (Result.Code==EPathFollowingRequestResult::Failed) continue;
         if (!bErrandTravelBudgetAdded)
         {
@@ -282,10 +383,12 @@ void UDeliveryCompanionComponent::UpdateErrand()
 {
     auto* Npc=GetCompanion();
     if (!Npc || !Npc->HasAuthority() || !HasActiveErrand()) return;
+    if (DeliveryNpc::IsCompanionItemErrand(Errand.Action)) { UpdateItemErrand(); return; }
     if (HasActiveHomeArrangement() || PendingHomeArrangementId.IsValid())
     { StopErrandMovement(); UpdateHomeArrangement(); return; }
     if (!CanCommand(OwnerPlayerState)) { FinishErrand(EDeliveryNpcActionStatus::Cancelled,TEXT("OwnerLost")); return; }
-    if (Npc->IsKnockedDown() || Npc->Agent->ShouldPauseForConversation() || Npc->Agent->HasActiveAction())
+    if (Npc->IsKnockedDown() || Npc->Agent->ShouldPauseForConversation() ||
+        (Npc->Agent->HasActiveAction() && !Npc->Agent->CanContinueCompanionMovement()))
     { StopErrandMovement(); SetSuspension(Npc->IsKnockedDown()?TEXT("Down"):TEXT("OtherBehavior")); return; }
     const auto* Manager=UDeliveryTaskManagerComponent::Get(this);
     if (!IsValid(Errand.Task) || !Manager || !Manager->CanAcquireItem(Errand.Task))
@@ -297,7 +400,33 @@ void UDeliveryCompanionComponent::UpdateErrand()
         return IsValid(this) && IsValid(Npc) && !Npc->IsActorBeingDestroyed() &&
             HasActiveErrand() && Errand.CommandRevision==Revision && CommandRevision==Revision;
     };
-    APawn* OwnerCarrierPawn=GetOwnerPackageCarrier();
+    // 开箱期间持有原请求编号，不能把自己的 TrunkBusy 当成主人失效后反复取消
+    if (ErrandCargoHandoffId.IsValid())
+    {
+        auto* Bike=ErrandCargoVehicle.Get();
+        bool bComplete=false, bSucceeded=false;
+        FName Reason;
+        if (!IsValid(Bike) || !Bike->GetCargoHandoffResult(ErrandCargoHandoffId,bComplete,bSucceeded,Reason))
+        { FinishErrand(EDeliveryNpcActionStatus::Failed,TEXT("CargoHandoffLost")); return; }
+        LastErrandUpdateAt=GetWorld()->GetTimeSeconds();
+        if (!bComplete) return;
+        ErrandCargoHandoffId.Invalidate();
+        ErrandCargoVehicle.Reset();
+        if (!bSucceeded || GetCarriedTaskPackage()!=Errand.Package || PackageTask(GetCarriedTaskPackage())!=Errand.Task)
+        { FinishErrand(EDeliveryNpcActionStatus::Failed,bSucceeded?FName(TEXT("PackageHandoffStateChanged")):Reason); return; }
+        if (Errand.Action==EDeliveryNpcAction::DeliverPackage)
+        {
+            SetErrandPhase(EDeliveryCompanionErrandPhase::GoToDelivery);
+            if (!IsCurrent()) return;
+            Npc->ObserveFact(TEXT("CompanionPackageReceived"),Bike,
+                TEXT("游戏确认我已从主人停放的车上接到本次委托的同一个实物包裹，尚未送达。"),EDeliveryNpcEvidenceSource::ActionResult);
+        }
+        else FinishErrand(EDeliveryNpcActionStatus::Succeeded,TEXT("PackageReceived"));
+        return;
+    }
+    // 交还始终面向主人当前步行身体，不能因为车上有别的货就改为装车
+    APawn* OwnerCarrierPawn=Errand.Phase==EDeliveryCompanionErrandPhase::ReturnToOwner?
+        Cast<ADeliveryCharacter>(GetOwnerPawn()):GetOwnerPackageCarrier();
     auto* OwnerCarrier=Cast<IDeliveryPackageCarrierInterface>(OwnerCarrierPawn);
     const bool bNeedsOwner=Errand.Phase==EDeliveryCompanionErrandPhase::ReceiveFromOwner || Errand.Phase==EDeliveryCompanionErrandPhase::ReturnToOwner;
     if (bNeedsOwner && (!OwnerCarrier || !OwnerCarrier->CanHandleTaskPackage()))
@@ -321,9 +450,10 @@ void UDeliveryCompanionComponent::UpdateErrand()
     float ReachRadius=220;
     UDeliveryPickupPointComponent* Pickup=nullptr;
     UDeliveryTargetComponent* Delivery=nullptr;
+    const ADeliveryHome* DeliveryHome=nullptr;
     UDeliveryInteractableComponent* Interaction=nullptr;
     AActor* InteractionTarget=OwnerCarrierPawn;
-    if (bNeedsOwner) Goal=OwnerCarrierPawn->GetActorLocation();
+    if (bNeedsOwner) Goal=OwnerCarrier->GetTaskPackageTransferPoint();
     else
     {
         const bool bPickup=Errand.Phase==EDeliveryCompanionErrandPhase::GoToPickup;
@@ -341,21 +471,57 @@ void UDeliveryCompanionComponent::UpdateErrand()
         else
         {
             Delivery=Target->FindComponentByClass<UDeliveryTargetComponent>();
+            if (!Delivery) { FinishErrand(EDeliveryNpcActionStatus::Failed,TEXT("DeliveryTargetLost")); return; }
+            const auto* Grandpa=Cast<ADeliveryGrandpa>(Target);
+            const auto* Home=Grandpa?ADeliveryHome::FindSharedHome(this):nullptr;
+            // 第一单的门未破时先到屋外等候，继续保留同一件包裹
+            if (IsValid(Home) && Home->FormerResident==Grandpa && IsValid(Home->ReturnAnchor)) DeliveryHome=Home;
+            if (DeliveryHome && IsValid(Grandpa->FrontDoor) && !Grandpa->IsDoorBroken())
+            {
+                const FVector Outside=Home->ReturnAnchor->GetComponentLocation();
+                constexpr float OutsideReach=140.f;
+                // 门外已站稳就继续等，保留暂停原因与原包裹，不重复停车或重发站位
+                if (LastErrandPause==TEXT("WaitingAtGrandpaDoor") && !IsUsingErrandVehicle() &&
+                    FVector::Dist2D(Npc->GetNavAgentLocation(),Outside)<=OutsideReach+45.f &&
+                    FMath::Abs(Npc->GetNavAgentLocation().Z-Outside.Z)<=60.f)
+                {
+                    SetSuspension(TEXT("WaitingAtGrandpaDoor"));
+                    LastErrandUpdateAt=0;
+                    return;
+                }
+                const bool bReady=UpdateVehicleTravel(Outside,OutsideReach,EDeliveryCompanionTravelPurpose::Errand);
+                if (!IsCurrent() || !bReady) return;
+                if (!MoveForErrand(Outside,OutsideReach,nullptr) || !IsCurrent()) return;
+                ReportErrandPause(TEXT("WaitingAtGrandpaDoor"));
+                if (IsCurrent()) LastErrandUpdateAt=0;
+                return;
+            }
+            if (LastErrandPause==TEXT("WaitingAtGrandpaDoor"))
+            {
+                // 门外站位已经完成，打开门后立即计算走向爷爷的新路径
+                LastErrandPause=NAME_None;
+                bHasErrandDestination=false;
+                NextErrandNavigationAt=0;
+            }
             Goal=Delivery->GetDeliveryPoint(Npc->GetActorLocation());
             ReachRadius=Delivery->DeliveryRadius;
         }
     }
-    const bool bOnFoot=UpdateVehicleTravel(Goal,ReachRadius,EDeliveryCompanionTravelPurpose::Errand);
+    // 门已经打开时车仍停屋外，收件点是爷爷本人所在的交互位置
+    const FVector VehicleGoal=DeliveryHome?DeliveryHome->ReturnAnchor->GetComponentLocation():Goal;
+    const bool bOnFoot=UpdateVehicleTravel(VehicleGoal,DeliveryHome?140.f:ReachRadius,EDeliveryCompanionTravelPurpose::Errand);
     if (!IsCurrent()) return;
     if (!bOnFoot) { LastErrandUpdateAt=Now; return; }
     const bool bInReach=(bNeedsOwner?FVector::Dist(Npc->GetActorLocation(),Goal)<=220:
         Pickup?Interaction->CanInteract(Npc):Delivery->CanAcceptDelivery(Errand.Package,OwnerPlayerState)) &&
         HasClearErrandApproach(Npc,Npc->GetActorLocation(),Goal,InteractionTarget);
     const bool bAtDestination=bInReach || MoveForErrand(Goal,ReachRadius,InteractionTarget);
+    if (!IsCurrent()) return;
     // 路线重试也算本次执行时间；BT中断和等主人恢复时则重置采样起点
     LastErrandUpdateAt=Now;
     if (!bAtDestination) { ErrandInteractionSeconds=0; return; }
     StopErrandMovement();
+    if (!IsCurrent()) return;
     LastErrandUpdateAt=Now;
     SetSuspension(NAME_None);
     FName Failure;
@@ -383,7 +549,40 @@ void UDeliveryCompanionComponent::UpdateErrand()
     else
     {
         const bool bReceiving=Errand.Phase==EDeliveryCompanionErrandPhase::ReceiveFromOwner;
-        bSucceeded=DeliveryPackageTransfer::TryTransfer(bReceiving?OwnerCarrierPawn:Npc,bReceiving?Npc:OwnerCarrierPawn,Failure);
+        const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
+        const TWeakObjectPtr<UDeliveryTaskDefinition> ExpectedTask(Errand.Task.Get());
+        const TWeakObjectPtr<ADeliveryPackageItem> ExpectedPackage(Errand.Package.Get());
+        const auto Phase=Errand.Phase;
+        const auto Continue=[WeakThis,ExpectedTask,ExpectedPackage,Revision,Phase]()
+        {
+            const auto* C=WeakThis.Get();
+            const auto* Character=C?C->GetCompanion():nullptr;
+            const auto* Tasks=C?UDeliveryTaskManagerComponent::Get(C):nullptr;
+            return C && IsValid(Character) && !Character->IsActorBeingDestroyed() &&
+                C->CommandRevision==Revision && C->HasActiveErrand() && C->Errand.CommandRevision==Revision &&
+                C->Errand.Phase==Phase && ExpectedTask.IsValid() && C->Errand.Task==ExpectedTask.Get() &&
+                ExpectedPackage.IsValid() && C->Errand.Package==ExpectedPackage.Get() &&
+                C->CanCommand(C->OwnerPlayerState) && IsValid(C->GetOwnerPawn()) && Character->CanHandleTaskPackage() &&
+                !Character->Agent->ShouldPauseForConversation() &&
+                (!Character->Agent->HasActiveAction() || Character->Agent->CanContinueCompanionMovement()) &&
+                Tasks && Tasks->CanAcquireItem(ExpectedTask.Get());
+        };
+        if (auto* Bike=bReceiving?Cast<ADeliveryMotorbike>(OwnerCarrierPawn):nullptr)
+        {
+            const FGuid Id=Bike->RequestCargoHandoff(Npc,Errand.Package,OwnerPlayerState,Continue);
+            if (!IsCurrent()) { if (IsValid(Bike)) Bike->CancelCargoHandoff(Id); return; }
+            if (Id.IsValid())
+            {
+                ErrandCargoVehicle=Bike;
+                ErrandCargoHandoffId=Id;
+                Errand.Reason=TEXT("OpeningOwnerCargo");
+                Npc->ForceNetUpdate();
+                return;
+            }
+            Failure=TEXT("CargoHandoffUnavailable");
+        }
+        else bSucceeded=DeliveryPackageTransfer::TryTransfer(bReceiving?OwnerCarrierPawn:Npc,
+            bReceiving?Npc:OwnerCarrierPawn,Failure,Errand.Package,Continue);
         if (!IsCurrent()) return;
         if (bSucceeded)
         {

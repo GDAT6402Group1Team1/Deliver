@@ -397,6 +397,7 @@ void ADeliveryNpcCharacter::ReceiveHorn(float Multiplier) { ReceiveHornFrom(Mult
 void ADeliveryNpcCharacter::ReceiveHornFrom(float Multiplier,AActor* Vehicle,AActor* Driver)
 {
     if (!HasAuthority()) return;
+    if (Look) Look->TryStartle(Vehicle);
     const double Now=GetWorld()->GetTimeSeconds(); if (Now-LastHorn>2) HornPressure=0;
     ++HornPressure; LastHorn=Now;
     if (Now-LastHornObservation<1.5 || Agent->IsDecisionPending()) return;

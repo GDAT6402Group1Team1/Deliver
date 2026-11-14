@@ -1,5 +1,9 @@
 #include "AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Companion/DeliveryCompanionCharacter.h"
+#include "AI/Companion/DeliveryCompanionComponent.h"
+#include "Inventory/DeliveryHandheldItem.h"
+#include "Carry/DeliveryHandheldCarrierInterface.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "Navigation/PathFollowingComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
@@ -28,6 +32,7 @@ UBTTask_DeliveryExecuteNpcAction::UBTTask_DeliveryExecuteNpcAction()
 EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
     ReleaseFocus();
+    bKeepsCompanionMovement=false;
     bStrikeStarted=false;
     StrikeFinishAt=0;
     bReturningToOrigin=false;
@@ -43,8 +48,29 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
     if (!Agent.IsValid() || !Agent->StartAction(Action)) return EBTNodeResult::Failed;
     ActionId = Action.ActionId;
     FinishAt = Pawn->GetWorld()->GetTimeSeconds() + Action.Duration;
-    Controller->StopMovement();
-    if (Action.Action == EDeliveryNpcAction::LookAt || Action.Action == EDeliveryNpcAction::StrikeOnce || Action.Action == EDeliveryNpcAction::Fight)
+    const TWeakObjectPtr<ADeliveryCompanionCharacter> ItemObserver=Cast<ADeliveryCompanionCharacter>(Pawn);
+    const TWeakObjectPtr<ADeliveryHandheldItem> ObservedItem=Cast<ADeliveryHandheldItem>(Action.Target);
+    const bool bItemFocus=Action.Action==EDeliveryNpcAction::LookAt && ItemObserver.IsValid() &&
+        DeliveryHandheldTransfer::IsOrdinaryItem(ObservedItem.Get());
+    bKeepsCompanionMovement=Agent->CanContinueCompanionMovement();
+    if (!bKeepsCompanionMovement) Controller->StopMovement();
+    if (bItemFocus)
+    {
+        // 停导航会同步广播，挂 live 焦点前重查同一动作及当前实见，不能用旧目标覆盖新动作
+        const bool bSameAction=Agent.IsValid() && Agent->HasActiveAction() &&
+            Agent->GetPublicState().ActionId==Action.ActionId && Agent->GetPublicState().PlanRevision==Action.PlanRevision;
+        if (!bSameAction || !Controller.IsValid() || !ItemObserver.IsValid() || ItemObserver->IsActorBeingDestroyed() ||
+            Controller->GetPawn()!=ItemObserver.Get() || !ObservedItem.IsValid() ||
+            Agent->GetPublicState().Status!=EDeliveryNpcActionStatus::Running || Agent->GetPublicState().Target!=ObservedItem.Get() ||
+            !ItemObserver->Companion->CanUseObservedItemTarget(ObservedItem.Get()))
+        {
+            if (bSameAction) Agent->TryFinishAction(Action.ActionId,EDeliveryNpcActionStatus::Failed,TEXT("ItemTargetNoLongerVisible"));
+            return EBTNodeResult::Failed;
+        }
+    }
+    // 持续安排保留身体朝向，聊天目标由原交谈动画驱动头部注视
+    if ((!bKeepsCompanionMovement && Action.Action == EDeliveryNpcAction::LookAt) ||
+        Action.Action == EDeliveryNpcAction::StrikeOnce || Action.Action == EDeliveryNpcAction::Fight)
     {
         FocusTarget = Action.Target;
         Controller->SetFocus(Action.Target, ResidentActionFocus);
@@ -205,6 +231,19 @@ void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerCom
         }
         return;
     }
+    if (bKeepsCompanionMovement)
+    {
+        // 原分支被对白临时替换时，由同一个 BT 执行者继续推进实际安排
+        auto* Companion=Controller.IsValid() && Controller->GetPawn()?
+            Controller->GetPawn()->FindComponentByClass<UDeliveryCompanionComponent>():nullptr;
+        if (Companion)
+        {
+            if (Companion->HasActiveErrand()) Companion->UpdateErrand();
+            else Companion->UpdateFollow();
+        }
+        if (!Agent.IsValid() || Agent->GetPublicState().ActionId!=ActionId ||
+            Agent->GetPublicState().Status!=EDeliveryNpcActionStatus::Running) return;
+    }
     if (State.Action==EDeliveryNpcAction::MoveTo && Controller.IsValid() && Controller->GetMoveStatus()==EPathFollowingStatus::Idle)
     {
         const auto* Npc=Cast<ADeliveryNpcCharacter>(Controller->GetPawn());
@@ -354,7 +393,8 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::AbortTask(UBehaviorTreeCom
 
 void UBTTask_DeliveryExecuteNpcAction::ReleaseFocus()
 {
-    if (Controller.IsValid() && ActionId.IsValid() && Controller->GetFocusActorForPriority(ResidentActionFocus) == FocusTarget.Get())
+    if (Controller.IsValid() && ActionId.IsValid() && (!Agent.IsValid() || Agent->GetPublicState().ActionId==ActionId) &&
+        Controller->GetFocusActorForPriority(ResidentActionFocus) == FocusTarget.Get())
         Controller->ClearFocus(ResidentActionFocus);
     FocusTarget.Reset();
 }
@@ -365,7 +405,8 @@ void UBTTask_DeliveryExecuteNpcAction::OnTaskFinished(UBehaviorTreeComponent& Ow
     ReleaseFocus();
     if (Controller.IsValid())
     {
-        Controller->StopMovement();
+        // 被动短动作没有取得导航所有权，结束回调不能停止新 Follow 的路径
+        if (!bKeepsCompanionMovement && Agent.IsValid() && Agent->GetPublicState().ActionId==ActionId) Controller->StopMovement();
         if (auto* Resident=Cast<ADeliveryNpcCharacter>(Controller->GetPawn())) Resident->StopAction(ActionId);
     }
     Agent.Reset();

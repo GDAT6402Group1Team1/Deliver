@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/GameStateBase.h"
+#include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Vehicle/DeliveryTrunkPassengerComponent.h"
@@ -27,6 +28,27 @@ void UDeliveryVehicleSummonComponent::GetLifetimeReplicatedProps(
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	// 只发给拥有者：别人的冷却和我无关，没必要占带宽
 	DOREPLIFETIME_CONDITION(UDeliveryVehicleSummonComponent, ReadyServerTime, COND_OwnerOnly);
+}
+
+void UDeliveryVehicleSummonComponent::RegisterVehicle(ADeliveryMotorbike* Bike)
+{
+    const auto* Character = Cast<ADeliveryCharacter>(GetOwner());
+    auto* Player = Character ? Character->GetTaskPlayerState() : nullptr;
+    if (!Character || !Character->HasAuthority() || !IsValid(Bike) || Bike->IsActorBeingDestroyed() ||
+        Bike->GetWorld() != GetWorld() || !Bike->CanBeUsedByPlayers() || !IsValid(Player) ||
+        Player->IsInactive() || Player->GetWorld() != GetWorld()) return;
+    Bike->RegisterPlayerUse(Player);
+    if (Bike->GetRegisteredPlayer() == Player) RegisteredVehicle = Bike;
+}
+
+ADeliveryMotorbike* UDeliveryVehicleSummonComponent::GetRegisteredVehicle() const
+{
+    const auto* Character = Cast<ADeliveryCharacter>(GetOwner());
+    auto* Player = Character ? Character->GetTaskPlayerState() : nullptr;
+    auto* Bike = RegisteredVehicle.Get();
+    return IsValid(Player) && !Player->IsInactive() && Player->GetWorld() == GetWorld() &&
+        IsValid(Bike) && !Bike->IsActorBeingDestroyed() && Bike->GetWorld() == GetWorld() &&
+        Bike->CanBeUsedByPlayers() && Bike->GetRegisteredPlayer() == Player ? Bike : nullptr;
 }
 
 float UDeliveryVehicleSummonComponent::GetCooldownRemaining() const
@@ -170,6 +192,7 @@ void UDeliveryVehicleSummonComponent::ServerSummon_Implementation()
 		}
 		return;
 	}
+	RegisterVehicle(Bike);
 	Bike->ForceNetUpdate();
 
 	ReadyServerTime = Now + Cooldown;

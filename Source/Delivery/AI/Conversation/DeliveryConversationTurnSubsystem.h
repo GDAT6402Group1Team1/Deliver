@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "AI/Conversation/DeliveryNpcMessageTypes.h"
+#include "Speech/DeliverySpeechPlayerContext.h"
 #include "DeliveryConversationTurnSubsystem.generated.h"
 
 class ADeliveryNpcCharacter;
@@ -35,6 +36,10 @@ struct FDeliveryConversationTurnLease
     FGuid ClientToken;
     TWeakObjectPtr<APlayerController> Owner;
     TWeakObjectPtr<APawn> PawnAtBegin;
+    // 仅语音记录原角色，正常上下车保留这一份录音和回复
+    FDeliverySpeechPlayerContext VoiceContext;
+    bool bVoice = false;
+    double VoiceContextPendingSince = -1;
     TWeakObjectPtr<ADeliveryNpcCharacter> Npc;
     FGuid MessageId;
     EDeliveryConversationTurnPhase Phase = EDeliveryConversationTurnPhase::Recording;
@@ -71,6 +76,11 @@ public:
     EDeliveryConversationTurnResult TryBeginText(APlayerController* Owner, ADeliveryNpcCharacter* Npc,
         FGuid Token, uint64 InputSequence, FDeliveryConversationTurnHandle& OutHandle,
         TArray<FDeliveryConversationTurnLease>& OutReplaced);
+    EDeliveryConversationTurnResult TryBeginVoice(APlayerController* Owner, ADeliveryNpcCharacter* Npc,
+        FGuid Token, uint64 InputSequence, FDeliveryConversationTurnHandle& OutHandle,
+        TArray<FDeliveryConversationTurnLease>& OutReplaced);
+    EDeliverySpeechPlayerContextState GetVoiceContextState(APlayerController* Owner,
+        const FDeliveryConversationTurnHandle& Handle);
 
     // 首次松键开始最终文字的五秒期限，重复松键不延长期限
     EDeliveryConversationTurnResult FinishRecording(APlayerController* Owner, const FDeliveryConversationTurnHandle& Handle);
@@ -121,6 +131,7 @@ protected:
 
 private:
     friend class FDeliveryConversationLeaseWorldTest;
+    friend class FDeliveryConversationVehicleVoiceTest;
     friend class FDeliveryNpcMessageFlowTest;
     struct FOwnerHistory
     {
@@ -129,11 +140,12 @@ private:
     };
 
     EDeliveryConversationTurnResult BeginInternal(APlayerController* Owner, ADeliveryNpcCharacter* Npc,
-        FGuid Token, uint64 InputSequence, bool bText, FDeliveryConversationTurnHandle& OutHandle,
+        FGuid Token, uint64 InputSequence, bool bText, bool bVoice, FDeliveryConversationTurnHandle& OutHandle,
         TArray<FDeliveryConversationTurnLease>& OutReplaced);
     bool IsServerWorld() const;
     bool IsValidOwner(const APlayerController* Owner) const;
-    FDeliveryConversationTurnLease* FindOwned(APlayerController* Owner, const FDeliveryConversationTurnHandle& Handle);
+    FDeliveryConversationTurnLease* FindOwned(APlayerController* Owner, const FDeliveryConversationTurnHandle& Handle,
+        bool bAllowPendingVoice = false);
     void PruneInvalidLeases();
 
     struct FNpcReplyRecord

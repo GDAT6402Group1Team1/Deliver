@@ -407,10 +407,16 @@ void ADeliveryCompanionCharacter::UpdateEncounter()
     }
     if (Encounter.Phase==EDeliveryCompanionEncounterPhase::Joined && Companion->GetOwnerPlayerState() && !bAnnouncedJoining)
     {
-        bAnnouncedJoining=true;
         const auto* PC=Companion->GetOwnerPlayerState()->GetPlayerController();
-        ObserveFact(TEXT("CompanionJoined"),PC?PC->GetPawn():nullptr,
-            TEXT("刚才这名玩家亲手扶我起来，我已认他为主人，准备继续陪他送快递。感谢由我自己说；没有亲历的旧订单不能说一起完成，也不能虚构已经送达。"),EDeliveryNpcEvidenceSource::ActionResult);
+        APawn* Rescuer=PC?PC->GetPawn():nullptr;
+        if (IsValid(Rescuer) && Rescuer->GetWorld()==GetWorld())
+        {
+            FDeliveryNpcObservation Joined;
+            Joined.EventId=FGuid::NewGuid(); Joined.Kind=TEXT("CompanionJoined");
+            Joined.Subject=Rescuer; Joined.Source=EDeliveryNpcEvidenceSource::ActionResult; Joined.Lifetime=60;
+            Joined.Description=TEXT("刚才这名玩家亲手扶我起来，我现在已站起来并认他为主人，准备继续陪他送快递。没有亲历的旧订单不能说一起完成，也不能虚构已经送达。");
+            if (Agent->ObserveEvent(Joined)) { bAnnouncedJoining=true; WakeDecision(); }
+        }
     }
 }
 

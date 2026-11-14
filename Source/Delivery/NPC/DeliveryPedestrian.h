@@ -83,6 +83,7 @@ class DELIVERY_API ADeliveryPedestrian : public AActor, public IDeliveryImpactRe
 	/** 只调整本次过街的步速；服务器调用，离开红灯后恢复原速度 */
 	void SetCrosswalkSpeedMultiplier(float Multiplier);
 	virtual void ReceiveHorn(float SpeedMultiplier) override;
+	virtual void ReceiveHornFrom(float Multiplier,AActor* Vehicle,AActor* Driver) override;
 
 	// 程序化步态
 	/**

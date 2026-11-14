@@ -6,6 +6,7 @@
 #include "AI/Companion/DeliveryCompanionHomeTypes.h"
 #include "World/DeliveryHomeUseExecutor.h"
 #include "Grab/DeliveryObjectCarryProvider.h"
+#include "Carry/DeliveryHandheldUseExecutor.h"
 #include "GameplayAbilitySpec.h"
 #include "Task/DeliveryTaskTypes.h"
 #include "DeliveryCompanionComponent.generated.h"
@@ -13,6 +14,7 @@
 class APlayerState;
 class ADeliveryCompanionCharacter;
 class UDeliveryCompanionTuning;
+class UDeliveryLocationComponent;
 class UDeliveryTaskDefinition;
 class UDeliveryTaskManagerComponent;
 class APlayerController;
@@ -21,6 +23,7 @@ class ADeliveryPackageItem;
 class ADeliveryHandheldItem;
 class UAbilitySystemComponent;
 class ADeliveryCompanionMotorbike;
+class ADeliveryMotorbike;
 class UDeliveryGrabbableComponent;
 class UGA_UseHomeObject;
 struct FGameplayEventData;
@@ -30,7 +33,7 @@ UENUM(BlueprintType)
 enum class EDeliveryCompanionMode : uint8 { Unrecruited, Follow, Stay, GoHome };
 
 UENUM(BlueprintType)
-enum class EDeliveryCompanionErrandPhase : uint8 { Idle, GoToPickup, ReceiveFromOwner, GoToDelivery, ReturnToOwner };
+enum class EDeliveryCompanionErrandPhase : uint8 { Idle, GoToPickup, ReceiveFromOwner, GoToDelivery, ReturnToOwner, WaitingForOwner, WaitingForCapacity };
 
 // 同一时刻只有一种安排可以拥有走向车辆和驾驶请求
 enum class EDeliveryCompanionTravelPurpose : uint8 { None, Errand, Follow, ReturnToStay, GoHome };
@@ -45,6 +48,8 @@ struct DELIVERY_API FDeliveryCompanionErrand
     UPROPERTY(BlueprintReadOnly) EDeliveryCompanionErrandPhase Phase=EDeliveryCompanionErrandPhase::Idle;
     UPROPERTY(BlueprintReadOnly) TObjectPtr<UDeliveryTaskDefinition> Task;
     UPROPERTY(BlueprintReadOnly) TObjectPtr<ADeliveryPackageItem> Package;
+    // 普通物品的安排目标，不代表实际持有，实际持物仍只有 CarriedPackage 一个槽
+    UPROPERTY(BlueprintReadOnly) TWeakObjectPtr<ADeliveryHandheldItem> Item;
     UPROPERTY(BlueprintReadOnly) int32 CommandRevision=0;
     UPROPERTY(BlueprintReadOnly) FName Reason;
 };
@@ -52,7 +57,7 @@ struct DELIVERY_API FDeliveryCompanionErrand
 // 服务器保存主人和持续安排，行为树是导航的唯一调用者
 // 对话只改变模式，倾听、受击与乘车暂停不会清掉主人的安排
 UCLASS(ClassGroup=(Delivery),meta=(BlueprintSpawnableComponent))
-class DELIVERY_API UDeliveryCompanionComponent : public UActorComponent, public IDeliveryHomeUseExecutor, public IDeliveryObjectCarryProvider
+class DELIVERY_API UDeliveryCompanionComponent : public UActorComponent, public IDeliveryHomeUseExecutor, public IDeliveryObjectCarryProvider, public IDeliveryHandheldUseExecutor
 {
     GENERATED_BODY()
     friend class FDeliveryCompanionRulesTest;
@@ -65,6 +70,9 @@ public:
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|同伴") TObjectPtr<UDeliveryCompanionTuning> Tuning;
     UPROPERTY(Replicated,EditInstanceOnly,BlueprintReadOnly,Category="Delivery|同伴|车辆") TObjectPtr<ADeliveryCompanionMotorbike> ErrandVehicle;
     bool IsUsingErrandVehicle() const;
+    ADeliveryCompanionMotorbike* GetFollowMotorbike() const;
+    UFUNCTION(BlueprintPure,Category="Delivery|同伴|车辆") EDeliveryCompanionTravelMode GetTravelMode() const { return TravelMode; }
+    void ExtendTravelDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const;
     bool EnsureOnFoot();
     // ASC 完成初始化后由角色调用，只授予本组件负责的家居能力
     void InitializeHomeAbility();
@@ -129,13 +137,24 @@ public:
     bool CanCommand(APlayerState* Requester) const;
     // 编号必须来自本次模型请求，true 只表示新模式已生效
     bool ApplyCommand(EDeliveryNpcAction Action,APlayerState* Requester,int32 ExpectedRevision,
-        UDeliveryTaskDefinition* ExpectedTask=nullptr,ADeliveryPackageItem* ExpectedPackage=nullptr);
+        UDeliveryTaskDefinition* ExpectedTask=nullptr,ADeliveryPackageItem* ExpectedPackage=nullptr,
+        EDeliveryCompanionTravelMode RequestedTravelMode=EDeliveryCompanionTravelMode::Unspecified);
     UFUNCTION(BlueprintPure,Category="Delivery|同伴|跑腿") bool HasActiveErrand() const;
     UFUNCTION(BlueprintPure,Category="Delivery|同伴|跑腿") FDeliveryCompanionErrand GetErrand() const { return Errand; }
     bool CanArrangeErrand(EDeliveryNpcAction Action,APlayerState* Requester) const;
     // 仅行为树调用，执行移动和已验证的物品接口；暂停只停本任务导航
     void UpdateErrand();
     void StopErrandMovement();
+    void RefreshItemObservations();
+    void ExtendItemDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const;
+    // 普通道具的短动作只跟踪当前实见物或同槽实际自持物，不把旧记录当当前位置
+    bool CanUseObservedItemTarget(const ADeliveryHandheldItem* Item) const;
+    bool CanArrangeItem(EDeliveryNpcAction Action,ADeliveryHandheldItem* Item,APlayerState* Requester) const;
+    bool CanApplyItemChoice(const FDeliveryCompanionItemChoice& Choice,APlayerState* Requester,int32 ExpectedRevision) const;
+    bool ApplyItemChoice(const FDeliveryCompanionItemChoice& Choice,APlayerState* Requester,int32 ExpectedRevision,
+        EDeliveryCompanionTravelMode RequestedTravelMode=EDeliveryCompanionTravelMode::Unspecified);
+    virtual bool ExecuteHandheldUse(const UDeliveryHandheldUseRequest& Request,FName& Reason) override;
+    virtual void FinishHandheldUse(FGuid UseId,bool bSucceeded,FName Reason) override;
     ADeliveryHandheldItem* GetCarriedItem() const;
     bool CanReceiveCarriedItem(ADeliveryHandheldItem* Item) const;
     bool TryReceiveCarriedItem(ADeliveryHandheldItem* Item);
@@ -158,8 +177,19 @@ protected:
     virtual void TickComponent(float DeltaTime,ELevelTick TickType,FActorComponentTickFunction* TickFunction) override;
 private:
     ADeliveryCompanionCharacter* GetCompanion() const;
+    struct FObservedPublicPlace
+    {
+        TWeakObjectPtr<UDeliveryLocationComponent> Location;
+        FDeliveryNpcObservedPlace View;
+    };
     // 当次读取本世界公开地点，不缓存可见性或创建新行动证据
+    void CollectObservedPlaces(TArray<FObservedPublicPlace>& Out) const;
     void ExtendWorldDecisionRequest(FDeliveryNpcDecisionRequest& Request) const;
+    // 沿既有服务器生命周期更新旧见闻，读取请求时只复制并计算观察年龄
+    void RefreshPublicPlaceMemories();
+    void RecordPublicPlaceMemory(const FObservedPublicPlace& Place,double ObservedAt);
+    void PrunePublicPlaceMemoryIndex();
+    void CopyCompanionMemories(TArray<FDeliveryNpcCompanionMemory>& Out) const;
     APawn* GetOwnerPawn() const;
     bool FindFollowDestination(APawn* Pawn,FVector& Out) const;
     bool FindWaitDestination(APawn* Pawn,FVector& Out) const;
@@ -187,6 +217,11 @@ private:
     void StopWalkingForVehicle();
     void ReportVehiclePause(FName Reason);
     void ReleaseErrandVehicle();
+    void ApplyTravelInstruction(EDeliveryCompanionTravelMode NewMode);
+    bool CanTakeNearbyPackage() const;
+    UPROPERTY(Replicated) EDeliveryCompanionTravelMode TravelMode=EDeliveryCompanionTravelMode::Unspecified;
+    // 只有主人接受为跟随指令的骑车安排才能启动跟车，跑腿的出行选择独立
+    bool bRideWhileFollowing=false;
     bool RecordMemory(FGuid EventId,FName Kind,const FString& Description,int32 AffinityDelta);
     void RecordRecruitMemory();
     bool RecordDeliveryMemory(UDeliveryTaskDefinition* Task,APlayerState* Deliverer);
@@ -218,7 +253,13 @@ private:
     void StartPendingHomeChoice();
     void OnHomeObjectUseEnded(FGuid ActionId,FName Reason);
     double GetHomeServerTime() const;
-    UPROPERTY(Replicated) FDeliveryCompanionHomeState HomeState;
+    UFUNCTION() void OnRep_HomeState();
+    void UpdateHomeSeatPresentation();
+    bool BeginHomeSeatMove(const FTransform& FeetGoal,UAnimSequence* Animation,FName& OutReason);
+    bool UpdateHomeSeatMove(const FTransform& FeetGoal,FName& OutReason);
+    void ReleaseHomeSeatMove(bool bClearState);
+    FDeliveryCompanionSeatRuntime HomeSeatRuntime;
+    UPROPERTY(ReplicatedUsing=OnRep_HomeState) FDeliveryCompanionHomeState HomeState;
     FDeliveryCompanionHomeChoice ActiveHomeChoice;
     FDeliveryCompanionHomeChoice PendingHomeChoice;
     FGuid PendingHomeArrangementId;
@@ -262,11 +303,41 @@ private:
     bool HasCaterpillarOpportunity() const;
     bool StoreCarriedItem(ADeliveryHandheldItem* Item);
     void DropCarriedItem();
+    bool CanSeeWorldItem(const ADeliveryHandheldItem* Item,FVector& ObservedPoint) const;
+    void UpdateItemErrand();
+    bool RunItemTransfer(bool bReturnToOwner,FName& Reason);
+    bool IsCurrentItemUse(FGuid UseId,int32 Revision,ADeliveryHandheldItem* Item) const;
+    void CancelItemUse();
+    void ShutdownItemExecution();
+    struct FSeenItem
+    {
+        TWeakObjectPtr<ADeliveryHandheldItem> Item;
+        FVector Location=FVector::ZeroVector;
+        double SeenAt=0;
+        double FactAt=0;
+        FGuid EventId;
+        bool bVisible=false;
+    };
+    TArray<FSeenItem> SeenItems;
+    FGuid HeldItemEventId;
+    TWeakObjectPtr<ADeliveryHandheldItem> ObservedHeldItem;
+    double HeldItemObservedAt=0;
+    double NextItemObservationAt=0;
+    FVector ItemLastSeenLocation=FVector::ZeroVector;
+    double ItemLastSeenAt=0;
+    FGameplayAbilitySpecHandle ItemAbilityHandle;
+    TWeakObjectPtr<UAbilitySystemComponent> ItemAbilitySystem;
+    FGuid ItemUseId;
+    bool bItemUseResolved=false;
+    bool bItemUseSucceeded=false;
+    FName ItemUseReason;
+    double NextItemOwnerRetryAt=0;
     UDeliveryTaskDefinition* GetCommandTask() const;
     ADeliveryPackageItem* GetCommandPackage() const;
     APawn* GetOwnerPackageCarrier() const;
     bool StartErrand(EDeliveryNpcAction Action,APlayerState* Requester,int32 ExpectedRevision,
-        UDeliveryTaskDefinition* ExpectedTask,ADeliveryPackageItem* ExpectedPackage);
+        UDeliveryTaskDefinition* ExpectedTask,ADeliveryPackageItem* ExpectedPackage,
+        EDeliveryCompanionTravelMode RequestedTravelMode=EDeliveryCompanionTravelMode::Unspecified);
     void FinishErrand(EDeliveryNpcActionStatus Status,FName Reason);
     void SetErrandPhase(EDeliveryCompanionErrandPhase Phase);
     void ReportErrandPause(FName Reason);
@@ -291,6 +362,15 @@ private:
     TWeakObjectPtr<UAbilitySystemComponent> BoundOwnerCombat;
     FDelegateHandle OwnerCombatHandle;
     TArray<FDeliveryNpcCompanionMemory> Memories;
+    // 只索引 Memories 中最多六条地点见闻，不保活地点，也不保存导航坐标
+    struct FRememberedPublicPlace
+    {
+        TWeakObjectPtr<UDeliveryLocationComponent> Location;
+        FGuid EventId;
+        double ObservedAt=0;
+    };
+    TArray<FRememberedPublicPlace> RememberedPublicPlaces;
+    double NextPublicPlaceObservationAt=0;
     // 当局去重不随模型最近 24 条记忆淘汰，旧事件重发不能再次加减关系
     TSet<FGuid> RecordedMemoryEvents;
     bool bReportedMemoryLimit=false;
@@ -336,6 +416,10 @@ private:
     bool bErrandVehicleApproachBudgetAdded=false;
     float ErrandInteractionSeconds=0;
     FName LastErrandPause;
+    // 只取消本次从主人车辆接货的交接，不影响后来开始的装卸
+    TWeakObjectPtr<ADeliveryMotorbike> ErrandCargoVehicle;
+    FGuid ErrandCargoHandoffId;
+    void CancelPackageHandoff();
     bool bErrandOwnsNavigation=false;
     bool bHasErrandDestination=false;
     TWeakObjectPtr<UDeliveryTaskManagerComponent> BoundTaskManager;

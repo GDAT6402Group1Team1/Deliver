@@ -21,6 +21,9 @@ public:
     // 收集范围内允许交互的目标，准星排序由玩家探测器负责
     void GetCandidates(const APawn* Seeker, EDeliveryInteractionKey Key,
         TArray<UDeliveryInteractableComponent*>& OutCandidates);
+    // 仅收集已登记的公开对象，感知者另行检查视线与物品能力
+    void GetRegisteredInRadius(const FVector& Origin,float Radius,
+        TArray<UDeliveryInteractableComponent*>& OutCandidates) const;
     UDeliveryInteractableComponent* FindNearest(const APawn* Seeker, EDeliveryInteractionKey Key);
 
 private:
