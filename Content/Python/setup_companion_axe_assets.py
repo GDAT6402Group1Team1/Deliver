@@ -71,6 +71,17 @@ def transform(value):
     return result
 
 
+def matching_grip_fields(actual, expected):
+    # UE 读回动画对象路径和欧拉角可能规范化，按同一个资产与角度比较
+    for key in ('npc_hand_socket', 'companion_can_fetch'):
+        if actual[key] != expected[key]:
+            return False
+    if (actual['npc_carry_animation'] or '').split('.', 1)[0] != (expected['npc_carry_animation'] or '').split('.', 1)[0]:
+        return False
+    return (all(math.isclose(a, b, abs_tol=.001) for a, b in zip(actual['npc_held_offset'], expected['npc_held_offset'])) and
+            all(abs((a-b+180.) % 360. - 180.) <= .001 for a, b in zip(actual['npc_held_rotation'], expected['npc_held_rotation'])))
+
+
 def main(mode='inspect', *, manifest_path=None, manifest_sha256=None):
     import unreal
     if mode not in ('inspect', 'retarget', 'configure', 'verify'):
@@ -97,7 +108,7 @@ def main(mode='inspect', *, manifest_path=None, manifest_sha256=None):
             raise RuntimeError('游戏世界存在，停止资源操作')
         dirty_maps = [path(p) for p in util.get_dirty_map_packages()]
         dirty_assets = [path(p) for p in util.get_dirty_content_packages()]
-        if dirty_maps or any(p not in allowed_dirty for p in dirty_assets):
+        if any(p not in allowed_dirty for p in dirty_maps+dirty_assets):
             raise RuntimeError('存在范围外未保存改动：'+str(dirty_maps+dirty_assets))
 
     def finish_assets():
@@ -322,18 +333,20 @@ def main(mode='inspect', *, manifest_path=None, manifest_sha256=None):
                         raise RuntimeError('斧头蓝图编译失败，未保存')
                     cdo = unreal.get_default_object(bp.generated_class())
                     after = item_snapshot(cdo)
-                    if after['fields'] != fields or after['preserved'] != report['cdo_before']['preserved']:
+                    report['cdo_after'] = after
+                    if not matching_grip_fields(after['fields'], fields) or after['preserved'] != report['cdo_before']['preserved']:
                         raise RuntimeError('读回出现范围外变化，未保存')
-                    guard((BP,))
+                    # 编译默认值会把已加载的地图实例标成待存，本步骤只保存斧头蓝图
+                    guard((BP, MAP))
                     helper.save_asset(bp)
                     report.update(cdo_after=after, saved_blueprint_sha256=sha(helper.asset_file(project, BP)), status='configured_needs_independent_reload_and_playtest')
                 else:
-                    if report['cdo_before']['fields'] != fields or report['placed_axe']['fields'] != fields:
+                    if not matching_grip_fields(report['cdo_before']['fields'], fields) or not matching_grip_fields(report['placed_axe']['fields'], fields):
                         raise RuntimeError('独立重载默认值或实例尚未使用本次配置')
                     if report['cdo_before']['preserved'] != manifest['before_cdo']['preserved'] or report['placed_axe']['preserved'] != manifest['before_placed_axe']['preserved']:
                         raise RuntimeError('独立重载发现玩家配置/尺寸/模型等保护字段变化')
                     report['status'] = 'verified_saved_configuration_not_gameplay'
-        guard()
+        guard((MAP,) if mode == 'configure' else ())
     except Exception as error:
         report.update(status='failed', error=repr(error))
         raise

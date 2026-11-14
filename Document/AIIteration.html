@@ -31,6 +31,9 @@
 <p>反馈记“在哪一步、说了什么或按了什么、实际发生什么”即可。初遇动画、真实物品交接、延迟和多人体验尚未完整验收；构建、静态审查与离线协议检查不替代这些结果。用户已授权提交当前试玩版，尚未授权推送。</p>
 <p>本机恢复后台使用 <code>Tools/DeliveryAI/start_backend.ps1 -SpeechEngine native -NativeSpeechRuntime D:/Udev/Delivery/Saved/AIResearch/NativeQwen/runtime-q8_0-kv1024.json -DisableLocalCombat -DialogueLog -StreamAudio -Port 8769 -PythonExecutable C:/Python314/python.exe</code>。原生声音权重、DLL 与该配置仍在本机 Saved；本次提交是工程回退点，不包含可移植模型包。语音输入运行库由 <code>Tools/DeliverySpeech/build_runtime.ps1</code> 和 <code>deploy_runtime.ps1</code> 准备，Binaries/ThirdParty/DeliverySpeech 不入库。</p></div>
 <section id="ergou-follow-riding-feedback-20261115"><h2>第二次试玩反馈：跟我走与骑自己的车</h2>
+<h3 id="ergou-axe-grip-stage-20261115">正式斧头握点与试玩</h3>
+<p>以 Quaternius 原有 Sword_Idle 经已有 IK 重定向得到 A_ErgouAxeIdle。导出正式 futou LOD0，用 40–50 cm 柄尾截面和 RightHandEnd 估计掌心，五个时刻检查实际斧头投影。正品 BP_Axe 针对二狗启用取物及可编辑的持握动画，仅改五个同伴字段。独立 NullRHI 进程从旧爷爷家门前实例读回，仍为原模型、0.2 尺寸及玩家挥斧配置。相关报告在 <code>Saved/AIResearch/CompanionItems/AxeAssets</code>，独立读回为 <code>20261114T194053820375Z/report.json</code>。第一次重定向命令被独占守门误认父 shell，改为独立进程。配置尝试处理了对象路径读回以及编译标记已加载地图待存，最终仅保存斧头蓝图，保护包哈希保持。上述投影与读回未覆盖游戏里的手指贴合和走路持握。</p>
+<p>用户本轮明确授权实机流程，分别点击两次 Play。正常按 R 一次召车、F 两次上下车，画面确认玩家坐上车辆并回到步行。点击接听时只有响铃与超时重拨日志，未达到 Task_001 已接听确认。40 次 W 短按未提供连续油门，未走到面馆和爷爷家。没有使用 RPC 或设置运行状态补造结果。尚未看到二狗接单后持续跟车、拿起斧头或操作家具，也未见完整第一单及多人结果。</p>
 <h3 id="ergou-continuous-bike-20261115">持续跟车、避障和鸣笛</h3>
 <p class="evidence">DeliveryEditor Win64 Development 先通过连续跟车构建（42 项，51.63 秒）。加入鸣笛后首次构建因参数名遮蔽 Driver 失败，改名后 13 项、18.00 秒通过。后台 67 项离线单测及 4 项鸣笛协议断言通过。进程重载后新 PID 56180 独占 8769，语音正常初始化，stderr 为空。新版未运行 PIE、真实模型或语音请求。新路段、提速、短鸣笛和多人同步待实机验证。</p>
 <p>03:17 这轮用户试玩确认二狗一度跟车，后来停下来，界面显示动作完成。日志里两次明确的骑车同行候选被接受，后续出现 CompanionVehicleFollowGroundMissing、CompanionVehicleFollowParkingBlocked 和 CompanionVehicleNoRoute。持续跟随仍由 BT 的默认同伴分支推进，短指令结束反馈及静默回执改为“已接下指令，持续跟随”。</p>
