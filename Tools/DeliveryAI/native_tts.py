@@ -42,7 +42,7 @@ def native_identities(config, runtime):
         value.pop('talker_mode', None)
         value.pop('predictor_mode', None)
         value.update(runtime='qwentts_cpp', source_commit=COMMIT,
-                     gguf_sha256=runtime['models'][voice]['sha256'],
+                     gguf_sha256=runtime['models']['male' if voice == 'ergou' else voice]['sha256'],
                      codec_sha256=runtime['models']['codec']['sha256'],
                      quantization=runtime['quantization'])
     return identities

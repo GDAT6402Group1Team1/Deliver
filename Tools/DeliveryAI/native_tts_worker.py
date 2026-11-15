@@ -17,6 +17,8 @@ from native_tts_engine import NativeVoiceEngines
 def warm_up_voices(engine, speakers, closed):
     """用一条短句准备首次解码，生成的声音留在进程内"""
     voices = ('male', 'female') if engine.voice_residency == 'both' else ('male',)
+    if 'ergou' in speakers:
+        voices += ('ergou',)
     for voice in voices:
         task = SimpleNamespace(task_id=f'warmup_{voice}', text='听得见吗？', voice=voice, speaker=speakers[voice],
                                cancel=threading.Event(), chunk_frames=8)

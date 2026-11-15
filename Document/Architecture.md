@@ -668,7 +668,9 @@ NPC 也可以通过动作回应玩家。无台词动作真正成功后，Agent �
 
 取消模型调用后，只有收到该轮的 `interrupted` 结束通知才保留 AppServer 进程，下一轮仍建立独立会话。取消未得到确认、超时或连接异常时关闭进程；旧轮次消息不会交给新的回复。四次真实取消对照中，保留进程省去了下一轮约 173–192 毫秒的启动时间。样本量很小，下一句的全部时间差不能都归因于进程复用。
 
-`SentenceParser` 收到完整 JSON 后，先检查候选动作和句子。第一个完整短句进入语音队列，轮到它时开始合成，后续文字继续生成。正式后台以 `-SpeechProvider qwen` 启动：大壮使用 Uncle_Fu，翠花使用用户选定的固定 B 音色。两套声音模型共用一个 GPU 合成队列，依次生成声音。可选 Windows 语音保留两个合成线程；外部 `DELIVERY_TTS_URL` 接口继续保留。
+`SentenceParser` 收到完整 JSON 后，先检查候选动作和句子。第一个完整短句进入语音队列，轮到它时开始合成，后续文字继续生成。正式后台以 `-SpeechProvider qwen` 启动。二狗的 `profile_id=ergou` 选用 Dylan，大壮使用 Uncle_Fu，两人共用 CustomVoice 模型。翠花使用 Base 模型的固定 B 音色。两套模型沿同一个 GPU 合成队列依次生成声音。可选 Windows 语音保留两个合成线程，外部 `DELIVERY_TTS_URL` 接口继续保留。人物的受击和笑声短录音由 VoiceSet 单独配置。
+
+连麦入口由 HUD 放在左下角。正式 `WBP_SpeechStatus` 只绘制麦克风和 `V`。麦克风关闭时有斜线，开启后显示蓝色，说话期间图标呼吸。点击或按 V 切换连麦，成功开启时收起文字对话框。控件只监听本机控制器的语音状态，准备、失败与会话繁忙的原因在悬停提示显示。图标源文件位于 `Design/Art/UI/Conversation`，运行 `Content/Python/create_conversation_widget.py --speech-status-only --replace-layout` 可重建这一个蓝图。
 
 若后续句子格式错误，已经检查通过的完整句子继续合成并发送，回复按实际句数结束。首句无效、超时或断线仍停止整轮。后端内部失败保留一次错误通知，玩家主动打断则丢弃旧内容；两种情况在发送前再次区分，避免已经生成的首句或失败原因无故消失。修复前后记录见[首句丢失与短反应音](AIIteration.html#reply-pipeline-repair)。
 

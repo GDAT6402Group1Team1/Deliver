@@ -12,9 +12,11 @@
 #include "Speech/DeliverySpeechInputComponent.h"
 #include "UI/DeliverySpeechStatusWidget.h"
 #include "Components/BoxComponent.h"
+#include "Components/Button.h"
+#include "Components/Image.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SceneComponent.h"
-#include "Components/TextBlock.h"
+#include "Components/WidgetSwitcher.h"
 #include "Character/DeliveryCharacter.h"
 #include "Vehicle/DeliveryCompanionMotorbike.h"
 #include "Vehicle/DeliveryMotorbike.h"
@@ -395,34 +397,35 @@ bool FDeliveryConversationVoiceKeyTest::RunTest(const FString&)
     TestTrue(TEXT("明确取消仍能结束当前输入"),Speech->IsVoiceReady() && Cancelled==3);
     Speech->OnTurnCancelled.Clear();
 
-    // 使用真实 Widget 刷新状态，验证识别阶段不会变成一份可见输入流程
+    // 使用真实 Widget 刷新状态，验证录音和收尾都沿用开启图标
     PC->Player=NewObject<ULocalPlayer>(GEngine);
     auto* Status=CreateWidget<UDeliverySpeechStatusWidget>(PC);
     if (!TestNotNull(TEXT("创建本机连麦状态界面"),Status)) return false;
-    Status->VoiceLabel=NewObject<UTextBlock>(Status);
-    Status->VoicePreview=NewObject<UTextBlock>(Status);
-    Status->VoiceDisableLabel=NewObject<UTextBlock>(Status);
+    Status->VoiceIcons=NewObject<UWidgetSwitcher>(Status);
+    Status->VoiceIcons->AddChild(NewObject<UImage>(Status));
+    Status->VoiceIcons->AddChild(NewObject<UImage>(Status));
+    Status->VoiceDisableButton=NewObject<UButton>(Status);
     Status->NativeConstruct();
-    // 通过组件关闭，清掉前面取消测试留下的状态文案并通知真实界面
+    // 通过组件关闭，清掉前面取消测试留下的状态并通知界面
     Speech->DisableVoice();
     Status->RefreshStatus();
-    TestTrue(TEXT("未打开文字面板也能发现连麦入口"),Status->GetVisibility()!=ESlateVisibility::Collapsed &&
-        Status->VoiceLabel->GetText().ToString()==TEXT("V 与二狗连麦") && Status->VoiceDisableLabel->GetText().ToString()==TEXT("连麦"));
+    TestTrue(TEXT("未打开文字面板也能看到关闭图标"),Status->GetVisibility()!=ESlateVisibility::Collapsed &&
+        Status->VoiceIcons->GetActiveWidgetIndex()==0);
     const auto UiGeneration=Speech->TurnState.BeginPreparation();
     Speech->TurnState.MarkReady(UiGeneration);
     Speech->TurnState.BeginCapture(FPlatformTime::Seconds(),Current);
+    Speech->bVoiceEnabled=true;
     Speech->PartialText=TEXT("只留在内部的识别草稿");
-    Status->VoicePreview->SetText(FText::FromString(Speech->PartialText));
     Status->RefreshStatus();
-    TestTrue(TEXT("说话时只显示连麦状态"),Status->VoiceLabel->GetText().ToString().Contains(TEXT("连麦中")));
-    TestTrue(TEXT("旧预览内容被清除并隐藏"),Status->VoicePreview->GetText().IsEmpty() &&
-        Status->VoicePreview->GetVisibility()==ESlateVisibility::Collapsed);
+    TestEqual(TEXT("说话时显示开启图标"),Status->VoiceIcons->GetActiveWidgetIndex(),1);
+    TestFalse(TEXT("悬停提示不公开识别草稿"),
+        Status->VoiceDisableButton->GetToolTipText().ToString().Contains(Speech->PartialText));
     Speech->TurnState.FinishCapture(Current,FPlatformTime::Seconds());
     Status->RefreshStatus();
-    TestTrue(TEXT("收尾不显示识别和按住发送流程"),Status->VoiceLabel->GetText().ToString().Contains(TEXT("连麦中")) &&
-        !Status->VoiceLabel->GetText().ToString().Contains(TEXT("识别")));
+    TestEqual(TEXT("语音收尾时仍显示开启图标"),Status->VoiceIcons->GetActiveWidgetIndex(),1);
+    Speech->DisableVoice();
+    TestEqual(TEXT("关闭通知恢复关闭图标"),Status->VoiceIcons->GetActiveWidgetIndex(),0);
     Status->NativeDestruct();
-    Speech->CancelHold();
     return true;
 }
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryConversationVoiceTargetTest,"Delivery.Speech.Conversation.VoiceTarget",

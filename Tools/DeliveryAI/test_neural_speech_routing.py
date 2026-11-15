@@ -26,15 +26,32 @@ class NeuralSpeechRoutingTests(unittest.TestCase):
         self.voices.stop()
         self.environment.stop()
 
-    def run_reply(self, text, source='player', voice='male'):
+    def run_reply(self, text, source='player', voice='male', profile_id=''):
         context = request()
-        context.update(persona=text, request_source=source, voice=voice)
+        context.update(persona=text, request_source=source, voice=voice, profile_id=profile_id)
         job = Job(context)
         def model(prompt, cancel, on_delta):
             on_delta(json.dumps({'candidate_index': 0, 'speech': text, 'emotion': 'Calm'}))
         with patch('streaming.stream_api', side_effect=model):
             streaming.run_job(job, 'llm', validate_action, None)
         return job
+
+    def test_ergou_uses_own_speaker_without_changing_other_profiles(self):
+        spoken = []
+
+        class Voice:
+            def synthesize(self, text, voice, emotion, cancel):
+                spoken.append(voice)
+                return b'\x01\x00' * 240, 24000
+
+            def close(self):
+                pass
+
+        with patch('streaming.QwenSpeechSynthesizer', return_value=Voice()):
+            self.run_reply('等我一下。', profile_id='ergou').completion.result(timeout=2)
+            self.run_reply('听我说。', profile_id='dazhuang').completion.result(timeout=2)
+            self.run_reply('我在这儿。', voice='female', profile_id='cuihua').completion.result(timeout=2)
+        self.assertEqual(spoken, ['ergou', 'male', 'female'])
 
     def test_player_sentence_precedes_waiting_chatter_and_reuses_one_model(self):
         started, release = threading.Event(), threading.Event()

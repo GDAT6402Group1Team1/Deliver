@@ -12,6 +12,11 @@
       "speaker": "Uncle_Fu",
       "review": "保留用户认可的 B 音色与生成参数"
     },
+    "ergou": {
+      "speaker": "Dylan",
+      "profile_id": "ergou",
+      "review": "使用同一 CustomVoice 模型的较年轻北京男声生成完整台词。正式接口已生成 Dylan 音频，用户在游戏中试听后确认可用"
+    },
     "female": {
       "speaker": "Xiaofang_B",
       "provider": "qwen_base",
@@ -34,7 +39,7 @@
       "accepted_sample": "Saved/AIResearch/FemaleVoiceIntegration/20261113T151516/runtime-trial-after-lf/xiaofang_clarification.wav",
       "accepted_accelerated_sample": "Saved/AIResearch/TtsEvaluation/qwen_voice_clone/results/20261113T040218056401Z/Xiaofang_B_clarification.wav"
     },
-    "limits": "男声保留已认可的 CustomVoice B，女声由 Base 复用项目合成参考，不复刻真人。当前未用情绪参数控制语调；完整台词与短反应录音分别配置"
+    "limits": "大壮使用已认可的 CustomVoice B，二狗复用该模型选择 Dylan。女声由 Base 复用项目合成参考。当前未用情绪参数控制语调。完整台词与短反应录音分别配置"
   },
   "voices": [
     {

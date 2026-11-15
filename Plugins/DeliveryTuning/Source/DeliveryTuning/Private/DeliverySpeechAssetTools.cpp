@@ -8,16 +8,16 @@
 #include "AssetToolsModule.h"
 #include "Blueprint/WidgetTree.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
-#include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/Image.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
+#include "Components/WidgetSwitcher.h"
 #include "Editor.h"
 #include "Engine/Font.h"
+#include "Engine/Texture2D.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "InputCoreTypes.h"
@@ -49,7 +49,6 @@ const FLinearColor White=Color(235,242,249);
 const FLinearColor Muted=Color(167,185,201);
 const FLinearColor Slate=Color(88,113,136);
 const FLinearColor Accent=Color(151,212,237);
-const FLinearColor Charcoal=Color(39,53,68,242);
 
 bool SaveAsset(UObject* Asset)
 {
@@ -167,7 +166,7 @@ void MakePulseAnimation(UWidgetBlueprint* Blueprint,UWidget* Dot)
     Blueprint->Animations.Add(Animation);
 }
 
-void BuildStatusLayout(UWidgetBlueprint* Blueprint,UFont* Font)
+void BuildStatusLayout(UWidgetBlueprint* Blueprint,UFont* Font,UTexture2D* MicOff,UTexture2D* MicOn)
 {
     Blueprint->Modify();
     if (Blueprint->WidgetTree)
@@ -175,64 +174,45 @@ void BuildStatusLayout(UWidgetBlueprint* Blueprint,UFont* Font)
     auto* Tree=NewObject<UWidgetTree>(Blueprint,TEXT("WidgetTree"),RF_Transactional);
     Blueprint->WidgetTree=Tree;
 
-    auto* Frame=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("SpeechStatusFrame"));
-    Frame->SetBrush(FSlateRoundedBoxBrush(Charcoal,10.f,Slate,1.f));
-    Frame->SetPadding(FMargin(12,10));
-    Tree->RootWidget=Frame;
-    auto* Width=Tree->ConstructWidget<USizeBox>(USizeBox::StaticClass(),TEXT("SpeechStatusWidth"));
-    Width->SetWidthOverride(316.f);
-    Frame->SetContent(Width);
-    auto* Stack=Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(),TEXT("SpeechStatusStack"));
-    Width->SetContent(Stack);
-    auto* Row=Tree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(),TEXT("SpeechStatusRow"));
-    Stack->AddChildToVerticalBox(Row);
-
-    auto* DotSize=Tree->ConstructWidget<USizeBox>();
-    DotSize->SetWidthOverride(8.f);
-    DotSize->SetHeightOverride(8.f);
-    auto* Dot=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("VoiceActivityDot"));
-    Dot->bIsVariable=true;
-    Dot->SetBrush(FSlateRoundedBoxBrush(Accent,4.f));
-    Dot->SetPadding(FMargin(0));
-    DotSize->SetContent(Dot);
-    Row->AddChildToHorizontalBox(DotSize)->SetVerticalAlignment(VAlign_Center);
-
-    auto* Label=MakeText(Tree,Font,TEXT("VoiceLabel"),TEXT("V 与二狗连麦"),14,White);
-    Label->bIsVariable=true;
-    auto* LabelSlot=Row->AddChildToHorizontalBox(Label);
-    LabelSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-    LabelSlot->SetPadding(FMargin(8,0));
-    LabelSlot->SetVerticalAlignment(VAlign_Center);
-
-    auto* Disable=Tree->ConstructWidget<UButton>(UButton::StaticClass(),TEXT("VoiceDisableButton"));
-    Disable->bIsVariable=true;
-    // UE 5.8 的 UButton 只公开可聚焦属性读取，编辑器把配置直接保存到正式 WBP
+    auto* Button=Tree->ConstructWidget<UButton>(UButton::StaticClass(),TEXT("VoiceDisableButton"));
+    Tree->RootWidget=Button;
+    Button->bIsVariable=true;
+    // 鼠标可点，键盘仍由原 V 映射处理
     if (auto* FocusProperty=FindFProperty<FBoolProperty>(UButton::StaticClass(),TEXT("IsFocusable")))
-        FocusProperty->SetPropertyValue_InContainer(Disable,false);
-    FButtonStyle Style=Disable->GetStyle();
-    Style.SetNormal(FSlateRoundedBoxBrush(Ink,6.f,Slate,1.f));
-    Style.SetHovered(FSlateRoundedBoxBrush(FMath::Lerp(Ink,Accent,.15f),6.f,Accent,1.f));
-    Style.SetPressed(FSlateRoundedBoxBrush(Ink*.78f,6.f,Accent,1.f));
-    Style.SetNormalPadding(FMargin(6,3));
-    Style.SetPressedPadding(FMargin(6,4,6,2));
-    Disable->SetStyle(Style);
-    auto* DisableLabel=MakeText(Tree,Font,TEXT("VoiceDisableLabel"),TEXT("连麦"),12,Accent);
-    DisableLabel->bIsVariable=true;
-    Disable->SetContent(DisableLabel);
-    Row->AddChildToHorizontalBox(Disable)->SetVerticalAlignment(VAlign_Center);
+        FocusProperty->SetPropertyValue_InContainer(Button,false);
+    FButtonStyle Style=Button->GetStyle();
+    Style.SetNormal(FSlateRoundedBoxBrush(Color(28,39,52,210),7.f));
+    Style.SetHovered(FSlateRoundedBoxBrush(FMath::Lerp(Ink,Accent,.15f),7.f,Slate,1.f));
+    Style.SetPressed(FSlateRoundedBoxBrush(Ink*.78f,7.f,Accent,1.f));
+    Style.SetNormalPadding(FMargin(6,4));
+    Style.SetPressedPadding(FMargin(6,4));
+    Button->SetStyle(Style);
 
-    auto* PreviewArea=Tree->ConstructWidget<USizeBox>(USizeBox::StaticClass(),TEXT("SpeechPreviewArea"));
-    PreviewArea->SetMaxDesiredHeight(60.f);
-    PreviewArea->SetVisibility(ESlateVisibility::Collapsed);
-    PreviewArea->SetClipping(EWidgetClipping::ClipToBounds);
-    auto* Preview=MakeText(Tree,Font,TEXT("VoicePreview"),TEXT(""),12,Muted);
-    Preview->bIsVariable=true;
-    Preview->SetAutoWrapText(true);
-    Preview->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
-    Preview->SetVisibility(ESlateVisibility::Collapsed);
-    PreviewArea->SetContent(Preview);
-    Stack->AddChildToVerticalBox(PreviewArea)->SetPadding(FMargin(0,6,0,0));
-    MakePulseAnimation(Blueprint,Dot);
+    auto* Row=Tree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(),TEXT("SpeechStatusRow"));
+    Button->SetContent(Row);
+    auto* IconSize=Tree->ConstructWidget<USizeBox>(USizeBox::StaticClass(),TEXT("VoiceIconSize"));
+    IconSize->SetWidthOverride(24.f);
+    IconSize->SetHeightOverride(24.f);
+    Row->AddChildToHorizontalBox(IconSize)->SetVerticalAlignment(VAlign_Center);
+    auto* Icons=Tree->ConstructWidget<UWidgetSwitcher>(UWidgetSwitcher::StaticClass(),TEXT("VoiceIcons"));
+    Icons->bIsVariable=true;
+    IconSize->SetContent(Icons);
+
+    auto* OffIcon=Tree->ConstructWidget<UImage>(UImage::StaticClass(),TEXT("MicOffIcon"));
+    OffIcon->SetBrushFromTexture(MicOff);
+    OffIcon->SetColorAndOpacity(Muted);
+    Icons->AddChild(OffIcon);
+    auto* OnIcon=Tree->ConstructWidget<UImage>(UImage::StaticClass(),TEXT("MicOnIcon"));
+    OnIcon->SetBrushFromTexture(MicOn);
+    OnIcon->SetColorAndOpacity(Accent);
+    Icons->AddChild(OnIcon);
+    Icons->SetActiveWidgetIndex(0);
+
+    auto* Key=MakeText(Tree,Font,TEXT("SpeechToggleKey"),TEXT("V"),14,White);
+    auto* KeySlot=Row->AddChildToHorizontalBox(Key);
+    KeySlot->SetPadding(FMargin(3,0,2,0));
+    KeySlot->SetVerticalAlignment(VAlign_Center);
+    MakePulseAnimation(Blueprint,Icons);
 
     TSet<FName> VariableNames;
     Blueprint->ForEachSourceWidget([Blueprint,&VariableNames](UWidget* Widget)
@@ -270,6 +250,10 @@ FString UDeliverySpeechAssetTools::CreateSpeechAssets(bool bReplaceLayout)
     if (Blueprint && !bReplaceLayout)
         return TEXT("Speech input assets ready; status layout already exists, kept editor changes");
 
+    auto* MicOff=LoadObject<UTexture2D>(nullptr,TEXT("/Game/UI/Conversation/T_MicOff.T_MicOff"));
+    auto* MicOn=LoadObject<UTexture2D>(nullptr,TEXT("/Game/UI/Conversation/T_MicOn.T_MicOn"));
+    if (!MicOff || !MicOn) return TEXT("Import T_MicOff and T_MicOn before creating the speech status widget");
+
     if (!Blueprint)
     {
         auto* Factory=NewObject<UWidgetBlueprintFactory>();
@@ -278,7 +262,7 @@ FString UDeliverySpeechAssetTools::CreateSpeechAssets(bool bReplaceLayout)
             SpeechBlueprintName,SpeechFolder,UWidgetBlueprint::StaticClass(),Factory));
     }
     if (!Blueprint) return TEXT("Speech status blueprint creation failed");
-    BuildStatusLayout(Blueprint,Font);
+    BuildStatusLayout(Blueprint,Font,MicOff,MicOn);
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
     FKismetEditorUtilities::CompileBlueprint(Blueprint,EBlueprintCompileOptions::SkipSave);
     if (Blueprint->Status==BS_Error) return TEXT("Speech status blueprint compilation failed");

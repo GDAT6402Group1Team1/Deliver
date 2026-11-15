@@ -2947,6 +2947,11 @@ for label, first, last, clock in [
 </section>
 <section id="player-speech-input-20261114">
 <h2>2026-11-14：本机玩家语音与发送反馈</h2>
+<h3 id="ergou-dylan-mic">2026-11-15 二狗音色与连麦入口</h3>
+<p>用户反馈二狗听着太老，改用同一 Qwen CustomVoice 模型的 Dylan 预设。更新音色配置时，仍在监听的旧后端用旧校验读到新增的二狗配置，游戏请求因此被拒。以现有 Luna、native Qwen 和分段音频参数重新启动 8769 服务后，正式接口各生成一份二狗、大壮和翠花的音频，日志分别记录 Dylan、Uncle_Fu 和 Xiaofang_B。实际试玩请求 <code>b5edbd9c-4cbf-8f56-e662-38ba600498f5</code> 随后也返回 Dylan，UE 日志记录批准与一段语音完成。用户在游戏里试听后确认音色可用。</p>
+<p><code>python -m unittest discover -s Tools/DeliveryAI -p 'test_neural*.py'</code> 通过 70 项，<code>test_streaming*.py</code> 通过 40 项。短反应录音继续由原 VoiceSet 提供。</p>
+<p>麦克风控件在独立工程中保存并重新加载，<code>Delivery.Speech.Conversation.KeyOwnership</code> 通过。首次独立构建遗漏识别头文件的包含路径，补齐同一头文件后构建通过。随后在正式工程以 UE 5.8 构建 <code>DeliveryEditor Win64 Development</code>，把麦克风界面与同伴停手、倒地对话改动一起编译，46 项构建动作共 80.23 秒，结果为 Succeeded。日志为 <code>Saved/Logs/DeliverySpeechAssistCombinedBuild.log</code>，有既有的载物接口弃用警告。按用户要求直接交试玩，跳过本轮实际按键及同伴行为验收。</p>
+
 <h3>2026-11-15：用户确认连麦可用，上下车连续性修复</h3>
 <p>用户已实际验证与二狗连麦成功，随后发现上车必须重新连接。源码定位到本机 Speech.SessionPawn、Conversation.LocalVoicePawn 及服务器轮次 PawnAtBegin 都严格比较当前受控 Pawn；正常上车将控制权交给车辆，因此被误判为身份切换。Agent 倾听还以旧 Pawn 与现场 900 cm 检查，会使远处或切换后的回复被取消。</p>
 <p>复用项目已有车辆控制关系，保存同一 PC、PlayerState 与原人物；合法上下车不重建麦克风、AEC 或识别器。客户端复制空窗最多等待 2 秒，保留当前句子和原超时，完整身份恢复后才提交最终文字。服务器按原人物与实际驾驶关系校验，不把短暂等待当作授权豁免；普通文字对话不扩大换 Pawn 权限。新增无音频设备的身份、轮次与远程倾听回归，使用真实 Possess 并构造 Driver/附着字段，仅验证控制关系，不代表真实按键上车、录音或听感通过。当前等待统一构建与用户新一轮实机验收，不能沿用此前构建记录声称本次已验证。</p>

@@ -40,6 +40,13 @@ def uses_neural_speech(voice):
     return uses_neural_voice(voice)
 
 
+def reply_speech_voice(context):
+    voice = context.get('voice', 'male')
+    if voice == 'male' and context.get('profile_id') == 'ergou' and uses_neural_speech('ergou'):
+        return 'ergou'
+    return voice
+
+
 def neural_speech_queue():
     global _neural_speech_pool
     with _resource_lock:
@@ -568,7 +575,7 @@ def run_job(job, provider, validate, fallback):
         try:
             if job.cancel.is_set():
                 return
-            neural = uses_neural_speech(job.context.get('voice', 'male'))
+            neural = uses_neural_speech(voice)
             synth = neural_speech_synthesizer() if neural else speech_synthesizer()
             stream_requested = (neural and job.context.get('speech_transport') == 'pcm_chunks_v1'
                                 and os.environ.get('DELIVERY_AI_STREAM_AUDIO') == '1')
@@ -589,7 +596,7 @@ def run_job(job, provider, validate, fallback):
                     chunk_count += 1
                     total_bytes += len(pcm)
                 received_bytes, rate = synth.synthesize_stream(
-                    sentence['text'], job.context.get('voice', 'male'), sentence['emotion'], job.cancel, on_chunk)
+                    sentence['text'], voice, sentence['emotion'], job.cancel, on_chunk)
                 if received_bytes != total_bytes or rate != 24000:
                     raise ValueError('speech_stream_size_mismatch')
                 if job.cancel.is_set():
@@ -605,7 +612,7 @@ def run_job(job, provider, validate, fallback):
                       job.context.get('speech_transport') != 'pcm_chunks_v1' else
                       'disabled' if not stream_requested else 'worker_unsupported')
             report_transport('sentence', reason)
-            pcm, rate = synth.synthesize(sentence['text'], job.context.get('voice', 'male'), sentence['emotion'], job.cancel)
+            pcm, rate = synth.synthesize(sentence['text'], voice, sentence['emotion'], job.cancel)
             if job.cancel.is_set():
                 return
             job.emit('sentence', **sentence, pcm=base64.b64encode(pcm).decode(), sample_rate=rate)
@@ -635,7 +642,7 @@ def run_job(job, provider, validate, fallback):
                 print(f"latency request={job.key[2]} stage=first_sentence elapsed_ms={int((time.monotonic()-job.created)*1000)}", flush=True)
                 first_sentence = False
             queued_at = time.monotonic()
-            if uses_neural_speech(job.context.get('voice', 'male')):
+            if uses_neural_speech(voice):
                 # 完整句子直接进入优先队列，避免先排在旧语音线程后面
                 future = neural_speech_queue().submit(synthesize, data, queued_at,
                                                       priority=job.priority, cancel=job.cancel)
@@ -651,7 +658,8 @@ def run_job(job, provider, validate, fallback):
     model = provider
     speech_reservation = None
     try:
-        if job.priority == 0 and uses_neural_speech(job.context.get('voice', 'male')):
+        voice = reply_speech_voice(job.context)
+        if job.priority == 0 and uses_neural_speech(voice):
             speech_reservation = neural_speech_queue().reserve_player(cancel=job.cancel)
         context = model_context(job.context)
         message = context['current_player_message']

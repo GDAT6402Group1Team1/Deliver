@@ -6,9 +6,9 @@
 
 class UDeliverySpeechInputComponent;
 class UDeliveryConversationComponent;
-class UTextBlock;
 class UButton;
 class UWidgetAnimation;
+class UWidgetSwitcher;
 
 // HUD 创建本机语音状态蓝图，麦克风开启期间持续显示，控件树和呼吸动画由蓝图保存
 UCLASS()
@@ -25,16 +25,10 @@ protected:
     virtual void NativeDestruct() override;
 
     UPROPERTY(meta=(BindWidgetOptional))
-    TObjectPtr<UTextBlock> VoiceLabel;
-
-    UPROPERTY(meta=(BindWidgetOptional))
-    TObjectPtr<UTextBlock> VoicePreview;
+    TObjectPtr<UWidgetSwitcher> VoiceIcons;
 
     UPROPERTY(meta=(BindWidgetOptional))
     TObjectPtr<UButton> VoiceDisableButton;
-
-    UPROPERTY(meta=(BindWidgetOptional))
-    TObjectPtr<UTextBlock> VoiceDisableLabel;
 
     UPROPERTY(Transient, meta=(BindWidgetAnimOptional))
     TObjectPtr<UWidgetAnimation> VoiceStatusPulse;

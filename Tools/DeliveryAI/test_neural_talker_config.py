@@ -64,7 +64,7 @@ class NeuralTalkerConfigTests(unittest.TestCase):
         with talker_generation(SimpleNamespace(config={})):
             pass
 
-    def test_graph_startup_warms_both_voices_before_returning(self):
+    def test_graph_startup_warms_all_configured_voices_before_returning(self):
         with patch.dict(os.environ, {}, clear=True):
             config = load_voice_config()
         calls = []
@@ -78,7 +78,7 @@ class NeuralTalkerConfigTests(unittest.TestCase):
             return {'type': 'audio_end'}
         fake = SimpleNamespace(synthesize=synthesize)
         for mode, startup_check, expected in (('official', False, []), ('cuda_graph', True, []),
-                                               ('cuda_graph', False, ['male', 'female'])):
+                                               ('cuda_graph', False, ['male', 'ergou', 'female'])):
             with self.subTest(mode=mode, startup_check=startup_check):
                 config['talker_mode'] = mode
                 calls.clear()

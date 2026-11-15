@@ -481,7 +481,7 @@ class QwenCloneEngine:
 
 
 class QwenVoiceEngines:
-    """两类声音共用现有单任务队列，轮到哪位 NPC 就使用已加载的对应模型"""
+    """预设与参考音色共用现有单任务队列"""
     def __init__(self, config, closed, check_startup=False):
         self.custom = QwenEngine(config, closed, check_startup=check_startup)
         self.identities = neural_voice_identities(config)
@@ -493,7 +493,8 @@ class QwenVoiceEngines:
 
     def warm_voices(self, closed):
         """准备完成前各生成一句，声音只用于预热，不发送给游戏"""
-        lines = {'male': '翠花，你别急，先听我把话说完。', 'female': '哎，你找我什么事？'}
+        lines = {'male': '翠花，你别急，先听我把话说完。', 'female': '哎，你找我什么事？',
+                 'ergou': '大哥，你等我一下。'}
         for voice in self.engines:
             check_cancel(closed, closed, float('inf'))
             started = time.monotonic()

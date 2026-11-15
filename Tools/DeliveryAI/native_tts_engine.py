@@ -78,7 +78,9 @@ class NativeVoiceEngines:
             if voice == 'male':
                 speakers = {self.api.qt_speaker_name(handle, i).decode('utf-8').lower()
                             for i in range(self.api.qt_n_speakers(handle))}
-                if self.config['voices']['male']['speaker'].lower() not in speakers:
+                custom_speakers = {entry['speaker'].lower() for entry in self.config['voices'].values()
+                                   if entry.get('provider') == 'qwen'}
+                if not custom_speakers <= speakers:
                     raise NeuralTtsError('native_tts_speaker_missing')
         except BaseException:
             self.api.qt_free(handle)
@@ -97,6 +99,9 @@ class NativeVoiceEngines:
         check()
         if self._closed:
             raise NeuralTtsError('cancelled')
+        # 二狗和大壮共用预设音色模型，单独选择音色，避免换人时重载模型
+        if voice == 'ergou':
+            voice = 'male'
         if voice not in ('male', 'female'):
             raise NeuralTtsError('native_tts_unknown_voice')
         if voice not in self.contexts:
@@ -193,7 +198,7 @@ class NativeVoiceEngines:
         params.top_k = params.subtalker_top_k = 50
         params.top_p = params.subtalker_top_p = 1
         params.repetition_penalty = 1.05
-        if task.voice == 'male':
+        if task.voice in ('male', 'ergou'):
             params.speaker = task.speaker.lower().encode('utf-8')
         else:
             params.ref_spk_emb, params.ref_spk_dim = self.reference.ref_spk_emb, self.reference.ref_spk_dim

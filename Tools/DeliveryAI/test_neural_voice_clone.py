@@ -130,7 +130,7 @@ class NeuralVoiceCloneTests(unittest.TestCase):
     def test_config_selects_base_without_changing_male_and_rejects_invalid_fields(self):
         config = load_voice_config(self.config_path)
         self.assertEqual(config['voices']['male'], {'provider': 'qwen', 'speaker': 'Uncle_Fu'})
-        self.assertEqual(neural_voice_speakers(config), {'male': 'Uncle_Fu', 'female': 'Xiaofang_B'})
+        self.assertEqual(neural_voice_speakers(config), {'male': 'Uncle_Fu', 'female': 'Xiaofang_B', 'ergou': 'Dylan'})
         with patch('neural_tts.load_voice_config', return_value=config), patch.dict('os.environ', {'DELIVERY_TTS_PROVIDER':'qwen'}):
             self.assertTrue(uses_neural_voice('female'))
         for key, bad in (('reference_sha256', 'wrong'), ('model_revision', True),

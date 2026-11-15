@@ -57,8 +57,9 @@ def load_voice_config(config_path=None):
         raise NeuralTtsError('neural_tts_invalid_talker_mode')
     config['talker_mode'] = talker_mode
     voices = config.get('voices')
-    if (not isinstance(voices, dict) or set(voices) != {'male', 'female'}
-            or voices['male'] != {'provider': 'qwen', 'speaker': 'Uncle_Fu'}):
+    if (not isinstance(voices, dict) or set(voices) not in ({'male', 'female'}, {'male', 'female', 'ergou'})
+            or voices['male'] != {'provider': 'qwen', 'speaker': 'Uncle_Fu'}
+            or ('ergou' in voices and voices['ergou'] != {'provider': 'qwen', 'speaker': 'Dylan'})):
         raise NeuralTtsError('neural_tts_invalid_voices')
     female = voices['female']
     if isinstance(female, dict) and female.get('provider') == 'qwen_base':

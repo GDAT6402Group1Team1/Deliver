@@ -10,6 +10,10 @@
       "provider": "qwen",
       "speaker": "Uncle_Fu"
     },
+    "ergou": {
+      "provider": "qwen",
+      "speaker": "Dylan"
+    },
     "female": {
       "provider": "qwen_base",
       "speaker": "Xiaofang_B",
