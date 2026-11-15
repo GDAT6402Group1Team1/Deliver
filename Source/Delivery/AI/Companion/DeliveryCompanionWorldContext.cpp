@@ -1,5 +1,7 @@
 #include "AI/Companion/DeliveryCompanionComponent.h"
 #include "AI/Companion/DeliveryCompanionCharacter.h"
+#include "AI/Characters/DeliveryNpcProfile.h"
+#include "AI/Conversation/DeliveryConversationTurnSubsystem.h"
 #include "World/DeliveryLocationComponent.h"
 #include "World/DeliveryLocationRegistry.h"
 #include "AIController.h"
@@ -14,6 +16,8 @@ namespace
 constexpr int32 MaxObservedPlaces=8;
 constexpr int32 MaxPlaceSightQueries=32;
 constexpr float MaxPlaceObservationRadius=3000;
+constexpr int32 MaxRememberedNeighborLines=4;
+const FName NeighborLineMemoryKind(TEXT("NeighborSaidDirectly"));
 
 FString PublicPlaceText(const FText& Value,int32 Limit)
 {
@@ -128,4 +132,60 @@ void UDeliveryCompanionComponent::ExtendWorldDecisionRequest(FDeliveryNpcDecisio
     CollectObservedPlaces(Observed);
     Request.CompanionObservedPlaces.Reset();
     for (auto& Place:Observed) Request.CompanionObservedPlaces.Add(MoveTemp(Place.View));
+}
+
+void UDeliveryCompanionComponent::RecordDeliveredNeighborLine(const FDeliveryNpcMessageHandle& Handle)
+{
+    const auto* Npc=GetCompanion();
+    const auto* World=GetWorld();
+    if (!IsValid(Npc) || !Npc->HasAuthority() || !World || Npc->GetWorld()!=World || Npc->IsHidden() || Npc->IsKnockedDown() ||
+        Npc->GetEncounterState().Phase!=EDeliveryCompanionEncounterPhase::Joined || !CanCommand(OwnerPlayerState) ||
+        RecordedMemoryEvents.Contains(Handle.MessageId)) return;
+    const auto* Turns=World->GetSubsystem<UDeliveryConversationTurnSubsystem>();
+    FDeliveryNpcMessage Message;
+    // 重新取已送达的原记录，核对同一世界代次和接收者，预备消息不能写进当局记忆
+    if (!Turns || !Turns->GetNpcMessage(Handle,Npc,Message)) return;
+    auto* Speaker=Message.Sender.Get();
+    if (!IsValid(Speaker) || Speaker==Npc || Speaker->GetWorld()!=World || Speaker->IsHidden() ||
+        Speaker->IsA<ADeliveryCompanionCharacter>() || !Speaker->Profile.DataTable || Speaker->Profile.RowName.IsNone()) return;
+    const auto* Profile=Speaker->Profile.DataTable->FindRow<FDeliveryNpcProfileRow>(Speaker->Profile.RowName,TEXT("CompanionNeighborLine"),false);
+    if (!Profile || Profile->DisplayName.IsEmpty()) return;
+    const FString Name=PublicPlaceText(Speaker->DisplayName,48);
+    if (Name.IsEmpty() || Name==TEXT("居民")) return;
+
+    const FString Prefix=FString::Printf(TEXT("街坊%s当时直接对我说：「"),*Name);
+    const FString Suffix=TEXT("」；这是他的说法，内容未经证实");
+    FString Quote=Message.Text.Left(256-Prefix.Len()-Suffix.Len());
+    // 按记忆长度截取时保留完整的 UTF-16 代理对
+    if (!Quote.IsEmpty() && Quote[Quote.Len()-1]>=0xD800 && Quote[Quote.Len()-1]<=0xDBFF) Quote.LeftChopInline(1);
+    for (TCHAR& Character:Quote)
+        if (Character<32 || Character==127) Character=TEXT(' ');
+    Quote.TrimStartAndEndInline();
+    if (Quote.IsEmpty()) return;
+
+    const auto FindMemory=[this](FGuid MessageId)
+    {
+        return Memories.IndexOfByPredicate([MessageId](const FDeliveryNpcCompanionMemory& Memory)
+        { return Memory.EventId==MessageId && Memory.Kind==NeighborLineMemoryKind; });
+    };
+    RememberedNeighborLines.RemoveAll([&](const FRememberedNeighborLine& Line){ return FindMemory(Line.MessageId)==INDEX_NONE; });
+    int32 ReplaceIndex=RememberedNeighborLines.IndexOfByPredicate([Speaker](const FRememberedNeighborLine& Line)
+    { return Line.Speaker.Get()==Speaker; });
+    if (ReplaceIndex==INDEX_NONE && RememberedNeighborLines.Num()>=MaxRememberedNeighborLines) ReplaceIndex=0;
+    FDeliveryNpcCompanionMemory Previous;
+    int32 PreviousIndex=INDEX_NONE;
+    if (ReplaceIndex!=INDEX_NONE)
+    {
+        PreviousIndex=FindMemory(RememberedNeighborLines[ReplaceIndex].MessageId);
+        Previous=MoveTemp(Memories[PreviousIndex]);
+        Memories.RemoveAt(PreviousIndex);
+    }
+    // 同一街坊只换最近一句，替换失败保留旧记录；真实消息编号沿原当局规则去重
+    if (!RecordMemory(Handle.MessageId,NeighborLineMemoryKind,Prefix+Quote+Suffix,0))
+    {
+        if (PreviousIndex!=INDEX_NONE) Memories.Insert(MoveTemp(Previous),PreviousIndex);
+        return;
+    }
+    if (ReplaceIndex!=INDEX_NONE) RememberedNeighborLines.RemoveAt(ReplaceIndex);
+    RememberedNeighborLines.Add({Speaker,Handle.MessageId});
 }

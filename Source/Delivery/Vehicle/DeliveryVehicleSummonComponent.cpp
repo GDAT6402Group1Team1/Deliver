@@ -8,9 +8,31 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
+#include "Inventory/DeliveryPackageItem.h"
 #include "Net/UnrealNetwork.h"
+#include "Task/Data/DeliveryTaskDefinition.h"
+#include "Task/DeliveryTaskManagerComponent.h"
+#include "Task/World/DeliveryItemComponent.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Vehicle/DeliveryTrunkPassengerComponent.h"
+
+namespace
+{
+bool CarriesRegisteredPlayerPackage(const ADeliveryMotorbike* Bike, const APlayerState* Player)
+{
+    if (!IsValid(Bike) || Bike->IsActorBeingDestroyed() || Bike->GetWorld()!=Player->GetWorld() ||
+        !Bike->CanBeUsedByPlayers() || Bike->GetRegisteredPlayer()!=Player || Bike->GetCargoPlayerState()!=Player)
+        return false;
+
+    const auto* Package=Bike->GetCargo();
+    if (!IsValid(Package) || Package->IsActorBeingDestroyed() || Package->GetWorld()!=Bike->GetWorld() ||
+        Package->GetOwner()!=Bike) return false;
+    const auto* Item=Package->GetDeliveryItemComponent();
+    const auto* Task=IsValid(Item)?Item->OwningTask.Get():nullptr;
+    const auto* Tasks=UDeliveryTaskManagerComponent::Get(Bike);
+    return IsValid(Task) && Tasks && Tasks->GetActiveTask()==Task;
+}
+}
 
 UDeliveryVehicleSummonComponent::UDeliveryVehicleSummonComponent()
 {
@@ -38,7 +60,11 @@ void UDeliveryVehicleSummonComponent::RegisterVehicle(ADeliveryMotorbike* Bike)
         Bike->GetWorld() != GetWorld() || !Bike->CanBeUsedByPlayers() || !IsValid(Player) ||
         Player->IsInactive() || Player->GetWorld() != GetWorld()) return;
     Bike->RegisterPlayerUse(Player);
-    if (Bike->GetRegisteredPlayer() == Player) RegisteredVehicle = Bike;
+    if (Bike->GetRegisteredPlayer() != Player) return;
+    RegisteredVehicle = Bike;
+    // 玩家改骑空车时保留仍有原订单实物的车，卸下后直接按实物状态失效
+    if (!CarriesRegisteredPlayerPackage(RegisteredCargoVehicle.Get(),Player) && CarriesRegisteredPlayerPackage(Bike,Player))
+        RegisteredCargoVehicle = Bike;
 }
 
 ADeliveryMotorbike* UDeliveryVehicleSummonComponent::GetRegisteredVehicle() const
@@ -49,6 +75,16 @@ ADeliveryMotorbike* UDeliveryVehicleSummonComponent::GetRegisteredVehicle() cons
     return IsValid(Player) && !Player->IsInactive() && Player->GetWorld() == GetWorld() &&
         IsValid(Bike) && !Bike->IsActorBeingDestroyed() && Bike->GetWorld() == GetWorld() &&
         Bike->CanBeUsedByPlayers() && Bike->GetRegisteredPlayer() == Player ? Bike : nullptr;
+}
+
+ADeliveryMotorbike* UDeliveryVehicleSummonComponent::GetRegisteredCargoVehicle() const
+{
+    const auto* Character=Cast<ADeliveryCharacter>(GetOwner());
+    const auto* Player=IsValid(Character)?Character->GetTaskPlayerState():nullptr;
+    if (!IsValid(Player) || Player->IsInactive() || Player->GetWorld()!=GetWorld()) return nullptr;
+    if (auto* CargoBike=RegisteredCargoVehicle.Get(); CarriesRegisteredPlayerPackage(CargoBike,Player)) return CargoBike;
+    auto* RecentBike=RegisteredVehicle.Get();
+    return CarriesRegisteredPlayerPackage(RecentBike,Player)?RecentBike:nullptr;
 }
 
 float UDeliveryVehicleSummonComponent::GetCooldownRemaining() const

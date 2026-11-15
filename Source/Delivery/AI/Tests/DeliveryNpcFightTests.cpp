@@ -1,10 +1,13 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
+#include "AbilitySystem/DeliverAbilitySystemComponent.h"
+#include "AbilitySystem/DeliverAttributeSet.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Characters/DeliveryNpcAIController.h"
+#include "AI/Conversation/DeliveryConversationTurnSubsystem.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
 #include "AI/Network/DeliveryAiSettings.h"
@@ -13,12 +16,16 @@
 #include "Components/AudioComponent.h"
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
+#include "Character/DeliveryCharacter.h"
 #include "Components/BoxComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/WorldSettings.h"
+#include "Player/DeliverPlayerState.h"
+#include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "UObject/StrongObjectPtr.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcFightTest,"Delivery.AI.Fight",
@@ -105,17 +112,20 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
                 Case.FinishedAt=World->GetTimeSeconds();
         }
     };
-    const auto Begin=[&](FCase& Case,EDeliveryNpcAction Kind,float Duration=5.f)
+    const auto Begin=[&](FCase& Case,EDeliveryNpcAction Kind,float Duration=5.f,const TCHAR* AmbientSpeech=nullptr,
+        AActor* ActionTarget=nullptr)
     {
         if (!Case.Tree) return false;
         if (Case.Task) Case.Task->OnTaskFinished(*Case.Tree,nullptr,EBTNodeResult::Succeeded);
         Case.Attacker->Agent->CancelPlan(TEXT("NextFightTest"));
-        Case.Attacker->ObserveFact(TEXT("SeenNpc"),Case.Target,TEXT("对方就在面前"),EDeliveryNpcEvidenceSource::Seen);
+        if (!ActionTarget) ActionTarget=Case.Target;
+        const FName SeenKind=Cast<ADeliveryCharacter>(ActionTarget)?TEXT("SeenPlayer"):TEXT("SeenNpc");
+        Case.Attacker->ObserveFact(SeenKind,ActionTarget,TEXT("对方就在面前"),EDeliveryNpcEvidenceSource::Seen);
         FDeliveryNpcDecisionRequest Request;
         if (!Case.Attacker->Agent->BuildDecisionRequest(World->GetSubsystem<UDeliveryAiGatewaySubsystem>()->GetWorldEpoch(),Request)) return false;
         const auto* Candidate=Request.Candidates.FindByPredicate([&](const auto& Item)
         {
-            return Item.Action==Kind && Case.Attacker->Agent->KnownSubjects.FindRef(Item.TargetId).Get()==Case.Target;
+            return Item.Action==Kind && Case.Attacker->Agent->KnownSubjects.FindRef(Item.TargetId).Get()==ActionTarget;
         });
         if (!Candidate) return false;
         // 使用真实候选与回复校验，仅替代传输层，不启用后台或发送 HTTP
@@ -126,6 +136,12 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
         Proposal.ContextRevision=Request.ContextRevision; Proposal.PlanRevision=Request.PlanRevision;
         Proposal.Action=Candidate->Action; Proposal.TargetId=Candidate->TargetId; Proposal.EvidenceIds=Candidate->EvidenceIds;
         Proposal.Duration=Duration; Proposal.Emotion=TEXT("Angry");
+        if (AmbientSpeech)
+        {
+            Proposal.Speech=AmbientSpeech;
+            Proposal.bHasSpeechTarget=true;
+            Proposal.SpeechTargetId=Candidate->TargetId;
+        }
         Case.Attacker->Agent->ReceiveDecision(Request.RequestId,&Proposal,NAME_None);
         if (Case.Attacker->Agent->GetPublicState().Status!=EDeliveryNpcActionStatus::Accepted) return false;
         Case.ActionId=Case.Attacker->Agent->GetPublicState().ActionId;
@@ -244,7 +260,12 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
     Close(Main);
 
     auto Pair=SpawnCase(); Tick(Pair,.2f);
-    if (!TestTrue(TEXT("双方交战先由一人开始"),Begin(Pair,EDeliveryNpcAction::Fight))) return false;
+    if (!TestTrue(TEXT("双方交战先由一人开始"),Begin(Pair,EDeliveryNpcAction::Fight,5.f,
+        TEXT("等一等，等我把话说完！你刚才从街那头走过来，到现在都没给我一个说法。")))) return false;
+    auto* Turns=World->GetSubsystem<UDeliveryConversationTurnSubsystem>();
+    const FGuid FightingReply=Pair.Attacker->Agent->GetPublicState().GetReplyId();
+    if (!TestTrue(TEXT("先开始一条系统跟踪的战斗台词"),Turns && Turns->IsNpcReplyValid(FightingReply) &&
+        Pair.Attacker->Presentation->GetSpeech().bActive)) return false;
     Tick(Pair,.44f);
     FCase Reply;
     Reply.Attacker=Pair.Target; Reply.Target=Pair.Attacker;
@@ -254,13 +275,17 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
     if (!TestTrue(TEXT("受轻拳后仍能接受自己的交战决定"),Begin(Reply,EDeliveryNpcAction::Fight))) return false;
     bool bKeptFightAfterHit=false;
     bool bPunchedAgainAfterHit=false;
+    bool bSpeechInterruptedByHit=false;
     int32 PunchesWhenHit=INDEX_NONE;
     for (int32 Step=0;Step<270;++Step)
     {
+        const bool bSpeechWasActive=Pair.Attacker->Presentation->GetSpeech().bActive && Turns->IsNpcReplyValid(FightingReply);
         Tick(Pair,.02f);
         if (Reply.Attacker->Agent->GetPublicState().Status==EDeliveryNpcActionStatus::Running)
             Reply.Task->TickTask(*Reply.Tree,nullptr,.02f);
         const auto State=Pair.Attacker->Agent->GetPublicState();
+        bSpeechInterruptedByHit|=bSpeechWasActive && Pair.Attacker->Combat->IsReactingToHit() &&
+            !Turns->IsNpcReplyValid(FightingReply) && !Pair.Attacker->Presentation->GetSpeech().bActive;
         if (Pair.Attacker->Combat->IsReactingToHit() && State.ActionId==Pair.ActionId &&
             State.Status==EDeliveryNpcActionStatus::Running)
         {
@@ -272,6 +297,7 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
     }
     TestTrue(TEXT("双方各自挥出了拳"),Pair.Attacker->Combat->GetFightPunchCount()>0 && Reply.Attacker->Combat->GetFightPunchCount()>0);
     TestTrue(TEXT("后仰结束后双方仍能实际命中"),Pair.Attacker->Combat->GetFightHitCount()>0 && Reply.Attacker->Combat->GetFightHitCount()>0);
+    TestTrue(TEXT("还击确实打断了正在播的台词"),bSpeechInterruptedByHit);
     TestTrue(TEXT("被还击时保留模型选择的交战和同一个动作编号"),bKeptFightAfterHit);
     TestTrue(TEXT("后仰结束后继续出拳，中间没有再请求一次模型"),bPunchedAgainAfterHit);
     TestNotEqual(TEXT("轻拳不会再用重新判断为由结束整段交战"),Pair.Attacker->Agent->GetPublicState().Reason,FName(TEXT("ReconsiderAfterHit")));
@@ -336,6 +362,9 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
     FDeliveryNpcDecisionProposal Update;
     if (!TestTrue(TEXT("挥拳期间可以准备下一次模型请求"),PrepareUpdate(Continuous,EDeliveryNpcAction::Fight,8,UpdateRequest,Update))) return false;
     TestEqual(TEXT("请求记住正在执行的行动"),UpdateRequest.RunningActionId,ContinuousAction);
+    TestFalse(TEXT("交战中的后台请求不把看一眼当成停手"),UpdateRequest.AllowedActions.Contains(EDeliveryNpcAction::LookAt));
+    TestTrue(TEXT("后台请求仍能明确选停手"),UpdateRequest.Candidates.ContainsByPredicate([](const auto& Item)
+        { return Item.Action==EDeliveryNpcAction::Wait; }));
     TestTrue(TEXT("模型收到当前行动和实际出拳情况"),UpdateRequest.Evidence.ContainsByPredicate([](const auto& Item)
         { return Item.Kind==TEXT("SelfCombat") && Item.Description.Contains(TEXT("正在")) && Item.Description.Contains(TEXT("实际命中")); }));
     // 战斗小模型只更新动作，适配器的默认 Calm 不能抹掉正在播放的生气表情
@@ -394,17 +423,58 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
     TestTrue(TEXT("结束后重放旧决定不会恢复交战"),DeliveryNpc::IsTerminal(ContinuingAgent->GetPublicState().Status));
     Close(Continuous);
 
+    auto Recheck=SpawnCase(); Tick(Recheck,.2f);
+    Recheck.Attacker->Combat->bHarmlessStrikes=true;
+    if (!TestTrue(TEXT("开始一段可后台复判的交战"),Begin(Recheck,EDeliveryNpcAction::Fight,8))) return false;
+    auto* RecheckAgent=Recheck.Attacker->Agent.Get();
+    Recheck.Attacker->ObserveFact(TEXT("FleeStarted"),Recheck.Attacker,TEXT("无关角色远离"),EDeliveryNpcEvidenceSource::Seen);
+    TestTrue(TEXT("无关对象的消息不会提前询问"),RecheckAgent->CombatEventDecisionAt<0);
+    Tick(Recheck,.1f);
+    Recheck.Attacker->ObserveFact(TEXT("LightMeleeHit"),Recheck.Target,TEXT("我挨了一拳"),EDeliveryNpcEvidenceSource::Seen);
+    const double RecheckAt=RecheckAgent->CombatEventDecisionAt;
+    TestTrue(TEXT("挨打后安排提前复判"),RecheckAt>World->GetTimeSeconds() && RecheckAt<RecheckAgent->NextActionDecisionAt);
+    Recheck.Attacker->ObserveFact(TEXT("FleeStarted"),Recheck.Target,TEXT("对手开始跑开"),EDeliveryNpcEvidenceSource::Seen);
+    TestEqual(TEXT("连续战况变化合并到同一次询问"),RecheckAgent->CombatEventDecisionAt,RecheckAt);
+    TestEqual(TEXT("安排复判时保留当前交战"),RecheckAgent->GetPublicState().ActionId,Recheck.ActionId);
+    Tick(Recheck,7.6f);
+    TestEqual(TEXT("最后零点几秒仍接受后台决定"),RecheckAgent->GetPublicState().Status,EDeliveryNpcActionStatus::Running);
+    Tick(Recheck,.4f);
+    TestEqual(TEXT("已授权的时间用完才停止"),RecheckAgent->GetPublicState().Reason,FName(TEXT("FightTimeLimit")));
+    Close(Recheck);
+
     auto StopNow=SpawnCase(); Tick(StopNow,.2f);
     if (!TestTrue(TEXT("准备在出拳途中接受停手决定"),Begin(StopNow,EDeliveryNpcAction::Fight,8))) return false;
     Tick(StopNow,.06f);
+    auto* StoppingAgent=StopNow.Attacker->Agent.Get();
+    auto* StoppingPresentation=StopNow.Attacker->Presentation.Get();
+    if (!TestTrue(TEXT("停手前先收到一条续战台词"),PrepareUpdate(StopNow,EDeliveryNpcAction::Fight,8,UpdateRequest,Update))) return false;
+    Update.Speech=TEXT("你给我站住！");
+    Update.bHasSpeechTarget=true; Update.SpeechTargetId=Update.TargetId;
+    const FGuid OldFightRequest=Update.RequestId;
+    if (!TestTrue(TEXT("接受带台词的续战"),StoppingAgent->ReceiveStreamDecision(OldFightRequest,Update))) return false;
+    const FGuid OldFightReply=StoppingAgent->GetPublicState().GetReplyId();
+    FDeliveryNpcSentence FightLine; FightLine.Text=Update.Speech;
+    StoppingAgent->ReceiveSentence(OldFightRequest,FightLine);
+    if (!TestTrue(TEXT("续战决定已完成，旧语音仍可继续传输"),
+        StoppingAgent->FinishModelReply(OldFightRequest,1,TOptional<FString>(FightLine.Text)))) return false;
+    StoppingPresentation->TickSentences();
+    TestTrue(TEXT("停手前确实在显示追打台词"),StoppingPresentation->Speech.bActive);
+    TestTrue(TEXT("停手前旧请求仍可接收后续语音"),StoppingAgent->CanReceiveReply(OldFightRequest));
+    TestTrue(TEXT("语音还在播放时对方已经收到台词"),Turns->WasNpcMessageDelivered(OldFightReply,StopNow.Target));
     if (!TestTrue(TEXT("出拳时模型也能选择Wait停手"),PrepareUpdate(StopNow,EDeliveryNpcAction::Wait,1,UpdateRequest,Update))) return false;
     Update.Emotion=TEXT("Calm");
     const FGuid StoppedAction=StopNow.ActionId;
-    StopNow.Attacker->Agent->ReceiveDecision(Update.RequestId,&Update,NAME_None);
-    const FGuid WaitAction=StopNow.Attacker->Agent->GetPublicState().ActionId;
+    if (!TestTrue(TEXT("接受无台词的停手决定"),StoppingAgent->ReceiveStreamDecision(Update.RequestId,Update))) return false;
+    const FGuid WaitAction=StoppingAgent->GetPublicState().ActionId;
     TestNotEqual(TEXT("停手作为新行动替换追打"),WaitAction,StoppedAction);
+    TestFalse(TEXT("停手后停止显示上一轮追打台词"),StoppingPresentation->Speech.bActive);
+    TestTrue(TEXT("停手后向客户端取消上一轮追打声音"),StoppingPresentation->CancelledVoiceActions.Contains(OldFightReply));
+    TestFalse(TEXT("迟到的追打音频不能恢复播放"),StoppingAgent->CanReceiveReply(OldFightRequest));
+    TestTrue(TEXT("停手只取消声音，对方仍可引用收到的台词"),Turns->GetNpcMessageHandle(OldFightReply,StopNow.Target).IsValid());
+    TestTrue(TEXT("取消旧台词时保留本次停手请求"),StoppingAgent->CanReceiveReply(Update.RequestId));
     TestEqual(TEXT("换动作即使没有台词也使用本次模型的表情"),StopNow.Attacker->Agent->GetPublicState().Emotion,FName(TEXT("Calm")));
     TestFalse(TEXT("停手决定立即取消未命中的拳"),StopNow.Attacker->Combat->IsStriking());
+    StoppingAgent->FinishReply(Update.RequestId,true,0);
     Tick(StopNow,.6f);
     TestEqual(TEXT("旧拳不会在停手后补算命中"),StopNow.Attacker->Combat->GetFightHitCount(),0);
     TestFalse(TEXT("停手后的目标没有凭空受击"),StopNow.Target->Combat->IsReactingToHit());
@@ -463,6 +533,49 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
     Tick(Heavy,.44f);
     TestTrue(TEXT("原StrikeOnce仍保留一次重击倒地的规则"),Heavy.Target->IsKnockedDown());
     Close(Heavy);
+
+    auto* PlayerClass=LoadClass<ADeliveryCharacter>(nullptr,
+        TEXT("/Game/Blueprint/Character/DeliverMan/BP_DeliveryMan.BP_DeliveryMan_C"));
+    if (!TestNotNull(TEXT("装有布娃娃的正式玩家蓝图"),PlayerClass)) return false;
+    bool bHitPlayer=false;
+    // 不同近身间距覆盖骨架差异；只接受正式拳头扫掠碰到玩家刚体的结果
+    for (const double Distance:{72.,62.,52.})
+    {
+        auto Contact=SpawnCase();
+        Contact.Target->Destroy(); Contact.Target=nullptr;
+        ON_SCOPE_EXIT { Close(Contact); };
+        FActorSpawnParameters Spawn;
+        Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        auto* Player=World->SpawnActor<ADeliveryCharacter>(PlayerClass,FVector(Distance,0,90),FRotator(0,180,0),Spawn);
+        auto* State=World->SpawnActor<ADeliverPlayerState>();
+        auto* Controller=World->SpawnActor<APlayerController>();
+        if (!TestTrue(TEXT("创建带技能系统的玩家目标"),Player && State && Controller)) return false;
+        ON_SCOPE_EXIT { Controller->UnPossess(); Player->Destroy(); State->Destroy(); Controller->Destroy(); };
+        State->SetOwner(Controller);
+        Controller->PlayerState=State;
+        Controller->Possess(Player);
+        if (!TestTrue(TEXT("服务器能从被控制的玩家找到同一 PlayerState"),Player->GetPlayerState()==State)) return false;
+        auto* ASC=State->GetDeliverAbilitySystemComponent();
+        ASC->InitializeAbilityActor(State,Player);
+        const FGameplayAttribute Health=UDeliverAttributeSet::GetHealthAttribute();
+        ASC->SetNumericAttributeBase(Health,100.f);
+        if (!TestTrue(TEXT("玩家处于原主动布娃娃状态"),Player->GetActiveRagdoll()->IsRagdollActive())) return false;
+        float LowestHealth=100.f;
+        const FDelegateHandle HealthChanged=ASC->GetGameplayAttributeValueChangeDelegate(Health).AddLambda(
+            [&LowestHealth](const FOnAttributeChangeData& Change) { LowestHealth=FMath::Min(LowestHealth,Change.NewValue); });
+        ON_SCOPE_EXIT { ASC->GetGameplayAttributeValueChangeDelegate(Health).Remove(HealthChanged); };
+        Contact.Attacker->Combat->bHarmlessStrikes=false;
+        // 角色动作编号驱动正式出拳动画和实际拳头扫掠
+        if (!Begin(Contact,EDeliveryNpcAction::StrikeOnce,5.f,nullptr,Player)) continue;
+        Tick(Contact,.45f);
+        bool bContact=false;
+        if (!TestTrue(TEXT("正式 BT 拳头与动画共用动作编号"),Contact.bParentTimeMatches && Contact.PunchIds.Contains(Contact.ActionId))) return false;
+        if (!TestTrue(TEXT("真实近身挥拳产生了判定结果"),Contact.Attacker->Combat->GetStrikeResult(Contact.ActionId,bContact))) return false;
+        TestTrue(TEXT("只有实际命中才通过原 GAS 扣血"),FMath::IsNearlyEqual(LowestHealth,
+            bContact?100.f-Contact.Attacker->Combat->OutgoingPlayerDamage:100.f));
+        if (bContact) { bHitPlayer=true; break; }
+    }
+    TestTrue(TEXT("近身拳头实际扫到正式主角的布娃娃网格"),bHitPlayer);
     TestFalse(TEXT("整个测试没有启用AI后台"),Settings->bEnabled);
     return true;
 }

@@ -51,10 +51,10 @@ FText UDeliveryTrunkPassengerComponent::GetStatusText() const
 {
     switch(State.Phase)
     {
-    case EDeliveryPassengerPhase::Loading: return NSLOCTEXT("Delivery","TrunkLoadingPlayer","Being put in the trunk");
-    case EDeliveryPassengerPhase::WaitingToExit: return NSLOCTEXT("Delivery","TrunkWaitingExit","Recovering - waiting for a clear exit");
-    case EDeliveryPassengerPhase::Unloading: return NSLOCTEXT("Delivery","TrunkLeavingPlayer","Getting out of the trunk");
-    default: return NSLOCTEXT("Delivery","TrunkRecoveringPlayer","Recovering - you will get out automatically");
+    case EDeliveryPassengerPhase::Loading: return NSLOCTEXT("Delivery","TrunkLoadingPlayer","正被放进后备箱");
+    case EDeliveryPassengerPhase::WaitingToExit: return NSLOCTEXT("Delivery","TrunkWaitingExit","正在恢复，等车尾空出来就能出去");
+    case EDeliveryPassengerPhase::Unloading: return NSLOCTEXT("Delivery","TrunkLeavingPlayer","正在离开后备箱");
+    default: return NSLOCTEXT("Delivery","TrunkRecoveringPlayer","正在恢复，稍后会自动离开后备箱");
     }
 }
 

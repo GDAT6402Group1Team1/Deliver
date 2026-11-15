@@ -8,6 +8,7 @@
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Camera/DeliveryDoorHitCameraShake.h"
+#include "Delivery.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
@@ -31,10 +32,16 @@ ADeliveryBreakableDoor::ADeliveryBreakableDoor()
 
 	Fragments = CreateDefaultSubobject<UGeometryCollectionComponent>(TEXT("Fragments"));
 	Fragments->SetupAttachment(IntactDoor);
+	Fragments->SetCanEverAffectNavigation(false);
 	static ConstructorHelpers::FObjectFinder<UGeometryCollection> FracturedAsset(
 	    TEXT("/Game/crack/crackdoor.crackdoor"));
 	if (FracturedAsset.Succeeded())
 		Fragments->SetRestCollection(FracturedAsset.Object);
+	// 碎片照常落地和互撞，门洞通行只由完整门体的碰撞和正式导航连接决定
+	Fragments->SetCollisionObjectType(ECC_Destructible);
+	Fragments->SetCollisionResponseToAllChannels(ECR_Ignore);
+	Fragments->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
+	Fragments->SetCollisionResponseToChannel(ECC_Destructible, ECR_Block);
 	Fragments->SetVisibility(false);
 	Fragments->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Fragments->SetSimulatePhysics(false);
@@ -63,6 +70,8 @@ bool ADeliveryBreakableDoor::ReceiveAxeHit(APawn* Attacker, const FVector& HitPo
     if (!HasAuthority() || bBroken || !IsValid(Attacker) || Attacker->GetWorld() != GetWorld()) return false;
     HitCount = FMath::Min(HitCount + 1, FMath::Max(1, HitsToBreak));
     const bool bFinal = HitCount >= HitsToBreak;
+    UE_LOG(LogDelivery, Log, TEXT("DoorAxeHit door=%s attacker=%s hit=%d/%d"), *GetName(), *GetNameSafe(Attacker),
+           HitCount, FMath::Max(1, HitsToBreak));
     // 内置控制器 RPC 只发给本次挥斧者，旁观者不被强制晃镜头
     if (auto* PC = Cast<APlayerController>(Attacker->GetController()))
         PC->ClientStartCameraShake(UDeliveryDoorHitCameraShake::StaticClass(), bFinal ? 1.5f : 1.f);
@@ -114,6 +123,7 @@ bool ADeliveryBreakableDoor::BreakFromAxe()
 		return false;
 	bBroken = true;
 	OnRep_Broken();
+	UE_LOG(LogDelivery, Log, TEXT("DoorOpenedByAxe door=%s hits=%d"), *GetName(), HitCount);
 	ForceNetUpdate();
 	return true;
 }
@@ -129,7 +139,7 @@ void ADeliveryBreakableDoor::OnRep_Broken()
 	if (Fragments && Fragments->GetRestCollection())
 	{
 		Fragments->SetVisibility(true, true);
-		Fragments->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Fragments->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
 		Fragments->SetSimulatePhysics(true);
 		Fragments->CrumbleActiveClusters();
 		Fragments->AddRadialImpulse(GetActorLocation(), 170.f, 350.f, ERadialImpulseFalloff::RIF_Linear,

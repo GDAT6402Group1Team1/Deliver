@@ -43,6 +43,10 @@ class ADeliveryPlayerController : public APlayerController
     UFUNCTION(Server, Reliable)
     void ServerReportStartupReady(ADeliveryStartupFlow* Flow);
 
+    // 真实交付后通知结算玩家，无论本机控制角色还是车辆
+    UFUNCTION(Client, Reliable)
+    void ClientConfirmDelivery(ADeliveryCharacter* Recipient);
+
     // 补位只查询本机实际视锥，客户端报告不能直接移动同伴
     UFUNCTION(Client, Unreliable)
     void ClientCheckCompanionCatchUp(ADeliveryCompanionCharacter* Companion, FGuid RequestId,

@@ -42,8 +42,11 @@ size = bounds.max - bounds.min
 scale = 22.0 / max(size.x, size.y, size.z, 1.0)
 cdo.get_item_mesh().set_relative_scale3d(unreal.Vector(scale, scale, scale))
 cdo.get_item_component().set_editor_property('icon', icon)
+cdo.get_item_component().set_editor_property('companion_can_fetch', True)
 center = (bounds.min + bounds.max) * .5
 cdo.set_editor_property('held_relative_transform', unreal.Transform(location=unreal.Vector(5,0,0)-center*scale))
+cdo.set_editor_property('use_npc_ground_pickup_pose', True)
+cdo.set_editor_property('npc_ground_pickup_grip', center)
 unreal.BlueprintEditorLibrary.compile_blueprint(bp)
 unreal.EditorAssetLibrary.save_loaded_asset(bp, False)
 

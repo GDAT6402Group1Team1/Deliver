@@ -6,6 +6,7 @@
 #include "AI/Companion/DeliveryCompanionComponent.h"
 #include "Game/DeliveryStartupFlow.h"
 #include "Character/DeliveryCharacter.h"
+#include "Events/DeliveryEventComponent.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Blueprint/UserWidget.h"
 #include "Audio/DeliveryDialogueVoiceComponent.h"
@@ -400,6 +401,13 @@ void ADeliveryPlayerController::RequestHangUpCall()
 void ADeliveryPlayerController::ServerHangUpCall_Implementation()
 {
     RequestHangUpCall();
+}
+
+void ADeliveryPlayerController::ClientConfirmDelivery_Implementation(ADeliveryCharacter* Recipient)
+{
+    if (!IsLocalController() || !IsValid(Recipient) || Recipient->IsActorBeingDestroyed() || Recipient->GetWorld()!=GetWorld()) return;
+    if (auto* Events=Recipient->FindComponentByClass<UDeliveryEventComponent>())
+        Events->Publish(EDeliveryEvent::DeliverySucceeded);
 }
 
 // 角色交互的服务器入口

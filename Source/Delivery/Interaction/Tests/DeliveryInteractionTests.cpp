@@ -20,12 +20,17 @@
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryPackageItem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
+#include "Inventory/DeliveryTestAxe.h"
 #include "Carry/DeliveryCarryComponent.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "UI/Controllers/DeliveryHotbarController.h"
 #include "UI/Controllers/DeliveryInteractionController.h"
+#include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Game/DeliveryGameState.h"
+#include "GameFramework/PlayerState.h"
+#include "GameFramework/WorldSettings.h"
 #include "Task/DeliveryTaskManagerComponent.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
 #include "Task/World/DeliveryItemComponent.h"
@@ -33,7 +38,7 @@
 #include "Task/World/DeliveryPickupPointComponent.h"
 #include "World/DeliveryLocationComponent.h"
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryInteractionFlowTest, "Delivery.Systems.Interaction",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryInteractionFlowTest, "Delivery.Systems.Interaction.PlayerFlow",
                                  EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FDeliveryInteractionFlowTest::RunTest(const FString &)
@@ -187,6 +192,13 @@ bool FDeliveryInteractionFlowTest::RunTest(const FString &)
     TestTrue(TEXT("hotbar displays current item"), Hotbar->GetSlot(0).bOccupied);
     Hotbar->SetInventory(nullptr);
     TestFalse(TEXT("hotbar rebind clears old item"), Hotbar->GetSlot(0).bOccupied);
+    auto* WalkerInventory=Walker->GetInventoryComponent();
+    WalkerInventory->RequestSlotAction(UDeliveryInventoryComponent::FirstBackpackSlot);
+    TestNull(TEXT("普通手持物仍可收进空背包槽"), WalkerInventory->GetHeldItem());
+    TestTrue(TEXT("收纳后普通物品仍归原玩家"),
+        WalkerInventory->GetItemInSlot(UDeliveryInventoryComponent::FirstBackpackSlot)==Item && Item->GetOwner()==Walker);
+    WalkerInventory->RequestSlotAction(UDeliveryInventoryComponent::FirstBackpackSlot);
+    TestTrue(TEXT("从背包可以装备同一个普通物品"), WalkerInventory->GetHeldItem()==Item);
 
     // 使用真实任务管理器验证领取和交付，初始订单设为已发出
     ADeliveryGameState *State = World->SpawnActor<ADeliveryGameState>(Spawn);
@@ -331,6 +343,75 @@ bool FDeliveryInteractionFlowTest::RunTest(const FString &)
     TestEqual(TEXT("pickup advances task"), Tasks->GetTaskStatus(Definition),
               EDeliveryTaskStatus::InProgress);
 
+    auto* Inventory=Character->GetInventoryComponent();
+    constexpr int32 BackpackSlot=UDeliveryInventoryComponent::FirstBackpackSlot;
+    TestNull(TEXT("第一格背包当前为空"), Inventory->GetItemInSlot(BackpackSlot));
+    Inventory->RequestSlotAction(BackpackSlot);
+    TestTrue(TEXT("按空背包槽会收好原包裹"),
+        !Inventory->GetHeldItem() && Inventory->GetItemInSlot(BackpackSlot)==WalkingPackage &&
+        WalkingPackage->GetOwner()==Character && WalkingPackage->IsHidden());
+    TestFalse(TEXT("背包里已有原件时不能重新领件"), PickupPoint->TryDispense(Character));
+    Inventory->RequestSlotAction(BackpackSlot);
+    TestTrue(TEXT("按同一背包槽重新手持原件"), Inventory->GetHeldItem()==WalkingPackage && !WalkingPackage->IsHidden());
+
+    auto* Axe=World->SpawnActor<ADeliveryTestAxe>(Spawn);
+    if (!TestTrue(TEXT("持餐时捡来的斧头进背包"), IsValid(Axe) && Inventory->TryPickup(Axe) &&
+            Inventory->GetItemInSlot(BackpackSlot)==Axe)) return false;
+    {
+        const FTransform PreviousPose=Character->GetActorTransform();
+        ON_SCOPE_EXIT { Character->SetActorTransform(PreviousPose, false, nullptr, ETeleportType::TeleportPhysics); };
+        // 将夹具移离重叠生成的角色和车辆，模拟已走到一扇闭门前
+        Character->SetActorLocationAndRotation(FVector(2000,2000,500), FRotator::ZeroRotator,
+                                               false, nullptr, ETeleportType::TeleportPhysics);
+        const FVector Reference=Character->GetActorLocation()+FVector::UpVector*Inventory->GetDropUpOffset();
+        const auto AddDropBlocker=[&](const FVector& Offset, const FVector& Extent) -> AActor*
+        {
+            AActor* Blocker=World->SpawnActor<AActor>(Spawn);
+            if (!Blocker)
+                return nullptr;
+            UBoxComponent* Box=NewObject<UBoxComponent>(Blocker);
+            Blocker->SetRootComponent(Box);
+            Blocker->AddInstanceComponent(Box);
+            Box->SetBoxExtent(Extent);
+            Box->SetCollisionProfileName(TEXT("BlockAll"));
+            Box->RegisterComponent();
+            Blocker->SetActorLocation(Reference+Offset, false, nullptr, ETeleportType::TeleportPhysics);
+            return Blocker;
+        };
+        AActor* Door=AddDropBlocker(FVector(54,0,0), FVector(3,150,100));
+        if (!TestNotNull(TEXT("放件路径上的完整门碰撞"), Door)) return false;
+        const auto IsPackageOnPlayerSide=[&]()
+        {
+            return WalkingPackage->GetComponentsBoundingBox(true).Max.X < Door->GetActorLocation().X-3.0;
+        };
+
+        Inventory->RequestSlotAction(0);
+        TestNull(TEXT("快捷栏第一格仍放下手持快递"), Inventory->GetHeldItem());
+        TestNull(TEXT("放下快递后解除玩家持有"), WalkingPackage->GetOwner());
+        TestTrue(TEXT("闭门前显式放件后整件快递仍在玩家一侧"), IsPackageOnPlayerSide());
+        if (!TestTrue(TEXT("放下后可以在同侧重新取回原包裹"),
+                      Character->GetCarryComponent()->TryReceivePackage(WalkingPackage, false))) return false;
+
+        AActor* Left=AddDropBlocker(FVector(0,-50,0), FVector(28,3,100));
+        AActor* Right=AddDropBlocker(FVector(0,50,0), FVector(28,3,100));
+        AActor* Behind=AddDropBlocker(FVector(-50,0,0), FVector(3,150,100));
+        if (!TestTrue(TEXT("三条备选放置路线均有阻挡"), Left && Right && Behind)) return false;
+        Inventory->RequestSlotAction(0);
+        TestTrue(TEXT("无可用落点时按第一格仍持原包裹"),
+                 Inventory->GetHeldItem()==WalkingPackage && WalkingPackage->GetOwner()==Character);
+        Inventory->RequestSlotAction(BackpackSlot);
+        TestTrue(TEXT("闭门前可以收起快递并装备原斧头"),
+                 Inventory->GetHeldItem()==Axe && Axe->GetOwner()==Character &&
+                 Inventory->GetItemInSlot(BackpackSlot)==WalkingPackage && WalkingPackage->GetOwner()==Character &&
+                 WalkingPackage->IsHidden());
+        Left->Destroy(); Right->Destroy(); Behind->Destroy();
+
+        Inventory->RequestSlotAction(BackpackSlot);
+        TestTrue(TEXT("切回原包裹时原斧头收回背包"), Inventory->GetHeldItem()==WalkingPackage &&
+            WalkingPackage->GetOwner()==Character && Inventory->GetItemInSlot(BackpackSlot)==Axe);
+        Door->Destroy();
+    }
+
     UDeliveryTargetComponent *DropOff = NewObject<UDeliveryTargetComponent>(Target);
     Target->AddInstanceComponent(DropOff);
     DropOff->RegisterComponent();
@@ -338,11 +419,22 @@ bool FDeliveryInteractionFlowTest::RunTest(const FString &)
     DropOff->EnsureInteractableConfigured();
     TestTrue(TEXT("dropoff registers availability"), Action->CanUse.IsBound());
     TestTrue(TEXT("dropoff registers behavior"), Action->Use.IsBound());
+    // 独立世界没有在线登录，交付仍需有效的任务结算玩家
+    if (!IsValid(Character->GetTaskPlayerState()))
+        Character->SetPlayerState(World->SpawnActor<APlayerState>());
+    if (!TestTrue(TEXT("交付夹具拥有有效玩家身份并处于步行状态"),Character->CanHandleTaskPackage())) return false;
+    Character->SetActorLocationAndRotation(FVector(2500,2500,500),FRotator::ZeroRotator,
+        false,nullptr,ETeleportType::TeleportPhysics);
+    Inventory->RefreshItemPresentation(WalkingPackage);
     Target->SetActorLocation(WalkingPackage->GetActorLocation());
+    Inventory->RequestSlotAction(BackpackSlot);
+    TestFalse(TEXT("原件留在背包时不能隔着库存交付"),Action->CanUse.Execute(Character,true));
+    Inventory->RequestSlotAction(BackpackSlot);
     WalkingPackage->SetOwner(Bike);
     TestFalse(TEXT("vehicle-owned cargo cannot be delivered directly"),
               DropOff->TryDeliver(WalkingPackage, Character->GetTaskPlayerState()));
     WalkingPackage->SetOwner(Character);
+    Inventory->RefreshItemPresentation(WalkingPackage);
     TestTrue(TEXT("dropoff accepts correct package"), Action->CanUse.Execute(Character, true));
     TestTrue(TEXT("dropoff completes delivery"), Action->Use.Execute(Character));
     TestEqual(TEXT("task completed"), Tasks->GetTaskStatus(Definition), EDeliveryTaskStatus::Completed);
@@ -352,6 +444,106 @@ bool FDeliveryInteractionFlowTest::RunTest(const FString &)
 
     Target->Destroy();
     TestFalse(TEXT("destroyed target rejected"), Interaction->ValidateTarget(Target));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryCarriedPackagePawnDestroyedTest,
+    "Delivery.Systems.Interaction.PackageHolderDestroyed",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDeliveryCarriedPackagePawnDestroyedTest::RunTest(const FString&)
+{
+    const auto Settings=UWorld::InitializationValues().AllowAudioPlayback(false).CreatePhysicsScene(true)
+        .ShouldSimulatePhysics(false).CreateNavigation(false).CreateAISystem(false);
+    auto* World=UWorld::CreateWorld(EWorldType::Game,false,NAME_None,nullptr,true,ERHIFeatureLevel::Num,&Settings);
+    if (!TestNotNull(TEXT("真实角色销毁测试世界"),World)) return false;
+    GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
+    ON_SCOPE_EXIT
+    {
+        GEngine->DestroyWorldContext(World);
+        World->EndPlay(EEndPlayReason::Quit);
+        World->DestroyWorld(false);
+    };
+    auto* State=World->SpawnActor<ADeliveryGameState>();
+    World->SetGameState(State);
+    auto* Tasks=State->GetTaskManager();
+    auto* Definition=NewObject<UDeliveryTaskDefinition>(State);
+    Definition->TaskId=TEXT("PackageHolderDestroyed");
+    Definition->PickupLocationId=TEXT("PackageHolderDestroyed_Pickup");
+    auto* DefinitionProperty=FindFProperty<FArrayProperty>(Tasks->GetClass(),TEXT("TaskDefinitions"));
+    if (!TestNotNull(TEXT("任务配置存在"),DefinitionProperty)) return false;
+    DefinitionProperty->ContainerPtrToValuePtr<TArray<TObjectPtr<UDeliveryTaskDefinition>>>(Tasks)->Add(Definition);
+    World->InitializeActorsForPlay(FURL());
+    World->GetWorldSettings()->NotifyBeginPlay();
+    if (!TestTrue(TEXT("正式任务流程接听并开始计时"),Tasks->StartTaskTimerFromAcceptedCall(Definition))) return false;
+
+    auto* PickupActor=World->SpawnActor<AActor>();
+    auto* PickupLocation=NewObject<UDeliveryLocationComponent>(PickupActor);
+    PickupActor->SetRootComponent(PickupLocation);
+    PickupLocation->LocationId=Definition->PickupLocationId;
+    PickupLocation->RegisterComponent();
+    auto* Pickup=NewObject<UDeliveryPickupPointComponent>(PickupActor);
+    PickupActor->AddInstanceComponent(Pickup);
+    Pickup->RegisterComponent();
+    Pickup->EnsureInteractableConfigured();
+
+    FActorSpawnParameters Spawn;
+    Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    const auto MakeCarrier=[&](FName Name,const FVector& Position) -> ADeliveryCharacter*
+    {
+        Spawn.Name=Name;
+        // 测试收纳和原件回收的原生角色没有物理资产
+        AddExpectedError(FString::Printf(TEXT("%s: Skeletal mesh has no Physics Asset."),*Name.ToString()),
+            EAutomationExpectedErrorFlags::Contains,1);
+        auto* Pawn=World->SpawnActor<ADeliveryCharacter>(Position,FRotator::ZeroRotator,Spawn);
+        if (!Pawn) return nullptr;
+        Pawn->GetActiveRagdoll()->StopRagdoll();
+        Pawn->SetPlayerState(World->SpawnActor<APlayerState>());
+        return Pawn;
+    };
+    auto* First=MakeCarrier(TEXT("StoredPackageHolder"),FVector(0,0,100));
+    auto* Second=MakeCarrier(TEXT("GroundPackageHolder"),FVector(0,300,100));
+    if (!TestTrue(TEXT("首个步行玩家领到真实任务物品"),First && Second && Pickup->TryDispense(First))) return false;
+    auto* Original=First->GetCarriedTaskPackage();
+    if (!TestNotNull(TEXT("真实包裹占用即将销毁角色的手槽"),Original)) return false;
+    First->GetInventoryComponent()->RequestSlotAction(UDeliveryInventoryComponent::FirstBackpackSlot);
+    TestTrue(TEXT("销毁前原件已进入真实背包槽"),First->IsTaskPackageInBackpack(Original) && Original->IsHidden());
+    World->Tick(LEVELTICK_All,.2f);
+    const auto PickupClock=Tasks->GetTimeSnapshot(Definition);
+    TestTrue(TEXT("模拟退出前已经计时"),PickupClock.bRunning && PickupClock.ElapsedSeconds>0.f);
+
+    First->Destroy();
+    if (!TestTrue(TEXT("有安全落点时角色销毁后原包裹留在世界"),IsValid(Original) &&
+        !Original->GetOwner() && !Original->GetAttachParentActor() && Original->GetActorEnableCollision())) return false;
+    const auto* OriginalPickup=UDeliveryInteractableComponent::FindOn(Original,EDeliveryInteractionKey::PickupE);
+    TestTrue(TEXT("原包裹恢复物理查询与拾取提示"),
+        Original->GetItemMesh()->GetCollisionEnabled()==ECollisionEnabled::QueryAndPhysics &&
+        OriginalPickup && OriginalPickup->bInteractEnabled);
+    TestEqual(TEXT("保留原包裹就不开放重复领件"),Tasks->GetTaskStatus(Definition),EDeliveryTaskStatus::InProgress);
+    Second->SetActorLocation(Original->GetActorLocation(),false,nullptr,ETeleportType::TeleportPhysics);
+    if (!TestTrue(TEXT("另一位玩家可拾起同一个原件"),Original->CanPickup(Second,true) && Original->Pickup(Second) &&
+        Second->GetCarriedTaskPackage()==Original)) return false;
+
+    // 让本次角色处于封闭碰撞内部，复用补领规则，避免在墙另一边生成落点
+    auto* Blocker=World->SpawnActor<AActor>();
+    auto* Box=NewObject<UBoxComponent>(Blocker);
+    Blocker->SetRootComponent(Box);
+    Box->SetBoxExtent(FVector(120));
+    Box->SetCollisionProfileName(TEXT("BlockAll"));
+    Box->RegisterComponent();
+    const FVector SealedPosition(1200,0,100);
+    Blocker->SetActorLocation(SealedPosition);
+    Second->SetActorLocation(SealedPosition,false,nullptr,ETeleportType::TeleportPhysics);
+    Second->Destroy();
+    TestFalse(TEXT("原包裹无安全位置时通过真实销毁触发丢件"),IsValid(Original));
+    TestEqual(TEXT("丢件仅退回待补取"),Tasks->GetTaskStatus(Definition),EDeliveryTaskStatus::AwaitingPickup);
+    TestEqual(TEXT("补领取前保留原 elapsed 计时"),Tasks->GetTimeSnapshot(Definition).ElapsedSeconds,PickupClock.ElapsedSeconds);
+
+    auto* ReplacementCarrier=MakeCarrier(TEXT("ReplacementPackageHolder"),FVector(0,0,100));
+    if (!TestTrue(TEXT("无处落地时其他玩家可从原取货点补领"),ReplacementCarrier && Pickup->TryDispense(ReplacementCarrier) &&
+        IsValid(ReplacementCarrier->GetCarriedTaskPackage()) && ReplacementCarrier->GetCarriedTaskPackage()!=Original)) return false;
+    TestEqual(TEXT("补领同一订单继续进行中"),Tasks->GetTaskStatus(Definition),EDeliveryTaskStatus::InProgress);
+    TestEqual(TEXT("补领不会重置接听时的计时"),Tasks->GetTimeSnapshot(Definition).ElapsedSeconds,PickupClock.ElapsedSeconds);
     return true;
 }
 #endif

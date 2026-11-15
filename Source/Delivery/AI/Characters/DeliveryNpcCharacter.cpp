@@ -22,6 +22,8 @@
 #include "Engine/World.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/Abilities/GA_NpcStrike.h"
+#include "Animation/AnimSequence.h"
+#include "Engine/SkeletalMesh.h"
 
 namespace
 {
@@ -95,11 +97,26 @@ bool ADeliveryNpcCharacter::ApplyProfile()
     }
     DisplayName=Row->DisplayName;Agent->Persona=Row->Persona;Presentation->VoiceSet=Row->VoiceSet;
     if (!Row->TtsVoice.IsNone()) Presentation->TtsVoice=FName(*VoiceName);
+    BehaviorPresentation=Row->BehaviorPresentation;
     return true;
+}
+const FDeliveryNpcBehaviorPresentation* ADeliveryNpcCharacter::FindBehaviorPresentation(FGameplayTag Behavior) const
+{
+    const auto* Variant=Behavior.IsValid()?BehaviorPresentation.Find(Behavior):nullptr;
+    if (!Variant || !IsValid(Variant->Animation) || !FMath::IsFinite(Variant->PlayRate) || Variant->PlayRate<.25f ||
+        Variant->PlayRate>3.f || !FMath::IsFinite(Variant->MovementReferenceSpeed) ||
+        Variant->MovementReferenceSpeed<0 || Variant->MovementReferenceSpeed>500.f) return nullptr;
+    const auto* MeshComponent=GetMesh();
+    const auto* MeshAsset=MeshComponent?MeshComponent->GetSkeletalMeshAsset():nullptr;
+    const auto* Skeleton=MeshAsset?MeshAsset->GetSkeleton():nullptr;
+    const auto* Animation=Variant->Animation.Get();
+    if (!Skeleton || Animation->GetSkeleton()!=Skeleton || Animation->HasRootMotion() || Animation->GetAdditiveAnimType()!=AAT_None ||
+        !FMath::IsFinite(Animation->GetPlayLength()) || Animation->GetPlayLength()<=0) return nullptr;
+    return Variant;
 }
 bool ADeliveryNpcCharacter::CanTalk(APawn* Interactor,bool bCheckAvailability)
 {
-    if (!Interactor || IsKnockedDown()) return false;
+    if (!Interactor) return false;
     const auto* PC=Cast<APlayerController>(Interactor->GetController());
     const auto* Conversation=PC?PC->FindComponentByClass<UDeliveryConversationComponent>():nullptr;
     if (!Conversation || !Conversation->CanTalkTo(this)) return false;
@@ -137,7 +154,7 @@ bool ADeliveryNpcCharacter::HearSpeechInternal(AActor* Speaker,const FString& Te
         Text.IsEmpty() || Text.Len()>256 || (!bCompanionVoice &&
         FVector::DistSquared(Speaker->GetActorLocation(),GetActorLocation())>FMath::Square(900.f))) return false;
     if (!Addressee) Addressee=this;
-    if (!bCompanionVoice && !DeliveryNpcConversationTrace::HasClearPath(this,Speaker)) return false;
+    if (!bCompanionVoice && !DeliveryNpcConversationTrace::HasClearSpeechPath(this,Speaker)) return false;
     const auto* SpeakingPawn=Cast<APawn>(Speaker);
     FDeliveryNpcObservation Event; Event.EventId=TurnId;
     Event.ReplyToEventId=ReplyToEventId;
@@ -156,7 +173,7 @@ bool ADeliveryNpcCharacter::HearSpeechInternal(AActor* Speaker,const FString& Te
         bDecisionRetryScheduled=false;
         if (!Agent->BeginListening(Speaker,TurnId)) return false;
         ConversationDepth=0;
-        bDecisionNeeded=!Agent->RequestDecision();
+        if (!Agent->RequestDecision()) MarkDecisionNeeded();
         return true;
     }
     ConversationDepth=Depth; WakeDecision();
@@ -166,7 +183,7 @@ bool ADeliveryNpcCharacter::HearSpeechInternal(AActor* Speaker,const FString& Te
 }
 bool ADeliveryNpcCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target) const
 {
-    if (Action==EDeliveryNpcAction::GetUp) return Combat->IsDown();
+    if (Action==EDeliveryNpcAction::GetUp) return !Target && Combat->CanStartDeliberateRecovery();
     if (IsKnockedDown() || (Combat->IsReactingToHit() && Action!=EDeliveryNpcAction::Fight && Action!=EDeliveryNpcAction::Flee &&
         Action!=EDeliveryNpcAction::Wait && Action!=EDeliveryNpcAction::LookAt)) return false;
     if (Action==EDeliveryNpcAction::ReleaseVehicle) return GetHeldVehicle()!=nullptr;
@@ -269,8 +286,11 @@ bool ADeliveryNpcCharacter::FindPaceDestination(FVector& OutLocation) const
 {
     if (!HasAuthority() || IsKnockedDown() || GetHeldVehicle()) return false;
     const float Distance=FMath::Clamp(PaceDistance,40.f,140.f);
+    const float Budget=FMath::Min(Distance*1.5f,GetPaceTravelBudget());
+    if (Budget<40.f) return false;
+    const float Step=FMath::Min(Distance,Budget);
     for (const FVector& Direction:{GetActorRightVector(),-GetActorRightVector(),GetActorForwardVector(),-GetActorForwardVector()})
-        if (FindNearbyWalkDestination(GetNavAgentLocation()+Direction*Distance,Distance*1.5f,OutLocation)) return true;
+        if (FindNearbyWalkDestination(GetNavAgentLocation()+Direction*Step,Budget,OutLocation)) return true;
     return false;
 }
 bool ADeliveryNpcCharacter::FindSideStepDestination(AActor* Target,FVector& OutLocation) const
@@ -355,11 +375,16 @@ bool ADeliveryNpcCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
     // 攻击目标还在远处时，由行为树先靠近；到达前不会启动命中判定
     if (State.Action==EDeliveryNpcAction::StrikeOnce && Combat->CanStrike(State.Target))
         bStarted=RequestStrike(State.Target,State.ActionId);
-    else if (State.Action==EDeliveryNpcAction::Fight) bStarted=Combat->BeginFight(State.Target,State.ActionId,State.Duration,State.Origin==EDeliveryNpcActionOrigin::Model);
+    else if (State.Action==EDeliveryNpcAction::Fight)
+    {
+        // 规则动作验证过目标和代次后才能使用该角色授权的接近距离
+        const float ApproachRange=State.Origin==EDeliveryNpcActionOrigin::GameplayRule?GetGameplayRuleFightApproachRange():0.f;
+        bStarted=Combat->BeginFight(State.Target,State.ActionId,State.Duration,State.Origin==EDeliveryNpcActionOrigin::Model,ApproachRange);
+    }
     else if (State.Action==EDeliveryNpcAction::HoldVehicle) bStarted=CastChecked<ADeliveryMotorbike>(State.Target)->ResidentHold->TryHold(this,State.ActionId);
     else if (State.Action==EDeliveryNpcAction::ReleaseVehicle) { if (GetHeldVehicle()) GetHeldVehicle()->Release(TEXT("VoluntaryRelease")); }
     else if (State.Action==EDeliveryNpcAction::LieDown) bStarted=Combat->SetDeliberateProne(true);
-    else if (State.Action==EDeliveryNpcAction::GetUp) bStarted=Combat->SetDeliberateProne(false);
+    else if (State.Action==EDeliveryNpcAction::GetUp) bStarted=Combat->StartDeliberateRecovery();
     if (bStarted && !State.bStreamSpeech && !State.Speech.IsEmpty() &&
         !Presentation->PublishSpeech(State.Speech,State.Emotion,Agent->GetActionConversationDepth(),State.ReplyToEventId,State.GetReplyId()))
     {
@@ -408,21 +433,22 @@ void ADeliveryNpcCharacter::ReceiveHornFrom(float Multiplier,AActor* Vehicle,AAc
 void ADeliveryNpcCharacter::Tick(float Dt)
 {
     Super::Tick(Dt);
-    // 交谈期间隐藏图标，为对白字幕留出位置，玩家仍可继续交谈
-    ConversationInteractable->bShowPrompt=!IsKnockedDown();
+    ConversationInteractable->bShowPrompt=!IsKnockedDown() || Combat->IsDeliberatelyProne();
     if (!HasAuthority()) return;
     if (auto* AI=Cast<ADeliveryNpcAIController>(GetController())) AI->RefreshBlackboard();
     const auto State=Agent->GetPublicState();
     if (DeliveryNpc::IsTerminal(State.Status) && State.ActionId!=LastFinishedAction)
     {
         LastFinishedAction=State.ActionId;
-        if (State.Status!=EDeliveryNpcActionStatus::Succeeded || (State.Action!=EDeliveryNpcAction::Wait && State.Action!=EDeliveryNpcAction::LookAt)) bDecisionNeeded=true;
+        if (State.Status!=EDeliveryNpcActionStatus::Succeeded || (State.Action!=EDeliveryNpcAction::Wait && State.Action!=EDeliveryNpcAction::LookAt))
+            MarkDecisionNeeded();
     }
-    if (bDecisionNeeded && (Agent->IsWaitingToReplyToPlayer() || Agent->HasPendingNpcMessage() || !Presentation->HasPendingSpeech()) && !IsKnockedDown() && !Combat->IsReactingToHit() &&
+    const bool bCanDecide=!IsKnockedDown() || (Combat->IsDeliberatelyProne() && Agent->IsWaitingToReplyToPlayer());
+    if (bDecisionNeeded && (Agent->IsWaitingToReplyToPlayer() || Agent->HasPendingNpcMessage() || !Presentation->HasPendingSpeech()) && bCanDecide && !Combat->IsReactingToHit() &&
         (!Agent->HasActiveAction() || Agent->IsWaitingToReplyToPlayer()) && !Agent->IsDecisionPending() && GetWorld()->GetTimeSeconds()>=NextDecision)
     {
         NextDecision=GetWorld()->GetTimeSeconds()+4;
-        if (Agent->RequestDecision()) { bDecisionNeeded=false; bDecisionRetryScheduled=false; }
+        Agent->RequestDecision();
     }
 }
 void ADeliveryNpcCharacter::EndPlay(const EEndPlayReason::Type Reason)
@@ -439,10 +465,29 @@ void ADeliveryNpcCharacter::EndPlay(const EEndPlayReason::Type Reason)
     ConversationInteractable->CanUse.Unbind(); ConversationInteractable->Use.Unbind(); Super::EndPlay(Reason);
 }
 
+void ADeliveryNpcCharacter::MarkDecisionNeeded()
+{
+    ++DecisionWakeSerial;
+    bDecisionNeeded=true;
+}
+
+void ADeliveryNpcCharacter::ConfirmDecisionRequestQueued(uint64 WakeSerial)
+{
+    if (WakeSerial==DecisionWakeSerial) bDecisionNeeded=false;
+    bDecisionRetryScheduled=false;
+}
+
+void ADeliveryNpcCharacter::ResetDecisionScheduling()
+{
+    bDecisionNeeded=false;
+    bDecisionRetryScheduled=false;
+    DecisionRetryCount=0;
+}
+
 void ADeliveryNpcCharacter::WakeDecision()
 {
+    MarkDecisionNeeded();
     if (Agent->IsWaitingToReplyToPlayer() && bDecisionRetryScheduled) return;
-    bDecisionNeeded=true;
     // 旁人插话会补充下一次请求，同一句玩家消息仍沿用已有的重试次数
     if (!Agent->IsWaitingToReplyToPlayer()) { DecisionRetryCount=0; bDecisionRetryScheduled=false; }
     NextDecision=FMath::Min(NextDecision,GetWorld()->GetTimeSeconds()+.25);
@@ -452,12 +497,13 @@ void ADeliveryNpcCharacter::OnDecisionFinished(FName Reason)
 {
     if (!HasAuthority()) return;
     bDecisionRetryScheduled=false;
-    bDecisionNeeded=false;
     if (Reason.IsNone()) { DecisionRetryCount=0; return; }
-    // 请求忙碌、超时或回复失效时，最多重新请求两次
-    if ((Reason==TEXT("TransportFailure") || Reason==TEXT("RequestTimeout") || Reason==TEXT("StaleProposal") || Reason==TEXT("MissingPlayerReply")) && DecisionRetryCount<2)
+    // 原问题最多刷新两次，已知委托刚取得实物或结束时沿用现场事件的短暂合并间隔
+    const bool bErrandChanged=Reason==TEXT("CompanionErrandEnded") || Reason==TEXT("CompanionErrandAdvanced");
+    if ((Reason==TEXT("TransportFailure") || Reason==TEXT("RequestTimeout") || Reason==TEXT("StaleProposal") ||
+        Reason==TEXT("MissingPlayerReply") || bErrandChanged) && DecisionRetryCount<2)
     {
         ++DecisionRetryCount; bDecisionNeeded=true; bDecisionRetryScheduled=true;
-        NextDecision=GetWorld()->GetTimeSeconds()+2*DecisionRetryCount;
+        NextDecision=GetWorld()->GetTimeSeconds()+(bErrandChanged?.25:2.*DecisionRetryCount);
     }
 }

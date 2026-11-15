@@ -2,6 +2,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Inventory/DeliveryPackageItem.h"
+#include "AI/Companion/DeliveryCompanionCharacter.h"
+#include "Carry/DeliveryHandheldCarrierInterface.h"
 #include "Carry/DeliveryPackageCarrierInterface.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Inventory/DeliveryCaterpillarItem.h"
@@ -11,6 +13,9 @@
 #include "Net/UnrealNetwork.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerState.h"
+#include "GameFramework/PlayerController.h"
+#include "Misc/ScopeExit.h"
 #include "Character/DeliveryCharacter.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Texture2D.h"
@@ -29,7 +34,7 @@ ADeliveryPackageItem::ADeliveryPackageItem()
     CaterpillarVisual->SetAbsolute(false, false, true);
     CaterpillarVisual->SetHiddenInGame(true);
     ItemComponent->ItemType = EDeliveryInventoryItemType::DeliveryItem;
-    ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "DeliveryPackage", "Package");
+    ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "DeliveryPackage", "快递");
     static ConstructorHelpers::FObjectFinder<UTexture2D> PackageIcon(
         TEXT("/Game/UI/Inventory/Textures/T_ItemIconPackage.T_ItemIconPackage"));
     if (PackageIcon.Succeeded())
@@ -37,7 +42,7 @@ ADeliveryPackageItem::ADeliveryPackageItem()
     ItemComponent->bUsesDurability = false;
     ItemComponent->MaxDurability = 0.0f;
     ItemComponent->Durability = 0.0f;
-    InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "HoldPickupPackage", "[Hold E] Pick Up Package");
+    InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "HoldPickupPackage", "[按住 E] 拾取快递");
     InteractableComponent->InteractionKey = EDeliveryInteractionKey::PickupE;
     InteractableComponent->HoldDuration = 0.5f;
     InteractableComponent->InteractRadius = 100.0f;
@@ -150,25 +155,127 @@ void ADeliveryPackageItem::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
     DOREPLIFETIME(ADeliveryPackageItem, bContainsCaterpillar);
 }
 
-bool ADeliveryPackageItem::CanInsertCaterpillar(const APawn* Interactor) const
+bool ADeliveryPackageItem::IsPrankPackageAvailable() const
 {
-    const auto* Character = Cast<ADeliveryCharacter>(Interactor);
-    if (!Character || Character->GetWorld() != GetWorld() || GetOwner() || bContainsCaterpillar ||
-        Character->IsIncapacitated() || Character->IsRidingVehicle() || !InteractableComponent->CanInteract(Character)) return false;
-    const auto* Worm = Cast<ADeliveryCaterpillarItem>(Character->GetInventoryComponent()->GetHeldItem());
     const auto* Task = DeliveryItemComponent->OwningTask.Get();
     const auto* Manager = UDeliveryTaskManagerComponent::Get(this);
-    if (!IsValid(Worm) || Worm->GetOwner() != Character || !Task || !Manager ||
-        Manager->GetTaskStatus(DeliveryItemComponent->OwningTask) != EDeliveryTaskStatus::InProgress ||
-        !Task->SpecialEventRules.ContainsByPredicate([](const FDeliverySpecialEventRule& Rule)
-            { return Rule.EventTag == TAG_Event_Delivery_Caterpillar; })) return false;
-    // 完成长按时再次校验遮挡；不能隔墙向地面外卖投放，也不能修改别人手里或后箱里的外卖
+    return !IsActorBeingDestroyed() && !IsHidden() && !bContainsCaterpillar && IsValid(Task) && Manager &&
+        Manager->GetTaskStatus(Task)==EDeliveryTaskStatus::InProgress &&
+        Task->SpecialEventRules.ContainsByPredicate([](const FDeliverySpecialEventRule& Rule)
+            { return Rule.EventTag==TAG_Event_Delivery_Caterpillar; });
+}
+
+bool ADeliveryPackageItem::HasCaterpillarInsertionReach(const APawn* Interactor,const AActor* Worm) const
+{
+    if (!IsValid(Interactor) || Interactor->GetWorld()!=GetWorld()) return false;
+    const auto* Carrier=GetOwner();
+    // 手持原件关闭了通用 E 地面拾取，投放仍按当前实物网格检查接触距离
+    if (!Carrier && !InteractableComponent->CanInteract(Interactor)) return false;
+    const FVector From=Interactor->GetActorLocation()+FVector(0,0,25);
+    const FVector Point=Carrier?ItemMesh->Bounds.Origin:InteractableComponent->GetInteractionPoint(From)+FVector(0,0,5);
+    if (From.ContainsNaN() || Point.ContainsNaN()) return false;
+    if (Carrier)
+    {
+        const double Reach=InteractableComponent->InteractRadius+Interactor->GetSimpleCollisionRadius();
+        if (!FMath::IsFinite(Reach) || Reach<=0 || FVector::DistSquared(From,Point)>FMath::Square(Reach)) return false;
+    }
     FCollisionQueryParams Query(SCENE_QUERY_STAT(InsertCaterpillar), false, this);
-    Query.AddIgnoredActor(Character);
-    Query.AddIgnoredActor(Worm);
+    Query.AddIgnoredActor(Interactor);
+    if (Worm) Query.AddIgnoredActor(Worm);
+    if (Carrier) Query.AddIgnoredActor(Carrier);
     FHitResult Hit;
-    return !GetWorld()->LineTraceSingleByChannel(Hit, Character->GetActorLocation() + FVector(0,0,25),
-        GetActorLocation() + FVector(0,0,5), ECC_Visibility, Query);
+    return !GetWorld()->LineTraceSingleByChannel(Hit,From,Point,ECC_Visibility,Query);
+}
+
+bool ADeliveryPackageItem::CanInsertCaterpillar(const APawn* Interactor) const
+{
+    const auto* Character=Cast<ADeliveryCharacter>(Interactor);
+    if (!Character || Character->GetWorld()!=GetWorld() || GetOwner() || !IsPrankPackageAvailable() ||
+        Character->IsIncapacitated() || Character->IsRidingVehicle()) return false;
+    const auto* Worm=Cast<ADeliveryCaterpillarItem>(Character->GetInventoryComponent()->GetHeldItem());
+    return IsValid(Worm) && Worm->GetOwner()==Character && HasCaterpillarInsertionReach(Character,Worm);
+}
+
+bool ADeliveryPackageItem::CanAcceptCompanionCaterpillar(const ADeliveryCompanionCharacter* Companion,
+    const APlayerState* Requester,bool bCheckReach,bool bCompanionHoldsPackage) const
+{
+    if (!HasAuthority() || !IsValid(Companion) || Companion->GetWorld()!=GetWorld() || Companion->IsActorBeingDestroyed() ||
+        !IsValid(Requester) || Requester->IsInactive() || Requester->GetWorld()!=GetWorld() ||
+        Companion->GetHandheldOwnerPlayerState()!=Requester || !IsPrankPackageAvailable()) return false;
+    const auto* Controller=Requester->GetPlayerController();
+    const auto* Player=IsValid(Controller)?Cast<ADeliveryCharacter>(Controller->GetPawn()):nullptr;
+    if (!IsValid(Player) || Player->IsActorBeingDestroyed() || Player->GetWorld()!=GetWorld() ||
+        Player->GetTaskPlayerState()!=Requester || !Player->CanHandleTaskPackage()) return false;
+    if (bCompanionHoldsPackage)
+    {
+        if (GetOwner()!=Companion || Companion->GetCarriedTaskPackage()!=this || !Companion->CanHandleTaskPackage()) return false;
+    }
+    else if (GetOwner())
+    {
+        if (GetOwner()!=Player || Player->GetInventoryComponent()->GetHeldItem()!=this) return false;
+    }
+    else if (GetAttachParentActor() || !GetActorEnableCollision() ||
+        Player->GetInventoryComponent()->GetDroppedFirstOrderPackage()!=this) return false;
+    return !bCheckReach || (Companion->CanHandleHandheldItem() &&
+        HasCaterpillarInsertionReach(Companion,Companion->GetCarriedHandheldItem()));
+}
+
+bool ADeliveryPackageItem::TryInsertGroundCaterpillarIntoHeldPackage(ADeliveryCompanionCharacter* Companion,
+    ADeliveryCaterpillarItem* Worm,const APlayerState* Requester,TFunctionRef<bool()> IsStillAtContact)
+{
+    if (!IsInGameThread() || !IsStillAtContact() || !CanAcceptCompanionCaterpillar(Companion,Requester,true,true))
+        return false;
+    const auto* Pickup=DeliveryHandheldTransfer::FindWorldPickupInteraction(Worm,GetWorld());
+    if (!Pickup || !Pickup->CanInteract(Companion) || !DeliveryItemComponent->BeginTransfer(Companion)) return false;
+    const TWeakObjectPtr<UDeliveryItemComponent> WeakPackageData(DeliveryItemComponent);
+    ON_SCOPE_EXIT { if (WeakPackageData.IsValid()) WeakPackageData->EndTransfer(); };
+
+    auto* WormData=Worm->GetItemComponent();
+    const FGuid WormTransfer=WormData->BeginTransfer(Companion);
+    if (!WormTransfer.IsValid()) return false;
+    const TWeakObjectPtr<UDeliveryInventoryItemComponent> WeakWormData(WormData);
+    ON_SCOPE_EXIT { if (WeakWormData.IsValid()) WeakWormData->EndTransfer(WormTransfer); };
+
+    // 未转移任何持有关系，核验失败时原件仍在手里，原虫仍在原地
+    if (!IsStillAtContact() || !CanAcceptCompanionCaterpillar(Companion,Requester,true,true) ||
+        DeliveryHandheldTransfer::FindWorldPickupInteraction(Worm,GetWorld())!=Pickup) return false;
+    CommitCaterpillar(Worm);
+    return true;
+}
+
+bool ADeliveryPackageItem::TryInsertCompanionCaterpillar(ADeliveryCompanionCharacter* Companion,ADeliveryCaterpillarItem* Worm,
+    const APlayerState* Requester,TFunctionRef<bool()> IsCurrent)
+{
+    if (!IsInGameThread() || !IsCurrent() || !CanAcceptCompanionCaterpillar(Companion,Requester,true) || !IsValid(Worm) ||
+        Worm->GetWorld()!=GetWorld() || Worm->GetOwner()!=Companion || !Companion->OwnsHandheldItem(Worm) ||
+        !DeliveryItemComponent->BeginTransfer(Companion)) return false;
+    const TWeakObjectPtr<UDeliveryItemComponent> WeakPackageData(DeliveryItemComponent);
+    ON_SCOPE_EXIT { if (WeakPackageData.IsValid()) WeakPackageData->EndTransfer(); };
+    auto* WormData=Worm->GetItemComponent();
+    const FGuid WormTransfer=WormData->BeginTransfer(Companion);
+    if (!WormTransfer.IsValid()) return false;
+    const TWeakObjectPtr<UDeliveryInventoryItemComponent> WeakWormData(WormData);
+    ON_SCOPE_EXIT { if (WeakWormData.IsValid()) WeakWormData->EndTransfer(WormTransfer); };
+    const TWeakObjectPtr<ADeliveryPackageItem> WeakPackage(this);
+    const TWeakObjectPtr<ADeliveryCompanionCharacter> WeakCompanion(Companion);
+    const TWeakObjectPtr<ADeliveryCaterpillarItem> WeakWorm(Worm);
+    const TWeakObjectPtr<const APlayerState> WeakRequester(Requester);
+    const FVector OriginalLocation=Companion->GetActorLocation();
+    if (!Companion->ReleaseHandheldItem(Worm)) return false;
+    // 释放后仍只允许原安排提交，失效时把同一只小绿交还二狗或放回脚边
+    if (IsCurrent() && WeakPackage.IsValid() && WeakWorm.IsValid() && !WeakWorm->GetOwner() &&
+        CanAcceptCompanionCaterpillar(WeakCompanion.Get(),WeakRequester.Get(),false) &&
+        WeakCompanion->CanHandleHandheldItem() && HasCaterpillarInsertionReach(WeakCompanion.Get(),WeakWorm.Get()))
+    {
+        CommitCaterpillar(WeakWorm.Get());
+        return true;
+    }
+    if (WeakWorm.IsValid() && !WeakWorm->GetOwner())
+    {
+        if (WeakCompanion.IsValid() && WeakCompanion->TryReceiveHandheldItem(WeakWorm.Get())) return false;
+        WeakWorm->DropFromInventory(OriginalLocation,FVector::ZeroVector);
+    }
+    return false;
 }
 
 bool ADeliveryPackageItem::TryInsertCaterpillar(APawn* Interactor)
@@ -177,14 +284,40 @@ bool ADeliveryPackageItem::TryInsertCaterpillar(APawn* Interactor)
     auto* Character = CastChecked<ADeliveryCharacter>(Interactor);
     auto* Inventory = Character->GetInventoryComponent();
     auto* Worm = Cast<ADeliveryCaterpillarItem>(Inventory->GetHeldItem());
+    if (!DeliveryItemComponent->BeginTransfer(Character)) return false;
+    const TWeakObjectPtr<UDeliveryItemComponent> WeakPackageData(DeliveryItemComponent);
+    ON_SCOPE_EXIT { if (WeakPackageData.IsValid()) WeakPackageData->EndTransfer(); };
+    auto* WormData=Worm->GetItemComponent();
+    const FGuid WormTransfer=WormData->BeginTransfer(Character);
+    if (!WormTransfer.IsValid()) return false;
+    const TWeakObjectPtr<UDeliveryInventoryItemComponent> WeakWormData(WormData);
+    ON_SCOPE_EXIT { if (WeakWormData.IsValid()) WeakWormData->EndTransfer(WormTransfer); };
+    const TWeakObjectPtr<ADeliveryPackageItem> WeakPackage(this);
+    const TWeakObjectPtr<ADeliveryCharacter> WeakCharacter(Character);
+    const TWeakObjectPtr<ADeliveryCaterpillarItem> WeakWorm(Worm);
+    const FVector OriginalLocation=Character->GetActorLocation();
     if (!Inventory->ConsumeHeldItem(Worm)) return false;
-    // 同一服务器调用中消耗物品并置位，后续并发请求只能看到已经放入的结果
+    // 背包回调可能改变当前站位或销毁包裹，仍需以原件和原持有者提交
+    if (!WeakPackage.IsValid() || !WeakCharacter.IsValid() || !WeakWorm.IsValid() || WeakWorm->GetOwner() ||
+        GetOwner() || !IsPrankPackageAvailable() || !Character->CanHandleTaskPackage() || !HasCaterpillarInsertionReach(Character,Worm))
+    {
+        if (WeakWorm.IsValid() && !WeakWorm->GetOwner() &&
+            (!WeakCharacter.IsValid() || !WeakCharacter->TryReceiveHandheldItem(WeakWorm.Get())))
+            WeakWorm->DropFromInventory(OriginalLocation,FVector::ZeroVector);
+        return false;
+    }
+    CommitCaterpillar(Worm);
+    if (WeakCharacter.IsValid()) WeakCharacter->ClientPickupSucceeded();
+    return true;
+}
+
+void ADeliveryPackageItem::CommitCaterpillar(ADeliveryCaterpillarItem* Worm)
+{
+    // 只在同一只实物已释放后置位，额外奖励仍由原交付路径评定
     bContainsCaterpillar = true;
     OnRep_Caterpillar();
     ForceNetUpdate();
-    Worm->Destroy();
-    Character->ClientPickupSucceeded();
-    return true;
+    if (IsValid(Worm)) Worm->Destroy();
 }
 
 void ADeliveryPackageItem::OnRep_Caterpillar()
@@ -207,9 +340,9 @@ FText ADeliveryPackageItem::GetPackagePrompt(const APawn* Interactor) const
     const auto* Character = Cast<ADeliveryCharacter>(Interactor);
     if (Character && Cast<ADeliveryCaterpillarItem>(Character->GetInventoryComponent()->GetHeldItem()))
         return bContainsCaterpillar
-            ? NSLOCTEXT("DeliveryItems", "CaterpillarAlreadyAdded", "Caterpillar already added - put away the caterpillar to pick up food")
-            : NSLOCTEXT("DeliveryItems", "InsertCaterpillar", "[Hold E] Put caterpillar in food (delivery bonus)");
+            ? NSLOCTEXT("DeliveryItems", "CaterpillarAlreadyAdded", "外卖里已经有毛毛虫，先收起手里的毛毛虫再取餐")
+            : NSLOCTEXT("DeliveryItems", "InsertCaterpillar", "[按住 E] 把毛毛虫放进外卖（交付时有额外奖励）");
     return bContainsCaterpillar
-        ? NSLOCTEXT("DeliveryItems", "PickupFoodWithCaterpillar", "[Hold E] Pick up food - caterpillar bonus ready")
+        ? NSLOCTEXT("DeliveryItems", "PickupFoodWithCaterpillar", "[按住 E] 拾取外卖（已加入毛毛虫）")
         : InteractableComponent->PromptText;
 }

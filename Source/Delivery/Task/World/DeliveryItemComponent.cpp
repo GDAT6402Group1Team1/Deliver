@@ -61,26 +61,26 @@ bool UDeliveryItemComponent::IsTransferInProgress() const
 FText UDeliveryItemComponent::GetPickupBlockedReason() const
 {
 	if (IsTransferInProgress())
-        return NSLOCTEXT("DeliveryPickup", "TransferInProgress", "Package handover in progress");
+        return NSLOCTEXT("DeliveryPickup", "TransferInProgress", "正在交接包裹");
 	const UDeliveryTaskManagerComponent* Manager = UDeliveryTaskManagerComponent::Get(this);
 	if (!OwningTask)
-		return NSLOCTEXT("DeliveryPickup", "NoTask", "Package Has No Delivery Assigned");
+		return NSLOCTEXT("DeliveryPickup", "NoTask", "快递未配置任务");
 	if (!Manager)
-		return NSLOCTEXT("DeliveryPickup", "NoManager", "Delivery Service Unavailable");
+		return NSLOCTEXT("DeliveryPickup", "NoManager", "当前关卡未配置任务管理器");
 	if (!Manager->IsTaskRegistered(OwningTask))
-		return NSLOCTEXT("DeliveryPickup", "NotRegistered", "Delivery Unavailable in This Area");
+		return NSLOCTEXT("DeliveryPickup", "NotRegistered", "当前关卡未登记这份快递任务");
 	if (Manager->CanAcquireItem(OwningTask))
 		return FText::GetEmpty();
 	if (Manager->GetTaskStatus(OwningTask) == EDeliveryTaskStatus::Completed)
-		return NSLOCTEXT("DeliveryPickup", "Completed", "Delivery Already Completed");
+		return NSLOCTEXT("DeliveryPickup", "Completed", "这份快递的任务已完成");
 	if (Manager->GetTaskStatus(OwningTask) == EDeliveryTaskStatus::Locked)
-		return NSLOCTEXT("DeliveryPickup", "Locked", "Wait for the Delivery Call");
+		return NSLOCTEXT("DeliveryPickup", "Locked", "任务尚未解锁，请等待任务来电");
 	if (!Manager->IsTaskAccepted(OwningTask))
 	{
-		return NSLOCTEXT("DeliveryPickup", "NotAnswered", "Answer the Call to Accept This Delivery");
+		return NSLOCTEXT("DeliveryPickup", "NotAnswered", "先接电话才能接这一单");
 	}
 
-	return NSLOCTEXT("DeliveryPickup", "OtherTask", "Complete Your Current Delivery First");
+	return NSLOCTEXT("DeliveryPickup", "OtherTask", "请先完成正在进行的快递任务");
 }
 
 // 由服务器通知任务管理器快递已被领取

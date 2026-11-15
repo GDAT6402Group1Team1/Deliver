@@ -15,6 +15,7 @@
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/Composites/BTComposite_Sequence.h"
 #include "Builders/CubeBuilder.h"
+#include "Character/DeliveryCharacter.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -131,6 +132,49 @@ bool FDeliveryNpcStrikeNavigationTest::RunTest(const FString&)
     DescribeNavigation(TEXT("BeforeWall"));
     TestTrue(TEXT("完整导航允许走向远处目标"),A->CanExecute(EDeliveryNpcAction::MoveTo,B));
     TestTrue(TEXT("完整导航允许靠近后挥拳"),A->Combat->CanApproachStrike(B));
+    {
+        auto* PlayerClass=LoadClass<ADeliveryCharacter>(nullptr,
+            TEXT("/Game/Blueprint/Character/DeliverMan/BP_DeliveryMan.BP_DeliveryMan_C"));
+        if (!TestNotNull(TEXT("正式主角蓝图"),PlayerClass)) return false;
+        auto* Player=World->SpawnActor<ADeliveryCharacter>(PlayerClass,
+            A->GetActorLocation()+FVector(145.5,0,0),FRotator::ZeroRotator,Spawn);
+        if (!TestNotNull(TEXT("已生成主角"),Player)) return false;
+        ON_SCOPE_EXIT { Player->Destroy(); };
+        auto* Capsule=Player->GetCapsuleComponent();
+        Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        // 放大整角色的碰撞边界，重现主角停用胶囊时通用 Bounds 扩大近身距离
+        auto* BodyBounds=NewObject<UBoxComponent>(Player);
+        Player->AddInstanceComponent(BodyBounds);
+        BodyBounds->SetupAttachment(Capsule);
+        BodyBounds->SetRelativeLocation(FVector(0,0,400));
+        BodyBounds->SetBoxExtent(FVector(150,150,20));
+        BodyBounds->SetCollisionProfileName(TEXT("BlockAll"));
+        BodyBounds->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+        BodyBounds->SetCanEverAffectNavigation(false);
+        BodyBounds->RegisterComponent();
+
+        const auto* Combat=A->Combat.Get();
+        const float Expected=FMath::Min(FMath::Max(10.f,Combat->StrikeRange),
+            A->GetSimpleCollisionRadius()+Capsule->GetScaledCapsuleRadius()+FMath::Clamp(Combat->StrikeBodyGap,0.f,12.f));
+        TestTrue(TEXT("主角整体碰撞边界大于实际胶囊体型"),Player->GetSimpleCollisionRadius()>Capsule->GetScaledCapsuleRadius());
+        TestEqual(TEXT("接近距离按已配置的主角胶囊体型计算"),Combat->GetStrikeApproachDistance(Player),Expected);
+        TestTrue(TEXT("玩家实测空挥处仍需靠近"),Combat->GetStrikeApproachDistance(Player)<145.5f);
+        TestFalse(TEXT("未到近身距离不能启动真实挥拳"),A->Combat->StartStrike(Player,FGuid::NewGuid()));
+    }
+    {
+        const float PriorApproach=A->Combat->StrikeApproachRange;
+        A->Combat->StrikeApproachRange=320.f;
+        ON_SCOPE_EXIT { A->Combat->StrikeApproachRange=PriorApproach; };
+        const FGuid FightId=FGuid::NewGuid();
+        TestFalse(TEXT("普通居民仍使用自己的交战接近范围"),A->Combat->CanBeginFight(B));
+        TestFalse(TEXT("模型交战不能扩大原有范围"),A->Combat->BeginFight(B,FightId,2.f,true,450.f));
+        if (TestTrue(TEXT("已授权的接近范围可开始同一个可达目标的短回合"),A->Combat->BeginFight(B,FightId,2.f,false,450.f)))
+        {
+            TestTrue(TEXT("规则回合不会刚开始便因旧接近范围结束"),A->Combat->GetFightStopReason(FightId).IsNone());
+            TestFalse(TEXT("加大接近距离不会在远处启动拳头"),A->Combat->StartFightStrike(B,FightId,FGuid::NewGuid()));
+            A->Combat->EndFight(FightId,false);
+        }
+    }
 
     // 用实际墙体把导航分成两块，不能把只走到墙边的路径当成能够到达
     auto* Barrier=World->SpawnActor<AActor>();
@@ -156,6 +200,7 @@ bool FDeliveryNpcStrikeNavigationTest::RunTest(const FString&)
     TestFalse(TEXT("完整路径检查拒绝墙前结束的路径"),A->CanReachTarget(B));
     TestFalse(TEXT("隔墙且无完整路径时不提供走过去"),A->CanExecute(EDeliveryNpcAction::MoveTo,B));
     TestFalse(TEXT("隔墙时不提供追近挥拳"),A->Combat->CanApproachStrike(B));
+    TestFalse(TEXT("更大的规则接近范围仍不能沿隔墙部分路径开打"),A->Combat->CanBeginFight(B,900.f));
     // 检查普通组件退出流程确实移除了墙体导航，再验证拆墙后能重新靠近目标
     const FNavigationElementHandle WallNavigation(BarrierMesh);
     TestNotNull(TEXT("拆墙前导航仍保存实际墙体"),Nav->GetDataForElement(WallNavigation));

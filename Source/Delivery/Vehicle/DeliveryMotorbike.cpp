@@ -186,10 +186,10 @@ ADeliveryMotorbike::ADeliveryMotorbike()
 	TrunkInteractable->HoldDuration = 0.0f;
 	TrunkInteractable->PromptOffset = FVector(0.0f, 0.0f, 60.0f);
 
-	DrivePromptText = NSLOCTEXT("Delivery", "MotorbikeDrivePrompt", "Press F to Ride");
-	ExitPromptText = NSLOCTEXT("Delivery", "MotorbikeExitPrompt", "Press F to Dismount");
-	TrunkLoadPromptText = NSLOCTEXT("Delivery", "MotorbikeTrunkLoad", "Left Click to Load");
-	TrunkUnloadPromptText = NSLOCTEXT("Delivery", "MotorbikeTrunkUnload", "Left Click to Unload");
+	DrivePromptText = NSLOCTEXT("Delivery", "MotorbikeDrivePrompt", "按 F 驾驶");
+	ExitPromptText = NSLOCTEXT("Delivery", "MotorbikeExitPrompt", "按 F 下车");
+	TrunkLoadPromptText = NSLOCTEXT("Delivery", "MotorbikeTrunkLoad", "左键装货");
+	TrunkUnloadPromptText = NSLOCTEXT("Delivery", "MotorbikeTrunkUnload", "左键取货");
 
 	static ConstructorHelpers::FObjectFinder<UInputAction> MoveActionFinder(
 	    TEXT("/Game/Input/Actions/IA_Move"));
@@ -1768,8 +1768,8 @@ void ADeliveryMotorbike::ToggleCameraMode()
 		}
 	}
 
-	ShowNotice(bFreeLookCamera ? NSLOCTEXT("Delivery", "MotorbikeFreeLook", "Free Camera (P to Switch)")
-	                           : NSLOCTEXT("Delivery", "MotorbikeFixedLook", "Fixed Camera (P to Switch)"),
+	ShowNotice(bFreeLookCamera ? NSLOCTEXT("Delivery", "MotorbikeFreeLook", "自由视角（P 切换）")
+	                           : NSLOCTEXT("Delivery", "MotorbikeFixedLook", "固定视角（P 切换）"),
 	           1.5f);
 }
 
@@ -1931,13 +1931,13 @@ void ADeliveryMotorbike::Tick(float DeltaSeconds)
 		// 现有上车或切换视角提示结束后，再显示一次鸣笛操作
 		if (bHornHintPending && NoticeRemaining <= 0.f)
 		{
-			FText Key = NSLOCTEXT("Delivery", "HornMouseFallback", "Left Mouse Button");
+			FText Key = NSLOCTEXT("Delivery", "HornMouseFallback", "左键");
 			if (const auto* Hint = GetController()->FindComponentByClass<UDeliveryHintComponent>())
 			{
 				const FText MappedKey = Hint->GetKeyText(HornAction);
 				if (!MappedKey.IsEmpty()) Key = MappedKey;
 			}
-			ShowNotice(FText::Format(NSLOCTEXT("Delivery", "BikeHornHint", "Hold {0} to Honk"), Key), 1.f);
+			ShowNotice(FText::Format(NSLOCTEXT("Delivery", "BikeHornHint", "按住 {0} 鸣笛"), Key), 1.f);
 			bHornHintPending = false;
 		}
 		if (NoticeRemaining > 0.0f)

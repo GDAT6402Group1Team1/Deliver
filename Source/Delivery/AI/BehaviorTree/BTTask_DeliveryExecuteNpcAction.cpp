@@ -19,6 +19,15 @@ namespace
 {
     // NPC 动作使用单独的朝向优先级，不覆盖导航或其他玩法设置的朝向
     const EAIFocusPriority::Type ResidentActionFocus = EAIFocusPriority::LastFocusPriority + 1;
+
+    bool IsCurrentPace(const ADeliveryCompanionCharacter* Npc,const AAIController* AI,const FDeliveryNpcPublicState& Expected)
+    {
+        if (!IsValid(Npc) || Npc->IsActorBeingDestroyed() || !IsValid(AI) || AI->GetPawn()!=Npc || Npc->GetController()!=AI) return false;
+        const auto Current=Npc->Agent->GetPublicState();
+        return Current.ActionId==Expected.ActionId && Current.PlanRevision==Expected.PlanRevision &&
+            Current.CompanionCommandRevision==Expected.CompanionCommandRevision &&
+            Current.Status==EDeliveryNpcActionStatus::Running && Npc->CanContinuePace(Current);
+    }
 }
 
 UBTTask_DeliveryExecuteNpcAction::UBTTask_DeliveryExecuteNpcAction()
@@ -48,12 +57,20 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
     if (!Agent.IsValid() || !Agent->StartAction(Action)) return EBTNodeResult::Failed;
     ActionId = Action.ActionId;
     FinishAt = Pawn->GetWorld()->GetTimeSeconds() + Action.Duration;
+    const TWeakObjectPtr<AAIController> StartedController=Controller;
+    const TWeakObjectPtr<UDeliveryNpcAgentComponent> StartedAgent=Agent;
     const TWeakObjectPtr<ADeliveryCompanionCharacter> ItemObserver=Cast<ADeliveryCompanionCharacter>(Pawn);
+    const bool bCompanionPace=Action.Action==EDeliveryNpcAction::Pace && ItemObserver.IsValid();
     const TWeakObjectPtr<ADeliveryHandheldItem> ObservedItem=Cast<ADeliveryHandheldItem>(Action.Target);
     const bool bItemFocus=Action.Action==EDeliveryNpcAction::LookAt && ItemObserver.IsValid() &&
         DeliveryHandheldTransfer::IsOrdinaryItem(ObservedItem.Get());
     bKeepsCompanionMovement=Agent->CanContinueCompanionMovement();
     if (!bKeepsCompanionMovement) Controller->StopMovement();
+    if (bCompanionPace && !IsCurrentPace(ItemObserver.Get(),StartedController.Get(),Action))
+    {
+        if (StartedAgent.IsValid()) StartedAgent->TryFinishAction(Action.ActionId,EDeliveryNpcActionStatus::Failed,TEXT("PaceStayUnavailable"));
+        return EBTNodeResult::Failed;
+    }
     if (bItemFocus)
     {
         // 停导航会同步广播，挂 live 焦点前重查同一动作及当前实见，不能用旧目标覆盖新动作
@@ -79,14 +96,25 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
     {
         if (Action.Action==EDeliveryNpcAction::StrikeOnce && Action.Duration<UDeliveryNpcCombatComponent::StrikeWindup)
         { Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,TEXT("StrikeDurationTooShort")); return EBTNodeResult::Failed; }
-        if (!Resident->ExecuteAction(Action))
-        { Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,TEXT("StartRejected")); return EBTNodeResult::Failed; }
+        if (!Resident->ExecuteAction(Action) || (bCompanionPace && !IsCurrentPace(ItemObserver.Get(),StartedController.Get(),Action)))
+        {
+            if (StartedAgent.IsValid()) StartedAgent->TryFinishAction(Action.ActionId,EDeliveryNpcActionStatus::Failed,TEXT("StartRejected"));
+            return EBTNodeResult::Failed;
+        }
         if (DeliveryNpc::IsCompanionCommand(Action.Action))
         {
             // 这里只确认安排已接收，实际跑腿、家居和跟随由持续分支执行
-            Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Succeeded,
-                Action.Action==EDeliveryNpcAction::HomeAction?TEXT("HomeArrangementAccepted"):
-                DeliveryNpc::IsCompanionErrand(Action.Action)?TEXT("CompanionErrandAccepted"):TEXT("CompanionModeChanged"));
+            const auto* Companion=ItemObserver.IsValid()?ItemObserver->Companion.Get():nullptr;
+            FName Reason=TEXT("CompanionModeChanged");
+            if (Action.Action==EDeliveryNpcAction::JoinAssist) Reason=TEXT("AssistArrangementAccepted");
+            else if (Action.Action==EDeliveryNpcAction::StopAssist) Reason=TEXT("AssistStoppedByOwner");
+            else if (Action.Action==EDeliveryNpcAction::HomeAction) Reason=TEXT("HomeArrangementAccepted");
+            else if (Action.Action==EDeliveryNpcAction::Follow && Companion &&
+                Companion->GetCommandRevision()==Action.CompanionCommandRevision) Reason=TEXT("CompanionFollowContinued");
+            else if (DeliveryNpc::IsCompanionErrand(Action.Action))
+                Reason=Companion && Companion->GetCommandRevision()==Action.CompanionCommandRevision?
+                    TEXT("CompanionErrandContinued"):TEXT("CompanionErrandAccepted");
+            if (StartedAgent.IsValid()) StartedAgent->TryFinishAction(Action.ActionId,EDeliveryNpcActionStatus::Succeeded,Reason);
             return EBTNodeResult::Succeeded;
         }
         if (Action.Action==EDeliveryNpcAction::MoveTo)
@@ -118,8 +146,11 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
             WalkOrigin=Resident->GetNavAgentLocation();
             const bool bFound=Action.Action==EDeliveryNpcAction::Pace?Resident->FindPaceDestination(WalkDestination):
                 Resident->FindSideStepDestination(Action.Target,WalkDestination);
-            if (!bFound || !StartNearbyMove(WalkDestination))
-            { Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,TEXT("NearbyPathUnavailable")); return EBTNodeResult::Failed; }
+            if (!bFound || !StartNearbyMove(WalkDestination,bCompanionPace?&Action:nullptr))
+            {
+                if (StartedAgent.IsValid()) StartedAgent->TryFinishAction(Action.ActionId,EDeliveryNpcActionStatus::Failed,TEXT("NearbyPathUnavailable"));
+                return EBTNodeResult::Failed;
+            }
         }
         else if (Action.Action==EDeliveryNpcAction::Flee)
         {
@@ -132,15 +163,26 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
     return EBTNodeResult::InProgress;
 }
 
-bool UBTTask_DeliveryExecuteNpcAction::StartNearbyMove(const FVector& Destination)
+bool UBTTask_DeliveryExecuteNpcAction::StartNearbyMove(const FVector& Destination,const FDeliveryNpcPublicState* CompanionPace)
 {
     if (!Controller.IsValid()) return false;
+    const TWeakObjectPtr<AAIController> AI=Controller;
+    const TWeakObjectPtr<ADeliveryCompanionCharacter> Pacer=CompanionPace?Cast<ADeliveryCompanionCharacter>(AI->GetPawn()):nullptr;
     FAIMoveRequest Request(Destination);
     Request.SetAcceptanceRadius(8.f);
     Request.SetReachTestIncludesAgentRadius(false);
     Request.SetReachTestIncludesGoalRadius(false);
     Request.SetAllowPartialPath(false);
-    return Controller->MoveTo(Request).Code!=EPathFollowingRequestResult::Failed;
+    const auto Move=AI->MoveTo(Request);
+    if (CompanionPace && (ActionId!=CompanionPace->ActionId || Controller!=AI || !IsCurrentPace(Pacer.Get(),AI.Get(),*CompanionPace)))
+    {
+        // MoveTo 可以同步回调，旧动作只能取消自己刚交给寻路的编号
+        auto* Path=AI.IsValid()?AI->GetPathFollowingComponent():nullptr;
+        if (Path && Move.MoveId.IsValid() && Path->GetCurrentRequestId()==Move.MoveId)
+            Path->AbortMove(*AI.Get(),FPathFollowingResultFlags::UserAbort,Move.MoveId);
+        return false;
+    }
+    return Move.Code!=EPathFollowingRequestResult::Failed;
 }
 
 void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds)
@@ -149,6 +191,17 @@ void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerCom
     const auto State = Agent->GetPublicState();
     if (State.ActionId != ActionId || State.Status != EDeliveryNpcActionStatus::Running)
     {
+        if (State.ActionId.IsValid() && State.ActionId!=ActionId && State.Status==EDeliveryNpcActionStatus::Accepted &&
+            Controller.IsValid() && Controller.Get()==OwnerComp.GetAIOwner() && Controller->GetPawn()==Agent->GetOwner())
+        {
+            // 模型可在同一帧换动作，黑板仍为真时由正在运行的节点领取新动作
+            // Agent 已经停止旧动作，这里只收回该节点的焦点，不再取消移动或结束旧编号
+            ReleaseFocus(true);
+            ActionId.Invalidate();
+            const auto Result=ExecuteTask(OwnerComp,NodeMemory);
+            if (Result!=EBTNodeResult::InProgress) FinishLatentTask(OwnerComp,Result);
+            return;
+        }
         FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
         return;
     }
@@ -162,36 +215,65 @@ void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerCom
         TickFlee(OwnerComp,Controller.IsValid()?Cast<ADeliveryNpcCharacter>(Controller->GetPawn()):nullptr,State);
         return;
     }
+    if (State.Action==EDeliveryNpcAction::GetUp)
+    {
+        const auto* Resident=Controller.IsValid()?Cast<ADeliveryNpcCharacter>(Controller->GetPawn()):nullptr;
+        if (Resident && Resident->Combat->IsDeliberatelyProne() && Resident->Combat->IsRecovering()) return;
+        const bool bStanding=IsValid(Resident) && !Resident->IsKnockedDown();
+        const bool bFinished=Agent->TryFinishAction(ActionId,
+            bStanding?EDeliveryNpcActionStatus::Succeeded:EDeliveryNpcActionStatus::Failed,
+            bStanding?NAME_None:FName(TEXT("DeliberateRecoveryInterrupted")));
+        FinishLatentTask(OwnerComp,bStanding && bFinished?EBTNodeResult::Succeeded:EBTNodeResult::Failed);
+        return;
+    }
     if (State.Action==EDeliveryNpcAction::Pace || State.Action==EDeliveryNpcAction::MoveAside)
     {
         auto* Npc=Controller.IsValid()?Cast<ADeliveryNpcCharacter>(Controller->GetPawn()):nullptr;
+        const auto* Companion=Cast<ADeliveryCompanionCharacter>(Npc);
+        const bool bCompanionPace=State.Action==EDeliveryNpcAction::Pace && Companion;
+        const bool bTimedOut=OwnerComp.GetWorld()->GetTimeSeconds()>=FinishAt;
+        const bool bStoppedAtPaceReturn=bCompanionPace && bReturningToOrigin && Npc->GetVelocity().SizeSquared2D()<=FMath::Square(5.f);
         FName Failure;
         if (!Npc || Npc->IsKnockedDown()) Failure=TEXT("WalkerUnavailable");
+        else if (bCompanionPace && !IsCurrentPace(Companion,Controller.Get(),State)) Failure=TEXT("PaceStayUnavailable");
         else if (State.Action==EDeliveryNpcAction::MoveAside && !IsValid(State.Target)) Failure=TEXT("StepAsideTargetLost");
-        else if (OwnerComp.GetWorld()->GetTimeSeconds()>=FinishAt) Failure=TEXT("NearbyMoveTimeout");
-        else if (Controller->GetMoveStatus()==EPathFollowingStatus::Idle)
+        else if (bTimedOut && !bCompanionPace) Failure=TEXT("NearbyMoveTimeout");
+        else if (Controller->GetMoveStatus()==EPathFollowingStatus::Idle || (bTimedOut && bStoppedAtPaceReturn))
         {
             const FVector Feet=Npc->GetNavAgentLocation();
             const bool bReached=FVector::Dist2D(Feet,WalkDestination)<=12 && FMath::Abs(Feet.Z-WalkDestination.Z)<=60;
             if (!bReached) Failure=TEXT("NearbyPathInterrupted");
+            else if (bCompanionPace && bReturningToOrigin && !bStoppedAtPaceReturn)
+            {
+                if (!bTimedOut) return;
+                Failure=TEXT("NearbyMoveTimeout");
+            }
             else if (State.Action==EDeliveryNpcAction::Pace && !bReturningToOrigin)
             {
-                // 返回本次记录的起点，让一次踱步停在附近
-                bReturningToOrigin=true;
-                WalkDestination=WalkOrigin;
-                if (!StartNearbyMove(WalkDestination)) Failure=TEXT("PaceReturnBlocked");
+                if (bTimedOut) Failure=TEXT("NearbyMoveTimeout");
+                else
+                {
+                    // 返回本次记录的起点，让一次踱步停在附近
+                    bReturningToOrigin=true;
+                    WalkDestination=WalkOrigin;
+                    const auto StartedAgent=Agent;
+                    const bool bStarted=StartNearbyMove(WalkDestination,bCompanionPace?&State:nullptr);
+                    if (ActionId!=State.ActionId || Agent!=StartedAgent) return;
+                    if (!bStarted) Failure=TEXT("PaceReturnBlocked");
+                }
             }
             else
             {
-                Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Succeeded,NAME_None);
-                FinishLatentTask(OwnerComp,EBTNodeResult::Succeeded);
+                Agent->TryFinishAction(State.ActionId,EDeliveryNpcActionStatus::Succeeded,NAME_None);
+                if (ActionId==State.ActionId) FinishLatentTask(OwnerComp,EBTNodeResult::Succeeded);
                 return;
             }
         }
+        else if (bTimedOut) Failure=TEXT("NearbyMoveTimeout");
         if (!Failure.IsNone())
         {
-            Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Failed,Failure);
-            FinishLatentTask(OwnerComp,EBTNodeResult::Failed);
+            Agent->TryFinishAction(State.ActionId,EDeliveryNpcActionStatus::Failed,Failure);
+            if (ActionId==State.ActionId) FinishLatentTask(OwnerComp,EBTNodeResult::Failed);
         }
         return;
     }
@@ -305,13 +387,11 @@ void UBTTask_DeliveryExecuteNpcAction::TickFight(UBehaviorTreeComponent& OwnerCo
     }
     if (State.Origin==EDeliveryNpcActionOrigin::GameplayRule && Combat->GetFightPunchCount()>=Combat->GetFightPunchLimit())
     { FinishFight(OwnerComp,TEXT("FightPunchLimit"),false); return; }
-    if (Now+UDeliveryNpcCombatComponent::StrikeWindup>FinishAt)
-    { FinishFight(OwnerComp,TEXT("FightTimeLimit"),false); return; }
     if (Combat->CanStrike(State.Target))
     {
         Controller->StopMovement(); bFightMoveRequested=false;
-        // 收拳后可以继续追赶，只有下一次出拳需要等待攻击间隔
-        if (!Combat->IsReadyToStrike()) return;
+        // 剩余时间不够蓄力时先保持距离，仍可接收正在生成的决定
+        if (!Combat->IsReadyToStrike() || Now+UDeliveryNpcCombatComponent::StrikeWindup>FinishAt) return;
         FightPunchId=FGuid::NewGuid();
         bStrikeStarted=Npc->RequestFightStrike(State.Target,ActionId,FightPunchId);
         if (!bStrikeStarted) { FinishFight(OwnerComp,TEXT("StrikeStartRejected"),true); return; }
@@ -391,9 +471,10 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::AbortTask(UBehaviorTreeCom
     return EBTNodeResult::Aborted;
 }
 
-void UBTTask_DeliveryExecuteNpcAction::ReleaseFocus()
+void UBTTask_DeliveryExecuteNpcAction::ReleaseFocus(bool bReplacingOwnAction)
 {
-    if (Controller.IsValid() && ActionId.IsValid() && (!Agent.IsValid() || Agent->GetPublicState().ActionId==ActionId) &&
+    if (Controller.IsValid() && ActionId.IsValid() && FocusTarget.IsValid() &&
+        (bReplacingOwnAction || !Agent.IsValid() || Agent->GetPublicState().ActionId==ActionId) &&
         Controller->GetFocusActorForPriority(ResidentActionFocus) == FocusTarget.Get())
         Controller->ClearFocus(ResidentActionFocus);
     FocusTarget.Reset();
@@ -401,12 +482,20 @@ void UBTTask_DeliveryExecuteNpcAction::ReleaseFocus()
 
 void UBTTask_DeliveryExecuteNpcAction::OnTaskFinished(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, EBTNodeResult::Type TaskResult)
 {
-    if (Agent.IsValid()) Agent->TryFinishAction(ActionId, EDeliveryNpcActionStatus::Cancelled, TEXT("ExecutorStopped"));
+    bool bCompanionPace=false;
+    if (Agent.IsValid())
+    {
+        const auto State=Agent->GetPublicState();
+        bCompanionPace=State.ActionId==ActionId && State.Action==EDeliveryNpcAction::Pace &&
+            Cast<ADeliveryCompanionCharacter>(Agent->GetOwner());
+        Agent->TryFinishAction(ActionId,EDeliveryNpcActionStatus::Cancelled,TEXT("ExecutorStopped"));
+    }
     ReleaseFocus();
     if (Controller.IsValid())
     {
-        // 被动短动作没有取得导航所有权，结束回调不能停止新 Follow 的路径
-        if (!bKeepsCompanionMovement && Agent.IsValid() && Agent->GetPublicState().ActionId==ActionId) Controller->StopMovement();
+        // 保留被动短动作、重复委托和已结算踱步之后的持续导航
+        if (!bKeepsCompanionMovement && !bCompanionPace && Agent.IsValid() && Agent->GetPublicState().ActionId==ActionId)
+            Controller->StopMovement();
         if (auto* Resident=Cast<ADeliveryNpcCharacter>(Controller->GetPawn())) Resident->StopAction(ActionId);
     }
     Agent.Reset();

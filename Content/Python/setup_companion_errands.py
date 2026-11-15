@@ -253,12 +253,18 @@ def describe_tree():
 
 def validate_tree(tree):
     errors = list(tree.get('validation_errors', []))
-    if (tree.get('blackboard_path') or '').split('.')[0] != AI + 'BB_Companion':
+    blackboard_path = tree.get('blackboard_path') or ''
+    if blackboard_path.split('.')[0] != AI + 'BB_Companion':
         errors.append('行为树没有引用独立 BB_Companion')
     children = tree['root'].get('children', [])
     expected_keys = ['Unavailable', 'Listening', 'HasApprovedAction', 'HasCompanionErrand', None]
+    search_key = 'HasNearbyItemSearch'
+    blackboard_keys = tree.get('blackboard', {}).get('keys', [])
+    search_installed = len(children) == 6
+    if search_installed:
+        expected_keys.insert(3, search_key)
     if len(children) != len(expected_keys):
-        errors.append('根 Selector 必须保留五个预期分支')
+        errors.append('根 Selector 需要五个委托基础分支，接入找物后需要六个')
         return errors
     if not tree['root'].get('class', '').endswith('BTComposite_Selector'):
         errors.append('行为树根不是 Selector')
@@ -272,17 +278,33 @@ def validate_tree(tree):
         elif decorators[0].get('flow_abort_mode_name') != 'Both' or decorators[0].get('basic_operation_name') != 'Set':
             errors.append('分支必须按 Set/Both 中止：' + key)
         node = child.get('node', {})
-        if index in (3, 4):
-            suffix = 'BTT_CompanionErrand_C' if index == 3 else 'BTT_CompanionFollow_C'
-            if index == 4 and len(node.get('children', [])) == 1:
+        if key in ('HasCompanionErrand', None):
+            suffix = 'BTT_CompanionErrand_C' if key else 'BTT_CompanionFollow_C'
+            if key is None and len(node.get('children', [])) == 1:
                 if node['children'][0].get('decorators'):
                     errors.append('默认 Follow 叶子不应有装饰器')
                 node = node['children'][0].get('node', {})
             if not node.get('class', '').endswith(suffix):
                 errors.append('持续任务叶子类型不符：' + suffix)
-    keys = [key for key in tree.get('blackboard', {}).get('keys', []) if key.get('name') == 'HasCompanionErrand']
-    if len(keys) != 1 or not keys[0].get('type', '').endswith('BlackboardKeyType_Bool') or keys[0].get('instance_synced'):
-        errors.append('HasCompanionErrand 必须是非实例同步 Bool')
+            if key == 'HasCompanionErrand' and node.get('search_stage_only') is True:
+                errors.append('持续委托叶子必须允许推进非找物阶段')
+        if key == search_key:
+            subtree = node.get('subtree', {})
+            if (not node.get('class', '').endswith('BTTask_RunBehavior') or
+                    subtree.get('path') != '/Game/NPC/Shared/AI/BT_SearchNearbyItem.BT_SearchNearbyItem' or
+                    subtree.get('blackboard_path') != blackboard_path):
+                errors.append('找物分支必须运行正式子树并共享 BB_Companion')
+            root = subtree.get('root', {})
+            tasks = root.get('children', [])
+            if (not root.get('class', '').endswith('BTComposite_Sequence') or len(tasks) != 1 or
+                    tasks[0].get('node', {}).get('search_stage_only') is not True):
+                errors.append('找物子树需要仅执行搜索阶段的委托任务')
+    for required in ('HasCompanionErrand', search_key) if search_installed else ('HasCompanionErrand',):
+        keys = [key for key in blackboard_keys if key.get('name') == required]
+        if len(keys) != 1 or not keys[0].get('type', '').endswith('BlackboardKeyType_Bool') or keys[0].get('instance_synced'):
+            errors.append(required + ' 必须是非实例同步 Bool')
+    if not search_installed and any(key.get('name') == search_key for key in blackboard_keys):
+        errors.append('黑板已有找物键，正式找物分支尚未接好')
     for node in tree.get('graph', {}).get('nodes', []):
         if 'blackboard_path' in node and (node['blackboard_path'] or '').split('.')[0] != AI + 'BB_Companion':
             errors.append('可编辑图根仍引用旧黑板')

@@ -14,6 +14,7 @@
 #include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
 #include "World/DeliveryHome.h"
+#include "World/DeliveryNavigationAreas.h"
 #include "NavLinkCustomComponent.h"
 #include "NavigationSystem.h"
 #include "NavigationData.h"
@@ -171,28 +172,62 @@ FString UDeliveryGrandpaHomeAssetTools::InspectDoorwayNavigation(ADeliveryHome* 
     Root->SetStringField(TEXT("navigation_agent"),Npc->GetPathName());
     Root->SetStringField(TEXT("outside"),Outside.Location.ToString());
     Root->SetStringField(TEXT("inside"),Inside.Location.ToString());
+    const auto VehicleFilter=UDeliveryCompanionVehicleNavFilter::StaticClass();
+    const auto EnabledArea=Link->GetEnabledArea();
+    const FNavLinkId DoorwayId=Link->GetId();
+    const bool bPedestrianAreaConfigured=EnabledArea.Get()==UDeliveryPedestrianLinkArea::StaticClass();
+    Root->SetStringField(TEXT("enabled_area"),GetPathNameSafe(EnabledArea.Get()));
+    Root->SetStringField(TEXT("disabled_area"),GetPathNameSafe(Link->GetDisabledArea().Get()));
+    Root->SetStringField(TEXT("companion_vehicle_filter"),GetPathNameSafe(VehicleFilter));
+    Root->SetBoolField(TEXT("pedestrian_area_configured"),bPedestrianAreaConfigured);
+    Root->SetBoolField(TEXT("doorway_id_valid"),DoorwayId.IsValid());
+    const auto InspectRoute=[&](const FVector& Start,const FVector& End,TSubclassOf<UNavigationQueryFilter> Filter)
+    {
+        auto* Path=Nav->FindPathToLocationSynchronously(Home->GetWorld(),Start,End,Npc,Filter);
+        const bool bValid=Path && Path->IsValid();
+        const bool bPartial=bValid && Path->IsPartial();
+        const bool bUsesLink=DoorwayId.IsValid() && Path && Path->GetPath().IsValid() && Path->GetPath()->ContainsCustomLink(DoorwayId);
+        auto Route=MakeShared<FJsonObject>();
+        Route->SetBoolField(TEXT("complete"),bValid && !bPartial);
+        Route->SetBoolField(TEXT("partial"),bPartial);
+        Route->SetBoolField(TEXT("uses_home_doorway"),bUsesLink);
+        Route->SetNumberField(TEXT("length_cm"),bValid?Path->GetPathLength():0);
+        return Route;
+    };
+    bool bVehicleAvoidsDoorway=true;
     for (const bool bEnabled:{false,true})
     {
         Link->SetEnabled(bEnabled);
         auto Entry=MakeShared<FJsonObject>();
+        auto VehicleEntry=MakeShared<FJsonObject>();
         bool bComplete=true,bUsesLink=true;
+        bool bVehicleComplete=true,bVehicleUsesLink=false;
         for (const bool bReturn:{false,true})
         {
-            auto* Path=Nav->FindPathToLocationSynchronously(Home->GetWorld(),
-                bReturn?Inside.Location:Outside.Location,bReturn?Outside.Location:Inside.Location,Npc);
-            const bool bRouteComplete=Path && Path->IsValid() && !Path->IsPartial();
-            const bool bRouteUsesLink=Path && Path->GetPath().IsValid() && Path->GetPath()->ContainsCustomLink(Link->GetId());
-            auto Route=MakeShared<FJsonObject>();
-            Route->SetBoolField(TEXT("complete"),bRouteComplete);
-            Route->SetBoolField(TEXT("uses_home_doorway"),bRouteUsesLink);
-            Route->SetNumberField(TEXT("length_cm"),Path && Path->IsValid()?Path->GetPathLength():0);
-            Entry->SetObjectField(bReturn?TEXT("grandpa_to_return_anchor"):TEXT("return_anchor_to_grandpa"),Route);
-            bComplete&=bRouteComplete; bUsesLink&=bRouteUsesLink;
+            const FVector& Start=bReturn?Inside.Location:Outside.Location;
+            const FVector& End=bReturn?Outside.Location:Inside.Location;
+            const TCHAR* Direction=bReturn?TEXT("grandpa_to_return_anchor"):TEXT("return_anchor_to_grandpa");
+            const auto WalkRoute=InspectRoute(Start,End,nullptr);
+            const auto VehicleRoute=InspectRoute(Start,End,VehicleFilter);
+            Entry->SetObjectField(Direction,WalkRoute);
+            VehicleEntry->SetObjectField(Direction,VehicleRoute);
+            bComplete&=WalkRoute->GetBoolField(TEXT("complete"));
+            bUsesLink&=WalkRoute->GetBoolField(TEXT("uses_home_doorway"));
+            bVehicleComplete&=VehicleRoute->GetBoolField(TEXT("complete"));
+            bVehicleUsesLink|=VehicleRoute->GetBoolField(TEXT("uses_home_doorway"));
         }
+        VehicleEntry->SetBoolField(TEXT("complete"),bVehicleComplete);
+        VehicleEntry->SetBoolField(TEXT("uses_home_doorway"),bVehicleUsesLink);
+        bVehicleAvoidsDoorway&=!bVehicleUsesLink;
+        Entry->SetObjectField(TEXT("companion_vehicle"),VehicleEntry);
         Entry->SetBoolField(TEXT("complete"),bComplete);
         Entry->SetBoolField(TEXT("uses_home_doorway"),bUsesLink);
         Root->SetObjectField(bEnabled?TEXT("link_enabled"):TEXT("link_disabled"),Entry);
     }
+    Root->SetBoolField(TEXT("vehicle_avoids_home_doorway"),bVehicleAvoidsDoorway);
+    if (!DoorwayId.IsValid()) Root->SetStringField(TEXT("error"),TEXT("DoorwayLinkIdMissing"));
+    else if (!bPedestrianAreaConfigured) Root->SetStringField(TEXT("error"),TEXT("PedestrianAreaMismatch"));
+    else if (!bVehicleAvoidsDoorway) Root->SetStringField(TEXT("error"),TEXT("VehicleRouteUsesHomeDoorway"));
     Link->SetEnabled(bOriginal);
     Root->SetBoolField(TEXT("restored"),Link->IsEnabled()==bOriginal);
     FString Result;

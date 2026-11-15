@@ -33,6 +33,8 @@ class DELIVERY_API UDeliveryVehicleSummonComponent : public UActorComponent
     // 只在实际召唤、驾驶或装货成功后登记；查询不会选取附近别人的车
     void RegisterVehicle(ADeliveryMotorbike* Bike);
     ADeliveryMotorbike* GetRegisteredVehicle() const;
+    // 同伴找货时读取仍装有本人当前订单的登记车辆
+    ADeliveryMotorbike* GetRegisteredCargoVehicle() const;
 
 
 	// 冷却查询
@@ -68,6 +70,7 @@ class DELIVERY_API UDeliveryVehicleSummonComponent : public UActorComponent
 
   private:
 	TWeakObjectPtr<ADeliveryMotorbike> RegisteredVehicle;
+	TWeakObjectPtr<ADeliveryMotorbike> RegisteredCargoVehicle;
 
 	// 服务器召唤与车辆查询
 	UFUNCTION(Server, Reliable)

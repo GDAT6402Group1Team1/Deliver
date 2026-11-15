@@ -8,6 +8,7 @@
 #include "Combat/DeliveryCombatEvents.h"
 #include "Combat/DeliveryImpactReceiver.h"
 #include "Character/DeliveryCharacter.h"
+#include "Delivery.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
@@ -121,7 +122,7 @@ void UDeliveryCompanionComponent::UnbindOwnerCombat()
 bool UDeliveryCompanionComponent::IsAllowedAssistTarget(const AActor* Target) const
 {
     const auto* Npc=GetCompanion();
-    if (!IsValid(Npc) || !IsValid(Target) || Target==Npc || Target->GetWorld()!=GetWorld() ||
+    if (!IsValid(Npc) || !IsValid(Target) || Target->IsActorBeingDestroyed() || Target==Npc || Target->GetWorld()!=GetWorld() ||
         !CanCommand(OwnerPlayerState) || Target==GetOwnerPawn() || Target==OwnerPlayerState.Get() ||
         DeliveryCombatEvents::FindPlayerState(Target)==OwnerPlayerState) return false;
     // 旧主人身体、当前驾驶对象和同属主同伴都不能成为护主目标
@@ -136,17 +137,67 @@ bool UDeliveryCompanionComponent::IsAllowedAssistTarget(const AActor* Target) co
     return Cast<ADeliveryCharacter>(Target)!=nullptr || Cast<IDeliveryImpactReceiver>(Target)!=nullptr;
 }
 
+bool UDeliveryCompanionComponent::IsAssistEvidenceCurrent(const AActor* Target,FGuid EvidenceId) const
+{
+    const auto* Npc=GetCompanion();
+    return IsValid(Npc) && Npc->HasAuthority() && !Npc->IsActorBeingDestroyed() && GetWorld() &&
+        Mode!=EDeliveryCompanionMode::Unrecruited && Npc->GetEncounterState().Phase==EDeliveryCompanionEncounterPhase::Joined &&
+        IsValid(OwnerPlayerState) && IsValid(OwnerPlayerState->GetPlayerController()) &&
+        AssistRevision>0 && Target==AssistTarget && IsAllowedAssistTarget(Target) &&
+        EvidenceId.IsValid() && EvidenceId==AssistEvidenceId && (bAssistCommitted ||
+            (GetWorld()->GetTimeSeconds()<PendingAssistExpiresAt && Npc->Agent->HasObservationEvent(EvidenceId)));
+}
+
+bool UDeliveryCompanionComponent::CanJoinAssist(APlayerState* Requester) const
+{
+    return !bAssistCommitted && IsAssistEvidenceCurrent(AssistTarget,AssistEvidenceId) &&
+        (Requester?CanCommand(Requester):StoppedAssistTarget.Get()!=AssistTarget);
+}
+
+bool UDeliveryCompanionComponent::CanStopAssist(APlayerState* Requester) const
+{
+    return bAssistCommitted && CanCommand(Requester) && IsAssistEvidenceCurrent(AssistTarget,AssistEvidenceId);
+}
+
+bool UDeliveryCompanionComponent::JoinAssist(APlayerState* Requester,int32 ExpectedAssistRevision)
+{
+    if (ExpectedAssistRevision!=AssistRevision || !CanJoinAssist(Requester)) return false;
+    bAssistCommitted=true;
+    StoppedAssistTarget.Reset();
+    ++AssistRevision;
+    GetOwner()->ForceNetUpdate();
+    return true;
+}
+
+bool UDeliveryCompanionComponent::StopAssist(APlayerState* Requester,int32 ExpectedAssistRevision)
+{
+    if (ExpectedAssistRevision!=AssistRevision || !CanStopAssist(Requester)) return false;
+    StoppedAssistTarget=AssistTarget.Get();
+    CancelAssist(TEXT("OwnerStoppedAssist"));
+    return true;
+}
+
+void UDeliveryCompanionComponent::PauseAssistForOwnerConversation(APlayerState* Requester)
+{
+    if (CanStopAssist(Requester)) PauseAssistRound(TEXT("OwnerSpeaking"));
+}
+
+float UDeliveryCompanionComponent::GetAssistRange() const
+{
+    return FMath::Clamp(GetTuning().AssistRange,200.f,1200.f);
+}
+
 bool UDeliveryCompanionComponent::CanExecuteAssist(AActor* Target,int32 RuleRevision) const
 {
     const auto* Npc=GetCompanion();
-    if (!IsValid(Npc) || !Npc->HasAuthority() || Mode==EDeliveryCompanionMode::Unrecruited ||
-        !IsValid(OwnerPlayerState) || !IsValid(OwnerPlayerState->GetPlayerController()) ||
-        RuleRevision<=0 || RuleRevision!=AssistRevision || Target!=AssistTarget || !AssistEvidenceId.IsValid() ||
-        !GetWorld() || GetWorld()->GetTimeSeconds()>=AssistExpiresAt || !IsAllowedAssistTarget(Target) ||
-        (GetCarriedItem() && !GetCarriedTaskPackage())) return false;
-    const float Range=FMath::Clamp(GetTuning().AssistRange,200.f,1200.f);
-    return FVector::DistSquared(Npc->GetActorLocation(),AssistOrigin)<=FMath::Square(Range) &&
-        FVector::DistSquared(Target->GetActorLocation(),AssistOrigin)<=FMath::Square(Range);
+    const auto* OwnerPawn=GetOwnerPawn();
+    if (!bAssistCommitted || RuleRevision!=AssistRevision || !IsAssistEvidenceCurrent(Target,AssistEvidenceId) ||
+        !IsValid(Npc) || Npc->IsHidden() || !IsValid(OwnerPawn) || OwnerPawn->IsActorBeingDestroyed() ||
+        Target->IsHidden() || (GetCarriedItem() && !GetCarriedTaskPackage())) return false;
+    if (const auto* Receiver=Cast<IDeliveryImpactReceiver>(Target); Receiver && Receiver->IsKnockedDown()) return false;
+    const float Range=GetAssistRange();
+    return FVector::DistSquared(Npc->GetActorLocation(),Target->GetActorLocation())<=FMath::Square(Range) &&
+        FVector::DistSquared(OwnerPawn->GetActorLocation(),Target->GetActorLocation())<=FMath::Square(Range);
 }
 
 void UDeliveryCompanionComponent::OnOwnerConfirmedHit(FGameplayTag EventTag,const FGameplayEventData* EventData)
@@ -173,7 +224,7 @@ void UDeliveryCompanionComponent::OnOwnerConfirmedHit(FGameplayTag EventTag,cons
     if (RecentAssistHits.Num()>128) RecentAssistHits.RemoveAt(0);
     auto* Target=bOwnerAttacked?Hit->Target.Get():Hit->Attacker.Get();
     if (!IsAllowedAssistTarget(Target)) return;
-    const float Range=FMath::Clamp(GetTuning().AssistRange,200.f,1200.f);
+    const float Range=GetAssistRange();
     if (FVector::DistSquared(Npc->GetActorLocation(),Hit->ImpactPoint)>FMath::Square(Range) ||
         FVector::DistSquared(Npc->GetActorLocation(),Target->GetActorLocation())>FMath::Square(Range)) return;
 
@@ -183,30 +234,36 @@ void UDeliveryCompanionComponent::OnOwnerConfirmedHit(FGameplayTag EventTag,cons
     Fact.Kind=bOwnerAttacked?TEXT("OwnerConfirmedAttack"):TEXT("OwnerConfirmedHit");
     Fact.Source=EDeliveryNpcEvidenceSource::ActionResult;
     Fact.Subject=Target;
-    Fact.Description=bOwnerAttacked?TEXT("主人刚刚实际打中了这个对象，我要上前帮忙；之后是否命中仍由真实接触决定"):
-        TEXT("这个对象刚刚实际打中了主人，我要上前帮忙；之后是否命中仍由真实接触决定");
+    Fact.Description=bOwnerAttacked?TEXT("主人刚刚实际打中了这个对象，可以商量加入这场协战"):
+        TEXT("这个对象刚刚实际打中了主人，可以商量加入这场协战");
     Fact.Lifetime=Lifetime;
     Fact.bHasObservedLocation=true;
     Fact.ObservedLocation=Hit->ImpactPoint;
     Fact.bNeedsReply=false;
-    // 只用本轮目标与旧期限合并记忆，不改变护主动作的授权或续期
-    const bool bContinuedAssist=AssistTarget==Target && GetWorld()->GetTimeSeconds()<AssistExpiresAt;
+    const double Now=GetWorld()->GetTimeSeconds();
     const TWeakObjectPtr<APlayerState> HitOwner(OwnerPlayerState.Get());
     const int32 HitCommandRevision=CommandRevision;
     if (!Npc->Agent->ObserveEvent(Fact)) return;
-    if (AssistTarget!=Target)
+    const bool bContinuedAssist=AssistTarget==Target && (bAssistCommitted ||
+        (Now<PendingAssistExpiresAt && Npc->Agent->HasObservationEvent(AssistEvidenceId)));
+    // 已确认的协战始终跟当前对手，别的真实命中只记作当前所见
+    if (bAssistCommitted && !bContinuedAssist) return;
+    if (!bContinuedAssist)
     {
         CancelAssist(TEXT("AssistTargetChanged"));
-        if (!IsValid(this) || !IsValid(Npc) || !IsAllowedAssistTarget(Target)) return;
+        if (!IsValid(this) || !IsValid(Npc) || HitOwner.Get()!=OwnerPlayerState || HitCommandRevision!=CommandRevision ||
+            !IsAllowedAssistTarget(Target)) return;
         AssistTarget=Target;
         ++AssistRevision;
         Target->OnDestroyed.AddUniqueDynamic(this,&ThisClass::OnAssistTargetDestroyed);
+        AssistEvidenceId=Fact.EventId;
+        PendingAssistExpiresAt=Now+Lifetime;
+        RememberedAssistHitDirections=0;
+        UE_LOG(LogDelivery,Log,TEXT("CompanionAssistPending npc=%s owner=%s target=%s punch=%s revision=%d expires_in=%.1f distance=%.1f"),
+            *GetNameSafe(Npc),*GetNameSafe(HitOwner.Get()),*GetNameSafe(Target),*AssistEvidenceId.ToString(),AssistRevision,Lifetime,
+            FVector::Dist(Npc->GetActorLocation(),Target->GetActorLocation()));
+        if (CanJoinAssist(nullptr)) Npc->WakeDecision();
     }
-    // 同一目标的新命中只更新真实证据与期限，不重置正在执行的拳数或整轮时间
-    AssistEvidenceId=Fact.EventId;
-    AssistExpiresAt=GetWorld()->GetTimeSeconds()+Lifetime;
-    AssistOrigin=Npc->GetActorLocation();
-    if (!bContinuedAssist) RememberedAssistHitDirections=0;
     const uint8 DirectionBit=bOwnerAttacked?OwnerHitResidentMemory:ResidentHitOwnerMemory;
     FString WitnessDescription;
     // 每个方向只留一次亲眼目睹的真实命中，未看见时不占本轮记录位置
@@ -222,19 +279,36 @@ void UDeliveryCompanionComponent::CancelAssist(FName Reason)
 {
     auto* Npc=GetCompanion();
     if (!Npc || !Npc->HasAuthority()) return;
+    if (Reason==TEXT("OwnerChangedArrangement"))
+    {
+        PauseAssistRound(Reason);
+        return;
+    }
     const int32 OldRevision=AssistRevision;
     const auto State=Npc->Agent->GetPublicState();
     const bool bHadAssist=AssistTarget!=nullptr || AssistEvidenceId.IsValid();
     if (IsValid(AssistTarget)) AssistTarget->OnDestroyed.RemoveDynamic(this,&ThisClass::OnAssistTargetDestroyed);
     AssistTarget=nullptr;
+    bAssistCommitted=false;
     AssistEvidenceId.Invalidate();
-    AssistExpiresAt=0;
+    PendingAssistExpiresAt=0;
     RememberedAssistHitDirections=0;
+    if (Reason==TEXT("OwnerLost") || Reason==TEXT("CompanionEndPlay")) StoppedAssistTarget.Reset();
     if (bHadAssist) ++AssistRevision;
     // 先撤销授权再结束对应规则动作，模型对白与新代次不受旧取消通知影响
     if (IsValid(Npc) && State.Origin==EDeliveryNpcActionOrigin::GameplayRule && State.RuleRevision==OldRevision && Npc->Agent->HasActiveAction())
         Npc->Agent->TryFinishAction(State.ActionId,EDeliveryNpcActionStatus::Cancelled,Reason);
     if (bHadAssist && IsValid(Npc)) Npc->ForceNetUpdate();
+}
+
+void UDeliveryCompanionComponent::PauseAssistRound(FName Reason)
+{
+    auto* Npc=GetCompanion();
+    if (!Npc || !Npc->HasAuthority() || !bAssistCommitted) return;
+    const auto State=Npc->Agent->GetPublicState();
+    if (State.Action==EDeliveryNpcAction::Fight && State.Target==AssistTarget && State.RuleRevision==AssistRevision &&
+        State.Origin==EDeliveryNpcActionOrigin::GameplayRule && Npc->Agent->HasActiveAction())
+        Npc->Agent->TryFinishAction(State.ActionId,EDeliveryNpcActionStatus::Cancelled,Reason);
 }
 
 void UDeliveryCompanionComponent::OnAssistTargetDestroyed(AActor* DestroyedActor)
@@ -246,26 +320,37 @@ void UDeliveryCompanionComponent::UpdateAssist()
 {
     auto* Npc=GetCompanion();
     if (!IsValid(Npc) || !Npc->HasAuthority() || (!AssistTarget && !AssistEvidenceId.IsValid())) return;
-    if (!CanExecuteAssist(AssistTarget,AssistRevision))
+    if (!IsAssistEvidenceCurrent(AssistTarget,AssistEvidenceId))
     {
+        UE_LOG(LogDelivery,Log,TEXT("CompanionAssistInvalid npc=%s target=%s punch=%s revision=%d committed=%d proof_valid=%d pending_remaining=%.2f"),
+            *GetNameSafe(Npc),*GetNameSafe(AssistTarget.Get()),*AssistEvidenceId.ToString(),AssistRevision,bAssistCommitted,
+            Npc->Agent->HasObservationEvent(AssistEvidenceId),PendingAssistExpiresAt-GetWorld()->GetTimeSeconds());
         CancelAssist(TEXT("AssistNoLongerValid"));
         return;
     }
+    if (!CanExecuteAssist(AssistTarget,AssistRevision)) return;
     auto* Agent=Npc->Agent.Get();
     // 玩家正在说话或等待本次回复时保留目标，不能用每轮续打抢走停止命令
     if (Npc->IsKnockedDown() || Npc->Combat->IsReactingToHit() || Agent->IsListening() ||
         Agent->IsWaitingToReplyToPlayer() || Agent->IsDecisionPending() || Agent->HasActiveAction()) return;
-    // 已确认的护主目标保留，但先实际离座和放下装饰物，不让坐姿与战斗同时执行
-    if (HasActiveHomeArrangement() || HomeState.CarriedProp || PendingHomeArrangementId.IsValid())
-    {
-        CancelHomeArrangement(TEXT("AssistCombat"));
-        if (HasActiveHomeArrangement()) return;
-    }
-    if (!EnsureOnFoot() || !Npc->Combat->CanBeginFight(AssistTarget)) return;
-    StopErrandMovement();
-    StopFollowMovement();
+    if (HasActiveErrand() || HasActiveHomeArrangement() || HomeState.CarriedProp || PendingHomeArrangementId.IsValid()) return;
     const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
-    const bool bAccepted=Agent->RequestGameplayRuleAction(EDeliveryNpcAction::Fight,AssistTarget,AssistRevision,
+    const TWeakObjectPtr<ADeliveryCompanionCharacter> WeakNpc(Npc);
+    const TWeakObjectPtr<AActor> Target(AssistTarget.Get());
+    const int32 Revision=AssistRevision;
+    const auto StillCurrent=[&]()
+    {
+        return WeakThis.IsValid() && WeakNpc.IsValid() && Target.IsValid() && CanExecuteAssist(Target.Get(),Revision) &&
+            !HasActiveErrand() && !HasActiveHomeArrangement() && !HomeState.CarriedProp && !PendingHomeArrangementId.IsValid() &&
+            !Agent->HasActiveAction() && !Agent->IsListening() && !Agent->IsWaitingToReplyToPlayer() && !Agent->IsDecisionPending();
+    };
+    if (!EnsureOnFoot() || !StillCurrent() || !Npc->Combat->CanBeginFight(Target.Get(),GetAssistRange())) return;
+    StopErrandMovement();
+    if (!StillCurrent()) return;
+    StopFollowMovement();
+    if (!StillCurrent()) return;
+    const bool bAccepted=Agent->RequestGameplayRuleAction(EDeliveryNpcAction::Fight,Target.Get(),Revision,
         AssistEvidenceId,FMath::Clamp(GetTuning().AssistActionSeconds,UDeliveryNpcCombatComponent::StrikeDuration,5.f));
-    if (bAccepted && WeakThis.IsValid()) SetSuspension(TEXT("AssistCombat"));
+    if (bAccepted && WeakThis.IsValid() && WeakNpc.IsValid() && AssistRevision==Revision && AssistTarget==Target.Get() && bAssistCommitted)
+        SetSuspension(TEXT("AssistCombat"));
 }

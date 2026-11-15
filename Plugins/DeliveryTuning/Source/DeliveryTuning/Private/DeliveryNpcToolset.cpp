@@ -38,6 +38,8 @@
 #include "InputKeyEventArgs.h"
 #include "TimerManager.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
+#include "AI/Decision/DeliveryNpcBehaviorCatalog.h"
+#include "AI/Network/DeliveryAiSettings.h"
 #include "AI/BehaviorTree/BTTask_DeliveryExecuteNpcAction.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BTService.h"
@@ -49,6 +51,7 @@
 #include "BehaviorTree/Composites/BTComposite_Sequence.h"
 #include "BehaviorTree/Decorators/BTDecorator_Blackboard.h"
 #include "BehaviorTree/Tasks/BTTask_Wait.h"
+#include "BehaviorTree/Tasks/BTTask_RunBehavior.h"
 #include "BehaviorTreeGraph.h"
 #include "BehaviorTreeGraphNode.h"
 #include "BehaviorTreeGraphNode_Root.h"
@@ -446,6 +449,106 @@ FString UDeliveryNpcToolset::CreateCompanionBehaviorAsset()
     return SaveResidentAsset(Tree)?TEXT("Saved BT_Companion, BB_Companion and persistent companion tasks"):TEXT("Failed companion tree save");
 }
 
+FString UDeliveryNpcToolset::InstallNearbyItemSearchSubtree()
+{
+    if (!GEditor || GEditor->PlayWorld) return TEXT("退出 PIE 后再接入寻找子树");
+    auto* Tree=LoadObject<UBehaviorTree>(nullptr,TEXT("/Game/NPC/Companion/AI/BT_Companion"));
+    auto* Root=Tree?Cast<UBTComposite_Selector>(Tree->RootNode.Get()):nullptr;
+    auto* Graph=Tree?Cast<UBehaviorTreeGraph>(Tree->BTGraph):nullptr;
+    auto* BB=Tree?Tree->BlackboardAsset.Get():nullptr;
+    if (!Root || !Graph || !BB || Root->Children.Num()<4) return TEXT("找不到同伴树、图或黑板");
+    const FString SubtreePath=TEXT("/Game/NPC/Shared/AI/BT_SearchNearbyItem");
+    const FName SearchKey=TEXT("HasNearbyItemSearch");
+    const int32 ErrandIndex=Root->Children.Num()-2;
+    const auto* ErrandTask=Cast<UBTTask_DeliveryCompanionErrand>(Root->GetChildNode(ErrandIndex));
+    if (!ErrandTask || ErrandTask->bSearchStageOnly) return TEXT("未找到正式委托分支");
+    const auto KeyId=BB->GetKeyID(SearchKey);
+    if (KeyId!=FBlackboard::InvalidKey && (BB->GetKeyType(KeyId)!=UBlackboardKeyType_Bool::StaticClass() || BB->IsKeyInstanceSynced(KeyId)))
+        return TEXT("寻找键必须使用非同步 Bool");
+    if (const auto* Run=Cast<UBTTask_RunBehavior>(Root->GetChildNode(ErrandIndex-1));
+        Run && Run->GetSubtreeAsset() && Run->GetSubtreeAsset()->GetPackage()->GetName()==SubtreePath)
+    {
+        const auto& Branch=Root->Children[ErrandIndex-1];
+        const auto* Gate=Branch.Decorators.Num()==1?Cast<UBTDecorator_Blackboard>(Branch.Decorators[0]):nullptr;
+        const auto* SubRoot=Run->GetSubtreeAsset()->RootNode.Get();
+        const auto* Search=SubRoot && SubRoot->Children.Num()==1?Cast<UBTTask_DeliveryCompanionErrand>(SubRoot->GetChildNode(0)):nullptr;
+        const bool bReady=Gate && Gate->GetSelectedBlackboardKey()==SearchKey && Gate->GetFlowAbortMode()==EBTFlowAbortMode::Both &&
+            KeyId!=FBlackboard::InvalidKey && Search && Search->bSearchStageOnly && Run->GetSubtreeAsset()->BlackboardAsset==BB;
+        return bReady?TEXT("同伴寻找子树已接入"):TEXT("已有寻找分支与预期配置不同");
+    }
+    UBehaviorTreeGraphNode* RootGraph=nullptr;
+    UBehaviorTreeGraphNode* PreviousGraph=nullptr;
+    UBehaviorTreeGraphNode* ErrandGraph=nullptr;
+    for (UEdGraphNode* Raw:Graph->Nodes)
+    {
+        auto* Node=Cast<UBehaviorTreeGraphNode>(Raw);
+        if (!Node) continue;
+        if (Node->NodeInstance==Root) RootGraph=Node;
+        if (Node->NodeInstance==Root->GetChildNode(ErrandIndex-1)) PreviousGraph=Node;
+        if (Node->NodeInstance==ErrandTask) ErrandGraph=Node;
+    }
+    auto* Output=RootGraph?RootGraph->GetOutputPin():nullptr;
+    if (!Output || !PreviousGraph || !ErrandGraph || !Output->LinkedTo.Contains(PreviousGraph->GetInputPin()) ||
+        !Output->LinkedTo.Contains(ErrandGraph->GetInputPin()) || ErrandGraph->NodePosX-PreviousGraph->NodePosX<2)
+        return TEXT("寻找分支插入点与正式委托图不匹配");
+    auto* Subtree=ResidentAsset<UBehaviorTree>(SubtreePath);
+    if (!Subtree) return TEXT("创建寻找子树失败");
+    if (Subtree->RootNode || Subtree->BTGraph)
+    {
+        const auto* Existing=Subtree->RootNode && Subtree->RootNode->Children.Num()==1?
+            Cast<UBTTask_DeliveryCompanionErrand>(Subtree->RootNode->GetChildNode(0)):nullptr;
+        if (!Existing || !Existing->bSearchStageOnly || Subtree->BlackboardAsset!=BB)
+            return TEXT("已有寻找子树与同伴配置不兼容");
+    }
+    else
+    {
+        Subtree->BlackboardAsset=BB;
+        Subtree->RootNode=NewObject<UBTComposite_Sequence>(Subtree);
+        auto* Search=NewObject<UBTTask_DeliveryCompanionErrand>(Subtree);
+        Search->bSearchStageOnly=true;
+        Search->NodeName=TEXT("前往线索并搜索附近");
+        Subtree->RootNode->Children.AddDefaulted_GetRef().ChildTask=Search;
+        RebuildResidentGraph(Subtree);
+        if (!Subtree->BTGraph || !SaveResidentAsset(Subtree)) return TEXT("保存寻找子树失败");
+    }
+    if (KeyId==FBlackboard::InvalidKey)
+    {
+        BB->Modify();
+        FBlackboardEntry Entry; Entry.EntryName=SearchKey; Entry.KeyType=NewObject<UBlackboardKeyType_Bool>(BB);
+        Entry.EntryDescription=TEXT("当前委托需要走到主人指出的位置附近，观察后才转入拿取");
+        BB->Keys.Add(Entry); BB->UpdateKeyIDs();
+        if (!SaveResidentAsset(BB)) return TEXT("保存寻找黑板键失败");
+    }
+    Tree->Modify(); Graph->Modify(); Graph->LockUpdates();
+    FGraphNodeCreator<UBehaviorTreeGraphNode_Task> Builder(*Graph);
+    auto* Node=Builder.CreateNode();
+    auto* Run=NewObject<UBTTask_RunBehavior>(Tree);
+    FindFProperty<FObjectProperty>(UBTTask_RunBehavior::StaticClass(),TEXT("BehaviorAsset"))->SetObjectPropertyValue_InContainer(Run,Subtree);
+    Node->NodeInstance=Run;
+    Node->ClassData=FGraphNodeClassData(Run->GetClass(),FString());
+    Node->NodePosX=PreviousGraph->NodePosX+(ErrandGraph->NodePosX-PreviousGraph->NodePosX)/2;
+    Node->NodePosY=ErrandGraph->NodePosY;
+    Builder.Finalize();
+    auto* Gate=NewObject<UBTDecorator_Blackboard>(Tree);
+    const auto* KeyProperty=FindFProperty<FStructProperty>(Gate->GetClass(),TEXT("BlackboardKey"));
+    auto* Selector=KeyProperty->ContainerPtrToValuePtr<FBlackboardKeySelector>(Gate);
+    Selector->SelectedKeyName=SearchKey; Selector->ResolveSelectedKey(*BB);
+    FindFProperty<FByteProperty>(Gate->GetClass(),TEXT("OperationType"))->SetPropertyValue_InContainer(Gate,EBasicKeyOperation::Set);
+    FindFProperty<FByteProperty>(Gate->GetClass(),TEXT("BasicOperation"))->SetPropertyValue_InContainer(Gate,EBasicKeyOperation::Set);
+    FindFProperty<FByteProperty>(Gate->GetClass(),TEXT("FlowAbortMode"))->SetPropertyValue_InContainer(Gate,EBTFlowAbortMode::Both);
+    static_cast<UBTNode*>(Gate)->InitializeFromAsset(*Tree); Gate->BuildDescription();
+    auto* GateNode=NewObject<UBehaviorTreeGraphNode_Decorator>(Graph);
+    GateNode->NodeInstance=Gate;
+    GateNode->ClassData=FGraphNodeClassData(Gate->GetClass(),FString());
+    Node->AddSubNode(GateNode,Graph);
+    Output->Modify(); Output->MakeLinkTo(Node->GetInputPin());
+    Graph->UnlockUpdates();
+    Graph->UpdateBlackboardChange(); Graph->UpdateAsset(); Graph->NotifyGraphChanged();
+    if (Root->Children.Num()<4 || Root->GetChildNode(ErrandIndex)!=Run || Root->GetChildNode(ErrandIndex+1)!=ErrandTask)
+        return TEXT("寻找分支优先级检查失败，未保存同伴树");
+    return SaveResidentAsset(Tree)?TEXT("保存了同伴寻找子树与黑板接线"):TEXT("保存同伴树失败");
+}
+
 FString UDeliveryNpcToolset::DescribeCompanionBehaviorAsset()
 {
     auto Report=MakeShared<FJsonObject>();
@@ -513,6 +616,17 @@ FString UDeliveryNpcToolset::DescribeCompanionBehaviorAsset()
         Data->SetStringField(TEXT("name"),Node->GetNodeName());
         if (RuntimeVisited.Contains(Node)) { Data->SetBoolField(TEXT("already_described"),true); return Data; }
         RuntimeVisited.Add(Node);
+        if (const auto* Errand=Cast<UBTTask_DeliveryCompanionErrand>(Node))
+            Data->SetBoolField(TEXT("search_stage_only"),Errand->bSearchStageOnly);
+        if (const auto* Run=Cast<UBTTask_RunBehavior>(Node))
+            if (const auto* Subtree=Run->GetSubtreeAsset())
+            {
+                auto Asset=MakeShared<FJsonObject>();
+                Asset->SetStringField(TEXT("path"),Subtree->GetPathName());
+                Asset->SetStringField(TEXT("blackboard_path"),GetPathNameSafe(Subtree->BlackboardAsset.Get()));
+                Asset->SetObjectField(TEXT("root"),DescribeRuntime(Subtree->RootNode));
+                Data->SetObjectField(TEXT("subtree"),Asset);
+            }
         TArray<TSharedPtr<FJsonValue>> Services,Children;
         const auto* Composite=Cast<UBTCompositeNode>(Node);
         Data->SetStringField(TEXT("kind"),Composite?TEXT("composite"):Node->IsA<UBTTaskNode>()?TEXT("task"):TEXT("auxiliary"));
@@ -646,6 +760,17 @@ FString UDeliveryNpcToolset::DescribeCompanionBehaviorAsset()
     }
     Report->SetBoolField(TEXT("ready_for_errands"),Errors.IsEmpty()); Report->SetArrayField(TEXT("validation_errors"),Errors);
     FString Json; FJsonSerializer::Serialize(Report,TJsonWriterFactory<>::Create(&Json)); return Json;
+}
+
+FString UDeliveryNpcToolset::InspectNpcBehaviorCatalog()
+{
+    const auto& Reference=GetDefault<UDeliveryAiSettings>()->NpcBehaviorCatalog;
+    const auto* Table=Reference.LoadSynchronous();
+    FDeliveryNpcBehaviorCatalog Catalog;
+    const bool bLoaded=Table && Catalog.Load(*Table);
+    const auto* Fetch=Catalog.Find(FGameplayTag::RequestGameplayTag(TEXT("Npc.Behavior.Inventory.FetchItem"),false));
+    return FString::Printf(TEXT("valid=%d rows=%d fetch_item=%d asset=%s"),bLoaded,Catalog.Num(),
+        Fetch && Fetch->Action==EDeliveryNpcAction::FetchItem,*Reference.ToSoftObjectPath().ToString());
 }
 
 FString UDeliveryNpcToolset::CreateResidentAssets()

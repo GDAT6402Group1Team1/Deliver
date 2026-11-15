@@ -22,7 +22,7 @@ ADeliveryTestTarget::ADeliveryTestTarget()
 	}
 
 	InteractableComponent = CreateDefaultSubobject<UDeliveryInteractableComponent>(TEXT("Interactable"));
-	InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "HoldDeliverPackage", "[Hold E] Deliver Package");
+	InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "HoldDeliverPackage", "[按住 E] 交付快递");
 	InteractableComponent->InteractionKey = EDeliveryInteractionKey::PickupE;
 	InteractableComponent->HoldDuration = 0.5f;
 	InteractableComponent->InteractRadius = 100.0f;

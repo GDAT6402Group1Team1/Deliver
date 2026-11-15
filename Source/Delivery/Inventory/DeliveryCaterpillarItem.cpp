@@ -4,8 +4,10 @@
 
 ADeliveryCaterpillarItem::ADeliveryCaterpillarItem()
 {
-    ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "Caterpillar", "Caterpillar");
+    ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "Caterpillar", "毛毛虫");
     ItemComponent->bUsesDurability = false;
-    InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "PickupCaterpillar", "[E] Pick up caterpillar - hold it near food");
+    ItemComponent->bCompanionCanFetch = true;
+    bUseNpcGroundPickupPose = true;
+    InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "PickupCaterpillar", "[E] 拾取毛毛虫，拿在手上靠近外卖");
     HeldRelativeTransform = FTransform(FRotator::ZeroRotator, FVector(5,0,0));
 }

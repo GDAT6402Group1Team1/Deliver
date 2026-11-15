@@ -5,6 +5,7 @@
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimBlueprintGeneratedClass.h"
+#include "Animation/AnimSequence.h"
 #include "Animation/Skeleton.h"
 #include "AssetToolsModule.h"
 #include "Factories/AnimBlueprintFactory.h"
@@ -15,6 +16,9 @@
 #include "AnimGraphNode_LocalToComponentSpace.h"
 #include "AnimGraphNode_ComponentToLocalSpace.h"
 #include "AnimGraphNode_ModifyBone.h"
+#include "AnimGraphNode_BlendBoneByChannel.h"
+#include "AnimGraphNode_SaveCachedPose.h"
+#include "AnimGraphNode_UseCachedPose.h"
 #include "AnimGraphNode_LookAt.h"
 #include "AnimGraphNode_BlendListByInt.h"
 #include "AnimGraphNode_SequencePlayer.h"
@@ -22,6 +26,7 @@
 #include "AnimationGraphSchema.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphPin.h"
+#include "Editor.h"
 #include "K2Node_VariableGet.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -118,6 +123,239 @@ bool ConnectNpcBodyPose(UEdGraph* Graph,UEdGraphNode* From,UAnimGraphNode_BlendL
     auto* Output=FindPosePin(From,EGPD_Output);
     auto* Input=Blend->FindPin(FName(*FString::Printf(TEXT("BlendPose_%d"),Index)),EGPD_Input);
     return Output && Input && Graph->GetSchema()->TryCreateConnection(Output,Input);
+}
+
+constexpr int32 FirstJumpPose=static_cast<int32>(UDeliveryNpcBodyAnimInstance::EPose::JumpStart);
+constexpr int32 LastJumpPose=static_cast<int32>(UDeliveryNpcBodyAnimInstance::EPose::JumpLand);
+const FName JumpAssetProperties[]={TEXT("JumpStartAnimation"),TEXT("JumpLoopAnimation"),TEXT("JumpLandAnimation")};
+const FName JumpTimeProperties[]={TEXT("JumpStartTime"),TEXT("JumpLoopTime"),TEXT("JumpLandTime")};
+const FName JumpPelvisBone(TEXT("Hips"));
+
+UEdGraphNode* LinkedNpcBodyInput(const UEdGraphNode* Node,FName PinName)
+{
+    const auto* Pin=Node?Node->FindPin(PinName,EGPD_Input):nullptr;
+    return Pin && Pin->LinkedTo.Num()==1?Pin->LinkedTo[0]->GetOwningNode():nullptr;
+}
+
+FName NpcBodyInputProperty(const UEdGraphNode* Node,FName PinName)
+{
+    const auto* Get=Cast<UK2Node_VariableGet>(LinkedNpcBodyInput(Node,PinName));
+    return Get?Get->VariableReference.GetMemberName():NAME_None;
+}
+
+FName BlendPosePin(int32 Index)
+{
+    return FName(*FString::Printf(TEXT("BlendPose_%d"),Index));
+}
+
+UAnimGraphNode_BlendListByInt* FindNativeBodyPoseSelector(const UAnimBlueprint* Blueprint)
+{
+    UAnimGraphNode_BlendListByInt* Result=nullptr;
+    for (const UEdGraph* Graph:Blueprint->FunctionGraphs)
+    {
+        if (!Graph || Graph->GetFName()!=TEXT("AnimGraph")) continue;
+        for (UEdGraphNode* Node:Graph->Nodes)
+        {
+            auto* Selector=Cast<UAnimGraphNode_BlendListByInt>(Node);
+            if (!Selector || NpcBodyInputProperty(Selector,TEXT("ActiveChildIndex"))!=TEXT("PoseIndex")) continue;
+            if (Result) return nullptr;
+            Result=Selector;
+        }
+    }
+    return Result;
+}
+
+bool IsNpcJumpBodyPath(const FString& BodyPath)
+{
+    return BodyPath==TEXT("/Game/NPC/Residents/Animation/ABP_NpcBody") ||
+        BodyPath==TEXT("/Game/NPC/Companion/Animation/ABP_CompanionBody");
+}
+
+bool IsValidNpcJumpClip(const UAnimSequence* Clip,const USkeleton* Skeleton)
+{
+    // 零位根锁保留成品原有单位姿势，蓝图单独恢复根缩放和骨盆位置
+    return IsValid(Clip) && Clip->GetSkeleton()==Skeleton && !Clip->HasRootMotion() &&
+        Clip->GetAdditiveAnimType()==AAT_None && Clip->bForceRootLock && Clip->RootMotionRootLock==ERootMotionRootLock::Zero &&
+        FMath::IsFinite(Clip->GetPlayLength()) && Clip->GetPlayLength()>0;
+}
+
+bool JumpReferenceScale(const FReferenceSkeleton& Ref,FName& Root,FVector& Scale)
+{
+    const int32 Hips=Ref.FindBoneIndex(JumpPelvisBone);
+    if (Ref.GetNum()<2 || Hips==INDEX_NONE || Ref.GetParentIndex(Hips)!=0) return false;
+    Root=Ref.GetBoneName(0);
+    Scale=Ref.GetRefBonePose()[0].GetScale3D();
+    if (Scale.ContainsNaN() || Scale.GetMin()<=0 || !FMath::IsNearlyEqual(Scale.X,Scale.Y,1.e-4) ||
+        !FMath::IsNearlyEqual(Scale.X,Scale.Z,1.e-4)) return false;
+    for (int32 Index=1;Index<Ref.GetNum();++Index)
+        if (!Ref.GetRefBonePose()[Index].GetScale3D().Equals(FVector::OneVector,1.e-4) ||
+            (Ref.GetParentIndex(Index)==0 && Index!=Hips)) return false;
+    return true;
+}
+
+bool JumpReferenceScaleForBody(const UAnimBlueprint* Blueprint,FName& Root,FVector& Scale)
+{
+    if (!Blueprint || !Blueprint->TargetSkeleton) return false;
+    const bool bCompanion=Blueprint->GetFName()==TEXT("ABP_CompanionBody");
+    const TCHAR* ResidentLoud=TEXT("/Game/NPC/Residents/BP_ResidentLoud.BP_ResidentLoud_C");
+    const TCHAR* ResidentShrewd=TEXT("/Game/NPC/Residents/BP_ResidentShrewd.BP_ResidentShrewd_C");
+    const TCHAR* Companion=TEXT("/Game/NPC/Companion/BP_Companion_Ergou.BP_Companion_Ergou_C");
+    Root=NAME_None;
+    for (const TCHAR* Path:{bCompanion?Companion:ResidentLoud,bCompanion?nullptr:ResidentShrewd})
+    {
+        if (!Path) continue;
+        const auto* Class=LoadClass<ADeliveryNpcCharacter>(nullptr,Path);
+        const auto* Character=Class?Class->GetDefaultObject<ADeliveryNpcCharacter>():nullptr;
+        const auto* Mesh=Character && Character->GetMesh()?Character->GetMesh()->GetSkeletalMeshAsset():nullptr;
+        FName MeshRoot;
+        FVector MeshScale;
+        if (!Mesh || Mesh->GetSkeleton()!=Blueprint->TargetSkeleton ||
+            !JumpReferenceScale(Mesh->GetRefSkeleton(),MeshRoot,MeshScale)) return false;
+        if (Root.IsNone()) { Root=MeshRoot; Scale=MeshScale; }
+        else if (MeshRoot!=Root || !MeshScale.Equals(Scale,1.e-4)) return false;
+    }
+    return !Root.IsNone();
+}
+
+const UAnimGraphNode_SequenceEvaluator* CorrectedJumpClip(const UEdGraphNode* Output,FName Root,const FVector& Scale)
+{
+    const auto* Channels=Cast<UAnimGraphNode_BlendBoneByChannel>(Output);
+    if (!Channels || Channels->BlendNode.TransformsSpace!=BCS_ComponentSpace ||
+        !FMath::IsNearlyEqual(Channels->BlendNode.Alpha,1.f) || Channels->FindPin(TEXT("Alpha"),EGPD_Input) ||
+        Channels->BlendNode.BoneDefinitions.Num()!=1) return nullptr;
+    const auto& Pelvis=Channels->BlendNode.BoneDefinitions[0];
+    if (Pelvis.SourceBone.BoneName!=JumpPelvisBone || Pelvis.TargetBone.BoneName!=JumpPelvisBone ||
+        !Pelvis.bBlendTranslation || Pelvis.bBlendRotation || Pelvis.bBlendScale) return nullptr;
+    const auto* ToLocal=Cast<UAnimGraphNode_ComponentToLocalSpace>(LinkedNpcBodyInput(Channels,TEXT("A")));
+    const auto* RootScale=Cast<UAnimGraphNode_ModifyBone>(LinkedNpcBodyInput(ToLocal,TEXT("ComponentPose")));
+    if (!RootScale || RootScale->Node.BoneToModify.BoneName!=Root ||
+        RootScale->Node.ScaleMode!=BMM_Replace || RootScale->Node.ScaleSpace!=BCS_ParentBoneSpace ||
+        RootScale->Node.TranslationMode!=BMM_Ignore || RootScale->Node.RotationMode!=BMM_Ignore ||
+        !RootScale->Node.Scale.Equals(Scale,1.e-4) || !FMath::IsNearlyEqual(RootScale->Node.Alpha,1.f) ||
+        RootScale->FindPin(TEXT("Scale"),EGPD_Input) || RootScale->FindPin(TEXT("Alpha"),EGPD_Input)) return nullptr;
+    const auto* ToComponent=Cast<UAnimGraphNode_LocalToComponentSpace>(LinkedNpcBodyInput(RootScale,TEXT("ComponentPose")));
+    const auto* ScaleInput=Cast<UAnimGraphNode_UseCachedPose>(LinkedNpcBodyInput(ToComponent,TEXT("LocalPose")));
+    const auto* PelvisInput=Cast<UAnimGraphNode_UseCachedPose>(LinkedNpcBodyInput(Channels,TEXT("B")));
+    const auto* Cache=ScaleInput?ScaleInput->SaveCachedPoseNode.Get():nullptr;
+    if (!Cache || !PelvisInput || PelvisInput->SaveCachedPoseNode.Get()!=Cache) return nullptr;
+    return Cast<UAnimGraphNode_SequenceEvaluator>(LinkedNpcBodyInput(Cache,TEXT("Pose")));
+}
+
+bool JumpPinsMatch(const UAnimGraphNode_BlendListByInt* Blend,FName Root,const FVector& Scale,bool bAllowLegacy=false)
+{
+    for (int32 Index=FirstJumpPose;Index<=LastJumpPose;++Index)
+    {
+        const auto* Output=LinkedNpcBodyInput(Blend,BlendPosePin(Index));
+        const auto* Clip=CorrectedJumpClip(Output,Root,Scale);
+        if (!Clip && bAllowLegacy) Clip=Cast<UAnimGraphNode_SequenceEvaluator>(Output);
+        if (!Clip || NpcBodyInputProperty(Clip,TEXT("Sequence"))!=JumpAssetProperties[Index-FirstJumpPose] ||
+            NpcBodyInputProperty(Clip,TEXT("ExplicitTime"))!=JumpTimeProperties[Index-FirstJumpPose]) return false;
+    }
+    return true;
+}
+
+bool HideJumpConstantPin(UAnimGraphNode_Base* Node,FName Name)
+{
+    for (int32 Index=0;Index<Node->ShowPinForProperties.Num();++Index)
+        if (Node->ShowPinForProperties[Index].PropertyName==Name)
+        {
+            Node->SetPinVisibility(false,Index);
+            break;
+        }
+    return !Node->FindPin(Name,EGPD_Input);
+}
+
+bool ConnectJumpPose(UEdGraph* Graph,UEdGraphNode* From,UEdGraphNode* To,FName InputName)
+{
+    auto* Input=To->FindPin(InputName,EGPD_Input);
+    auto* Output=FindPosePin(From,EGPD_Output);
+    return Input && Output && Graph->GetSchema()->TryCreateConnection(Output,Input);
+}
+
+bool CorrectBodyJumpPoses(UEdGraph* Graph,UAnimGraphNode_BlendListByInt* Blend,FName Root,const FVector& Scale)
+{
+    for (int32 Index=FirstJumpPose;Index<=LastJumpPose;++Index)
+    {
+        auto* Input=Blend->FindPin(BlendPosePin(Index),EGPD_Input);
+        auto* Clip=Cast<UAnimGraphNode_SequenceEvaluator>(LinkedNpcBodyInput(Blend,BlendPosePin(Index)));
+        if (!Clip) continue;
+        const int32 X=Blend->NodePosX-1500;
+        const int32 Y=Clip->NodePosY;
+        Clip->Modify();
+        Clip->NodePosX=X-260;
+        for (const FName Pin:{FName(TEXT("Sequence")),FName(TEXT("ExplicitTime"))})
+            if (auto* Parameter=LinkedNpcBodyInput(Clip,Pin))
+            {
+                Parameter->Modify();
+                Parameter->NodePosX=X-485;
+            }
+        auto* Cache=AddAnimationNode<UAnimGraphNode_SaveCachedPose>(Graph,X,Y,TEXT("保存未修正的跳跃姿势"));
+        Cache->CacheName=FString::Printf(TEXT("NpcJumpRaw%d"),Index);
+        auto* ScaleInput=AddAnimationNode<UAnimGraphNode_UseCachedPose>(Graph,X+200,Y,TEXT("跳跃原姿势用于恢复根单位"));
+        auto* PelvisInput=AddAnimationNode<UAnimGraphNode_UseCachedPose>(Graph,X+850,Y+115,TEXT("保留剪辑的骨盆组件位置"));
+        ScaleInput->SaveCachedPoseNode=Cache;
+        PelvisInput->SaveCachedPoseNode=Cache;
+        auto* ToComponent=AddAnimationNode<UAnimGraphNode_LocalToComponentSpace>(Graph,X+440,Y,TEXT("转到组件空间"));
+        auto* RootScale=AddAnimationNode<UAnimGraphNode_ModifyBone>(Graph,X+650,Y,TEXT("恢复正式网格的参考根缩放"));
+        RootScale->Node.BoneToModify.BoneName=Root;
+        RootScale->Node.Scale=Scale;
+        RootScale->Node.ScaleMode=BMM_Replace;
+        RootScale->Node.ScaleSpace=BCS_ParentBoneSpace;
+        RootScale->Node.TranslationMode=BMM_Ignore;
+        RootScale->Node.RotationMode=BMM_Ignore;
+        RootScale->ReconstructNode();
+        if (!HideJumpConstantPin(RootScale,TEXT("Scale")) || !HideJumpConstantPin(RootScale,TEXT("Alpha"))) return false;
+        RootScale->Node.Scale=Scale;
+        RootScale->Node.Alpha=1.f;
+        auto* ToLocal=AddAnimationNode<UAnimGraphNode_ComponentToLocalSpace>(Graph,X+900,Y,TEXT("转回局部姿势"));
+        auto* Channels=AddAnimationNode<UAnimGraphNode_BlendBoneByChannel>(Graph,X+1130,Y,TEXT("骨盆保留原位置，身体尺寸使用参考骨架"));
+        Channels->BlendNode.TransformsSpace=BCS_ComponentSpace;
+        FBlendBoneByChannelEntry Pelvis;
+        Pelvis.SourceBone.BoneName=JumpPelvisBone;
+        Pelvis.TargetBone.BoneName=JumpPelvisBone;
+        Pelvis.bBlendTranslation=true;
+        Pelvis.bBlendRotation=false;
+        Pelvis.bBlendScale=false;
+        Channels->BlendNode.BoneDefinitions={Pelvis};
+        Channels->ReconstructNode();
+        if (!HideJumpConstantPin(Channels,TEXT("Alpha"))) return false;
+        Channels->BlendNode.Alpha=1.f;
+        // 只替换跳跃输入，其他十个动作及家居混合继续走原图
+        if (!Input || !ConnectPose(Graph,Clip,Cache) || !ConnectPose(Graph,ScaleInput,ToComponent) ||
+            !ConnectPose(Graph,ToComponent,RootScale) || !ConnectPose(Graph,RootScale,ToLocal) ||
+            !ConnectJumpPose(Graph,ToLocal,Channels,TEXT("A")) ||
+            !ConnectJumpPose(Graph,PelvisInput,Channels,TEXT("B"))) return false;
+        Input->BreakAllPinLinks();
+        if (!ConnectNpcBodyPose(Graph,Channels,Blend,Index)) return false;
+    }
+    return JumpPinsMatch(Blend,Root,Scale);
+}
+
+bool AddBodyJumpPoses(UEdGraph* Graph,UAnimGraphNode_BlendListByInt* Blend)
+{
+    const TCHAR* Labels[]={TEXT("起跳"),TEXT("空中"),TEXT("落地")};
+    const float TransitionTimes[]={.08f,.10f,.08f};
+    for (int32 Index=FirstJumpPose;Index<=LastJumpPose;++Index) Blend->Node.AddPose();
+    Blend->ReconstructNode();
+    const auto* LastBase=LinkedNpcBodyInput(Blend,BlendPosePin(FirstJumpPose-1));
+    if (!LastBase) return false;
+    for (int32 Index=FirstJumpPose;Index<=LastJumpPose;++Index)
+    {
+        const int32 Phase=Index-FirstJumpPose;
+        auto* BlendTime=Blend->FindPin(FName(*FString::Printf(TEXT("BlendTime_%d"),Index)),EGPD_Input);
+        if (!BlendTime) return false;
+        Graph->GetSchema()->TrySetDefaultValue(*BlendTime,FString::SanitizeFloat(TransitionTimes[Phase]));
+        const int32 Y=LastBase->NodePosY+(Phase+1)*240;
+        auto* Clip=AddAnimationNode<UAnimGraphNode_SequenceEvaluator>(Graph,LastBase->NodePosX,Y,Labels[Phase]);
+        Clip->Node.SetGroupMethod(EAnimSyncMethod::DoNotSync);
+        Clip->Node.SetShouldUseExplicitFrame(false);
+        Clip->Node.SetShouldLoop(false);
+        if (!SetNpcAnimationBool(FAnimNode_SequenceEvaluator::StaticStruct(),&Clip->Node,TEXT("bTeleportToExplicitTime"),true) ||
+            !ConnectParameter(Graph,Clip,TEXT("Sequence"),JumpAssetProperties[Phase],Y) ||
+            !ConnectParameter(Graph,Clip,TEXT("ExplicitTime"),JumpTimeProperties[Phase],Y+95) ||
+            !ConnectNpcBodyPose(Graph,Clip,Blend,Index)) return false;
+    }
+    return true;
 }
 }
 
@@ -310,7 +548,11 @@ FString UDeliveryNpcAnimationAssetTools::CreateBodyAnimation(bool bReplaceGraph)
                 return FString::Printf(TEXT("Could not connect NPC animation %s"),*Assets[Index].ToString());
         }
         auto* Output=AddAnimationNode<UAnimGraphNode_Root>(Graph,1200,640,TEXT("主动作完成后继续应用现有交谈后处理图"));
-        if (!ConnectPose(Graph,Blend,Output)) return TEXT("Could not connect body animation output");
+        FName JumpRoot;
+        FVector JumpScale;
+        if (!JumpReferenceScaleForBody(Blueprint,JumpRoot,JumpScale) || !ConnectPose(Graph,Blend,Output) ||
+            !AddBodyJumpPoses(Graph,Blend) || !CorrectBodyJumpPoses(Graph,Blend,JumpRoot,JumpScale))
+            return TEXT("Could not connect body animation output or scale-corrected jump poses");
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
     }
     const FString GraphCheck=CheckBodyAnimation();
@@ -379,7 +621,11 @@ FString UDeliveryNpcAnimationAssetTools::CheckBodyAnimation()
     auto* TimesProperty=FindFProperty<FArrayProperty>(FAnimNode_BlendListBase::StaticStruct(),TEXT("BlendTime"));
     if (!Blend || !TimesProperty) return TEXT("Body animation pose selector is missing");
     FScriptArrayHelper Times(TimesProperty,TimesProperty->ContainerPtrToValuePtr<void>(&Blend->Node));
-    if (Times.Num()!=10) return TEXT("Body animation requires ten inputs; rebuild with -ReplaceNpcBodyAnimation");
+    FName JumpRoot;
+    FVector JumpScale;
+    if (Times.Num()!=FirstJumpPose && (Times.Num()!=LastJumpPose+1 ||
+        !JumpReferenceScaleForBody(Blueprint,JumpRoot,JumpScale) || !JumpPinsMatch(Blend,JumpRoot,JumpScale)))
+        return TEXT("Body animation base or scale-corrected jump pose inputs are invalid");
     for (int32 Index=0;Index<10;++Index)
     {
         const auto* Pin=Blend->FindPin(FName(*FString::Printf(TEXT("BlendPose_%d"),Index)),EGPD_Input);
@@ -396,5 +642,87 @@ FString UDeliveryNpcAnimationAssetTools::CheckBodyAnimation()
         if (!Get || Get->VariableReference.GetMemberName()!=Pair.Value)
             return TEXT("Body animation hit asset or time is not connected to the expected variable");
     }
-    return TEXT("NPC body graph checked; poses=10; hit_animation=HitAnimation; hit_time=HitTime");
+    return FString::Printf(TEXT("NPC body graph checked; poses=10; hit_animation=HitAnimation; hit_time=HitTime; jump_poses=%d"),
+        Times.Num()-FirstJumpPose);
+}
+
+FString UDeliveryNpcAnimationAssetTools::ConfigureBodyJumpAnimation(const FString& BodyPath,UAnimSequence* Start,UAnimSequence* Loop,
+    UAnimSequence* Land,bool bApply)
+{
+    if (GEditor && GEditor->PlayWorld) return TEXT("Stop PIE before preparing a body animation graph");
+    if (!IsNpcJumpBodyPath(BodyPath)) return TEXT("Unknown NPC body animation graph");
+    auto* Blueprint=LoadObject<UAnimBlueprint>(nullptr,*BodyPath);
+    if (!Blueprint || !Blueprint->ParentClass || !Blueprint->ParentClass->IsChildOf(UDeliveryNpcBodyAnimInstance::StaticClass()) ||
+        !Blueprint->TargetSkeleton || !Blueprint->GeneratedClass || Blueprint->GetPackage()->IsDirty())
+        return TEXT("Body animation blueprint is missing, incompatible or has unsaved edits");
+    for (const auto* Clip:{Start,Loop,Land})
+        if (!IsValidNpcJumpClip(Clip,Blueprint->TargetSkeleton))
+            return TEXT("Jump clips must be in-place animations on the body graph skeleton");
+    FName JumpRoot;
+    FVector JumpScale;
+    if (!JumpReferenceScaleForBody(Blueprint,JumpRoot,JumpScale))
+        return TEXT("NPC meshes must share the expected reference root and pelvis scale layout");
+
+    auto* Blend=FindNativeBodyPoseSelector(Blueprint);
+    const auto* Times=FindFProperty<FArrayProperty>(FAnimNode_BlendListBase::StaticStruct(),TEXT("BlendTime"));
+    if (!Times || !Blend) return TEXT("Native body pose selector is missing");
+    const int32 PoseCount=FScriptArrayHelper(Times,Times->ContainerPtrToValuePtr<void>(&Blend->Node)).Num();
+    const bool bAddInputs=PoseCount==FirstJumpPose;
+    if (!bAddInputs && (PoseCount!=LastJumpPose+1 || !JumpPinsMatch(Blend,JumpRoot,JumpScale,true)))
+        return TEXT("Existing jump inputs have unknown connections");
+    const bool bFixInputs=bAddInputs || !JumpPinsMatch(Blend,JumpRoot,JumpScale);
+    for (int32 Index=0;Index<FirstJumpPose;++Index)
+        if (!LinkedNpcBodyInput(Blend,BlendPosePin(Index))) return TEXT("Existing base pose is disconnected");
+
+    const auto* Defaults=Blueprint->GeneratedClass->GetDefaultObject<UDeliveryNpcBodyAnimInstance>();
+    if (!Defaults || (Defaults->JumpStartAnimation && Defaults->JumpStartAnimation!=Start) ||
+        (Defaults->JumpLoopAnimation && Defaults->JumpLoopAnimation!=Loop) || (Defaults->JumpLandAnimation && Defaults->JumpLandAnimation!=Land))
+        return TEXT("Existing jump clips differ; their settings were preserved");
+    if (!bApply) return TEXT("NPC jump graph preflight passed");
+    if (!bFixInputs && Defaults->JumpStartAnimation==Start && Defaults->JumpLoopAnimation==Loop && Defaults->JumpLandAnimation==Land)
+        return TEXT("NPC jump graph ready; reference scale and pelvis verified; existing asset preserved");
+
+    if (bFixInputs)
+    {
+        auto* Graph=Blend->GetGraph();
+        Blueprint->Modify(); Graph->Modify(); Blend->Modify();
+        if ((bAddInputs && !AddBodyJumpPoses(Graph,Blend)) || !CorrectBodyJumpPoses(Graph,Blend,JumpRoot,JumpScale))
+            return TEXT("Scale-corrected jump pose connections failed before save");
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        FKismetEditorUtilities::CompileBlueprint(Blueprint,EBlueprintCompileOptions::SkipSave);
+        if (Blueprint->Status==BS_Error || !Blueprint->GeneratedClass || !JumpPinsMatch(Blend,JumpRoot,JumpScale))
+            return TEXT("Jump animation blueprint compilation failed before save");
+    }
+    auto* Updated=Blueprint->GeneratedClass->GetDefaultObject<UDeliveryNpcBodyAnimInstance>();
+    if (!Updated) return TEXT("Jump animation blueprint defaults are unavailable");
+    Updated->Modify();
+    Updated->JumpStartAnimation=Start;
+    Updated->JumpLoopAnimation=Loop;
+    Updated->JumpLandAnimation=Land;
+    return SaveNpcAnimationAsset(Blueprint)?TEXT("NPC jump graph ready; reference scale and pelvis verified; asset saved"):
+        TEXT("Could not save the NPC jump graph");
+}
+
+FString UDeliveryNpcAnimationAssetTools::CheckBodyJumpAnimation(const FString& BodyPath)
+{
+    if (!IsNpcJumpBodyPath(BodyPath)) return TEXT("Unknown NPC body animation graph");
+    auto* Blueprint=LoadObject<UAnimBlueprint>(nullptr,*BodyPath);
+    FName Root;
+    FVector Scale;
+    if (!JumpReferenceScaleForBody(Blueprint,Root,Scale) || !Blueprint->GeneratedClass || Blueprint->Status==BS_Error)
+        return TEXT("Body blueprint or official reference scale is unavailable");
+    const auto* Blend=FindNativeBodyPoseSelector(Blueprint);
+    const auto* Times=FindFProperty<FArrayProperty>(FAnimNode_BlendListBase::StaticStruct(),TEXT("BlendTime"));
+    if (!Blend || !Times || FScriptArrayHelper(Times,Times->ContainerPtrToValuePtr<void>(&Blend->Node)).Num()!=LastJumpPose+1 ||
+        !JumpPinsMatch(Blend,Root,Scale))
+        return TEXT("Body blueprint is missing the three scale-corrected jump inputs");
+    for (int32 Index=0;Index<FirstJumpPose;++Index)
+        if (!LinkedNpcBodyInput(Blend,BlendPosePin(Index))) return TEXT("An original body pose is disconnected");
+    const auto* Defaults=Cast<UDeliveryNpcBodyAnimInstance>(Blueprint->GeneratedClass->GetDefaultObject());
+    if (!Defaults || !IsValidNpcJumpClip(Defaults->JumpStartAnimation,Blueprint->TargetSkeleton) ||
+        !IsValidNpcJumpClip(Defaults->JumpLoopAnimation,Blueprint->TargetSkeleton) ||
+        !IsValidNpcJumpClip(Defaults->JumpLandAnimation,Blueprint->TargetSkeleton))
+        return TEXT("Body blueprint has missing or incompatible jump clips");
+    return FString::Printf(TEXT("NPC jump graph checked; poses=%d; root=%s; scale=%s; hips=component translation"),
+        LastJumpPose+1,*Root.ToString(),*Scale.ToString());
 }

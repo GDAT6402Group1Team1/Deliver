@@ -6,8 +6,11 @@
 #include "AI/Network/DeliveryAiSettings.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "AI/Presentation/DeliveryNpcVoiceCodec.h"
+#include "Animation/AnimSequence.h"
 #include "Components/AudioComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/WorldSettings.h"
 #include "GameFramework/PlayerController.h"
@@ -182,6 +185,110 @@ bool FDeliveryNpcProfileTest::RunTest(const FString&)
     TestTrue(TEXT("结束关卡后清除短音事件"),P->SeenReactionEvents.IsEmpty() && P->CancelledReactionEvents.IsEmpty());
     P->MulticastPlayReaction_Implementation(EDeliveryNpcVoiceReaction::Hit,FGuid::NewGuid(),P->ServerTime());
     TestNull(TEXT("结束后迟到的通知不能重建音频组件"),P->ReactionAudio.Get());
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcBehaviorPresentationTest,"Delivery.AI.NpcBehaviorPresentations",
+    EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
+bool FDeliveryNpcBehaviorPresentationTest::RunTest(const FString&)
+{
+    const FGameplayTag PaceTag=FGameplayTag::RequestGameplayTag(FName(TEXT("Npc.Behavior.Movement.Pace")),false);
+    const FGameplayTag LookTag=FGameplayTag::RequestGameplayTag(FName(TEXT("Npc.Behavior.Attention.LookAt")),false);
+    auto* Walk=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/NPC/Residents/Animation/A_ResidentWalk.A_ResidentWalk"));
+    auto* ResidentMesh=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/NPC/Residents/Appearance/SK_NpcManFace.SK_NpcManFace"));
+    auto* OtherMesh=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"));
+    if (!TestTrue(TEXT("踱步与注视行为标签已登记"),PaceTag.IsValid() && LookTag.IsValid()) ||
+        !TestNotNull(TEXT("正式居民踱步动画"),Walk) || !TestNotNull(TEXT("正式居民骨架"),ResidentMesh) ||
+        !TestNotNull(TEXT("不同骨架的对照网格"),OtherMesh)) return false;
+
+    auto* Settings=GetMutableDefault<UDeliveryAiSettings>();
+    const bool bAiEnabled=Settings->bEnabled;
+    Settings->bEnabled=false;
+    const auto Init=UWorld::InitializationValues().AllowAudioPlayback(false).CreatePhysicsScene(true)
+        .ShouldSimulatePhysics(false).CreateNavigation(false).CreateAISystem(true);
+    auto* World=UWorld::CreateWorld(EWorldType::Game,false,NAME_None,nullptr,true,ERHIFeatureLevel::Num,&Init);
+    GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
+    World->InitializeActorsForPlay(FURL());
+    World->GetWorldSettings()->NotifyBeginPlay();
+    ON_SCOPE_EXIT
+    {
+        World->EndPlay(EEndPlayReason::Quit);
+        GEngine->DestroyWorldContext(World);
+        World->DestroyWorld(false);
+        Settings->bEnabled=bAiEnabled;
+    };
+
+    auto* Npc=World->SpawnActor<ADeliveryNpcCharacter>();
+    Npc->GetMesh()->SetSkeletalMeshAsset(ResidentMesh);
+    TestNull(TEXT("没有人物表时不提供动作覆盖"),Npc->FindBehaviorPresentation(PaceTag));
+    auto* Table=NewObject<UDataTable>();
+    Table->RowStruct=FDeliveryNpcProfileRow::StaticStruct();
+    const FName RowName(TEXT("PresentationTest"));
+    FDeliveryNpcProfileRow Row;
+    Row.DisplayName=FText::FromString(TEXT("测试人物"));
+    Row.Persona=TEXT("爱聊天的街坊");
+    FDeliveryNpcBehaviorPresentation Pace;
+    Pace.Animation=Walk;
+    Pace.MovementReferenceSpeed=80.f;
+    Pace.PlayRate=1.25f;
+    Row.BehaviorPresentation.Add(PaceTag,Pace);
+    Table->AddRow(RowName,Row);
+    Npc->Profile.DataTable=Table;
+    Npc->Profile.RowName=RowName;
+    if (!TestTrue(TEXT("人物表应用行为覆盖"),Npc->ApplyProfile())) return false;
+    const auto* Initial=Npc->FindBehaviorPresentation(PaceTag);
+    if (!TestNotNull(TEXT("按标签取得已应用的踱步覆盖"),Initial)) return false;
+    TestTrue(TEXT("踱步使用原动画资产"),Initial->Animation==Walk);
+    TestEqual(TEXT("覆盖保留步态参考速度"),Initial->MovementReferenceSpeed,80.f);
+    TestEqual(TEXT("覆盖保留动画播放倍率"),Initial->PlayRate,1.25f);
+    TestNull(TEXT("无效标签不返回覆盖"),Npc->FindBehaviorPresentation(FGameplayTag()));
+    TestNull(TEXT("同一人物没有为注视配置覆盖"),Npc->FindBehaviorPresentation(LookTag));
+
+    Row.BehaviorPresentation.FindChecked(PaceTag).PlayRate=1.5f;
+    Table->AddRow(RowName,Row);
+    const auto* BeforeReapply=Npc->FindBehaviorPresentation(PaceTag);
+    if (!TestNotNull(TEXT("修改表行后角色仍保留已应用的覆盖"),BeforeReapply)) return false;
+    TestEqual(TEXT("运行设置是人物行的副本"),BeforeReapply->PlayRate,1.25f);
+    if (!TestTrue(TEXT("重新应用人物行"),Npc->ApplyProfile())) return false;
+    const auto* AfterReapply=Npc->FindBehaviorPresentation(PaceTag);
+    if (!TestNotNull(TEXT("重新应用后仍有覆盖"),AfterReapply)) return false;
+    TestEqual(TEXT("重新应用后更新播放倍率"),AfterReapply->PlayRate,1.5f);
+
+    Npc->GetMesh()->SetSkeletalMeshAsset(OtherMesh);
+    TestNull(TEXT("换成不兼容的角色骨架后不应用旧动画"),Npc->FindBehaviorPresentation(PaceTag));
+    Npc->GetMesh()->SetSkeletalMeshAsset(ResidentMesh);
+    TestNotNull(TEXT("恢复匹配骨架后可以读取原覆盖"),Npc->FindBehaviorPresentation(PaceTag));
+
+    const auto CheckRejected=[&](const TCHAR* Description,const FDeliveryNpcBehaviorPresentation& Invalid)
+    {
+        Row.BehaviorPresentation.Add(PaceTag,Invalid);
+        Table->AddRow(RowName,Row);
+        Npc->ApplyProfile();
+        TestNull(Description,Npc->FindBehaviorPresentation(PaceTag));
+    };
+    auto Invalid=Pace;
+    Invalid.Animation=nullptr;
+    CheckRejected(TEXT("未填动画资产时保留原表现"),Invalid);
+    auto* RootMotionWalk=DuplicateObject<UAnimSequence>(Walk,GetTransientPackage());
+    RootMotionWalk->bEnableRootMotion=true;
+    Invalid=Pace;
+    Invalid.Animation=RootMotionWalk;
+    CheckRejected(TEXT("明确启用 Root Motion 的动画不能接管角色移动"),Invalid);
+    Invalid=Pace;
+    Invalid.PlayRate=std::numeric_limits<float>::quiet_NaN();
+    CheckRejected(TEXT("拒绝非有限播放倍率"),Invalid);
+    Invalid.PlayRate=10000.f;
+    CheckRejected(TEXT("拒绝超出范围的播放倍率"),Invalid);
+    Invalid=Pace;
+    Invalid.MovementReferenceSpeed=std::numeric_limits<float>::infinity();
+    CheckRejected(TEXT("拒绝非有限步态参考速度"),Invalid);
+    Invalid.MovementReferenceSpeed=-1.f;
+    CheckRejected(TEXT("拒绝负的步态参考速度"),Invalid);
+
+    Row.BehaviorPresentation.Reset();
+    Table->AddRow(RowName,Row);
+    TestTrue(TEXT("人物行可以省略所有表现覆盖"),Npc->ApplyProfile());
+    TestNull(TEXT("切换为无覆盖配置后清除旧行为设置"),Npc->FindBehaviorPresentation(PaceTag));
     return true;
 }
 

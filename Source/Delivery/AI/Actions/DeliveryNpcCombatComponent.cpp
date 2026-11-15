@@ -27,6 +27,24 @@ namespace
     constexpr EAIFocusPriority::Type HitReactionFocus=EAIFocusPriority::LastFocusPriority+3;
     constexpr double HitFacingMaximumSeconds=1.0;
     constexpr float HitFacingArrivalDegrees=5.f;
+
+    float ClampFightApproachOverride(float Range)
+    {
+        return FMath::IsFinite(Range)?FMath::Clamp(Range,0.f,1200.f):0.f;
+    }
+
+    FVector2f GetStrikeBodySize(const AActor& Actor)
+    {
+        // 主角站立时也在模拟布娃娃，停用胶囊碰撞后仍用它的体型确定靠近距离
+        if (const auto* Player=Cast<ADeliveryCharacter>(&Actor); Player && Player->GetCapsuleComponent())
+        {
+            const auto* Capsule=Player->GetCapsuleComponent();
+            return FVector2f(Capsule->GetScaledCapsuleRadius(),Capsule->GetScaledCapsuleHalfHeight());
+        }
+        FVector2f Size;
+        Actor.GetSimpleCollisionCylinder(Size.X,Size.Y);
+        return Size;
+    }
 }
 
 UDeliveryNpcCombatComponent::UDeliveryNpcCombatComponent()
@@ -54,7 +72,7 @@ bool UDeliveryNpcCombatComponent::HasStrikePose() const
 float UDeliveryNpcCombatComponent::GetStrikeApproachDistance(const AActor* Target) const
 {
     if (!GetOwner() || !Target) return 0;
-    const float Bodies=GetOwner()->GetSimpleCollisionRadius()+Target->GetSimpleCollisionRadius();
+    const float Bodies=GetStrikeBodySize(*GetOwner()).X+GetStrikeBodySize(*Target).X;
     return FMath::Min(FMath::Max(10.f,StrikeRange),Bodies+FMath::Clamp(StrikeBodyGap,0.f,12.f));
 }
 bool UDeliveryNpcCombatComponent::CanStrikeTarget(AActor* Target,float MaxDistance) const
@@ -73,8 +91,8 @@ bool UDeliveryNpcCombatComponent::CanStrike(AActor* Target) const
 {
     if (!IsValid(Target) || !GetOwner() || !HasStrikePose()) return false;
     const float Distance=GetStrikeApproachDistance(Target);
-    const float OwnerHeight=GetOwner()->GetSimpleCollisionHalfHeight();
-    const float TargetHeight=Target->GetSimpleCollisionHalfHeight();
+    const float OwnerHeight=GetStrikeBodySize(*GetOwner()).Y;
+    const float TargetHeight=GetStrikeBodySize(*Target).Y;
     const float HeightTolerance=FMath::Abs(OwnerHeight-TargetHeight)+FMath::Min(OwnerHeight,TargetHeight)*.5f;
     const FVector Difference=Target->GetActorLocation()-GetOwner()->GetActorLocation();
     // 身高不同会改变胶囊中心高度，靠近距离按地面上的两人间距计算
@@ -140,23 +158,27 @@ bool UDeliveryNpcCombatComponent::IsReactingToHit() const
     const double Now=State?State->GetServerWorldTimeSeconds():GetWorld()->GetTimeSeconds();
     return Now>=HitReactionStartedAt && Now-HitReactionStartedAt<HitReactionDuration;
 }
-bool UDeliveryNpcCombatComponent::CanBeginFight(AActor* Target) const
+bool UDeliveryNpcCombatComponent::CanBeginFight(AActor* Target,float AuthorizedApproachRange) const
 {
-    return GetWorld() && !FightActionId.IsValid() && GetWorld()->GetTimeSeconds()>=NextFightAt && CanChooseFightTarget(Target);
+    return GetWorld() && !FightActionId.IsValid() && GetWorld()->GetTimeSeconds()>=NextFightAt &&
+        CanChooseFightTarget(Target,AuthorizedApproachRange);
 }
-bool UDeliveryNpcCombatComponent::CanChooseFightTarget(AActor* Target) const
+bool UDeliveryNpcCombatComponent::CanChooseFightTarget(AActor* Target,float AuthorizedApproachRange) const
 {
     const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
-    if (!GetWorld() || !Npc || !HasStrikePose() ||
-        !CanStrikeTarget(Target,FMath::Max(StrikeRange,StrikeApproachRange))) return false;
+    const float ApproachLimit=FMath::Max3(StrikeRange,StrikeApproachRange,ClampFightApproachOverride(AuthorizedApproachRange));
+    if (!GetWorld() || !Npc || !HasStrikePose() || !CanStrikeTarget(Target,ApproachLimit)) return false;
     // 短暂后仰或收拳不会作废模型决定，行为树会等身体恢复后再挥拳
     return CanStrike(Target) || Npc->CanReachTarget(Target);
 }
-bool UDeliveryNpcCombatComponent::BeginFight(AActor* Target,FGuid ActionId,float Duration,bool bModelDecision)
+bool UDeliveryNpcCombatComponent::BeginFight(AActor* Target,FGuid ActionId,float Duration,bool bModelDecision,float AuthorizedApproachRange)
 {
+    const float RangeOverride=bModelDecision?0.f:ClampFightApproachOverride(AuthorizedApproachRange);
     if (!GetOwner()->HasAuthority() || !ActionId.IsValid() || !FMath::IsFinite(Duration) || Duration<StrikeDuration ||
-        Duration>(bModelDecision?DeliveryNpc::FightDecisionSeconds:DeliveryNpc::OtherActionSeconds) || !CanBeginFight(Target)) return false;
+        Duration>(bModelDecision?DeliveryNpc::FightDecisionSeconds:DeliveryNpc::OtherActionSeconds) ||
+        !CanBeginFight(Target,RangeOverride)) return false;
     FightActionId=ActionId; FightTarget=Target; FightOrigin=GetOwner()->GetActorLocation();
+    FightApproachOverride=RangeOverride;
     FightEndsAt=GetWorld()->GetTimeSeconds()+Duration; FightPunches=0; FightHits=0;
     bModelFight=bModelDecision; FightBurstPunches=0;
     // 对方看见有人冲自己来，记下现场变化；是否还手仍由对方自己的模型决定
@@ -181,8 +203,10 @@ FName UDeliveryNpcCombatComponent::GetFightStopReason(FGuid ActionId) const
     if (const auto* Player=Cast<ADeliveryCharacter>(Target); Player && Player->GetActiveRagdoll() &&
         Player->GetActiveRagdoll()->GetControlMode()!=EDeliveryRagdollControlMode::Active) return TEXT("TargetDown");
     if (GetWorld()->GetTimeSeconds()>=FightEndsAt) return TEXT("FightTimeLimit");
-    if (FVector::DistSquared(GetOwner()->GetActorLocation(),FightOrigin)>FMath::Square(FMath::Clamp(FightTravelRange,160.f,1200.f)) ||
-        FVector::DistSquared(GetOwner()->GetActorLocation(),Target->GetActorLocation())>FMath::Square(FMath::Max(StrikeRange,StrikeApproachRange)))
+    const float TravelLimit=FMath::Max(FMath::Clamp(FightTravelRange,160.f,1200.f),FightApproachOverride);
+    const float ApproachLimit=FMath::Max3(StrikeRange,StrikeApproachRange,FightApproachOverride);
+    if (FVector::DistSquared(GetOwner()->GetActorLocation(),FightOrigin)>FMath::Square(TravelLimit) ||
+        FVector::DistSquared(GetOwner()->GetActorLocation(),Target->GetActorLocation())>FMath::Square(ApproachLimit))
         return TEXT("TargetEscaped");
     return NAME_None;
 }
@@ -203,7 +227,7 @@ bool UDeliveryNpcCombatComponent::StartFightStrike(AActor* Target,FGuid ActionId
 void UDeliveryNpcCombatComponent::EndFight(FGuid ActionId,bool bApplyCooldown)
 {
     if (!ActionId.IsValid() || ActionId!=FightActionId) return;
-    CancelStrike(); FightActionId.Invalidate(); FightTarget.Reset(); FightEndsAt=0;
+    CancelStrike(); FightActionId.Invalidate(); FightTarget.Reset(); FightEndsAt=0; FightApproachOverride=0.f;
     bModelFight=false;
     if (GetWorld()) NextFightAt=GetWorld()->GetTimeSeconds()+(bApplyCooldown?FMath::Clamp(FightCooldown,1.f,15.f):0.f);
 }
@@ -580,10 +604,7 @@ bool UDeliveryNpcCombatComponent::StartAssistedRecovery(FGuid ExpectedDownEpisod
     UnassistedRecoverAt=RecoverAt;
     RecoveryHelper=Helper;
     bAssistedRecovery=true;
-    bRecovering=true;
-    RecoveryStartedAt=GetWorld()->GetTimeSeconds();
-    RecoverAt=RecoveryStartedAt+1.6;
-    GetOwner()->ForceNetUpdate();
+    BeginRecovery(GetWorld()->GetTimeSeconds());
     return true;
 }
 
@@ -615,6 +636,27 @@ bool UDeliveryNpcCombatComponent::SetDeliberateProne(bool bProne)
     DownEpisodeId.Invalidate();
     OnRep_Down(); GetOwner()->ForceNetUpdate(); return true;
 }
+
+bool UDeliveryNpcCombatComponent::CanStartDeliberateRecovery() const
+{
+    const auto* Resident=Cast<ADeliveryNpcCharacter>(GetOwner());
+    return IsValid(Resident) && IsDeliberatelyProne() && Resident->GetCharacterMovement()->IsMovingOnGround();
+}
+
+bool UDeliveryNpcCombatComponent::StartDeliberateRecovery()
+{
+    if (!CanStartDeliberateRecovery() || !GetOwner()->HasAuthority() || !GetWorld()) return false;
+    if (!bRecovering) BeginRecovery(GetWorld()->GetTimeSeconds());
+    return true;
+}
+
+void UDeliveryNpcCombatComponent::BeginRecovery(double Now)
+{
+    bRecovering=true;
+    RecoveryStartedAt=Now;
+    RecoverAt=Now+RecoveryMotionSeconds;
+    GetOwner()->ForceNetUpdate();
+}
 void UDeliveryNpcCombatComponent::OnRep_Down()
 {
     if (auto* Resident=Cast<ADeliveryNpcCharacter>(GetOwner())) Resident->GetCharacterMovement()->MaxWalkSpeed=bDown?0.f:Resident->WalkSpeed;
@@ -642,7 +684,8 @@ void UDeliveryNpcCombatComponent::TickComponent(float Dt,ELevelTick Type,FActorC
         {
             auto* Resident=CastChecked<ADeliveryNpcCharacter>(GetOwner());
             if (!Resident->GetCharacterMovement()->IsMovingOnGround()) return;
-            bRecovering=true; RecoveryStartedAt=Now; RecoverAt=Now+1.6; GetOwner()->ForceNetUpdate(); return;
+            BeginRecovery(Now);
+            return;
         }
         const FGuid FinishedEpisode=DownEpisodeId;
         const TWeakObjectPtr<APawn> FinishedHelper=bAssistedRecovery?RecoveryHelper:TWeakObjectPtr<APawn>();

@@ -25,6 +25,7 @@ class DELIVERY_API UDeliveryNpcAgentComponent : public UActorComponent
     friend class FDeliveryAiContextTest;
     friend class FDeliveryCompanionRulesTest;
     friend class FDeliveryCompanionErrandTest;
+    friend class FDeliveryCompanionAssistTest;
     friend class FDeliveryConversationFeedbackTest;
     friend class FDeliveryNpcConversationOcclusionTest;
     friend class FDeliveryNpcStrikeApproachTest;
@@ -94,9 +95,11 @@ public:
     bool ShouldPauseForConversation() const;
     FDeliveryNpcPlayerReplyEnded OnPlayerReplyEnded;
     // 表现组件确认整轮播放完成后调用，模型结束不能代替声音结束
-    void FinishReplyPlayback(FGuid ReplyId);
+    void FinishReplyPlayback(FGuid ReplyId,FGuid CompletedSpeechEventId=FGuid());
+    bool CanLinkReplyPlayback(FGuid ReplyId) const;
     bool CanReplacePendingReply(FGuid ExistingReplyId,FGuid NewReplyId) const;
     bool CanStartReplySpeech(FGuid ReplyId) const;
+    AActor* GetReplyListenerForPlayback(FGuid ReplyId,AActor* Fallback) const;
     bool CanStartReplyMessageAudio(FGuid ReplyId) const;
     bool CanRetainReplySpeech(FGuid ReplyId) const;
     bool HasPendingNpcMessage() const;
@@ -176,6 +179,8 @@ private:
         // 独立关联真实获救事件，玩家插话后仍保留原 MessageId
         FGuid JoinedEventId;
         TWeakObjectPtr<APlayerState> JoinedOwner;
+        double JoinedOutOfReachSince=-1;
+        bool bJoinedPlaybackMissed=false;
         FGuid ReplyId;
         FGuid MessageId;
         FGuid ActionId;
@@ -192,6 +197,7 @@ private:
         int32 SentenceCount=INDEX_NONE;
         int32 Depth=0;
         int32 PlanRevision=0;
+        bool RequiresCompanionCommandReceipt() const { return bOwnsAction && DeliveryNpc::IsCompanionCommand(Action); }
     };
     void BindNpcMessageTurns();
     bool IsNpcMessageParentCurrent(const FDeliveryNpcMessageHandle& Parent) const;
@@ -209,16 +215,22 @@ private:
     bool bHandlingNpcMessageCancellation=false;
     TArray<FDeliveryNpcMessageCancellation> PendingNpcMessageCancellations;
     bool StartReplyPresentation(FReply Reply);
+    void FailReply(FGuid RequestId);
     bool IsActivitySnapshotCurrent(const FDeliveryNpcDecisionRequest& Request) const;
-    bool AcceptContinueCurrent(const FDeliveryNpcDecisionProposal& Proposal,FName& Reason);
+    FName GetRequestedCompanionErrandRefreshReason(EDeliveryNpcAction ProposedAction) const;
+    bool AcceptContinueCurrent(const FDeliveryNpcDecisionProposal& Proposal,EDeliveryCompanionSpeechPreference Preference,FName& Reason);
     void RemoveReply(FGuid ReplyId,FName Reason);
     bool IsJoinedResponseOwnerCurrent() const;
+    APawn* GetJoinedResponseListener() const;
+    bool CanHearJoinedResponse(const APawn* Listener) const;
+    bool IsJoinedReplyTarget(const FDeliveryNpcDecisionRequest& Request,FGuid SubjectId,const APawn& Listener) const;
     void BindJoinedResponse(FReply& Reply,const FDeliveryNpcDecisionRequest& Request) const;
     FGuid GetJoinedResponseEvent(const FDeliveryNpcDecisionRequest& Request) const;
     void DeferJoinedResponse();
     // 保留未说完的初遇回应，最多主动尝试三次，之后等自然交谈机会
     FGuid PendingJoinedEvent;
     TWeakObjectPtr<APlayerState> PendingJoinedOwner;
+    TWeakObjectPtr<APawn> PendingJoinedSubject;
     double JoinedResponseExpiresAt=0;
     double NextJoinedResponseRetryAt=0;
     int32 JoinedResponseAttempts=0;
@@ -260,6 +272,8 @@ private:
     double ActionEndsAt=0;
     double CombatDeadline=0;
     double NextActionDecisionAt=0;
+    double CombatEventDecisionAt=-1;
+    double LastCombatDecisionAt=-1;
     UPROPERTY(Replicated) TObjectPtr<AActor> ListeningSpeaker;
     UPROPERTY(Replicated) double ListeningStartedAt = -1;
     FGuid ListeningMessage;

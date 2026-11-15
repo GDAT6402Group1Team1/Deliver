@@ -39,9 +39,12 @@ class DELIVERY_API UDeliveryGrabbableComponent : public UActorComponent
 	// NPC 与玩家互斥，人数仍只统计原有玩家抓取者
 	UPROPERTY(ReplicatedUsing = OnRep_KinematicCarry, BlueprintReadOnly, Category = "Grab|Carry")
 	bool bNpcCarry = false;
-	// 实物根位置和托举目标均须在 NPC 当前身体附近
+	// 实物触点和托举目标的最大距离
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Carry", meta = (ClampMin = "20", ClampMax = "300", Units = "cm"))
 	float NpcCarryMaxDistance = 200.f;
+	// 大件家具可从经物理校验的真实边缘拿起
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Carry")
+	bool bAllowNpcEdgePickup = false;
 	// 只限制 NPC 搬运的真实位置更新，不改变玩家搬运插值
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Grab|Carry", meta = (ClampMin = "10", ClampMax = "600", Units = "cm/s"))
 	float NpcCarryMaxSpeed = 300.f;
@@ -60,6 +63,9 @@ class DELIVERY_API UDeliveryGrabbableComponent : public UActorComponent
 	bool UnregisterCarryProvider(UActorComponent* Provider, const FGuid& CarryId,
 	    EDeliveryObjectCarryReleaseReason Reason = EDeliveryObjectCarryReleaseReason::Cancelled);
 	bool IsCarriedByProvider(const UActorComponent* Provider, const FGuid& CarryId) const;
+	bool FindNpcPickupContact(const FVector& From, const AActor* Requester, FVector& OutContact) const;
+	bool CanNpcReachPlacement(const AActor& Requester,const FVector& From,const FVector& BodyLocation,
+	    const FVector& BodyCenter,const FVector& Target) const;
 	UFUNCTION(BlueprintPure, Category = "Grab")
 	bool HasAnyCarrier() const { return bNpcCarry || bKinematicCarry || GrabberCount > 0; }
 
@@ -70,7 +76,8 @@ class DELIVERY_API UDeliveryGrabbableComponent : public UActorComponent
 	void ApplyCarryMode();
 	void RestoreCarryBody(UPrimitiveComponent* Body);
 	bool ReadCarryProviderPose(UActorComponent* Provider, const FGuid& CarryId, UPrimitiveComponent* Body,
-	    FVector& OutTarget, FVector& OutForward) const;
+	    FVector& OutTarget, FVector& OutForward, TOptional<FVector>* OutInitialEdge = nullptr) const;
+	float GetNpcCarryReach() const;
 	bool IsNpcCarryMoveClear(UPrimitiveComponent* Body, const FVector& Location, const FQuat& Rotation) const;
 	void ReleaseCarryProvider(EDeliveryObjectCarryReleaseReason Reason);
 	UFUNCTION()
@@ -79,6 +86,10 @@ class DELIVERY_API UDeliveryGrabbableComponent : public UActorComponent
 	TWeakObjectPtr<AActor> CarryProviderActor;
 	TWeakObjectPtr<UPrimitiveComponent> ProviderCarryBody;
 	FGuid ProviderCarryId;
+	FVector InitialPickupStand = FVector::ZeroVector;
+	FVector InitialPickupRoot = FVector::ZeroVector;
+	FVector InitialPickupContact = FVector::ZeroVector;
+	double InitialPickupUntil = -1.;
 	bool bChangingCarryProvider = false;
 	bool bReleasingAllGrabbers = false;
 	bool bEndingPlay = false;

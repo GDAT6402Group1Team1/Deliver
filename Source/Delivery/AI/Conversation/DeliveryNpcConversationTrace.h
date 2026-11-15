@@ -6,6 +6,8 @@
 
 namespace DeliveryNpcConversationTrace
 {
+inline constexpr double LocalConversationRangeCm=600.;
+
 // 交谈时有人从中间走过，NPC 仍能听见和看向对方；墙壁、门和场景物件继续阻挡
 // 出拳命中和玩家交互保留各自的严格检查，不使用这项交谈查询
 inline bool HasClearPath(const AActor* Listener,const AActor* Speaker,const FVector& Offset=FVector::ZeroVector)
@@ -26,5 +28,10 @@ inline bool HasClearPath(const AActor* Listener,const AActor* Speaker,const FVec
         Params.AddIgnoredActor(Obstacle);
     }
     return false;
+}
+
+inline bool HasClearSpeechPath(const AActor* Listener,const AActor* Speaker)
+{
+    return HasClearPath(Listener,Speaker,FVector(0,0,40)) || HasClearPath(Listener,Speaker);
 }
 }

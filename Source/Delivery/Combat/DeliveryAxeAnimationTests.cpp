@@ -3,6 +3,8 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Combat/DeliveryBoxingPose.h"
 #include "Animation/AnimSequence.h"
+#include "CollisionQueryParams.h"
+#include "CollisionShape.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
@@ -188,6 +190,30 @@ bool FDeliveryAxeInputTest::RunTest(const FString&)
 			if (TestNotNull(TEXT("breakable door spawns"), Door))
 			{
 				TestFalse(TEXT("door starts intact"), Door->IsBroken());
+				const FBoxSphereBounds DoorBounds = Door->GetIntactMesh()->Bounds;
+				const FVector Span = FVector::ForwardVector * (DoorBounds.BoxExtent.X + 90.f);
+				const FVector Outside = DoorBounds.Origin - Span;
+				const FVector Inside = DoorBounds.Origin + Span;
+				FCollisionQueryParams DoorwayQuery(SCENE_QUERY_STAT(AxeTestDoorway), false, Character);
+				DoorwayQuery.AddIgnoredActor(Axe);
+				DoorwayQuery.AddIgnoredActor(OrdinaryItem);
+				const auto IsPawnBlocked = [&]()
+				{
+					return World->SweepTestByChannel(Outside, Inside, FQuat::Identity, ECC_Pawn,
+					    FCollisionShape::MakeCapsule(34.f, 88.f), DoorwayQuery);
+				};
+				const auto IsPackageBlocked = [&]()
+				{
+					return World->SweepTestByProfile(Outside, Inside, FQuat::Identity, TEXT("PhysicsActor"),
+					    FCollisionShape::MakeBox(FVector(16.f, 13.f, 10.f)), DoorwayQuery);
+				};
+				const auto IsDeliverySightBlocked = [&]()
+				{
+					return World->LineTraceTestByChannel(Outside, Inside, ECC_Visibility, DoorwayQuery);
+				};
+				TestTrue(TEXT("intact door blocks the walking capsule"), IsPawnBlocked());
+				TestTrue(TEXT("intact door blocks the parcel sweep"), IsPackageBlocked());
+				TestTrue(TEXT("intact door blocks Grandpa's delivery sight channel"), IsDeliverySightBlocked());
 				Ragdoll->TryAxeDoorHit();
 				TestEqual(TEXT("first swing damages the door"), Door->GetHitCount(), 1);
                 TestFalse(TEXT("first impact does not break door"), Door->IsBroken());
@@ -201,8 +227,26 @@ bool FDeliveryAxeInputTest::RunTest(const FString&)
                 TestTrue(TEXT("three distinct swings break door"), Door->IsBroken());
 				TestEqual(TEXT("broken door no longer blocks the player"),
 				          Door->GetIntactMesh()->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
-				TestTrue(TEXT("broken pieces become visible"), Door->GetFragments()->IsVisible());
-				TestNotNull(TEXT("fractured door asset"), Door->GetFragments()->GetRestCollection());
+				const UGeometryCollectionComponent* Fragments = Door->GetFragments();
+				TestTrue(TEXT("broken pieces become visible"), Fragments->IsVisible());
+				TestNotNull(TEXT("fractured door asset"), Fragments->GetRestCollection());
+				TestTrue(TEXT("broken pieces have a live Chaos physics state"), Fragments->HasValidPhysicsState());
+				TestEqual(TEXT("broken pieces use physics without scene queries"), Fragments->GetCollisionEnabled(),
+				    ECollisionEnabled::PhysicsOnly);
+				TestEqual(TEXT("broken pieces use the destructible object channel"), Fragments->GetCollisionObjectType(),
+				    ECC_Destructible);
+				TestEqual(TEXT("broken pieces still collide with the floor"), Fragments->GetCollisionResponseToChannel(ECC_WorldStatic),
+				    ECR_Block);
+				TestEqual(TEXT("broken pieces still collide with each other"), Fragments->GetCollisionResponseToChannel(ECC_Destructible),
+				    ECR_Block);
+				for (const ECollisionChannel Channel : {ECC_Pawn, ECC_PhysicsBody, ECC_Visibility, ECC_Camera, ECC_Vehicle})
+					TestEqual(TEXT("broken pieces ignore movement, cargo and interaction channels"),
+					    Fragments->GetCollisionResponseToChannel(Channel), ECR_Ignore);
+				TestFalse(TEXT("broken pieces cannot affect the doorway nav link"), Fragments->CanEverAffectNavigation());
+				World->Tick(LEVELTICK_All, .02f);
+				TestFalse(TEXT("walking capsule can cross the fractured doorway"), IsPawnBlocked());
+				TestFalse(TEXT("parcel sweep can cross the fractured doorway"), IsPackageBlocked());
+				TestFalse(TEXT("broken pieces cannot occlude Grandpa's delivery sight channel"), IsDeliverySightBlocked());
 			}
 			Inventory->DropHeldItem();
 			ADeliveryBreakableDoor* UnarmedDoor = World->SpawnActor<ADeliveryBreakableDoor>(

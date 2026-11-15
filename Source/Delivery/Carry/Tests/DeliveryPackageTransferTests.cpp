@@ -18,6 +18,8 @@ void UDeliveryPackageTransferProbe::OnInventoryChanged()
 #include "AI/Companion/DeliveryCompanionComponent.h"
 #include "AI/Network/DeliveryAiSettings.h"
 #include "Carry/DeliveryPackageCarrierInterface.h"
+#include "Components/BoxComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Game/DeliveryGameState.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/WorldSettings.h"
@@ -26,7 +28,11 @@ void UDeliveryPackageTransferProbe::OnInventoryChanged()
 #include "Task/DeliveryTaskManagerComponent.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/BodySetup.h"
+#include "StaticMeshCompiler.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryPackageTransferTest, "Delivery.Carry.PackageTransfer",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -130,6 +136,92 @@ bool FDeliveryPackageTransferTest::RunTest(const FString&)
     TestTrue(TEXT("取消安排保留实际包裹"), IsValid(Package) && Npc->GetCarriedTaskPackage() == Package);
     TestEqual(TEXT("换手与取消没有完成或重置任务"), Tasks->GetTaskStatus(Task), EDeliveryTaskStatus::InProgress);
     TestEqual(TEXT("所有换手与失败回滚沿用原计时"), Tasks->FindState(Task)->StartServerTime, OriginalStart);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryProductionPackagePhysicsTest,"Delivery.Carry.ProductionPackageGroundPhysics",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDeliveryProductionPackagePhysicsTest::RunTest(const FString&)
+{
+    const auto Init=UWorld::InitializationValues().AllowAudioPlayback(false).CreatePhysicsScene(true)
+        .ShouldSimulatePhysics(true).CreateNavigation(false).CreateAISystem(false);
+    auto* World=UWorld::CreateWorld(EWorldType::Game,false,NAME_None,nullptr,true,ERHIFeatureLevel::Num,&Init);
+    if (!TestNotNull(TEXT("实际包裹刚体检查世界"),World)) return false;
+    GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
+    ON_SCOPE_EXIT
+    {
+        World->EndPlay(EEndPlayReason::Quit);
+        GEngine->DestroyWorldContext(World);
+        World->DestroyWorld(false);
+    };
+    auto* Floor=World->SpawnActor<AActor>();
+    auto* Collision=NewObject<UBoxComponent>(Floor);
+    Floor->SetRootComponent(Collision);
+    Collision->SetBoxExtent(FVector(250,250,25));
+    Collision->SetCollisionProfileName(TEXT("BlockAll"));
+    Collision->RegisterComponent();
+    Floor->SetActorLocation(FVector(0,0,-25));
+    World->InitializeActorsForPlay(FURL());
+    World->GetWorldSettings()->NotifyBeginPlay();
+    UClass* PackageClass=LoadClass<ADeliveryPackageItem>(nullptr,TEXT("/Game/Blueprint/Item/BP_DeliveryPackage.BP_DeliveryPackage_C"));
+    if (!TestNotNull(TEXT("加载正式外卖蓝图"),PackageClass)) return false;
+    const auto* Defaults=PackageClass->GetDefaultObject<ADeliveryPackageItem>();
+    UStaticMesh* Food=Defaults && Defaults->GetItemMesh()?Defaults->GetItemMesh()->GetStaticMesh().Get():nullptr;
+    if (!TestTrue(TEXT("正式外卖继续使用原食盒网格"),Food && Food->GetPathName()==TEXT("/Game/model/food.food"))) return false;
+    // 独立世界没有地图加载阶段，食盒完成异步编译后再按正式蓝图创建刚体
+    UStaticMesh* Assets[]={Food};
+    FStaticMeshCompilingManager::Get().FinishCompilation(Assets);
+    if (!TestFalse(TEXT("生成外卖前正式网格已编译"),Food->IsCompiling())) return false;
+    auto* Setup=Food->GetBodySetup();
+    if (!TestTrue(TEXT("正式食盒同时保留复杂查询和实际可模拟的简单刚体碰撞"),
+        Setup && Setup->GetCollisionTraceFlag()==CTF_UseSimpleAndComplex && Setup->AggGeom.GetElementCount()>0)) return false;
+    Setup->CreatePhysicsMeshes();
+    const FVector ReleasePoint(0,0,140);
+    FActorSpawnParameters Spawn;
+    Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    auto* Package=World->SpawnActor<ADeliveryPackageItem>(PackageClass,ReleasePoint,FRotator::ZeroRotator,Spawn);
+    if (!TestNotNull(TEXT("按正式蓝图生成实物外卖"),Package)) return false;
+    auto* Mesh=Package->GetItemMesh();
+    if (!TestTrue(TEXT("正式外卖的活实例使用同一已编译网格作为可移动根部"),Mesh && Mesh==Package->GetRootComponent() &&
+        Mesh->GetStaticMesh()==Food && Mesh->IsRegistered() && Mesh->Mobility==EComponentMobility::Movable)) return false;
+    Package->SetInventoryPresentation(false,true,nullptr);
+    if (!TestTrue(TEXT("同一正式外卖收纳后隐藏并关闭实物碰撞"),Package->IsHidden() &&
+        !Package->GetActorEnableCollision() && !Mesh->IsSimulatingPhysics())) return false;
+    Package->DropFromInventory(ReleasePoint,FVector::ZeroVector);
+    if (!TestTrue(TEXT("落地恢复正式外卖有效动态刚体与碰撞"),Mesh->IsSimulatingPhysics() &&
+        Mesh->GetCollisionEnabled()==ECollisionEnabled::QueryAndPhysics && Mesh->IsPhysicsStateCreated())) return false;
+
+    FHitResult FloorHit;
+    const FCollisionQueryParams Query(SCENE_QUERY_STAT(ProductionPackagePhysicsFloor),false,Package);
+    if (!TestTrue(TEXT("掉落点下方存在会阻挡正式包裹的真实地面"),
+        World->LineTraceSingleByChannel(FloorHit,ReleasePoint,ReleasePoint-FVector(0,0,220),ECC_Visibility,Query) &&
+        FloorHit.GetComponent()==Collision && Collision->IsPhysicsCollisionEnabled() &&
+        Collision->GetCollisionResponseToChannel(Mesh->GetCollisionObjectType())==ECR_Block &&
+        Mesh->GetCollisionResponseToChannel(Collision->GetCollisionObjectType())==ECR_Block)) return false;
+    auto* Body=Mesh->GetBodyInstance();
+    if (!TestTrue(TEXT("正式包裹刚体启用重力"),Body && Body->IsValidBodyInstance() &&
+        Mesh->IsGravityEnabled() && World->GetGravityZ()<0.f)) return false;
+    const FVector ReleaseBody=Body->GetUnrealWorldTransform().GetLocation();
+    // 手动推进隔离世界时同步推进引擎帧号，让物理开始与结束 Tick 在每一步都入队
+    for (int32 Frame=0; Frame<120; ++Frame)
+    {
+        ++GFrameCounter;
+        World->Tick(LEVELTICK_All,1.f/60.f);
+    }
+    const FVector FinalBody=Body->GetUnrealWorldTransform().GetLocation();
+    const double FinalBottom=Mesh->Bounds.GetBox().Min.Z;
+    const double FinalSpeed=Mesh->GetPhysicsLinearVelocity().Size();
+    AddInfo(FString::Printf(TEXT("PackageGroundPhysics release=%s body=%s actor=%s mesh=%s bottom=%.2f support=%.2f speed=%.2f"),
+        *ReleaseBody.ToCompactString(),*FinalBody.ToCompactString(),*Package->GetActorLocation().ToCompactString(),
+        *Mesh->GetComponentLocation().ToCompactString(),FinalBottom,FloorHit.ImpactPoint.Z,FinalSpeed));
+    TestTrue(TEXT("真实刚体从释放点在重力下下降"),ReleaseBody.Z-FinalBody.Z>70.);
+    TestTrue(TEXT("同一件外卖仍可见、归属为空且变换跟随根刚体"),Package->GetOwner()==nullptr &&
+        Package->GetActorEnableCollision() && !Package->IsHidden() &&
+        Package->GetActorLocation().Equals(Mesh->GetComponentLocation(),1.) &&
+        Mesh->GetComponentLocation().Equals(FinalBody,1.));
+    TestTrue(TEXT("同一件外卖落在实际支撑面并静稳"),
+        FMath::Abs(FinalBottom-FloorHit.ImpactPoint.Z)<10. && FinalSpeed<5.);
     return true;
 }
 #endif

@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "AI/Decision/DeliveryNpcTypes.h"
+#include "AI/Decision/DeliveryNpcBehaviorCatalog.h"
 #include "DeliveryAiGatewaySubsystem.generated.h"
 
 class UDeliveryNpcAgentComponent;
@@ -20,6 +20,7 @@ public:
     bool Enqueue(UDeliveryNpcAgentComponent* Agent, const FDeliveryNpcDecisionRequest& Request);
     void Cancel(UDeliveryNpcAgentComponent* Agent);
     void CancelRequest(UDeliveryNpcAgentComponent* Agent, FGuid RequestId);
+    const FDeliveryNpcBehaviorCatalog& GetBehaviorCatalog() const { return BehaviorCatalog; }
     FGuid GetWorldEpoch() const { return WorldEpoch; }
     int32 GetPendingCount() const { return Pending.Num(); }
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
@@ -69,6 +70,7 @@ private:
     void RejectStream(FGuid RequestId, const TCHAR* Reason);
     TMap<FGuid, FPending> Pending;
     TArray<FGuid> Queue;
+    FDeliveryNpcBehaviorCatalog BehaviorCatalog;
     FGuid WorldEpoch;
     bool bShuttingDown = false;
     friend class FDeliveryAiInfrastructureTest;

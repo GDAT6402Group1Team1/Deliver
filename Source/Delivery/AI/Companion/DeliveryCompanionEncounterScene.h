@@ -9,6 +9,9 @@ class USceneComponent;
 class USkeletalMeshComponent;
 class UStaticMeshComponent;
 
+UENUM(BlueprintType)
+enum class EDeliveryCompanionEncounterObstruction : uint8 { None, Doorway, EjectionPath };
+
 // 保存面馆初遇的固定锚点和门状态，二狗角色负责自身阶段与移动，蓝图配置门和老板的表现
 UCLASS()
 class DELIVERY_API ADeliveryCompanionEncounterScene : public AActor
@@ -36,6 +39,14 @@ public:
 
     UFUNCTION(BlueprintPure, Category="Delivery|初遇|门")
     bool IsDoorOpen() const;
+    // 用实际门框和抛出方向判断玩家是否已经离开面馆内侧
+    bool IsPastDoorway(const FVector& Position) const;
+
+    // 区分初遇暂停与演出结束后的关门等待，附近玩家据此显示提示
+    EDeliveryCompanionEncounterObstruction GetEncounterObstruction() const { return EncounterObstruction; }
+    bool IsDoorOpeningBlocked() const { return HasAuthority() && bRequestedOpen && bDoorBlocked; }
+    void SetEncounterObstruction(EDeliveryCompanionEncounterObstruction Obstruction);
+    FSimpleMulticastDelegate OnEncounterObstructionChanged;
 
     // 客户端开始抛出演出前同时确认服务器进度和本机门叶表现，等待跨 Actor 复制到齐
     UFUNCTION(BlueprintPure, Category="Delivery|初遇|门")
@@ -93,6 +104,9 @@ private:
     bool IsDoorwayOccupied() const;
     void SetDoorBlocked(bool bBlocked);
     UFUNCTION() void OnRep_DoorState();
+    UFUNCTION() void OnRep_EncounterObstruction();
+    UPROPERTY(ReplicatedUsing=OnRep_EncounterObstruction)
+    EDeliveryCompanionEncounterObstruction EncounterObstruction=EDeliveryCompanionEncounterObstruction::None;
 
     // 目标只由服务器修改，客户端仅追随复制的实际进度
     bool bRequestedOpen = false;

@@ -8,6 +8,7 @@
 #include "DeliveryWalletComponent.generated.h"
 
 class UDeliveryTaskDefinition;
+class UDeliveryTaskManagerComponent;
 
 /** 余额变化；NewBalance 是变化后的余额，Delta 是这次的增减（负数是扣款） */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeliveryBalanceChanged, int32, NewBalance, int32, Delta);
@@ -62,12 +63,13 @@ class DELIVERY_API UDeliveryWalletComponent : public UActorComponent
 	UPROPERTY(BlueprintAssignable, Category = "Delivery|Economy")
 	FOnDeliveryBalanceChanged OnBalanceChanged;
 
-	/** 送达入账时广播，带上完整的奖励明细，UI 可以直接拿去做结算飘字 */
+	/** 送达入账后通知服务器监听者和所属客户端，提供同一次结算的完整明细 */
 	UPROPERTY(BlueprintAssignable, Category = "Delivery|Economy")
 	FOnDeliveryTaskPaid OnTaskPaid;
 
   protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// 初始配置
@@ -91,5 +93,9 @@ class DELIVERY_API UDeliveryWalletComponent : public UActorComponent
 	void HandleTaskCompleted(UDeliveryTaskDefinition* Task, const FDeliveryRewardBreakdown& Reward,
 	                         APlayerState* Deliverer);
 
+	UFUNCTION(Client, Reliable)
+	void ClientNotifyTaskPaid(UDeliveryTaskDefinition* Task, const FDeliveryRewardBreakdown& Reward);
+
+	TWeakObjectPtr<UDeliveryTaskManagerComponent> BoundTaskManager;
 	FTimerHandle BindRetryTimer;
 };

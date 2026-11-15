@@ -8,6 +8,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "SmartObjectComponent.h"
+#include "SmartObjectDefinition.h"
 #include "SmartObjectSubsystem.h"
 #include "Sound/SoundBase.h"
 #include "GameFramework/GameStateBase.h"
@@ -22,6 +23,8 @@
 #include "UObject/UObjectIterator.h"
 #include "Async/Async.h"
 #include "Net/UnrealNetwork.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogDeliveryHomeObject,Log,All);
 
 namespace
 {
@@ -98,14 +101,15 @@ UAudioComponent* UDeliveryHomeObjectComponent::ResolveAudio() const
     return IsValid(Component) && Component->GetOwner()==GetOwner() && Component->GetWorld()==GetWorld()?Component:nullptr;
 }
 
-bool UDeliveryHomeObjectComponent::ValidateHome(FName& OutReason) const
+bool UDeliveryHomeObjectComponent::ValidateHome(FName& OutReason,bool bRequireRuntimeHome) const
 {
     if (!IsInGameThread() || bEndingPlay || !GetWorld() || !IsValid(GetOwner()) || !GetOwner()->HasAuthority() ||
         GetOwner()->IsActorBeingDestroyed() || GetOwner()->IsHidden()) return Fail(OutReason,TEXT("HomeObjectUnavailable"));
     const FBox ObjectBounds=GetOwner()->GetComponentsBoundingBox(true);
     if (!ObjectBounds.IsValid || ObjectBounds.GetExtent().GetMax()<=0) return Fail(OutReason,TEXT("HomeObjectGeometryMissing"));
     if (!IsValid(Home) || Home->IsActorBeingDestroyed() || Home->GetWorld()!=GetWorld() ||
-        ADeliveryHome::FindSharedHome(this)!=Home || !Home->IsClaimed()) return Fail(OutReason,TEXT("HomeNotClaimed"));
+        (bRequireRuntimeHome && (ADeliveryHome::FindSharedHome(this)!=Home || !Home->IsClaimed())))
+        return Fail(OutReason,TEXT("HomeNotClaimed"));
     if (!ObjectId.IsValid() || DisplayName.IsEmpty() || !Home->ContainsFurniture(this))
         return Fail(OutReason,TEXT("HomeObjectIdentityMissing"));
     // 只核对同 World 的实例，重复持久 ID 不随机选择其中一个
@@ -131,33 +135,55 @@ bool UDeliveryHomeObjectComponent::ValidateUser(ADeliveryCompanionCharacter* Com
 bool UDeliveryHomeObjectComponent::IsOperationAvailable(const UDeliveryHomeBehaviorDefinition* Definition) const
 {
     if (!Definition || !Definition->IsUsableConfiguration() || !AllowedUses.Contains(Definition->Operation)) return false;
+    const bool bTaking=Definition->Operation==EDeliveryHomeOperation::TakeProp;
+    for (const auto& Pair:OwnedUses)
+    {
+        const auto* Active=Pair.Value.Definition.Get();
+        if (Active && (Active->Operation==EDeliveryHomeOperation::TakeProp)!=bTaking && IsCurrentSmartObjectClaim(Pair.Value))
+            return false;
+    }
+    const auto* Grabbable=GetOwner()->FindComponentByClass<UDeliveryGrabbableComponent>();
+    if (IsCarryScaleActive() || (Grabbable && Grabbable->HasAnyCarrier())) return false;
     if (Definition->Operation==EDeliveryHomeOperation::PlayAudio) return !bAudioPlaying && ResolveAudio()!=nullptr;
     if (Definition->Operation==EDeliveryHomeOperation::StopAudio) return bAudioPlaying && ResolveAudio()!=nullptr;
-    if (Definition->Operation==EDeliveryHomeOperation::TakeProp)
+    if (bTaking)
     {
-        const auto* Grabbable=GetOwner()->FindComponentByClass<UDeliveryGrabbableComponent>();
         const auto* Body=Cast<UPrimitiveComponent>(GetOwner()->GetRootComponent());
-        return Grabbable && !Grabbable->HasAnyCarrier() && !GetOwner()->GetOwner() && Body &&
+        return Grabbable && !GetOwner()->GetOwner() && Body &&
             Body->Mobility==EComponentMobility::Movable && Body->IsSimulatingPhysics();
     }
+    if (Definition->Operation==EDeliveryHomeOperation::PlaceProp) return IsStablePlacementSurface();
     return true;
 }
 
 bool UDeliveryHomeObjectComponent::ValidateUse(ADeliveryCompanionCharacter* Companion,
-    const UDeliveryHomeBehaviorDefinition* Definition,const FSmartObjectSlotHandle& Slot,bool bClose,FName& OutReason) const
+    const UDeliveryHomeBehaviorDefinition* Definition,const FSmartObjectSlotHandle& Slot,bool bClose,FName& OutReason,
+    const AActor* PlacementProp) const
 {
     auto* Subsystem=GetWorld()?GetWorld()->GetSubsystem<USmartObjectSubsystem>():nullptr;
     auto* Smart=ResolveSmartObject();
     if (!Subsystem || !Smart || !Slot.IsValid() || Slot.GetSmartObjectHandle()!=Smart->GetRegisteredHandle() ||
         !Subsystem->IsSmartObjectSlotValid(Slot) || !Definition || !Definition->IsUsableConfiguration() ||
         !AllowedUses.Contains(Definition->Operation)) return Fail(OutReason,TEXT("HomeSlotUnavailable"));
+    if (Definition->Operation!=EDeliveryHomeOperation::TakeProp)
+    {
+        const auto* Grab=GetOwner()->FindComponentByClass<UDeliveryGrabbableComponent>();
+        if (IsCarryScaleActive() || (Grab && Grab->HasAnyCarrier())) return Fail(OutReason,TEXT("HomePropAlreadyCarried"));
+    }
     FTransform Entrance,Use,Exit;
     if (!ResolveUseTransforms(Companion,Definition,Slot,Entrance,Use,Exit,OutReason)) return false;
-    const FVector Point=Use.TransformPositionNoScale(Definition->SightOffset);
+    FVector Point=Use.TransformPositionNoScale(Definition->SightOffset);
+    if (bClose && Definition->Operation==EDeliveryHomeOperation::TakeProp)
+        if (const auto* Grab=GetOwner()->FindComponentByClass<UDeliveryGrabbableComponent>(); Grab && Grab->bAllowNpcEdgePickup &&
+            !Grab->HasAnyCarrier() && !Grab->FindNpcPickupContact(Companion->GetActorLocation(),Companion,Point))
+            return Fail(OutReason,TEXT("HomeTakeEntranceTooFar"));
     const float Radius=bClose?Definition->UseRadius:Definition->ApproachRadius;
     if (FVector::DistSquared(Companion->GetActorLocation(),Point)>FMath::Square(Radius))
         return Fail(OutReason,TEXT("HomeObjectTooFar"));
     FCollisionQueryParams Params(SCENE_QUERY_STAT(HomeObjectSight),false,Companion);
+    // 原物盖住支撑点后仍需验证家具视线，其余物件和墙继续挡射线
+    if (Definition->Operation==EDeliveryHomeOperation::PlaceProp && IsValid(PlacementProp) && !PlacementProp->IsActorBeingDestroyed())
+        Params.AddIgnoredActor(PlacementProp);
     FHitResult Hit;
     if (GetWorld()->LineTraceSingleByChannel(Hit,Companion->GetPawnViewLocation(),Point,ECC_Visibility,Params) &&
         Hit.GetActor()!=GetOwner()) return Fail(OutReason,TEXT("HomeObjectOccluded"));
@@ -206,8 +232,11 @@ bool UDeliveryHomeObjectComponent::ResolveTakeStandingPoint(ADeliveryCompanionCh
     if (!FMath::IsFinite(HalfHeight) || !FMath::IsFinite(Radius) || Radius<=0 || HalfHeight<Radius)
         return Fail(OutReason,TEXT("HomeTakeCapsuleUnavailable"));
     const FVector Center=Feet+FVector(0,0,HalfHeight);
-    const FVector UsePoint=Use.TransformPositionNoScale(Definition.SightOffset);
-    if (FVector::DistSquared(Center,GetOwner()->GetActorLocation())>FMath::Square(200.) ||
+    FVector UsePoint=Use.TransformPositionNoScale(Definition.SightOffset);
+    const auto* Grab=GetOwner()->FindComponentByClass<UDeliveryGrabbableComponent>();
+    const bool bEdge=Grab && Grab->bAllowNpcEdgePickup;
+    if ((bEdge && !Grab->FindNpcPickupContact(Center,Companion,UsePoint)) ||
+        (!bEdge && FVector::DistSquared(Center,GetOwner()->GetActorLocation())>FMath::Square(200.)) ||
         FVector::DistSquared(Center,UsePoint)>FMath::Square(FMath::Min(200.,static_cast<double>(Definition.UseRadius))))
         return Fail(OutReason,TEXT("HomeTakeEntranceTooFar"));
     TArray<FOverlapResult> Overlaps;
@@ -224,8 +253,9 @@ bool UDeliveryHomeObjectComponent::ResolveTakeStandingPoint(ADeliveryCompanionCh
     FCollisionQueryParams ReachQuery=GroundQuery;
     ReachQuery.AddIgnoredActor(GetOwner());
     const FBox Bounds=GetOwner()->GetComponentsBoundingBox(true);
-    if (!Bounds.IsValid || GetWorld()->LineTraceTestByChannel(Center,Bounds.GetCenter(),ECC_Visibility,ReachQuery) ||
-        GetWorld()->LineTraceTestByChannel(Center,GetOwner()->GetActorLocation(),ECC_Visibility,ReachQuery))
+    if (!Bounds.IsValid || (!bEdge &&
+        (GetWorld()->LineTraceTestByChannel(Center,Bounds.GetCenter(),ECC_Visibility,ReachQuery) ||
+         GetWorld()->LineTraceTestByChannel(Center,GetOwner()->GetActorLocation(),ECC_Visibility,ReachQuery))))
         return Fail(OutReason,TEXT("HomeTakeEntranceOccluded"));
     // 已站在同一入口只表示无需移动；仍先通过地面、导航、胶囊与伸手检查，不伪造零长度路径成功
     const bool bAlreadyAtEntrance=FVector::Dist2D(Start,Feet)<=1. && FMath::Abs(Start.Z-Feet.Z)<=15.;
@@ -257,7 +287,7 @@ bool UDeliveryHomeObjectComponent::FindCommittedPlacement(FDeliveryHomeUseClaim&
         {
             const auto& Placement=Pair.Value;
             FName Reason;
-            if (!Placement.bPlacementCommitted || Placement.PlacedProp.Get()!=GetOwner() ||
+            if (!Placement.bPlacementCommitted || Placement.PlacementProp.Get()!=GetOwner() ||
                 !Object->IsCurrentSmartObjectClaim(Placement) || !Object->ValidateHome(Reason) ||
                 !Object->IsPlacementValid(Placement,GetOwner(),Reason)) continue;
             bool bOccupied=false;
@@ -272,12 +302,22 @@ bool UDeliveryHomeObjectComponent::FindCommittedPlacement(FDeliveryHomeUseClaim&
     return true;
 }
 
+TOptional<FTransform> UDeliveryHomeObjectComponent::ReadLiveSlotTransform(const FSmartObjectSlotHandle& Slot) const
+{
+    const auto* Subsystem=GetWorld()?GetWorld()->GetSubsystem<USmartObjectSubsystem>():nullptr;
+    const auto* Smart=ResolveSmartObject();
+    const auto* Definition=Smart?Smart->GetDefinition():nullptr;
+    if (!Subsystem || !Definition || !Slot.IsValid() || Slot.GetSmartObjectHandle()!=Smart->GetRegisteredHandle() ||
+        !Subsystem->IsSmartObjectSlotValid(Slot) || !Definition->GetSlots().IsValidIndex(Slot.GetSlotIndex())) return {};
+    // 占槽仍归 Smart Objects，已搬过的家具按实时组件位置解析同一真实槽
+    return Definition->GetSlotWorldTransform(Slot.GetSlotIndex(),Smart->GetComponentTransform());
+}
+
 bool UDeliveryHomeObjectComponent::ResolveUseTransforms(ADeliveryCompanionCharacter* Companion,
     const UDeliveryHomeBehaviorDefinition* Definition,const FSmartObjectSlotHandle& Slot,
     FTransform& OutEntrance,FTransform& OutUse,FTransform& OutExit,FName& OutReason) const
 {
-    const auto* Subsystem=GetWorld()?GetWorld()->GetSubsystem<USmartObjectSubsystem>():nullptr;
-    const auto SlotTransform=Subsystem?Subsystem->GetSlotTransform(Slot):TOptional<FTransform>();
+    const auto SlotTransform=ReadLiveSlotTransform(Slot);
     if (!Definition || !SlotTransform.IsSet()) return Fail(OutReason,TEXT("HomeSlotUnavailable"));
     MakeUseTransforms(*Definition,SlotTransform.GetValue(),OutEntrance,OutUse,OutExit);
     OutReason=NAME_None;
@@ -306,11 +346,66 @@ bool UDeliveryHomeObjectComponent::ResolveUseTransforms(ADeliveryCompanionCharac
     }
     const bool bProjectNearby=!Placement.IsValid();
     FTransform StandingEntrance,StandingExit;
-    if (!ResolveTakeStandingPoint(Companion,*Definition,GroundEntrance,OutUse,bProjectNearby,StandingEntrance,OutReason)) return false;
+    if (!ResolveTakeStandingPoint(Companion,*Definition,GroundEntrance,OutUse,bProjectNearby,StandingEntrance,OutReason))
+    {
+        if (!bProjectNearby) return false;
+        const FBox Bounds=GetOriginalSizeBounds(GetOwner()->GetActorTransform());
+        if (!Bounds.IsValid) return false;
+        const FVector Extent=Bounds.GetExtent();
+        const FVector Center=Bounds.GetCenter();
+        FVector Toward=(Companion->GetNavAgentLocation()-Center).GetSafeNormal2D();
+        if (Toward.IsNearlyZero()) Toward=FVector::ForwardVector;
+        // 家具被搬到新位置后，旧入口可能贴墙；只在这件原物周围重查可落脚处
+        for (const float Angle:{0.f,45.f,-45.f,90.f,-90.f,180.f})
+        {
+            const FVector Side=Toward.RotateAngleAxis(Angle,FVector::UpVector);
+            const double Distance=FMath::Abs(Side.X)*Extent.X+FMath::Abs(Side.Y)*Extent.Y+Companion->GetSimpleCollisionRadius()+14.;
+            if (!Grab->bAllowNpcEdgePickup && Distance>190.) continue;
+            const FTransform Alternative((-Side).Rotation(),Center+Side*FMath::Max(65.,Distance));
+            if (ResolveTakeStandingPoint(Companion,*Definition,Alternative,OutUse,true,OutEntrance,OutReason))
+            { OutExit=OutEntrance; return true; }
+        }
+        return false;
+    }
     if (GroundExit.Equals(GroundEntrance,.001)) StandingExit=StandingEntrance;
     else if (!ResolveTakeStandingPoint(Companion,*Definition,GroundExit,OutUse,bProjectNearby,StandingExit,OutReason)) return false;
     OutEntrance=StandingEntrance;
     OutExit=StandingExit;
+    return true;
+}
+
+bool UDeliveryHomeObjectComponent::CanReachPlacementEntrance(const ADeliveryCompanionCharacter& Companion,
+    const FDeliveryHomeUseCandidate& Candidate) const
+{
+    const auto* Definition=Candidate.Definition.Get();
+    const auto* Capsule=Companion.GetCapsuleComponent();
+    const auto* Movement=Companion.GetCharacterMovement();
+    if (!Definition || !Capsule || !Movement) return false;
+    const FVector Entrance=Candidate.EntranceTransform.GetLocation();
+    const FVector Center=Entrance+FVector(0,0,Capsule->GetScaledCapsuleHalfHeight());
+    const FVector Use=Candidate.UseTransform.TransformPositionNoScale(Definition->SightOffset);
+    // 候选检查作者站位的距离、导航面与脚下空间，完整路线在行动开始时查询
+    if (Entrance.ContainsNaN() || Use.ContainsNaN() || FVector::DistSquared(Center,Use)>FMath::Square(Definition->UseRadius)) return false;
+    auto* World=GetWorld();
+    auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+    const auto& Properties=Companion.GetNavAgentPropertiesRef();
+    const FVector Start=Companion.GetNavAgentLocation();
+    const auto* NavData=Nav?Nav->GetNavDataForProps(Properties,Start):nullptr;
+    FNavLocation Projection;
+    if (!World || !NavData || Start.ContainsNaN() ||
+        !Nav->ProjectPointToNavigation(Entrance,Projection,FVector(18,18,30),NavData) ||
+        FVector::Dist2D(Projection.Location,Entrance)>12. || FMath::Abs(Projection.Location.Z-Entrance.Z)>15.) return false;
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(HomePlacementEntrance),false,&Companion);
+    if (const auto* Component=Companion.Companion.Get()) Query.AddIgnoredActor(Component->GetHomeState().CarriedProp.Get());
+    FHitResult Floor;
+    if (!World->LineTraceSingleByChannel(Floor,Entrance+FVector(0,0,30),Entrance-FVector(0,0,35),ECC_Visibility,Query) ||
+        Floor.bStartPenetrating || !Floor.GetComponent() || Floor.GetComponent()->IsSimulatingPhysics() ||
+        !Movement->IsWalkable(Floor) || FMath::Abs(Floor.ImpactPoint.Z-Entrance.Z)>15.) return false;
+    TArray<FOverlapResult> Overlaps;
+    World->OverlapMultiByObjectType(Overlaps,Center+FVector(0,0,2),FQuat::Identity,ScaleCollisionObjects(),
+        FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius(),Capsule->GetScaledCapsuleHalfHeight()),Query);
+    for (const auto& Overlap:Overlaps)
+        if (BlocksScaleExpansion(Overlap.GetComponent(),ECC_Pawn)) return false;
     return true;
 }
 
@@ -354,23 +449,37 @@ void UDeliveryHomeObjectComponent::FindAvailableUses(ADeliveryCompanionCharacter
         Candidate.Operation=Definition->Operation; Candidate.Revision=Revision; Candidate.Slot=Result;
         if (!ResolveUseTransforms(Companion,Definition,Slot,
             Candidate.EntranceTransform,Candidate.UseTransform,Candidate.ExitTransform,Reason)) continue;
+        if (Candidate.Operation==EDeliveryHomeOperation::PlaceProp && !CanReachPlacementEntrance(*Companion,Candidate)) continue;
         OutUses.Add(MoveTemp(Candidate));
     }
     OutUses.RemoveAll([&](const auto& Candidate){return DuplicateSlotIds.Contains(Candidate.SlotId);});
 }
 
 bool UDeliveryHomeObjectComponent::TryClaimUse(ADeliveryCompanionCharacter* Companion,APlayerState* Requester,FGuid ActionId,
-    const FDeliveryHomeUseCandidate& Candidate,FDeliveryHomeUseClaim& OutClaim,FName& OutReason)
+    const FDeliveryHomeUseCandidate& Candidate,FDeliveryHomeUseClaim& OutClaim,FName& OutReason,
+    const UDeliveryHomeObjectComponent* PlacementSource)
 {
     OutClaim={};
     if (!ActionId.IsValid()) return Fail(OutReason,TEXT("HomeActionIdMissing"));
     if (!ValidateUser(Companion,Requester,OutReason)) return false;
     if (Candidate.Object.Get()!=this || Candidate.ObjectId!=ObjectId) return Fail(OutReason,TEXT("HomeCandidateExpired"));
+    TWeakObjectPtr<AActor> PlacementProp;
+    if (Candidate.Operation==EDeliveryHomeOperation::PlaceProp)
+    {
+        auto* Prop=IsValid(PlacementSource)?PlacementSource->GetOwner():nullptr;
+        if (!IsValid(Prop) || PlacementSource==this || PlacementSource->Home!=Home || Prop==GetOwner() ||
+            Prop->GetOwner() || Prop->IsA<APawn>() || Prop->IsA<ADeliveryPackageItem>() ||
+            !PlacementSource->AllowedUses.Contains(EDeliveryHomeOperation::TakeProp))
+            return Fail(OutReason,TEXT("HomePropUnavailable"));
+        if (!PlacementSource->ValidateHome(OutReason)) return false;
+        PlacementProp=Prop;
+    }
     for (const auto& Pair:OwnedUses)
         if (Pair.Value.Ticket.ActionId==ActionId)
         {
             const auto& Existing=Pair.Value;
             if (!Existing.bPlacementCommitted && Existing.Companion==Companion && Existing.Requester==Requester &&
+                Existing.PlacementProp.HasSameIndexAndSerialNumber(PlacementProp) &&
                 Existing.Handle.SlotHandle==Candidate.Slot.SlotHandle && ValidateClaim(Existing.Ticket,false,OutReason))
             { OutClaim=Existing.Ticket; return true; }
             return Fail(OutReason,TEXT("HomeActionAlreadyClaimed"));
@@ -390,6 +499,7 @@ bool UDeliveryHomeObjectComponent::TryClaimUse(ADeliveryCompanionCharacter* Comp
     if (!Handle.IsValid()) return Fail(OutReason,TEXT("HomeSlotClaimRejected"));
     // SO 通知可能同步改变拥有者，领取后再次核验再交出凭据
     if (!WeakThis.IsValid() || !IsValid(Subsystem) || !ValidateUser(Companion,Requester,OutReason) ||
+        !IsOperationAvailable(Offered->Definition.Get()) ||
         !HasClaimToken(Subsystem,Handle.SlotHandle,Token))
     {
         if (IsValid(Subsystem) && HasClaimToken(Subsystem,Handle.SlotHandle,Token)) Subsystem->MarkSlotAsFree(Handle);
@@ -399,6 +509,7 @@ bool UDeliveryHomeObjectComponent::TryClaimUse(ADeliveryCompanionCharacter* Comp
     FOwnedUse Use;
     Use.Ticket.Object=this; Use.Ticket.Token=Token; Use.Ticket.ActionId=ActionId;
     Use.Handle=Handle; Use.Companion=Companion; Use.Requester=Requester; Use.Definition=Offered->Definition;
+    Use.PlacementProp=PlacementProp;
     OwnedUses.Add(Token,Use);
     Subsystem->RegisterSlotInvalidationCallback(Handle,FOnSlotInvalidated::CreateLambda(
         [WeakThis](const FSmartObjectClaimHandle& InvalidHandle,ESmartObjectSlotState)
@@ -441,7 +552,27 @@ bool UDeliveryHomeObjectComponent::ValidateClaim(const FDeliveryHomeUseClaim& Cl
     Subsystem->ReadSlotData(Use->Handle.SlotHandle,[&](FConstSmartObjectSlotView View){ bEnabled=View.IsValid() && View.IsEnabled(); });
     if (!bEnabled || !Subsystem->EvaluateSelectionConditions(Use->Handle.SlotHandle,
         FConstStructView::Make(FSmartObjectActorUserData(Use->Companion.Get())))) return Fail(OutReason,TEXT("HomeSlotConditionChanged"));
-    return ValidateUse(Use->Companion.Get(),Use->Definition.Get(),Use->Handle.SlotHandle,bRequireInteractionRange,OutReason);
+    const auto* Definition=Use->Definition.Get();
+    if (CarryScaleState.Phase==EDeliveryHomeCarryScalePhase::CarriedSmall && Definition && Definition->Operation==EDeliveryHomeOperation::TakeProp)
+    {
+        const auto* Companion=Use->Companion.Get();
+        const auto* Grabbable=GetOwner()->FindComponentByClass<UDeliveryGrabbableComponent>();
+        if (Companion && Grabbable && Grabbable->IsCarriedByProvider(Companion->Companion,Claim.ActionId))
+        {
+            // 已拿起的实物由搬运凭据确认，转头和桌沿遮挡不应撤销原拿取凭据
+            const auto* Smart=ResolveSmartObject();
+            if (!IsRegistered() || !Smart || Use->Handle.SlotHandle.GetSmartObjectHandle()!=Smart->GetRegisteredHandle() ||
+                Subsystem->GetSlotState(Use->Handle.SlotHandle)!=ESmartObjectSlotState::Occupied ||
+                !Definition->IsUsableConfiguration() || !AllowedUses.Contains(EDeliveryHomeOperation::TakeProp))
+                return Fail(OutReason,TEXT("HomeSlotUnavailable"));
+            return ValidateScaleObject(OutReason);
+        }
+    }
+    const auto* PlacementProp=Use->PlacementProp.Get();
+    if (Definition && Definition->Operation==EDeliveryHomeOperation::PlaceProp &&
+        (!IsValid(PlacementProp) || PlacementProp->IsActorBeingDestroyed()))
+        return Fail(OutReason,TEXT("HomePropUnavailable"));
+    return ValidateUse(Use->Companion.Get(),Definition,Use->Handle.SlotHandle,bRequireInteractionRange,OutReason,PlacementProp);
 }
 
 bool UDeliveryHomeObjectComponent::GetUseTransforms(const FDeliveryHomeUseClaim& Claim,FTransform& OutEntrance,FTransform& OutUse,FTransform& OutExit) const
@@ -462,7 +593,7 @@ bool UDeliveryHomeObjectComponent::GetPlacementTransform(const FDeliveryHomeUseC
     if (!Definition || Definition->Operation!=EDeliveryHomeOperation::PlaceProp || !IsCurrentSmartObjectClaim(*Use))
         return Fail(OutReason,TEXT("HomePlacementClaimExpired"));
     const auto* Prop=IsValid(Source)?Source->GetOwner():nullptr;
-    if (!IsValid(Source) || Source==this || Source->GetWorld()!=GetWorld() || Source->Home!=Home ||
+    if (!IsValid(Source) || Source==this || Source->GetWorld()!=GetWorld() || Source->Home!=Home || Use->PlacementProp.Get()!=Prop ||
         !IsValid(Prop) || Prop==GetOwner() || Prop->IsActorBeingDestroyed() || Prop->IsA<APawn>() ||
         Prop->IsA<ADeliveryPackageItem>() || !Source->AllowedUses.Contains(EDeliveryHomeOperation::TakeProp))
         return Fail(OutReason,TEXT("HomePropUnavailable"));
@@ -475,7 +606,9 @@ bool UDeliveryHomeObjectComponent::GetPlacementTransform(const FDeliveryHomeUseC
     const FBox Bounds=Source->GetOriginalSizeBounds(FTransform(Support.GetRotation(),FVector::ZeroVector,FVector::OneVector));
     if (!Bounds.IsValid || Bounds.Min.ContainsNaN() || Bounds.Max.ContainsNaN() || Bounds.GetExtent().GetMin()<=0)
         return Fail(OutReason,TEXT("HomePropBoundsMissing"));
-    const FVector Offset(Bounds.GetCenter().X,Bounds.GetCenter().Y,Bounds.Min.Z);
+    const FBox Footprint=Source->GetPlacementFootprintBounds(FTransform(Support.GetRotation()));
+    if (!Footprint.IsValid) return Fail(OutReason,TEXT("HomePropBoundsMissing"));
+    const FVector Offset(Footprint.GetCenter().X,Footprint.GetCenter().Y,Bounds.Min.Z);
     OutTransform=FTransform(Support.GetRotation(),Support.GetLocation()-Offset,FVector::OneVector);
     OutReason=NAME_None;
     return true;
@@ -494,7 +627,7 @@ bool UDeliveryHomeObjectComponent::ReadPropTransferPoint(const FOwnedUse& Use,
         !AllowedUses.Contains(EDeliveryHomeOperation::PlaceProp))
         return Fail(OutReason,TEXT("HomePropTransferUnavailable"));
     if (!Definition->bUsePropTransferPoint) { OutReason=NAME_None; return true; }
-    const auto Slot=Subsystem->GetSlotTransform(Use.Handle.SlotHandle);
+    const auto Slot=ReadLiveSlotTransform(Use.Handle.SlotHandle);
     if (!Slot.IsSet() || Slot->ContainsNaN() || !Slot->GetRotation().IsNormalized())
         return Fail(OutReason,TEXT("HomePropTransferUnavailable"));
     OutPoint.bEnabled=true;
@@ -554,7 +687,7 @@ bool UDeliveryHomeObjectComponent::ValidatePropTransferPoint(const FDeliveryHome
         return Fail(OutReason,TEXT("HomePropTransferChanged"));
     bool bEnabled=false;
     Subsystem->ReadSlotData(Point.Slot,[&](FConstSmartObjectSlotView View){ bEnabled=View.IsValid() && View.IsEnabled(); });
-    const auto Slot=Subsystem->GetSlotTransform(Point.Slot);
+    const auto Slot=ReadLiveSlotTransform(Point.Slot);
     if (!bEnabled || !Slot.IsSet() || !Slot->Equals(Point.SlotTransform,.01) || Point.WorldPoint.ContainsNaN())
         return Fail(OutReason,TEXT("HomePropTransferChanged"));
     const FTransform Frame(Slot->GetRotation(),Slot->GetLocation(),FVector::OneVector);
@@ -629,6 +762,7 @@ bool UDeliveryHomeObjectComponent::IsPlacementValid(const FOwnedUse& Use,AActor*
     if (!Definition || Definition->Operation!=EDeliveryHomeOperation::PlaceProp || !IsValid(Prop) ||
         Prop==GetOwner() || Prop->IsActorBeingDestroyed() || Prop->GetWorld()!=GetWorld() || Prop->GetOwner())
         return Fail(OutReason,TEXT("HomePropUnavailable"));
+    if (!IsStablePlacementSurface()) return Fail(OutReason,TEXT("HomePlacementUnsupported"));
     const auto* PropMetadata=Prop->FindComponentByClass<UDeliveryHomeObjectComponent>();
     const auto* Grabbable=Prop->FindComponentByClass<UDeliveryGrabbableComponent>();
     const auto* Body=Cast<UPrimitiveComponent>(Prop->GetRootComponent());
@@ -644,37 +778,28 @@ bool UDeliveryHomeObjectComponent::IsPlacementValid(const FOwnedUse& Use,AActor*
     if (FVector::Dist(Prop->GetActorLocation(),Placement.GetLocation())>Definition->PlacementTolerance ||
         FMath::RadiansToDegrees(Prop->GetActorQuat().AngularDistance(Placement.GetRotation()))>Definition->PlacementAngleTolerance)
         return Fail(OutReason,TEXT("HomePropNotAtPlacement"));
-    const FBox Bounds=Prop->GetComponentsBoundingBox(true);
-    if (!Bounds.IsValid || Bounds.GetExtent().GetMin()<=0 || Bounds.GetExtent().ContainsNaN())
-        return Fail(OutReason,TEXT("HomePropBoundsMissing"));
     // 直接把原尺寸几何转进槽位轴向，世界 AABB 再反转会在非零 yaw 时二次膨胀
     const FQuat SlotRelativeRotation=Placement.GetRotation().Inverse()*Prop->GetActorQuat();
     const FBox SlotBounds=PropMetadata->GetOriginalSizeBounds(FTransform(SlotRelativeRotation,FVector::ZeroVector,FVector::OneVector));
     if (!SlotBounds.IsValid || SlotBounds.Min.ContainsNaN() || SlotBounds.Max.ContainsNaN() || SlotBounds.GetExtent().GetMin()<=0)
         return Fail(OutReason,TEXT("HomePropBoundsMissing"));
     // 平移只影响中心，不影响半尺寸；世界位置另由到位、碰撞和支撑查询核验
-    const FVector Extent=SlotBounds.GetExtent();
+    const FBox SlotFootprint=PropMetadata->GetPlacementFootprintBounds(FTransform(SlotRelativeRotation));
+    if (!SlotFootprint.IsValid) return Fail(OutReason,TEXT("HomePropBoundsMissing"));
+    const FVector Extent(SlotFootprint.GetExtent().X, SlotFootprint.GetExtent().Y, SlotBounds.GetExtent().Z);
     if (Extent.X>Definition->MaximumPropHalfExtent.X || Extent.Y>Definition->MaximumPropHalfExtent.Y || Extent.Z>Definition->MaximumPropHalfExtent.Z)
         return Fail(OutReason,TEXT("HomePropTooLarge"));
-    FCollisionQueryParams Params(SCENE_QUERY_STAT(HomePropPlacement),false,Prop);
-    const FVector CheckExtent=(Bounds.GetExtent()-FVector(1)).ComponentMax(FVector(1));
-    if (GetWorld()->OverlapBlockingTestByChannel(Bounds.GetCenter(),FQuat::Identity,Body->GetCollisionObjectType(),
-        FCollisionShape::MakeBox(CheckExtent),Params,FCollisionResponseParams(Body->GetCollisionResponseToChannels())))
-        return Fail(OutReason,TEXT("HomePlacementBlocked"));
-    // 五个点必须实际落在目的家具上，旁边的人或其他道具不能冒充本槽的支撑
-    const FVector Center=Bounds.GetCenter();
-    for (const FVector Offset:{FVector::ZeroVector,FVector(CheckExtent.X*.7f,CheckExtent.Y*.7f,0),
-        FVector(CheckExtent.X*.7f,-CheckExtent.Y*.7f,0),FVector(-CheckExtent.X*.7f,CheckExtent.Y*.7f,0),
-        FVector(-CheckExtent.X*.7f,-CheckExtent.Y*.7f,0)})
+    const FBox Footprint=PropMetadata->GetPlacementFootprintBounds(Prop->GetActorTransform());
+    if (!Footprint.IsValid) return Fail(OutReason,TEXT("HomePropBoundsMissing"));
+    const FVector Center=Footprint.GetCenter(), FootExtent=Footprint.GetExtent();
+    if (PropMetadata->HasPlacementFootprint())
     {
-        const FVector Bottom(Center.X+Offset.X,Center.Y+Offset.Y,Bounds.Min.Z);
-        FHitResult Support;
-        if (!GetWorld()->LineTraceSingleByChannel(Support,Bottom+FVector(0,0,3),Bottom-FVector(0,0,Definition->MaximumSupportGap),ECC_Visibility,Params) ||
-            Support.GetActor()!=GetOwner() || Support.ImpactNormal.Z<Definition->MinimumSupportNormalZ)
-            return Fail(OutReason,TEXT("HomePlacementUnsupported"));
+        const FVector MassCenter=Body->GetCenterOfMass();
+        if (MassCenter.ContainsNaN() || FMath::Abs(MassCenter.X-Center.X)>FootExtent.X*.7 ||
+            FMath::Abs(MassCenter.Y-Center.Y)>FootExtent.Y*.7) return Fail(OutReason,TEXT("HomePlacementUnsupported"));
     }
-    OutReason=NAME_None;
-    return true;
+    return PropMetadata->HasRestoreSpaceAndSupport(Prop->GetActorTransform(),false,OutReason,this,
+        Definition->MaximumSupportGap,Definition->MinimumSupportNormalZ);
 }
 
 bool UDeliveryHomeObjectComponent::CanCommitPlacement(const FDeliveryHomeUseClaim& Claim,AActor* Prop,FName& OutReason) const
@@ -690,11 +815,11 @@ bool UDeliveryHomeObjectComponent::CommitPlacement(const FDeliveryHomeUseClaim& 
 {
     if (!ValidateHome(OutReason)) return false;
     auto* Use=FindOwned(Claim);
-    if (Use && Use->bPlacementCommitted && Use->PlacedProp==Prop && IsCurrentSmartObjectClaim(*Use))
+    if (Use && Use->bPlacementCommitted && Use->PlacementProp==Prop && IsCurrentSmartObjectClaim(*Use))
         return IsPlacementValid(*Use,Prop,OutReason);
     if (!CanCommitPlacement(Claim,Prop,OutReason)) return false;
     Use=FindOwned(Claim);
-    Use->PlacedProp=Prop; Use->bPlacementCommitted=true; Use->bExecutionEnded=true;
+    Use->bPlacementCommitted=true; Use->bExecutionEnded=true;
     // SO 中原使用者仅为弱引用，占用从这里起由实物持续保持
     Use->Companion.Reset(); Use->Requester.Reset();
     RefreshReplicatedState();
@@ -751,10 +876,42 @@ FBox UDeliveryHomeObjectComponent::GetOriginalSizeBounds(const FTransform& Actor
     return CalculateSizeBounds(Original);
 }
 
+bool UDeliveryHomeObjectComponent::HasPlacementFootprint() const
+{
+    return !PlacementFootprintCenter.ContainsNaN() && !PlacementFootprintHalfExtent.ContainsNaN() &&
+        PlacementFootprintHalfExtent.X>0. && PlacementFootprintHalfExtent.Y>0.;
+}
+
+FBox UDeliveryHomeObjectComponent::GetPlacementFootprintBounds(const FTransform& ActorTransform) const
+{
+    if (!HasPlacementFootprint()) return GetOriginalSizeBounds(ActorTransform);
+    FTransform Original=ActorTransform;
+    Original.SetScale3D(GetOriginalActorScale());
+    const FVector Extent(PlacementFootprintHalfExtent.X,PlacementFootprintHalfExtent.Y,0);
+    return FBox(PlacementFootprintCenter-Extent,PlacementFootprintCenter+Extent).TransformBy(Original);
+}
+
+bool UDeliveryHomeObjectComponent::GetCarryPlacementLocation(const FTransform& FullSizeGoal,FVector& OutLocation,bool bPredictCarryScale) const
+{
+    OutLocation=FullSizeGoal.GetLocation();
+    if ((!IsCarryScaleActive() && !bPredictCarryScale) || !bRestoreScaleFromSupportBottom) return !OutLocation.ContainsNaN();
+    const FVector SmallScale=IsCarryScaleActive()?GetOwner()->GetActorScale3D():GetOriginalActorScale()*CarryScaleMultiplier;
+    if (!ValidScale(SmallScale)) return false;
+    const FBox Original=GetOriginalSizeBounds(FullSizeGoal);
+    FTransform CarryGoal=FullSizeGoal;
+    CarryGoal.SetScale3D(SmallScale);
+    const FBox Small=CalculateSizeBounds(CarryGoal);
+    if (!Original.IsValid || !Small.IsValid) return false;
+    // 小件先接触实际支撑面，展开时才按同一底部接触点恢复高度
+    OutLocation.Z+=Original.Min.Z-Small.Min.Z;
+    return !OutLocation.ContainsNaN();
+}
+
 void UDeliveryHomeObjectComponent::SetCarryScalePhase(EDeliveryHomeCarryScalePhase Phase)
 {
     if (CarryScaleState.Phase==Phase) return;
     CarryScaleState.Phase=Phase;
+    NextScaleRestoreOffsetAt=-1;
     ++ScaleGeneration;
     RefreshReplicatedState();
 }
@@ -800,10 +957,31 @@ bool UDeliveryHomeObjectComponent::BeginCarryScale(const FDeliveryHomeUseClaim& 
     return true;
 }
 
-bool UDeliveryHomeObjectComponent::HasRestoreSpaceAndSupport(const FTransform& Target,bool bCheckExpansion,FName& OutReason) const
+bool UDeliveryHomeObjectComponent::IsStablePlacementSurface() const
+{
+    const auto* Actor=GetOwner();
+    const auto* Body=IsValid(Actor)?Cast<UPrimitiveComponent>(Actor->GetRootComponent()):nullptr;
+    const auto* Grab=Actor?Actor->FindComponentByClass<UDeliveryGrabbableComponent>():nullptr;
+    FName Reason;
+    bool bRequireRuntimeHome=true;
+#if WITH_EDITOR
+    // 普通编辑器可预检几何。所有游戏世界继续要求已认领，不能用预览生成候选或占槽
+    if (const auto* World=GetWorld(); World && World->WorldType==EWorldType::Editor && !World->HasBegunPlay())
+        bRequireRuntimeHome=false;
+#endif
+    return Body && ValidateHome(Reason,bRequireRuntimeHome) && !IsCarryScaleActive() && !Actor->GetOwner() && !Actor->GetAttachParentActor() &&
+        (!Grab || !Grab->HasAnyCarrier()) && (!Body->IsSimulatingPhysics() ||
+            (Body->GetPhysicsLinearVelocity().SizeSquared()<=FMath::Square(5.f) &&
+             Body->GetPhysicsAngularVelocityInDegrees().SizeSquared()<=FMath::Square(5.f)));
+}
+
+bool UDeliveryHomeObjectComponent::HasRestoreSpaceAndSupport(const FTransform& Target,bool bCheckExpansion,FName& OutReason,
+    const UDeliveryHomeObjectComponent* PlacementSupport,float SupportGap,float MinimumSupportNormalZ,bool bAllowRestingFurniture) const
 {
     const auto* Actor=GetOwner();
     const auto* Body=Cast<UPrimitiveComponent>(Actor->GetRootComponent());
+    if (PlacementSupport && (PlacementSupport==this || PlacementSupport->Home!=Home ||
+        !PlacementSupport->IsStablePlacementSurface())) return Fail(OutReason,TEXT("HomePlacementUnsupported"));
     const FBox Full=GetOriginalSizeBounds(Target);
     if (!Full.IsValid || Full.GetExtent().GetMin()<=.1) return Fail(OutReason,TEXT("HomePropBoundsMissing"));
     FBox Envelope=Full;
@@ -825,34 +1003,60 @@ bool UDeliveryHomeObjectComponent::HasRestoreSpaceAndSupport(const FTransform& T
         if (const auto* Other=Overlap.GetComponent(); IsValid(Other) && Other->GetOwner()!=Actor &&
             BlocksScaleExpansion(Other,Body->GetCollisionObjectType()))
             return Fail(OutReason,TEXT("HomeScaleRestoreBlocked"));
-    // 展开必须落在真实固定支撑面上，人物、车辆和会滑动的松散道具不能冒充地面
-    const FVector Center=Full.GetCenter(),Extent=Full.GetExtent();
+    // 五点复核同一稳定支撑，取消后的落点也可使用同房屋静止的登记家具
+    const FBox Footprint=GetPlacementFootprintBounds(Target);
+    if (!Footprint.IsValid) return Fail(OutReason,TEXT("HomePropBoundsMissing"));
+    Query.bTraceComplex=PlacementSupport && PlacementSupport->bTracePlacementSupportComplex;
+    const FVector Center=Footprint.GetCenter(),Extent=Footprint.GetExtent();
+    const UPrimitiveComponent* RestingFurniture=nullptr;
+    bool bCenterSample=true;
     for (const FVector Offset:{FVector::ZeroVector,FVector(Extent.X*.7,Extent.Y*.7,0),
         FVector(Extent.X*.7,-Extent.Y*.7,0),FVector(-Extent.X*.7,Extent.Y*.7,0),FVector(-Extent.X*.7,-Extent.Y*.7,0)})
     {
         const FVector Bottom(Center.X+Offset.X,Center.Y+Offset.Y,Full.Min.Z);
         TArray<FHitResult> Hits;
-        GetWorld()->LineTraceMultiByObjectType(Hits,Bottom+FVector(0,0,2),Bottom-FVector(0,0,12),Objects,Query);
+        GetWorld()->LineTraceMultiByObjectType(Hits,Bottom+FVector(0,0,2),Bottom-FVector(0,0,SupportGap),Objects,Query);
         const FHitResult* Support=Hits.FindByPredicate([&](const FHitResult& Hit)
         { return BlocksScaleExpansion(Hit.GetComponent(),Body->GetCollisionObjectType()); });
-        if (!Support || !Support->GetActor() || Support->GetActor()->IsA<APawn>() ||
-            Support->GetComponent()->GetCollisionObjectType()==ECC_Vehicle || Support->GetComponent()->IsSimulatingPhysics() ||
-            Support->ImpactNormal.Z<.7 || Support->bStartPenetrating)
+        const auto* HitActor=Support?Support->GetActor():nullptr;
+        const auto* HitBody=Support?Support->GetComponent():nullptr;
+        if (!IsValid(HitActor) || !IsValid(HitBody) || HitActor->IsA<APawn>() ||
+            HitBody->GetCollisionObjectType()==ECC_Vehicle ||
+            Support->ImpactNormal.Z<MinimumSupportNormalZ || Support->bStartPenetrating)
             return Fail(OutReason,TEXT("HomeScaleRestoreUnsupported"));
+        if (bCenterSample && bAllowRestingFurniture && !PlacementSupport && HitBody->IsSimulatingPhysics())
+        {
+            const auto* Furniture=HitActor->FindComponentByClass<UDeliveryHomeObjectComponent>();
+            if (Furniture && Furniture!=this && Furniture->Home==Home && HitBody==HitActor->GetRootComponent() &&
+                Furniture->IsStablePlacementSurface()) RestingFurniture=HitBody;
+        }
+        if (PlacementSupport?HitActor!=PlacementSupport->GetOwner():
+            (RestingFurniture?HitBody!=RestingFurniture:HitBody->IsSimulatingPhysics()))
+            return Fail(OutReason,TEXT("HomeScaleRestoreUnsupported"));
+        bCenterSample=false;
     }
     OutReason=NAME_None;
     return true;
 }
 
-bool UDeliveryHomeObjectComponent::CanRestoreScaleAt(const FTransform& FullSizeGoal,FName& OutReason) const
+bool UDeliveryHomeObjectComponent::CanRestoreScaleAt(const FTransform& FullSizeGoal,FName& OutReason,const UDeliveryHomeObjectComponent* Support) const
 {
     if (!ValidateScaleObject(OutReason)) return false;
     if (FullSizeGoal.ContainsNaN() || !FullSizeGoal.GetRotation().IsNormalized() ||
         !FullSizeGoal.GetScale3D().Equals(GetOriginalActorScale(),.001)) return Fail(OutReason,TEXT("HomeRestoreScaleGoalInvalid"));
-    return HasRestoreSpaceAndSupport(FullSizeGoal,true,OutReason);
+    return HasRestoreSpaceAndSupport(FullSizeGoal,true,OutReason,Support);
 }
 
-bool UDeliveryHomeObjectComponent::RestoreScale(const FTransform& Target,FName& OutReason)
+bool UDeliveryHomeObjectComponent::CanPlaceAtOriginalSize(const FTransform& Goal,FName& OutReason,const UDeliveryHomeObjectComponent* Support) const
+{
+    if (!ValidateScaleObject(OutReason)) return false;
+    if (Goal.ContainsNaN() || !Goal.GetRotation().IsNormalized() || !Goal.GetScale3D().Equals(GetOriginalActorScale(),.001))
+        return Fail(OutReason,TEXT("HomeRestoreScaleGoalInvalid"));
+    return HasRestoreSpaceAndSupport(Goal,false,OutReason,Support);
+}
+
+bool UDeliveryHomeObjectComponent::RestoreScale(const FTransform& Target,FName& OutReason,const UDeliveryHomeObjectComponent* Support,
+    bool bAllowRestingFurniture)
 {
     if (bChangingCarryScale) return Fail(OutReason,TEXT("HomeScaleChangeInProgress"));
     if (!ValidateScaleObject(OutReason)) return false;
@@ -861,7 +1065,7 @@ bool UDeliveryHomeObjectComponent::RestoreScale(const FTransform& Target,FName& 
     auto* Grabbable=Actor->FindComponentByClass<UDeliveryGrabbableComponent>();
     if (Grabbable->HasAnyCarrier() || Actor->GetOwner() || Actor->GetAttachParentActor() || !Body->IsSimulatingPhysics())
         return Fail(OutReason,TEXT("HomePropStillCarried"));
-    if (!HasRestoreSpaceAndSupport(Target,true,OutReason)) return false;
+    if (!HasRestoreSpaceAndSupport(Target,true,OutReason,Support,12.f,.7f,bAllowRestingFurniture)) return false;
     if (!IsCarryScaleActive()) { OutReason=NAME_None; return true; }
     const uint32 Generation=ScaleGeneration;
     const TWeakObjectPtr<UDeliveryHomeObjectComponent> WeakThis(this);
@@ -887,16 +1091,18 @@ bool UDeliveryHomeObjectComponent::RestoreScale(const FTransform& Target,FName& 
     return true;
 }
 
-bool UDeliveryHomeObjectComponent::TryRestoreScaleAt(const FTransform& FullSizeGoal,FName& OutReason)
+bool UDeliveryHomeObjectComponent::TryRestoreScaleAt(const FTransform& FullSizeGoal,FName& OutReason,const UDeliveryHomeObjectComponent* Support)
 {
-    if (!CanRestoreScaleAt(FullSizeGoal,OutReason)) return false;
+    if (!CanRestoreScaleAt(FullSizeGoal,OutReason,Support)) return false;
     const FTransform Actual=GetOwner()->GetActorTransform();
-    if (FVector::Dist(Actual.GetLocation(),FullSizeGoal.GetLocation())>4 ||
+    FVector SmallGoal;
+    if (!GetCarryPlacementLocation(FullSizeGoal,SmallGoal) || FVector::Dist(Actual.GetLocation(),SmallGoal)>4 ||
         FMath::RadiansToDegrees(Actual.GetRotation().AngularDistance(FullSizeGoal.GetRotation()))>3)
         return Fail(OutReason,TEXT("HomePropNotAtPlacement"));
     FTransform Restored=Actual;
+    Restored.AddToTranslation(FVector(0,0,FullSizeGoal.GetLocation().Z-SmallGoal.Z));
     Restored.SetScale3D(GetOriginalActorScale());
-    return RestoreScale(Restored,OutReason);
+    return RestoreScale(Restored,OutReason,Support);
 }
 
 void UDeliveryHomeObjectComponent::QueueScaleRestore()
@@ -919,7 +1125,8 @@ void UDeliveryHomeObjectComponent::UpdateScaleRestore()
     SetCarryScalePhase(EDeliveryHomeCarryScalePhase::WaitingToRestore);
     const auto* Body=Cast<UPrimitiveComponent>(Actor->GetRootComponent());
     if (!Body->IsSimulatingPhysics() || Body->GetPhysicsLinearVelocity().Size()>10 ||
-        Body->GetPhysicsAngularVelocityInDegrees().Size()>10) return;
+        Body->GetPhysicsAngularVelocityInDegrees().Size()>10)
+    { NextScaleRestoreOffsetAt=-1; return; }
     FTransform Target=Actor->GetActorTransform();
     Target.SetScale3D(GetOriginalActorScale());
     if (bRestoreScaleFromSupportBottom)
@@ -930,7 +1137,33 @@ void UDeliveryHomeObjectComponent::UpdateScaleRestore()
         if (!FMath::IsFinite(Lift) || Lift<-.5) return;
         Target.AddToTranslation(FVector(0,0,FMath::Max(0.,Lift)));
     }
-    RestoreScale(Target,Reason);
+    const FName Blocked(TEXT("HomeScaleRestoreBlocked"));
+    const FName Unsupported(TEXT("HomeScaleRestoreUnsupported"));
+    const TWeakObjectPtr<UDeliveryHomeObjectComponent> WeakThis(this);
+    if (RestoreScale(Target,Reason,nullptr,true) || !WeakThis.IsValid() || (Reason!=Blocked && Reason!=Unsupported)) return;
+    const double Now=GetWorld()->GetTimeSeconds();
+    if (NextScaleRestoreOffsetAt<0)
+    {
+        NextScaleRestoreOffsetAt=Now+.75;
+        UE_LOG(LogDeliveryHomeObject,Log,TEXT("HomeScaleRestoreDeferred object=%s reason=%s location=%s current=%s original=%s"),
+            *GetNameSafe(Actor),*Reason.ToString(),*Actor->GetActorLocation().ToCompactString(),
+            *Actor->GetActorScale3D().ToCompactString(),*GetOriginalActorScale().ToCompactString());
+        return;
+    }
+    if (Now<NextScaleRestoreOffsetAt) return;
+    NextScaleRestoreOffsetAt=Now+1;
+    // 原地受阻后只试同一高度附近的落点，完整包络覆盖小物件当前位置到全尺寸目标
+    const FVector2D Directions[]={FVector2D(1,0),FVector2D(-1,0),FVector2D(0,1),FVector2D(0,-1),
+        FVector2D(1,1),FVector2D(1,-1),FVector2D(-1,1),FVector2D(-1,-1)};
+    for (const float Distance:{24.f,48.f,72.f})
+        for (const FVector2D& Direction:Directions)
+        {
+            const FVector2D Offset=Direction.GetSafeNormal()*Distance;
+            FTransform Nearby=Target;
+            Nearby.AddToTranslation(FVector(Offset.X,Offset.Y,0));
+            if (RestoreScale(Nearby,Reason,nullptr,true) || !WeakThis.IsValid() ||
+                (Reason!=Blocked && Reason!=Unsupported)) return;
+        }
 }
 
 void UDeliveryHomeObjectComponent::ReleaseUse(const FDeliveryHomeUseClaim& Claim,FName Reason)
@@ -977,7 +1210,7 @@ void UDeliveryHomeObjectComponent::RefreshReplicatedState()
         State.ActionId=Use.Ticket.ActionId;
         State.Phase=Use.bPlacementCommitted?EDeliveryHomeUsePhase::Placed:
             Subsystem->GetSlotState(Use.Handle.SlotHandle)==ESmartObjectSlotState::Occupied?EDeliveryHomeUsePhase::Using:EDeliveryHomeUsePhase::Approaching;
-        State.User=Use.bPlacementCommitted?Use.PlacedProp.Get():Use.Companion.Get();
+        State.User=Use.bPlacementCommitted?Use.PlacementProp.Get():Use.Companion.Get();
         UseStates.Add(State);
     }
     ++Revision;
@@ -1006,7 +1239,7 @@ void UDeliveryHomeObjectComponent::TickComponent(float DeltaTime,ELevelTick Type
         if (!Use) continue;
         FName Reason;
         const bool bValid=Use->bPlacementCommitted?
-            ValidateHome(Reason) && IsCurrentSmartObjectClaim(*Use) && IsPlacementValid(*Use,Use->PlacedProp.Get(),Reason):
+            ValidateHome(Reason) && IsCurrentSmartObjectClaim(*Use) && IsPlacementValid(*Use,Use->PlacementProp.Get(),Reason):
             ValidateClaim(Use->Ticket,GetWorld()->GetSubsystem<USmartObjectSubsystem>() &&
                 GetWorld()->GetSubsystem<USmartObjectSubsystem>()->GetSlotState(Use->Handle.SlotHandle)==ESmartObjectSlotState::Occupied,Reason);
         if (!bValid) ReleaseOwned(Token,Reason.IsNone()?FName(TEXT("HomeClaimExpired")):Reason);

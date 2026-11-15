@@ -2,6 +2,8 @@
 #include "AI/Conversation/DeliveryConversationTurnSubsystem.h"
 #include "AI/Conversation/DeliveryNpcConversationTrace.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Companion/DeliveryCompanionCharacter.h"
+#include "AI/Companion/DeliveryCompanionComponent.h"
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "Engine/World.h"
@@ -72,8 +74,9 @@ bool UDeliveryNpcAgentComponent::RegisterReplyMessageContext(FReply& Reply,const
     Reply.bPlainText=bPlainText;
     Reply.bPlayerReply=Request.bPlayerRequest;
     Reply.bOwnsAction=!Reply.bContinueCurrent && Reply.ActionId!=Request.RunningActionId;
-    Reply.bActionStarted=PublicState.Status==EDeliveryNpcActionStatus::Running ||
-        PublicState.Status==EDeliveryNpcActionStatus::Succeeded || (Reply.bContinueCurrent && !Request.RunningActionId.IsValid());
+    Reply.bActionStarted=PublicState.Status==EDeliveryNpcActionStatus::Succeeded ||
+        (!Reply.RequiresCompanionCommandReceipt() && (PublicState.Status==EDeliveryNpcActionStatus::Running ||
+            (Reply.bContinueCurrent && !Request.RunningActionId.IsValid())));
     if (Reply.bOwnsAction)
     {
         NpcMessageActionParent=Reply.ParentNpcMessage;
@@ -179,7 +182,10 @@ bool UDeliveryNpcAgentComponent::ReceiveNpcMessage(const FDeliveryNpcMessageHand
     Event.Description=Message.Text; Event.ReplyToEventId=Message.ReplyToEventId;
     Event.bNeedsReply=Message.bNeedsReply; Event.bHasObservedLocation=false; Event.Lifetime=300;
     if (!ObserveEvent(Event)) return false;
-    return Turns->ConfirmNpcMessageDelivery(Handle,Npc,true);
+    if (!Turns->ConfirmNpcMessageDelivery(Handle,Npc,true)) return false;
+    if (auto* Companion=Cast<ADeliveryCompanionCharacter>(Npc); IsValid(Companion))
+        Companion->Companion->RecordDeliveredNeighborLine(Handle);
+    return true;
 }
 
 void UDeliveryNpcAgentComponent::TryDeliverReplyMessage(FGuid RequestId)
@@ -187,6 +193,8 @@ void UDeliveryNpcAgentComponent::TryDeliverReplyMessage(FGuid RequestId)
     if (!IsAuthority() || bChangingPlan) return;
     auto* Found=Replies.Find(RequestId);
     if (!Found || !Found->bHasApprovedText || Found->bNpcMessageAttempted) return;
+    // 委托确认后仍可发送这份已批准的文字，当前不占用实际发送机会
+    if (Found->RequiresCompanionCommandReceipt() && !Found->bActionStarted) return;
     Found->bNpcMessageAttempted=true;
     const FReply Reply=*Found;
     auto* Turns=BoundNpcTurns.Get();
@@ -299,6 +307,22 @@ void UDeliveryNpcAgentComponent::HandleNpcMessageCancellations(const TArray<FDel
         if (!IsAuthority()) return;
         if (Cancel.bCancelAction && PublicState.Origin==EDeliveryNpcActionOrigin::Model &&
             PublicState.ActionId==Cancel.ActionId && PublicState.PlanRevision==Cancel.PlanRevision)
-            TryFinishAction(Cancel.ActionId,EDeliveryNpcActionStatus::Cancelled,Cancel.Reason);
+        {
+            const bool bInterruptedDuringCombat=Cancel.Reason==TEXT("NpcReplyInterrupted") &&
+                PublicState.Status==EDeliveryNpcActionStatus::Running &&
+                (PublicState.Action==EDeliveryNpcAction::Fight || PublicState.Action==EDeliveryNpcAction::Flee);
+            if (bInterruptedDuringCombat)
+            {
+                // 轻拳能打断对话，已经开始的追打或逃跑仍按本次模型决定执行
+                if (NpcMessageActionId==Cancel.ActionId && NpcMessageActionPlan==Cancel.PlanRevision)
+                {
+                    NpcMessageActionParent={};
+                    NpcMessageActionId.Invalidate();
+                    NpcMessageActionPlan=0;
+                }
+                if (PublicState.GetReplyId()==Cancel.ReplyId) PublishState();
+            }
+            else TryFinishAction(Cancel.ActionId,EDeliveryNpcActionStatus::Cancelled,Cancel.Reason);
+        }
     }
 }

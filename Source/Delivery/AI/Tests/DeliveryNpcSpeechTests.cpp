@@ -5,6 +5,8 @@
 #include "Sound/SoundWaveProcedural.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
+#include "AI/Companion/DeliveryCompanionCharacter.h"
+#include "AI/Companion/DeliveryCompanionComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Network/DeliveryAiSettings.h"
 #include "AI/Network/DeliveryAiGatewaySubsystem.h"
@@ -13,13 +15,21 @@
 #include "AI/Presentation/DeliveryNpcExpressionSet.h"
 #include "AI/Presentation/DeliveryNpcSpeechTiming.h"
 #include "AI/Presentation/DeliveryNpcVoiceCodec.h"
+#include "Character/DeliveryCharacter.h"
+#include "Components/BoxComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Dom/JsonObject.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "GameFramework/WorldSettings.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
+#include "Ragdoll/DeliveryActiveRagdollComponent.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "UObject/UnrealType.h"
+#include "Vehicle/DeliveryMotorbike.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcSpeechStreamTest,"Delivery.AI.SentencePlayback",
     EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
@@ -39,12 +49,12 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     auto* Player=World->SpawnActor<APawn>();
     SpeakerController->Possess(Player);
     auto* Agent=Npc->Agent.Get();auto* Presentation=Npc->Presentation.Get();
-    auto WaitForEncoding=[Presentation]()
+    auto WaitForEncoding=[](const UDeliveryNpcPresentationComponent* VoicePresentation)
     {
         const double Deadline=FPlatformTime::Seconds()+3;
-        while (Presentation->PendingEncodeTasks>0 && FPlatformTime::Seconds()<Deadline)
+        while (VoicePresentation->PendingEncodeTasks>0 && FPlatformTime::Seconds()<Deadline)
             FTaskGraphInterface::Get().ProcessThreadUntilIdle(ENamedThreads::GameThread);
-        return Presentation->PendingEncodeTasks==0;
+        return VoicePresentation->PendingEncodeTasks==0;
     };
     Npc->SetActorTickEnabled(false);
     World->Tick(LEVELTICK_TimeOnly,1.f);
@@ -303,7 +313,7 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     TestFalse(TEXT("没有第一句时不能先播第二句"),Presentation->GetSpeech().bActive);
     FDeliveryNpcSentence First=Second;First.Sequence=0;First.Text=Proposal.Speech;
     Agent->ReceiveSentence(Request.RequestId,First);
-    if (!TestTrue(TEXT("处理后台编码完成的游戏线程回调"),WaitForEncoding())) return false;
+    if (!TestTrue(TEXT("处理后台编码完成的游戏线程回调"),WaitForEncoding(Presentation))) return false;
     TArray<uint8> ReferenceEncoded;FString EncodeError;
     TestTrue(TEXT("同一份声音可用于同步编码对照"),DeliveryNpcVoice::Encode(First.Pcm,First.SampleRate,ReferenceEncoded,EncodeError));
     TestTrue(TEXT("后台编码没有改变传输内容"),Presentation->EncodedSentences.Contains(0) && Presentation->EncodedSentences[0].Audio==ReferenceEncoded);
@@ -487,14 +497,277 @@ bool FDeliveryNpcSpeechStreamTest::RunTest(const FString&)
     Presentation->BeginReply(CancelledAction,CancelledMessage,Npc->GetConversationDepth());
     Presentation->QueueSentence(CancelledAction,CancelledMessage,First);
     Presentation->CancelSpeech();
-    TestTrue(TEXT("取消后仍处理已开始编码任务的完成回调"),WaitForEncoding());
+    TestTrue(TEXT("取消后仍处理已开始编码任务的完成回调"),WaitForEncoding(Presentation));
     TestTrue(TEXT("晚到的编码结果不能恢复已取消的回复"),Presentation->EncodedSentences.IsEmpty() && Presentation->Sentences.IsEmpty() && !Presentation->HasPendingSpeech());
     const FGuid EndingAction=FGuid::NewGuid(), EndingMessage=FGuid::NewGuid();
     Presentation->BeginReply(EndingAction,EndingMessage,Npc->GetConversationDepth());
     Presentation->QueueSentence(EndingAction,EndingMessage,First);
     Presentation->EndPlay(EEndPlayReason::EndPlayInEditor);
-    TestTrue(TEXT("组件结束后后台任务能正常返回"),WaitForEncoding());
+    TestTrue(TEXT("组件结束后后台任务能正常返回"),WaitForEncoding(Presentation));
     TestTrue(TEXT("组件结束后不再接受旧编码结果"),Presentation->EncodedSentences.IsEmpty() && Presentation->Sentences.IsEmpty());
+
+    const auto* EncounterProperty=FindFProperty<FStructProperty>(ADeliveryCompanionCharacter::StaticClass(),TEXT("Encounter"));
+    const auto* OwnerProperty=FindFProperty<FObjectPropertyBase>(UDeliveryCompanionComponent::StaticClass(),TEXT("OwnerPlayerState"));
+    const auto* StartRagdoll=FindFProperty<FBoolProperty>(UDeliveryActiveRagdollComponent::StaticClass(),TEXT("bStartOnBeginPlay"));
+    if (!TestTrue(TEXT("已结识和无模型角色的夹具字段存在"),EncounterProperty && OwnerProperty && StartRagdoll)) return false;
+    const FTransform OwnerStart(FVector(7200,0,100));
+    auto* OwnerBody=World->SpawnActorDeferred<ADeliveryCharacter>(ADeliveryCharacter::StaticClass(),OwnerStart,
+        nullptr,nullptr,ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+    auto* OwnerController=World->SpawnActor<APlayerController>();
+    auto* Bike=World->SpawnActor<ADeliveryMotorbike>(FVector(7300,0,100),FRotator::ZeroRotator,PeerSpawn);
+    auto* Companion=World->SpawnActor<ADeliveryCompanionCharacter>(FVector(7100,0,100),FRotator::ZeroRotator,PeerSpawn);
+    auto* Visitor=World->SpawnActor<APawn>(OwnerStart.GetLocation(),FRotator::ZeroRotator,PeerSpawn);
+    if (!TestTrue(TEXT("建立真实上下车与同位旁观测试"),OwnerBody && OwnerController && Bike && Companion && Visitor)) return false;
+    StartRagdoll->SetPropertyValue_InContainer(OwnerBody->GetActiveRagdoll(),false);
+    OwnerBody->FinishSpawning(OwnerStart);
+    OwnerController->PlayerState=World->SpawnActor<APlayerState>();
+    if (!TestNotNull(TEXT("主人有真实 PlayerState"),OwnerController->PlayerState.Get())) return false;
+    OwnerController->PlayerState->SetOwner(OwnerController);
+    OwnerController->Possess(OwnerBody);
+    // 只布置已经结识的前置，之后走原事件、候选、防串话和玩家上下车
+    EncounterProperty->ContainerPtrToValuePtr<FDeliveryCompanionEncounterState>(Companion)->Phase=EDeliveryCompanionEncounterPhase::Joined;
+    OwnerProperty->SetObjectPropertyValue_InContainer(Companion->Companion,OwnerController->PlayerState);
+    auto* JoinedAgent=Companion->Agent.Get();
+    const auto RecordSubject=[&](FName Kind,APawn* Subject,EDeliveryNpcEvidenceSource Source,bool bNeedsReply)
+    {
+        FDeliveryNpcObservation Event;
+        Event.EventId=FGuid::NewGuid(); Event.Kind=Kind; Event.Subject=Subject; Event.Source=Source;
+        Event.Description=TEXT("初遇后的真实场景对象"); Event.bNeedsReply=bNeedsReply;
+        return JoinedAgent->ObserveEvent(Event)?Event.EventId:FGuid();
+    };
+    const FGuid VisitorEvent=RecordSubject(TEXT("NearbyVisitor"),Visitor,EDeliveryNpcEvidenceSource::Seen,false);
+    const FGuid JoinedEvent=RecordSubject(TEXT("CompanionJoined"),OwnerBody,EDeliveryNpcEvidenceSource::ActionResult,true);
+    const auto PrepareJoinedReply=[&](FDeliveryNpcDecisionRequest& Snapshot,FGuid TargetEvent,FDeliveryNpcDecisionProposal& Reply)
+    {
+        if (!JoinedAgent->BuildDecisionRequest(FGuid::NewGuid(),Snapshot) || Snapshot.JoinedResponseEvent!=JoinedEvent) return false;
+        const auto* Fact=Snapshot.Evidence.FindByPredicate([TargetEvent](const auto& Item){ return Item.EventId==TargetEvent; });
+        const auto* Wait=Snapshot.Candidates.FindByPredicate([](const auto& Item){ return Item.Action==EDeliveryNpcAction::Wait; });
+        if (!Fact || !Wait) return false;
+        Reply={}; Reply.CapabilityVersion=Snapshot.RequestedCapabilityVersion;
+        Reply.NpcId=Snapshot.NpcId; Reply.WorldEpoch=Snapshot.WorldEpoch; Reply.RequestId=Snapshot.RequestId;
+        Reply.ContextRevision=Snapshot.ContextRevision; Reply.PlanRevision=Snapshot.PlanRevision;
+        Reply.CandidateId=Wait->CandidateId; Reply.Action=Wait->Action; Reply.Duration=1.f;
+        Reply.Speech=TEXT("谢了，刚才是你扶我起来的。"); Reply.bHasSpeechTarget=true; Reply.SpeechTargetId=Fact->SubjectId;
+        JoinedAgent->ActiveRequest=Snapshot;
+        return true;
+    };
+    FDeliveryNpcDecisionRequest WalkingSnapshot, RidingSnapshot;
+    FDeliveryNpcDecisionProposal JoinedReply;
+    TestTrue(TEXT("同一层相邻主人可以听见现场道谢"),JoinedAgent->CanHearJoinedResponse(OwnerBody));
+    if (!TestTrue(TEXT("实际候选在主人步行时封存"),PrepareJoinedReply(WalkingSnapshot,JoinedEvent,JoinedReply))) return false;
+    if (!TestTrue(TEXT("主人实际控制已登记的车辆"),Bike->TryEnter(OwnerBody) && OwnerController->GetPawn()==Bike &&
+        Bike->GetRegisteredPlayer()==OwnerController->PlayerState)) return false;
+    const auto* VisitorFact=WalkingSnapshot.Evidence.FindByPredicate([VisitorEvent](const auto& Item){ return Item.EventId==VisitorEvent; });
+    if (!TestNotNull(TEXT("同位置访客也在原请求表中"),VisitorFact)) return false;
+    auto VisitorReply=JoinedReply;
+    VisitorReply.SpeechTargetId=VisitorFact->SubjectId;
+    FName JoinedReason;
+    TestFalse(TEXT("同位访客不能当作原救援主体"),JoinedAgent->TryAcceptProposal(VisitorReply,JoinedReason));
+    TestEqual(TEXT("正确报告旧收话人不符"),JoinedReason,FName(TEXT("JoinedReplyTargetChanged")));
+    auto StaleReply=JoinedReply;
+    ++StaleReply.PlanRevision;
+    TestFalse(TEXT("真正换控也不放行旧修订"),JoinedAgent->TryAcceptProposal(StaleReply,JoinedReason));
+    JoinedAgent->ActiveRequest.JoinedResponseEvent=FGuid::NewGuid();
+    TestFalse(TEXT("真正换控也不放行原事件已变的请求"),JoinedAgent->TryAcceptProposal(JoinedReply,JoinedReason));
+    JoinedAgent->ActiveRequest=WalkingSnapshot;
+    const FVector BikeNear=Bike->GetActorLocation();
+    const FVector BikeFar=BikeNear+FVector(3000,0,0);
+    Bike->SetActorLocation(BikeFar,false,nullptr,ETeleportType::TeleportPhysics);
+    TestFalse(TEXT("模型返回前走远的同一主人无法听见现场道谢"),JoinedAgent->CanHearJoinedResponse(Bike));
+    FDeliveryNpcDecisionRequest DistantSnapshot;
+    if (!TestTrue(TEXT("远离后仍可生成普通自动请求"),JoinedAgent->BuildDecisionRequest(FGuid::NewGuid(),DistantSnapshot))) return false;
+    TestFalse(TEXT("远处的自动请求不带本轮道谢标记"),DistantSnapshot.JoinedResponseEvent.IsValid());
+    TestFalse(TEXT("远处的自动请求不发送待道谢事件"),DistantSnapshot.Evidence.ContainsByPredicate([JoinedEvent](const auto& Fact)
+        { return Fact.EventId==JoinedEvent; }));
+    TestEqual(TEXT("远离期间保留原救助事件供回到近处再说"),JoinedAgent->PendingJoinedEvent,JoinedEvent);
+    Bike->SetActorLocation(BikeNear,false,nullptr,ETeleportType::TeleportPhysics);
+    JoinedAgent->ActiveRequest=WalkingSnapshot;
+    if (!TestTrue(TEXT("原步行主体可接续到主人当前真实车辆"),JoinedAgent->ReceiveStreamDecision(WalkingSnapshot.RequestId,JoinedReply))) return false;
+    TestTrue(TEXT("已接受流式道谢使用当前车辆及原事件"),JoinedAgent->GetPublicState().SpeechTarget==Bike &&
+        JoinedAgent->GetPublicState().ReplyToEventId==JoinedEvent);
+    JoinedAgent->CancelPlan(TEXT("TestInterruptBeforeThankYouPlayed"));
+
+    const FGuid BikeEvent=RecordSubject(TEXT("VisibleNow"),Bike,EDeliveryNpcEvidenceSource::Seen,false);
+    if (!TestTrue(TEXT("实际候选在驾驶中封存登记车辆"),PrepareJoinedReply(RidingSnapshot,BikeEvent,JoinedReply))) return false;
+    TSharedPtr<FJsonObject> RidingJson;
+    const TArray<TSharedPtr<FJsonValue>>* EncodedSubjects=nullptr;
+    const FString EncodedListenerId=JoinedReply.SpeechTargetId.ToString(EGuidFormats::DigitsWithHyphensLower);
+    if (!TestTrue(TEXT("道谢请求实际编码了人物表"),
+        FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(DeliveryNpc::EncodeRequest(RidingSnapshot)),RidingJson) &&
+        RidingJson.IsValid() && RidingJson->TryGetArrayField(TEXT("subjects"),EncodedSubjects))) return false;
+    TestTrue(TEXT("后台名单把已核验的驾驶主人当作可选玩家收话对象"),EncodedSubjects->ContainsByPredicate([&](const auto& Item)
+    {
+        const auto& Subject=Item->AsObject();
+        return Subject->GetStringField(TEXT("subject_id"))==EncodedListenerId && Subject->GetStringField(TEXT("kind"))==TEXT("player");
+    }));
+    AddExpectedError(FString::Printf(TEXT("%s: Skeletal mesh has no Physics Asset."),*OwnerBody->GetName()),
+        EAutomationExpectedErrorFlags::Contains,1);
+    Bike->ExitVehicle();
+    if (!TestTrue(TEXT("主人通过实际下车取回原角色控制权"),OwnerController->GetPawn()==OwnerBody && !Bike->GetDriver())) return false;
+    if (!TestTrue(TEXT("原车辆主体可接续到主人当前步行角色"),JoinedAgent->ReceiveStreamDecision(RidingSnapshot.RequestId,JoinedReply))) return false;
+    TestTrue(TEXT("下车后仍使用原事件和已选台词"),JoinedAgent->GetPublicState().SpeechTarget==OwnerBody &&
+        JoinedAgent->GetPublicState().ReplyToEventId==JoinedEvent && JoinedAgent->GetPublicState().Speech==JoinedReply.Speech);
+    FDeliveryNpcPublicState StartedReply;
+    if (!TestTrue(TEXT("行为树接手前主人再次上车"),Bike->TryEnter(OwnerBody) && OwnerController->GetPawn()==Bike) ||
+        !TestTrue(TEXT("同一个道谢动作可正常开始"),JoinedAgent->StartAction(StartedReply))) return false;
+    TestTrue(TEXT("开始动作前按新控制对象重绑且不改原事件和已选台词"),StartedReply.SpeechTarget==Bike &&
+        StartedReply.ReplyToEventId==JoinedEvent && StartedReply.Speech==JoinedReply.Speech);
+    TestTrue(TEXT("已排队道谢也能解析到玩家当前控制的车辆"),
+        JoinedAgent->GetReplyListenerForPlayback(StartedReply.GetReplyId(),OwnerBody)==Bike);
+
+    auto* Wall=World->SpawnActor<AActor>();
+    if (!TestNotNull(TEXT("构造真实道谢遮挡墙"),Wall)) return false;
+    auto* WallCollision=NewObject<UBoxComponent>(Wall);
+    Wall->SetRootComponent(WallCollision);
+    Wall->AddInstanceComponent(WallCollision);
+    WallCollision->SetBoxExtent(FVector(12,140,150));
+    WallCollision->SetCollisionProfileName(TEXT("BlockAll"));
+    WallCollision->RegisterComponent();
+    Wall->SetActorLocation((Companion->GetActorLocation()+BikeNear)*.5);
+    TestFalse(TEXT("同层近距离的墙挡住现场道谢"),JoinedAgent->CanHearJoinedResponse(Bike));
+    TestFalse(TEXT("隔墙不开始已排队的自动道谢"),JoinedAgent->CanStartReplySpeech(StartedReply.GetReplyId()));
+    WallCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    TestTrue(TEXT("移开墙后同一个主人可接着听"),JoinedAgent->CanStartReplySpeech(StartedReply.GetReplyId()));
+    Wall->Destroy();
+
+    auto* JoinedPresentation=Companion->Presentation.Get();
+    FDeliveryNpcSentence JoinedSentence;
+    JoinedSentence.Sequence=0;
+    JoinedSentence.Text=JoinedReply.Speech;
+    JoinedPresentation->QueueSentence(StartedReply.GetReplyId(),JoinedEvent,JoinedSentence);
+    JoinedPresentation->TickSentences();
+    const auto BegunSpeech=JoinedPresentation->GetSpeech();
+    if (!TestTrue(TEXT("句子沿正式播放流程开始并分配实际语音编号"),BegunSpeech.bActive &&
+        BegunSpeech.ActionId==StartedReply.GetReplyId() && BegunSpeech.TurnId.IsValid())) return false;
+    if (!TestTrue(TEXT("原模型轮次声明一段实际台词"),JoinedAgent->FinishModelReply(RidingSnapshot.RequestId,1))) return false;
+    World->Tick(LEVELTICK_TimeOnly,.2f);
+    Bike->SetActorLocation(BikeFar,false,nullptr,ETeleportType::TeleportPhysics);
+    JoinedAgent->TickComponent(0.f,LEVELTICK_All,nullptr);
+    const auto* BegunReply=JoinedAgent->Replies.Find(RidingSnapshot.RequestId);
+    TestTrue(TEXT("道谢已开始后走出范围，真实回复记录错过播放"),BegunReply && BegunReply->bJoinedPlaybackMissed);
+    Bike->SetActorLocation(BikeNear,false,nullptr,ETeleportType::TeleportPhysics);
+
+    const auto RecordCompletedSpeech=[&](FGuid SpeechId)
+    {
+        FDeliveryNpcObservation Spoken;
+        Spoken.EventId=SpeechId; Spoken.Kind=TEXT("SelfSpeech"); Spoken.Source=EDeliveryNpcEvidenceSource::ActionResult;
+        Spoken.Subject=Companion; Spoken.Addressee=Bike; Spoken.ReplyToEventId=JoinedEvent; Spoken.Description=JoinedSentence.Text;
+        return JoinedAgent->ObserveEvent(Spoken);
+    };
+    TestTrue(TEXT("错过的播放仍有二狗说完的事实"),RecordCompletedSpeech(BegunSpeech.TurnId));
+    JoinedAgent->FinishReplyPlayback(StartedReply.GetReplyId(),BegunSpeech.TurnId);
+    TestEqual(TEXT("主人已错过时，返回不让旧播放结清获救事件"),JoinedAgent->PendingJoinedEvent,JoinedEvent);
+
+    const auto StartAnotherJoinedReply=[&](FDeliveryNpcDecisionRequest& Snapshot,FDeliveryNpcPublicState& Started)
+    {
+        JoinedAgent->CancelPlan(TEXT("TestPreviousJoinedReplyFinished"));
+        if (!PrepareJoinedReply(Snapshot,BikeEvent,JoinedReply) || !JoinedAgent->ReceiveStreamDecision(Snapshot.RequestId,JoinedReply) ||
+            !JoinedAgent->StartAction(Started) || !JoinedAgent->FinishModelReply(Snapshot.RequestId,1)) return false;
+        JoinedPresentation->QueueSentence(Started.GetReplyId(),JoinedEvent,JoinedSentence);
+        JoinedPresentation->TickSentences();
+        return JoinedPresentation->GetSpeech().bActive && JoinedPresentation->GetSpeech().ActionId==Started.GetReplyId();
+    };
+    FDeliveryNpcDecisionRequest RetrySnapshot;
+    if (!TestTrue(TEXT("同一原事件可以再次请求道谢"),StartAnotherJoinedReply(RetrySnapshot,StartedReply))) return false;
+    JoinedAgent->FinishReplyPlayback(StartedReply.GetReplyId(),FGuid::NewGuid());
+    TestEqual(TEXT("已有同一原事件的旧台词也不能代替当前完成语音编号"),JoinedAgent->PendingJoinedEvent,JoinedEvent);
+    if (!TestTrue(TEXT("主人仍在可交谈范围时收到原道谢的新版播放"),StartAnotherJoinedReply(RetrySnapshot,StartedReply))) return false;
+    const FGuid CurrentSpeech=JoinedPresentation->GetSpeech().TurnId;
+    TestTrue(TEXT("记录与当前回复匹配的实际完成事实"),RecordCompletedSpeech(CurrentSpeech));
+    JoinedAgent->FinishReplyPlayback(StartedReply.GetReplyId(),CurrentSpeech);
+    TestFalse(TEXT("主人留在可听范围且本轮真实完成，原道谢结清"),JoinedAgent->PendingJoinedEvent.IsValid());
+
+    JoinedAgent->CancelPlan(TEXT("TestOwnerRequestedReply"));
+    const FGuid NewJoinedEvent=RecordSubject(TEXT("CompanionJoined"),Bike,EDeliveryNpcEvidenceSource::ActionResult,true);
+    Bike->SetActorLocation(BikeFar,false,nullptr,ETeleportType::TeleportPhysics);
+    const FGuid OwnerMessage=RecordSubject(TEXT("PlayerSpeech"),Bike,EDeliveryNpcEvidenceSource::Heard,true);
+    FDeliveryNpcDecisionRequest PlayerSnapshot;
+    if (!TestTrue(TEXT("测试控制器发起的显式请求仍能封存"),NewJoinedEvent.IsValid() &&
+        JoinedAgent->BeginListening(Bike,OwnerMessage) && JoinedAgent->BuildDecisionRequest(FGuid::NewGuid(),PlayerSnapshot))) return false;
+    TestTrue(TEXT("自动现场限制不会从主人的主动回复里移除原救助事实"),PlayerSnapshot.bPlayerRequest &&
+        PlayerSnapshot.PlayerMessageId==OwnerMessage && PlayerSnapshot.Evidence.ContainsByPredicate([NewJoinedEvent](const auto& Fact)
+            { return Fact.EventId==NewJoinedEvent; }));
+
+    JoinedAgent->CancelPlan(TEXT("TestCompanionCommandReply"));
+    Bike->SetActorLocation(BikeNear,false,nullptr,ETeleportType::TeleportPhysics);
+    const auto StageCommandReply=[&](FDeliveryNpcDecisionRequest& Snapshot,FDeliveryNpcSentence& Line,FGuid& ReplyId)
+    {
+        const FGuid MessageId=RecordSubject(TEXT("PlayerSpeech"),Bike,EDeliveryNpcEvidenceSource::Heard,true);
+        if (!MessageId.IsValid() || !JoinedAgent->BeginListening(Bike,MessageId) ||
+            !JoinedAgent->BuildDecisionRequest(FGuid::NewGuid(),Snapshot)) return false;
+        const auto* Stay=Snapshot.Candidates.FindByPredicate([](const auto& Candidate)
+            { return Candidate.Action==EDeliveryNpcAction::Stay; });
+        if (!Stay || !Snapshot.bRequesterIsCompanionOwner) return false;
+        FDeliveryNpcDecisionProposal Decision;
+        Decision.CapabilityVersion=Snapshot.RequestedCapabilityVersion;
+        Decision.RequestId=Snapshot.RequestId; Decision.WorldEpoch=Snapshot.WorldEpoch; Decision.NpcId=Snapshot.NpcId;
+        Decision.ContextRevision=Snapshot.ContextRevision; Decision.PlanRevision=Snapshot.PlanRevision;
+        Decision.CandidateId=Stay->CandidateId; Decision.Action=Stay->Action; Decision.TargetId=Stay->TargetId;
+        Decision.Duration=0.f; Decision.EvidenceIds=Stay->EvidenceIds;
+        Line=First; Line.Text=TEXT("行，我就在这等你。");
+        Decision.Speech=Line.Text; Decision.Emotion=Line.Emotion;
+        JoinedAgent->ActiveRequest=Snapshot;
+        if (!JoinedAgent->ReceiveStreamDecision(Snapshot.RequestId,Decision)) return false;
+        ReplyId=JoinedAgent->GetPublicState().GetReplyId();
+        JoinedAgent->ReceiveSentence(Snapshot.RequestId,Line);
+        if (!JoinedAgent->FinishModelReply(Snapshot.RequestId,1)) return false;
+        JoinedAgent->FinishReply(Snapshot.RequestId,true,1);
+        const auto* Reply=JoinedAgent->Replies.Find(Snapshot.RequestId);
+        return ReplyId.IsValid() && ReplyId==JoinedAgent->GetPublicState().ActionId && Reply && Reply->bTransferFinished &&
+            JoinedPresentation->HasReply(ReplyId) && WaitForEncoding(JoinedPresentation) &&
+            JoinedPresentation->EncodedSentences.Contains(0) && !JoinedPresentation->EncodedSentences[0].Audio.IsEmpty();
+    };
+    const auto CheckWaiting=[&](const TCHAR* Assertion,FGuid ReplyId)
+    {
+        JoinedPresentation->TickSentences();
+        return TestTrue(Assertion,!JoinedAgent->CanStartReplySpeech(ReplyId) && !JoinedPresentation->GetSpeech().bActive &&
+            JoinedPresentation->HasReply(ReplyId) && JoinedPresentation->EncodedSentences.Contains(0));
+    };
+
+    FDeliveryNpcDecisionRequest RejectedCommand;
+    FDeliveryNpcSentence RejectedLine;
+    FGuid RejectedReplyId;
+    if (!TestTrue(TEXT("失败用例已接收整轮真实编码语音"),StageCommandReply(RejectedCommand,RejectedLine,RejectedReplyId))) return false;
+    CheckWaiting(TEXT("命令仅被采纳时保持语音待播"),RejectedReplyId);
+    FDeliveryNpcPublicState RejectedAction;
+    if (!TestTrue(TEXT("行为树可按原候选启动"),JoinedAgent->StartAction(RejectedAction))) return false;
+    CheckWaiting(TEXT("启动动作后仍等待服务器应用同伴安排"),RejectedReplyId);
+    if (!TestTrue(TEXT("同一主人改变安排使旧命令修订失效"),Companion->Companion->ApplyCommand(EDeliveryNpcAction::Follow,
+        OwnerController->PlayerState,RejectedAction.CompanionCommandRevision))) return false;
+    TestFalse(TEXT("旧安排在正式执行入口被拒绝"),Companion->ExecuteAction(RejectedAction));
+    // 同时保存另一轮本机待播内容，失败时只清除这次命令的回复
+    FDeliveryNpcSpeechState UnrelatedSpeech;
+    UnrelatedSpeech.ActionId=FGuid::NewGuid(); UnrelatedSpeech.TurnId=FGuid::NewGuid(); UnrelatedSpeech.bActive=true;
+    UnrelatedSpeech.StartTime=JoinedPresentation->ServerTime()+1.; UnrelatedSpeech.Duration=1.f;
+    JoinedPresentation->StartStreamSpeech_Implementation(UnrelatedSpeech);
+    if (!TestTrue(TEXT("服务端按失败终止旧安排"),JoinedAgent->TryFinishAction(RejectedAction.ActionId,
+        EDeliveryNpcActionStatus::Failed,TEXT("StartRejected")))) return false;
+    TestTrue(TEXT("按准确回复编号撤下已传输完成的语音"),!JoinedPresentation->HasReply(RejectedReplyId) &&
+        JoinedPresentation->CancelledVoiceActions.Contains(RejectedReplyId) &&
+        JoinedPresentation->EncodedSentences.IsEmpty() && !JoinedAgent->Replies.Contains(RejectedCommand.RequestId));
+    TestTrue(TEXT("取消旧安排保留另一轮的待播内容"),!JoinedPresentation->CancelledVoiceActions.Contains(UnrelatedSpeech.ActionId) &&
+        JoinedPresentation->LocalVoices.ContainsByPredicate([&UnrelatedSpeech](const auto& Voice)
+            { return Voice.State.TurnId==UnrelatedSpeech.TurnId; }));
+    JoinedPresentation->StopStreamSpeech_Implementation(UnrelatedSpeech.ActionId,false);
+
+    FDeliveryNpcDecisionRequest ConfirmedCommand;
+    FDeliveryNpcSentence ConfirmedLine;
+    FGuid ConfirmedReplyId;
+    if (!TestTrue(TEXT("成功用例独立接收下一轮语音"),StageCommandReply(ConfirmedCommand,ConfirmedLine,ConfirmedReplyId))) return false;
+    JoinedAgent->ReceiveSentence(RejectedCommand.RequestId,RejectedLine);
+    TestTrue(TEXT("旧回复的迟到句不复活或覆盖新队列"),!JoinedPresentation->HasReply(RejectedReplyId) &&
+        ConfirmedReplyId!=RejectedReplyId && JoinedPresentation->HasReply(ConfirmedReplyId));
+    FDeliveryNpcPublicState ConfirmedAction;
+    if (!TestTrue(TEXT("新命令正常启动"),JoinedAgent->StartAction(ConfirmedAction)) ||
+        !TestTrue(TEXT("新命令经服务器实装到等候状态"),Companion->ExecuteAction(ConfirmedAction) &&
+            Companion->Companion->GetMode()==EDeliveryCompanionMode::Stay)) return false;
+    CheckWaiting(TEXT("服务器尚未发出动作成功回执时保留语音队列"),ConfirmedReplyId);
+    if (!TestTrue(TEXT("只有本次成功回执完成安排"),JoinedAgent->TryFinishAction(ConfirmedAction.ActionId,
+        EDeliveryNpcActionStatus::Succeeded,TEXT("CompanionModeChanged")))) return false;
+    JoinedPresentation->TickSentences();
+    TestTrue(TEXT("服务端确认成功后播放同一份已收语音"),JoinedAgent->CanStartReplySpeech(ConfirmedReplyId) &&
+        JoinedPresentation->GetSpeech().bActive && JoinedPresentation->GetSpeech().bRecordedVoice &&
+        JoinedPresentation->GetSpeech().ActionId==ConfirmedReplyId && JoinedPresentation->GetSpeech().Text==ConfirmedLine.Text);
     return true;
 }
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryNpcSpeechSendBudgetTest,"Delivery.AI.SpeechSendBudget",

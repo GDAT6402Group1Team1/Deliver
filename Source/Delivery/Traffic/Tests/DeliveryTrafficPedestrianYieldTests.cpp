@@ -4,10 +4,12 @@
 #include "NPC/DeliveryPedestrian.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SplineComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/WorldSettings.h"
 #include "Misc/ScopeExit.h"
+#include "UObject/UnrealType.h"
 
 /**
  * 交通车为行人让行
@@ -203,6 +205,75 @@ bool FDeliveryTrafficPedestrianYieldTest::RunTest(const FString&)
 	Walker->SetActorLocation(FVector(ScanStart + 150.0f, 0, 0));
 	Traffic->bYieldToPedestrians = false;
 	TestEqual(TEXT("关掉开关后不再探测行人"), Traffic->GetDistanceToPedestrianAhead(), -1.0f);
+
+	// 使用正式路口蓝图中的 StopAtInter，碰撞盒的位置由测试指定
+	UClass* IntersectionClass = LoadClass<AActor>(nullptr,
+	    TEXT("/Game/PS2DEM/BP_TrafficLine1_IntersectionChild.BP_TrafficLine1_IntersectionChild_C"));
+	if (!TestNotNull(TEXT("正式路口蓝图"), IntersectionClass))
+		return false;
+	const FBoolProperty* StopAtInter = FindFProperty<FBoolProperty>(IntersectionClass, TEXT("StopAtInter"));
+	if (!TestNotNull(TEXT("路口红灯字段"), StopAtInter))
+		return false;
+
+	const FVector TestOrigin(0.f, 3000.f, 0.f);
+	UDeliveryTrafficCarComponent* CrossingCar = MakeCar(TestOrigin);
+	if (!TestNotNull(TEXT("停车线测试车"), CrossingCar))
+		return false;
+	const FName CrossingTag(TEXT("TrafficTestCrosswalk"));
+	CrossingCar->StopLineRequiredTag = CrossingTag;
+	CrossingCar->TraceStartForwardOffset = 0.f;
+	CrossingCar->RedLightScanDistance = 1000.f;
+	CrossingCar->StopLineTraceRadius = 30.f;
+	CrossingCar->StopLineSetback = 60.f;
+	const auto MakeIntersection = [&](float Distance, bool bRed) -> AActor*
+	{
+		const FVector Center = TestOrigin + FVector(Distance, 0.f, 0.f);
+		FActorSpawnParameters Spawn;
+		Spawn.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AActor* Intersection = World->SpawnActor<AActor>(IntersectionClass, Center, FRotator::ZeroRotator, Spawn);
+		if (!Intersection)
+			return nullptr;
+		Intersection->Tags.AddUnique(CrossingTag);
+		StopAtInter->SetPropertyValue_InContainer(Intersection, bRed);
+		for (UPrimitiveComponent* Primitive : TInlineComponentArray<UPrimitiveComponent*>(Intersection))
+		{
+			Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+		for (USplineComponent* Spline : TInlineComponentArray<USplineComponent*>(Intersection))
+		{
+			Spline->ClearSplinePoints(false);
+			Spline->AddSplinePoint(Center, ESplineCoordinateSpace::World, false);
+			Spline->AddSplinePoint(Center + FVector(100.f, 0.f, 0.f), ESplineCoordinateSpace::World);
+		}
+		UBoxComponent* Box = NewObject<UBoxComponent>(Intersection);
+		Box->SetBoxExtent(FVector(25.f, 80.f, 80.f));
+		Box->SetCollisionObjectType(ECC_GameTraceChannel1);
+		Box->SetCollisionResponseToAllChannels(ECR_Ignore);
+		Box->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		Box->RegisterComponent();
+		Box->SetWorldLocation(Center);
+		return Intersection;
+	};
+	AActor* NearGreen = MakeIntersection(350.f, false);
+	AActor* FarRed = MakeIntersection(730.f, true);
+	if (!TestNotNull(TEXT("近处绿灯"), NearGreen) || !TestNotNull(TEXT("远处红灯"), FarRed))
+		return false;
+	float RedDistance;
+	float CrosswalkDistance;
+	CrossingCar->GetStopLineDistances(RedDistance, CrosswalkDistance);
+	TestEqual(TEXT("斑马线减速用近处的绿灯路口"), CrosswalkDistance, 235.f, 2.f);
+	TestEqual(TEXT("红灯停车仍用远处的红灯路口"), RedDistance, 615.f, 2.f);
+
+	StopAtInter->SetPropertyValue_InContainer(FarRed, false);
+	CrossingCar->GetStopLineDistances(RedDistance, CrosswalkDistance);
+	TestEqual(TEXT("本帧没有红灯时清除上次距离"), RedDistance, TNumericLimits<float>::Max());
+	TestEqual(TEXT("两处都是绿灯时仍使用最近斑马线"), CrosswalkDistance, 235.f, 2.f);
+
+	StopAtInter->SetPropertyValue_InContainer(FarRed, true);
+	CrossingCar->bUseStopLine = false;
+	CrossingCar->GetStopLineDistances(RedDistance, CrosswalkDistance);
+	TestEqual(TEXT("关闭停车线功能时没有红灯距离"), RedDistance, TNumericLimits<float>::Max());
+	TestEqual(TEXT("关闭停车线功能时没有斑马线距离"), CrosswalkDistance, TNumericLimits<float>::Max());
 
 	return true;
 }

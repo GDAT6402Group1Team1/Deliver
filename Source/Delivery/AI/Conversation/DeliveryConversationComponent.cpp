@@ -1,5 +1,8 @@
 #include "AI/Conversation/DeliveryConversationComponent.h"
+#include "AI/Conversation/DeliveryNpcConversationTrace.h"
+#include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
+#include "AI/Companion/DeliveryCompanionCharacter.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -64,12 +67,13 @@ void UDeliveryConversationComponent::BindInput()
 bool UDeliveryConversationComponent::CanTalkTo(const ADeliveryNpcCharacter* Resident) const
 {
     const auto* PC=Cast<APlayerController>(GetOwner()); const APawn* Pawn=PC?PC->GetPawn():nullptr;
-    if (!Pawn || !IsValid(Resident) || Resident->GetWorld()!=GetWorld() || Resident->IsKnockedDown() ||
-        FVector::DistSquared(Pawn->GetActorLocation(),Resident->GetActorLocation())>FMath::Square(600.f)) return false;
+    if (!Pawn || !IsValid(Resident) || Resident->GetWorld()!=GetWorld() ||
+        (Resident->IsKnockedDown() && !Resident->Combat->IsDeliberatelyProne()) ||
+        FVector::DistSquared(Pawn->GetActorLocation(),Resident->GetActorLocation())>
+            FMath::Square(DeliveryNpcConversationTrace::LocalConversationRangeCm)) return false;
     if (const auto* Character=ADeliveryHUD::ResolveCharacter(const_cast<APawn*>(Pawn)))
         if (const auto* ASC=Character->GetAbilitySystemComponent(); ASC && ASC->HasMatchingGameplayTag(TAG_State_Stunned)) return false;
-    FHitResult Hit; FCollisionQueryParams Params(SCENE_QUERY_STAT(ResidentConversation),false,Pawn);
-    return !GetWorld()->LineTraceSingleByChannel(Hit,Pawn->GetActorLocation()+FVector(0,0,60),Resident->GetActorLocation(),ECC_Visibility,Params) || Hit.GetActor()==Resident;
+    return DeliveryNpcConversationTrace::HasClearSpeechPath(Resident,Pawn);
 }
 ADeliveryNpcCharacter* UDeliveryConversationComponent::GetAimedNpc() const
 {
@@ -133,11 +137,21 @@ ADeliveryNpcCharacter* UDeliveryConversationComponent::FindNpcInView(
 }
 void UDeliveryConversationComponent::OpenAimedConversation()
 {
-    if (auto* Npc=GetAimedNpc())
+    auto* Npc=GetAimedNpc();
+    if (!Npc)
     {
-        const uint64 FacingSequence=PrepareConversationFacingInput();
-        ServerOpenConversation(Npc,FacingSequence,LocalFacingPawn.Get());
+        const auto* PC=Cast<APlayerController>(GetOwner());
+        const APawn* Pawn=PC && PC->IsLocalController()?PC->GetPawn():nullptr;
+        auto* Companion=Pawn?Cast<ADeliveryCompanionCharacter>(ResolveVoiceCompanion()):nullptr;
+        // 已骑乘的自家同伴可能正在几米外停车，仍按原距离和遮挡规则叫住
+        if (Companion && Companion->ConversationInteractable->bInteractEnabled &&
+            (Companion->IsMountedOnCompanionBike() ||
+                FVector::DistSquared(Pawn->GetActorLocation(),Companion->GetActorLocation())<=FMath::Square(300.f)) &&
+            CanTalkTo(Companion)) Npc=Companion;
     }
+    if (!Npc) return;
+    const uint64 FacingSequence=PrepareConversationFacingInput();
+    ServerOpenConversation(Npc,FacingSequence,LocalFacingPawn.Get());
 }
 FString UDeliveryConversationComponent::GetProvokeText(const ADeliveryNpcCharacter* Npc) const
 {
@@ -207,7 +221,11 @@ void UDeliveryConversationComponent::ServerSubmit_Implementation(ADeliveryNpcCha
     if (Message.IsEmpty() || Text.Len()>256) { ClientResult(TEXT("Empty"),SpeechId); return; }
     if (!CanTalkTo(Resident))
     {
-        UE_LOG(LogTemp,Log,TEXT("ResidentConversation rejected: player=%s resident=%s reason=Unavailable"),*GetNameSafe(GetOwner()),*GetNameSafe(Resident));
+        const auto* PC=Cast<APlayerController>(GetOwner());
+        const APawn* Pawn=PC?PC->GetPawn():nullptr;
+        const float Distance=Pawn && IsValid(Resident)?FVector::Dist(Pawn->GetActorLocation(),Resident->GetActorLocation()):-1.f;
+        UE_LOG(LogTemp,Log,TEXT("ResidentConversation rejected: player=%s resident=%s reason=Unavailable pawn=%s distanceCm=%.1f down=%d"),
+            *GetNameSafe(GetOwner()),*GetNameSafe(Resident),*GetNameSafe(Pawn),Distance,IsValid(Resident) && Resident->IsKnockedDown());
         ClientResult(TEXT("Unavailable"),SpeechId); return;
     }
     auto* PC=CastChecked<APlayerController>(GetOwner());

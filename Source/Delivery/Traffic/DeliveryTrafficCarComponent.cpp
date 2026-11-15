@@ -19,6 +19,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SplineComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 #include "TimerManager.h"
 #include "Audio/DeliveryVehicleAudioComponent.h"
 #include "Sound/SoundBase.h"
@@ -584,7 +585,9 @@ const bool bAnyoneAtLight = bStoppedAtIntersection || bLeaderStoppedAtIntersecti
 	//
 	// 后车什么都不用改：它们看到的是"前面有一辆停着的车"，走的还是原来那条
 	// 前车避让减速，所以天然依次排在停车线后面。
-	const float StopLineRemaining = GetDistanceToStopLine();
+	float StopLineRemaining;
+	float CrosswalkRemaining;
+	GetStopLineDistances(StopLineRemaining, CrosswalkRemaining);
 	bHoldingForRedLight = false;
 	if (StopLineRemaining < TNumericLimits<float>::Max())
 	{
@@ -602,7 +605,6 @@ const bool bAnyoneAtLight = bStoppedAtIntersection || bLeaderStoppedAtIntersecti
 	    (StopLineRemaining < TNumericLimits<float>::Max()) ? StopLineRemaining : -1.0f;
 
 	// 绿灯且没人时也慢速经过斑马线；驶过路口段后查询失去命中，速度自然恢复
-	const float CrosswalkRemaining = GetDistanceToStopLine(false);
 	if (CrosswalkRemaining < TNumericLimits<float>::Max() &&
 	    CrosswalkRemaining <= CrosswalkSlowdownDistance &&
 	    CrosswalkRemaining >= -StopLineSetback - 100.f && LastKnownMaxSpeed > 0.f)
@@ -1038,18 +1040,23 @@ void UDeliveryTrafficCarComponent::ProcessMotorbikeImpacts(const FVector& Start,
  * -1 在这个函数里有歧义（刚好压在线上也是负的），用一个绝不会被当成距离的值
  * 表达"没有"最不容易误用。
  */
-float UDeliveryTrafficCarComponent::GetDistanceToStopLine(bool bRequireRed)
+void UDeliveryTrafficCarComponent::GetStopLineDistances(float& OutRedDistance, float& OutCrosswalkDistance)
 {
-	constexpr float NoRedLight = TNumericLimits<float>::Max();
+	constexpr float NoStopLine = TNumericLimits<float>::Max();
+	OutRedDistance = NoStopLine;
+	OutCrosswalkDistance = NoStopLine;
 
 	const AActor* Owner = GetOwner();
 	UWorld* World = GetWorld();
 	if (!bUseStopLine || !Owner || !World)
 	{
-		return NoRedLight;
+		return;
 	}
 
+	CSV_SCOPED_TIMING_STAT_GLOBAL(DeliveryTrafficStopLineScan);
+	CSV_CUSTOM_STAT_GLOBAL(DeliveryTrafficStopLineQueries, 1, ECsvCustomStatOp::Accumulate);
 	const FVector Forward = Owner->GetActorForwardVector();
+	const FVector Forward2D = Forward.GetSafeNormal2D();
 	const FVector Start = Owner->GetActorLocation() + Forward * TraceStartForwardOffset;
 	const FVector End = Start + Forward * RedLightScanDistance;
 
@@ -1068,14 +1075,15 @@ float UDeliveryTrafficCarComponent::GetDistanceToStopLine(bool bRequireRed)
 	World->SweepMultiByObjectType(Hits, Start, End, FQuat::Identity, ObjectParams,
 	                              FCollisionShape::MakeSphere(StopLineTraceRadius), QueryParams);
 
-	float NearestRed = NoRedLight;
+	float NearestRed = NoStopLine;
+	float NearestCrosswalk = NoStopLine;
 	for (const FHitResult& Hit : Hits)
 	{
 		const AActor* Segment = Hit.GetActor();
 		bool bRed = false;
-		if (!ReadIntersectionRedLight(Segment, bRed) || (bRequireRed && !bRed))
+		if (!ReadIntersectionRedLight(Segment, bRed))
 		{
-			// 没有 StopAtInter 的是普通车道段，绿灯的不用拦
+			// 没有 StopAtInter 的是普通车道段
 			continue;
 		}
 
@@ -1091,32 +1099,38 @@ float UDeliveryTrafficCarComponent::GetDistanceToStopLine(bool bRequireRed)
 		// 横向那条路的路口段和本路的是叠着的，而它的灯正好相反
 		FVector SegmentForward = FVector::ZeroVector;
 		if (GetSegmentForward(Segment, SegmentForward) &&
-		    FVector::DotProduct(SegmentForward, Forward.GetSafeNormal2D()) < StopLineSameDirectionDot)
+		    FVector::DotProduct(SegmentForward, Forward2D) < StopLineSameDirectionDot)
 		{
 			continue;
 		}
 
 		const float D = Hit.bStartPenetrating ? 0.0f : Hit.Distance;
-		NearestRed = FMath::Min(NearestRed, D);
+		NearestCrosswalk = FMath::Min(NearestCrosswalk, D);
+		if (bRed)
+		{
+			NearestRed = FMath::Min(NearestRed, D);
+		}
 	}
 
-	if (NearestRed >= NoRedLight)
+	// 一个绿灯路口可能比红灯更近，两段距离都要保留
+	const auto SetDistance = [&](float Nearest, float& OutDistance)
 	{
-		return NoRedLight;
-	}
-
-	const float Remaining = NearestRed - StopLineSetback;
-
-	if (bDrawDebugStopLine)
-	{
-		const FVector LinePoint = Start + Forward * NearestRed - Forward * StopLineSetback;
-		const FVector Right = FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal();
-		DrawDebugLine(World, LinePoint - Right * 250.0f, LinePoint + Right * 250.0f,
-		              Remaining <= 0.0f ? FColor::Red : FColor::Orange, false, -1.0f, 0, 6.0f);
-		DrawDebugLine(World, Start, End, FColor::Silver, false, -1.0f, 0, 1.0f);
-	}
-
-	return Remaining;
+		if (Nearest >= NoStopLine)
+		{
+			return;
+		}
+		OutDistance = Nearest - StopLineSetback;
+		if (bDrawDebugStopLine)
+		{
+			const FVector LinePoint = Start + Forward * Nearest - Forward * StopLineSetback;
+			const FVector Right = FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal();
+			DrawDebugLine(World, LinePoint - Right * 250.0f, LinePoint + Right * 250.0f,
+			              OutDistance <= 0.0f ? FColor::Red : FColor::Orange, false, -1.0f, 0, 6.0f);
+			DrawDebugLine(World, Start, End, FColor::Silver, false, -1.0f, 0, 1.0f);
+		}
+	};
+	SetDistance(NearestRed, OutRedDistance);
+	SetDistance(NearestCrosswalk, OutCrosswalkDistance);
 }
 
 float UDeliveryTrafficCarComponent::GetDistanceToPedestrianAhead()

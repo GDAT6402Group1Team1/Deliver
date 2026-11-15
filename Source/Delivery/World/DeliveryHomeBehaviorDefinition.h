@@ -8,7 +8,7 @@ class UAnimSequence;
 class USoundBase;
 
 UENUM(BlueprintType)
-enum class EDeliveryHomeOperation : uint8 { None, Sit, PlayAudio, StopAudio, TakeProp, PlaceProp };
+enum class EDeliveryHomeOperation : uint8 { None, Sit, PlayAudio, StopAudio, TakeProp, PlaceProp, LeaveSeat, PlaceNearOwner };
 
 // 家具用途保存在 Smart Object 定义中，行为树和 GAS 读取配置执行，不从网格名猜用途
 UCLASS(BlueprintType, EditInlineNew, DefaultToInstanced, CollapseCategories)

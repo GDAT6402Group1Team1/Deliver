@@ -135,6 +135,7 @@ public:
     void CancelSpeech(bool bFinishCurrentSentence=false,bool bPreserveOtherReplies=false);
     void BeginReply(FGuid ActionId, FGuid MessageId, int32 Depth, AActor* Listener=nullptr);
     bool HasReply(FGuid ReplyId) const { return ReplyId.IsValid() && (ReplyId==ReplyAction || ReplyId==PendingReply.ReplyId); }
+    bool IsReplyPlaying(FGuid ReplyId) const { return ReplyId.IsValid() && Speech.bActive && (Speech.ActionId==ReplyId || Speech.TurnId==ReplyId); }
     void CancelReply(FGuid ReplyId);
     // 先移除整批待播声音，再停当前句，避免取消途中把旧待播回复提升为当前回复
     void CancelReplies(const TArray<FGuid>& ReplyIds);
@@ -184,6 +185,9 @@ public:
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> GetUpAnimation;
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> HitAnimation;
     UPROPERTY(EditAnywhere,Category="Delivery|表演") TObjectPtr<UAnimSequence> HoldAnimation;
+    UPROPERTY(EditAnywhere,Category="Delivery|表演|跳跃") TObjectPtr<UAnimSequence> JumpStartAnimation;
+    UPROPERTY(EditAnywhere,Category="Delivery|表演|跳跃") TObjectPtr<UAnimSequence> JumpLoopAnimation;
+    UPROPERTY(EditAnywhere,Category="Delivery|表演|跳跃") TObjectPtr<UAnimSequence> JumpLandAnimation;
     // 在蓝图中填写模型已有的表情名称，播放时调整对应的形态键
     UPROPERTY(EditAnywhere,Category="Delivery|表演") FName MouthMorph;
     UPROPERTY(EditAnywhere,Category="Delivery|表演") FName AngryMorph;

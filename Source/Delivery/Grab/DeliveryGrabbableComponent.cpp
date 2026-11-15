@@ -12,6 +12,32 @@
 #include "PhysicsEngine/BodyInstance.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 
+namespace
+{
+	FVector GetNpcPickupEyeOffset(const AActor& Requester)
+	{
+		FVector Eyes;
+		FRotator Rotation;
+		Requester.GetActorEyesViewPoint(Eyes,Rotation);
+		const FVector Offset = Eyes-Requester.GetActorLocation();
+		return Offset.ContainsNaN() ? FVector::ZeroVector : Offset;
+	}
+
+	bool HasNpcPickupClearReach(const UWorld& World, const AActor& Requester, const FVector& From,
+	    const FVector& Contact, const FVector& Target, const FCollisionQueryParams& Query)
+	{
+		const double EyeHeight = FMath::Clamp(GetNpcPickupEyeOffset(Requester).Z,0.,75.);
+		for (const double Fraction : {0.,.55,1.})
+		{
+			const FVector Origin = From+FVector(0,0,EyeHeight*Fraction);
+			if ((Origin.Equals(From) || !World.LineTraceTestByChannel(From,Origin,ECC_Visibility,Query)) &&
+			    !World.LineTraceTestByChannel(Origin,Contact,ECC_Visibility,Query) &&
+			    !World.LineTraceTestByChannel(Origin,Target,ECC_Visibility,Query)) return true;
+		}
+		return false;
+	}
+}
+
 UDeliveryGrabbableComponent::UDeliveryGrabbableComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -85,6 +111,10 @@ void UDeliveryGrabbableComponent::TickComponent(float DeltaTime, ELevelTick Tick
 		// Provider 查询和扫掠回调都可能结束当前搬运，旧 Tick 不能续写下一次搬运
 		if (!IsCarriedByProvider(Provider.Get(), CarryId) || ProviderCarryBody.Get() != Body)
 			return;
+		const double ReachSquared = FMath::Square(GetNpcCarryReach());
+		if (InitialPickupUntil >= 0. && FVector::DistSquared(CarryProviderActor->GetActorLocation(),Body->GetComponentLocation()) <= ReachSquared &&
+		    FVector::DistSquared(CarryProviderActor->GetActorLocation(),Target) <= ReachSquared)
+			InitialPickupUntil = -1.;
 		if (!FMath::IsFinite(DeltaTime) || DeltaTime <= 0.f)
 			return;
 		Contributors = 1;
@@ -339,9 +369,77 @@ void UDeliveryGrabbableComponent::RestoreCarryBody(UPrimitiveComponent* Body)
 	}
 }
 
+float UDeliveryGrabbableComponent::GetNpcCarryReach() const
+{
+	return FMath::IsFinite(NpcCarryMaxDistance) ? FMath::Clamp(NpcCarryMaxDistance, 20.f, 300.f) : 200.f;
+}
+
+bool UDeliveryGrabbableComponent::FindNpcPickupContact(const FVector& From, const AActor* Requester, FVector& OutContact) const
+{
+	const auto* Owner = GetOwner();
+	auto* World = GetWorld();
+	const auto* Body = Owner ? Cast<UPrimitiveComponent>(Owner->GetRootComponent()) : nullptr;
+	if (!IsValid(Owner) || !Owner->HasAuthority() || !World || !IsValid(Requester) || Requester->GetWorld() != World ||
+	    !Body || !Body->IsQueryCollisionEnabled() || From.ContainsNaN()) return false;
+	FCollisionQueryParams Query(SCENE_QUERY_STAT(DeliveryNpcPickupContact), false, Requester);
+	Query.AddIgnoredActor(Owner);
+	const double ReachSquared = FMath::Square(GetNpcCarryReach());
+	if (!bAllowNpcEdgePickup)
+	{
+		OutContact = Body->Bounds.Origin;
+		return !OutContact.ContainsNaN() && FVector::DistSquared(From,Body->GetComponentLocation()) <= ReachSquared &&
+		       !World->LineTraceTestByChannel(From,OutContact,ECC_Visibility,Query);
+	}
+	const FVector EyeOffset = GetNpcPickupEyeOffset(*Requester);
+	const double EyeHeight = FMath::Clamp(EyeOffset.Z,0.,75.);
+	const FCollisionQueryParams SightQuery(SCENE_QUERY_STAT(DeliveryNpcPickupSight),false,Requester);
+	for (const double Fraction : {0.,.55,1.})
+	{
+		const FVector Origin = From+FVector(0,0,EyeHeight*Fraction);
+		if (!Origin.Equals(From) && World->LineTraceTestByChannel(From,Origin,ECC_Visibility,Query)) continue;
+		// 只提高碰撞取样点。触点仍须是实物表面，且在人物中心原有伸手范围内
+		for (const double Lift : {0.,45.,90.})
+		{
+			FVector Contact;
+			const float Distance = Body->GetClosestPointOnCollision(Origin+FVector(0,0,Lift),Contact);
+			if (!FMath::IsFinite(Distance) || Distance <= 0.f || Contact.ContainsNaN() ||
+			    FVector::DistSquared(From,Contact) > ReachSquared ||
+			    World->LineTraceTestByChannel(Origin,Contact,ECC_Visibility,Query)) continue;
+			FHitResult Sight;
+			if (World->LineTraceSingleByChannel(Sight,From+EyeOffset,Contact,ECC_Visibility,SightQuery) && Sight.GetActor()!=Owner) continue;
+			OutContact = Contact;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool UDeliveryGrabbableComponent::CanNpcReachPlacement(const AActor& Requester,const FVector& From,
+    const FVector& BodyLocation,const FVector& BodyCenter,const FVector& Target) const
+{
+    const auto* Owner=GetOwner();
+    const auto* World=GetWorld();
+    if (!IsValid(Owner) || !Owner->HasAuthority() || !World || Requester.GetWorld()!=World ||
+        From.ContainsNaN() || BodyLocation.ContainsNaN() || BodyCenter.ContainsNaN() || Target.ContainsNaN()) return false;
+    const double EyeHeight=bAllowNpcEdgePickup ? FMath::Clamp(GetNpcPickupEyeOffset(Requester).Z,0.,75.) : 0.;
+    const double RangeSquared=FMath::Square(GetNpcCarryReach());
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(DeliveryNpcPlacementReach),false,&Requester);
+    Query.AddIgnoredActor(Owner);
+    for (const double Fraction:{0.,.55,1.})
+    {
+        const FVector Origin=From+FVector(0,0,EyeHeight*Fraction);
+        if (FVector::DistSquared(Origin,BodyLocation)>RangeSquared || FVector::DistSquared(Origin,Target)>RangeSquared) continue;
+        if ((!Origin.Equals(From) && World->LineTraceTestByChannel(From,Origin,ECC_Visibility,Query)) ||
+            World->LineTraceTestByChannel(Origin,Target,ECC_Visibility,Query) ||
+            (!BodyCenter.Equals(Target,.01) && World->LineTraceTestByChannel(Origin,BodyCenter,ECC_Visibility,Query))) continue;
+        return true;
+    }
+    return false;
+}
+
 // NPC 只提供姿势，登记和每帧都用真实角色位置、根刚体与遮挡复核
 bool UDeliveryGrabbableComponent::ReadCarryProviderPose(UActorComponent* Provider, const FGuid& CarryId,
-    UPrimitiveComponent* Body, FVector& OutTarget, FVector& OutForward) const
+    UPrimitiveComponent* Body, FVector& OutTarget, FVector& OutForward, TOptional<FVector>* OutInitialEdge) const
 {
 	AActor* Owner = GetOwner();
 	AActor* ProviderActor = IsValid(Provider) ? Provider->GetOwner() : nullptr;
@@ -379,14 +477,35 @@ bool UDeliveryGrabbableComponent::ReadCarryProviderPose(UActorComponent* Provide
 	OutForward.Z = 0.f;
 	if (!OutForward.Normalize())
 		return false;
-	const float MaxDistance = FMath::IsFinite(NpcCarryMaxDistance) ? FMath::Clamp(NpcCarryMaxDistance, 20.f, 300.f) : 200.f;
-	if (FVector::DistSquared(ProviderLocation, BodyLocation) > FMath::Square(MaxDistance) ||
-	    FVector::DistSquared(ProviderLocation, OutTarget) > FMath::Square(MaxDistance))
-		return false;
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(DeliveryNpcCarryReach), false, ProviderActor);
 	Query.AddIgnoredActor(Owner);
-	return !World->LineTraceTestByChannel(ProviderLocation, BodyCenter, ECC_Visibility, Query) &&
-	       !World->LineTraceTestByChannel(ProviderLocation, OutTarget, ECC_Visibility, Query);
+	const double RootDistanceSquared = FVector::DistSquared(ProviderLocation, BodyLocation);
+	const double TargetDistanceSquared = FVector::DistSquared(ProviderLocation, OutTarget);
+	const double ReachSquared = FMath::Square(GetNpcCarryReach());
+	if (RootDistanceSquared <= ReachSquared && TargetDistanceSquared <= ReachSquared)
+	{
+		if (!World->LineTraceTestByChannel(ProviderLocation,BodyCenter,ECC_Visibility,Query) &&
+		    !World->LineTraceTestByChannel(ProviderLocation,OutTarget,ECC_Visibility,Query)) return true;
+		if (bAllowNpcEdgePickup && HasNpcPickupClearReach(*World,*ProviderActor,ProviderLocation,BodyCenter,OutTarget,Query)) return true;
+	}
+	if (!bAllowNpcEdgePickup) return false;
+	if (IsCarriedByProvider(Provider,CarryId) && Interface->IsObjectCarryInPlacement(Owner,CarryId) &&
+	    CanNpcReachPlacement(*ProviderActor,ProviderLocation,BodyLocation,BodyCenter,OutTarget)) return true;
+	if (OutInitialEdge && !bNpcCarry)
+	{
+		FVector Contact;
+		// 首帧可从原位置开始，小物的后续位移仍逐帧走扫掠
+		if (!OutTarget.Equals(BodyLocation,5.) || !FindNpcPickupContact(ProviderLocation,ProviderActor,Contact)) return false;
+		*OutInitialEdge = Contact;
+		return true;
+	}
+	// 只有刚以实物边缘登记的同一次搬运可从原位收拢，离开原站位或超时即失效
+	if (!IsCarriedByProvider(Provider,CarryId) || World->GetTimeSeconds() > InitialPickupUntil ||
+	    FVector::DistSquared(ProviderLocation,InitialPickupStand) > FMath::Square(30.) ||
+	    FVector::DistSquared(InitialPickupStand,BodyLocation) > FVector::DistSquared(InitialPickupStand,InitialPickupRoot)+25. ||
+	    FVector::DistSquared(ProviderLocation,InitialPickupContact) > ReachSquared ||
+	    FMath::PointDistToSegmentSquared(OutTarget,InitialPickupRoot,ProviderLocation) > FMath::Square(GetNpcCarryReach())) return false;
+	return HasNpcPickupClearReach(*World,*ProviderActor,ProviderLocation,InitialPickupContact,OutTarget,Query);
 }
 
 // 包围整个平移和转向范围，补上 Actor 平移扫掠没有覆盖的旋转净空
@@ -489,7 +608,8 @@ bool UDeliveryGrabbableComponent::RegisterCarryProvider(UActorComponent* Provide
 
 	TGuardValue<bool> ChangingGuard(bChangingCarryProvider, true);
 	FVector Target, Forward;
-	if (!ReadCarryProviderPose(Provider, CarryId, Body, Target, Forward))
+	TOptional<FVector> InitialEdge;
+	if (!ReadCarryProviderPose(Provider, CarryId, Body, Target, Forward, &InitialEdge))
 		return false;
 	Grabbers.Reset();
 	GrabberCount = 0;
@@ -497,6 +617,13 @@ bool UDeliveryGrabbableComponent::RegisterCarryProvider(UActorComponent* Provide
 	CarryProviderActor = Provider->GetOwner();
 	ProviderCarryBody = Body;
 	ProviderCarryId = CarryId;
+	if (InitialEdge.IsSet())
+	{
+		InitialPickupStand = CarryProviderActor->GetActorLocation();
+		InitialPickupRoot = Body->GetComponentLocation();
+		InitialPickupContact = InitialEdge.GetValue();
+		InitialPickupUntil = GetWorld()->GetTimeSeconds() + 5.;
+	}
 	CarryProviderActor->OnEndPlay.AddUniqueDynamic(this, &UDeliveryGrabbableComponent::OnCarryProviderEndPlay);
 	bNpcCarry = true;
 	bKinematicCarry = true;
@@ -547,6 +674,7 @@ void UDeliveryGrabbableComponent::ReleaseCarryProvider(EDeliveryObjectCarryRelea
 	CarryProviderActor.Reset();
 	ProviderCarryBody.Reset();
 	ProviderCarryId.Invalidate();
+	InitialPickupUntil = -1.;
 	bNpcCarry = false;
 	bKinematicCarry = false;
 	if (OldProviderActor.IsValid())

@@ -78,6 +78,8 @@ ADeliveryPedestrian::ADeliveryPedestrian()
 
 	HitBox = CreateDefaultSubobject<UCapsuleComponent>(TEXT("HitBox"));
 	HitBox->SetupAttachment(Mesh);
+	// 胶囊单独处理碰撞，行走用的根组件可以没有骨骼网格
+	HitBox->BodyInstance.bAutoWeld = false;
 	// 缩放 1.0 的成年路人身高 140（= setup_npc.py 的 TARGET_ADULT_HEIGHT，和主角一样高
 	// ——主角的胶囊半高就是 70，renwu 网格实测 139.9）：半高 70、脚底在原点，
 	// 所以胶囊中心抬到 70。

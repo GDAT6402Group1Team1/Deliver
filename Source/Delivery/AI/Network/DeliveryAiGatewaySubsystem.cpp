@@ -109,6 +109,19 @@ void UDeliveryAiGatewaySubsystem::Initialize(FSubsystemCollectionBase& Collectio
     Super::Initialize(Collection);
     WorldEpoch = FGuid::NewGuid();
     bShuttingDown = false;
+    const auto* Settings=GetDefault<UDeliveryAiSettings>();
+    if (Settings->bEnabled && GetWorld()->GetNetMode()!=NM_Client && !Settings->NpcBehaviorCatalog.IsNull())
+    {
+        const auto* Table=Settings->NpcBehaviorCatalog.LoadSynchronous();
+        if (!Table || !BehaviorCatalog.Load(*Table))
+        {
+            UE_LOG(LogTemp,Warning,TEXT("NPC 行为表未加载或存在无效行，继续使用现有角色候选"));
+        }
+        else
+        {
+            UE_LOG(LogTemp,Log,TEXT("NpcBehaviorCatalog loaded table=%s count=%d"),*Table->GetPathName(),BehaviorCatalog.Num());
+        }
+    }
 }
 
 bool UDeliveryAiGatewaySubsystem::Enqueue(UDeliveryNpcAgentComponent* Agent, const FDeliveryNpcDecisionRequest& Request)

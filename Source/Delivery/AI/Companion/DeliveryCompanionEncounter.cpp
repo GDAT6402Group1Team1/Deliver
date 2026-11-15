@@ -201,6 +201,21 @@ bool ADeliveryCompanionCharacter::CanWitnessEncounter(const APawn* Pawn) const
     return !GetWorld()->LineTraceSingleByChannel(Hit,Pawn->GetPawnViewLocation(),Trigger,ECC_Visibility,Params);
 }
 
+bool ADeliveryCompanionCharacter::HasNearbyEncounterWitness() const
+{
+    const FVector Trigger=EncounterScene->GetTriggerWorldLocation();
+    // 已触发后允许玩家退到门侧让开，门叶和挡路物不再反过来取消演出
+    const float ResumeRadius=FMath::Max(800.f,Companion->GetTuning().EncounterRadius+300.f);
+    for (auto It=GetWorld()->GetPlayerControllerIterator();It;++It)
+    {
+        const auto* Player=It->Get();
+        const APawn* Pawn=Player?Player->GetPawn():nullptr;
+        if (IsValid(Pawn) && !Pawn->IsActorBeingDestroyed() && Pawn->GetWorld()==GetWorld() &&
+            FVector::DistSquared(Pawn->GetActorLocation(),Trigger)<=FMath::Square(ResumeRadius)) return true;
+    }
+    return false;
+}
+
 bool ADeliveryCompanionCharacter::TryStartEncounter()
 {
     if (!IsValid(EncounterScene) || EncounterScene->GetWorld()!=GetWorld() || !Companion->GetTuning().EjectionCurve)
@@ -220,6 +235,7 @@ bool ADeliveryCompanionCharacter::TryStartEncounter()
         if (!CanWitnessEncounter(Pawn)) continue;
         if (!EncounterScene->RequestDoorOpen(true)) return false;
         Encounter.EncounterStartedAt=GetEncounterServerTime();
+        LastNearbyEncounterWitnessAt=Encounter.EncounterStartedAt;
         Encounter.FailureReason=NAME_None;
         SetEncounterPhase(EDeliveryCompanionEncounterPhase::OpeningDoor);
         return true;
@@ -227,55 +243,71 @@ bool ADeliveryCompanionCharacter::TryStartEncounter()
     return false;
 }
 
-bool ADeliveryCompanionCharacter::HasClearEjectionPath(const FDeliveryCompanionEncounterState& State) const
+ADeliveryCompanionCharacter::EEjectionPathStatus ADeliveryCompanionCharacter::GetEjectionPathStatus(
+    const FDeliveryCompanionEncounterState& State) const
 {
     if (!State.EjectionCurve || State.EjectionStart.ContainsNaN() || State.EjectionTarget.ContainsNaN() ||
-        !FMath::IsFinite(State.EjectionDuration) || State.EjectionDuration<=0 || State.EjectionDuration>5) return false;
+        State.EjectionStart.Equals(State.EjectionTarget,1) || !FMath::IsFinite(State.EjectionDuration) ||
+        State.EjectionDuration<=0 || State.EjectionDuration>5) return EEjectionPathStatus::Invalid;
     FRootMotionSource_MoveToForce Path;
     Path.StartLocation=State.EjectionStart;
     Path.TargetLocation=State.EjectionTarget;
     Path.PathOffsetCurve=State.EjectionCurve;
     // 使用引擎同一曲线采样与朝向变换，预检不能另算一条看似相近的抛物线
-    if (!Path.GetPathOffsetInWorldSpace(0).IsNearlyZero(1) || !Path.GetPathOffsetInWorldSpace(1).IsNearlyZero(1)) return false;
+    if (!Path.GetPathOffsetInWorldSpace(0).IsNearlyZero(1) || !Path.GetPathOffsetInWorldSpace(1).IsNearlyZero(1))
+        return EEjectionPathStatus::Invalid;
     FCollisionObjectQueryParams Objects;
     for (const auto Channel:{ECC_WorldStatic,ECC_WorldDynamic,ECC_Pawn,ECC_Vehicle,ECC_PhysicsBody}) Objects.AddObjectTypesToQuery(Channel);
     FCollisionQueryParams Params(SCENE_QUERY_STAT(CompanionEjectionClearance),false,this);
     const auto Capsule=FCollisionShape::MakeCapsule(GetSimpleCollisionRadius(),GetSimpleCollisionHalfHeight());
-    if (GetWorld()->OverlapAnyTestByObjectType(State.EjectionStart,FQuat::Identity,Objects,Capsule,Params)) return false;
+    if (GetWorld()->OverlapAnyTestByObjectType(State.EjectionStart,FQuat::Identity,Objects,Capsule,Params)) return EEjectionPathStatus::Blocked;
     FVector Previous=State.EjectionStart;
     const int32 Steps=FMath::Clamp(FMath::CeilToInt(FVector::Distance(State.EjectionStart,State.EjectionTarget)/25.f),32,128);
     for (int32 Index=1;Index<=Steps;++Index)
     {
         const float Progress=static_cast<float>(Index)/Steps;
         const FVector Position=FMath::Lerp(State.EjectionStart,State.EjectionTarget,Progress)+Path.GetPathOffsetInWorldSpace(Progress);
-        if (Position.ContainsNaN()) return false;
+        if (Position.ContainsNaN()) return EEjectionPathStatus::Invalid;
         FHitResult Hit;
-        if (GetWorld()->SweepSingleByObjectType(Hit,Previous,Position,FQuat::Identity,Objects,Capsule,Params)) return false;
+        if (GetWorld()->SweepSingleByObjectType(Hit,Previous,Position,FQuat::Identity,Objects,Capsule,Params)) return EEjectionPathStatus::Blocked;
         Previous=Position;
     }
-    return true;
+    return EEjectionPathStatus::Clear;
 }
 
-bool ADeliveryCompanionCharacter::TryStartEjection()
+void ADeliveryCompanionCharacter::TryStartEjection()
 {
-    if (!IsValid(EncounterScene) || !EncounterScene->IsDoorOpen()) return false;
     FDeliveryCompanionEncounterState Proposed=Encounter;
     Proposed.EjectionStart=EncounterScene->GetThrowStartWorldLocation();
     Proposed.EjectionTarget=EncounterScene->GetThrowLandingWorldLocation();
     Proposed.EjectionDuration=Companion->GetTuning().EjectionDuration;
     Proposed.EjectionCurve=Companion->GetTuning().EjectionCurve;
-    if (!HasClearEjectionPath(Proposed)) return false;
+    const auto PathStatus=GetEjectionPathStatus(Proposed);
+    if (PathStatus==EEjectionPathStatus::Invalid)
+    {
+        ResetUnstartedEncounter(TEXT("InvalidEjectionPath"));
+        return;
+    }
+    if (PathStatus==EEjectionPathStatus::Blocked)
+    {
+        EncounterScene->SetEncounterObstruction(EDeliveryCompanionEncounterObstruction::EjectionPath);
+        return;
+    }
     Companion->StopFollowMovement();
     Agent->CancelPlan(TEXT("CompanionEncounter"));
     if (auto* AI=Cast<AAIController>(GetController())) { AI->StopMovement(); AI->ClearFocus(EAIFocusPriority::Gameplay); }
     // 唯一一次初始定位发生在角色仍隐藏时，之后的整段位移交给带碰撞的 CharacterMovement
-    if (!SetActorLocationAndRotation(Proposed.EjectionStart,EncounterScene->GetThrowStartTransform().Rotator(),false,nullptr,ETeleportType::TeleportPhysics)) return false;
+    if (!SetActorLocationAndRotation(Proposed.EjectionStart,EncounterScene->GetThrowStartTransform().Rotator(),false,nullptr,ETeleportType::TeleportPhysics))
+    {
+        ResetUnstartedEncounter(TEXT("EjectionStartUnavailable"));
+        return;
+    }
+    EncounterScene->SetEncounterObstruction(EDeliveryCompanionEncounterObstruction::None);
     Encounter=Proposed;
     Encounter.FallAnimationStartedAt=GetEncounterServerTime();
     bReportedLandingTimeout=false;
     SetEncounterPhase(EDeliveryCompanionEncounterPhase::Ejecting);
     if (!EjectionMotionId) BeginEncounterFall(TEXT("MotionStartFailed"));
-    return true;
 }
 
 void ADeliveryCompanionCharacter::ApplyEjectionMotion()
@@ -370,10 +402,14 @@ void ADeliveryCompanionCharacter::ResetUnstartedEncounter(FName Reason)
 {
     Encounter.FailureReason=Reason;
     Encounter.EncounterStartedAt=-1;
-    if (IsValid(EncounterScene)) EncounterScene->RequestDoorOpen(false);
+    if (IsValid(EncounterScene))
+    {
+        EncounterScene->SetEncounterObstruction(EDeliveryCompanionEncounterObstruction::None);
+        EncounterScene->RequestDoorOpen(false);
+    }
     SetEncounterPhase(EDeliveryCompanionEncounterPhase::Dormant);
     NextEncounterCheck=GetWorld()->GetTimeSeconds()+3;
-    UE_LOG(LogTemp,Warning,TEXT("CompanionEncounter %s waiting for clear doorway: %s"),*GetName(),*Reason.ToString());
+    UE_LOG(LogTemp,Log,TEXT("CompanionEncounter %s reset before ejection: %s"),*GetName(),*Reason.ToString());
 }
 
 void ADeliveryCompanionCharacter::UpdateEncounter()
@@ -386,15 +422,20 @@ void ADeliveryCompanionCharacter::UpdateEncounter()
     }
     else if (Encounter.Phase==EDeliveryCompanionEncounterPhase::OpeningDoor)
     {
-        if (!IsValid(EncounterScene)) ResetUnstartedEncounter(TEXT("SceneLost"));
-        // 已经开门的初遇独立推进，其他玩家交件不会撤销本次演出
-        else if (Now-Encounter.PhaseStartedAt>=Companion->GetTuning().DoorWaitSeconds)
-            ResetUnstartedEncounter(TEXT("DoorOrFlightPathBlocked"));
-        else if (EncounterScene->IsDoorOpen() && GetWorld()->GetTimeSeconds()>=NextEncounterCheck)
+        if (!IsValid(EncounterScene) || EncounterScene->GetWorld()!=GetWorld()) ResetUnstartedEncounter(TEXT("SceneLost"));
+        else if (GetWorld()->GetTimeSeconds()>=NextEncounterCheck)
         {
             // 被玩家挡住时按需重查整条路径，真正飞行期间仍由 CMC 每帧处理碰撞
             NextEncounterCheck=GetWorld()->GetTimeSeconds()+.2;
-            TryStartEjection();
+            const bool bNearby=HasNearbyEncounterWitness();
+            if (bNearby) LastNearbyEncounterWitnessAt=Now;
+            if (Now-LastNearbyEncounterWitnessAt>=Companion->GetTuning().DoorWaitSeconds)
+                ResetUnstartedEncounter(TEXT("WitnessLeft"));
+            else if (!EncounterScene->IsDoorOpen())
+                EncounterScene->SetEncounterObstruction(EncounterScene->IsDoorOpeningBlocked()?
+                    EDeliveryCompanionEncounterObstruction::Doorway:EDeliveryCompanionEncounterObstruction::None);
+            else if (bNearby) TryStartEjection();
+            else EncounterScene->SetEncounterObstruction(EDeliveryCompanionEncounterObstruction::None);
         }
     }
     else if (Encounter.Phase==EDeliveryCompanionEncounterPhase::Ejecting)
@@ -406,18 +447,38 @@ void ADeliveryCompanionCharacter::UpdateEncounter()
             BeginEncounterFall(bArrived?FName(NAME_None):FName(TEXT("EjectionBlocked")));
         }
     }
-    else if (Encounter.Phase==EDeliveryCompanionEncounterPhase::Falling && Now-Encounter.PhaseStartedAt>10 && !bReportedLandingTimeout)
+    else if (Encounter.Phase==EDeliveryCompanionEncounterPhase::Falling)
     {
-        bReportedLandingTimeout=true;
-        Encounter.FailureReason=TEXT("LandingNotConfirmed");
-        ForceNetUpdate();
-        // 超时只报告失败，不以计时结束冒充落地或将角色传送到预期位置
-        UE_LOG(LogTemp,Warning,TEXT("CompanionEncounter %s still has no confirmed landing"),*GetName());
+        const auto* Movement=GetCharacterMovement();
+        // 某些移动状态直接恢复 Walking，使用 CMC 当前实际支撑面补上漏掉的落地事件
+        if (Movement->IsMovingOnGround() && Movement->CurrentFloor.IsWalkableFloor() &&
+            Movement->IsWalkable(Movement->CurrentFloor.HitResult)) ConfirmEncounterLanding();
+        else if (Now-Encounter.PhaseStartedAt>10 && !bReportedLandingTimeout)
+        {
+            bReportedLandingTimeout=true;
+            if (Encounter.FailureReason.IsNone()) Encounter.FailureReason=TEXT("LandingNotConfirmed");
+            ForceNetUpdate();
+            UE_LOG(LogTemp,Warning,TEXT("CompanionEncounter %s still has no confirmed landing"),*GetName());
+        }
     }
     else if (Encounter.Phase==EDeliveryCompanionEncounterPhase::Helping && !Super::IsKnockedDown() &&
         GetCharacterMovement()->IsMovingOnGround() && Now-Encounter.PhaseStartedAt>=Companion->GetTuning().HelpRecoverySeconds)
     {
         SetEncounterPhase(EDeliveryCompanionEncounterPhase::Joined);
+    }
+    if (Encounter.Phase==EDeliveryCompanionEncounterPhase::Joined && bKeepDoorOpenForRescue &&
+        GetWorld()->GetTimeSeconds()>=NextEncounterCheck)
+    {
+        NextEncounterCheck=GetWorld()->GetTimeSeconds()+.2;
+        const auto* OwnerState=Companion->GetOwnerPlayerState();
+        const auto* PC=OwnerState?OwnerState->GetPlayerController():nullptr;
+        const APawn* Rescuer=PC?PC->GetPawn():nullptr;
+        if (!IsValid(EncounterScene)) bKeepDoorOpenForRescue=false;
+        else if (IsValid(Rescuer) && EncounterScene->IsPastDoorway(Rescuer->GetActorLocation()) &&
+            EncounterScene->IsPastDoorway(GetActorLocation()) && EncounterScene->RequestDoorOpen(false))
+        {
+            bKeepDoorOpenForRescue=false;
+        }
     }
     if (Encounter.Phase==EDeliveryCompanionEncounterPhase::Joined && Companion->GetOwnerPlayerState() && !bAnnouncedJoining)
     {
@@ -437,11 +498,18 @@ void ADeliveryCompanionCharacter::UpdateEncounter()
 void ADeliveryCompanionCharacter::Landed(const FHitResult& Hit)
 {
     Super::Landed(Hit);
-    if (!HasAuthority() || Encounter.Phase!=EDeliveryCompanionEncounterPhase::Falling || !Hit.bBlockingHit ||
-        Hit.ImpactNormal.Z<GetCharacterMovement()->GetWalkableFloorZ()) return;
+    if (!HasAuthority() || Encounter.Phase!=EDeliveryCompanionEncounterPhase::Falling || !GetCharacterMovement()->IsWalkable(Hit)) return;
     // Landed 发生在 CMC 切回 Walking 之前，阶段先复制，下一帧移动状态才允许扶起
+    ConfirmEncounterLanding();
+}
+
+void ADeliveryCompanionCharacter::ConfirmEncounterLanding()
+{
+    // 先确认真实支撑面。被截停在店内时保留通行，等两人都离开再关门
+    bKeepDoorOpenForRescue=IsValid(EncounterScene) && EncounterScene->IsDoorOpen() &&
+        !EncounterScene->IsPastDoorway(GetActorLocation());
     SetEncounterPhase(EDeliveryCompanionEncounterPhase::AwaitingHelp);
-    if (IsValid(EncounterScene)) EncounterScene->RequestDoorOpen(false);
+    if (IsValid(EncounterScene) && !bKeepDoorOpenForRescue) EncounterScene->RequestDoorOpen(false);
 }
 
 void ADeliveryCompanionCharacter::ReceiveImpactFrom(const FVector& Impulse,const FVector& Point,AActor* Source)

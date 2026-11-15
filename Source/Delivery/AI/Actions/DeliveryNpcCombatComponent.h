@@ -19,6 +19,8 @@ class DELIVERY_API UDeliveryNpcCombatComponent : public UActorComponent
 {
     GENERATED_BODY()
     friend class FDeliveryNpcLookTest;
+    friend class FDeliveryCompanionRulesTest;
+    friend class FDeliveryCompanionErrandTest;
 public:
     UDeliveryNpcCombatComponent();
     // 检查距离、遮挡和身体状态，攻击冷却在 StartStrike 中检查
@@ -32,9 +34,9 @@ public:
     // 返回 true 表示开始挥拳，只有有效窗口内的拳头扫掠碰到目标才算命中
     bool StartStrike(AActor* Target,FGuid ActionId);
     // 模型选择目标，行为树负责接近和出拳；护主规则仍使用原来的短轮次数限制
-    bool CanBeginFight(AActor* Target) const;
-    bool CanChooseFightTarget(AActor* Target) const;
-    bool BeginFight(AActor* Target,FGuid ActionId,float Duration,bool bModelDecision=false);
+    bool CanBeginFight(AActor* Target,float AuthorizedApproachRange=0.f) const;
+    bool CanChooseFightTarget(AActor* Target,float AuthorizedApproachRange=0.f) const;
+    bool BeginFight(AActor* Target,FGuid ActionId,float Duration,bool bModelDecision=false,float AuthorizedApproachRange=0.f);
     // 同目标的新决定只更新结束时间，保留当前拳、起点和累计命中
     bool ContinueFight(FGuid ActionId,float Duration);
     bool StartFightStrike(AActor* Target,FGuid ActionId,FGuid PunchId);
@@ -82,6 +84,10 @@ public:
     // 控制器退出时只清理本组件的受击焦点，不取消模型选择或其他朝向层
     void ResetHitFacing();
     bool SetDeliberateProne(bool bProne);
+    bool CanStartDeliberateRecovery() const;
+    // 开始起身，或接续已经开始的自主起身
+    bool StartDeliberateRecovery();
+    static constexpr float RecoveryMotionSeconds=1.6f;
     UFUNCTION(BlueprintPure) bool IsDown() const { return bDown; }
     // 主动躺下保留说话能力，被击倒时仍立即停止对白
     bool IsDeliberatelyProne() const { return bDown && bDeliberate; }
@@ -134,6 +140,7 @@ private:
     void UpdateHitFacing(double Now);
     void RememberRecoveryFacing(AActor* Source);
     void TryFaceSourceAfterRecovery(FGuid Episode);
+    void BeginRecovery(double Now);
     TWeakObjectPtr<AAIController> HitFacingController;
     TWeakObjectPtr<AActor> HitFacingSource;
     TWeakObjectPtr<AActor> HitFacingListener;
@@ -179,6 +186,7 @@ private:
     FGuid FightActionId;
     TWeakObjectPtr<AActor> FightTarget;
     FVector FightOrigin=FVector::ZeroVector;
+    float FightApproachOverride=0.f;
     double FightEndsAt=0;
     double NextFightAt=0;
     int32 FightPunches=0;

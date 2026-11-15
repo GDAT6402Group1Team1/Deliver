@@ -32,7 +32,7 @@ ADeliveryHandheldItem::ADeliveryHandheldItem()
 
     ItemComponent = CreateDefaultSubobject<UDeliveryInventoryItemComponent>(TEXT("Item"));
     InteractableComponent = CreateDefaultSubobject<UDeliveryInteractableComponent>(TEXT("Interactable"));
-    InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "PickupPrompt", "[E] Pick Up");
+    InteractableComponent->PromptText = NSLOCTEXT("DeliveryItems", "PickupPrompt", "[E] 拾取");
     InteractableComponent->InteractRadius = 100.0f;
     InteractableComponent->PromptOffset = FVector(0.0f, 0.0f, 45.0f);
     InteractableComponent->InteractionKey = EDeliveryInteractionKey::PickupE;

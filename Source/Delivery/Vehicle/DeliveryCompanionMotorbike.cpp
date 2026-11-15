@@ -21,9 +21,14 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Interaction/DeliveryInteractableComponent.h"
+#include "NavLinkCustomComponent.h"
 #include "NavigationPath.h"
 #include "NavigationSystem.h"
 #include "Net/UnrealNetwork.h"
+#include "World/DeliveryHome.h"
+#include "World/DeliveryNavigationAreas.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogDeliveryCompanionBike, Log, All);
 
 ADeliveryCompanionMotorbike::ADeliveryCompanionMotorbike()
 {
@@ -223,10 +228,12 @@ bool ADeliveryCompanionMotorbike::TryMount(ADeliveryNpcCharacter* Companion)
     if (!WeakThis.IsValid() || !WeakNpc.IsValid() || IsActorBeingDestroyed() || Companion->IsActorBeingDestroyed() ||
         !bMounted || ReservedCompanion!=Companion) return false;
     Companion->ForceNetUpdate(); ForceNetUpdate();
+    UE_LOG(LogDeliveryCompanionBike,Log,TEXT("CompanionMounted npc=%s bike=%s revision=%d"),
+        *GetNameSafe(Companion),*GetName(),Revision);
     return true;
 }
 
-bool ADeliveryCompanionMotorbike::SetDriveDestination(const FVector& Goal,bool bKeepDrivingWhileReplanning)
+bool ADeliveryCompanionMotorbike::SetDriveDestination(const FVector& Goal,bool bKeepDrivingWhileReplanning,const FVector* WalkAfterParking)
 {
     if (!HasAuthority()) return false;
     const auto Reject=[&](FName Reason)
@@ -238,16 +245,40 @@ bool ADeliveryCompanionMotorbike::SetDriveDestination(const FVector& Goal,bool b
     if (Goal.ContainsNaN()) return Reject(TEXT("ParkingBlocked"));
 
     // 路线确认后再替换当前路线，移动主人重新定点时保留现有车速和卡住计时
-    auto* NewPath=UNavigationSystemV1::FindPathToLocationSynchronously(GetWorld(),GetActorLocation(),Goal,ReservedCompanion);
+    auto* NewPath=UNavigationSystemV1::FindPathToLocationSynchronously(GetWorld(),GetActorLocation(),Goal,ReservedCompanion,
+        UDeliveryCompanionVehicleNavFilter::StaticClass());
     if (!NewPath || !NewPath->IsValid() || NewPath->IsPartial() || NewPath->PathPoints.Num()<2)
         return Reject(TEXT("PathUnavailable"));
     const auto& Points=NewPath->PathPoints;
+    auto* Home=ADeliveryHome::FindSharedHome(this);
+    if (IsValid(Home) && IsValid(Home->DoorwayLink))
+    {
+        // 旧地图的导航块也不得给专属车分配这一条门洞连接
+        const FNavLinkId DoorwayId=Home->DoorwayLink->GetId();
+        if (DoorwayId.IsValid() && NewPath->GetPath()->ContainsCustomLink(DoorwayId)) return Reject(TEXT("WalkOnlyDoorway"));
+        for (int32 Index=1;Index<Points.Num();++Index)
+            if (Home->CrossesPedestrianDoorway(Points[Index-1],Points[Index])) return Reject(TEXT("WalkOnlyDoorway"));
+    }
     const FVector ArrivalDirection=(Points.Last()-Points[Points.Num()-2]).GetSafeNormal2D();
     const FQuat ArrivalHeading=ArrivalDirection.IsNearlyZero()?
         FRotator(0,GetActorRotation().Yaw,0).Quaternion():ArrivalDirection.Rotation().Quaternion();
     // 停车位的长宽按最后一段到站朝向检查，最终停车仍使用实时车身朝向
-    if (!IsParkSpaceClear(Goal,ArrivalHeading)) return Reject(TEXT("ParkingBlocked"));
-    NewPath->EnableRecalculationOnInvalidation(ENavigationOptionFlag::Enable);
+    FVector ParkingCenter;
+    if (!IsParkSpaceClear(Goal,ArrivalHeading,&ParkingCenter)) return Reject(TEXT("ParkingBlocked"));
+    if (WalkAfterParking)
+    {
+        if (!IsValid(CompanionSeat) || !IsValid(MeshRoot)) return Reject(TEXT("WalkExitUnreachable"));
+        // 停车时车身侧倾归零，按模型上的座位和预计车身还原位置，到站后再按实际姿态复查
+        const FVector SeatOnMesh=MeshRoot->GetComponentTransform().InverseTransformPosition(CompanionSeat->GetComponentLocation());
+        const FTransform MeshAtRest(FQuat::Identity,MeshRoot->GetRelativeLocation(),MeshRoot->GetRelativeScale3D());
+        const FTransform ArrivalPose(ArrivalHeading,ParkingCenter,GetActorScale3D());
+        FVector Exit;
+        const FVector ArrivalSeat=ArrivalPose.TransformPosition(MeshAtRest.TransformPosition(SeatOnMesh));
+        if (!FindDismountLocationAtPose(ParkingCenter,ArrivalHeading,ArrivalSeat,Exit,WalkAfterParking))
+            return Reject(TEXT("WalkExitUnreachable"));
+    }
+    // 带步行出口的车路失效后重新检查末段朝向和出口，避免 UE 单独改掉到站姿态
+    NewPath->EnableRecalculationOnInvalidation(WalkAfterParking?ENavigationOptionFlag::Disable:ENavigationOptionFlag::Enable);
     if (!bKeepDrivingWhileReplanning || !bDriving)
     {
         // 跟随调用者已经设置当前主人车辆，接受新绕线路段时继续用它的车速
@@ -256,7 +287,9 @@ bool ADeliveryCompanionMotorbike::SetDriveDestination(const FVector& Goal,bool b
         LastProgressTime=GetWorld()->GetTimeSeconds();
     }
     DrivePath=NewPath;
+    DrivePedestrianHome=Home;
     bDrivingDirect=false;
+    bDrivingToWalkExit=WalkAfterParking!=nullptr;
     PathPointIndex=1;
     DriveGoal=Goal;
     bDriving=true;
@@ -265,40 +298,59 @@ bool ADeliveryCompanionMotorbike::SetDriveDestination(const FVector& Goal,bool b
     return true;
 }
 
-bool ADeliveryCompanionMotorbike::TrySetDirectFollowDestination(const FVector& Goal)
+bool ADeliveryCompanionMotorbike::TrySetDirectFollowDestination(const FVector& Goal,bool bRequireGoalHeight)
 {
     if (!HasAuthority() || !IsMounted() || bDismountPending || !CanCompanionRide() || Goal.ContainsNaN()) return false;
     const FVector Here=GetActorLocation();
     const double Distance=FVector::Dist2D(Here,Goal);
-    if (Distance<20 || Distance>2400 || FMath::Abs(Goal.Z-Here.Z)>180) return false;
-    const int32 Samples=FMath::CeilToInt(Distance/150.);
+    if (Distance<20 || Distance>2400) return false;
+    // 行驶段采用车辆自身的爬坡限制，保留每段净空和跨台阶高度检查
+    const int32 Samples=FMath::CeilToInt(Distance/90.);
     FVector Previous=Here;
     const FQuat Heading=(Goal-Here).GetSafeNormal2D().Rotation().Quaternion();
+    const float DriveNormalZ=FMath::Cos(FMath::DegreesToRadians(MaxClimbAngle));
     for (int32 Index=1;Index<=Samples;++Index)
     {
+        FVector Probe=FMath::Lerp(Here,Goal,double(Index)/Samples);
+        // 探地高度跟随上一段真实支撑，缓坡累计的高差不能变成中途悬空
+        Probe.Z=Previous.Z;
         FVector Center;
-        if (!IsParkSpaceClear(FMath::Lerp(Here,Goal,double(Index)/Samples),Heading,&Center) ||
-            FMath::Abs(Center.Z-Previous.Z)>65 ||
-            !HasClearDrivingSegment(Previous,Center,Heading)) return false;
+        if (!IsSupportedVehicleSpace(Probe,Heading,DriveNormalZ,&Center,true) ||
+            FMath::Abs(Center.Z-Previous.Z)>65) return false;
+        if (!HasClearDrivingSegment(Previous,Center,Heading))
+        {
+            // 坡脊处两采样间的直线可能擦地，按原车 TryStepUp 的升起、前进、落下逐段核验
+            const FVector RaisedStart=Previous+FVector(0,0,FMath::Max(0.f,MaxStepHeight));
+            const FVector RaisedEnd(Center.X,Center.Y,RaisedStart.Z);
+            if (RaisedEnd.Z<Center.Z || !HasClearDrivingSegment(Previous,RaisedStart,Heading) ||
+                !HasClearDrivingSegment(RaisedStart,RaisedEnd,Heading) || !HasClearDrivingSegment(RaisedEnd,Center,Heading)) return false;
+        }
         Previous=Center;
     }
+    // 有高度的车迹必须到同一层实地，水平探路仍逐段检查坡度、支撑与车体净空
+    if (bRequireGoalHeight && FMath::Abs(Previous.Z-Goal.Z)>180.) return false;
+    auto* Home=ADeliveryHome::FindSharedHome(this);
+    const FVector Height(0,0,HoverHeight);
+    if (IsValid(Home) && Home->CrossesPedestrianDoorway(Here-Height,Previous-Height)) return false;
     if (!bDriving)
     {
         ProgressLocation=Here;
         LastProgressTime=GetWorld()->GetTimeSeconds();
     }
     DrivePath=nullptr;
+    DrivePedestrianHome=Home;
     DriveGoal=Previous;
     bDrivingDirect=true;
+    bDrivingToWalkExit=false;
     bDriving=true;
     bArrived=false;
     DriveFailure=NAME_None;
     return true;
 }
 
-bool ADeliveryCompanionMotorbike::HasActiveDriveRoute() const
+bool ADeliveryCompanionMotorbike::HasActiveDriveRoute(bool bRequireWalkExit) const
 {
-    return bDriving && DriveFailure.IsNone() && (bDrivingDirect ||
+    return bDriving && (!bRequireWalkExit || bDrivingToWalkExit) && DriveFailure.IsNone() && (bDrivingDirect ||
         (DrivePath && DrivePath->IsValid() && !DrivePath->IsPartial()));
 }
 
@@ -306,7 +358,8 @@ void ADeliveryCompanionMotorbike::StopDriving()
 {
     if (!HasAuthority()) return;
     FollowBike.Reset();
-    bDriving=false; bDrivingDirect=false; DrivePath=nullptr; PathPointIndex=1;
+    DrivePedestrianHome.Reset();
+    bDriving=false; bDrivingDirect=false; bDrivingToWalkExit=false; DrivePath=nullptr; PathPointIndex=1;
     StopAutonomousMotion();
 }
 
@@ -337,9 +390,12 @@ void ADeliveryCompanionMotorbike::UpdateAutonomousDriveInput(float DeltaSeconds,
     { FailDrive(TEXT("PathInvalidated")); return; }
     const FVector Here=GetActorLocation();
     const float Remaining=FVector::Dist2D(Here,DriveGoal);
-    if (Remaining<=GetParkingAcceptanceRadius())
+    // 需要步行续程时靠近验过出口的位置，避免在门框前提早停车
+    const float ArrivalRadius=bDrivingToWalkExit?FMath::Min(30.f,GetParkingAcceptanceRadius()):GetParkingAcceptanceRadius();
+    if (Remaining<=ArrivalRadius)
     {
-        if (!CanParkAt(Here)) { FailDrive(TEXT("ParkingBlocked")); return; }
+        // 直线跟车的中途点到达后继续找路，正式停车仍由上层复核
+        if (!bDrivingDirect && !CanParkAt(Here)) { FailDrive(TEXT("ParkingBlocked")); return; }
         StopDriving(); bArrived=true; DriveFailure=NAME_None;
         return;
     }
@@ -364,6 +420,13 @@ void ADeliveryCompanionMotorbike::UpdateAutonomousDriveInput(float DeltaSeconds,
                 ++PathPointIndex;
         }
         Aim=Points[PathPointIndex];
+    }
+    const FVector Height(0,0,HoverHeight);
+    if (const auto* Home=DrivePedestrianHome.Get(); IsValid(Home) &&
+        Home->CrossesPedestrianDoorway(Here-Height,bDrivingDirect?Aim-Height:Aim))
+    {
+        FailDrive(TEXT("WalkOnlyDoorway"));
+        return;
     }
     const FVector Toward=(Aim-Here).GetSafeNormal2D();
     const float Angle=FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw,Toward.Rotation().Yaw);
@@ -397,24 +460,55 @@ bool ADeliveryCompanionMotorbike::HasClearDrivingSegment(const FVector& From,con
 
 bool ADeliveryCompanionMotorbike::IsParkSpaceClear(const FVector& Goal,const FQuat& Rotation,FVector* OutVehicleCenter) const
 {
+    return IsSupportedVehicleSpace(Goal,Rotation,FMath::Cos(FMath::DegreesToRadians(25.f)),OutVehicleCenter);
+}
+
+bool ADeliveryCompanionMotorbike::IsSupportedVehicleSpace(const FVector& Goal,const FQuat& Rotation,float MinimumGroundNormalZ,
+    FVector* OutVehicleCenter,bool bFitTravelClearance) const
+{
     if (!GetWorld() || !CollisionBox || Goal.ContainsNaN()) return false;
     FCollisionQueryParams Params(SCENE_QUERY_STAT(CompanionParking),false,this);
     Params.AddIgnoredActor(ReservedCompanion);
     FHitResult Ground;
     if (!GetWorld()->LineTraceSingleByChannel(Ground,Goal+FVector(0,0,150),Goal-FVector(0,0,300),ECC_Visibility,Params) ||
-        Ground.ImpactNormal.Z<FMath::Cos(FMath::DegreesToRadians(25.f))) return false;
+        Ground.ImpactNormal.Z<MinimumGroundNormalZ) return false;
     const FVector Extent=CollisionBox->GetScaledBoxExtent();
-    const FVector Center(Ground.ImpactPoint.X,Ground.ImpactPoint.Y,Ground.ImpactPoint.Z+HoverHeight);
-    // 检查整个车体及四角支撑，不能只用导航点或车身中心判定可停放
+    FVector Center(Ground.ImpactPoint.X,Ground.ImpactPoint.Y,Ground.ImpactPoint.Z+HoverHeight);
+    double HighestSupportZ=Ground.ImpactPoint.Z;
+    // 检查整个车体及四角支撑，防止跨边缘时只剩中心落在地面
     for (const float X:{-.85f,.85f}) for (const float Y:{-.85f,.85f})
     {
-        const FVector Corner=Ground.ImpactPoint+Rotation.RotateVector(FVector(Extent.X*X,Extent.Y*Y,0));
+        const FVector Offset=Rotation.RotateVector(FVector(Extent.X*X,Extent.Y*Y,0));
+        FVector Corner=Ground.ImpactPoint+Offset;
+        // 行驶时以实测坡面估计四角高度，仍须逐角找到真实支撑
+        if (bFitTravelClearance && Ground.ImpactNormal.Z>UE_SMALL_NUMBER)
+            Corner.Z-=FVector::DotProduct(Offset,Ground.ImpactNormal)/Ground.ImpactNormal.Z;
+        // 跨坡脊时另一角可能已在反坡，探测同时覆盖中心高度与本侧坡面预测高度
+        const double TopZ=FMath::Max(Ground.ImpactPoint.Z,Corner.Z)+50.;
+        const double BottomZ=FMath::Min(Ground.ImpactPoint.Z,Corner.Z)-50.;
         FHitResult Support;
-        if (!GetWorld()->LineTraceSingleByChannel(Support,Corner+FVector(0,0,50),Corner-FVector(0,0,50),ECC_Visibility,Params) ||
-            Support.ImpactNormal.Z<FMath::Cos(FMath::DegreesToRadians(25.f))) return false;
+        if (!GetWorld()->LineTraceSingleByChannel(Support,FVector(Corner.X,Corner.Y,TopZ),
+            FVector(Corner.X,Corner.Y,BottomZ),ECC_Visibility,Params) ||
+            Support.ImpactNormal.Z<MinimumGroundNormalZ) return false;
+        HighestSupportZ=FMath::Max(HighestSupportZ,Support.ImpactPoint.Z);
     }
-    if (GetWorld()->OverlapBlockingTestByChannel(Center,Rotation,CollisionBox->GetCollisionObjectType(),
-        FCollisionShape::MakeBox(Extent),Params,FCollisionResponseParams(CollisionBox->GetCollisionResponseToChannels()))) return false;
+    // 行驶预检给平放的车身盒留出坡面净空，抬升上限沿用真实越障配置
+    if (bFitTravelClearance)
+        Center.Z+=FMath::Clamp(HighestSupportZ+Extent.Z+8.-Center.Z,0.,static_cast<double>(MaxStepHeight));
+    const auto HasBodyClearance=[&]()
+    {
+        return !GetWorld()->OverlapBlockingTestByChannel(Center,Rotation,CollisionBox->GetCollisionObjectType(),
+            FCollisionShape::MakeBox(Extent),Params,FCollisionResponseParams(CollisionBox->GetCollisionResponseToChannels()));
+    };
+    bool bClear=HasBodyClearance();
+    // 尖坡顶可能落在中心和角支撑之间，只在车辆原有越阶高度内检查整个车盒的净空
+    const double HighestCenter=Ground.ImpactPoint.Z+HoverHeight+FMath::Max(0.f,MaxStepHeight);
+    while (!bClear && bFitTravelClearance && Center.Z<HighestCenter)
+    {
+        Center.Z=FMath::Min(Center.Z+8.,HighestCenter);
+        bClear=HasBodyClearance();
+    }
+    if (!bClear) return false;
     if (OutVehicleCenter) *OutVehicleCenter=Center;
     return true;
 }
@@ -441,37 +535,89 @@ bool ADeliveryCompanionMotorbike::FindFooting(const FVector& Near,FVector& OutLo
         FCollisionShape::MakeCapsule(Radius,Height),Params,FCollisionResponseParams(Capsule->GetCollisionResponseToChannels()));
 }
 
-bool ADeliveryCompanionMotorbike::FindDismountLocation(FVector& OutLocation) const
+bool ADeliveryCompanionMotorbike::FindDismountLocation(FVector& OutLocation,const FVector* WalkGoal) const
 {
-    const auto* Npc=GetReservedCompanion();
-    if (!Npc || !CollisionBox) return false;
+    if (!IsValid(CompanionSeat)) return false;
+    return FindDismountLocationAtPose(GetActorLocation(),FRotator(0,GetActorRotation().Yaw,0).Quaternion(),
+        CompanionSeat->GetComponentLocation(),OutLocation,WalkGoal);
+}
+
+bool ADeliveryCompanionMotorbike::FindDismountLocationAtPose(const FVector& VehicleCenter,const FQuat& VehicleHeading,
+    const FVector& SeatLocation,FVector& OutLocation,const FVector* WalkGoal) const
+{
+    auto* Npc=GetReservedCompanion();
+    if (!Npc || !CollisionBox || VehicleCenter.ContainsNaN() || VehicleHeading.ContainsNaN() || SeatLocation.ContainsNaN()) return false;
     const FVector Extent=CollisionBox->GetScaledBoxExtent();
     const float Radius=Npc->GetSimpleCollisionRadius()+35;
-    const FQuat Rotation=FRotator(0,GetActorRotation().Yaw,0).Quaternion();
+    const auto* Capsule=Npc->GetCapsuleComponent();
+    auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+    if (WalkGoal && (!Nav || WalkGoal->ContainsNaN())) return false;
+    TOptional<FVector> SafeFooting;
     for (const FVector Offset:{FVector(0,Extent.Y+Radius,0),FVector(0,-Extent.Y-Radius,0),
         FVector(-Extent.X-Radius,0,0),FVector(Extent.X+Radius,0,0)})
     {
-        const FVector Near=GetActorLocation()+Rotation.RotateVector(Offset);
+        const FVector Near=VehicleCenter+VehicleHeading.RotateVector(Offset);
         FCollisionQueryParams Params(SCENE_QUERY_STAT(CompanionExitSide),false,this);
         Params.AddIgnoredActor(Npc);
         FHitResult Wall;
         // 下车不能穿过车边墙体落到墙另一侧
-        if (GetWorld()->LineTraceSingleByChannel(Wall,CompanionSeat->GetComponentLocation(),Near+FVector(0,0,40),ECC_Visibility,Params)) continue;
-        if (!FindFooting(Near,OutLocation)) continue;
-        const auto* Capsule=Npc->GetCapsuleComponent();
-        if (!GetWorld()->SweepSingleByChannel(Wall,CompanionSeat->GetComponentLocation(),OutLocation,FQuat::Identity,
+        if (GetWorld()->LineTraceSingleByChannel(Wall,SeatLocation,Near+FVector(0,0,40),ECC_Visibility,Params)) continue;
+        FVector Footing;
+        if (!FindFooting(Near,Footing)) continue;
+        const FVector Feet=Footing-FVector(0,0,Capsule->GetScaledCapsuleHalfHeight());
+        const double ParkingGround=VehicleCenter.Z-HoverHeight;
+        if (WalkGoal && FMath::Abs(Feet.Z-3.-ParkingGround)>Npc->GetCharacterMovement()->MaxStepHeight+5.f) continue;
+        if (!GetWorld()->SweepSingleByChannel(Wall,SeatLocation,Footing,FQuat::Identity,
             Capsule->GetCollisionObjectType(),FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius(),Capsule->GetScaledCapsuleHalfHeight()),
-            Params,FCollisionResponseParams(Capsule->GetCollisionResponseToChannels()))) return true;
+            Params,FCollisionResponseParams(Capsule->GetCollisionResponseToChannels())))
+        {
+            // 先尝试贴合步行导航的出口，仍保留物理安全的落脚点用于中断和无导航场景
+            FNavLocation Projected;
+            if (!Nav || (Nav->ProjectPointToNavigation(Feet,Projected,FVector(20,20,35),&Npc->GetNavAgentPropertiesRef()) &&
+                FVector::DistSquared(Projected.Location,Feet)<=FMath::Square(20.f)))
+            {
+                // 车的另一侧可能属于不连通的步行区域，继续检查其余出口
+                if (WalkGoal)
+                {
+                    const auto* Path=Nav->FindPathToLocationSynchronously(GetWorld(),Projected.Location,*WalkGoal,Npc);
+                    if (!Path || !Path->IsValid() || Path->IsPartial()) continue;
+                }
+                OutLocation=Footing;
+                return true;
+            }
+            if (!WalkGoal && !SafeFooting.IsSet()) SafeFooting=Footing;
+        }
     }
-    return false;
+    if (!SafeFooting.IsSet()) return false;
+    OutLocation=SafeFooting.GetValue();
+    return true;
 }
 
 bool ADeliveryCompanionMotorbike::TryDismount()
+{
+    return TryDismountAtExit(nullptr);
+}
+
+bool ADeliveryCompanionMotorbike::TryDismountIfClear()
+{
+    return FMath::Abs(GetCurrentSpeed())<=30.f && TryDismountAtExit(nullptr,true);
+}
+
+bool ADeliveryCompanionMotorbike::TryDismountForWalk(const FVector& WalkGoal)
+{
+    return TryDismountAtExit(&WalkGoal);
+}
+
+bool ADeliveryCompanionMotorbike::TryDismountAtExit(const FVector* WalkGoal,bool bCheckExitBeforeStopping)
 {
     if (!HasAuthority()) return false;
     const double Now=GetWorld()->GetTimeSeconds();
     // 行为树和车辆 Tick 可以同时请求下车，碰撞复核共用同一个重试间隔
     if (bMounted && bDismountPending && Now<NextDismountAttempt) return false;
+    FVector Exit;
+    // 跟随仍可重选停车点，找不到出口时继续保留这段车辆路线
+    const bool bCheckExit=WalkGoal || bCheckExitBeforeStopping;
+    if (bCheckExit && (!bMounted || (WalkGoal && bDismountPending) || !FindDismountLocation(Exit,WalkGoal))) return false;
     FollowHornEndsAt=0.;
     SetHornActive(false);
     StopDriving();
@@ -480,8 +626,7 @@ bool ADeliveryCompanionMotorbike::TryDismount()
     NextDismountAttempt=Now+.25;
     auto* Npc=GetReservedCompanion();
     if (!Npc) { bMounted=false; bDismountPending=false; ApplyCompanionPresentation(); ForceNetUpdate(); return true; }
-    FVector Exit;
-    if (!FindDismountLocation(Exit)) { DriveFailure=TEXT("DismountBlocked"); return false; }
+    if (!bCheckExit && !FindDismountLocation(Exit)) { DriveFailure=TEXT("DismountBlocked"); return false; }
     bMounted=false; bDismountPending=false;
     Npc->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
     Npc->SetActorLocation(Exit,false,nullptr,ETeleportType::TeleportPhysics);
@@ -492,6 +637,9 @@ bool ADeliveryCompanionMotorbike::TryDismount()
     if (!WeakThis.IsValid() || !WeakNpc.IsValid() || IsActorBeingDestroyed() || Npc->IsActorBeingDestroyed()) return false;
     Npc->ForceNetUpdate(); ForceNetUpdate();
     if (DriveFailure==TEXT("DismountBlocked")) DriveFailure=NAME_None;
+    const auto* Arrangement=Npc->FindComponentByClass<UDeliveryCompanionComponent>();
+    UE_LOG(LogDeliveryCompanionBike,Log,TEXT("CompanionDismounted npc=%s bike=%s revision=%d"),
+        *GetNameSafe(Npc),*GetName(),Arrangement?Arrangement->GetCommandRevision():INDEX_NONE);
     return true;
 }
 
@@ -574,8 +722,14 @@ void ADeliveryCompanionMotorbike::Tick(float DeltaSeconds)
         TryDismount();
     else if (HasAuthority() && bMounted && !CanCompanionRide())
     {
-        FailDrive(TEXT("CompanionInterrupted"));
-        TryDismount();
+        const auto* Npc=GetReservedCompanion();
+        const auto* Companion=Npc?Npc->FindComponentByClass<UDeliveryCompanionComponent>():nullptr;
+        if (Companion && Npc->GetAttachParentActor()==this && Companion->CanKeepVehicleSeatWhilePaused()) StopDriving();
+        else
+        {
+            FailDrive(TEXT("CompanionInterrupted"));
+            TryDismount();
+        }
     }
     Super::Tick(DeltaSeconds);
     if (!WeakThis.IsValid() || IsActorBeingDestroyed()) return;

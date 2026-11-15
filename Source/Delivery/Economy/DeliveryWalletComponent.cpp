@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
@@ -74,6 +75,15 @@ void UDeliveryWalletComponent::BeginPlay()
 	BindToTaskManager();
 }
 
+void UDeliveryWalletComponent::EndPlay(const EEndPlayReason::Type Reason)
+{
+	if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(BindRetryTimer);
+	if (auto* Manager = BoundTaskManager.Get())
+		Manager->OnTaskCompleted.RemoveDynamic(this, &UDeliveryWalletComponent::HandleTaskCompleted);
+	BoundTaskManager.Reset();
+	Super::EndPlay(Reason);
+}
+
 // 只向钱包所属玩家同步余额
 void UDeliveryWalletComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -86,7 +96,7 @@ void UDeliveryWalletComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProper
 // 找到共享任务管理器并订阅结算，尚未就绪时稍后重试
 void UDeliveryWalletComponent::BindToTaskManager()
 {
-	// 只有服务器需要订阅：入账是权威侧的事，客户端靠 Balance 复制拿结果
+	// 服务器监听任务完成并入账，远端通过余额复制和结算通知更新界面
 	if (!GetOwner() || !GetOwner()->HasAuthority())
 	{
 		return;
@@ -113,6 +123,7 @@ void UDeliveryWalletComponent::BindToTaskManager()
 
 	World->GetTimerManager().ClearTimer(BindRetryTimer);
 	Manager->OnTaskCompleted.AddUniqueDynamic(this, &UDeliveryWalletComponent::HandleTaskCompleted);
+	BoundTaskManager = Manager;
 }
 
 // 只为实际完成交付的玩家计算并发放奖励
@@ -123,18 +134,36 @@ void UDeliveryWalletComponent::HandleTaskCompleted(UDeliveryTaskDefinition* Task
 	// 委托是广播给所有钱包的，这里挑出"是不是我送的"
 	// 多人抢单时只有送达者拿钱，判据直接用委托带过来的 Deliverer，
 	// 不需要各调用点自己去比对
-	if (Deliverer != GetOwner())
+	if (!IsValid(Deliverer) || Deliverer != GetOwner() || !Deliverer->HasAuthority() || !IsValid(Task))
 	{
 		return;
 	}
 
 	AddBalance(Reward.FinalReward);
 	OnTaskPaid.Broadcast(Task, Reward);
+	// 本机监听服已收到上面的通知；远端仅发送给仍占有该 PlayerState 的连接
+	if (IsValid(Deliverer) && !Deliverer->IsActorBeingDestroyed() && !Deliverer->IsInactive())
+	{
+		const auto* Controller = Deliverer->GetPlayerController();
+		if (IsValid(Controller) && !Controller->IsActorBeingDestroyed() && !Controller->IsLocalController() &&
+		    Controller->PlayerState == Deliverer && Controller->GetWorld() == GetWorld() && Controller->GetNetConnection())
+		{
+			ClientNotifyTaskPaid(Task, Reward);
+		}
+	}
 
 	UE_LOG(LogDeliveryWallet, Log,
 	       TEXT("[Wallet] %s 送达 %s，入账 %d（底薪 %d × 时间 %.2f × 特殊 %.2f），余额 %d"),
 	       *GetNameSafe(Deliverer), Task ? *Task->TaskId.ToString() : TEXT("<空>"), Reward.FinalReward,
 	       Reward.BaseReward, Reward.TimeMultiplier, Reward.SpecialMultiplier, Balance);
+}
+
+void UDeliveryWalletComponent::ClientNotifyTaskPaid_Implementation(UDeliveryTaskDefinition* Task,
+                                                                   const FDeliveryRewardBreakdown& Reward)
+{
+	if (GetNetMode() != NM_Client || !IsValid(Task)) return;
+	// 奖励已在服务器入账，通知只提供给界面显示，余额由 OnRep_Balance 更新
+	OnTaskPaid.Broadcast(Task, Reward);
 }
 
 // 由服务器增加余额并通知相关界面

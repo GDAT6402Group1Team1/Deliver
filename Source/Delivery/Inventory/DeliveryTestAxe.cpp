@@ -23,7 +23,7 @@ ADeliveryTestAxe::ADeliveryTestAxe()
 		AxeHead->SetRelativeScale3D(FVector(1.8f, 4.8f, 0.258f));
 		AxeHead->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
-	ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "TestAxe", "Axe");
+	ItemComponent->DisplayName = NSLOCTEXT("DeliveryItems", "TestAxe", "斧头");
 	static ConstructorHelpers::FObjectFinder<UTexture2D> AxeIcon(
 	    TEXT("/Game/UI/Inventory/Textures/T_ItemIconAxe.T_ItemIconAxe"));
 	if (AxeIcon.Succeeded())

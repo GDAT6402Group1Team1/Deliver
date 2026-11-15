@@ -50,14 +50,14 @@ ADeliveryGrandpa::ADeliveryGrandpa()
     ReceiveInteraction->InteractionKey = EDeliveryInteractionKey::PickupE;
     ReceiveInteraction->HoldDuration = .5f;
     ReceiveInteraction->PromptOffset = FVector(0, 0, 75);
-    ReceiveInteraction->PromptText = NSLOCTEXT("Grandpa", "Deliver", "[Hold E] Give Grandpa the delivery");
+    ReceiveInteraction->PromptText = NSLOCTEXT("Grandpa", "Deliver", "[按住 E] 把外卖交给爷爷");
     DeliveryTarget = CreateDefaultSubobject<UDeliveryTargetComponent>(TEXT("DeliveryTarget"));
     DeliveryTarget->InteractRadius = 150.f;
     DeliveryTarget->DeliveryRadius = 150.f;
     auto* Location = CreateDefaultSubobject<UDeliveryLocationComponent>(TEXT("RecipientLocation"));
     Location->SetupAttachment(Capsule);
     Location->LocationId = TEXT("NPC_OldMan_001");
-    Location->DisplayName = NSLOCTEXT("Grandpa", "Name", "Grandpa");
+    Location->DisplayName = NSLOCTEXT("Grandpa", "Name", "爷爷");
 }
 
 void ADeliveryGrandpa::BeginPlay()
@@ -241,9 +241,12 @@ void ADeliveryGrandpa::RefreshInteractions()
     {
         KnockInteraction->bInteractEnabled = !IsDoorBroken() && !bDelivered;
         KnockInteraction->PromptText = KnockCount >= 2
-            ? NSLOCTEXT("Grandpa", "StillClosed", "Grandpa: Wait a moment!  The door stays shut. Find the axe.")
-            : KnockCount == 1 ? NSLOCTEXT("Grandpa", "KnockAgain", "No answer... [Hold E] Knock again")
-            : NSLOCTEXT("Grandpa", "Knock", "[Hold E] Knock on Grandpa's door");
+            ? NSLOCTEXT("Grandpa", "FinishDeliveryAfterKnocking",
+                "如果拿着外卖，可以先收进背包，也可以放在门边空地（快捷栏第 1 格）。\n"
+                "捡起并装备斧头，用左攻击键劈开门。\n"
+                "进门前记得把外卖拿到手上。")
+            : KnockCount == 1 ? NSLOCTEXT("Grandpa", "KnockAgain", "没人应门……[按住 E] 再敲一次")
+            : NSLOCTEXT("Grandpa", "Knock", "[按住 E] 敲爷爷家的门");
     }
 }
 
@@ -287,15 +290,15 @@ void ADeliveryGrandpa::OnRep_Action()
     case EDeliveryGrandpaAction::StrollHome:
         Clip = bWalking && WalkAnimation ? WalkAnimation.Get() : IdleAnimation.Get(); break;
     case EDeliveryGrandpaAction::Reply:
-        Clip = TalkAnimation; Line = NSLOCTEXT("Grandpa", "Reply", "Wait a moment!"); break;
+        Clip = TalkAnimation; Line = NSLOCTEXT("Grandpa", "Reply", "等一下！"); break;
     case EDeliveryGrandpaAction::Startled:
-        Clip = StartledAnimation; bLoop = false; Line = NSLOCTEXT("Grandpa", "Broken", "My door! What are you doing?!"); break;
+        Clip = StartledAnimation; bLoop = false; Line = NSLOCTEXT("Grandpa", "Broken", "我的门！你干什么呢？！"); break;
     case EDeliveryGrandpaAction::Receive:
-        Line = NSLOCTEXT("Grandpa", "Hungry", "Well, where is my food?"); break;
+        Line = NSLOCTEXT("Grandpa", "Hungry", "我的饭呢？"); break;
     case EDeliveryGrandpaAction::Thanks:
-        Clip = ReceiveAnimation; bLoop = false; Line = NSLOCTEXT("Grandpa", "Thanks", "Finally! Thank you."); break;
+        Clip = ReceiveAnimation; bLoop = false; Line = NSLOCTEXT("Grandpa", "Thanks", "总算送到了，谢谢啊！"); break;
     case EDeliveryGrandpaAction::Finished:
-        if (!HasMovedOut()) Line = NSLOCTEXT("Grandpa", "Done", "Delivery received"); break;
+        if (!HasMovedOut()) Line = NSLOCTEXT("Grandpa", "Done", "已收到外卖"); break;
     case EDeliveryGrandpaAction::MoveOut:
         Clip=bWalking && WalkAnimation?WalkAnimation.Get():IdleAnimation.Get();
         if (MoveOutState==EDeliveryGrandpaMoveOutState::Waiting)

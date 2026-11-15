@@ -6,6 +6,8 @@
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "AI/Conversation/DeliveryNpcConversationTrace.h"
+#include "AIController.h"
+#include "Navigation/PathFollowingComponent.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Interaction/DeliveryInteractionComponent.h"
 #include "Character/DeliveryCharacter.h"
@@ -16,6 +18,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
+#include "GameFramework/GameNetworkManager.h"
 #include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
@@ -51,6 +54,25 @@ ADeliveryCompanionCharacter::ADeliveryCompanionCharacter()
     Combat->bReceiveHitsWhileDown=true;
     Combat->KnockdownHorizontalSpeed=600;
     Combat->KnockdownUpwardSpeed=250;
+}
+
+bool ADeliveryCompanionCharacter::IsMountedOnCompanionBike() const
+{
+    const auto* Bike=Cast<ADeliveryCompanionMotorbike>(GetAttachParentActor());
+    return IsValid(Bike) && !Bike->IsActorBeingDestroyed() && Bike->GetWorld()==GetWorld() &&
+        Bike->IsMounted() && Bike->GetReservedCompanion()==this && GetRootComponent() &&
+        GetRootComponent()->GetAttachParent()==Bike->CompanionSeat.Get();
+}
+
+bool ADeliveryCompanionCharacter::IsNetRelevantFor(const AActor* RealViewer,const AActor* ViewTarget,const FVector& SrcLocation) const
+{
+    if (Super::IsNetRelevantFor(RealViewer,ViewTarget,SrcLocation)) return true;
+    if (!IsMountedOnCompanionBike() || !IsValid(RealViewer) || RealViewer->GetWorld()!=GetWorld()) return false;
+    // 骑乘用车上的网格替身，隐藏的原角色仍承载交谈、声音和真实同伴状态
+    const auto* Player=Cast<APlayerController>(RealViewer);
+    if (Player && Companion && Companion->CanCommand(Player->PlayerState)) return true;
+    return !bOnlyRelevantToOwner && (!GetDefault<AGameNetworkManager>()->bUseDistanceBasedRelevancy ||
+        IsWithinNetRelevancyDistance(SrcLocation));
 }
 
 void ADeliveryCompanionCharacter::BeginPlay()
@@ -130,8 +152,40 @@ void ADeliveryCompanionCharacter::ReceiveMeleeHitFrom(const FVector& Impulse,con
     }
     Super::ReceiveMeleeHitFrom(Impulse,Point,Source,PunchId);
 }
+bool ADeliveryCompanionCharacter::HasPaceContext() const
+{
+    return HasAuthority() && Encounter.Phase==EDeliveryCompanionEncounterPhase::Joined &&
+        Companion->GetMode()==EDeliveryCompanionMode::Stay && !IsKnockedDown() &&
+        GetCharacterMovement()->IsMovingOnGround() && !GetHeldVehicle() && !Companion->IsUsingErrandVehicle() &&
+        !Companion->HasActiveErrand() && !Companion->HasActiveHomeArrangement() && !Companion->GetHomeState().CarriedProp &&
+        !Companion->GetCarriedItem() && !Companion->GetAssistTarget() &&
+        !Combat->IsRecovering() && !Combat->IsReactingToHit() && !Combat->IsStriking();
+}
+float ADeliveryCompanionCharacter::GetPaceTravelBudget() const
+{
+    // 保留转身和停步时间，低速时缩短两段路程
+    constexpr float TurnAndStopSeconds=1.25f;
+    const float LegTime=(DeliveryNpc::CandidateDuration(EDeliveryNpcAction::Pace)-TurnAndStopSeconds)*.5f;
+    return FMath::Min(Companion->GetWaitAreaRemaining()-12.f,PaceSpeed*LegTime);
+}
+bool ADeliveryCompanionCharacter::CanContinuePace(const FDeliveryNpcPublicState& State) const
+{
+    return State.Action==EDeliveryNpcAction::Pace && State.Origin==EDeliveryNpcActionOrigin::Model &&
+        Companion->CanCommand(State.Requester) && State.CompanionCommandRevision==Companion->GetCommandRevision() &&
+        HasPaceContext() && Companion->GetWaitAreaRemaining()>0.f;
+}
 bool ADeliveryCompanionCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target) const
 {
+    if (Action==EDeliveryNpcAction::JoinAssist)
+        return Target==Companion->GetAssistTarget() && Companion->CanJoinAssist(nullptr);
+    if (Action==EDeliveryNpcAction::StopAssist)
+        return !Target && Companion->CanStopAssist(Companion->GetOwnerPlayerState());
+    if (Action==EDeliveryNpcAction::Pace)
+    {
+        const auto* AI=Cast<AAIController>(GetController());
+        return !Target && HasPaceContext() && AI && AI->GetMoveStatus()==EPathFollowingStatus::Idle &&
+            GetVelocity().SizeSquared2D()<=FMath::Square(5.f) && Super::CanExecute(Action,nullptr);
+    }
     if (Action==EDeliveryNpcAction::SoundFollowHorn)
     {
         const auto* Bike=Companion->GetFollowMotorbike();
@@ -148,12 +202,20 @@ bool ADeliveryCompanionCharacter::CanExecute(EDeliveryNpcAction Action,AActor* T
     if (Action==EDeliveryNpcAction::MoveAside && Companion->HasActiveHomeArrangement()) return false;
     if (const auto* Item=Cast<ADeliveryHandheldItem>(Target); DeliveryHandheldTransfer::IsOrdinaryItem(Item) &&
         !Companion->CanUseObservedItemTarget(Item)) return false;
-    // 模型保留陪伴安排，护主交战只能由服务器真实命中建立的规则授权
+    // 模型凭真实命中选择协战安排，具体 Fight 回合复用服务器批准的目标
     if (Action!=EDeliveryNpcAction::Wait && Action!=EDeliveryNpcAction::LookAt && Action!=EDeliveryNpcAction::MoveAside) return false;
     return Super::CanExecute(Action,Target);
 }
 bool ADeliveryCompanionCharacter::CanExecuteForRequester(EDeliveryNpcAction Action,AActor* Target,APlayerState* Requester) const
 {
+    if (Action==EDeliveryNpcAction::JoinAssist)
+        return Target==Companion->GetAssistTarget() && Companion->CanJoinAssist(Requester);
+    if (Action==EDeliveryNpcAction::StopAssist)
+        return !Target && Companion->CanStopAssist(Requester);
+    const bool bHasAction=Agent->HasActiveAction();
+    const bool bPacing=bHasAction && Agent->GetPublicState().Action==EDeliveryNpcAction::Pace;
+    if ((bPacing || Action==EDeliveryNpcAction::Pace) && !Companion->CanCommand(Requester)) return false;
+    if (Action==EDeliveryNpcAction::Pace && bHasAction && !bPacing) return false;
     if (Action==EDeliveryNpcAction::SoundFollowHorn) return !Requester && CanExecute(Action,Target);
     if (Action==EDeliveryNpcAction::OfferCaterpillar) return CanExecute(Action,Target) && Companion->CanRequestCaterpillarOffer(Requester);
     if (DeliveryNpc::IsCompanionCommand(Action)) return CanExecute(Action,Target) && Companion->CanCommand(Requester);
@@ -165,12 +227,45 @@ bool ADeliveryCompanionCharacter::CanExecuteGameplayRule(EDeliveryNpcAction Acti
         !Companion->IsUsingErrandVehicle() && !Companion->HasActiveHomeArrangement() && !Companion->GetHomeState().CarriedProp &&
         Companion->CanExecuteAssist(Target,RuleRevision);
 }
+float ADeliveryCompanionCharacter::GetGameplayRuleFightApproachRange() const
+{
+    return Companion->GetAssistRange();
+}
+
 void ADeliveryCompanionCharacter::ExtendDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const
 {
     Companion->ExtendDecisionRequest(Request,Requester);
     Companion->ExtendHomeDecisionRequest(Request,Requester);
     Companion->ExtendItemDecisionRequest(Request,Requester);
     Companion->ExtendTravelDecisionRequest(Request,Requester);
+    Request.CompanionAssistRevision=Companion->GetAssistRevision();
+    Request.bCompanionAssistCommitted=Companion->HasCommittedAssist();
+    Request.bCompanionAssistPending=Companion->CanJoinAssist(Companion->GetOwnerPlayerState());
+    if ((!Request.bPlayerRequest || Request.bPendingPlayerMessage) && Companion->CanJoinAssist(Requester))
+    {
+        const FGuid EvidenceId=Companion->GetAssistEvidenceId();
+        const auto* Fact=Request.Evidence.FindByPredicate([EvidenceId](const FDeliveryNpcEvidence& Entry)
+        {
+            return Entry.EventId==EvidenceId && Entry.Source==EDeliveryNpcEvidenceSource::ActionResult &&
+                (Entry.Kind==TEXT("OwnerConfirmedAttack") || Entry.Kind==TEXT("OwnerConfirmedHit"));
+        });
+        if (Fact && Agent->FindKnownSubjectId(Companion->GetAssistTarget())==Fact->SubjectId)
+        {
+            FDeliveryNpcCandidate Candidate;
+            Candidate.Action=EDeliveryNpcAction::JoinAssist;
+            Candidate.TargetId=Fact->SubjectId;
+            Candidate.EvidenceIds.Add(EvidenceId);
+            Request.Candidates.Add(Candidate);
+            Request.AllowedActions.AddUnique(Candidate.Action);
+        }
+    }
+    if (Request.bPlayerRequest && Request.bPendingPlayerMessage && Companion->CanStopAssist(Requester))
+    {
+        FDeliveryNpcCandidate Candidate;
+        Candidate.Action=EDeliveryNpcAction::StopAssist;
+        Request.Candidates.Add(Candidate);
+        Request.AllowedActions.AddUnique(Candidate.Action);
+    }
     if (!Requester && CanExecute(EDeliveryNpcAction::SoundFollowHorn,nullptr))
     {
         FDeliveryNpcCandidate Candidate;
@@ -181,7 +276,9 @@ void ADeliveryCompanionCharacter::ExtendDecisionRequest(FDeliveryNpcDecisionRequ
 }
 bool ADeliveryCompanionCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
 {
-    if (Agent->CanContinueCompanionMovement() && State.ActionId==Agent->GetPublicState().ActionId &&
+    if (State.Action==EDeliveryNpcAction::Pace) return CanContinuePace(State) && Super::ExecuteAction(State);
+    if (!DeliveryNpc::IsCompanionCommand(State.Action) && Agent->CanContinueCompanionMovement() &&
+        State.ActionId==Agent->GetPublicState().ActionId &&
         State.PlanRevision==Agent->GetPublicState().PlanRevision && State.Action==Agent->GetPublicState().Action &&
         State.Status==EDeliveryNpcActionStatus::Running && State.Target==Agent->GetPublicState().Target &&
         State.Requester==Agent->GetPublicState().Requester && State.Origin==EDeliveryNpcActionOrigin::Model)
@@ -198,9 +295,15 @@ bool ADeliveryCompanionCharacter::ExecuteAction(const FDeliveryNpcPublicState& S
     }
     if (!DeliveryNpc::IsCompanionCommand(State.Action))
         return Companion->EnsureOnFoot() && Super::ExecuteAction(State);
-    if (!HasAuthority() || !CanExecuteForRequester(State.Action,State.Target,State.Requester)) return false;
-    const bool bAccepted=DeliveryNpc::IsCompanionItemErrand(State.Action)?
-        State.ItemChoice.IsValid() && Companion->ApplyItemChoice(*State.ItemChoice,State.Requester,State.CompanionCommandRevision,State.CompanionTravelMode):
+    const bool bItemErrand=DeliveryNpc::IsCompanionItemErrand(State.Action);
+    if (!HasAuthority() || (!bItemErrand && !CanExecuteForRequester(State.Action,State.Target,State.Requester))) return false;
+    const bool bAccepted=State.Action==EDeliveryNpcAction::JoinAssist?
+        Companion->JoinAssist(State.Requester,State.CompanionAssistRevision):
+        State.Action==EDeliveryNpcAction::StopAssist?
+        Companion->StopAssist(State.Requester,State.CompanionAssistRevision):bItemErrand?
+        State.ItemChoice.IsValid() && State.ItemChoice->Item.Get()==State.Target &&
+        State.ItemChoice->GetAction()==State.Action &&
+        Companion->ApplyItemChoice(*State.ItemChoice,State.Requester,State.CompanionCommandRevision,State.CompanionTravelMode):
         State.Action==EDeliveryNpcAction::HomeAction?
         State.HomeChoice.IsValid() && Companion->ApplyHomeChoice(*State.HomeChoice,State.Requester,State.CompanionCommandRevision):
         Companion->ApplyCommand(State.Action,State.Requester,State.CompanionCommandRevision,State.CompanionTask,State.CompanionPackage,State.CompanionTravelMode);
@@ -252,7 +355,11 @@ void ADeliveryCompanionCharacter::EndPlay(const EEndPlayReason::Type Reason)
     if (IsValid(EncounterScene))
     {
         EncounterScene->UpdateBossPresentation(-1,false);
-        if (HasAuthority() && Reason==EEndPlayReason::Destroyed) EncounterScene->RequestDoorOpen(false);
+        if (HasAuthority())
+        {
+            EncounterScene->SetEncounterObstruction(EDeliveryCompanionEncounterObstruction::None);
+            if (Reason==EEndPlayReason::Destroyed) EncounterScene->RequestDoorOpen(false);
+        }
     }
     HelpInteractable->CanUse.Unbind(); HelpInteractable->Use.Unbind();
     Super::EndPlay(Reason);

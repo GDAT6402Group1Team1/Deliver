@@ -244,10 +244,11 @@ void UDeliveryNpcPresentationComponent::TickSentences()
         if (!Speech.bActive && PendingReply.ReplyId.IsValid()) PromotePendingReply();
         if (!Speech.bActive && ExpectedSentences==NextSentence)
         {
-            RecordSpokenReply(true);
             const FGuid CompletedReply=ReplyAction;
-            ReplyAction.Invalidate(); ReplyMessage.Invalidate();
-            Npc->Agent->FinishReplyPlayback(CompletedReply);
+            const FGuid CompletedSpeech=Speech.TurnId;
+            RecordSpokenReply(true);
+            if (ReplyAction==CompletedReply) { ReplyAction.Invalidate(); ReplyMessage.Invalidate(); }
+            Npc->Agent->FinishReplyPlayback(CompletedReply,CompletedSpeech);
             GetOwner()->ForceNetUpdate();
         }
         else if (!Speech.bActive && Npc->Agent->CanStartReplySpeech(ReplyAction))
@@ -650,9 +651,14 @@ void UDeliveryNpcPresentationComponent::RecordSpokenReply(bool bCompleteReply)
     if (SpokenReply.IsEmpty()) return;
     FDeliveryNpcObservation Said; Said.Kind=TEXT("SelfSpeech"); Said.Source=EDeliveryNpcEvidenceSource::ActionResult;
     Said.Description=SpokenReply; Said.Lifetime=60;
-    Said.Subject=Npc; Said.Addressee=ReplyListener.Get();
+    const TWeakObjectPtr<AActor> Listener(Npc->Agent->GetReplyListenerForPlayback(ReplyAction,ReplyListener.Get()));
+    Said.Subject=Npc; Said.Addressee=Listener.Get();
     // 整段说完才标记玩家的问题已回答，中途停止仍保留前面说过的内容
-    if (bCompleteReply) { Said.EventId=Speech.TurnId; Said.ReplyToEventId=ReplyMessage; }
+    if (bCompleteReply)
+    {
+        Said.EventId=Speech.TurnId;
+        if (Npc->Agent->CanLinkReplyPlayback(ReplyAction)) Said.ReplyToEventId=ReplyMessage;
+    }
     Npc->Agent->ObserveEvent(Said);
     // 最后一轮仍让邻居记住完整台词，但不再安排下一轮接话
     if (bCompleteReply)
@@ -660,7 +666,7 @@ void UDeliveryNpcPresentationComponent::RecordSpokenReply(bool bCompleteReply)
             if (*It!=Npc && !Npc->Agent->WasReplyTextDelivered(ReplyAction,*It) &&
                 FVector::DistSquared(It->GetActorLocation(),Npc->GetActorLocation())<FMath::Square(800.f))
                 It->HearSpeech(Npc,SpokenReply,Speech.TurnId,FMath::Min(SpeechDepth+1,3),
-                    ReplyListener.IsValid()?ReplyListener.Get():Npc,ReplyMessage,SpeechDepth<3 && !Speech.RadioListener);
+                    Listener.IsValid()?Listener.Get():Npc,Said.ReplyToEventId,SpeechDepth<3 && !Speech.RadioListener);
     if (bCompleteReply)
     {
         UE_LOG(LogTemp,Log,TEXT("NpcLatency speech=%s stage=reply_completed sentences=%d"),*ReplyMessage.ToString(),NextSentence);

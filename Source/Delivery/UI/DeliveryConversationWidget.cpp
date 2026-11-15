@@ -277,10 +277,13 @@ void UDeliveryConversationWidget::RefreshReply()
     const bool bReplyFailed=Result==TEXT("ReplyFailed");
     const bool bActionReply=Result==TEXT("ActionReply");
     const auto Action=Resident->Agent->GetPublicState();
+    const bool bOwnsCompanionCommand=Action.ActionId.IsValid() && Action.GetReplyId()==Action.ActionId &&
+        DeliveryNpc::IsCompanionCommand(Action.Action);
     // 首句通过服务器检查后结束本次等待，台词由人物附近的字幕显示
     // 待播查询同时检查本轮动作编号和停止通知，取消后的旧状态不能重新显示首句
     const bool bFirstSentenceReady=SubmittedEventId.IsValid() && Action.bStreamSpeech &&
         Action.GetReplyId().IsValid() && Action.ReplyToEventId==SubmittedEventId &&
+        (!bOwnsCompanionCommand || Action.Status==EDeliveryNpcActionStatus::Succeeded) &&
         !Action.Speech.IsEmpty() && !bRejected && !bReplyFailed &&
         Resident->Presentation->IsWaitingForSpeechPlayback();
     if (bFirstSentenceReady && LastReplyText.IsEmpty() && !DisplayedTurnId.IsValid())

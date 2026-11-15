@@ -1,16 +1,46 @@
 #include "AI/Companion/DeliveryCompanionComponent.h"
 #include "AI/Companion/DeliveryCompanionCharacter.h"
-#include "AI/Companion/DeliveryCompanionTuning.h"
 #include "Character/DeliveryCharacter.h"
 #include "Inventory/DeliveryCaterpillarItem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
+#include "Inventory/DeliveryInventoryItemComponent.h"
 #include "Inventory/DeliveryPackageItem.h"
+#include "Carry/DeliveryHandheldCarrierInterface.h"
+#include "Interaction/DeliveryInteractableComponent.h"
+#include "Interaction/DeliveryInteractionRegistry.h"
 #include "Task/DeliveryTaskManagerComponent.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
 #include "World/DeliveryLocationRegistry.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerState.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
+
+ADeliveryCaterpillarItem* UDeliveryCompanionComponent::FindReachableYardCaterpillar(const APawn* Pawn,float Radius) const
+{
+    const auto* Registry=GetWorld()?GetWorld()->GetSubsystem<UDeliveryInteractionRegistry>():nullptr;
+    if (!Registry || !IsValid(Pawn) || Pawn->GetWorld()!=GetWorld()) return nullptr;
+    const FVector Origin=Pawn->GetActorLocation();
+    TArray<UDeliveryInteractableComponent*> Nearby;
+    Registry->GetRegisteredInRadius(Origin,Radius,Nearby);
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(CompanionYardCaterpillar),false,Pawn);
+    Query.AddIgnoredActor(GetOwner());
+    ADeliveryCaterpillarItem* Nearest=nullptr;
+    double NearestSquared=FMath::Square(Radius);
+    for (const auto* Interaction:Nearby)
+    {
+        auto* Worm=Cast<ADeliveryCaterpillarItem>(Interaction->GetOwner());
+        if (Interaction!=DeliveryHandheldTransfer::FindWorldPickupInteraction(Worm,GetWorld()) ||
+            Worm->GetItemComponent()->IsTransferInProgress()) continue;
+        const FVector Point=Interaction->GetInteractionPoint(Origin);
+        const double DistanceSquared=FVector::DistSquared(Origin,Point);
+        if (Point.ContainsNaN() || DistanceSquared>NearestSquared) continue;
+        FHitResult Hit;
+        if (GetWorld()->LineTraceSingleByChannel(Hit,Origin+FVector(0,0,35),Point,ECC_Visibility,Query) && Hit.GetActor()!=Worm) continue;
+        Nearest=Worm;
+        NearestSquared=DistanceSquared;
+    }
+    return Nearest;
+}
 
 bool UDeliveryCompanionComponent::HasCaterpillarOpportunity() const
 {
@@ -48,7 +78,9 @@ void UDeliveryCompanionComponent::UpdateCaterpillarOpportunity()
     FDeliveryNpcObservation Opportunity;
     Opportunity.EventId=FGuid::NewGuid(); Opportunity.Kind=TEXT("CaterpillarOpportunity");
     Opportunity.Source=EDeliveryNpcEvidenceSource::ActionResult; Opportunity.Subject=const_cast<APawn*>(Pawn);
-    Opportunity.Description=TEXT("我和主人到了第一单收件地点附近，外卖还没交付也没加毛毛虫；小绿还在我这里，可以按当前情境决定是否向主人提出恶作剧建议");
+    Opportunity.Description=GetCarriedTaskPackage()?
+        TEXT("我还拿着第一单的原包裹，附近有小绿。可以询问主人要不要我把这只小绿放进手里的原包裹，等主人同意再行动"):
+        TEXT("我和主人到了第一单收件地点附近，原包裹还没交付也没加毛毛虫。附近的小绿可以拿来；可以提议恶作剧，拿取和投放要由主人另行同意");
     Opportunity.Lifetime=45; Opportunity.bNeedsReply=false;
     if (!Npc->Agent->ObserveEvent(Opportunity)) return;
     bAnnouncedCaterpillarOpportunity=true;
@@ -67,11 +99,15 @@ bool UDeliveryCompanionComponent::CanOfferCaterpillar(APlayerState* Requester) c
     const auto* Registry=UDeliveryLocationRegistry::Get(this);
     const auto* Package=GetCommandPackage();
     FVector Destination;
-    return Npc && CanCommand(Requester) && !bCaterpillarGiven && !bGivingCaterpillar && !Npc->IsKnockedDown() &&
-        !GetTuning().CaterpillarItemClass.IsNull() && Task && Task->TaskId==Npc->EncounterTaskId &&
+    if (!(Npc && CanCommand(Requester) && !bCaterpillarGiven && !bGivingCaterpillar && !Npc->IsKnockedDown() &&
+        Task && Task->TaskId==Npc->EncounterTaskId &&
         Manager && Manager->GetTaskStatus(Task)==EDeliveryTaskStatus::InProgress && Package && !Package->ContainsCaterpillar() &&
         Registry && Registry->ResolveLocation(Task->DeliveryLocationId,Destination) &&
-        FVector::DistSquared(Npc->GetActorLocation(),Destination)<=FMath::Square(900.f);
+        FVector::DistSquared(Npc->GetActorLocation(),Destination)<=FMath::Square(900.f))) return false;
+    auto* Nearby=FindReachableYardCaterpillar(GetOwnerPawn(),DeliveryCompanionItemSearch::Radius);
+    if (GetCarriedTaskPackage()==Package)
+        return CanArrangeCaterpillar(EDeliveryNpcAction::InsertCaterpillar,Nearby,Requester,true);
+    return Cast<ADeliveryCaterpillarItem>(GetCarriedItem()) || Nearby;
 }
 
 bool UDeliveryCompanionComponent::CanAcceptCaterpillar(APawn* Interactor) const
@@ -80,6 +116,13 @@ bool UDeliveryCompanionComponent::CanAcceptCaterpillar(APawn* Interactor) const
     if (!Player || !bCaterpillarOffered || !CanOfferCaterpillar(Player->GetTaskPlayerState()) ||
         !Player->CanHandleTaskPackage() || Player->GetWorld()!=GetWorld() || !Player->GetInventoryComponent()->HasBackpackSpace() ||
         FVector::DistSquared(Player->GetActorLocation(),GetOwner()->GetActorLocation())>FMath::Square(180.f)) return false;
+    auto* Worm=Cast<ADeliveryCaterpillarItem>(GetCarriedItem());
+    if (!Worm)
+    {
+        Worm=FindReachableYardCaterpillar(Player,180.f);
+        const auto* Interaction=UDeliveryInteractableComponent::FindOn(Worm,EDeliveryInteractionKey::PickupE);
+        if (!Interaction || !Interaction->CanInteract(Player)) return false;
+    }
     FCollisionQueryParams Params(SCENE_QUERY_STAT(CompanionGiveCaterpillar),false,GetOwner());
     Params.AddIgnoredActor(Player);
     FHitResult Hit;
@@ -90,32 +133,26 @@ bool UDeliveryCompanionComponent::AcceptCaterpillar(APawn* Interactor)
 {
     if (!GetOwner()->HasAuthority() || !CanAcceptCaterpillar(Interactor) || !EnsureOnFoot()) return false;
     auto* Player=CastChecked<ADeliveryCharacter>(Interactor);
-    UClass* ItemClass=GetTuning().CaterpillarItemClass.LoadSynchronous();
-    if (!ItemClass || !ItemClass->IsChildOf(ADeliveryCaterpillarItem::StaticClass())) return false;
-    FActorSpawnParameters Spawn;
-    Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    auto* Item=GetWorld()->SpawnActor<ADeliveryCaterpillarItem>(ItemClass,Player->GetActorLocation(),FRotator::ZeroRotator,Spawn);
-    if (!Item) return false;
+    auto* Npc=GetCompanion();
+    auto* Held=Cast<ADeliveryCaterpillarItem>(GetCarriedItem());
+    auto* Worm=Held?Held:FindReachableYardCaterpillar(Player,180.f);
+    if (!IsValid(Npc) || !Worm) return false;
     bGivingCaterpillar=true;
     const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
     const TWeakObjectPtr<APlayerState> ReceivingOwner=OwnerPlayerState;
-    const bool bReceived=Player->GetInventoryComponent()->TryPickup(Item);
-    if (!WeakThis.IsValid())
+    const TWeakObjectPtr<ADeliveryCharacter> WeakPlayer(Player);
+    const int32 Revision=CommandRevision;
+    const auto Current=[WeakThis,ReceivingOwner,WeakPlayer,Revision]()
     {
-        if (!bReceived && IsValid(Item)) Item->Destroy();
-        return bReceived;
-    }
-    if (OwnerPlayerState!=ReceivingOwner.Get())
-    {
-        if (!bReceived && IsValid(Item)) Item->Destroy();
-        return bReceived;
-    }
+        return WeakThis.IsValid() && WeakThis->CommandRevision==Revision && WeakThis->bGivingCaterpillar &&
+            WeakThis->CanCommand(ReceivingOwner.Get()) && WeakPlayer.IsValid() && WeakThis->GetOwnerPawn()==WeakPlayer.Get();
+    };
+    FName Reason;
+    const bool bReceived=Held?DeliveryHandheldTransfer::TryTransfer(Npc,Player,Worm,Reason,Current):
+        DeliveryHandheldTransfer::TryPickupWorldItem(Player,Worm,Reason,Current);
+    if (!WeakThis.IsValid() || OwnerPlayerState!=ReceivingOwner.Get()) return bReceived;
     bGivingCaterpillar=false;
-    if (!bReceived)
-    {
-        if (IsValid(Item)) Item->Destroy();
-        return false;
-    }
+    if (!bReceived) return false;
     bCaterpillarGiven=true; bCaterpillarOffered=false;
     RecordMemory(FGuid::NewGuid(),TEXT("XiaolvGiven"),TEXT("主人亲手接过了小绿；是否放进外卖还由主人决定，我没有替他投放或获得奖励"),0);
     GetOwner()->ForceNetUpdate();

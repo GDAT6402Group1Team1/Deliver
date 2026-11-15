@@ -100,6 +100,17 @@ bool ADeliveryCompanionEncounterScene::IsDoorOpen() const
     return DoorProgress >= 1.f - UE_KINDA_SMALL_NUMBER;
 }
 
+bool ADeliveryCompanionEncounterScene::IsPastDoorway(const FVector& Position) const
+{
+    const FVector Outward=(GetThrowLandingWorldLocation()-GetThrowStartWorldLocation()).GetSafeNormal2D();
+    const FVector FromDoor=Position-DoorwayClearance->GetComponentLocation();
+    const FVector Extent=DoorwayClearance->GetScaledBoxExtent();
+    const FVector LocalOutward=DoorwayClearance->GetComponentQuat().UnrotateVector(Outward);
+    const double DoorwayDepth=FVector::DotProduct(Extent,LocalOutward.GetAbs());
+    // 离开面馆附近也可以关门，以免从另一条路离开的玩家一直保留通行
+    return FVector::DotProduct(Outward,FromDoor)>DoorwayDepth || FromDoor.SizeSquared2D()>FMath::Square(900.f);
+}
+
 bool ADeliveryCompanionEncounterScene::IsDoorPresentationOpen() const
 {
     return HasActorBegunPlay() && IsDoorOpen() && DisplayedDoorProgress >= 1.f - UE_KINDA_SMALL_NUMBER;
@@ -127,6 +138,19 @@ void ADeliveryCompanionEncounterScene::SetDoorBlocked(bool bBlocked)
     if (bDoorBlocked == bBlocked) return;
     bDoorBlocked = bBlocked;
     ForceNetUpdate();
+}
+
+void ADeliveryCompanionEncounterScene::SetEncounterObstruction(EDeliveryCompanionEncounterObstruction Obstruction)
+{
+    if (!HasAuthority() || EncounterObstruction==Obstruction) return;
+    EncounterObstruction=Obstruction;
+    ForceNetUpdate();
+    OnRep_EncounterObstruction();
+}
+
+void ADeliveryCompanionEncounterScene::OnRep_EncounterObstruction()
+{
+    OnEncounterObstructionChanged.Broadcast();
 }
 
 void ADeliveryCompanionEncounterScene::BeginPlay()
@@ -199,4 +223,5 @@ void ADeliveryCompanionEncounterScene::GetLifetimeReplicatedProps(TArray<FLifeti
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ADeliveryCompanionEncounterScene, DoorProgress);
     DOREPLIFETIME(ADeliveryCompanionEncounterScene, bDoorBlocked);
+    DOREPLIFETIME(ADeliveryCompanionEncounterScene, EncounterObstruction);
 }

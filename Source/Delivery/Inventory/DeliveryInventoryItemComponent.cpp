@@ -11,7 +11,7 @@ UDeliveryInventoryItemComponent::UDeliveryInventoryItemComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
-	DisplayName = NSLOCTEXT("DeliveryItems", "UnnamedItem", "Item");
+	DisplayName = NSLOCTEXT("DeliveryItems", "UnnamedItem", "道具");
 }
 
 // 向客户端同步物品耐久

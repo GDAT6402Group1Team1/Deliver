@@ -166,7 +166,7 @@ protected:
 	 * 看着像 UI 出了 bug，而不是"我迟到了"。
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement")
-	FText OverdueGradeText = NSLOCTEXT("DeliverySettlement", "Overdue", "Late Delivery");
+	FText OverdueGradeText = NSLOCTEXT("DeliverySettlement", "Overdue", "超时送达");
 
 	/** 倍率的显示格式。`{0}` 是倍率本身。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|Settlement")

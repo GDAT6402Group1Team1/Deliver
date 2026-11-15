@@ -3,6 +3,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/PoseableMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SplineComponent.h"
@@ -452,10 +453,16 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	ADeliveryPedestrian* Victim = Route->SpawnOnePedestrian(true);
 	if (!TestNotNull(TEXT("spawn victim"), Victim))
 		return false;
+	const auto* HitBox = Victim->FindComponentByClass<UCapsuleComponent>();
+	if (!TestNotNull(TEXT("行人的碰撞胶囊"), HitBox))
+		return false;
+	TestFalse(TEXT("胶囊不尝试焊接到根网格"), HitBox->BodyInstance.bAutoWeld);
+	TestTrue(TEXT("站立时胶囊参与查询和物理碰撞"), HitBox->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics);
 	TestEqual(TEXT("清场后只有这一个"), Route->GetAlivePedestrians().Num(), 1);
 	TestFalse(TEXT("刚生成时没被打飞"), Victim->IsKnockedDown());
 	Victim->ReceiveImpact(FVector(0.f, 0.f, 1000.f), Victim->GetActorLocation());
 	TestTrue(TEXT("受击后进入被打飞状态"), Victim->IsKnockedDown());
+	TestTrue(TEXT("倒地后关闭胶囊碰撞"), HitBox->GetCollisionEnabled() == ECollisionEnabled::NoCollision);
 	TestEqual(TEXT("被打飞阶段"), static_cast<int32>(Victim->GetPhase()),
 	          static_cast<int32>(EDeliveryPedestrianPhase::KnockedDown));
 	// 倒地期间不从在场名单摘掉，避免路线补出新人。
@@ -507,6 +514,7 @@ bool FDeliveryPedestrianWalkTest::RunTest(const FString&)
 	// 缩放要回到原尺寸：被打飞那条路没碰过 AppearAlpha，但不起身那条路会把它缩下去，
 	// 两条路共用同一组字段，漏了归位的表现是起身之后人只有半个大小
 	TestTrue(TEXT("起身完恢复原尺寸"), Victim->GetAppearAlpha() > 0.95f);
+	TestTrue(TEXT("起身后恢复胶囊碰撞"), HitBox->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics);
 
 	// 起身之后还能再被打倒一次：挨打的胶囊必须还回来了，
 	// 不还的表现是站起来的人再也打不中（而那和"命中窗口没对上"长得一模一样）

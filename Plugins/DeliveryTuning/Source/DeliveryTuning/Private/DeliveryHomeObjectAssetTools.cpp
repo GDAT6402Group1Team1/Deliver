@@ -12,6 +12,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
+#include "StaticMeshResources.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/CollisionProfile.h"
@@ -70,6 +71,28 @@ FString HomeToolError(const FString& Message)
 TArray<TSharedPtr<FJsonValue>> VectorJson(const FVector& Value)
 {
     return {MakeShared<FJsonValueNumber>(Value.X),MakeShared<FJsonValueNumber>(Value.Y),MakeShared<FJsonValueNumber>(Value.Z)};
+}
+
+bool ReadMeshContactGeometry(const UStaticMesh& Mesh,TArray<FVector>& OutHull,FBox& OutFootprint)
+{
+    const auto* RenderData=Mesh.GetRenderData();
+    if (!RenderData || RenderData->LODResources.IsEmpty()) return false;
+    const auto& Positions=RenderData->LODResources[0].VertexBuffers.PositionVertexBuffer;
+    if (!Positions.GetVertexData() || Positions.GetNumVertices()<4 || Positions.GetNumVertices()>100000) return false;
+    FBox RenderBounds(ForceInit);
+    OutHull.Reserve(Positions.GetNumVertices());
+    for (uint32 Index=0;Index<Positions.GetNumVertices();++Index)
+    {
+        const FVector Point(Positions.VertexPosition(Index));
+        if (Point.ContainsNaN()) return false;
+        RenderBounds+=Point;
+        OutHull.Add(Point);
+    }
+    if (!RenderBounds.IsValid || RenderBounds.GetExtent().GetMin()<=.1) return false;
+    const double BottomBand=RenderBounds.Min.Z+FMath::Clamp(RenderBounds.GetSize().Z*.02,.25,1.);
+    for (const FVector& Vertex:OutHull)
+        if (Vertex.Z<=BottomBand) OutFootprint+=Vertex;
+    return OutFootprint.IsValid && OutFootprint.GetExtent().X>.1 && OutFootprint.GetExtent().Y>.1;
 }
 
 TSharedRef<FJsonObject> TransformJson(const FTransform& Value)
@@ -251,6 +274,31 @@ bool PrepareSlots(const TSharedPtr<FJsonObject>& Config,TArray<FPreparedSlot>& O
 }
 }
 
+FString UDeliveryHomeObjectAssetTools::InspectFurniturePlacement(AActor* Source,AActor* Support,const FTransform& Surface)
+{
+    if (!IsEditorActor(Source) || !IsEditorActor(Support) || Source==Support || Surface.ContainsNaN() ||
+        !Surface.GetRotation().IsNormalized()) return HomeToolError(TEXT("InvalidEditorFurniturePlacement"));
+    const auto* SourceObject=Source->FindComponentByClass<UDeliveryHomeObjectComponent>();
+    const auto* SupportObject=Support->FindComponentByClass<UDeliveryHomeObjectComponent>();
+    if (!SourceObject || !SupportObject || !SourceObject->Home || SourceObject->Home!=SupportObject->Home)
+        return HomeToolError(TEXT("FurnitureMustBelongToSameHome"));
+    const FTransform Orientation(Surface.GetRotation());
+    const FBox FullSize=SourceObject->GetOriginalSizeBounds(Orientation);
+    const FBox Footprint=SourceObject->GetPlacementFootprintBounds(Orientation);
+    if (!FullSize.IsValid || !Footprint.IsValid) return HomeToolError(TEXT("MissingFurnitureBounds"));
+    const FVector Offset(Footprint.GetCenter().X,Footprint.GetCenter().Y,FullSize.Min.Z);
+    const FTransform Goal(Surface.GetRotation(),Surface.GetLocation()-Offset,SourceObject->GetOriginalActorScale());
+    FName Reason;
+    const bool bCanPlace=SourceObject->CanPlaceAtOriginalSize(Goal,Reason,SupportObject);
+    auto Result=MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("can_place_original_size"),bCanPlace);
+    Result->SetStringField(TEXT("reason"),Reason.ToString());
+    Result->SetArrayField(TEXT("goal"),VectorJson(Goal.GetLocation()));
+    Result->SetArrayField(TEXT("full_half_extent"),VectorJson(FullSize.GetExtent()));
+    Result->SetArrayField(TEXT("footprint_half_extent"),VectorJson(Footprint.GetExtent()));
+    return Json(Result);
+}
+
 FString UDeliveryHomeObjectAssetTools::InspectFurniture(AActor* Actor)
 {
     if (!IsEditorActor(Actor)) return HomeToolError(TEXT("EditorWorldRequired_NoPIE_NoBeginPlay"));
@@ -269,6 +317,7 @@ FString UDeliveryHomeObjectAssetTools::InspectFurniture(AActor* Actor)
     Result->SetArrayField(TEXT("world_bounds_extent"),VectorJson(Mesh->Bounds.BoxExtent));
     Result->SetBoolField(TEXT("movable"),Mesh->Mobility==EComponentMobility::Movable);
     Result->SetBoolField(TEXT("simulate_physics_configured"),Mesh->BodyInstance.bSimulatePhysics);
+    Result->SetBoolField(TEXT("prop_start_awake"),Mesh->BodyInstance.bStartAwake);
     Result->SetBoolField(TEXT("mass_override_enabled"),Mesh->BodyInstance.bOverrideMass);
     Result->SetNumberField(TEXT("prop_mass_kg"),Mesh->BodyInstance.GetMassOverride());
     Result->SetBoolField(TEXT("replicates"),Actor->GetIsReplicated());
@@ -294,6 +343,9 @@ FString UDeliveryHomeObjectAssetTools::InspectFurniture(AActor* Actor)
     Result->SetBoolField(TEXT("static_mesh_is_root"),Actor->GetRootComponent()==Mesh);
     const auto* Grab=Actor->FindComponentByClass<UDeliveryGrabbableComponent>();
     Result->SetBoolField(TEXT("grabbable_uses_root"),Grab && Grab->BodyComponentName==Mesh->GetFName());
+    Result->SetBoolField(TEXT("npc_edge_pickup"),Grab && Grab->bAllowNpcEdgePickup);
+    const auto* BodySetup=Mesh->GetStaticMesh()->GetBodySetup();
+    Result->SetNumberField(TEXT("convex_shape_count"),BodySetup?BodySetup->AggGeom.ConvexElems.Num():0);
     TArray<TSharedPtr<FJsonValue>> Materials,Overrides;
     for (auto* Material:Mesh->GetMaterials()) Materials.Add(MakeShared<FJsonValueString>(Material?Material->GetPathName():TEXT("")));
     for (const auto& Material:Mesh->OverrideMaterials) Overrides.Add(MakeShared<FJsonValueString>(Material?Material->GetPathName():TEXT("")));
@@ -301,6 +353,9 @@ FString UDeliveryHomeObjectAssetTools::InspectFurniture(AActor* Actor)
     auto* Metadata=Actor->FindComponentByClass<UDeliveryHomeObjectComponent>();
     if (Metadata)
     {
+        Result->SetBoolField(TEXT("complex_placement_support"),Metadata->bTracePlacementSupportComplex);
+        Result->SetArrayField(TEXT("placement_footprint_center"),VectorJson(Metadata->PlacementFootprintCenter));
+        Result->SetArrayField(TEXT("placement_footprint_half_extent"),VectorJson(FVector(Metadata->PlacementFootprintHalfExtent,0)));
         Result->SetStringField(TEXT("object_id"),Metadata->ObjectId.ToString(EGuidFormats::DigitsWithHyphensLower));
         Result->SetStringField(TEXT("home"),Metadata->Home?Metadata->Home->GetPathName():TEXT(""));
         Result->SetStringField(TEXT("display_name"),Metadata->DisplayName.ToString());
@@ -400,6 +455,7 @@ FString UDeliveryHomeObjectAssetTools::BuildFurnitureAssets(AActor* SourceActor,
     double CarryScaleMultiplier=.35;
     double PropMassKg=0;
     bool bRestoreScaleFromSupportBottom=true;
+    bool bPropStartAwake=true;
     if (!Config->TryGetStringField(TEXT("blueprint_path"),BlueprintPath) || !IsAssetPath(BlueprintPath) ||
         !Config->TryGetStringField(TEXT("display_name"),Name) || Name.IsEmpty() ||
         !Config->TryGetStringField(TEXT("description"),Description) || !Config->TryGetBoolField(TEXT("physical_prop"),bProp))
@@ -416,6 +472,8 @@ FString UDeliveryHomeObjectAssetTools::BuildFurnitureAssets(AActor* SourceActor,
     if (Config->HasField(TEXT("restore_scale_from_support_bottom")) &&
         !Config->TryGetBoolField(TEXT("restore_scale_from_support_bottom"),bRestoreScaleFromSupportBottom))
         return HomeToolError(TEXT("InvalidRestoreScaleFromSupportBottom"));
+    if (Config->HasField(TEXT("prop_start_awake")) && !Config->TryGetBoolField(TEXT("prop_start_awake"),bPropStartAwake))
+        return HomeToolError(TEXT("InvalidPropStartAwake"));
     TArray<FPreparedSlot> Slots;
     FString Why;
     if (!PrepareSlots(Config,Slots,Why)) return HomeToolError(Why);
@@ -432,6 +490,16 @@ FString UDeliveryHomeObjectAssetTools::BuildFurnitureAssets(AActor* SourceActor,
     auto* Collision=CollisionPath.IsEmpty()?nullptr:LoadObject<UStaticMesh>(nullptr,*CollisionPath);
     if (Blueprint && Blueprint->ParentClass!=AStaticMeshActor::StaticClass()) return HomeToolError(TEXT("BlueprintParentChanged"));
     const FString SourceMeshPath=SourceMesh->GetStaticMesh()->GetPathName();
+    bool bMeshHull=false,bMeshFootprint=false,bComplexSupport=false,bEdgePickup=false;
+    if ((Config->HasField(TEXT("prop_mesh_hull")) && !Config->TryGetBoolField(TEXT("prop_mesh_hull"),bMeshHull)) ||
+        (Config->HasField(TEXT("prop_mesh_footprint")) && !Config->TryGetBoolField(TEXT("prop_mesh_footprint"),bMeshFootprint)) ||
+        (Config->HasField(TEXT("complex_placement_support")) && !Config->TryGetBoolField(TEXT("complex_placement_support"),bComplexSupport)) ||
+        (Config->HasField(TEXT("npc_edge_pickup")) && !Config->TryGetBoolField(TEXT("npc_edge_pickup"),bEdgePickup)) ||
+        ((bMeshHull || bEdgePickup) && !bProp) || (bMeshFootprint && !bMeshHull)) return HomeToolError(TEXT("InvalidPropContactConfiguration"));
+    TArray<FVector> HullVertices;
+    FBox ContactFootprint(ForceInit);
+    if (bMeshHull && !ReadMeshContactGeometry(*SourceMesh->GetStaticMesh(),HullVertices,ContactFootprint))
+        return HomeToolError(TEXT("FurnitureMeshContactGeometryUnavailable: ")+SourceMeshPath);
     TArray<TSharedPtr<FJsonValue>> Assets;
     if (bProp)
     {
@@ -447,9 +515,20 @@ FString UDeliveryHomeObjectAssetTools::BuildFurnitureAssets(AActor* SourceActor,
         Body->Modify(); Body->AggGeom.EmptyElements();
         const FBox Bounds=Collision->GetBoundingBox();
         if (!Bounds.IsValid || Bounds.GetExtent().GetMin()<=0) return HomeToolError(TEXT("InvalidPropBounds"));
-        FKBoxElem Box; Box.Center=Bounds.GetCenter();
-        const FVector Size=Bounds.GetSize(); Box.X=Size.X; Box.Y=Size.Y; Box.Z=Size.Z;
-        Body->AggGeom.BoxElems.Add(Box); Body->CollisionTraceFlag=CTF_UseSimpleAndComplex;
+        if (bMeshHull)
+        {
+            FKConvexElem Hull;
+            Hull.VertexData=MoveTemp(HullVertices);
+            Hull.UpdateElemBox();
+            Body->AggGeom.ConvexElems.Add(MoveTemp(Hull));
+        }
+        else
+        {
+            FKBoxElem Box; Box.Center=Bounds.GetCenter();
+            const FVector Size=Bounds.GetSize(); Box.X=Size.X; Box.Y=Size.Y; Box.Z=Size.Z;
+            Body->AggGeom.BoxElems.Add(Box);
+        }
+        Body->CollisionTraceFlag=CTF_UseSimpleAndComplex;
         Body->InvalidatePhysicsData(); Body->CreatePhysicsMeshes();
         MarkOwnedAsset(Collision,SourceMeshPath); Assets.Add(MakeShared<FJsonValueString>(CollisionPath));
     }
@@ -489,6 +568,7 @@ FString UDeliveryHomeObjectAssetTools::BuildFurnitureAssets(AActor* SourceActor,
     auto* Root=Defaults->GetStaticMeshComponent();
     Blueprint->Modify(); Root->Modify();
     CopyMeshSettings(SourceMesh,Root,bProp?Collision:SourceMesh->GetStaticMesh().Get(),bProp,static_cast<float>(PropMassKg));
+    if (bProp) Root->BodyInstance.bStartAwake=bPropStartAwake;
     Root->SetRelativeTransform(FTransform::Identity);
     Defaults->SetReplicates(true); Defaults->SetReplicateMovement(bProp);
     Defaults->bStaticMeshReplicateMovement=bProp;
@@ -497,6 +577,9 @@ FString UDeliveryHomeObjectAssetTools::BuildFurnitureAssets(AActor* SourceActor,
     Metadata->DisplayName=FText::FromString(Name); Metadata->Description=FText::FromString(Description);
     Metadata->CarryScaleMultiplier=static_cast<float>(CarryScaleMultiplier);
     Metadata->bRestoreScaleFromSupportBottom=bRestoreScaleFromSupportBottom;
+    Metadata->bTracePlacementSupportComplex=bComplexSupport;
+    Metadata->PlacementFootprintCenter=bMeshFootprint?ContactFootprint.GetCenter():FVector::ZeroVector;
+    Metadata->PlacementFootprintHalfExtent=bMeshFootprint?FVector2D(ContactFootprint.GetExtent()):FVector2D::ZeroVector;
     Metadata->ObjectId.Invalidate(); Metadata->Home=nullptr; Metadata->AllowedUses.Reset();
     for (const auto& Slot:Slots) Metadata->AllowedUses.AddUnique(Slot.Behavior->Operation);
     if (Definition)
@@ -533,6 +616,7 @@ FString UDeliveryHomeObjectAssetTools::BuildFurnitureAssets(AActor* SourceActor,
         auto* Grab=EnsureComponent<UDeliveryGrabbableComponent>(Blueprint,TEXT("HomeGrabbable"));
         if (!Grab) return HomeToolError(TEXT("GrabbableComponentClassChanged"));
         Grab->BodyComponentName=Root->GetFName();
+        Grab->bAllowNpcEdgePickup=bEdgePickup;
     }
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
     FKismetEditorUtilities::CompileBlueprint(Blueprint,EBlueprintCompileOptions::SkipSave);
@@ -545,7 +629,8 @@ FString UDeliveryHomeObjectAssetTools::BuildFurnitureAssets(AActor* SourceActor,
     return Json(Result);
 }
 
-AActor* UDeliveryHomeObjectAssetTools::InstallFurniture(AActor* SourceActor,UBlueprint* Blueprint,ADeliveryHome* Home,FGuid ObjectId)
+AActor* UDeliveryHomeObjectAssetTools::InstallFurniture(AActor* SourceActor,UBlueprint* Blueprint,ADeliveryHome* Home,FGuid ObjectId,
+    bool bRefreshExistingPortableProp)
 {
     if (!IsEditorActor(SourceActor) || !IsEditorActor(Home) || SourceActor->GetWorld()!=Home->GetWorld() || !ObjectId.IsValid() ||
         !Blueprint || !IsOwnedAsset(Blueprint) || Blueprint->Status==BS_Error || !Blueprint->GeneratedClass ||
@@ -554,10 +639,55 @@ AActor* UDeliveryHomeObjectAssetTools::InstallFurniture(AActor* SourceActor,UBlu
     if (!Source || !Source->GetStaticMeshComponent()->GetStaticMesh()) return nullptr;
     const FTransform OriginalTransform=Source->GetActorTransform();
     auto* Existing=Source->FindComponentByClass<UDeliveryHomeObjectComponent>();
-    if (Existing)
-        return Source->GetClass()==Blueprint->GeneratedClass && Existing->Home==Home && Existing->ObjectId==ObjectId?Source:nullptr;
-    if (Source->GetClass()!=AStaticMeshActor::StaticClass()) return nullptr;
     const auto* Defaults=Blueprint->GeneratedClass->GetDefaultObject<AStaticMeshActor>();
+    auto* Template=Defaults->GetStaticMeshComponent();
+    if (Existing)
+    {
+        if (Source->GetClass()!=Blueprint->GeneratedClass || Existing->Home!=Home || Existing->ObjectId!=ObjectId) return nullptr;
+        if (!bRefreshExistingPortableProp) return Source;
+        if (!Blueprint->SimpleConstructionScript) return nullptr;
+        auto* Root=Source->GetStaticMeshComponent();
+        auto* Grab=Source->FindComponentByClass<UDeliveryGrabbableComponent>();
+        auto* Smart=Source->FindComponentByClass<USmartObjectComponent>();
+        const UDeliveryHomeObjectComponent* MetadataTemplate=nullptr;
+        const USmartObjectComponent* SmartTemplate=nullptr;
+        const UDeliveryGrabbableComponent* GrabTemplate=nullptr;
+        for (const auto* Node:Blueprint->SimpleConstructionScript->GetAllNodes())
+        {
+            if (Node->GetVariableName()==TEXT("HomeObject")) MetadataTemplate=Cast<UDeliveryHomeObjectComponent>(Node->ComponentTemplate);
+            if (Node->GetVariableName()==TEXT("HomeSmartObject")) SmartTemplate=Cast<USmartObjectComponent>(Node->ComponentTemplate);
+            if (Node->GetVariableName()==TEXT("HomeGrabbable")) GrabTemplate=Cast<UDeliveryGrabbableComponent>(Node->ComponentTemplate);
+        }
+        if (!Root || Root!=Source->GetRootComponent() || !Grab || !Smart || !MetadataTemplate || !SmartTemplate || !GrabTemplate ||
+            !Template->BodyInstance.bSimulatePhysics || !MetadataTemplate->AllowedUses.Contains(EDeliveryHomeOperation::TakeProp)) return nullptr;
+        // 组件模板只提供只读定义，关卡实例需要同一份可编辑资产
+        auto* Definition=LoadObject<USmartObjectDefinition>(nullptr,*GetPathNameSafe(SmartTemplate->GetDefinition()));
+        if (!Definition) return nullptr;
+        Source->Modify(); Root->Modify(); Existing->Modify(); Smart->Modify(); Grab->Modify();
+        Root->SetStaticMesh(Template->GetStaticMesh());
+        Root->SetMobility(EComponentMobility::Movable);
+        Root->SetCollisionProfileName(Template->GetCollisionProfileName());
+        Root->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+        Root->BodyInstance.bStartAwake=Template->BodyInstance.bStartAwake;
+        Root->BodyInstance.bSimulatePhysics=true;
+        Root->BodyInstance.SetMassOverride(Template->BodyInstance.GetMassOverride(),Template->BodyInstance.bOverrideMass);
+        Root->SetCanEverAffectNavigation(false); Root->SetIsReplicated(true);
+        Source->bStaticMeshReplicateMovement=true;
+        Source->SetReplicates(true); Source->SetReplicateMovement(true);
+        Grab->BodyComponentName=Root->GetFName();
+        Grab->bAllowNpcEdgePickup=GrabTemplate->bAllowNpcEdgePickup;
+        Existing->AllowedUses=MetadataTemplate->AllowedUses;
+        Existing->SmartObjectReference=MetadataTemplate->SmartObjectReference;
+        Existing->CarryScaleMultiplier=MetadataTemplate->CarryScaleMultiplier;
+        Existing->bRestoreScaleFromSupportBottom=MetadataTemplate->bRestoreScaleFromSupportBottom;
+        Existing->bTracePlacementSupportComplex=MetadataTemplate->bTracePlacementSupportComplex;
+        Existing->PlacementFootprintCenter=MetadataTemplate->PlacementFootprintCenter;
+        Existing->PlacementFootprintHalfExtent=MetadataTemplate->PlacementFootprintHalfExtent;
+        Smart->SetDefinition(Definition);
+        Source->MarkPackageDirty();
+        return Source->GetActorTransform().Equals(OriginalTransform,.001)?Source:nullptr;
+    }
+    if (Source->GetClass()!=AStaticMeshActor::StaticClass()) return nullptr;
     auto* Factory=NewObject<UActorFactoryBlueprint>();
     TArray<AActor*> NewActors;
     // UE 标准替换保留 Actor 名字、GUID、层级及指向旧家具的关卡引用
@@ -567,7 +697,6 @@ AActor* UDeliveryHomeObjectAssetTools::InstallFurniture(AActor* SourceActor,UBlu
     auto* Metadata=NewActor?NewActor->FindComponentByClass<UDeliveryHomeObjectComponent>():nullptr;
     if (!Metadata || !NewActor->GetActorTransform().Equals(OriginalTransform,.001)) return nullptr;
     auto* Root=NewActor->GetStaticMeshComponent();
-    auto* Template=Defaults->GetStaticMeshComponent();
     // 标准替换会复制旧 StaticMeshComponent，独立枕头只覆盖明确新增的物理配置
     const bool bProp=NewActor->FindComponentByClass<UDeliveryGrabbableComponent>()!=nullptr;
     NewActor->bStaticMeshReplicateMovement=bProp;
@@ -580,6 +709,7 @@ AActor* UDeliveryHomeObjectAssetTools::InstallFurniture(AActor* SourceActor,UBlu
         Root->SetCollisionProfileName(Template->GetCollisionProfileName());
         Root->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
         Root->SetCanEverAffectNavigation(false); Root->BodyInstance.bSimulatePhysics=true;
+        Root->BodyInstance.bStartAwake=Template->BodyInstance.bStartAwake;
         Root->SetIsReplicated(true); NewActor->SetReplicateMovement(true);
     }
     NewActor->SetReplicates(true);

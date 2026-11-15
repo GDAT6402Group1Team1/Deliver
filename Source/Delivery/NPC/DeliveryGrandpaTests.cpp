@@ -1,6 +1,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Misc/App.h"
+#include "Internationalization/Text.h"
 #include "NPC/DeliveryGrandpa.h"
 #include "World/DeliveryHome.h"
 #include "AIController.h"
@@ -15,6 +16,7 @@
 #include "Camera/CameraModifier_CameraShake.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Economy/DeliveryWalletComponent.h"
+#include "Economy/Tests/DeliveryWalletPaymentProbe.h"
 #include "Inventory/DeliveryCaterpillarItem.h"
 #include "AbilitySystem/DeliverGameplayTags.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -168,10 +170,22 @@ public:
         switch (Stage)
         {
         case 0:
+        {
             InitialClientBalance = UDeliveryWalletComponent::FindWallet(AuthorityCharacter)->GetBalance();
             InitialHostBalance = UDeliveryWalletComponent::FindWallet(HostCharacter)->GetBalance();
             StrollOrigin = Grandpa->GetActorLocation(); bTrackMovement = true;
             if (Tasks->GetTaskStatus(Task) != EDeliveryTaskStatus::Offered) return false;
+            auto BindWalletProbe = [](ADeliveryCharacter* Player, TStrongObjectPtr<UDeliveryWalletPaymentProbe>& Probe)
+            {
+                auto* Wallet = UDeliveryWalletComponent::FindWallet(Player);
+                if (!Wallet) return false;
+                Probe.Reset(NewObject<UDeliveryWalletPaymentProbe>(Wallet));
+                Wallet->OnTaskPaid.AddUniqueDynamic(Probe.Get(), &UDeliveryWalletPaymentProbe::RecordPayment);
+                return true;
+            };
+            if (!Test->TestTrue(TEXT("绑定交付者服务端、远端及旁观钱包通知"),
+                BindWalletProbe(AuthorityCharacter, AuthorityPayment) && BindWalletProbe(Character, ClientPayment) &&
+                BindWalletProbe(HostCharacter, HostPayment))) return End();
             Test->TestTrue(TEXT("爷爷竖直站立"), FVector::DotProduct(Grandpa->GetActorUpVector(), FVector::UpVector) > .99f);
             Test->TestTrue(TEXT("大门竖直堵住门洞"), FVector::DotProduct(Grandpa->FrontDoor->GetActorUpVector(), FVector::UpVector) > .99f);
             Test->TestTrue(TEXT("接听第一单"), Tasks->StartTaskTimerFromAcceptedCall(Task));
@@ -190,6 +204,7 @@ public:
             Test->TestNotNull(TEXT("服务器运行 AIController"), Grandpa->GetController());
             Test->TestNull(TEXT("客户端不重复运行 AI"), RemoteGrandpa->GetController());
             Step(); break;
+        }
         case 1:
             Send(EDeliveryInteractionRequest::CompleteHold, RemoteGrandpa->FrontDoor);
             Step(); break;
@@ -211,10 +226,19 @@ public:
             Send(EDeliveryInteractionRequest::CompleteHold, RemoteGrandpa->FrontDoor);
             Step(.4f); break;
         case 6:
+        {
             Test->TestEqual(TEXT("第二次回应"), Grandpa->GetKnockCount(), 2);
             Test->TestEqual(TEXT("蓝图 BTTask 选择回复动作"), Grandpa->GetCurrentAction(), EDeliveryGrandpaAction::Reply);
             Test->TestEqual(TEXT("回复动作复制"), RemoteGrandpa->GetCurrentAction(), EDeliveryGrandpaAction::Reply);
+            const auto* DoorPrompt=UDeliveryInteractableComponent::FindOn(Grandpa->FrontDoor,EDeliveryInteractionKey::PickupE);
+            const auto* RemotePrompt=UDeliveryInteractableComponent::FindOn(RemoteGrandpa->FrontDoor,EDeliveryInteractionKey::PickupE);
+            Test->TestTrue(TEXT("持餐玩家第二次敲门后看到斧头操作引导"),
+                DoorPrompt && DoorPrompt->bInteractEnabled &&
+                FTextInspector::GetKey(DoorPrompt->PromptText).Get(FString())==TEXT("FinishDeliveryAfterKnocking"));
+            Test->TestTrue(TEXT("远端玩家看到同一引导"), RemotePrompt && RemotePrompt->bInteractEnabled &&
+                DoorPrompt && RemotePrompt->PromptText.EqualTo(DoorPrompt->PromptText));
             Step(12.f); break;
+        }
         case 7:
             if (!Axe.IsValid())
             {
@@ -231,10 +255,20 @@ public:
             }
             if (!bSelectedAxe)
             {
+                // 地面投放回归明确使用放地输入，再装备原斧头
+                Character->GetInventoryComponent()->RequestSlotAction(0);
                 Character->GetInventoryComponent()->RequestSlotAction(1);
                 bSelectedAxe = true; NextTime = Now + .8f; return false;
             }
             if (!Test->TestTrue(TEXT("远端切槽后服务器持斧"), AuthorityCharacter->GetInventoryComponent()->GetHeldItem() == Axe.Get())) return End();
+            if (!Test->TestTrue(TEXT("服务器记录实际放下的首单原件"),
+                AuthorityCharacter->GetInventoryComponent()->GetDroppedFirstOrderPackage() == Package.Get())) return End();
+            {
+                const auto* RemoteDropped = Character->GetInventoryComponent()->GetDroppedFirstOrderPackage();
+                Test->TestTrue(TEXT("放件玩家收到原件引用"), RemoteDropped &&
+                    RemoteDropped->GetDeliveryItemComponent()->OwningTask == Task);
+            }
+            Test->TestNull(TEXT("旁观玩家没有这件落地外卖记录"), HostCharacter->GetInventoryComponent()->GetDroppedFirstOrderPackage());
             Test->TestEqual(TEXT("每次远端挥砍只命中一次"), Grandpa->FrontDoor->GetHitCount(), AxeSwings);
             Test->TestEqual(TEXT("斧击次数复制到远端"), RemoteGrandpa->FrontDoor->GetHitCount(), AxeSwings);
             if (AxeSwings < 3)
@@ -247,7 +281,7 @@ public:
                     Pawn->SetActorRotation(FRotator(0,90,0));
                     Pawn->GetMesh()->RefreshBoneTransforms();
                 }
-                // 快递已按正常切槽规则落地，放在门外避免测试期间滚入其他碰撞体
+                // 快递已由放地输入释放，放在门外避免测试期间滚入其他碰撞体
                 Package->GetItemMesh()->SetSimulatePhysics(false);
                 Package->SetActorLocation(FVector(9700,13250,2050));
                 if (AxeSwings == 2) StartledOrigin = Grandpa->GetActorLocation();
@@ -275,6 +309,7 @@ public:
                 Test->TestTrue(TEXT("受惊确实向屋内后退"), FVector::Dist2D(StartledOrigin, Grandpa->GetActorLocation()) > 15.f);
                 if (AuthorityCharacter->GetCarriedTaskPackage() != Package.Get() &&
                     !Test->TestTrue(TEXT("破门后重新拿起外卖，斧头自动收进背包"), AuthorityCharacter->GetCarryComponent()->TryReceivePackage(Package.Get(), false))) return End();
+                Test->TestNull(TEXT("重新拿起原件后清除放件记录"), AuthorityCharacter->GetInventoryComponent()->GetDroppedFirstOrderPackage());
                 // 爷爷后退结束后再靠近，等待手持表现更新，不能只检查角色中心的距离
                 Move(AuthorityCharacter, Grandpa->GetActorLocation() + FVector(0,-75,12));
                 Move(Character, Grandpa->GetActorLocation() + FVector(0,-75,12));
@@ -295,6 +330,19 @@ public:
             Test->TestNull(TEXT("交付后清空携带"), AuthorityCharacter->GetCarriedTaskPackage());
             Test->TestFalse(TEXT("包裹已销毁"), Package.IsValid());
             PaidBalance = UDeliveryWalletComponent::FindWallet(AuthorityCharacter)->GetBalance();
+            Test->TestEqual(TEXT("交付者服务器钱包通知一次"), AuthorityPayment->PaymentCount, 1);
+            Test->TestEqual(TEXT("交付者客户端收到一次结算通知"), ClientPayment->PaymentCount, 1);
+            Test->TestEqual(TEXT("旁观玩家没有结算通知"), HostPayment->PaymentCount, 0);
+            Test->TestTrue(TEXT("远端通知对应同一订单及奖励"), ClientPayment->LastTask.Get() == Task &&
+                ClientPayment->LastReward.FinalReward == PaidBalance - InitialClientBalance);
+            {
+                const auto& Expected = AuthorityPayment->LastReward;
+                const auto& Received = ClientPayment->LastReward;
+                Test->TestTrue(TEXT("远端收到完整奖励明细"), Expected.BaseReward == Received.BaseReward &&
+                    Expected.TimeMultiplier == Received.TimeMultiplier && Expected.SpecialMultiplier == Received.SpecialMultiplier &&
+                    Expected.TimeGradeName.EqualTo(Received.TimeGradeName) && Expected.SpecialEvents == Received.SpecialEvents &&
+                    Expected.ElapsedSeconds == Received.ElapsedSeconds && Expected.bOverdue == Received.bOverdue);
+            }
             if (bTestCaterpillar)
             {
                 Test->TestEqual(TEXT("交付计入一次毛毛虫倍率"), Tasks->PreviewReward(Task).SpecialMultiplier, 1.25f);
@@ -442,6 +490,7 @@ public:
             Test->TestEqual(TEXT("房屋认领事实复制到客户端"),RemoteHome->ClaimEventId,Home->ClaimEventId);
             Test->TestEqual(TEXT("重复交付后奖励保持不变"), UDeliveryWalletComponent::FindWallet(AuthorityCharacter)->GetBalance(), PaidBalance);
             Test->TestEqual(TEXT("奖励余额复制到交付客户端"), UDeliveryWalletComponent::FindWallet(Character)->GetBalance(), PaidBalance);
+            Test->TestEqual(TEXT("重复交付后客户端没有重复通知"), ClientPayment->PaymentCount, 1);
             Test->TestEqual(TEXT("结束动作持久显示"), RemoteGrandpa->GetCurrentAction(), EDeliveryGrandpaAction::Finished);
             return End();
         }
@@ -455,6 +504,7 @@ private:
     bool End() { GEditor->RequestEndPlayMap(); bEnding = true; return false; }
     FAutomationTestBase* Test;
     TStrongObjectPtr<ULevelEditorPlaySettings> Settings;
+    TStrongObjectPtr<UDeliveryWalletPaymentProbe> AuthorityPayment, ClientPayment, HostPayment;
     TWeakObjectPtr<ADeliveryPackageItem> Package;
     TWeakObjectPtr<ADeliveryHandheldItem> Axe;
     TWeakObjectPtr<ADeliveryCaterpillarItem> Worm, RemoteWorm;

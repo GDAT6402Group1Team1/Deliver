@@ -682,10 +682,10 @@ class DELIVERY_API UDeliveryTrafficCarComponent : public UActorComponent
 	bool bLeaderYieldingToPedestrian = false;
 
 	/**
-	 * 返回车头到红灯停车线的剩余距离（厘米），前方没有红灯时返回 TNumericLimits<float>::Max()
-	 * 负值表示已经越过停车线
+	 * 一次探测获取最近红灯和最近斑马线的剩余距离（厘米）
+	 * 各自找不到时为 TNumericLimits<float>::Max()，负值表示已经越过停车线
 	 */
-	float GetDistanceToStopLine(bool bRequireRed = true);
+	void GetStopLineDistances(float& OutRedDistance, float& OutCrosswalkDistance);
 
 	/**
 	 * 返回前方最近一个行人到探测起点的距离（厘米），没有要让的人时返回负一

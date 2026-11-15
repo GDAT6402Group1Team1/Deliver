@@ -28,7 +28,8 @@ EBTNodeResult::Type UBTTask_DeliveryCompanionFollow::AbortTask(UBehaviorTreeComp
     if (Companion.IsValid())
     {
         const auto* Agent=Companion->GetOwner()->FindComponentByClass<UDeliveryNpcAgentComponent>();
-        if (!Agent || !Agent->CanContinueCompanionMovement()) Companion->StopFollowMovement();
+        if (!Agent || !Agent->CanContinueCompanionMovement())
+            Companion->StopFollowMovement(Companion->CanKeepVehicleSeatWhilePaused());
     }
     return EBTNodeResult::Aborted;
 }
@@ -37,7 +38,8 @@ void UBTTask_DeliveryCompanionFollow::OnTaskFinished(UBehaviorTreeComponent& Own
     if (Companion.IsValid())
     {
         const auto* Agent=Companion->GetOwner()->FindComponentByClass<UDeliveryNpcAgentComponent>();
-        if (!Agent || !Agent->CanContinueCompanionMovement()) Companion->StopFollowMovement();
+        if (!Agent || !Agent->CanContinueCompanionMovement())
+            Companion->StopFollowMovement(Companion->CanKeepVehicleSeatWhilePaused());
     }
     Companion.Reset();
     Super::OnTaskFinished(OwnerComp,Memory,Result);

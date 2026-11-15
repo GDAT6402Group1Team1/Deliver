@@ -115,14 +115,19 @@ public:
     UPROPERTY(EditAnywhere,Category="Home|组件",meta=(UseComponentPicker,AllowedClasses="/Script/Engine.AudioComponent")) FComponentReference AudioReference;
     // 只对明确配置 TakeProp 的实物生效，任务包裹与人物不能使用
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|搬运缩放",meta=(ClampMin="0.1",ClampMax="1")) float CarryScaleMultiplier=.35f;
-    // 取消后落地展开时保持真实底面，只允许中心沿世界 Z 轴上移
+    // 取消后按实物底面计算展开高度，中心只沿世界 Z 轴上移
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|搬运缩放") bool bRestoreScaleFromSupportBottom=true;
+    // 可编辑的原网格底部触地范围，空范围沿用整体轮廓
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|摆放") FVector PlacementFootprintCenter=FVector::ZeroVector;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|摆放") FVector2D PlacementFootprintHalfExtent=FVector2D::ZeroVector;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Home|摆放") bool bTracePlacementSupportComplex=false;
 
     // 只返回当前真实可见、允许接近的用途，不领取槽位
     void FindAvailableUses(ADeliveryCompanionCharacter* Companion,APlayerState* Requester,TArray<FDeliveryHomeUseCandidate>& OutUses) const;
-    // 领取只表示准备接近，尚未到达或完成用途
+    // 摆放领取同时绑定原物，领取成功仍须走到使用点
     bool TryClaimUse(ADeliveryCompanionCharacter* Companion,APlayerState* Requester,FGuid ActionId,
-        const FDeliveryHomeUseCandidate& Candidate,FDeliveryHomeUseClaim& OutClaim,FName& OutReason);
+        const FDeliveryHomeUseCandidate& Candidate,FDeliveryHomeUseClaim& OutClaim,FName& OutReason,
+        const UDeliveryHomeObjectComponent* PlacementSource=nullptr);
     bool ValidateClaim(const FDeliveryHomeUseClaim& Claim,bool bRequireInteractionRange,FName& OutReason) const;
     bool GetUseTransforms(const FDeliveryHomeUseClaim& Claim,FTransform& OutEntrance,FTransform& OutUse,FTransform& OutExit) const;
     // Place 的 Use 是支撑面中心；按源物件原尺寸求 root 目标，成功仅表示查询有效，返回尺度为 1
@@ -145,10 +150,15 @@ public:
     FVector GetOriginalActorScale() const;
     // 输入的位置和朝向不变，尺寸按保存的原尺度计算，查询不会移动实物
     FBox GetOriginalSizeBounds(const FTransform& ActorTransform) const;
-    bool CanRestoreScaleAt(const FTransform& FullSizeGoal,FName& OutReason) const;
+    bool HasPlacementFootprint() const;
+    FBox GetPlacementFootprintBounds(const FTransform& ActorTransform) const;
+    bool GetCarryPlacementLocation(const FTransform& FullSizeGoal,FVector& OutLocation,bool bPredictCarryScale=false) const;
+    // 查询一块新地面能否容纳原尺寸，暂不检查从手中展开的过程
+    bool CanPlaceAtOriginalSize(const FTransform& Goal,FName& OutReason,const UDeliveryHomeObjectComponent* Support=nullptr) const;
+    bool CanRestoreScaleAt(const FTransform& FullSizeGoal,FName& OutReason,const UDeliveryHomeObjectComponent* Support=nullptr) const;
     // 用实际当前位置恢复，必须先释放搬运且已到指定目标附近，不会横移到目标
-    bool TryRestoreScaleAt(const FTransform& FullSizeGoal,FName& OutReason);
-    // 只登记等待，下次元数据更新才按实物当前位置检查展开
+    bool TryRestoreScaleAt(const FTransform& FullSizeGoal,FName& OutReason,const UDeliveryHomeObjectComponent* Support=nullptr);
+    // 只登记等待，物体稳定后才从实物当前位置检查展开
     void QueueScaleRestore();
     UFUNCTION(BlueprintPure,Category="Home|状态") bool IsCarryScaleActive() const { return CarryScaleState.Phase!=EDeliveryHomeCarryScalePhase::Original; }
     UFUNCTION(BlueprintPure,Category="Home|状态") FDeliveryHomeCarryScaleState GetCarryScaleState() const { return CarryScaleState; }
@@ -164,6 +174,7 @@ protected:
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     virtual void TickComponent(float DeltaTime,ELevelTick Type,FActorComponentTickFunction* Function) override;
 private:
+    friend class FDeliveryHomeInterruptedScaleTest;
     struct FOwnedUse
     {
         FDeliveryHomeUseClaim Ticket;
@@ -171,21 +182,24 @@ private:
         TWeakObjectPtr<ADeliveryCompanionCharacter> Companion;
         TWeakObjectPtr<APlayerState> Requester;
         TWeakObjectPtr<const UDeliveryHomeBehaviorDefinition> Definition;
-        TWeakObjectPtr<AActor> PlacedProp;
+        // 摆放领取时绑定实物，提交后继续用同一引用持有槽位
+        TWeakObjectPtr<AActor> PlacementProp;
         bool bPlacementCommitted=false;
         bool bExecutionEnded=false;
     };
     USmartObjectComponent* ResolveSmartObject() const;
     UAudioComponent* ResolveAudio() const;
-    bool ValidateHome(FName& OutReason) const;
+    bool ValidateHome(FName& OutReason,bool bRequireRuntimeHome=true) const;
     bool ValidateUser(ADeliveryCompanionCharacter* Companion,APlayerState* Requester,FName& OutReason) const;
     bool ValidateUse(ADeliveryCompanionCharacter* Companion,const UDeliveryHomeBehaviorDefinition* Definition,
-        const FSmartObjectSlotHandle& Slot,bool bClose,FName& OutReason) const;
+        const FSmartObjectSlotHandle& Slot,bool bClose,FName& OutReason,const AActor* PlacementProp=nullptr) const;
     // 候选、领取复核和执行读取同一站位，Take 入口不跟着物件高度悬空
     bool ResolveUseTransforms(ADeliveryCompanionCharacter* Companion,const UDeliveryHomeBehaviorDefinition* Definition,
         const FSmartObjectSlotHandle& Slot,FTransform& OutEntrance,FTransform& OutUse,FTransform& OutExit,FName& OutReason) const;
     bool ResolveTakeStandingPoint(ADeliveryCompanionCharacter* Companion,const UDeliveryHomeBehaviorDefinition& Definition,
         const FTransform& Authored,const FTransform& Use,bool bProjectNearby,FTransform& OutStanding,FName& OutReason) const;
+    bool CanReachPlacementEntrance(const ADeliveryCompanionCharacter& Companion,const FDeliveryHomeUseCandidate& Candidate) const;
+    TOptional<FTransform> ReadLiveSlotTransform(const FSmartObjectSlotHandle& Slot) const;
     bool FindCommittedPlacement(FDeliveryHomeUseClaim& OutClaim,FName& OutReason) const;
     bool ReadPropTransferPoint(const FOwnedUse& Use,FDeliveryHomePropTransferPoint& OutPoint,FName& OutReason) const;
     bool IsOperationAvailable(const UDeliveryHomeBehaviorDefinition* Definition) const;
@@ -193,8 +207,12 @@ private:
     bool IsPlacementValid(const FOwnedUse& Use,AActor* Prop,FName& OutReason) const;
     bool ValidateScaleObject(FName& OutReason) const;
     FBox CalculateSizeBounds(const FTransform& ActorTransform) const;
-    bool HasRestoreSpaceAndSupport(const FTransform& Target,bool bCheckExpansion,FName& OutReason) const;
-    bool RestoreScale(const FTransform& Target,FName& OutReason);
+    bool HasRestoreSpaceAndSupport(const FTransform& Target,bool bCheckExpansion,FName& OutReason,
+        const UDeliveryHomeObjectComponent* Support=nullptr,float SupportGap=12.f,float MinimumSupportNormalZ=.7f,
+        bool bAllowRestingFurniture=false) const;
+    bool IsStablePlacementSurface() const;
+    bool RestoreScale(const FTransform& Target,FName& OutReason,const UDeliveryHomeObjectComponent* Support=nullptr,
+        bool bAllowRestingFurniture=false);
     void UpdateScaleRestore();
     void SetCarryScalePhase(EDeliveryHomeCarryScalePhase Phase);
     FOwnedUse* FindOwned(const FDeliveryHomeUseClaim& Claim);
@@ -214,6 +232,7 @@ private:
     UPROPERTY(Replicated) FDeliveryHomeCarryScaleState CarryScaleState;
     TWeakObjectPtr<UPrimitiveComponent> ScaleRoot;
     uint32 ScaleGeneration=0;
+    double NextScaleRestoreOffsetAt=-1;
     bool bChangingCarryScale=false;
     UPROPERTY(ReplicatedUsing=OnRep_Audio) bool bAudioPlaying=false;
     UPROPERTY(ReplicatedUsing=OnRep_Audio) TObjectPtr<USoundBase> ActiveSound;

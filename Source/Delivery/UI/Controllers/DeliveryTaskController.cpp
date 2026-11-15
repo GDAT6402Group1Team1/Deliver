@@ -12,9 +12,16 @@
 #include "GameFramework/PlayerState.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
 #include "Character/DeliveryCharacter.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Inventory/DeliveryInventoryComponent.h"
 #include "Inventory/DeliveryPackageItem.h"
+#include "NPC/DeliveryGrandpa.h"
 #include "Vehicle/DeliveryMotorbike.h"
+#include "Task/World/DeliveryBreakableDoor.h"
 #include "Task/World/DeliveryItemComponent.h"
+#include "Task/World/DeliveryTargetComponent.h"
+#include "World/DeliveryLocationRegistry.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
 
@@ -23,6 +30,55 @@ namespace
 {
 /** 钱包挂在 PlayerState 上，而 PlayerState 是复制过来的，可能比控制器晚到 */
 constexpr float TaskHudBindRetrySeconds = 0.5f;
+constexpr float FirstOrderRecoveryRadius = 600.f;
+constexpr float FirstOrderRecoveryFloorTolerance = 100.f;
+
+// 只在开门现场引导这名玩家找回自己为拿斧头而放下的同一件外卖
+const ADeliveryPackageItem* FindFirstOrderRecoveryPackage(const ADeliveryCharacter* Character,
+                                                         const UDeliveryTaskDefinition* Task)
+{
+    if (!IsValid(Task) || Task->ReceiverNpcId.IsNone() || !IsValid(Character) ||
+        Character->IsIncapacitated() || Character->IsRidingVehicle()) return nullptr;
+    const auto* Inventory = Character->GetInventoryComponent();
+    const auto* HeldItem = Inventory ? Inventory->GetHeldItem() : nullptr;
+    if (!IsValid(HeldItem) || HeldItem->GetOwner() != Character || !HeldItem->bUsesAxeSwing) return nullptr;
+    const auto* Package = Inventory->GetDroppedFirstOrderPackage();
+    const auto* Item = Package ? Package->GetDeliveryItemComponent() : nullptr;
+    if (!Item || Item->OwningTask != Task) return nullptr;
+
+    const auto* Locations = UDeliveryLocationRegistry::Get(Character);
+    if (!Locations) return nullptr;
+    const ADeliveryGrandpa* Receiver = nullptr;
+    // 地址引导到门外，收件人编号才指向拥有这扇门的爷爷
+    for (const auto* Actor : Locations->ResolveAllActors(Task->ReceiverNpcId))
+    {
+        const auto* Grandpa = Cast<ADeliveryGrandpa>(Actor);
+        if (!IsValid(Grandpa) || Grandpa->IsActorBeingDestroyed() || Grandpa->GetWorld() != Character->GetWorld() ||
+            !IsValid(Grandpa->DeliveryTarget) || Grandpa->DeliveryTarget->ExpectedTask != Task) continue;
+        if (Receiver && Receiver != Grandpa) return nullptr;
+        Receiver = Grandpa;
+    }
+    const auto* Door = Receiver ? Receiver->FrontDoor.Get() : nullptr;
+    if (!IsValid(Door) || Door->IsActorBeingDestroyed() || Door->GetWorld() != Character->GetWorld() ||
+        !Door->IsBroken()) return nullptr;
+    const auto* DoorMesh = Door->GetIntactMesh();
+    const auto* PackageMesh = Package->GetItemMesh();
+    if (!IsValid(DoorMesh) || !DoorMesh->GetStaticMesh() || !IsValid(PackageMesh) || !PackageMesh->GetStaticMesh())
+        return nullptr;
+
+    // 门的原点高于门洞，水平范围用门叶中心，垂直范围单独对照门底
+    const FBox DoorBounds = DoorMesh->Bounds.GetBox();
+    const FVector PlayerFeet = Character->GetActorLocation() -
+        FVector(0, 0, Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+    FVector PackageFeet = Package->GetActorLocation();
+    PackageFeet.Z = PackageMesh->Bounds.GetBox().Min.Z;
+    const auto IsNearDoor = [&DoorBounds](const FVector& Feet)
+    {
+        return FVector::DistSquared2D(Feet, DoorBounds.GetCenter()) <= FMath::Square(FirstOrderRecoveryRadius) &&
+               FMath::Abs(Feet.Z - DoorBounds.Min.Z) <= FirstOrderRecoveryFloorTolerance;
+    };
+    return IsNearDoor(PlayerFeet) && IsNearDoor(PackageFeet) ? Package : nullptr;
+}
 
 /** 把秒数排成 4:32；负数（超时）前面加 +，表示已经多用了这么久 */
 FText FormatClock(float Seconds)
@@ -71,7 +127,7 @@ void UDeliveryTaskController::HandleTaskPaid(UDeliveryTaskDefinition *Task,
                                   ? FText::GetEmpty()
                                   : FText::Format(LOCTEXT("GradeSuffix", "（{0}）"), Reward.TimeGradeName);
 
-    CompletionText = FText::Format(LOCTEXT("Delivered", "Delivered! +{0}{1}"), FText::AsNumber(Reward.FinalReward),
+    CompletionText = FText::Format(LOCTEXT("Delivered", "送达！+{0}{1}"), FText::AsNumber(Reward.FinalReward),
                                    GradeSuffix);
     CompletionShownTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 }
@@ -99,9 +155,9 @@ bool UDeliveryTaskController::PushCallState(UDeliveryPhoneCallQueueComponent *Ph
 
         const ADeliveryPlayerController *Owner = Cast<ADeliveryPlayerController>(Player.Get());
         const FText MappedKey = Owner ? Owner->GetPhoneKeyText() : FText::GetEmpty();
-        const FText Key = MappedKey.IsEmpty() ? LOCTEXT("PhoneKeyFallback", "Phone Button") : MappedKey;
-        SetDisplay(FText::Format(LOCTEXT("Ringing", "Incoming Call: {0}"), Content.CallerName),
-                   FText::Format(LOCTEXT("RingingHint", "Press {0} to Answer ({1}s Remaining)"), Key,
+        const FText Key = MappedKey.IsEmpty() ? LOCTEXT("PhoneKeyFallback", "手机键") : MappedKey;
+        SetDisplay(FText::Format(LOCTEXT("Ringing", "来电：{0}"), Content.CallerName),
+                   FText::Format(LOCTEXT("RingingHint", "按 {0} 接听　（{1} 秒后转未接）"), Key,
                                  FText::AsNumber(FMath::CeilToInt(Phone->GetStateRemainingSeconds()))),
                    /* 紧急提示= */ true);
 
@@ -109,7 +165,7 @@ bool UDeliveryTaskController::PushCallState(UDeliveryPhoneCallQueueComponent *Ph
     }
 
     case EDeliveryPhoneCallState::InCall:
-        SetDisplay(FText::Format(LOCTEXT("InCall", "In Call: {0}"), Content.CallerName), FText::GetEmpty(),
+        SetDisplay(FText::Format(LOCTEXT("InCall", "通话中：{0}"), Content.CallerName), FText::GetEmpty(),
                    /* 紧急提示= */ false);
 
         return true;
@@ -149,7 +205,8 @@ bool UDeliveryTaskController::PushTaskState()
     }
 
     // 从该玩家的跟踪组件取得当前任务，不直接显示全局任务列表的第一项
-    const APlayerState *State = Cast<APlayerController>(Player.Get())->PlayerState;
+    const APlayerController* PC = Player.Get();
+    const APlayerState* State = PC ? PC->PlayerState.Get() : nullptr;
     const UDeliveryTaskTrackerComponent *Tracker =
         State ? State->FindComponentByClass<UDeliveryTaskTrackerComponent>() : nullptr;
     const UDeliveryTaskDefinition *Task = Tracker ? Tracker->GetTrackedTask() : nullptr;
@@ -166,27 +223,31 @@ bool UDeliveryTaskController::PushTaskState()
 
     // 等待取件时提示去取件，配送中则提示送达
     const bool bPickup = Status == EDeliveryTaskStatus::AwaitingPickup;
-    FText TaskTitle = bPickup ? FText::Format(LOCTEXT("GoPickup", "Collect: {0}"), Task->DisplayName)
-                             : FText::Format(LOCTEXT("GoDeliver", "Deliver: {0}"), Task->DisplayName);
+    FText TaskTitle = bPickup ? FText::Format(LOCTEXT("GoPickup", "去取件：{0}"), Task->DisplayName)
+                             : FText::Format(LOCTEXT("GoDeliver", "快去交付：{0}"), Task->DisplayName);
 
     // 明细行按有什么拼什么：地点组件还没摆时就只显示计时，不让整条消失
     TArray<FString> Parts;
 
-    const FDeliveryGuidance Guidance = UDeliveryGuidanceLibrary::GetTaskGuidance(this, Task);
+    FDeliveryGuidance Guidance = UDeliveryGuidanceLibrary::GetTaskGuidance(this, Task);
     if (!bPickup)
     {
-        const APlayerController* PC = Cast<APlayerController>(Player.Get());
+        const ADeliveryCharacter* Character = PC ? Cast<ADeliveryCharacter>(PC->GetPawn()) : nullptr;
         const ADeliveryMotorbike* RidingBike = PC ? Cast<ADeliveryMotorbike>(PC->GetPawn()) : nullptr;
         const ADeliveryPackageItem* RidingCargo = RidingBike ? RidingBike->GetCargo() : nullptr;
         const UDeliveryItemComponent* RidingItem = RidingCargo
             ? RidingCargo->FindComponentByClass<UDeliveryItemComponent>() : nullptr;
-        if (RidingItem && RidingItem->OwningTask == Task &&
+        if (const auto* Dropped = FindFirstOrderRecoveryPackage(Character, Task))
+        {
+            TaskTitle = LOCTEXT("RecoverFirstOrderAfterDoor", "捡回外卖再进门");
+            Guidance = UDeliveryGuidanceLibrary::MakeGuidanceToLocation(this, Dropped->GetActorLocation());
+        }
+        else if (RidingItem && RidingItem->OwningTask == Task &&
             Guidance.bValid && Guidance.Distance <= 500.f)
         {
-            TaskTitle = LOCTEXT("DismountUnloadDeliver", "Press F to Dismount and Deliver");
+            TaskTitle = LOCTEXT("DismountUnloadDeliver", "按 F 下车，取货后交付");
         }
-        else if (const ADeliveryCharacter* Character = PC ? Cast<ADeliveryCharacter>(PC->GetPawn()) : nullptr;
-                 Character && !Character->GetCarriedTaskPackage())
+        else if (Character && !Character->GetCarriedTaskPackage())
         {
             // 下车后包裹留在后备箱，提示取回；只找角色附近且属于当前任务的车
             for (TActorIterator<ADeliveryMotorbike> It(World); It; ++It)
@@ -198,7 +259,7 @@ bool UDeliveryTaskController::PushTaskState()
                     FVector::DistSquared2D(Character->GetActorLocation(), It->GetActorLocation()) <=
                         FMath::Square(600.f))
                 {
-                    TaskTitle = LOCTEXT("UnloadBeforeDeliver", "Left Click at the Rear to Unload");
+                    TaskTitle = LOCTEXT("UnloadBeforeDeliver", "到车尾左键取货");
                     break;
                 }
             }
@@ -215,7 +276,7 @@ bool UDeliveryTaskController::PushTaskState()
     const FDeliveryTaskTimeSnapshot Time = Manager->GetTimeSnapshot(Task);
     if (Time.bRunning)
     {
-        Parts.Add(FString::Printf(TEXT("Time Left: %s"), *FormatClock(Time.RemainingSeconds).ToString()));
+        Parts.Add(FText::Format(LOCTEXT("TimeLeft", "剩余 {0}"), FormatClock(Time.RemainingSeconds)).ToString());
         bTaskUrgent = Time.bOverdue || Time.RemainingSeconds < UrgentRemainingSeconds;
     }
 

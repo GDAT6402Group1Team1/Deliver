@@ -135,6 +135,20 @@ bool FDeliveryNpcConversationAimTest::RunTest(const FString&)
     WallBox->SetCollisionResponseToChannel(ECC_Visibility,ECR_Block);
     WallBox->RegisterComponent();
     Wall->SetActorLocation(FVector(200,0,110));
+    auto* PassingPawn=World->SpawnActor<APawn>();
+    auto* PassingBox=NewObject<UBoxComponent>(PassingPawn);
+    PassingPawn->SetRootComponent(PassingBox);
+    PassingBox->SetBoxExtent(FVector(20,60,120));
+    PassingBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    PassingBox->SetCollisionObjectType(ECC_Pawn);
+    PassingBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+    PassingBox->SetCollisionResponseToChannel(ECC_Visibility,ECR_Block);
+    PassingBox->RegisterComponent();
+    PassingPawn->SetActorLocation(FVector(200,0,110));
+    WallBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    TestTrue(TEXT("有行人经过时仍能向当前对象提交消息"),Conversation->CanTalkTo(FarNpc));
+    PassingPawn->Destroy();
+    WallBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     TestFalse(TEXT("玩家与 NPC 之间有墙时拒绝交谈"),Conversation->CanTalkTo(FarNpc));
     TestNull(TEXT("准星隔着墙时不会选中 NPC"),AimAt(FarNpc));
     FarNpc->SetActorLocation(FVector(450,100,90));
@@ -152,9 +166,9 @@ bool FDeliveryNpcConversationAimTest::RunTest(const FString&)
     TestFalse(TEXT("超过 600 厘米时交谈规则拒绝"),Conversation->CanTalkTo(FarNpc));
     TestNull(TEXT("超过距离后即使仍在准星中也不选中"),AimAt(FarNpc));
     FarNpc->SetActorLocation(FVector(400,0,90));
-    TestTrue(TEXT("使目标进入倒地状态"),FarNpc->Combat->SetDeliberateProne(true));
-    TestFalse(TEXT("倒地者不能交谈"),Conversation->CanTalkTo(FarNpc));
-    TestNull(TEXT("不会选中对准的倒地者"),AimAt(FarNpc));
+    TestTrue(TEXT("使目标进入主动躺姿"),FarNpc->Combat->SetDeliberateProne(true));
+    TestTrue(TEXT("玩家可以向主动躺着的居民发话"),Conversation->CanTalkTo(FarNpc));
+    TestTrue(TEXT("近处对准主动躺着的居民可以选中"),AimAt(FarNpc)==FarNpc);
     TestTrue(TEXT("恢复目标的站立状态"),FarNpc->Combat->SetDeliberateProne(false));
     TestTrue(TEXT("恢复后重新允许选中"),AimAt(FarNpc)==FarNpc);
 
@@ -172,6 +186,10 @@ bool FDeliveryNpcConversationAimTest::RunTest(const FString&)
     TestNull(TEXT("失去控制角色的控制器不能继续选择 NPC"),
         SecondConversation->FindNpcInView(SecondView,FVector::ForwardVector));
     TestTrue(TEXT("一位玩家失去角色不影响另一位玩家"),AimAt(FarNpc)==FarNpc);
+    FarNpc->ReceiveImpact(FVector::ZeroVector,FarNpc->GetActorLocation());
+    TestTrue(TEXT("实际受击进入战斗倒地"),FarNpc->IsKnockedDown() && !FarNpc->Combat->IsDeliberatelyProne());
+    TestFalse(TEXT("受击倒地者不能交谈"),Conversation->CanTalkTo(FarNpc));
+    TestNull(TEXT("不会选中对准的受击倒地者"),AimAt(FarNpc));
     return true;
 }
 #endif

@@ -194,24 +194,24 @@ void UDeliveryNpcPresentationComponent::TickComponent(float Dt,ELevelTick Type,F
         Speech.bActive=false; GetOwner()->ForceNetUpdate(); OnRep_Speech();
         FDeliveryNpcObservation Said; Said.Kind=TEXT("SelfSpeech");
         Said.Source=EDeliveryNpcEvidenceSource::ActionResult; Said.Description=Speech.Text; Said.Lifetime=60;
-        Said.Subject=Resident; Said.Addressee=ReplyListener.Get();
-        Said.ReplyToEventId=Speech.ReplyToEventId;
+        const TWeakObjectPtr<AActor> CompletedListener(Resident->Agent->GetReplyListenerForPlayback(Speech.TurnId,ReplyListener.Get()));
+        Said.Subject=Resident; Said.Addressee=CompletedListener.Get();
+        if (Resident->Agent->CanLinkReplyPlayback(Speech.TurnId)) Said.ReplyToEventId=Speech.ReplyToEventId;
         Said.EventId=Speech.TurnId;
         UE_LOG(LogTemp,Log,TEXT("ResidentSpeech completed: npc=%s turn=%s replyTo=%s"),
             *GetNameSafe(GetOwner()),*Speech.TurnId.ToString(),*Speech.ReplyToEventId.ToString());
         const auto CompletedSpeech=Speech;
-        const auto CompletedListener=ReplyListener;
         const int32 CompletedDepth=SpeechDepth;
         const TWeakObjectPtr<ADeliveryNpcCharacter> WeakResident(Resident);
         Resident->Agent->ObserveEvent(Said);
-        Resident->Agent->FinishReplyPlayback(CompletedSpeech.TurnId);
+        Resident->Agent->FinishReplyPlayback(CompletedSpeech.TurnId,CompletedSpeech.TurnId);
         if (!WeakResident.IsValid() || Resident->IsActorBeingDestroyed()) return;
         // 完整回复与流式回复一样，最后一轮只通知邻居记住台词
         for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
             if (*It!=Resident && !Resident->Agent->WasReplyTextDelivered(CompletedSpeech.TurnId,*It) &&
                 FVector::DistSquared(It->GetActorLocation(),Resident->GetActorLocation())<FMath::Square(800.f))
                 It->HearSpeech(Resident,CompletedSpeech.Text,CompletedSpeech.TurnId,FMath::Min(CompletedDepth+1,3),
-                    CompletedListener.IsValid()?CompletedListener.Get():Resident,CompletedSpeech.ReplyToEventId,
+                    CompletedListener.IsValid()?CompletedListener.Get():Resident,Said.ReplyToEventId,
                     CompletedDepth<3 && !CompletedSpeech.RadioListener);
         PromotePendingReply();
     }

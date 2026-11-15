@@ -73,6 +73,7 @@ public:
     UFUNCTION(BlueprintPure,Category="Delivery|初遇") bool HasEncounterStarted() const { return Encounter.Phase!=EDeliveryCompanionEncounterPhase::Dormant; }
     UFUNCTION(BlueprintPure,Category="Delivery|初遇") FDeliveryCompanionEncounterState GetEncounterState() const { return Encounter; }
     bool IsEncounterAirborne() const;
+    bool IsMountedOnCompanionBike() const;
     UFUNCTION(BlueprintPure,Category="Delivery|初遇") bool IsWaitingForHelp() const;
     bool HasFinishedEncounterFall() const;
     UFUNCTION(BlueprintPure,Category="Delivery|初遇") bool IsBeingHelpedUp() const;
@@ -92,20 +93,26 @@ public:
     virtual bool CanAdjustStandingPosition() const override { return false; }
     virtual bool CanExecute(EDeliveryNpcAction Action,AActor* Target) const override;
     virtual bool CanExecuteForRequester(EDeliveryNpcAction Action,AActor* Target,APlayerState* Requester) const override;
+    // 已批准的踱步还需要在每段导航期间维持原等候安排
+    bool CanContinuePace(const FDeliveryNpcPublicState& State) const;
     virtual bool CanExecuteGameplayRule(EDeliveryNpcAction Action,AActor* Target,int32 RuleRevision) const override;
+    virtual float GetGameplayRuleFightApproachRange() const override;
     virtual void ExtendDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const override;
     virtual bool ExecuteAction(const FDeliveryNpcPublicState& State) override;
     virtual void StopAction(FGuid ActionId) override;
     // 蓝图配置老板、编织袋等初遇表现，服务器时间供迟到客户端接上进度
     UFUNCTION(BlueprintImplementableEvent,Category="Delivery|初遇") void OnEncounterStarted();
+    virtual bool IsNetRelevantFor(const AActor* RealViewer,const AActor* ViewTarget,const FVector& SrcLocation) const override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out) const override;
 protected:
+    virtual float GetPaceTravelBudget() const override;
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaSeconds) override;
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     virtual void Landed(const FHitResult& Hit) override;
     virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode,uint8 PreviousCustomMode=0) override;
 private:
+    bool HasPaceContext() const;
     bool CanHelp(APawn* Helper,bool bCheckAvailability);
     bool Help(APawn* Helper);
     bool CanContinueAssistedHelp(APawn* Helper,FGuid DownEpisode) const;
@@ -124,12 +131,15 @@ private:
     void UpdateEncounterPresentation();
     bool HasEncounterOrderStarted() const;
     bool CanWitnessEncounter(const APawn* Pawn) const;
+    bool HasNearbyEncounterWitness() const;
     bool TryStartEncounter();
-    bool TryStartEjection();
-    bool HasClearEjectionPath(const FDeliveryCompanionEncounterState& State) const;
+    void TryStartEjection();
+    enum class EEjectionPathStatus : uint8 { Invalid, Blocked, Clear };
+    EEjectionPathStatus GetEjectionPathStatus(const FDeliveryCompanionEncounterState& State) const;
     void ApplyEjectionMotion();
     void RemoveEjectionMotion();
     void BeginEncounterFall(FName Reason);
+    void ConfirmEncounterLanding();
     void ResetUnstartedEncounter(FName Reason);
     uint16 EjectionMotionId=0;
     int32 AppliedMotionRevision=INDEX_NONE;
@@ -141,5 +151,7 @@ private:
     bool bReportedEncounterConfiguration=false;
     bool bReportedLandingTimeout=false;
     bool bAnnouncedJoining=false;
+    bool bKeepDoorOpenForRescue=false;
+    double LastNearbyEncounterWitnessAt=0;
     double NextEncounterCheck=0;
 };

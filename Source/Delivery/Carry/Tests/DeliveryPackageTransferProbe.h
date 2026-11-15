@@ -19,4 +19,11 @@ public:
     bool bAttempted = false;
     bool bThirdPartyReceived = false;
     UFUNCTION() void OnInventoryChanged();
+    TFunction<void()> InventoryChangeCallback;
+    UFUNCTION() void RunInventoryChangeCallback()
+    {
+        // 同步回滚也会广播变化，回调只执行一次
+        auto Callback=MoveTemp(InventoryChangeCallback);
+        if (Callback) Callback();
+    }
 };

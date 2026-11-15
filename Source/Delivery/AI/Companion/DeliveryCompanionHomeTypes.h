@@ -5,6 +5,7 @@
 #include "DeliveryCompanionHomeTypes.generated.h"
 
 class APlayerState;
+class APawn;
 class UAnimSequence;
 class UPrimitiveComponent;
 
@@ -41,6 +42,8 @@ struct FDeliveryCompanionHomeChoice
     EDeliveryHomeOperation Operation=EDeliveryHomeOperation::None;
     FDeliveryHomeUseCandidate Use;
     FDeliveryHomeUseCandidate TakeUse;
+    FGuid SeatArrangementId;
+    TWeakObjectPtr<APawn> PlacementOwnerPawn;
 };
 
 UENUM(BlueprintType)

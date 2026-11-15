@@ -1,7 +1,10 @@
 """复用现有房屋家具，默认只读，不启动 PIE 或调用游戏逻辑
 
 -InspectCompanionHomeObjects：只读真实家具与动画基准，输出标定 manifest 草案
+-CalibratePortableHomeEntrances -HomeObjectsManifest="..."：在已安装的正式地图中只读重查搬放入口并输出建议清单
+-RelocatePortableHomeTelevision：与只读站位标定并用，另为原电视寻找同一室内可达的地面起始位置
 -SetupCompanionHomeObjects -HomeObjectsManifest="..."：显式备份后创建资源并替换指定家具
+-UpgradePortableHomeFurniture -SetupCompanionHomeObjects -ReplaceCompanionHomeAssets -HomeObjectsManifest="..."：按同一清单增补独立物件的搬放与表面
 -ReplaceCompanionHomeAssets：允许重建本工具创建的资源；未知资产仍拒绝覆盖
 
 Setup 要求 manifest.calibrated=true，不能把包围盒推算当作座位、房间或摆放验收
@@ -93,7 +96,8 @@ def save_asset(path):
 
 def furniture_configuration_hash(item):
     keys = ('display_name','description','physical_prop','blueprint_path','definition_path','collision_mesh_path','slots',
-            'audio_volume','audio_inner_radius','audio_falloff','carry_scale_multiplier','restore_scale_from_support_bottom','prop_mass_kg')
+            'audio_volume','audio_inner_radius','audio_falloff','carry_scale_multiplier','restore_scale_from_support_bottom','prop_mass_kg',
+            'prop_start_awake','npc_edge_pickup','prop_mesh_hull','prop_mesh_footprint','complex_placement_support')
     data = {key: item[key] for key in keys if key in item}
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=True, separators=(',',':')).encode('utf-8')).hexdigest()
 
@@ -113,12 +117,21 @@ def verify_installed_configuration(item, observed):
         raise RuntimeError('家具实际 SmartObject 引用或 Definition 不符，停止保存：'+item['label'])
     if item['physical_prop']:
         if package_name(observed.get('mesh') or '') != package_name(item['collision_mesh_path']):
-            raise RuntimeError('抱枕实例未使用独立碰撞网格，停止保存：'+item['label'])
+            raise RuntimeError('可搬实物未使用独立碰撞网格，停止保存：'+item['label'])
         if (not all(observed.get(key) is True for key in ('static_mesh_is_root','grabbable_uses_root','movable',
             'simulate_physics_configured','query_and_physics','replicates','replicate_movement',
             'root_component_replicates','static_mesh_replicate_movement')) or
             observed.get('collision_profile') != 'PhysicsActor'):
-            raise RuntimeError('抱枕实际根刚体、抓取或复制配置不符，停止保存：'+item['label'])
+            raise RuntimeError('可搬实物的根刚体、抓取或复制不符，停止保存：'+item['label'])
+        if 'prop_start_awake' in item and observed.get('prop_start_awake') is not item['prop_start_awake']:
+            raise RuntimeError('可搬实物开局唤醒配置不符：'+item['label'])
+        for field in ('npc_edge_pickup', 'complex_placement_support'):
+            if field in item and observed.get(field) is not item[field]:
+                raise RuntimeError('可搬实物接触配置不符：'+item['label']+'/'+field)
+        if item.get('prop_mesh_hull') and observed.get('convex_shape_count', 0) != 1:
+            raise RuntimeError('正式网格凸体未读回：'+item['label'])
+        if item.get('prop_mesh_footprint') and not all(value > 0 for value in observed['placement_footprint_half_extent'][:2]):
+            raise RuntimeError('正式网格的真实底座接触范围未读回：'+item['label'])
         if not observed.get('mass_override_enabled') or not close_numbers(item['prop_mass_kg'], observed.get('prop_mass_kg')):
             raise RuntimeError('Physical prop mass override does not match manifest: '+item['label'])
     if {'PlayAudio','StopAudio'} & set(expected_uses):
@@ -143,7 +156,8 @@ def verify_installed_configuration(item, observed):
             raise RuntimeError('槽位实际道具中转点与 manifest 不同，停止保存：'+item['label']+'/'+expected['slot_id'])
         for key in ('slot_id','use_id','operation','slot','entrance','use','exit','sight_offset','approach_radius','use_radius',
                     'use_seconds','maximum_prop_half_extent','placement_tolerance','placement_angle_tolerance','maximum_support_gap'):
-            if key in expected and not close_numbers(expected[key], actual.get(key)):
+            compare = close_slot_transform if key in ('slot','entrance','use','exit') else close_numbers
+            if key in expected and not compare(expected[key], actual.get(key)):
                 raise RuntimeError('槽位实际参数与 manifest 不同，需审阅并显式 Replace：'+item['label']+'/'+expected['slot_id']+'/'+key)
         for key in ('enter_animation','animation','exit_animation','seat_mount_animation','seat_dismount_animation','sound'):
             if package_name(expected.get(key) or '') != package_name(actual.get(key) or ''):
@@ -174,6 +188,20 @@ def close_numbers(left, right, tolerance=.001):
     if isinstance(left, (int, float)) and isinstance(right, (int, float)):
         return math.isfinite(left) and math.isfinite(right) and abs(left - right) <= tolerance
     return left == right
+
+
+def close_slot_transform(expected, actual):
+    if not isinstance(expected, dict) or not isinstance(actual, dict) or expected.keys()!=actual.keys():
+        return False
+    if not close_numbers({k:v for k,v in expected.items() if k!='rotation'},
+                         {k:v for k,v in actual.items() if k!='rotation'}):
+        return False
+    left, right = expected.get('rotation'), actual.get('rotation')
+    if not isinstance(left,list) or not isinstance(right,list) or len(left)!=3 or len(right)!=3:
+        return False
+    return all(type(a) in (float,int) and type(b) in (float,int) and math.isfinite(a) and math.isfinite(b) and
+               abs(math.remainder(math.remainder(a,360.)-math.remainder(b,360.),360.))<=.001
+               for a,b in zip(left,right))
 
 
 def pending_packages():
@@ -223,6 +251,348 @@ def slot_template(name, operation, display):
         result.update(maximum_prop_half_extent=None, placement_tolerance=15, placement_angle_tolerance=15, maximum_support_gap=12,
                       use_prop_transfer_point=False, prop_transfer_offset=[0,0,0])
     return result
+
+
+def upgrade_portable_furniture(manifest, entries):
+    """保留原有房屋清单的 Actor 身份和用途，在可编辑定义上补独立物件的搬放。"""
+    indoor_z = manifest['interior_anchor_world'][2]
+    for item in manifest['objects']:
+        label = item['label']
+        data = entries[label]['data']
+        scale = data['transform']['scale']
+        local_center = [value * unit for value, unit in zip(data['mesh_bounds_origin'], scale)]
+        half = [value * abs(unit) for value, unit in zip(data['mesh_bounds_extent'], scale)]
+        if len(half) != 3 or len(local_center) != 3 or not all(math.isfinite(value) and value > 0 for value in half):
+            raise RuntimeError('无法从独立家具网格读取用途范围：'+label)
+        if not item['physical_prop']:
+            item.update(physical_prop=True, carry_scale_multiplier=max(.1, min(.35, 32 / max(half))),
+                        prop_start_awake=False, prop_mass_kg=max(2., min(45., math.prod(half) * 8 / 50000.)))
+        item['npc_edge_pickup'] = True
+        if label in ('chair', 'tv2'):
+            item['prop_mesh_hull'] = True
+        if label == 'tv2':
+            item['prop_mesh_footprint'] = True
+        if label == 'chair':
+            item['complex_placement_support'] = True
+        suffix = CATALOG[label][2]
+        item.setdefault('definition_path', ROOT + '/SmartObjects/SO_Home' + suffix)
+        item.setdefault('collision_mesh_path', ROOT + '/Meshes/SM_Home' + suffix)
+        identity = {'location': [0,0,0], 'rotation': [0,0,0], 'scale': [1,1,1]}
+        ground = indoor_z - data['transform']['location'][2]
+        stand = local_center[:2] + [ground]
+        approach_axis = 0 if half[0] < half[1] else 1
+        stand[approach_axis] += half[approach_axis] + 54.
+        entrance = {'location': stand, 'rotation': [0,180 if approach_axis == 0 else -90,0], 'scale': [1,1,1]}
+        if not any(slot['operation'] == 'TakeProp' for slot in item['slots']):
+            take = slot_template('Take', 'TakeProp', '拿起' + item['display_name'])
+            take.update(slot=identity, entrance=entrance, use=identity, exit=entrance, sight_offset=[0,0,0], use_radius=200)
+            item['slots'].append(take)
+        if not any(slot['slot_id'] == 'TopSurface' for slot in item['slots']):
+            surface = slot_template('TopSurface', 'PlaceProp', item['display_name'] + '上表面')
+            top = {'location': local_center[:2] + [local_center[2] + half[2]], 'rotation': [0,0,0], 'scale': [1,1,1]}
+            seat = next((slot for slot in item['slots'] if slot['operation'] == 'Sit'), None)
+            surface_entrance = seat['entrance'] if seat and label == 'chair' else entrance
+            surface.update(slot=identity, entrance=surface_entrance, use=top, exit=surface_entrance, sight_offset=[0,0,4], use_radius=400,
+                           maximum_prop_half_extent=[max(1., half[0]-2.), max(1., half[1]-2.), 200.])
+            item['slots'].append(surface)
+    return manifest
+
+
+def pickup_entrance_candidates(authored, center, half, anchor, radius):
+    yield authored
+    inward = math.atan2(anchor.y-center.y, anchor.x-center.x)
+    for step in (0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8):
+        angle = inward + step*math.pi/8
+        dx, dy = math.cos(angle), math.sin(angle)
+        edge = min(half[0]/max(abs(dx), .001), half[1]/max(abs(dy), .001))
+        for margin in (12., 32., 57., 82., 112.):
+            distance = edge + radius + margin
+            yield unreal.Vector(center.x+dx*distance, center.y+dy*distance, anchor.z)
+
+
+def segment_crosses_pickup_box(start, end, box):
+    lower, upper = 0., 1.
+    for a, b, low, high in ((start.x, end.x, box[0], box[1]), (start.y, end.y, box[2], box[3])):
+        if abs(b-a) < .001:
+            if a < low or a > high:
+                return False
+            continue
+        left, right = sorted(((low-a)/(b-a), (high-a)/(b-a)))
+        lower, upper = max(lower,left), min(upper,right)
+        if lower > upper:
+            return False
+    return True
+
+
+def calibrate_portable_home_entrances(manifest_file, relocate_tv=False):
+    """按正式碰撞给出可编辑厘米偏移，未找到安全站位的项目保持作者原值。"""
+    project = Path(unreal.Paths.project_dir()).resolve()
+    tools = unreal.DeliveryHomeObjectAssetTools
+    if pending_packages() or not tools.finish_pending_editor_assets():
+        raise RuntimeError('必须从干净且资源已就绪的正式地图检查')
+    home, actors, entries, _ = inspect_scene()
+    world = home.get_world()
+    manifest = json.loads(Path(manifest_file).read_text(encoding='utf-8-sig'))
+    baseline, _ = animation_baseline()
+    validate_manifest(manifest, home, entries, baseline, True)
+    if not tools.finish_pending_editor_assets():
+        raise RuntimeError('读入清单后资源尚未就绪')
+    npc = unique_companion(actors)
+    navs = [actor for actor in actors if isinstance(actor, unreal.RecastNavMesh)]
+    if len(navs) != 1:
+        raise RuntimeError('需要唯一正式导航数据')
+    nav = unreal.NavigationSystemV1
+    capsule = npc.get_component_by_class(unreal.CapsuleComponent)
+    house = home.get_editor_property('existing_house')
+    anchor = unreal.Vector(*manifest['interior_anchor_world'])
+    radius = capsule.get_scaled_capsule_radius()
+    height = capsule.get_scaled_capsule_half_height()
+    eyes = npc.get_actor_eyes_view_point()[0]-npc.get_actor_location()
+    channels = entries['chair']['data']['collision_object_channels']
+    checked_channels = {'WorldStatic', 'WorldDynamic', 'Pawn', 'PhysicsBody', 'Vehicle', 'Destructible'}
+    object_types = [unreal.ObjectTypeQuery.cast(int(e['query_index'])) for e in channels if e['channel_name'] in checked_channels]
+    if not object_types:
+        raise RuntimeError('正式家具碰撞对象查询映射缺失')
+    block = unreal.CollisionResponseType.ECR_BLOCK
+    result = {}
+
+    def trace(start, end, ignored):
+        hit = unreal.SystemLibrary.line_trace_single(world, start, end, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1,
+                                                   False, ignored, unreal.DrawDebugTrace.NONE, True)
+        return hit.to_dict() if hit is not None else {}
+
+    def route(start, end, avoid=None):
+        if (start-end).length() <= 1.:
+            return avoid is None or not segment_crosses_pickup_box(start, end, avoid)
+        path = nav.find_path_to_location_synchronously(world, start, end, npc)
+        if not path or not path.is_valid() or path.is_partial() or not path.path_points or (path.path_points[-1]-end).length()>15.:
+            return False
+        points = [start, *path.path_points, end]
+        return avoid is None or not any(segment_crosses_pickup_box(a,b,avoid) for a,b in zip(points,points[1:]))
+
+    def standing(point, avoid=None):
+        seed = unreal.Vector(point.x, point.y, anchor.z)
+        on_nav = nav.project_point_to_navigation(world, seed, navs[0], None, unreal.Vector(35, 35, 100))
+        if on_nav is None or math.hypot(on_nav.x-point.x, on_nav.y-point.y) > 15.:
+            return None, 'off_navigation'
+        ground = trace(on_nav+unreal.Vector(0, 0, 50), on_nav-unreal.Vector(0, 0, 100), [npc])
+        feet = ground.get('impact_point')
+        if (not ground.get('blocking_hit') or ground.get('initial_overlap') or ground.get('hit_actor') != house or
+                feet is None or ground['impact_normal'].z < .7 or abs(feet.z-on_nav.z) > 15. or abs(feet.z-anchor.z) > 25.):
+            return None, 'no_house_floor'
+        center = feet+unreal.Vector(0, 0, height)
+        overlaps = unreal.SystemLibrary.capsule_overlap_components(world, center+unreal.Vector(0, 0, 2), radius, height,
+                                                                  object_types, unreal.PrimitiveComponent, [npc])
+        if any(body.get_collision_response_to_channel(capsule.get_collision_object_type()) == block or
+               body.get_collision_enabled() == unreal.CollisionEnabled.QUERY_AND_PHYSICS
+               for body in overlaps or []):
+            return None, 'capsule_blocked'
+        if not route(anchor, on_nav, avoid) or not route(on_nav, anchor, avoid):
+            return None, 'incomplete_path'
+        return (feet, center), None
+
+    def find_contact(actor, body, center, reach, shift=None):
+        eye_height = min(75., max(0., eyes.z))
+        offset = shift or unreal.Vector()
+        projected = in_reach = cleared = False
+        for fraction in (0., .55, 1.):
+            origin = center+unreal.Vector(0, 0, eye_height*fraction)
+            if eye_height*fraction > .0001 and trace(center, origin, [npc, actor]).get('blocking_hit'):
+                continue
+            for lift in (0., 45., 90.):
+                # 和正式抓取使用相同采样，仍以真实站立中心计算距离
+                sample = body.get_closest_point_on_collision(origin+unreal.Vector(0, 0, lift)-offset)
+                values = sample if isinstance(sample, (tuple, list)) else (sample,)
+                contact = next((value for value in values if isinstance(value, unreal.Vector)), None)
+                distance = next((value for value in values if type(value) in (int, float)), -1.)
+                if contact is None or not math.isfinite(distance) or distance <= 0.:
+                    continue
+                contact = contact+offset
+                projected = True
+                if (contact-center).length() > reach:
+                    continue
+                in_reach = True
+                if trace(origin, contact, [npc, actor]).get('blocking_hit'):
+                    continue
+                cleared = True
+                sight = trace(center+eyes, contact, [npc, actor] if shift is not None else [npc])
+                if not sight.get('blocking_hit') or sight.get('hit_actor') == actor:
+                    return contact, None
+        if cleared:
+            return None, 'edge_view_blocked'
+        if in_reach:
+            return None, 'edge_reach_blocked'
+        if projected:
+            return None, 'edge_too_far'
+        return None, 'edge_no_collision_surface'
+
+    for item in sorted(manifest['objects'], key=lambda item: (item['label'] not in ('tv2', 'chair'), item['label'] != 'tv2')):
+        label = item['label']
+        if not item.get('npc_edge_pickup') or not item.get('physical_prop'):
+            raise RuntimeError('标定需要已安装的房屋搬放清单：'+label)
+        actor, data = (entries[label][name] for name in ('actor', 'data'))
+        verify_installed_configuration(item, data)
+        body = actor.get_component_by_class(unreal.StaticMeshComponent)
+        frame = actor.get_actor_transform()
+        actor_yaw = frame.rotation.rotator().yaw
+        center = unreal.Vector(*data['world_bounds_origin'])
+        outcome = result.setdefault(label, {})
+        for slot in item['slots']:
+            if slot['operation'] != 'TakeProp' and slot['slot_id'] != 'TopSurface':
+                continue
+            if label.startswith('pillow') and slot['operation'] == 'TakeProp':
+                outcome[slot['slot_id']] = {'status': 'preserved_existing_calibration'}
+                continue
+            origin = unreal.MathLibrary.transform_location(frame, unreal.Vector(*slot['slot']['location']))
+            yaw = actor_yaw+slot['slot']['rotation'][1]
+            angle = math.radians(yaw)
+            forward = unreal.Vector(math.cos(angle), math.sin(angle), 0)
+            right = unreal.Vector(-forward.y, forward.x, 0)
+
+            def from_slot(local):
+                return origin+forward*local[0]+right*local[1]+unreal.Vector(0, 0, local[2])
+
+            authored = from_slot(slot['entrance']['location'])
+            use = from_slot(slot['use']['location'])
+            reject = {}
+            for point in pickup_entrance_candidates(authored, center, data['world_bounds_extent'], anchor, radius):
+                stand, reason = standing(point)
+                if stand:
+                    feet, body_center = stand
+                    if slot['operation'] == 'TakeProp':
+                        contact, reason = find_contact(actor, body, body_center, min(200., slot['use_radius']))
+                    else:
+                        contact = use+unreal.Vector(0, 0, 4)
+                        hit = trace(body_center+eyes, contact, [npc])
+                        reason = 'top_surface_out_of_reach_or_occluded' if ((body_center-contact).length() > slot['use_radius'] or
+                                 (hit.get('blocking_hit') and hit.get('hit_actor') != actor)) else None
+                    if reason is None:
+                        changed = math.hypot(point.x-authored.x, point.y-authored.y) > .01
+                        if changed:
+                            delta = feet-origin
+                            direction = center-feet
+                            offset = dict(location=[delta.x*forward.x+delta.y*forward.y, delta.x*right.x+delta.y*right.y, delta.z],
+                                          rotation=[0, math.remainder(math.degrees(math.atan2(direction.y,direction.x))-yaw,360.), 0], scale=[1,1,1])
+                            slot.update(entrance=offset, exit=offset)
+                        outcome[slot['slot_id']] = dict(status='recalibrated' if changed else 'validated_existing',
+                                                        feet=xyz(feet), contact=xyz(contact), prior_rejections=reject)
+                        break
+                reject[reason] = reject.get(reason, 0)+1
+            else:
+                outcome[slot['slot_id']] = dict(status='no_verified_stand', rejections=reject)
+    if relocate_tv and result['tv2']['Take']['status']=='no_verified_stand':
+        item = next(item for item in manifest['objects'] if item['label']=='tv2')
+        actor, data = (entries['tv2'][name] for name in ('actor', 'data'))
+        body = actor.get_component_by_class(unreal.StaticMeshComponent)
+        original = actor.get_actor_location()
+        original_center = unreal.Vector(*data['world_bounds_origin'])
+        extent = unreal.Vector(*data['world_bounds_extent'])
+        scale = data['transform']['scale']
+        frame = actor.get_actor_transform()
+        yaw = frame.rotation.rotator().yaw
+        angle = math.radians(yaw)
+        forward = unreal.Vector(math.cos(angle), math.sin(angle), 0)
+        right = unreal.Vector(-forward.y,forward.x,0)
+        old_foot = unreal.MathLibrary.transform_location(frame, unreal.Vector(*data['placement_footprint_center']))
+        fx, fy = (data['placement_footprint_half_extent'][axis]*abs(scale[axis]) for axis in range(2))
+        extent_x = abs(forward.x)*fx+abs(forward.y)*fy
+        extent_y = abs(forward.y)*fx+abs(forward.x)*fy
+        if min(extent_x,extent_y,extent.z)<=0.:
+            raise RuntimeError('原电视真实支持区域与原尺寸不可读')
+        chair_slots = result['chair']
+        required = [unreal.Vector(*chair_slots[key]['feet']) for key in ('Take','TopSurface') if 'feet' in chair_slots[key]]
+        protected_stands = [unreal.Vector(*use['feet']) for label,uses in result.items() if label!='tv2'
+                            for use in uses.values() if 'feet' in use]
+        door = call_json(tools.inspect_interior_anchor(home,anchor))
+        if len(required)!=2 or not door['valid']:
+            raise RuntimeError('现有高脚凳两项入口与房屋完整通路须先可读')
+        # 保留房屋入口、室内锚与高脚凳的可达路径
+        interior_door = home.get_editor_property('interior_anchor').get_world_location()
+        home_return = home.get_editor_property('return_anchor').get_world_location()
+        heading = math.atan2(anchor.y-original.y, anchor.x-original.x)
+        take = next(slot for slot in item['slots'] if slot['operation']=='TakeProp')
+        top = next(slot for slot in item['slots'] if slot['slot_id']=='TopSurface')
+        top_slot = unreal.MathLibrary.transform_location(frame,unreal.Vector(*top['slot']['location']))
+        top_use = top['use']['location']
+        original_top = top_slot+forward*top_use[0]+right*top_use[1]+unreal.Vector(0,0,top_use[2]+4.)
+        rejects = {}
+        chosen = None
+        for length in (320.,420.,520.,630.):
+            for step in (0,1,-1,2,-2,3,-3,4,-4):
+                heading_offset = heading+step*math.pi/8
+                x,y = original_center.x+math.cos(heading_offset)*length, original_center.y+math.sin(heading_offset)*length
+                floor_heights = []
+                for dx,dy in ((0,0),(.7*extent_x,.7*extent_y),(.7*extent_x,-.7*extent_y),(-.7*extent_x,.7*extent_y),(-.7*extent_x,-.7*extent_y)):
+                    near = unreal.Vector(x+old_foot.x-original_center.x+dx,y+old_foot.y-original_center.y+dy,anchor.z)
+                    floor = trace(near+unreal.Vector(0,0,16),near-unreal.Vector(0,0,22),[actor,npc])
+                    if floor.get('hit_actor')!=house or floor.get('initial_overlap') or floor['impact_normal'].z<.9:
+                        break
+                    floor_heights.append(floor['impact_point'].z)
+                if len(floor_heights)!=5 or max(floor_heights)-min(floor_heights)>1.:
+                    rejects['no_level_house_support'] = rejects.get('no_level_house_support',0)+1
+                    continue
+                target_center = unreal.Vector(x,y,max(floor_heights)+extent.z+.25)
+                half = unreal.Vector(extent.x,extent.y,extent.z-.6)
+                overlaps = unreal.SystemLibrary.box_overlap_components(world,target_center,half,object_types,unreal.PrimitiveComponent,[actor])
+                if any(obstacle.get_collision_response_to_channel(body.get_collision_object_type())==block or
+                       obstacle.get_collision_enabled()==unreal.CollisionEnabled.QUERY_AND_PHYSICS for obstacle in overlaps or []):
+                    rejects['original_size_overlap'] = rejects.get('original_size_overlap',0)+1
+                    continue
+                offset = target_center-original_center
+                pad = radius+8.
+                box = (x-extent.x-pad,x+extent.x+pad,y-extent.y-pad,y+extent.y+pad)
+                if (segment_crosses_pickup_box(home_return,interior_door,box) or
+                        any(segment_crosses_pickup_box(feet,feet,box) for feet in protected_stands) or
+                        any(not route(anchor,destination,box) or not route(destination,anchor,box) for destination in required)):
+                    rejects['chair_or_doorway_path_blocked'] = rejects.get('chair_or_doorway_path_blocked',0)+1
+                    continue
+                for point in pickup_entrance_candidates(anchor,target_center,[extent.x,extent.y],anchor,radius):
+                    stand,_ = standing(point,box)
+                    if not stand:
+                        continue
+                    feet,body_center = stand
+                    contact,_ = find_contact(actor,body,body_center,min(200.,take['use_radius']),offset)
+                    top_point = original_top+offset
+                    if (contact is not None and (body_center-top_point).length()<=top['use_radius'] and
+                            not trace(body_center+eyes,top_point,[npc,actor]).get('blocking_hit')):
+                        chosen = (offset,feet,contact,floor_heights)
+                        break
+                if chosen is not None:
+                    break
+                rejects['take_stand_unreachable'] = rejects.get('take_stand_unreachable',0)+1
+            if chosen is not None:
+                break
+        if chosen is None:
+            result['tv2']['relocation'] = dict(status='no_verified_location',rejections=rejects)
+        else:
+            offset,feet,contact,floors = chosen
+            target = original+offset
+            for slot in item['slots']:
+                if slot['operation']!='TakeProp' and slot['slot_id']!='TopSurface':
+                    continue
+                origin = unreal.MathLibrary.transform_location(frame,unreal.Vector(*slot['slot']['location']))+offset
+                if abs(slot['slot']['rotation'][1])>.01:
+                    raise RuntimeError('原电视槽需水平朝向')
+                delta = feet-origin
+                direction = original_center+offset-feet
+                entrance = dict(location=[delta.x*forward.x+delta.y*forward.y,delta.x*right.x+delta.y*right.y,delta.z],
+                                rotation=[0,math.remainder(math.degrees(math.atan2(direction.y,direction.x))-yaw,360.),0],scale=[1,1,1])
+                slot.update(entrance=entrance,exit=entrance)
+            plan = dict(actor=data['actor'],object_id=data['object_id'],from_location=xyz(original),to_location=xyz(target),
+                        map_sha256=sha256(source_file(project,MAP,True)))
+            manifest['portable_tv_relocation'] = plan
+            result['tv2'][take['slot_id']] = dict(status='recalibrated_with_relocation',feet=xyz(feet),contact=xyz(contact))
+            result['tv2'][top['slot_id']] = dict(status='recalibrated_with_relocation',feet=xyz(feet),contact=xyz(original_top+offset))
+            result['tv2']['relocation'] = dict(status='verified',plan=plan,take_stand=xyz(feet),contact=xyz(contact),
+                                                floor_heights=floors,rejections=rejects)
+    if pending_packages():
+        raise RuntimeError('只读标定意外产生脏包')
+    output = project/'Saved/AIResearch/HomeObjects/PortableEntranceCalibration'/datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    output.mkdir(parents=True, exist_ok=False)
+    (output/'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
+    (output/'report.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+    unreal.log('Portable home entrance calibration: '+str(output))
+    return str(output)
 
 
 def animation_baseline():
@@ -603,11 +973,11 @@ def inspect_imported_animations(mesh, animations):
     return result
 
 
-def main(setup=False, replace=False, manifest_file=None):
+def main(setup=False, replace=False, manifest_file=None, upgrade_portable=False):
     project = Path(unreal.Paths.project_dir()).resolve()
     output = project/'Saved/AIResearch/HomeObjects'/datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     output.mkdir(parents=True, exist_ok=False)
-    report = {'status': 'preparing', 'setup': setup, 'replace': replace,
+    report = {'status': 'preparing', 'setup': setup, 'replace': replace, 'upgrade_portable': upgrade_portable,
               'map_saved': False, 'assets_saved': [], 'not_run': ['PIE', 'BeginPlay', 'game RPC', 'navigation build', 'LLM', 'TTS']}
 
     def write_report():
@@ -617,6 +987,22 @@ def main(setup=False, replace=False, manifest_file=None):
         home, actors, entries, house = inspect_scene()
         baseline, mesh = animation_baseline()
         manifest = json.loads(Path(manifest_file).read_text(encoding='utf-8-sig')) if manifest_file else None
+        relocate = manifest.get('portable_tv_relocation') if manifest else None
+        if upgrade_portable:
+            if not setup or not replace or not manifest:
+                raise RuntimeError('迁移必须确认 Setup、Replace 与现有已标定 manifest')
+            validate_manifest(manifest, home, entries, baseline, setup)
+            manifest = upgrade_portable_furniture(manifest, entries)
+        if relocate:
+            tv = entries['tv2']['data']
+            if (not isinstance(relocate,dict) or not upgrade_portable or relocate.get('actor')!=tv['actor'] or relocate.get('object_id')!=tv['object_id'] or
+                    not close_numbers(relocate.get('from_location'),tv['transform']['location']) or
+                    relocate.get('map_sha256')!=sha256(source_file(project,MAP,True))):
+                raise RuntimeError('电视位置方案与真实已保存地图或原物身份不一致，重新运行只读标定')
+            arrival = relocate.get('to_location')
+            if (not isinstance(arrival,list) or len(arrival)!=3 or any(type(v) not in (int,float) or not math.isfinite(v) for v in arrival) or
+                    not 0.<math.dist(arrival,relocate['from_location'])<=700.):
+                raise RuntimeError('电视拟搬配置信息无效')
         animations = manifest['animations']['assets'] if manifest else ANIMATIONS
         if not unreal.DeliveryHomeObjectAssetTools.finish_pending_editor_assets():
             raise RuntimeError('场景资源加载或编译尚未完成，停止室内检查')
@@ -689,13 +1075,37 @@ def main(setup=False, replace=False, manifest_file=None):
             # 家具资源全部就绪后才修改人物接线，默认与实例分别写入并立即读回
             report['companion_binding'] = apply_companion_binding(binding_plan, manifest['companion_carry'], animations)
             write_report()
+            if upgrade_portable:
+                # 蓝图编译可能重新实例化关卡 Actor，安装时重取同路径的实例
+                home, _, entries, _ = inspect_scene()
+                validate_manifest(manifest, home, entries, baseline, setup)
+            if relocate:
+                actor = entries['tv2']['actor']
+                old = entries['tv2']['data']
+                if (old['actor']!=relocate['actor'] or old['object_id']!=relocate['object_id'] or
+                        not close_numbers(old['transform']['location'],relocate['from_location'])):
+                    raise RuntimeError('安装前电视已改变，停止搬放')
+                actor.modify()
+                actor.set_actor_location(unreal.Vector(*relocate['to_location']),False,True)
+                moved = call_json(tools.inspect_furniture(actor))
+                expected = dict(old['transform'],location=relocate['to_location'])
+                if (moved['actor']!=old['actor'] or moved['object_id']!=old['object_id'] or moved['mesh']!=old['mesh'] or
+                        moved['overrides']!=old['overrides'] or moved['materials']!=old['materials'] or
+                        not close_numbers(old['world_bounds_extent'],moved['world_bounds_extent']) or
+                        not close_numbers(expected,moved['transform'])):
+                    raise RuntimeError('电视原物变换读回失败，地图保持未保存')
+                next(item for item in manifest['objects'] if item['label']=='tv2')['expected_transform'] = expected
+                entries['tv2']['data'] = moved
+                report['relocated_tv'] = manifest.pop('portable_tv_relocation')
+                report['manifest'] = manifest
             installed = []
             for item in manifest['objects']:
                 bp = load(item['blueprint_path'])
                 identity, valid = unreal.GuidLibrary.parse_string_to_guid(item['object_id'])
                 if not valid:
                     raise RuntimeError('UE GUID 解析失败')
-                actor = tools.install_furniture(entries[item['label']]['actor'], bp, home, identity)
+                actor = tools.install_furniture(entries[item['label']]['actor'], bp, home, identity,
+                                                upgrade_portable and item['physical_prop'])
                 if not actor:
                     raise RuntimeError('家具替换失败，地图保持未保存：' + item['label'])
                 observed = call_json(tools.inspect_furniture(actor))
@@ -704,7 +1114,7 @@ def main(setup=False, replace=False, manifest_file=None):
                 if observed['materials'] != entries[item['label']]['data']['materials'] or not observed['replicates']:
                     raise RuntimeError('家具实际材质或复制配置不符')
                 if item['physical_prop'] and not (observed['movable'] and observed['simulate_physics_configured'] and observed['replicate_movement']):
-                    raise RuntimeError('枕头缺少真实根刚体或位姿复制')
+                    raise RuntimeError('可搬实物缺少真实根刚体或位姿复制')
                 expected_slots = {(slot['slot_id'], slot['use_id'], slot['operation']) for slot in item['slots']}
                 actual_slots = {(slot['slot_id'], slot['use_id'], slot['operation']) for slot in observed.get('slots', [])}
                 if actual_slots != expected_slots or any(not slot['configuration_valid'] for slot in observed.get('slots', [])):
@@ -763,5 +1173,10 @@ if __name__ == '__main__':
     if inspect and setup:
         raise RuntimeError('Inspect 不能与写操作并用')
     match = re.search(r'(?:^|\s)-HomeObjectsManifest=(?:"([^"]+)"|(\S+))', command_line, re.IGNORECASE)
-    main(setup, '-replacecompanionhomeassets' in switches,
-         (match.group(1) or match.group(2)) if match else None)
+    manifest_file = (match.group(1) or match.group(2)) if match else None
+    if '-calibrateportablehomeentrances' in switches:
+        if setup or inspect or not manifest_file:
+            raise RuntimeError('只读站位标定须单独指定已安装的 manifest')
+        calibrate_portable_home_entrances(manifest_file,'-relocateportablehometelevision' in switches)
+    else:
+        main(setup, '-replacecompanionhomeassets' in switches, manifest_file, '-upgradeportablehomefurniture' in switches)

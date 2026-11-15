@@ -370,6 +370,14 @@ bool UDeliveryTaskManagerComponent::CompleteDelivery(UDeliveryTaskDefinition* Ta
 	{
 		return false;
 	}
+	const TWeakObjectPtr<APlayerState> ExpectedDeliverer(Deliverer);
+	const auto CanCommitForDeliverer=[&]()
+	{
+		if (!Deliverer) return Carrier==nullptr;
+		return ExpectedDeliverer.IsValid() && Deliverer->GetWorld()==GetWorld() &&
+			!Deliverer->IsActorBeingDestroyed() && !Deliverer->IsInactive();
+	};
+	if (!CanCommitForDeliverer()) return false;
 
 	FDeliveryTaskState* State = FindState(Task);
 	if (!State || State->Status != EDeliveryTaskStatus::InProgress || CompletingDeliveries.Contains(Task))
@@ -380,7 +388,7 @@ bool UDeliveryTaskManagerComponent::CompleteDelivery(UDeliveryTaskDefinition* Ta
 	// 摘下持件可能同步通知库存监听者，期间同一订单只接受这一次交付
 	CompletingDeliveries.Add(Task,Carrier);
 	ON_SCOPE_EXIT { CompletingDeliveries.Remove(Task); };
-	if (!ReleasePackage() || !IsValid(GetOwner()) || GetOwner()->IsActorBeingDestroyed()) return false;
+	if (!ReleasePackage() || !IsValid(GetOwner()) || GetOwner()->IsActorBeingDestroyed() || !CanCommitForDeliverer()) return false;
 	State=FindState(Task);
 	if (!State || State->Status!=EDeliveryTaskStatus::InProgress) return false;
 	if (DeliveryEvent.IsValid()) State->SpecialEvents.AddUnique(DeliveryEvent);
@@ -397,11 +405,12 @@ bool UDeliveryTaskManagerComponent::CompleteDelivery(UDeliveryTaskDefinition* Ta
 
 	// 先标记完成再通知结算，避免回调中再次交付同一任务
 	SetTaskStatus(*State, EDeliveryTaskStatus::Completed);
-	OnTaskCompleted.Broadcast(Task, Reward, Deliverer);
+	OnTaskCompleted.Broadcast(Task, Reward, ExpectedDeliverer.Get());
 
+	const auto* PaidPlayer=ExpectedDeliverer.Get();
 	UE_LOG(LogDelivery, Log, TEXT("[Task] %s 完成，用时 %.1fs，奖励 %d，交付玩家 %s"),
 	       *Task->TaskId.ToString(), Elapsed, Reward.FinalReward,
-	       Deliverer ? *Deliverer->GetPlayerName() : TEXT("None"));
+	       PaidPlayer ? *PaidPlayer->GetPlayerName() : TEXT("None"));
 
 	// 后续任务的解锁条件可能刚好被这次完成满足，立刻进电话队列
 	ReevaluateUnlocks();

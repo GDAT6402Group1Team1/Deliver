@@ -70,6 +70,12 @@ FString ActionLabel(const FString& Value)
         { TEXT("Stay"), TEXT("原地等候") }, { TEXT("CancelCompanionTask"), TEXT("取消当前委托") },
         { TEXT("FetchPackage"), TEXT("前往取件") }, { TEXT("TakePackage"), TEXT("接过包裹") },
         { TEXT("DeliverPackage"), TEXT("递送包裹") }, { TEXT("ReturnPackage"), TEXT("归还包裹") },
+        { TEXT("DropPackage"), TEXT("放下包裹") }, { TEXT("StorePackageInBackpack"), TEXT("把包裹收进主人背包") },
+        { TEXT("TakeItem"), TEXT("接过主人物品") },
+        { TEXT("CollectCaterpillar"), TEXT("拾取小绿") },
+        { TEXT("InsertCaterpillar"), TEXT("放入小绿") },
+        { TEXT("JoinAssist"), TEXT("持续协战") },
+        { TEXT("StopAssist"), TEXT("收手") },
         { TEXT("OfferCaterpillar"), TEXT("递出小绿") }, { TEXT("GoHome"), TEXT("回家") },
         { TEXT("HomeAction"), TEXT("居家活动") }, { TEXT("None"), TEXT("未选择动作") }
     };
@@ -264,7 +270,7 @@ void UDeliveryAiInspectorWidget::RefreshPresentation()
     if (HistoryBanner) HistoryBanner->SetVisibility(bHistoricalTrace ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
     if (LatestButton) LatestButton->SetVisibility(bHistoricalTrace ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     SetLabel(ExpandLabel, bExpanded ? TEXT("F6 收起") : TEXT("F6 展开"));
-    if (ExpandButton) ExpandButton->SetToolTipText(FText::FromString(TEXT("LLM NPC OBESERVATION")));
+    if (ExpandButton) ExpandButton->SetToolTipText(NSLOCTEXT("DeliveryAIInspector", "ExpandTooltip", "居民模型观察"));
     if (TabPages) TabPages->SetActiveWidgetIndex(ActiveTab);
     if (WidgetTree)
         for (int32 Index = 0; Index < UE_ARRAY_COUNT(TabNames); ++Index)

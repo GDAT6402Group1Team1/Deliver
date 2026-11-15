@@ -1,4 +1,5 @@
 #include "Carry/DeliveryHandheldCarrierInterface.h"
+#include "Inventory/DeliveryCaterpillarItem.h"
 #include "Inventory/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryPackageItem.h"
 #include "Inventory/DeliveryInventoryItemComponent.h"
@@ -10,6 +11,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Engine/World.h"
 #include "Misc/ScopeExit.h"
+#include "PhysicsEngine/BodyInstance.h"
 
 namespace
 {
@@ -47,6 +49,23 @@ bool DeliveryHandheldTransfer::IsFetchableItem(const ADeliveryHandheldItem* Item
     return IsOrdinaryItem(Item) && Item->GetItemComponent()->bCompanionCanFetch && !Item->GetItemComponent()->DisplayName.IsEmpty();
 }
 
+const UDeliveryInteractableComponent* DeliveryHandheldTransfer::FindWorldPickupInteraction(const ADeliveryHandheldItem* Item,const UWorld* World)
+{
+    if (!World || !IsFetchableItem(Item) || Item->GetWorld()!=World || Item->GetOwner() || Item->GetAttachParentActor() ||
+        Item->IsHidden() || !Item->GetActorEnableCollision()) return nullptr;
+    const auto* Mesh=Item->GetItemMesh();
+    const auto* Interaction=UDeliveryInteractableComponent::FindOn(Item,EDeliveryInteractionKey::PickupE);
+    if (!IsValid(Mesh) || Mesh!=Item->GetRootComponent() || !Mesh->GetStaticMesh() || !Mesh->IsRegistered() ||
+        !IsValid(Interaction) || !Interaction->IsRegistered() || !Interaction->bInteractEnabled) return nullptr;
+    if (Mesh->IsSimulatingPhysics()) return Interaction;
+
+    // 院里静置的小绿和落地的原虫使用同一个拾取入口，仍须有可查询的实物碰撞
+    if (!Item->IsA<ADeliveryCaterpillarItem>() || Mesh->Mobility!=EComponentMobility::Movable ||
+        !Mesh->IsPhysicsStateCreated() || !Mesh->IsQueryCollisionEnabled()) return nullptr;
+    const auto* Body=Mesh->GetBodyInstance(NAME_None,false);
+    return Body && Body->IsValidBodyInstance()?Interaction:nullptr;
+}
+
 bool DeliveryHandheldTransfer::TryPickupWorldItem(AActor* Receiver,ADeliveryHandheldItem* Item,FName& Reason,
     const TFunction<bool()>& CanContinue)
 {
@@ -55,13 +74,12 @@ bool DeliveryHandheldTransfer::TryPickupWorldItem(AActor* Receiver,ADeliveryHand
     auto* Carrier=IsValid(Receiver)?Cast<IDeliveryHandheldCarrierInterface>(Receiver):nullptr;
     auto* Pawn=Cast<APawn>(Receiver);
     auto* Data=IsValid(Item)?Item->GetItemComponent():nullptr;
-    auto* Interaction=IsValid(Item)?UDeliveryInteractableComponent::FindOn(Item,EDeliveryInteractionKey::PickupE):nullptr;
     if (!IsInGameThread() || !World || (CanContinue && !CanContinue()) || !IsLiveActor(Receiver,World) || !IsLiveActor(Item,World) || !Pawn || !Carrier ||
-        !IsFetchableItem(Item) || Item->GetOwner() || Item->GetAttachParentActor() || Item->IsHidden() ||
-        !Item->GetItemMesh() || Item->GetRootComponent()!=Item->GetItemMesh() || !Item->GetItemMesh()->IsSimulatingPhysics() ||
-        !Interaction || !Interaction->CanInteract(Pawn) || !Carrier->CanHandleHandheldItem() ||
+        !Carrier->CanHandleHandheldItem() ||
         !Carrier->CanReceiveHandheldItem(Item))
     { Reason=TEXT("WorldItemUnavailable"); return false; }
+    const auto* Interaction=FindWorldPickupInteraction(Item,World);
+    if (!Interaction || !Interaction->CanInteract(Pawn)) { Reason=TEXT("WorldItemUnavailable"); return false; }
     APlayerState* Owner=Carrier->GetHandheldOwnerPlayerState();
     if (!IsValid(Owner) || Owner->IsInactive() || Owner->GetWorld()!=World)
     { Reason=TEXT("OwnerUnavailable"); return false; }

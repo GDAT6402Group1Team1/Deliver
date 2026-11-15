@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 #include "Audio/DeliveryAudioComponent.h"
 #include "Audio/DeliveryAudioConfig.h"
+#include "Character/DeliveryCharacter.h"
+#include "Vehicle/DeliveryMotorbike.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -57,7 +59,10 @@ void UDeliveryAudioComponent::PlaySound(const FDeliverySoundSettings& Settings)
     // 提示音只播放给操作玩家，服务器上的远端角色不能触发本机提示
     const APawn* Pawn = Cast<APawn>(GetOwner());
     const APlayerController* Controller = Cast<APlayerController>(GetOwner());
-    if ((Pawn && Pawn->IsLocallyControlled()) || (Controller && Controller->IsLocalController()))
+    const auto* Character=Cast<ADeliveryCharacter>(Pawn);
+    const auto* DrivenBike=Character?Character->GetCurrentVehicle():nullptr;
+    if ((Pawn && Pawn->IsLocallyControlled()) || (Controller && Controller->IsLocalController()) ||
+        (DrivenBike && DrivenBike->IsLocallyControlled()))
     {
         UGameplayStatics::PlaySound2D(this, Settings.Sound, Settings.Volume, Settings.Pitch);
     }

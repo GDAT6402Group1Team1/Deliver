@@ -5,6 +5,7 @@
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
+#include "AI/Network/DeliveryAiGatewaySubsystem.h"
 #include "AI/Network/DeliveryAiSettings.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "Components/SceneComponent.h"
@@ -552,6 +553,70 @@ bool FDeliveryNpcConversationContextTest::RunTest(const FString&)
     TestEqual(TEXT("完整返回也能先接收玩家回复"),ReplyMemory->GetPublicState().Status,EDeliveryNpcActionStatus::Accepted);
     TestTrue(TEXT("完整返回后仍会处理邻居的新一句"),ReplyNpc->bDecisionNeeded);
     TestFalse(TEXT("完整返回没有提前标记邻居的话已处理"),ReplyMemory->LastDecisionEventIds.Contains(DeferredWholeReplyLine));
+
+    for (const bool bStreaming:{false,true})
+    {
+        TGuardValue<bool> ReplyProtocol(Settings->bStreamReplies,bStreaming);
+        const FString Protocol=bStreaming?TEXT("流式回复"):TEXT("完整回复");
+        for (const bool bNewFact:{false,true})
+        {
+            if (!TestTrue(Protocol+TEXT("可准备玩家原问题"),PreparePlayerReply(Proposal))) return false;
+            FGuid FactId;
+            if (bNewFact)
+            {
+                ReplyNpc->ObserveFact(TEXT("Recovered"),nullptr,TEXT("我已经恢复站立，可以继续行动"),EDeliveryNpcEvidenceSource::ActionResult);
+                const auto* Fact=ReplyMemory->Evidence.FindByPredicate([](const auto& Item){ return Item.Kind==TEXT("Recovered"); });
+                if (!TestNotNull(Protocol+TEXT("期间的现场结果已记录"),Fact)) return false;
+                FactId=Fact->EventId;
+                TestTrue(Protocol+TEXT("期间的现场结果请求下一轮更新"),ReplyNpc->bDecisionNeeded);
+                TestFalse(Protocol+TEXT("现场结果不走邻居直接接话的排队分支"),ReplyMemory->bDecisionQueued);
+            }
+            if (bStreaming)
+            {
+                if (!TestTrue(TEXT("流式回复接受原玩家问题的建议"),ReplyMemory->ReceiveStreamDecision(Proposal.RequestId,Proposal))) return false;
+                ReplyMemory->FinishReply(Proposal.RequestId,true,0);
+            }
+            else ReplyMemory->ReceiveDecision(Proposal.RequestId,&Proposal,NAME_None);
+            TestEqual(Protocol+TEXT("仍接受原玩家回复"),ReplyMemory->GetPublicState().Status,EDeliveryNpcActionStatus::Accepted);
+            TestFalse(Protocol+TEXT("正常结束释放旧请求"),ReplyMemory->IsDecisionPending());
+            TestEqual(Protocol+TEXT("仅有新现场事件时安排下一轮"),ReplyNpc->bDecisionNeeded,bNewFact);
+            if (bNewFact)
+            {
+                ReplyMemory->CancelPlan(TEXT("InspectDeferredGameplayFact"));
+                FDeliveryNpcDecisionRequest EventRequest;
+                if (!TestTrue(Protocol+TEXT("之后可重建现场请求"),ReplyMemory->BuildDecisionRequest(Epoch,EventRequest))) return false;
+                TestTrue(Protocol+TEXT("下一轮仍能读到恢复站立事件"),EventRequest.Evidence.ContainsByPredicate(
+                    [&FactId](const auto& Item){ return Item.EventId==FactId; }));
+                TestFalse(Protocol+TEXT("原回复没有提前把后来事实标记为已读"),EventRequest.LastDecisionEventIds.Contains(FactId));
+            }
+        }
+    }
+
+    {
+        ReplyMemory->ResetContext(TEXT("CheckQueuedDecisionWake"));
+        auto* Gateway=World->GetSubsystem<UDeliveryAiGatewaySubsystem>();
+        if (!TestNotNull(TEXT("同步入队检查使用真实网关"),Gateway)) return false;
+        // 该检查只入队并手动取消，不推进世界或网关 Tick
+        TGuardValue<bool> EnableEnqueue(Settings->bEnabled,true);
+        const FDelegateHandle TraceHandle=ReplyMemory->OnDecisionTraceChanged.AddLambda([&](const FDeliveryNpcDecisionTrace& Trace)
+        {
+            if (Trace.Stage==TEXT("Queued"))
+                ReplyNpc->ObserveFact(TEXT("Recovered"),nullptr,TEXT("我已经恢复站立，可以继续行动"),EDeliveryNpcEvidenceSource::ActionResult);
+        });
+        ON_SCOPE_EXIT
+        {
+            ReplyMemory->OnDecisionTraceChanged.Remove(TraceHandle);
+            ReplyMemory->CancelDecision();
+        };
+        ReplyNpc->WakeDecision();
+        const int32 PendingBefore=Gateway->GetPendingCount();
+        if (!TestTrue(TEXT("网关接受已封存的现场请求"),ReplyMemory->RequestDecision())) return false;
+        TestEqual(TEXT("只入队一轮请求"),Gateway->GetPendingCount(),PendingBefore+1);
+        TestFalse(TEXT("入队时新增事实未进入旧快照"),ReplyMemory->ActiveRequest.Evidence.ContainsByPredicate(
+            [](const auto& Item){ return Item.Kind==TEXT("Recovered"); }));
+        TestTrue(TEXT("同步入队回调新增的事实仍安排下轮"),ReplyNpc->bDecisionNeeded &&
+            ReplyMemory->Evidence.ContainsByPredicate([](const auto& Item){ return Item.Kind==TEXT("Recovered"); }));
+    }
 
     if (!TestTrue(TEXT("准备检查排队中的新玩家发言"),PreparePlayerReply(Proposal))) return false;
     FDeliveryNpcObservation NewPlayerLine;

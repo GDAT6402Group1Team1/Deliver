@@ -37,6 +37,8 @@ public:
     UFUNCTION(BlueprintPure,Category="Delivery|Home") bool IsClaimed() const { return bClaimed; }
     UFUNCTION(BlueprintPure,Category="Delivery|Home") bool TryGetReturnLocation(FVector& OutLocation) const;
     UFUNCTION(BlueprintPure,Category="Delivery|Home") bool TryGetInteriorLocation(FVector& OutLocation) const;
+    // 按同层门叶横截面判断两点是否从门的一侧跨到另一侧
+    bool CrossesPedestrianDoorway(const FVector& FromFeet,const FVector& ToFeet) const;
     void GetFurnitureObjects(TArray<UDeliveryHomeObjectComponent*>& OutObjects) const;
     bool ContainsFurniture(const UDeliveryHomeObjectComponent* Object) const;
     bool GetDeparturePoint(int32 Index,FVector& OutLocation) const;

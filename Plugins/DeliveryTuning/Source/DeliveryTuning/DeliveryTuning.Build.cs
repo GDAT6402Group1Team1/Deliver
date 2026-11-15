@@ -9,7 +9,7 @@ public class DeliveryTuning : ModuleRules
         bUseUnity = false;
         PrivateDependencyModuleNames.AddRange(new[] {
             "Core", "CoreUObject", "Engine", "Slate", "SlateCore", "UnrealEd",
-            "PropertyEditor", "ToolMenus", "Delivery", "Json", "InputCore", "MovieScene", "MovieSceneTracks",
+            "PropertyEditor", "ToolMenus", "Delivery", "GameplayTags", "Json", "InputCore", "MovieScene", "MovieSceneTracks",
             "NavigationSystem", "AssetTools", "ToolsetRegistry", "EnhancedInput", "AIModule", "SmartObjectsModule", "AIGraph", "BehaviorTreeEditor", "BlueprintGraph", "KismetCompiler", "AssetRegistry", "UMG", "UMGEditor", "AnimGraph", "AnimGraphRuntime", "AnimationBlueprintLibrary"
         });
     }

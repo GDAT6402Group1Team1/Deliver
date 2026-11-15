@@ -8,6 +8,7 @@
 #include "AbilitySystemInterface.h"
 #include "GameplayAbilitySpecHandle.h"
 #include "Combat/DeliveryNpcStrikeExecutor.h"
+#include "AI/Characters/DeliveryNpcProfile.h"
 #include "DeliveryNpcCharacter.generated.h"
 class UDeliveryNpcAgentComponent;
 class UDeliveryNpcCombatComponent;
@@ -27,6 +28,7 @@ UCLASS()
 class DELIVERY_API ADeliveryNpcCharacter : public ACharacter, public IDeliveryImpactReceiver, public IDeliveryHornReceiver, public IAbilitySystemInterface, public IDeliveryNpcStrikeExecutor
 {
     GENERATED_BODY()
+    friend class UDeliveryNpcAgentComponent;
     friend class FDeliveryNpcConversationContextTest;
     friend class FDeliveryConversationFeedbackTest;
 public:
@@ -42,6 +44,7 @@ public:
     virtual void CancelNpcStrike(FGuid ActionId,FGuid PunchId) override;
     virtual FDeliveryNpcStrikeFinished& GetNpcStrikeFinishedDelegate() override;
     virtual bool CanExecuteGameplayRule(EDeliveryNpcAction Action,AActor* Target,int32 RuleRevision) const { return false; }
+    virtual float GetGameplayRuleFightApproachRange() const { return 0.f; }
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|居民") TObjectPtr<UCapsuleComponent> ImpactSensor;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Delivery|居民") TObjectPtr<UDeliveryNpcAgentComponent> Agent;
@@ -52,8 +55,10 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Delivery|居民") TObjectPtr<UBehaviorTree> BehaviorTree;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Delivery|居民") FText DisplayName;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Delivery|人物",meta=(RowType="/Script/Delivery.DeliveryNpcProfileRow")) FDataTableRowHandle Profile;
-    // 从配置表更新姓名、性格和声音，未选择有效行时保留原设置
+    // 从配置表更新姓名、性格、声音和动作表现，未选择有效行时保留原设置
     UFUNCTION(BlueprintCallable,CallInEditor,Category="Delivery|人物") bool ApplyProfile();
+    // 查找已应用且与当前网格兼容的表现，无配置时由原动画层决定默认表现
+    const FDeliveryNpcBehaviorPresentation* FindBehaviorPresentation(FGameplayTag Behavior) const;
     // 检查 NPC 当前能否执行这个动作，只返回检查结果
     virtual bool CanExecute(EDeliveryNpcAction Action, AActor* Target) const;
     // 请求者由服务器保存，不能从模型选择的说话对象推导权限
@@ -108,15 +113,22 @@ public:
     bool IsDecisionRetryScheduled() const { return bDecisionRetryScheduled; }
     void ObserveFact(FName Kind,AActor* Subject,const FString& Text,EDeliveryNpcEvidenceSource Source);
 protected:
+    // 子类可收紧短程移动的路程上限，居民沿用步幅限制
+    virtual float GetPaceTravelBudget() const { return TNumericLimits<float>::Max(); }
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     virtual void Tick(float Dt) override;
 private:
+    // 配置随人物在各端加载，网络只同步现有动作编号与时间
+    UPROPERTY(Transient) TMap<FGameplayTag,FDeliveryNpcBehaviorPresentation> BehaviorPresentation;
     bool HearSpeechInternal(AActor* Speaker,const FString& Text,FGuid TurnId,int32 Depth,AActor* Addressee,
         FGuid ReplyToEventId,bool bRequestReply,bool bCompanionVoice);
     bool RequestStrikeAbility(AActor* Target,FGuid ActionId,FGuid PunchId,bool bFight);
     FGameplayAbilitySpecHandle StrikeAbilityHandle;
     float PreviousActionWalkSpeed=-1;
+    void MarkDecisionNeeded();
+    void ConfirmDecisionRequestQueued(uint64 WakeSerial);
+    void ResetDecisionScheduling();
     UFUNCTION() void OnDecisionFinished(FName Reason);
     int32 DecisionRetryCount=0;
     bool bDecisionRetryScheduled=false;
@@ -130,5 +142,7 @@ private:
     int32 ConversationDepth = 0;
     FGuid ExecutingAction;
     FGuid LastFinishedAction;
+    // 网关同步通知期间的新事实由下一份快照处理
+    uint64 DecisionWakeSerial=0;
     bool bDecisionNeeded=true;
 };

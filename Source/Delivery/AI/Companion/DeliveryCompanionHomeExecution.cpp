@@ -18,6 +18,8 @@
 #include "Navigation/PathFollowingComponent.h"
 #include "Engine/World.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogDeliveryCompanionHome,Log,All);
+
 namespace
 {
     bool IsHomeRunning(EDeliveryCompanionHomePhase Phase)
@@ -239,7 +241,8 @@ bool UDeliveryCompanionComponent::BeginHomeChoice(const FDeliveryCompanionHomeCh
     auto* Source=Choice.SourceObject.Get();
     const bool bTake=Choice.Operation==EDeliveryHomeOperation::TakeProp;
     const bool bPlace=Choice.Operation==EDeliveryHomeOperation::PlaceProp;
-    const bool bAlreadyCarried=bPlace && OwnsHomeSource(Source);
+    const bool bGround=Choice.Operation==EDeliveryHomeOperation::PlaceNearOwner;
+    const bool bAlreadyCarried=(bPlace || bGround) && OwnsHomeSource(Source);
     FDeliveryHomeUseClaim NewUse,NewTake;
     const FGuid NewCarryId=bAlreadyCarried?HomePropCarryId:FGuid::NewGuid();
     auto* UseObject=bPlace?Choice.DestinationObject.Get():Source;
@@ -259,9 +262,10 @@ bool UDeliveryCompanionComponent::BeginHomeChoice(const FDeliveryCompanionHomeCh
         if (NewUse.Object.IsValid()) NewUse.Object->ReleaseUse(NewUse,TEXT("HomeStartInvalidated"));
         if (NewTake.Object.IsValid()) NewTake.Object->ReleaseUse(NewTake,TEXT("HomeStartInvalidated"));
     };
-    if (!bTake && !UseObject->TryClaimUse(Npc,OwnerPlayerState,ArrangementId,Choice.Use,NewUse,OutReason)) return false;
+    if (!bTake && !bGround && !UseObject->TryClaimUse(Npc,OwnerPlayerState,ArrangementId,Choice.Use,NewUse,OutReason,bPlace?Source:nullptr))
+        return false;
     if (!StillCurrent()) { ReleaseNewClaims(); OutReason=TEXT("HomeStartInvalidated"); return false; }
-    if ((bTake || bPlace) && !bAlreadyCarried &&
+    if ((bTake || bPlace || bGround) && !bAlreadyCarried &&
         !Source->TryClaimUse(Npc,OwnerPlayerState,NewCarryId,bTake?Choice.Use:Choice.TakeUse,NewTake,OutReason))
     { if (NewUse.Object.IsValid()) NewUse.Object->ReleaseUse(NewUse,OutReason); return false; }
     if (!StillCurrent()) { ReleaseNewClaims(); OutReason=TEXT("HomeStartInvalidated"); return false; }
@@ -274,13 +278,14 @@ bool UDeliveryCompanionComponent::BeginHomeChoice(const FDeliveryCompanionHomeCh
     HomeState.ArrangementId=ArrangementId;
     HomeState.Operation=Choice.Operation;
     HomeState.Object=Source->GetOwner();
-    HomeState.Destination=bPlace?UseObject->GetOwner():nullptr;
+    HomeState.Destination=bPlace?UseObject->GetOwner():Choice.PlacementOwnerPawn.Get();
     ActiveHomeChoice=Choice;
     HomeRequester=OwnerPlayerState.Get();
     HomeActiveSeconds=0;
     bHomeUseStarted=false;
     bHomeExitAnimationFinished=false;
     bPlacingHomeProp=false;
+    bHasOwnerPlacementTarget=false;
     ClearHomePropTransfer();
     ReleasedPlacementProp.Reset(); PlacementReleasedAt=0; PlacementStableSince=0;
     SetHomePhase(bAlreadyCarried?EDeliveryCompanionHomePhase::GoToDestination:EDeliveryCompanionHomePhase::GoToObject);
@@ -295,6 +300,12 @@ bool UDeliveryCompanionComponent::ApplyHomeChoice(const FDeliveryCompanionHomeCh
         !CanApplyHomeChoice(Choice,Requester,ExpectedRevision)) return false;
     TGuardValue<bool> Changing(bChangingHomeArrangement,true);
     PendingHomeChoice={}; PendingHomeArrangementId.Invalidate();
+    if (Choice.Operation==EDeliveryHomeOperation::LeaveSeat)
+    {
+        ++CommandRevision;
+        BeginLeavingHomeUse(TEXT("HomeSeatLeftByOwner"));
+        return HomeState.ArrangementId==Choice.SeatArrangementId && HomeState.Phase==EDeliveryCompanionHomePhase::LeaveUse;
+    }
     const FGuid NewId=FGuid::NewGuid();
     if (NeedsHomeExit())
     {
@@ -308,10 +319,11 @@ bool UDeliveryCompanionComponent::ApplyHomeChoice(const FDeliveryCompanionHomeCh
     }
     // 即时替换也记录待执行快照，供亲自释放旧 claim 后更新唯一的自有版本变化
     PendingHomeChoice=Choice; PendingHomeArrangementId=NewId;
+    const bool bKeepProp=(Choice.Operation==EDeliveryHomeOperation::PlaceProp || Choice.Operation==EDeliveryHomeOperation::PlaceNearOwner) &&
+        OwnsHomeSource(Choice.SourceObject.Get());
     if (HasActiveHomeArrangement()) FinishHomeArrangement(EDeliveryCompanionHomePhase::Cancelled,TEXT("ReplacedByHomeArrangement"),
-        Choice.Operation==EDeliveryHomeOperation::PlaceProp && Choice.SourceObject.IsValid() && OwnsHomeSource(Choice.SourceObject.Get()));
-    if (HomeState.CarriedProp && !(Choice.Operation==EDeliveryHomeOperation::PlaceProp && OwnsHomeSource(Choice.SourceObject.Get())))
-        ReleaseHomeProp(TEXT("OwnerChangedArrangement"));
+        bKeepProp);
+    if (HomeState.CarriedProp && !bKeepProp) ReleaseHomeProp(TEXT("OwnerChangedArrangement"));
     const auto RefreshedChoice=PendingHomeChoice;
     PendingHomeChoice={}; PendingHomeArrangementId.Invalidate();
     FName Reason=TEXT("HomeCandidateChanged");
@@ -358,7 +370,8 @@ bool UDeliveryCompanionComponent::StartHomeUse(const UDeliveryHomeUseRequest& Re
     if (!Npc || !Npc->HasAuthority() || Request.GetOuter()!=Npc || !IsCurrentHome(Request.ArrangementId) ||
         bHomeUseStarted || !CanCommand(HomeRequester.Get()) || Npc->IsKnockedDown()) return false;
     const bool bTaking=HomeState.Phase==EDeliveryCompanionHomePhase::GoToObject &&
-        (HomeState.Operation==EDeliveryHomeOperation::TakeProp || HomeState.Operation==EDeliveryHomeOperation::PlaceProp);
+        (HomeState.Operation==EDeliveryHomeOperation::TakeProp || HomeState.Operation==EDeliveryHomeOperation::PlaceProp ||
+            HomeState.Operation==EDeliveryHomeOperation::PlaceNearOwner);
     const auto& Claim=bTaking?HomeTakeClaim:HomeUseClaim;
     auto* Object=Claim.Object.Get();
     FName Reason;
@@ -413,6 +426,9 @@ bool UDeliveryCompanionComponent::StartHomeUse(const UDeliveryHomeUseRequest& Re
         bPlacingHomeProp=true; PropPlacementTarget=Placement;
         BeginHomePropSegment(HomePropTransferPoint.bEnabled);
         SetHomePhase(EDeliveryCompanionHomePhase::PlaceProp);
+        UE_LOG(LogDeliveryCompanionHome,Log,TEXT("HomePropPlacementStarted arrangement=%s prop=%s support=%s stand=%s transfer=%s target=%s"),
+            *HomeState.ArrangementId.ToString(),*GetNameSafe(HomeState.CarriedProp.Get()),*GetNameSafe(Object->GetOwner()),
+            *Npc->GetActorLocation().ToCompactString(),*HomePropTransferPoint.WorldPoint.ToCompactString(),*Placement.GetLocation().ToCompactString());
     }
     else
     {
@@ -468,6 +484,10 @@ void UDeliveryCompanionComponent::FinishHomeArrangement(EDeliveryCompanionHomePh
         Description=FString::Printf(TEXT("我已经实际拿起%s，现在仍拿着它，可以继续跟随或等候；还没有把它放到别处。"),*SourceName);
     else if (bSucceeded && HomeState.Operation==EDeliveryHomeOperation::PlaceProp)
         Description=FString::Printf(TEXT("我已经把%s放在%s的%s，松手后实物稳定，游戏确认摆放完成。"),*SourceName,*DestinationName,*UseName);
+    else if (bSucceeded && HomeState.Operation==EDeliveryHomeOperation::PlaceNearOwner)
+        Description=FString::Printf(TEXT("我已经把%s放在主人面前的地上，它恢复了原来的大小，已经放稳。"),*SourceName);
+    else if (bSucceeded && Reason==TEXT("HomeSeatLeftByOwner"))
+        Description=FString::Printf(TEXT("我已经从%s下来，站到了地上。"),*SourceName);
     else if (bSucceeded && HomeState.Operation==EDeliveryHomeOperation::PlayAudio)
         Description=FString::Printf(TEXT("我已经走近%s，实际打开了它的%s，游戏确认声音开关已经打开。"),*SourceName,*UseName);
     else if (bSucceeded && HomeState.Operation==EDeliveryHomeOperation::StopAudio)
@@ -482,6 +502,7 @@ void UDeliveryCompanionComponent::FinishHomeArrangement(EDeliveryCompanionHomePh
     ReleaseHomeSeatMove(true);
     if (!WeakThis.IsValid() || !IsValid(GetOwner()) || HomeState.ArrangementId!=OldId) return;
     bHomeUseStarted=false; bPlacingHomeProp=false;
+    bHasOwnerPlacementTarget=false;
     ClearHomePropTransfer();
     ReleasedPlacementProp.Reset(); PlacementReleasedAt=0; PlacementStableSince=0;
     ActiveHomeChoice={}; HomeRequester.Reset();
@@ -490,6 +511,9 @@ void UDeliveryCompanionComponent::FinishHomeArrangement(EDeliveryCompanionHomePh
     RefreshHomeCarryPose();
     if (bWasRunning && IsValid(GetOwner()) && !bHomeEndingPlay)
     {
+        UE_LOG(LogDeliveryCompanionHome,Log,TEXT("HomeArrangementResult arrangement=%s operation=%s phase=%s reason=%s"),
+            *OldId.ToString(),*StaticEnum<EDeliveryHomeOperation>()->GetNameStringByValue(int64(HomeState.Operation)),
+            *StaticEnum<EDeliveryCompanionHomePhase>()->GetNameStringByValue(int64(Phase)),*Reason.ToString());
         if (bSucceeded) RecordMemory(OldId,TEXT("HomeUseCompleted"),Description,0);
         GetCompanion()->ObserveFact(bSucceeded?TEXT("HomeArrangementCompleted"):TEXT("HomeArrangementStopped"),HomeState.Object,
             Description,EDeliveryNpcEvidenceSource::ActionResult);
@@ -574,7 +598,12 @@ bool UDeliveryCompanionComponent::GetObjectCarryPose(const AActor* Object,const 
     if (!ValidateHomePropTransfer(TransferReason)) return false;
     FVector Target,Forward;
     if (!GetHomeHandPose(Target,Forward)) return false;
-    if (bPlacingHomeProp) { Target=PropPlacementTarget.GetLocation(); Forward=PropPlacementTarget.GetRotation().GetForwardVector().GetSafeNormal2D(); }
+    if (bPlacingHomeProp)
+    {
+        const auto* Source=HomeTakeClaim.Object.Get();
+        if (!Source || !Source->GetCarryPlacementLocation(PropPlacementTarget,Target)) return false;
+        Forward=PropPlacementTarget.GetRotation().GetForwardVector().GetSafeNormal2D();
+    }
     if (bMovingToPropTransferPoint)
     { Target=HomePropTransferPoint.WorldPoint; Forward=PropBlendForward; }
     const double BlendSeconds=FMath::Clamp(static_cast<double>(PropCarryBlendSeconds),.1,5.0);
@@ -584,6 +613,22 @@ bool UDeliveryCompanionComponent::GetObjectCarryPose(const AActor* Object,const 
     OutForward=FMath::Lerp(PropBlendForward,Forward,Smooth).GetSafeNormal2D();
     if (OutForward.IsNearlyZero()) OutForward=Forward;
     return !OutLocation.ContainsNaN() && !OutForward.ContainsNaN();
+}
+
+bool UDeliveryCompanionComponent::IsObjectCarryInPlacement(const AActor* Object,const FGuid& CarryId) const
+{
+    const auto* Destination=HomeUseClaim.Object.Get();
+    if (!bPlacingHomeProp || !bHomeUseStarted || HomeState.Phase!=EDeliveryCompanionHomePhase::PlaceProp ||
+        HomeState.Operation!=EDeliveryHomeOperation::PlaceProp || !IsValid(Object) || Object!=HomeState.CarriedProp ||
+        !CarryId.IsValid() || CarryId!=HomePropCarryId || !HomeGrabbable.IsValid() ||
+        !HomeGrabbable->IsCarriedByProvider(this,CarryId) || !Destination ||
+        HomeUseClaim.ActionId!=HomeState.ArrangementId || ActiveHomeChoice.DestinationObject.Get()!=Destination ||
+        HomeState.Destination!=Destination->GetOwner()) return false;
+    // 摆放可经过同一目标槽的已复核中转点，姿势查询仍逐帧校验槽和支撑物
+    if (bMovingToPropTransferPoint &&
+        (!HomePropTransferPoint.bEnabled || HomePropTransferPoint.Object.Get()!=Destination)) return false;
+    const auto* Definition=Destination->GetUseDefinition(HomeUseClaim);
+    return Definition && Definition->Operation==EDeliveryHomeOperation::PlaceProp;
 }
 
 bool UDeliveryCompanionComponent::BeginHomePropCarry(FName& OutReason)
@@ -645,6 +690,12 @@ void UDeliveryCompanionComponent::ReleaseHomeProp(FName Reason)
 void UDeliveryCompanionComponent::OnObjectCarryReleased(AActor* Object,const FGuid& CarryId,EDeliveryObjectCarryReleaseReason Reason)
 {
     if (!GetOwner() || !GetOwner()->HasAuthority() || CarryId!=HomePropCarryId || !CarryId.IsValid()) return;
+    FVector Target,Forward;
+    const bool bHasTarget=GetObjectCarryPose(Object,CarryId,Target,Forward);
+    UE_LOG(LogDeliveryCompanionHome,Log,TEXT("HomePropCarryReleased arrangement=%s phase=%s prop=%s release=%d position=%s target=%s"),
+        *HomeState.ArrangementId.ToString(),*StaticEnum<EDeliveryCompanionHomePhase>()->GetNameStringByValue(int64(HomeState.Phase)),
+        *GetNameSafe(Object),int32(Reason),IsValid(Object)?*Object->GetActorLocation().ToCompactString():TEXT("Unavailable"),
+        bHasTarget?*Target.ToCompactString():TEXT("Unavailable"));
     const TWeakObjectPtr<UDeliveryHomeObjectComponent> Source=HomeTakeClaim.Object;
     const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
     FName TransferReason;
@@ -739,8 +790,13 @@ void UDeliveryCompanionComponent::UpdateHomeArrangement()
         else FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomeArrangementTimedOut"));
         return;
     }
+    const bool bGroundPlacement=HomeState.Operation==EDeliveryHomeOperation::PlaceNearOwner;
+    if (bGroundPlacement && HomeState.Phase==EDeliveryCompanionHomePhase::GoToDestination)
+    { UpdateHomeOwnerPlacementApproach(Id,Now); return; }
+    if (bGroundPlacement && HomeState.Phase==EDeliveryCompanionHomePhase::PlaceProp)
+    { UpdateHomePropPlacement(Id,Now); return; }
     const bool bAtSource=HomeState.Phase==EDeliveryCompanionHomePhase::GoToObject &&
-        (HomeState.Operation==EDeliveryHomeOperation::TakeProp || HomeState.Operation==EDeliveryHomeOperation::PlaceProp);
+        (HomeState.Operation==EDeliveryHomeOperation::TakeProp || HomeState.Operation==EDeliveryHomeOperation::PlaceProp || bGroundPlacement);
     const bool bTaking=HomeState.Phase==EDeliveryCompanionHomePhase::TakeProp;
     const auto& Claim=(bAtSource || bTaking)?HomeTakeClaim:HomeUseClaim;
     auto* Object=Claim.Object.Get();
@@ -826,7 +882,8 @@ void UDeliveryCompanionComponent::UpdateHomeArrangement()
         }
         if (UpdateHomeSeatMove(Exit,Reason))
         {
-            if (IsCurrentHome(Id)) FinishHomeArrangement(EDeliveryCompanionHomePhase::Cancelled,HomeLeaveReason);
+            if (IsCurrentHome(Id)) FinishHomeArrangement(HomeLeaveReason==TEXT("HomeSeatLeftByOwner")?
+                EDeliveryCompanionHomePhase::Completed:EDeliveryCompanionHomePhase::Cancelled,HomeLeaveReason);
         }
         else if (IsCurrentHome(Id) && !Reason.IsNone()) FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason);
         return;
@@ -868,79 +925,108 @@ void UDeliveryCompanionComponent::UpdateHomeArrangement()
         HomeUseFinished.Broadcast(Id,true,TEXT("HomePropTaken"));
         return;
     }
-    if (HomeState.Phase==EDeliveryCompanionHomePhase::PlaceProp)
+    if (HomeState.Phase==EDeliveryCompanionHomePhase::PlaceProp) UpdateHomePropPlacement(Id,Now,Object);
+}
+
+void UDeliveryCompanionComponent::UpdateHomePropPlacement(FGuid Id,double Now,UDeliveryHomeObjectComponent* Destination)
+{
+    auto* Source=ActiveHomeChoice.SourceObject.Get();
+    const bool bReleased=PlacementReleasedAt>0;
+    auto* Prop=bReleased?ReleasedPlacementProp.Get():HomeState.CarriedProp.Get();
+    if (!IsValid(Source) || !IsValid(Prop) || Source->GetOwner()!=Prop)
     {
-        auto* Source=ActiveHomeChoice.SourceObject.Get();
-        auto* Prop=PlacementReleasedAt>0?ReleasedPlacementProp.Get():HomeState.CarriedProp.Get();
-        if (!IsValid(Source) || !Prop || Source->GetOwner()!=Prop)
-        {
-            FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,
-                PlacementReleasedAt>0?FName(TEXT("HomeReleasedPropTakenOrLost")):FName(TEXT("HomeCarriedPropChanged")));
-            return;
-        }
-        FTransform Placement;
-        // 松手前后都从同一实物的原尺寸重读目标，厚薄不同的抱枕可以共用支撑面槽
-        if (!Object->GetPlacementTransform(Claim,Source,Placement,Reason) || !IsUprightHomePlacement(Placement))
-        { FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason.IsNone()?FName(TEXT("HomePlacementChanged")):Reason); return; }
-        if (PlacementReleasedAt>0)
-        {
-            auto* Body=Prop?Cast<UPrimitiveComponent>(Prop->GetRootComponent()):nullptr;
-            auto* Grabbable=Prop?Prop->FindComponentByClass<UDeliveryGrabbableComponent>():nullptr;
-            if (!Prop || !Body || !Grabbable || Grabbable->HasAnyCarrier() || Prop->GetOwner())
-            { FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomeReleasedPropTakenOrLost")); return; }
-            const bool bStill=Source && Source->GetOwner()==Prop && !Source->IsCarryScaleActive() &&
-                Body->IsSimulatingPhysics() && Body->GetPhysicsLinearVelocity().Size()<=PropPlacementMaxSpeed &&
-                Body->GetPhysicsAngularVelocityInDegrees().Size()<=PropPlacementMaxAngularSpeed &&
-                FVector::Dist(Prop->GetActorLocation(),Placement.GetLocation())<=Definition->PlacementTolerance &&
-                FMath::RadiansToDegrees(Prop->GetActorQuat().AngularDistance(Placement.GetRotation()))<=Definition->PlacementAngleTolerance &&
-                Object->CanCommitPlacement(Claim,Prop,Reason);
-            if (!bStill) PlacementStableSince=0;
-            else if (PlacementStableSince<=0) PlacementStableSince=Now;
-            if (PlacementStableSince>0 && Now-PlacementStableSince>=FMath::Clamp(PropPlacementSettleSeconds,.1f,2.f))
-            {
-                TGuardValue<bool> Committing(bCommittingHomeUse,true);
-                const bool bCommitted=Object->CommitPlacement(Claim,Prop,Reason);
-                if (IsCurrentHome(Id)) FinishHomeArrangement(bCommitted?EDeliveryCompanionHomePhase::Completed:EDeliveryCompanionHomePhase::Failed,
-                    bCommitted?FName(TEXT("HomePlacementCommitted")):Reason);
-            }
-            else if (Now-PlacementReleasedAt>FMath::Clamp(PropPlacementSettleTimeout,1.f,15.f))
-                FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason.IsNone()?FName(TEXT("HomePlacementNotSettled")):Reason);
-            return;
-        }
-        if (!OwnsHomeSource(Source) ||
-            FVector::Dist(Placement.GetLocation(),PropPlacementTarget.GetLocation())>1.f ||
-            FMath::RadiansToDegrees(Placement.GetRotation().AngularDistance(PropPlacementTarget.GetRotation()))>2.f)
-        { FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomePlacementChanged")); return; }
-        if (bMovingToPropTransferPoint)
-        {
-            if (HasReachedHomePropTransferPoint()) BeginHomePropSegment(false);
-            return;
-        }
-        if (Now-PropBlendStartedAt<PropCarryBlendSeconds ||
-            FVector::Dist(Prop->GetActorLocation(),Placement.GetLocation())>FMath::Min(4.f,FMath::Min(PropCarryReachTolerance,Definition->PlacementTolerance)) ||
-            FMath::RadiansToDegrees(Prop->GetActorQuat().AngularDistance(Placement.GetRotation()))>FMath::Min(3.f,FMath::Min(HomeUseYawTolerance,Definition->PlacementAngleTolerance))) return;
-        FTransform FullSizeGoal=Placement;
-        FullSizeGoal.SetScale3D(Source->GetOriginalActorScale());
-        // 到完整尺寸的摆放点后先查展开空间，不能把手中的小尺寸当作槽位尺寸
-        if (!Source->CanRestoreScaleAt(FullSizeGoal,Reason))
-        { SetSuspension(TEXT("HomePropScaleRestoreBlocked")); return; }
-        const TWeakObjectPtr<AActor> ActualProp(Prop);
-        const TWeakObjectPtr<UDeliveryHomeObjectComponent> ActualSource(Source);
-        ReleaseHomeProp(TEXT("HomePropPlacedForCheck"));
-        if (!IsCurrentHome(Id)) return;
-        // Grabbable 先释放原搬运与物理模式，恢复大小后才开始真实稳定观察
-        const bool bRestored=ActualProp.IsValid() && ActualSource.IsValid() &&
-            ActualSource->GetOwner()==ActualProp.Get() && ActualSource->TryRestoreScaleAt(FullSizeGoal,Reason);
-        if (!IsCurrentHome(Id)) return;
-        if (!bRestored)
-        {
-            if (ActualSource.IsValid()) ActualSource->QueueScaleRestore();
-            FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomePropScaleRestoreBlocked"));
-            return;
-        }
-        ReleasedPlacementProp=ActualProp; PlacementReleasedAt=Now; PlacementStableSince=0;
-        SetHomePose(nullptr,false,false);
+        FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,
+            bReleased?FName(TEXT("HomeReleasedPropTakenOrLost")):FName(TEXT("HomeCarriedPropChanged")));
+        return;
     }
+    const bool bGround=HomeState.Operation==EDeliveryHomeOperation::PlaceNearOwner;
+    const auto* Definition=Destination?Destination->GetUseDefinition(HomeUseClaim):nullptr;
+    FTransform Placement=PropPlacementTarget;
+    FName Reason;
+    // 家具槽继续按同一原物重读，地面落点没有槽位，松手后只观察原件
+    if ((!bGround && (!Definition || !Destination->GetPlacementTransform(HomeUseClaim,Source,Placement,Reason))) ||
+        (bGround && !bHasOwnerPlacementTarget) || !IsUprightHomePlacement(Placement))
+    { FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason.IsNone()?FName(TEXT("HomePlacementChanged")):Reason); return; }
+    const float PositionTolerance=Definition?Definition->PlacementTolerance:15.f;
+    const float AngleTolerance=Definition?Definition->PlacementAngleTolerance:15.f;
+    if (bReleased)
+    {
+        auto* Body=Cast<UPrimitiveComponent>(Prop->GetRootComponent());
+        const auto* Grabbable=Prop->FindComponentByClass<UDeliveryGrabbableComponent>();
+        if (!Body || !Grabbable || Grabbable->HasAnyCarrier() || Prop->GetOwner())
+        { FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomeReleasedPropTakenOrLost")); return; }
+        const bool bStill=!Source->IsCarryScaleActive() && Body->IsSimulatingPhysics() &&
+            Body->GetPhysicsLinearVelocity().Size()<=PropPlacementMaxSpeed &&
+            Body->GetPhysicsAngularVelocityInDegrees().Size()<=PropPlacementMaxAngularSpeed &&
+            FVector::Dist(Prop->GetActorLocation(),Placement.GetLocation())<=PositionTolerance &&
+            FMath::RadiansToDegrees(Prop->GetActorQuat().AngularDistance(Placement.GetRotation()))<=AngleTolerance &&
+            (bGround?Source->CanPlaceAtOriginalSize(Prop->GetActorTransform(),Reason):Destination->CanCommitPlacement(HomeUseClaim,Prop,Reason));
+        if (!bStill) PlacementStableSince=0;
+        else if (PlacementStableSince<=0) PlacementStableSince=Now;
+        if (PlacementStableSince>0 && Now-PlacementStableSince>=FMath::Clamp(PropPlacementSettleSeconds,.1f,2.f))
+        {
+            TGuardValue<bool> Committing(bCommittingHomeUse,true);
+            const bool bCommitted=bGround || Destination->CommitPlacement(HomeUseClaim,Prop,Reason);
+            if (IsCurrentHome(Id)) FinishHomeArrangement(bCommitted?EDeliveryCompanionHomePhase::Completed:EDeliveryCompanionHomePhase::Failed,
+                bCommitted?FName(bGround?TEXT("HomePlacedInFrontOfOwner"):TEXT("HomePlacementCommitted")):Reason);
+        }
+        else if (Now-PlacementReleasedAt>FMath::Clamp(PropPlacementSettleTimeout,1.f,15.f))
+            FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason.IsNone()?FName(TEXT("HomePlacementNotSettled")):Reason);
+        return;
+    }
+    if (!OwnsHomeSource(Source) || FVector::Dist(Placement.GetLocation(),PropPlacementTarget.GetLocation())>1.f ||
+        FMath::RadiansToDegrees(Placement.GetRotation().AngularDistance(PropPlacementTarget.GetRotation()))>2.f)
+    { FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomePlacementChanged")); return; }
+    if (bGround)
+    {
+        const auto* Player=ActiveHomeChoice.PlacementOwnerPawn.Get();
+        if (!IsValid(Player) || Player!=GetOwnerPawn())
+        { FinishHomeArrangement(EDeliveryCompanionHomePhase::Cancelled,TEXT("HomePlacementOwnerChanged"),true); return; }
+        const FBox Bounds=Source->GetOriginalSizeBounds(Placement);
+        const FVector GroundPoint(Bounds.GetCenter().X,Bounds.GetCenter().Y,Bounds.Min.Z);
+        if (!Bounds.IsValid || !IsHomePlacementInFrontOfOwner(Player,GroundPoint,Prop) ||
+            !Source->CanPlaceAtOriginalSize(Placement,Reason))
+        {
+            bHasOwnerPlacementTarget=false;
+            bPlacingHomeProp=false;
+            BeginHomePropSegment(false);
+            SetHomePhase(EDeliveryCompanionHomePhase::GoToDestination);
+            SetSuspension(TEXT("HomeOwnerPlacementUnavailable"));
+            return;
+        }
+    }
+    if (bMovingToPropTransferPoint)
+    {
+        if (HasReachedHomePropTransferPoint()) BeginHomePropSegment(false);
+        return;
+    }
+    FVector SmallPlacement;
+    if (!Source->GetCarryPlacementLocation(Placement,SmallPlacement) || Now-PropBlendStartedAt<PropCarryBlendSeconds ||
+        FVector::Dist(Prop->GetActorLocation(),SmallPlacement)>FMath::Min(4.f,FMath::Min(PropCarryReachTolerance,PositionTolerance)) ||
+        FMath::RadiansToDegrees(Prop->GetActorQuat().AngularDistance(Placement.GetRotation()))>FMath::Min(3.f,FMath::Min(HomeUseYawTolerance,AngleTolerance))) return;
+    FTransform FullSizeGoal=Placement;
+    FullSizeGoal.SetScale3D(Source->GetOriginalActorScale());
+    // 松手前按原尺寸验证净空，原实物放大并稳定后才报告完成
+    if (!Source->CanRestoreScaleAt(FullSizeGoal,Reason,Destination))
+    { SetSuspension(TEXT("HomePropScaleRestoreBlocked")); return; }
+    const TWeakObjectPtr<AActor> ActualProp(Prop);
+    const TWeakObjectPtr<UDeliveryHomeObjectComponent> ActualSource(Source);
+    const TWeakObjectPtr<UDeliveryHomeObjectComponent> ActualDestination(Destination);
+    ReleaseHomeProp(TEXT("HomePropPlacedForCheck"));
+    if (!IsCurrentHome(Id)) return;
+    const bool bRestored=ActualProp.IsValid() && ActualSource.IsValid() && (bGround || ActualDestination.IsValid()) &&
+        ActualSource->GetOwner()==ActualProp.Get() && ActualSource->TryRestoreScaleAt(FullSizeGoal,Reason,ActualDestination.Get());
+    if (!IsCurrentHome(Id)) return;
+    if (!bRestored)
+    {
+        if (ActualSource.IsValid()) ActualSource->QueueScaleRestore();
+        FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomePropScaleRestoreBlocked"));
+        return;
+    }
+    ReleasedPlacementProp=ActualProp; PlacementReleasedAt=Now; PlacementStableSince=0;
+    UE_LOG(LogDeliveryCompanionHome,Log,TEXT("HomePropPlacementReleased arrangement=%s prop=%s position=%s scale=%s"),
+        *Id.ToString(),*GetNameSafe(ActualProp.Get()),*ActualProp->GetActorLocation().ToCompactString(),*ActualProp->GetActorScale3D().ToCompactString());
+    SetHomePose(nullptr,false,false);
 }
 
 void UDeliveryCompanionComponent::ShutdownHomeExecution()

@@ -6,6 +6,7 @@
 #include "DeliveryCompanionMotorbike.generated.h"
 
 class ADeliveryNpcCharacter;
+class ADeliveryHome;
 class UAnimSequence;
 class UNavigationPath;
 
@@ -18,11 +19,11 @@ public:
     ADeliveryCompanionMotorbike();
     bool InitializeForCompanion(ADeliveryNpcCharacter* Companion);
     bool TryMount(ADeliveryNpcCharacter* Companion);
-    // Goal 是调用者选好的室外停车点，失败不留下旧油门或旧路线
-    bool SetDriveDestination(const FVector& Goal,bool bKeepDrivingWhileReplanning=false);
-    // 主人骑车时，在短距离畅通路段直接跟车
-    bool TrySetDirectFollowDestination(const FVector& Goal);
-    bool HasActiveDriveRoute() const;
+    // 接受停车点前可检查从预计下车位置到步行目标的路线，重选失败时可保留已提交的车路
+    bool SetDriveDestination(const FVector& Goal,bool bKeepDrivingWhileReplanning=false,const FVector* WalkAfterParking=nullptr);
+    // 按连续实地支撑检查短路段，真实车迹核对终点高度，临时水平探路可不指定终点高度
+    bool TrySetDirectFollowDestination(const FVector& Goal,bool bRequireGoalHeight=true);
+    bool HasActiveDriveRoute(bool bRequireWalkExit=false) const;
     void SetFollowBike(ADeliveryMotorbike* Bike,float DesiredDistance);
     void ReportFollowBlocked();
     bool CanSoundFollowHorn() const;
@@ -32,6 +33,10 @@ public:
     void StopDriving();
     // 下车位置被占用时返回 false，原人物仍在车上，调用者可以稍后重试
     bool TryDismount();
+    // 检查当前安全出口，失败时允许行为树继续调整停车位置
+    bool TryDismountIfClear();
+    // 步行目标已投影到同伴的导航网格，有完整路线的安全出口才下车
+    bool TryDismountForWalk(const FVector& WalkGoal);
     UFUNCTION(BlueprintPure,Category="Companion|车辆") bool IsMounted() const;
     UFUNCTION(BlueprintPure,Category="Companion|车辆") ADeliveryNpcCharacter* GetReservedCompanion() const;
     UFUNCTION(BlueprintPure,Category="Companion|车辆") bool HasReachedDestination() const { return bArrived; }
@@ -78,10 +83,12 @@ private:
     UPROPERTY(ReplicatedUsing=OnRep_CompanionRide) bool bMounted=false;
     UFUNCTION() void OnRep_CompanionRide();
     UPROPERTY(Transient) TObjectPtr<UNavigationPath> DrivePath;
+    TWeakObjectPtr<ADeliveryHome> DrivePedestrianHome;
     TWeakObjectPtr<ADeliveryNpcCharacter> PresentedCompanion;
     bool bReservationInitialized=false;
     bool bDriving=false;
     bool bDrivingDirect=false;
+    bool bDrivingToWalkExit=false;
     bool bArrived=false;
     bool bDismountPending=false;
     FName DriveFailure;
@@ -102,9 +109,15 @@ private:
     void ApplyCompanionPresentation();
     void RestoreCompanionPresentation();
     void RefreshCompanionPackage(ADeliveryNpcCharacter* Companion);
-    bool FindDismountLocation(FVector& OutLocation) const;
+    bool TryDismountAtExit(const FVector* WalkGoal,bool bCheckExitBeforeStopping=false);
+    bool FindDismountLocation(FVector& OutLocation,const FVector* WalkGoal=nullptr) const;
+    bool FindDismountLocationAtPose(const FVector& VehicleCenter,const FQuat& VehicleHeading,const FVector& SeatLocation,
+        FVector& OutLocation,const FVector* WalkGoal=nullptr) const;
     bool FindFooting(const FVector& Near,FVector& OutLocation) const;
     bool IsParkSpaceClear(const FVector& Goal,const FQuat& Heading,FVector* OutVehicleCenter=nullptr) const;
+    bool IsSupportedVehicleSpace(const FVector& Goal,const FQuat& Heading,float MinimumGroundNormalZ,
+        FVector* OutVehicleCenter=nullptr,bool bFitTravelClearance=false) const;
     bool HasClearDrivingSegment(const FVector& From,const FVector& To,const FQuat& Heading) const;
     void ReleaseForEndPlay(EEndPlayReason::Type Reason);
+    friend class FDeliveryCompanionRulesTest;
 };

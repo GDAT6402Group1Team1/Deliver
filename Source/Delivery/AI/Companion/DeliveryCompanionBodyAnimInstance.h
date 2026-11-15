@@ -4,7 +4,7 @@
 #include "AI/Presentation/DeliveryNpcBodyAnimInstance.h"
 #include "DeliveryCompanionBodyAnimInstance.generated.h"
 
-// 同伴在原居民姿势上增加家居输入，混合与上半身蒙版保存在独立动画蓝图
+// 同伴为家居、持物和低处查看选择姿势，混合与上半身蒙版由独立动画蓝图配置
 UCLASS(Blueprintable)
 class DELIVERY_API UDeliveryCompanionBodyAnimInstance : public UDeliveryNpcBodyAnimInstance
 {

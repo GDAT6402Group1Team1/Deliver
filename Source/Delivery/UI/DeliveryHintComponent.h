@@ -5,14 +5,16 @@
 #include "Events/DeliveryEventComponent.h"
 #include "DeliveryHintComponent.generated.h"
 
+class ADeliveryCompanionEncounterScene;
 class APlayerController;
 class APawn;
+class USceneComponent;
 class UInputAction;
 class UEnhancedInputLocalPlayerSubsystem;
 class UDeliveryVehicleSummonComponent;
 
 /**
- * 监听玩家控制对象、驾驶视角、车辆召唤冷却和按键映射的变化
+ * 监听玩家控制对象、驾驶视角、车辆召唤冷却、按键映射和附近初遇提示的变化
  * 更新左下角操作提示，召唤冷却期间用计时器更新剩余秒数
  */
 UCLASS(ClassGroup=(Delivery), meta=(BlueprintSpawnableComponent))
@@ -48,7 +50,13 @@ private:
     void HandlePawnChanged(APawn* OldPawn, APawn* NewPawn);
     UFUNCTION()
     void HandleVehicleEvent(EDeliveryEvent Event);
+    UFUNCTION()
+    void HandleEncounterEndPlay(AActor* Actor, EEndPlayReason::Type Reason);
+    void HandleActorSpawned(AActor* Actor);
     void HandleVehicleChanged(AActor* Actor);
+    void BindEncounterScene(ADeliveryCompanionEncounterScene* Scene);
+    void BindEncounterPawnRoot(USceneComponent* Root);
+    void UpdateEncounterHint();
     void UnbindPawn();
     void ShowHint(const FText& Text, bool bDimmed = false);
 
@@ -62,6 +70,11 @@ private:
     TObjectPtr<UDeliveryEventComponent> VehicleEvents;
 
     FText CurrentText;
+    FText EncounterHint;
+    TArray<TWeakObjectPtr<ADeliveryCompanionEncounterScene>> EncounterScenes;
+    TWeakObjectPtr<USceneComponent> EncounterPawnRoot;
+    FDelegateHandle EncounterPawnTransformHandle;
+    bool bEncounterScenesInitialized = false;
     bool bUsingGamepad = false;
     FTimerHandle CountdownTimer;
     FTimerHandle RefreshTimer;

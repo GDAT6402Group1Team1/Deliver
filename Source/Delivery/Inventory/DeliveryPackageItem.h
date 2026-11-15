@@ -9,8 +9,12 @@
 
 class UDeliveryItemComponent;
 class UDeliveryInventoryComponent;
+class ADeliveryCaterpillarItem;
+class ADeliveryCompanionCharacter;
+class APlayerState;
+class UDeliveryCompanionComponent;
 
-/** 带任务信息的快递物体，可放在手持槽和背包中 */
+/** 保存任务身份、实物携带表现和小绿的投放结果 */
 UCLASS(Blueprintable)
 
 class DELIVERY_API ADeliveryPackageItem : public ADeliveryHandheldItem
@@ -32,6 +36,11 @@ class DELIVERY_API ADeliveryPackageItem : public ADeliveryHandheldItem
     UFUNCTION(BlueprintPure, Category = "Delivery|Caterpillar")
     bool ContainsCaterpillar() const { return bContainsCaterpillar; }
     bool CanInsertCaterpillar(const APawn* Interactor) const;
+    // 二狗核对当前手持方或主人登记的地上原件，接触时复核距离和遮挡
+    bool CanAcceptCompanionCaterpillar(const ADeliveryCompanionCharacter* Companion,const APlayerState* Requester,
+        bool bCheckReach,bool bCompanionHoldsPackage=false) const;
+    bool TryInsertCompanionCaterpillar(ADeliveryCompanionCharacter* Companion,ADeliveryCaterpillarItem* Worm,
+        const APlayerState* Requester,TFunctionRef<bool()> IsCurrent);
     FText GetPackagePrompt(const APawn* Interactor) const;
 
     // 快递任务信息
@@ -52,12 +61,20 @@ class DELIVERY_API ADeliveryPackageItem : public ADeliveryHandheldItem
 
 private:
     friend class UDeliveryInventoryComponent;
-    void ClearRecoveryInventory();
+    friend class UDeliveryCompanionComponent;
+    // 只在二狗伸手碰到真实地面小绿时提交，包裹始终留在其同一手持槽
+    bool TryInsertGroundCaterpillarIntoHeldPackage(ADeliveryCompanionCharacter* Companion,ADeliveryCaterpillarItem* Worm,
+        const APlayerState* Requester,TFunctionRef<bool()> IsStillAtContact);
+    // 原件转手或销毁时通知放下它的物品栏，避免再次落地后仍提示旧持有者
     TWeakObjectPtr<UDeliveryInventoryComponent> RecoveryInventory;
+    void ClearRecoveryInventory();
     bool bHadCarrierPresentation = false;
     // 状态属于这份外卖，丢弃、换手和装车都保留；销毁后不污染下一份外卖
     UPROPERTY(ReplicatedUsing = OnRep_Caterpillar)
     bool bContainsCaterpillar = false;
+    bool IsPrankPackageAvailable() const;
+    bool HasCaterpillarInsertionReach(const APawn* Interactor,const AActor* Worm) const;
+    void CommitCaterpillar(ADeliveryCaterpillarItem* Worm);
     UFUNCTION() void OnRep_Caterpillar();
     bool TryInsertCaterpillar(APawn* Interactor);
 };

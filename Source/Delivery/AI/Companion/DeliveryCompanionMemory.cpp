@@ -42,6 +42,32 @@ FString UDeliveryCompanionComponent::GetRelationshipStage() const
     return TEXT("寒心");
 }
 
+bool UDeliveryCompanionComponent::CanChangeSpeechPreference(APlayerState* Requester) const
+{
+    const auto* Npc=GetCompanion();
+    return IsValid(Npc) && Npc->HasAuthority() && !Npc->IsActorBeingDestroyed() && CanCommand(Requester) &&
+        Npc->GetEncounterState().Phase==EDeliveryCompanionEncounterPhase::Joined;
+}
+
+int32 UDeliveryCompanionComponent::GetQuietSecondsRemaining() const
+{
+    const UWorld* World=GetWorld();
+    return World?FMath::CeilToInt(FMath::Clamp(QuietSpeechUntil-World->GetTimeSeconds(),0.0,180.0)):0;
+}
+
+bool UDeliveryCompanionComponent::ApplySpeechPreference(APlayerState* Requester,int32 ExpectedCommandRevision,
+    EDeliveryCompanionSpeechPreference Preference)
+{
+    if (!CanChangeSpeechPreference(Requester) || ExpectedCommandRevision!=CommandRevision ||
+        (Preference!=EDeliveryCompanionSpeechPreference::Quiet && Preference!=EDeliveryCompanionSpeechPreference::Normal)) return false;
+    const float Configured=GetTuning().QuietSpeechSeconds;
+    const double Duration=FMath::IsFinite(Configured)?FMath::Clamp(Configured,15.f,180.f):45.f;
+    QuietSpeechUntil=Preference==EDeliveryCompanionSpeechPreference::Quiet?GetWorld()->GetTimeSeconds()+Duration:0.0;
+    UE_LOG(LogTemp,Log,TEXT("CompanionSpeechPreference npc=%s revision=%d remaining=%d"),
+        *GetNameSafe(GetOwner()),CommandRevision,GetQuietSecondsRemaining());
+    return true;
+}
+
 bool UDeliveryCompanionComponent::RecordMemory(FGuid EventId,FName Kind,const FString& Description,int32 AffinityDelta)
 {
     if (!GetOwner()->HasAuthority() || !CanCommand(OwnerPlayerState) || !EventId.IsValid() || Kind.IsNone() ||
@@ -246,7 +272,10 @@ void UDeliveryCompanionComponent::RecordOwnerVehicleHit(AActor* Source)
 void UDeliveryCompanionComponent::ClearCompanionMemories()
 {
     Memories.Reset(); RecordedMemoryEvents.Reset(); RememberedDeliveries.Reset(); RememberedVehicleKnockdowns.Reset();
+    QuietSpeechUntil=0;
+    RememberedNeighborLines.Reset();
     RememberedPublicPlaces.Reset(); NextPublicPlaceObservationAt=0;
+    ObservedHome.Reset(); RememberedHomeObjects.Reset(); NextHomeObjectObservationAt=0;
     bReportedMemoryLimit=false;
     AssistedRecoveryCount=0; DeliveryTogetherCount=0; OwnerPunchCount=0; OwnerDownPunchCount=0; OwnerVehicleHitCount=0;
     bCaterpillarOffered=false; bCaterpillarGiven=false; bGivingCaterpillar=false;

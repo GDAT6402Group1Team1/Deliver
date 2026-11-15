@@ -109,8 +109,8 @@ void ADeliveryMotorbike::RefreshPassengerPresentation(float DeltaSeconds)
     PassengerInteractable->InteractRadius = TrunkInteractRadius;
     PassengerInteractable->bInteractEnabled = AllowsPlayerUse() && !Driver && !HasCargo();
     PassengerInteractable->PromptText = HasTrunkPassenger()
-        ? NSLOCTEXT("Delivery", "UnloadPassenger", "E - Take Player Out")
-        : NSLOCTEXT("Delivery", "LoadPassenger", "E - Put Dragged Player In");
+        ? NSLOCTEXT("Delivery", "UnloadPassenger", "[E] 把玩家拉出后备箱")
+        : NSLOCTEXT("Delivery", "LoadPassenger", "[E] 把拖着的玩家放进后备箱");
     if (HasTrunkPassenger() && TrunkPassenger->TrunkPassenger)
     {
         const auto* Passenger = TrunkPassenger->TrunkPassenger.Get();

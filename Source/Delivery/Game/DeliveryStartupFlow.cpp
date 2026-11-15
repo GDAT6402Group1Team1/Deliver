@@ -57,7 +57,7 @@ void ADeliveryStartupFlow::BeginLoading()
     StreamingLevel = Package.IsEmpty() ? nullptr : UGameplayStatics::GetStreamingLevel(this, FName(*Package));
     if (!StreamingLevel)
     {
-        Fail(NSLOCTEXT("DeliveryStartup", "MissingLevel", "Gameplay level is not configured as a streaming sublevel."));
+        Fail(NSLOCTEXT("DeliveryStartup", "MissingLevel", "未配置可载入的游戏关卡。"));
         return;
     }
     StreamingLevel->OnLevelShown.AddUniqueDynamic(this, &ADeliveryStartupFlow::OnLevelShown);
@@ -155,7 +155,7 @@ void ADeliveryStartupFlow::PollLoading()
     }
     if (!bLocalSceneReady && FPlatformTime::Seconds() - LoadStartedAt > LoadTimeoutSeconds)
     {
-        Fail(NSLOCTEXT("DeliveryStartup", "Timeout", "Loading timed out. Check the gameplay level, PlayerStart and ground collision."));
+        Fail(NSLOCTEXT("DeliveryStartup", "Timeout", "加载超时，请检查游戏关卡、玩家出生点和地面碰撞。"));
         return;
     }
     UpdateLoadingProgress();
@@ -264,7 +264,7 @@ void ADeliveryStartupFlow::TryStartPlayers()
                 if (APawn* Pawn = Player->GetPawn()) { Player->UnPossess(); Pawn->Destroy(); }
                 SpawnedPlayers.Remove(Player);
             }
-        Fail(NSLOCTEXT("DeliveryStartup", "SpawnFailed", "Player could not spawn. Check the PlayerStart clearance and pawn class."));
+        Fail(NSLOCTEXT("DeliveryStartup", "SpawnFailed", "角色无法生成，请检查玩家出生点是否被挡住以及角色类配置。"));
         return;
     }
     if (!bGameStarted)

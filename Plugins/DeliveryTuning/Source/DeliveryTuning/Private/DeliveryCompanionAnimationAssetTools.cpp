@@ -174,8 +174,10 @@ bool OriginalGraph(UEdGraph* Graph,UAnimGraphNode_Root*& Root)
         if (auto* Found=Cast<UAnimGraphNode_BlendListByInt>(Node)) { if (Selector) return false; Selector=Found; }
     }
     const auto* Times=FindFProperty<FArrayProperty>(FAnimNode_BlendListBase::StaticStruct(),TEXT("BlendTime"));
-    if (!Root || !Selector || !Times || FScriptArrayHelper(Times,Times->ContainerPtrToValuePtr<void>(&Selector->Node)).Num()!=10) return false;
-    for (int32 Index=0;Index<10;++Index)
+    if (!Root || !Selector || !Times) return false;
+    const int32 Count=FScriptArrayHelper(Times,Times->ContainerPtrToValuePtr<void>(&Selector->Node)).Num();
+    if (Count!=10 && Count!=static_cast<int32>(UDeliveryNpcBodyAnimInstance::EPose::JumpLand)+1) return false;
+    for (int32 Index=0;Index<Count;++Index)
         if (!LinkedNode(Selector,FName(*FString::Printf(TEXT("BlendPose_%d"),Index)))) return false;
     const auto* Input=PosePin(Root,EGPD_Input);
     return Input && Input->LinkedTo.Num()==1;
@@ -629,7 +631,7 @@ FString UDeliveryCompanionAnimationAssetTools::SetupCompanionBodyAnimation(const
     }
     UAnimGraphNode_Root* OriginalRoot=nullptr;
     if (!Target && !OriginalGraph(BodyGraph(Current),OriginalRoot))
-        return Result(false,TEXT("Current animation must retain its ten connected base poses; nothing changed"));
+        return Result(false,TEXT("Current animation must retain its connected base poses; nothing changed"));
     const FString BackupFolder=FPaths::ProjectSavedDir()/TEXT("AIResearch/HomeObjects/AnimationBackups")/FGuid::NewGuid().ToString();
     if (!Backup(NpcBP,BackupFolder) || !Backup(Target,BackupFolder)) return Result(false,TEXT("Animation asset backup failed; nothing changed"));
     if (!Target)

@@ -23,8 +23,8 @@ public:
     virtual void OnTaskFinished(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, EBTNodeResult::Type TaskResult) override;
 
 private:
-    void ReleaseFocus();
-    bool StartNearbyMove(const FVector& Destination);
+    void ReleaseFocus(bool bReplacingOwnAction=false);
+    bool StartNearbyMove(const FVector& Destination,const FDeliveryNpcPublicState* CompanionPace=nullptr);
     void TickFight(UBehaviorTreeComponent& OwnerComp,ADeliveryNpcCharacter* Npc,const FDeliveryNpcPublicState& State);
     void TickFlee(UBehaviorTreeComponent& OwnerComp,ADeliveryNpcCharacter* Npc,const FDeliveryNpcPublicState& State);
     void FinishFight(UBehaviorTreeComponent& OwnerComp,FName Reason,bool bFailed);

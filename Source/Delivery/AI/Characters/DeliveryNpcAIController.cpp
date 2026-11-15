@@ -29,7 +29,11 @@ ADeliveryNpcAIController::ADeliveryNpcAIController()
 void ADeliveryNpcAIController::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
-    if (HasAuthority()) UpdateStandingSpace();
+    if (HasAuthority())
+    {
+        UpdateObstacleTraversal();
+        UpdateStandingSpace();
+    }
 }
 void ADeliveryNpcAIController::StopSpacingMove()
 {
@@ -140,6 +144,8 @@ void ADeliveryNpcAIController::OnPossess(APawn* InPawn)
 }
 void ADeliveryNpcAIController::OnUnPossess()
 {
+    StopObstacleTraversal();
+    ObstacleRetreatAttempts.Reset();
     if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetPawn()); Npc && Npc->Combat) Npc->Combat->ResetHitFacing();
     StopSpacingMove();
     GetPerceptionComponent()->OnTargetPerceptionUpdated.RemoveDynamic(this,&ADeliveryNpcAIController::OnTargetSeenOrHeard);
@@ -148,6 +154,8 @@ void ADeliveryNpcAIController::OnUnPossess()
 }
 void ADeliveryNpcAIController::EndPlay(const EEndPlayReason::Type Reason)
 {
+    StopObstacleTraversal();
+    ObstacleRetreatAttempts.Reset();
     StopSpacingMove();
     Super::EndPlay(Reason);
 }
@@ -199,6 +207,8 @@ void ADeliveryNpcAIController::RefreshBlackboard()
     {
         const auto* Companion=Resident->FindComponentByClass<UDeliveryCompanionComponent>();
         BB->SetValueAsBool(TEXT("HasCompanionErrand"),Companion && Companion->HasActiveErrand());
+        if (BB->GetKeyID(TEXT("HasNearbyItemSearch"))!=FBlackboard::InvalidKey)
+            BB->SetValueAsBool(TEXT("HasNearbyItemSearch"),Companion && Companion->HasNearbyItemSearch());
     }
     BB->SetValueAsObject(TEXT("ActionTarget"),State.Target);
     BB->SetValueAsInt(TEXT("PlanRevision"),State.PlanRevision);

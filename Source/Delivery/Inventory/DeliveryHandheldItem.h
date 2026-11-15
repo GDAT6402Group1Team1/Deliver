@@ -68,6 +68,11 @@ class DELIVERY_API ADeliveryHandheldItem : public AActor
     // 留空保持原行走手势，指定动画须与实际 NPC 网格使用同一骨架
     UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Item|NPC握持")
     TObjectPtr<UAnimSequence> NpcCarryAnimation;
+    // 指定地上拿取的握点，按物品模型本身的厘米配置，实际取物时应用实例缩放
+    UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Item|NPC握持")
+    bool bUseNpcGroundPickupPose=false;
+    UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Item|NPC握持",meta=(EditCondition="bUseNpcGroundPickupPose",Units="cm"))
+    FVector NpcGroundPickupGrip=FVector::ZeroVector;
 
     UFUNCTION(BlueprintPure, Category = "Item")
 

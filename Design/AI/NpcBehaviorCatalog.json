@@ -1,0 +1,243 @@
+{
+  "version": 1,
+  "actions": [
+    {
+      "tag": "Npc.Behavior.Attention.Wait",
+      "action": "Wait",
+      "display_name": "稍候",
+      "category": "attention",
+      "description": "短暂等待；同伴已有持续安排是否继续移动由原执行规则决定"
+    },
+    {
+      "tag": "Npc.Behavior.Attention.LookAt",
+      "action": "LookAt",
+      "display_name": "看向目标",
+      "category": "attention",
+      "description": "看向当前证据对应且仍可观察的目标，保留同伴持续安排的移动规则"
+    },
+    {
+      "tag": "Npc.Behavior.Movement.MoveTo",
+      "action": "MoveTo",
+      "display_name": "走近目标",
+      "category": "movement",
+      "description": "通过现有导航走近当前可达目标，实际到达才确认完成"
+    },
+    {
+      "tag": "Npc.Behavior.Combat.StrikeOnce",
+      "action": "StrikeOnce",
+      "display_name": "打一拳",
+      "category": "combat",
+      "description": "接近获准攻击的目标并通过 NPC 近战技能出拳，命中由服务器确认"
+    },
+    {
+      "tag": "Npc.Behavior.Vehicle.HoldVehicle",
+      "action": "HoldVehicle",
+      "display_name": "拽住车辆",
+      "category": "vehicle",
+      "description": "通过现有车辆抓持接口拽住当前允许交互的电瓶车"
+    },
+    {
+      "tag": "Npc.Behavior.Vehicle.ReleaseVehicle",
+      "action": "ReleaseVehicle",
+      "display_name": "松开车辆",
+      "category": "vehicle",
+      "description": "释放该 NPC 当前实际拽住的车辆，清理由原抓持接口完成"
+    },
+    {
+      "tag": "Npc.Behavior.Posture.LieDown",
+      "action": "LieDown",
+      "display_name": "主动躺下",
+      "category": "posture",
+      "description": "进入主动躺下状态，受击倒地与恢复仍遵守原战斗时序"
+    },
+    {
+      "tag": "Npc.Behavior.Posture.GetUp",
+      "action": "GetUp",
+      "display_name": "主动起身",
+      "category": "posture",
+      "description": "主动躺下且已落地的居民可响应玩家安排，沿角色原起身流程恢复站立后完成"
+    },
+    {
+      "tag": "Npc.Behavior.Movement.Pace",
+      "action": "Pace",
+      "display_name": "来回踱步",
+      "category": "movement",
+      "description": "沿现场可达的短路线踱步并返回起点，使用原导航和到达校验"
+    },
+    {
+      "tag": "Npc.Behavior.Movement.MoveAside",
+      "action": "MoveAside",
+      "display_name": "侧身让路",
+      "category": "movement",
+      "description": "针对当前目标寻找附近可站立位置，实际移动到侧方让路"
+    },
+    {
+      "tag": "Npc.Behavior.Combat.Fight",
+      "action": "Fight",
+      "display_name": "持续互殴",
+      "category": "combat",
+      "description": "沿原行为树接近并连续出拳；居民可由模型选择，二狗仅接受服务器护主规则授权"
+    },
+    {
+      "tag": "Npc.Behavior.Combat.Flee",
+      "action": "Flee",
+      "display_name": "避开威胁",
+      "category": "combat",
+      "description": "针对当前威胁目标寻找有效逃离路线，执行与停止沿用原行为树规则"
+    },
+    {
+      "tag": "Npc.Behavior.Companion.Follow",
+      "action": "Follow",
+      "display_name": "跟随主人",
+      "category": "companion",
+      "description": "主人确认持续跟随安排，保留本次候选的步行或专属车辆出行选择"
+    },
+    {
+      "tag": "Npc.Behavior.Companion.Stay",
+      "action": "Stay",
+      "display_name": "原地等候",
+      "category": "companion",
+      "description": "主人确认在当前位置附近持续等候，保留原避让和回位行为"
+    },
+    {
+      "tag": "Npc.Behavior.Companion.CancelCompanionTask",
+      "action": "CancelCompanionTask",
+      "display_name": "取消同伴安排",
+      "category": "companion",
+      "description": "主人取消当前委托或安排并转为等候，原物品和占用资源按既有规则释放"
+    },
+    {
+      "tag": "Npc.Behavior.Delivery.FetchPackage",
+      "action": "FetchPackage",
+      "display_name": "取件带回",
+      "category": "delivery",
+      "description": "按主人当前有效订单到真实取件点领取包裹，再返回交给主人"
+    },
+    {
+      "tag": "Npc.Behavior.Delivery.TakePackage",
+      "action": "TakePackage",
+      "display_name": "接过包裹",
+      "category": "delivery",
+      "description": "从主人角色或其车辆接过同一订单包裹，真实交接成功后确认接件"
+    },
+    {
+      "tag": "Npc.Behavior.Delivery.DeliverPackage",
+      "action": "DeliverPackage",
+      "display_name": "帮忙送件",
+      "category": "delivery",
+      "description": "按当前订单接件或取件后送往真实目的地，由任务服务器确认交付和奖励"
+    },
+    {
+      "tag": "Npc.Behavior.Delivery.ReturnPackage",
+      "action": "ReturnPackage",
+      "display_name": "交还包裹",
+      "category": "delivery",
+      "description": "返回主人附近并交还当前实际携带的同一订单包裹"
+    },
+    {
+      "tag": "Npc.Behavior.Delivery.DropPackage",
+      "action": "DropPackage",
+      "display_name": "放下包裹",
+      "category": "delivery",
+      "description": "按主人指令把实际携带的原包裹放到附近安全地面，保留任务进度并可由玩家拾回"
+    },
+    {
+      "tag": "Npc.Behavior.Delivery.StorePackageInBackpack",
+      "action": "StorePackageInBackpack",
+      "display_name": "把包裹收进主人背包",
+      "category": "delivery",
+      "description": "按主人指令靠近主人，将实际携带的原任务包裹交入主人可用的背包槽，由服务器确认归属和交接"
+    },
+    {
+      "tag": "Npc.Behavior.Interaction.OfferCaterpillar",
+      "action": "OfferCaterpillar",
+      "display_name": "提议送出小绿",
+      "category": "interaction",
+      "description": "满足现场条件时向主人提出小绿恶作剧，随后由主人授权拾取或投放真实小绿，E 沿原入口接过实物"
+    },
+    {
+      "tag": "Npc.Behavior.Home.GoHome",
+      "action": "GoHome",
+      "display_name": "回共用房屋",
+      "category": "home",
+      "description": "按主人安排前往已解锁共用房屋的有效返回点，实际到达后等候"
+    },
+    {
+      "tag": "Npc.Behavior.Home.HomeAction",
+      "action": "HomeAction",
+      "display_name": "使用家居物件",
+      "category": "home",
+      "description": "按真实物件和槽位执行坐下、离座、播放停止、缩小拿起、恢复原尺寸摆放或放在主人脚边"
+    },
+    {
+      "tag": "Npc.Behavior.Control.ContinueCurrent",
+      "action": "ContinueCurrent",
+      "display_name": "继续当前安排",
+      "category": "control",
+      "description": "内部决策控制项：确认当前安排快照仍有效，只续接回复，不重启原动作或委托"
+    },
+    {
+      "tag": "Npc.Behavior.Inventory.FetchItem",
+      "action": "FetchItem",
+      "display_name": "取回普通物品",
+      "category": "inventory",
+      "description": "按主人的真实物品候选寻找并拿取可搬运物品，再返回交还，失去视线后沿合法线索查找"
+    },
+    {
+      "tag": "Npc.Behavior.Inventory.SearchNearOwner",
+      "action": "SearchNearOwner",
+      "display_name": "在主人附近找物",
+      "category": "inventory",
+      "description": "按主人本轮指示步行到附近几个同层可达站位，查看并报告实见道具，拾取另由正式实物候选执行"
+    },
+    {
+      "tag": "Npc.Behavior.Inventory.ReturnItem",
+      "action": "ReturnItem",
+      "display_name": "交还普通物品",
+      "category": "inventory",
+      "description": "将同伴当前实际携带的普通物品交给主人，由原物品交接接口确认结果"
+    },
+    {
+      "tag": "Npc.Behavior.Vehicle.SoundFollowHorn",
+      "action": "SoundFollowHorn",
+      "display_name": "跟车鸣笛",
+      "category": "vehicle",
+      "description": "专属车跟随受行人或车辆阻挡且冷却允许时，模型通过环境候选选择短鸣笛"
+    },
+    {
+      "tag": "Npc.Behavior.Inventory.TakeItem",
+      "action": "TakeItem",
+      "display_name": "接过主人物品",
+      "category": "inventory",
+      "description": "从主人当前授权的手中或背包接过同一件普通物品，实际交接后由二狗持有"
+    },
+    {
+      "tag": "Npc.Behavior.Interaction.CollectCaterpillar",
+      "action": "CollectCaterpillar",
+      "display_name": "拾取小绿",
+      "category": "interaction",
+      "description": "按主人安排寻找并拾取场景中的真实小绿，实际入手后保留同一物件"
+    },
+    {
+      "tag": "Npc.Behavior.Interaction.InsertCaterpillar",
+      "action": "InsertCaterpillar",
+      "display_name": "把小绿放进快递",
+      "category": "interaction",
+      "description": "主人同意后取到同一只小绿并投放进当前原包裹，消耗实物后由原订单在送达时确认特殊奖励"
+    },
+    {
+      "tag": "Npc.Behavior.Combat.JoinAssist",
+      "action": "JoinAssist",
+      "display_name": "加入持续协战",
+      "category": "combat",
+      "description": "模型根据服务器确认的主人命中或受击事件选择加入，沿同一真实目标持续协战，短回合结束保留安排"
+    },
+    {
+      "tag": "Npc.Behavior.Combat.StopAssist",
+      "action": "StopAssist",
+      "display_name": "按主人要求收手",
+      "category": "combat",
+      "description": "只有当前主人本轮明确收手时可选，撤销持续协战并停止当前出拳，访客不能改变安排"
+    }
+  ]
+}

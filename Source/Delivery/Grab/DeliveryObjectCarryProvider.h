@@ -32,6 +32,9 @@ public:
     virtual bool GetObjectCarryPose(const AActor* Object, const FGuid& CarryId,
         FVector& OutLocation, FVector& OutForward) const = 0;
 
+    // 已登记的实物沿同次家具摆放路线使用上身伸手位置
+    virtual bool IsObjectCarryInPlacement(const AActor* Object,const FGuid& CarryId) const { return false; }
+
     // Grabbable 清掉本次引用并恢复实物后通知，接收方须核对 CarryId，不能取消新的搬运
     // Provider 自身的 EndPlay、受击和命令取消应显式注销，失效查询仍由 Grabbable 兜底
     virtual void OnObjectCarryReleased(AActor* Object, const FGuid& CarryId,

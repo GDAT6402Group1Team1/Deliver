@@ -8,15 +8,21 @@
 #include "AI/Companion/DeliveryCompanionComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AI/Network/DeliveryAiSettings.h"
+#include "Animation/AnimSequence.h"
 #include "Speech/DeliverySpeechInputComponent.h"
 #include "UI/DeliverySpeechStatusWidget.h"
+#include "Components/BoxComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/TextBlock.h"
 #include "Character/DeliveryCharacter.h"
+#include "Vehicle/DeliveryCompanionMotorbike.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
@@ -696,6 +702,63 @@ bool FDeliveryConversationVehicleVoiceTest::RunTest(const FString&)
     TestFalse(TEXT("车仍受控但原角色销毁时旧回复失效"),Turns->GetLease(Npc,Lease));
     TestFalse(TEXT("原角色弱引用失效不能回退到仅比较车辆Pawn"),Conversation->IsVoiceReplyMessage(Destroyed.Token,Npc));
     Conversation->OnSubmitted.Clear();
+
+    auto* RiderOwner=Fixture.MakePlayer();
+    auto* RiderVisitor=Fixture.MakePlayer();
+    const FVector PlayerLocation(12000,12000,100);
+    RiderOwner->GetPawn()->SetActorLocation(PlayerLocation);
+    RiderVisitor->GetPawn()->SetActorLocation(PlayerLocation+FVector(0,65,0));
+    RiderOwner->SetControlRotation(FRotator::ZeroRotator);
+    RiderVisitor->SetControlRotation(FRotator::ZeroRotator);
+    auto* MountedConversation=NewObject<UDeliveryConversationComponent>(RiderOwner);
+    RiderOwner->AddInstanceComponent(MountedConversation); MountedConversation->RegisterComponent();
+    auto* VisitorConversation=NewObject<UDeliveryConversationComponent>(RiderVisitor);
+    RiderVisitor->AddInstanceComponent(VisitorConversation); VisitorConversation->RegisterComponent();
+    auto* Rider=Fixture.MakeCompanion(RiderOwner);
+    const FVector BikeLocation=PlayerLocation-FVector(450,0,0);
+    auto* CompanionBike=Fixture.World->SpawnActor<ADeliveryCompanionMotorbike>(BikeLocation,FRotator::ZeroRotator,Spawn);
+    auto* RiderMesh=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/NPC/Companion/Appearance/SK_ErgouBoy.SK_ErgouBoy"));
+    auto* RideAnimation=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/NPC/Companion/Animation/A_ErgouRide.A_ErgouRide"));
+    if (!TestNotNull(TEXT("创建新的附近对话对象"),Rider) || !TestNotNull(TEXT("生成实际同伴专属车"),CompanionBike) ||
+        !TestNotNull(TEXT("加载正式二狗骨骼网格"),RiderMesh) || !TestNotNull(TEXT("加载正式专属车坐姿"),RideAnimation)) return false;
+    Rider->GetMesh()->SetSkeletalMeshAsset(RiderMesh);
+    Rider->SetActorHiddenInGame(false);
+    Rider->SetActorEnableCollision(true);
+    Rider->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+    CompanionBike->RideAnimation=RideAnimation;
+    if (!TestTrue(TEXT("专属车登记给当前二狗"),CompanionBike->InitializeForCompanion(Rider))) return false;
+    Rider->SetActorLocation(CompanionBike->GetBoardingLocation(),false,nullptr,ETeleportType::TeleportPhysics);
+    if (!TestTrue(TEXT("测试角色真实位于近距离对话范围但不在准星前"),MountedConversation->CanTalkTo(Rider) &&
+        !MountedConversation->GetAimedNpc())) return false;
+    const auto TryOpenNearbyConversation=[&](UDeliveryConversationComponent& Component)
+    {
+        Component.LastResult=TEXT("NoConversationOpened");
+        Component.OpenAimedConversation();
+        return Component.LastResult.IsNone();
+    };
+    TestFalse(TEXT("四米外步行二狗仍不进入三米 T 兜底"),TryOpenNearbyConversation(*MountedConversation));
+    if (!TestTrue(TEXT("实际骑乘入口挂到专属车座并隐藏原胶囊"),CompanionBike->TryMount(Rider) &&
+        Rider->IsMountedOnCompanionBike() && Rider->IsHidden() && !Rider->GetActorEnableCollision())) return false;
+    TestTrue(TEXT("车尾四米多处的自家骑乘二狗可以用 T 叫住"),TryOpenNearbyConversation(*MountedConversation));
+    TestFalse(TEXT("访客没有自家二狗的骑乘对话兜底"),TryOpenNearbyConversation(*VisitorConversation));
+    RiderOwner->GetPawn()->SetActorLocation(PlayerLocation+FVector(240,0,0));
+    TestFalse(TEXT("车上二狗仍遵守原本地对话外距"),TryOpenNearbyConversation(*MountedConversation));
+    RiderOwner->GetPawn()->SetActorLocation(PlayerLocation);
+
+    auto* TalkWall=Fixture.World->SpawnActor<AActor>();
+    auto* TalkWallBox=NewObject<UBoxComponent>(TalkWall);
+    TalkWall->SetRootComponent(TalkWallBox);
+    TalkWallBox->SetBoxExtent(FVector(12,100,150));
+    TalkWallBox->SetCollisionProfileName(TEXT("BlockAll"));
+    TalkWallBox->RegisterComponent();
+    TalkWall->SetActorLocation((PlayerLocation+BikeLocation)*.5);
+    TestFalse(TEXT("中间有墙时仍拒绝与车上二狗对话"),TryOpenNearbyConversation(*MountedConversation));
+    TalkWall->Destroy();
+    TestTrue(TEXT("移开墙后可以重新与车上二狗对话"),TryOpenNearbyConversation(*MountedConversation));
+    const FVector OutsideNetRange=PlayerLocation+FVector(1000000,0,0);
+    TestTrue(TEXT("骑乘时始终给同主人保留真实对话角色"),Rider->IsNetRelevantFor(RiderOwner,RiderOwner->GetPawn(),OutsideNetRange));
+    TestTrue(TEXT("附近访客可同步原角色以接收空间对白"),Rider->IsNetRelevantFor(RiderVisitor,RiderVisitor->GetPawn(),PlayerLocation));
+    TestFalse(TEXT("远处访客仍按角色原距离裁剪"),Rider->IsNetRelevantFor(RiderVisitor,RiderVisitor->GetPawn(),OutsideNetRange));
     return true;
 }
 #endif

@@ -92,7 +92,7 @@ void UDeliveryPickupPointComponent::EnsureInteractableConfigured()
     }
     if (Interactable->PromptText.IsEmpty())
     {
-        Interactable->PromptText = NSLOCTEXT("DeliveryPickup", "HoldTakePackage", "[Hold E] Collect Package");
+        Interactable->PromptText = NSLOCTEXT("DeliveryPickup", "HoldTakePackage", "[按住 E] 取快递");
     }
 
     if (bDefaultKey || bNoHold)
@@ -165,19 +165,19 @@ FText UDeliveryPickupPointComponent::GetBlockedReason(const APawn *Interactor) c
     {
         if (Character->IsRidingVehicle())
         {
-            return NSLOCTEXT("DeliveryPickup", "DismountToTake", "[F] Dismount to Collect Package");
+            return NSLOCTEXT("DeliveryPickup", "DismountToTake", "[按 F] 下车取货");
         }
     }
 
     if (GetLocationId().IsNone())
     {
-        return NSLOCTEXT("DeliveryPickup", "PointNoId", "Pickup Location Not Configured");
+        return NSLOCTEXT("DeliveryPickup", "PointNoId", "取货点没填地点 ID");
     }
 
     const UDeliveryTaskManagerComponent *Manager = UDeliveryTaskManagerComponent::Get(this);
     if (!Manager)
     {
-        return NSLOCTEXT("DeliveryPickup", "NoManager", "Delivery Service Unavailable");
+        return NSLOCTEXT("DeliveryPickup", "NoManager", "当前关卡未配置任务管理器");
     }
 
     if (const UDeliveryTaskDefinition *Task = ResolvePendingTask())
@@ -191,10 +191,10 @@ FText UDeliveryPickupPointComponent::GetBlockedReason(const APawn *Interactor) c
         // 但玩家该做的事完全不同（去接电话 vs 先送完手上这单）
         if (!Manager->IsTaskAccepted(Task))
         {
-            return NSLOCTEXT("DeliveryPickup", "NotAnswered", "Answer the Call to Accept This Delivery");
+            return NSLOCTEXT("DeliveryPickup", "NotAnswered", "先接电话才能接这一单");
         }
 
-        return NSLOCTEXT("DeliveryPickup", "OtherTask", "Complete Your Current Delivery First");
+        return NSLOCTEXT("DeliveryPickup", "OtherTask", "请先完成正在进行的快递任务");
     }
 
     // 没有待取件任务指向这里；分两种情况说，因为玩家的下一步动作完全不同：
@@ -203,11 +203,11 @@ FText UDeliveryPickupPointComponent::GetBlockedReason(const APawn *Interactor) c
     {
         if (Manager->GetTaskStatus(Active) == EDeliveryTaskStatus::InProgress)
         {
-            return NSLOCTEXT("DeliveryPickup", "AlreadyCarrying", "Package Collected. Head to the Drop-Off");
+            return NSLOCTEXT("DeliveryPickup", "AlreadyCarrying", "快递已在身上，去收件点交付");
         }
     }
 
-    return NSLOCTEXT("DeliveryPickup", "NoPendingHere", "No Packages to Collect Here");
+    return NSLOCTEXT("DeliveryPickup", "NoPendingHere", "这里暂时没有要取的快递");
 }
 
 // 生成任务快递并交给接收者，失败时清理新建快递

@@ -18,6 +18,9 @@ public:
     // 读真实组件、材质、坐标和用途，不创建占用、不调用 BeginPlay
     UFUNCTION(BlueprintCallable,Category="Delivery|Editor|Home")
     static FString InspectFurniture(AActor* Actor);
+    // 用运行时同一净空和支撑规则查询，不挪动物件或创建占用
+    UFUNCTION(BlueprintCallable,Category="Delivery|Editor|Home")
+    static FString InspectFurniturePlacement(AActor* Source,AActor* Support,const FTransform& Surface);
     // 只读检查拟定室内脚下点；临时预览门洞导航边后恢复原状态，不破门或重建导航
     UFUNCTION(BlueprintCallable,Category="Delivery|Editor|Home")
     static FString InspectInteriorAnchor(ADeliveryHome* Home,FVector ProposedWorldLocation);
@@ -27,5 +30,6 @@ public:
     static FString BuildFurnitureAssets(AActor* SourceActor,const FString& Configuration,bool bReplaceOwnedAssets=false);
     // 使用编辑器标准替换流程保留关卡引用；只接已经编译成功的独立家具蓝图
     UFUNCTION(BlueprintCallable,Category="Delivery|Editor|Home")
-    static AActor* InstallFurniture(AActor* SourceActor,UBlueprint* Blueprint,ADeliveryHome* Home,FGuid ObjectId);
+    static AActor* InstallFurniture(AActor* SourceActor,UBlueprint* Blueprint,ADeliveryHome* Home,FGuid ObjectId,
+        bool bRefreshExistingPortableProp=false);
 };

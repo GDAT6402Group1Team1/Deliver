@@ -14,6 +14,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerState.h"
 #include "Inventory/DeliveryHandheldItem.h"
+#include "Player/DeliveryPlayerController.h"
 #include "Vehicle/DeliveryMotorbike.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
@@ -94,7 +95,7 @@ void UDeliveryTargetComponent::EnsureInteractableConfigured()
     }
     if (Interactable->PromptText.IsEmpty())
     {
-        Interactable->PromptText = NSLOCTEXT("DeliveryPickup", "HoldDeliverPackage", "[Hold E] Deliver Package");
+        Interactable->PromptText = NSLOCTEXT("DeliveryPickup", "HoldDeliverPackage", "[按住 E] 交付快递");
     }
 
     // 提示半径和交付半径必须一致，否则"提示出来了但按不动"
@@ -206,7 +207,8 @@ FVector UDeliveryTargetComponent::GetDeliveryPoint(FVector FromLocation) const
 bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Player)
 {
     // 货仍归车辆持有时必须先在车尾取出，不能隔着后备箱直接交付
-    if (!GetOwner() || !GetOwner()->HasAuthority() || !IsValid(Player) || Player->GetWorld()!=GetWorld() || Player->IsInactive() || !ItemActor ||
+    if (!GetOwner() || !GetOwner()->HasAuthority() || !IsValid(Player) || Player->IsActorBeingDestroyed() ||
+        Player->GetWorld()!=GetWorld() || Player->IsInactive() || !IsValid(ItemActor) || ItemActor->IsActorBeingDestroyed() ||
         Cast<ADeliveryMotorbike>(ItemActor->GetOwner()) || !CanAcceptDelivery(ItemActor, Player))
     {
         return false;
@@ -225,7 +227,10 @@ bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Playe
         if (ReservedItem.IsValid()) ReservedItem->EndTransfer();
     };
     const TWeakObjectPtr<UDeliveryTargetComponent> WeakTarget(this);
+    const TWeakObjectPtr<AActor> ExpectedReceiver(GetOwner());
     const TWeakObjectPtr<AActor> WeakItem(ItemActor);
+    const TWeakObjectPtr<AActor> ExpectedHolder(Holder);
+    const TWeakObjectPtr<APlayerState> WeakDeliverer(Player);
     auto* Package=Cast<ADeliveryPackageItem>(ItemActor);
     const FGameplayTag DeliveryEvent=Package && Package->ContainsCaterpillar()?
         TAG_Event_Delivery_Caterpillar.GetTag():FGameplayTag();
@@ -234,12 +239,21 @@ bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Playe
     {
         if (Carrier)
         {
-            if (!Carrier->ReleaseTaskPackage(Package) || !WeakItem.IsValid() || WeakItem->GetOwner()) return false;
+            const bool bClearedHand=Carrier->ReleaseTaskPackage(Package);
+            if (!WeakItem.IsValid() || WeakItem->GetOwner()) return false;
             bReleased=true;
+            if (!bClearedHand) return false;
             WeakItem->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
         }
-        return WeakTarget.IsValid() && IsValid(WeakTarget->GetOwner()) && !WeakTarget->GetOwner()->IsActorBeingDestroyed() &&
-            WeakItem.IsValid() && !WeakItem->IsActorBeingDestroyed() && (!Carrier || !WeakItem->GetOwner());
+        // 清手可能同步触发归属和任务变化，只向原收件点提交仍属原订单的包裹
+        if (!WeakTarget.IsValid() || !ExpectedReceiver.IsValid() || ExpectedReceiver->IsActorBeingDestroyed() ||
+            WeakTarget->GetOwner()!=ExpectedReceiver.Get() || WeakTarget->ExpectedTask!=DeliveredTask || !WeakItem.IsValid() ||
+            WeakItem->IsActorBeingDestroyed() || !WeakDeliverer.IsValid()) return false;
+        const auto* CurrentItem=WeakItem->FindComponentByClass<UDeliveryItemComponent>();
+        if (!IsValid(CurrentItem) || CurrentItem->OwningTask!=DeliveredTask ||
+            (TransferItem && (CurrentItem!=ReservedItem.Get() || !CurrentItem->IsTransferInProgress()))) return false;
+        return !Carrier || (ExpectedHolder.IsValid() && !ExpectedHolder->IsActorBeingDestroyed() && !WeakItem->GetOwner() &&
+            Carrier->GetTaskPlayerState()==WeakDeliverer.Get());
     };
     if (!Manager->CompleteDelivery(DeliveredTask,Player,Carrier?Holder:nullptr,DeliveryEvent,ReleasePackage))
     {
@@ -249,9 +263,30 @@ bool UDeliveryTargetComponent::TryDeliver(AActor *ItemActor, APlayerState *Playe
         return false;
     }
 
-    if (WeakTarget.IsValid() && IsValid(WeakTarget->GetOwner()) && !WeakTarget->GetOwner()->IsActorBeingDestroyed() && WeakItem.IsValid())
-        OnDeliveryConfirmed.Broadcast(DeliveredTask, WeakItem.Get(), Player);
+    if (WeakTarget.IsValid() && ExpectedReceiver.IsValid() && !ExpectedReceiver->IsActorBeingDestroyed() && WeakItem.IsValid())
+        OnDeliveryConfirmed.Broadcast(DeliveredTask, WeakItem.Get(), WeakDeliverer.Get());
     if (WeakItem.IsValid()) WeakItem->Destroy();
+
+    // 收件回调可能改变玩家的 Pawn，结算后按同一个 PlayerState 找到当前接收者
+    auto* Deliverer=WeakDeliverer.Get();
+    auto* Controller=Deliverer && !Deliverer->IsActorBeingDestroyed() && !Deliverer->IsInactive()?
+        Deliverer->GetPlayerController():nullptr;
+    if (IsValid(Controller) && !Controller->IsActorBeingDestroyed() && Controller->PlayerState==Deliverer &&
+        Controller->GetWorld()==Deliverer->GetWorld())
+    {
+        APawn* Pawn=Controller->GetPawn();
+        auto* Bike=Cast<ADeliveryMotorbike>(Pawn);
+        auto* Recipient=Bike?Bike->GetDriver():Cast<ADeliveryCharacter>(Pawn);
+        if (IsValid(Recipient) && !Recipient->IsActorBeingDestroyed() && Recipient->GetTaskPlayerState()==Deliverer &&
+            (!Bike || Recipient->GetCurrentVehicle()==Bike))
+        {
+            // 车辆接管控制权后由仍属于本机玩家的控制器发送反馈
+            if (auto* DeliveryController=Cast<ADeliveryPlayerController>(Controller))
+                DeliveryController->ClientConfirmDelivery(Recipient);
+            else if (Recipient==Pawn)
+                Recipient->ClientDeliverySucceeded();
+        }
+    }
 
     return true;
 }
@@ -264,15 +299,10 @@ bool UDeliveryTargetComponent::CanDeliver(APawn *Interactor, bool bCheckTaskAvai
            CanAcceptDelivery(Character->GetCarriedTaskPackage(), Character->GetTaskPlayerState());
 }
 
-// 执行交付，成功后通知玩家播放反馈
+// 从角色交互进入亲自交付，与二狗代送共用确认入口
 bool UDeliveryTargetComponent::Deliver(APawn *Interactor)
 {
     ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(Interactor);
-    if (!Character || Character->IsRidingVehicle() ||
-        !TryDeliver(Character->GetCarriedTaskPackage(), Character->GetTaskPlayerState()))
-    {
-        return false;
-    }
-    Character->ClientDeliverySucceeded();
-    return true;
+    return Character && !Character->IsRidingVehicle() &&
+        TryDeliver(Character->GetCarriedTaskPackage(), Character->GetTaskPlayerState());
 }

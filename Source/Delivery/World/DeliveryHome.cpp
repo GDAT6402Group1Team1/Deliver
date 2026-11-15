@@ -2,15 +2,17 @@
 #include "World/DeliveryHomeObjectComponent.h"
 #include "World/DeliveryLocationComponent.h"
 #include "World/DeliveryLocationRegistry.h"
+#include "World/DeliveryNavigationAreas.h"
 #include "NPC/DeliveryGrandpa.h"
 #include "Task/World/DeliveryBreakableDoor.h"
 #include "NavLinkCustomComponent.h"
-#include "NavAreas/NavArea_Default.h"
 #include "NavAreas/NavArea_Null.h"
 #include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
+#include "Delivery.h"
 
 ADeliveryHome::ADeliveryHome()
 {
@@ -26,7 +28,7 @@ ADeliveryHome::ADeliveryHome()
     InteriorAnchor->SetRelativeLocation(FVector(0,480,0));
     DoorwayLink=CreateDefaultSubobject<UNavLinkCustomComponent>(TEXT("DoorwayLink"));
     DoorwayLink->SetLinkData(FVector(0,20,-35),FVector(0,220,0),ENavLinkDirection::BothWays);
-    DoorwayLink->SetEnabledArea(UNavArea_Default::StaticClass());
+    DoorwayLink->SetEnabledArea(UDeliveryPedestrianLinkArea::StaticClass());
     DoorwayLink->SetDisabledArea(UNavArea_Null::StaticClass());
     DoorwayLink->SetEnabled(false);
 }
@@ -36,6 +38,8 @@ void ADeliveryHome::BeginPlay()
     Super::BeginPlay();
     DoorwayLink->SetEnabled(false);
     if (!HasAuthority()) return;
+    // 旧地图实例的链接沿用端点和方向，启用时登记行人区域
+    DoorwayLink->SetEnabledArea(UDeliveryPedestrianLinkArea::StaticClass());
     auto* Door=IsValid(FormerResident)?FormerResident->FrontDoor.Get():nullptr;
     if (IsValid(Door) && Door->GetWorld()==GetWorld())
     {
@@ -78,6 +82,30 @@ ADeliveryHome* ADeliveryHome::FindSharedHome(const UObject* WorldContextObject)
     const auto Homes=Registry->ResolveAllActors(TEXT("Location_PlayerHome"));
     // 重复标记不选择其中一份，避免不同玩家使用不同房屋状态
     return Homes.Num()==1?Cast<ADeliveryHome>(Homes[0]):nullptr;
+}
+
+bool ADeliveryHome::CrossesPedestrianDoorway(const FVector& FromFeet,const FVector& ToFeet) const
+{
+    const auto* Door=BoundDoor.Get();
+    const auto* Mesh=IsValid(Door) && !Door->IsActorBeingDestroyed()?Door->GetIntactMesh():nullptr;
+    if (!IsValid(DoorwayLink) || !IsValid(Mesh) || !Mesh->IsRegistered() || FromFeet.ContainsNaN() || ToFeet.ContainsNaN()) return false;
+    const FVector Start=DoorwayLink->GetStartPoint(), End=DoorwayLink->GetEndPoint();
+    const FVector DoorCenter=Door->GetActorLocation();
+    if (Start.ContainsNaN() || End.ContainsNaN() || DoorCenter.ContainsNaN()) return false;
+    const FVector Axis=(End-Start).GetSafeNormal2D();
+    const double DoorAlongLink=FVector::DotProduct(DoorCenter-Start,Axis);
+    if (DoorAlongLink<=0. || DoorAlongLink>=FVector::Dist2D(Start,End) ||
+        FVector::DistSquared2D(DoorCenter,Start+Axis*DoorAlongLink)>FMath::Square(150.)) return false;
+    const double FromSide=FVector::DotProduct(FromFeet-DoorCenter,Axis);
+    const double ToSide=FVector::DotProduct(ToFeet-DoorCenter,Axis);
+    if (FromSide*ToSide>=0.) return false;
+    const FVector Crossing=FMath::Lerp(FromFeet,ToFeet,FromSide/(FromSide-ToSide));
+    constexpr double FloorTolerance=75.;
+    if (!FMath::IsWithinInclusive(Crossing.Z,FMath::Min(Start.Z,End.Z)-FloorTolerance,FMath::Max(Start.Z,End.Z)+FloorTolerance)) return false;
+    // 使用真实门叶的宽度，平面以外的路缘和上层通道可以照常通过
+    const FVector Lateral=FVector::CrossProduct(FVector::UpVector,Axis);
+    const double DoorHalfWidth=FVector::DotProduct(Mesh->Bounds.BoxExtent,Lateral.GetAbs());
+    return DoorHalfWidth>0. && FMath::Abs(FVector::DotProduct(Crossing-Mesh->Bounds.Origin,Lateral))<=DoorHalfWidth;
 }
 
 bool ADeliveryHome::TryGetReturnLocation(FVector& OutLocation) const
@@ -143,6 +171,8 @@ bool ADeliveryHome::TryClaimAfterDeparture(ADeliveryGrandpa* Resident)
     ClaimEventId=Resident->GetConfirmedDeliveryId();
     const auto* State=GetWorld()->GetGameState();
     ClaimedServerTime=State?State->GetServerWorldTimeSeconds():GetWorld()->GetTimeSeconds();
+    UE_LOG(LogDelivery,Log,TEXT("SharedHomeClaimed home=%s delivery=%s at=%s"),
+        *GetName(),*ClaimEventId.ToString(),*Resident->GetActorLocation().ToCompactString());
     ForceNetUpdate();
     return true;
 }
