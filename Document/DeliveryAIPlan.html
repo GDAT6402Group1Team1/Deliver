@@ -547,6 +547,11 @@
 </table></div>
 <p>一段连续 <code>Fight</code> 保留一个 Agent 动作编号，每一拳另有自己的编号。<code>StartFightStrike()</code> 检查是否仍属于本段交战、目标是否相同、是否已经收拳，再开始一拳；规则护主还检查原来的次数限制。<code>GetStrikeResult(PunchId)</code> 只查询这一拳的结果。客户端通过 <code>GetStrikeStartTime(ActionId)</code> 读取当前拳的服务器时间，旧角色的片段播放也使用每拳编号重新开始动画。<code>ContinueFight()</code> 只更新有效时限，不重置当前拳、累计命中或整场起点；<code>EndFight()</code> 停止尚未发生的命中并解除本段目标，重复结束不会多打一拳。</p>
 <p>被打时，旧闲聊及其声音会停止。如果 NPC 正在请求模型判断同一个人的攻击，并且尚未开始发布旧台词，这条请求可以继续，避免每挨一拳就重新生成、始终等不到回应。<code>IsRespondingToAttackFrom()</code> 只查询当前请求是否包含这个人的攻击记录，不触发新请求；倒地仍按原规则取消。</p>
+<h4>NPC 命中玩家后的反馈</h4>
+<p>NPC 的拳头扫到玩家实际网格后，服务器沿用 GAS 扣血和主动布娃娃冲量，再补上命中声音与被打玩家的短暂镜头晃动。声音复用主角原来的 <code>PunchHitSound</code>，经服务器多播在接触点播放。镜头通过角色的 <code>NotifyMeleeHit()</code> 通知，远端玩家收到 <code>ClientMeleeHit()</code> 后，由自己的相机组件调用 <code>PlayMeleeHit()</code>。</p>
+<p>镜头复用已有 <code>DoorHitCameraShake</code>，持续 0.24 秒。<code>CameraConfig.MeleeHitShakeScale</code> 默认 0.45，设为 0 可关闭。播放前检查该角色是否仍由本机控制、是否仍是当前观看对象，避免切换角色或镜头后收到旧角色的晃动。挥空不触发命中反馈，二狗对玩家的无伤轻拍也不使用这套重击反馈。镜头沿用现有单实例规则，短时间内再触发同类斧击门反馈时会重新开始这段晃动。命中声沿用角色复制和原声音资产设置，本轮还未实测听音距离。</p>
+<p>居民和二狗继续使用现有动画蓝图的快步、出拳和受击姿势（<code>Hurry</code>、<code>Strike</code>、<code>Hit</code>），拳头收回后继续追人。本批没有替换动画、改动碰撞距离、小模型的选择权或两个 B 音色。远端玩家自己的身体仍沿用原来的物理预测，新增镜头确认不代表整套受击物理同步已修复。</p>
+<p>本批已构建并通过 13 项 UE 离线回归，覆盖正式拳路的扣血、受击者镜头、旁观隔离、无伤接触和遮挡挥空。现场音效和双人受击表现待试玩。<a href="AIIteration.html#npc-confirmed-hit-feedback-20261115">本批记录</a></p>
 <p>后续表演仍需继续做。神经语音目前没有使用 <code>emotion</code> 控制激昂语调。翠花的眉形已替换到正式女性模型，并在独立进程中确认形态键有效、尺寸和材质等设置未变；尚未完成 UE 画面验收。头顶冒气、扬尘和表演强度配置仍是计划内容。</p>
 <p>建议保留 <code>candidate_index</code>、<code>speech_target_id</code>、<code>speech</code>、<code>emotion</code>，只增加 <code>intensity</code>，先允许 <code>Normal</code> 和 <code>Strong</code> 两档。下面是拟采用格式，当前协议尚不支持新增字段：</p>
 <pre><code class="language-json">{

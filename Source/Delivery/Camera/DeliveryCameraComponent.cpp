@@ -2,9 +2,12 @@
 
 #include "Camera/DeliveryCameraComponent.h"
 #include "Camera/DeliveryCameraConfig.h"
+#include "Camera/DeliveryDoorHitCameraShake.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 
 UDeliveryCameraComponent::UDeliveryCameraComponent()
@@ -63,6 +66,26 @@ void UDeliveryCameraComponent::PlayImpact()
         SetComponentTickEnabled(true);
     }
     HoldUntil = GetWorld()->GetTimeSeconds() + GetConfig().ImpactHoldTime;
+}
+
+void UDeliveryCameraComponent::PlayMeleeHit()
+{
+    const auto* Pawn = Cast<APawn>(GetOwner());
+    const auto* Controller = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+    // 换角色或观看其他对象后，不把旧角色收到的命中显示到新镜头
+    if (!IsValid(Pawn) || Pawn->IsActorBeingDestroyed() || !Pawn->IsLocallyControlled() ||
+        !IsValid(Controller) || !Controller->IsLocalController() || Controller->GetPawn() != Pawn ||
+        Controller->GetViewTarget() != Pawn || !IsValid(Controller->PlayerCameraManager))
+    {
+        return;
+    }
+    const float Scale = GetConfig().MeleeHitShakeScale;
+    if (FMath::IsFinite(Scale) && Scale > 0.0f)
+    {
+        // 复用现有 0.24 秒镜头回弹，由 CameraManager 播放和结束
+        Controller->PlayerCameraManager->StartCameraShake(UDeliveryDoorHitCameraShake::StaticClass(),
+            FMath::Clamp(Scale, 0.0f, 2.0f));
+    }
 }
 
 // 保持期间向外拉远，保持结束后回到撞击前的距离

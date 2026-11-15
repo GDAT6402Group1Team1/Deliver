@@ -179,6 +179,13 @@ private:
     UFUNCTION(Client, Reliable)
     void ClientVehicleImpactCamera();
 
+    /** 服务器确认真实拳击命中后，只通知被打中的玩家 */
+    void NotifyMeleeHit();
+
+    /** 收到通知时再次检查玩家是否仍在控制这个角色 */
+    UFUNCTION(Client, Unreliable)
+    void ClientMeleeHit();
+
     /** 通知操作玩家取件成功，由本机监听者响应 */
     UFUNCTION(Client, Reliable)
     void ClientPickupSucceeded();

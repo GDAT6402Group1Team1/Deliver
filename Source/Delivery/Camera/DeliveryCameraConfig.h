@@ -48,4 +48,8 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="撞击", meta=(DisplayName="恢复速度", ClampMin="0.1"))
     float ImpactReturnSpeed = 3.0f;
+
+    /** 拳头实际命中后短暂晃动镜头，设为 0 可关闭；不改变身体物理 */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="近战受击", meta=(DisplayName="镜头晃动强度", ClampMin="0", ClampMax="2"))
+    float MeleeHitShakeScale = 0.45f;
 };

@@ -176,6 +176,24 @@ void ADeliveryCharacter::ClientVehicleImpactCamera_Implementation()
     PlayerCamera->PlayImpact();
 }
 
+void ADeliveryCharacter::NotifyMeleeHit()
+{
+    if (!HasAuthority() || IsActorBeingDestroyed()) return;
+    if (IsLocallyControlled())
+    {
+        if (IsValid(PlayerCamera)) PlayerCamera->PlayMeleeHit();
+    }
+    else if (IsPlayerControlled())
+    {
+        ClientMeleeHit();
+    }
+}
+
+void ADeliveryCharacter::ClientMeleeHit_Implementation()
+{
+    if (IsValid(PlayerCamera)) PlayerCamera->PlayMeleeHit();
+}
+
 // 玩家状态到达客户端后，连接技能系统
 void ADeliveryCharacter::OnRep_PlayerState()
 {

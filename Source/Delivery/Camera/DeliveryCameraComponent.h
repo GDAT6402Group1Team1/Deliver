@@ -27,6 +27,9 @@ public:
     UFUNCTION(BlueprintCallable, Category="镜头")
     void PlayImpact();
 
+    /** 在受击玩家自己的镜头上播放短促反馈 */
+    void PlayMeleeHit();
+
 protected:
     virtual void BeginPlay() override;
     virtual void TickComponent(float DeltaTime, ELevelTick TickType,

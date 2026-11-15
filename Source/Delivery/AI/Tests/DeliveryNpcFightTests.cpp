@@ -16,10 +16,14 @@
 #include "Components/AudioComponent.h"
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
+#include "Camera/CameraModifier_CameraShake.h"
+#include "Camera/DeliveryDoorHitCameraShake.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Character/DeliveryCharacter.h"
 #include "Components/BoxComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -537,45 +541,107 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
     auto* PlayerClass=LoadClass<ADeliveryCharacter>(nullptr,
         TEXT("/Game/Blueprint/Character/DeliverMan/BP_DeliveryMan.BP_DeliveryMan_C"));
     if (!TestNotNull(TEXT("装有布娃娃的正式玩家蓝图"),PlayerClass)) return false;
-    bool bHitPlayer=false;
-    // 不同近身间距覆盖骨架差异；只接受正式拳头扫掠碰到玩家刚体的结果
-    for (const double Distance:{72.,62.,52.})
+    const auto AttachLocalCamera=[&](APlayerController* Controller,APawn* Pawn)
     {
-        auto Contact=SpawnCase();
-        Contact.Target->Destroy(); Contact.Target=nullptr;
-        ON_SCOPE_EXIT { Close(Contact); };
-        FActorSpawnParameters Spawn;
-        Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-        auto* Player=World->SpawnActor<ADeliveryCharacter>(PlayerClass,FVector(Distance,0,90),FRotator(0,180,0),Spawn);
-        auto* State=World->SpawnActor<ADeliverPlayerState>();
-        auto* Controller=World->SpawnActor<APlayerController>();
-        if (!TestTrue(TEXT("创建带技能系统的玩家目标"),Player && State && Controller)) return false;
-        ON_SCOPE_EXIT { Controller->UnPossess(); Player->Destroy(); State->Destroy(); Controller->Destroy(); };
-        State->SetOwner(Controller);
-        Controller->PlayerState=State;
-        Controller->Possess(Player);
-        if (!TestTrue(TEXT("服务器能从被控制的玩家找到同一 PlayerState"),Player->GetPlayerState()==State)) return false;
-        auto* ASC=State->GetDeliverAbilitySystemComponent();
-        ASC->InitializeAbilityActor(State,Player);
-        const FGameplayAttribute Health=UDeliverAttributeSet::GetHealthAttribute();
-        ASC->SetNumericAttributeBase(Health,100.f);
-        if (!TestTrue(TEXT("玩家处于原主动布娃娃状态"),Player->GetActiveRagdoll()->IsRagdollActive())) return false;
-        float LowestHealth=100.f;
-        const FDelegateHandle HealthChanged=ASC->GetGameplayAttributeValueChangeDelegate(Health).AddLambda(
-            [&LowestHealth](const FOnAttributeChangeData& Change) { LowestHealth=FMath::Min(LowestHealth,Change.NewValue); });
-        ON_SCOPE_EXIT { ASC->GetGameplayAttributeValueChangeDelegate(Health).Remove(HealthChanged); };
-        Contact.Attacker->Combat->bHarmlessStrikes=false;
-        // 角色动作编号驱动正式出拳动画和实际拳头扫掠
-        if (!Begin(Contact,EDeliveryNpcAction::StrikeOnce,5.f,nullptr,Player)) continue;
-        Tick(Contact,.45f);
-        bool bContact=false;
-        if (!TestTrue(TEXT("正式 BT 拳头与动画共用动作编号"),Contact.bParentTimeMatches && Contact.PunchIds.Contains(Contact.ActionId))) return false;
-        if (!TestTrue(TEXT("真实近身挥拳产生了判定结果"),Contact.Attacker->Combat->GetStrikeResult(Contact.ActionId,bContact))) return false;
-        TestTrue(TEXT("只有实际命中才通过原 GAS 扣血"),FMath::IsNearlyEqual(LowestHealth,
-            bContact?100.f-Contact.Attacker->Combat->OutgoingPlayerDamage:100.f));
-        if (bContact) { bHitPlayer=true; break; }
-    }
-    TestTrue(TEXT("近身拳头实际扫到正式主角的布娃娃网格"),bHitPlayer);
+        Controller->SetPlayer(NewObject<ULocalPlayer>(GEngine));
+        if (!Controller->PlayerCameraManager) Controller->SpawnPlayerCameraManager();
+        if (!Controller->PlayerCameraManager) return false;
+        Controller->Possess(Pawn);
+        Controller->SetViewTarget(Pawn);
+        return Pawn->IsLocallyControlled() && Controller->GetViewTarget()==Pawn;
+    };
+    const auto HasHitShake=[](const APlayerController* Controller)
+    {
+        auto* Manager=Controller->PlayerCameraManager.Get();
+        auto* Modifier=Manager?Cast<UCameraModifier_CameraShake>(Manager->FindCameraModifierByClass(UCameraModifier_CameraShake::StaticClass())):nullptr;
+        TArray<FActiveCameraShakeInfo> Shakes;
+        if (Modifier) Modifier->GetActiveCameraShakes(Shakes);
+        return Shakes.ContainsByPredicate([](const FActiveCameraShakeInfo& Shake)
+            { return Shake.ShakeInstance && Shake.ShakeInstance->IsA<UDeliveryDoorHitCameraShake>(); });
+    };
+    auto* ObserverController=World->SpawnActor<APlayerController>();
+    auto* Observer=World->SpawnActor<APawn>();
+    if (!TestTrue(TEXT("旁观者有独立的本机镜头"),ObserverController && Observer && AttachLocalCamera(ObserverController,Observer))) return false;
+    ON_SCOPE_EXIT { ObserverController->UnPossess(); ObserverController->Destroy(); Observer->Destroy(); };
+
+    enum class EPlayerStrike { Harmful, Harmless, Blocked };
+    const auto CheckPlayerStrike=[&](EPlayerStrike Kind)
+    {
+        // 三个近身间距用于覆盖正式玩家和居民的骨架差异
+        for (const double Distance:{72.,62.,52.})
+        {
+            auto Contact=SpawnCase();
+            Contact.Target->Destroy(); Contact.Target=nullptr;
+            ON_SCOPE_EXIT { Close(Contact); };
+            FActorSpawnParameters Spawn;
+            Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+            auto* Player=World->SpawnActor<ADeliveryCharacter>(PlayerClass,FVector(Distance,0,90),FRotator(0,180,0),Spawn);
+            auto* State=World->SpawnActor<ADeliverPlayerState>();
+            auto* Controller=World->SpawnActor<APlayerController>();
+            if (!TestTrue(TEXT("创建带技能系统的玩家目标"),Player && State && Controller)) return false;
+            ON_SCOPE_EXIT { Controller->UnPossess(); Player->Destroy(); State->Destroy(); Controller->Destroy(); };
+            State->SetOwner(Controller);
+            Controller->PlayerState=State;
+            if (!TestTrue(TEXT("受击者有实际使用的本机镜头"),AttachLocalCamera(Controller,Player))) return false;
+            if (!TestTrue(TEXT("服务器能从被控制的玩家找到同一 PlayerState"),Player->GetPlayerState()==State)) return false;
+            auto* ASC=State->GetDeliverAbilitySystemComponent();
+            ASC->InitializeAbilityActor(State,Player);
+            const FGameplayAttribute Health=UDeliverAttributeSet::GetHealthAttribute();
+            ASC->SetNumericAttributeBase(Health,100.f);
+            if (!TestTrue(TEXT("玩家处于原主动布娃娃状态"),Player->GetActiveRagdoll()->IsRagdollActive())) return false;
+            float LowestHealth=100.f;
+            const FDelegateHandle HealthChanged=ASC->GetGameplayAttributeValueChangeDelegate(Health).AddLambda(
+                [&LowestHealth](const FOnAttributeChangeData& Change) { LowestHealth=FMath::Min(LowestHealth,Change.NewValue); });
+            ON_SCOPE_EXIT { ASC->GetGameplayAttributeValueChangeDelegate(Health).Remove(HealthChanged); };
+            Contact.Attacker->Combat->bHarmlessStrikes=Kind==EPlayerStrike::Harmless;
+            if (!Begin(Contact,EDeliveryNpcAction::StrikeOnce,5.f,nullptr,Player)) continue;
+            AActor* Blocker=nullptr;
+            ON_SCOPE_EXIT { if (Blocker) Blocker->Destroy(); };
+            if (Kind==EPlayerStrike::Blocked)
+            {
+                // 已经起拳才加遮挡，让命中窗口得出一次真实未命中
+                Blocker=World->SpawnActor<AActor>();
+                auto* Shield=NewObject<UBoxComponent>(Blocker);
+                Blocker->SetRootComponent(Shield); Shield->SetBoxExtent(FVector(2,100,100));
+                Shield->SetCollisionProfileName(TEXT("BlockAll")); Shield->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+                Shield->RegisterComponent(); Blocker->SetActorLocation((Player->GetActorLocation()+Contact.Attacker->GetActorLocation())*.5f);
+            }
+            bool bPlayerSawShake=false;
+            bool bObserverSawShake=false;
+            for (int32 Step=0;Step<23;++Step)
+            {
+                Tick(Contact,.02f);
+                bPlayerSawShake|=HasHitShake(Controller);
+                bObserverSawShake|=HasHitShake(ObserverController);
+            }
+            bool bContact=false;
+            if (!TestTrue(TEXT("正式 BT 拳头与动画共用动作编号"),Contact.bParentTimeMatches && Contact.PunchIds.Contains(Contact.ActionId))) return false;
+            if (!TestTrue(TEXT("真实近身挥拳产生了判定结果"),Contact.Attacker->Combat->GetStrikeResult(Contact.ActionId,bContact))) return false;
+            const bool bHarmfulContact=bContact && Kind==EPlayerStrike::Harmful;
+            TestEqual(TEXT("只有有效近战命中才让受击者的镜头抖动"),bPlayerSawShake,bHarmfulContact);
+            TestFalse(TEXT("旁观者镜头不抖动"),bObserverSawShake);
+            TestTrue(TEXT("只有有效近战命中才通过原 GAS 扣血"),FMath::IsNearlyEqual(LowestHealth,
+                bHarmfulContact?100.f-Contact.Attacker->Combat->OutgoingPlayerDamage:100.f));
+            if (Kind==EPlayerStrike::Blocked) return !bContact;
+            if (!bContact) continue;
+            if (bHarmfulContact)
+            {
+                // 主动结束镜头效果，继续让同一拳的后续骨骼帧运行，以检查重复触发
+                Controller->PlayerCameraManager->StopAllInstancesOfCameraShake(UDeliveryDoorHitCameraShake::StaticClass(),true);
+                for (int32 Step=0;Step<15;++Step)
+                {
+                    Tick(Contact,.02f);
+                    TestFalse(TEXT("旧拳后续帧不会重新抖动镜头"),HasHitShake(Controller));
+                }
+            }
+            return true;
+        }
+        return false;
+    };
+    TestTrue(TEXT("近身拳头实际扫到正式主角的布娃娃网格"),CheckPlayerStrike(EPlayerStrike::Harmful));
+    TestTrue(TEXT("无伤拳实际接触玩家但不抖镜头"),CheckPlayerStrike(EPlayerStrike::Harmless));
+    TestTrue(TEXT("遮挡时挥空并保持镜头安静"),CheckPlayerStrike(EPlayerStrike::Blocked));
+    TestFalse(TEXT("此离线世界关闭声音，未验证实际音频播放"),World->AllowAudioPlayback());
     TestFalse(TEXT("整个测试没有启用AI后台"),Settings->bEnabled);
     return true;
 }

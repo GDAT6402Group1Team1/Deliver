@@ -6,6 +6,7 @@
 #include "AbilitySystem/DeliverGameplayTags.h"
 #include "GameplayEffect.h"
 #include "Combat/DeliveryCombatEvents.h"
+#include "Combat/DeliveryRagdollCombatComponent.h"
 #include "Misc/ScopeExit.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
@@ -317,6 +318,14 @@ void UDeliveryNpcCombatComponent::FinishStrike(bool bHit,const FVector& ImpactPo
         if (IsValid(Player) && !Player->IsActorBeingDestroyed() && IsValid(Player->GetActiveRagdoll()) &&
             !bHarmlessStrikes && OutgoingPlayerImpulse>0)
             Player->GetActiveRagdoll()->ApplyMeleeImpact(Direction*OutgoingPlayerImpulse,ImpactPoint);
+        // 只在真实接触后播放，挥空和二狗的无伤轻拍保留各自原有表现
+        // GAS 的同步通知可能销毁玩家，所以结算后再次检查
+        if (IsValid(Player) && !Player->IsActorBeingDestroyed() && !bHarmlessStrikes)
+        {
+            if (auto* Combat=Player->GetRagdollCombat(); IsValid(Combat))
+                Combat->MulticastPlayPunchHit(ImpactPoint,false);
+            Player->NotifyMeleeHit();
+        }
     }
     DeliveryCombatEvents::ReportHit(GetOwner(),Target,CompletedPunch,ImpactPoint);
 }
