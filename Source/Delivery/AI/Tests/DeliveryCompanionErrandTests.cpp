@@ -1307,6 +1307,42 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
         const auto Choice=*Take->ItemChoice;
         TestTrue(TEXT("私有物件证据只存在当前请求"),OwnerRequest.Evidence.ContainsByPredicate([&](const auto& Fact)
             { return Fact.EventId==Choice.EvidenceId && Fact.Kind==TEXT("CompanionOwnerItemAvailable"); }) && !Agent->HasObservationEvent(Choice.EvidenceId));
+
+        FDeliveryNpcDecisionRequest FullInventoryRequest;
+        FullInventoryRequest.RequesterPlayerState=OwnerRequest.RequesterPlayerState;
+        FullInventoryRequest.PlayerMessageId=OwnerRequest.PlayerMessageId;
+        FullInventoryRequest.bPlayerRequest=true;
+        FullInventoryRequest.bPendingPlayerMessage=true;
+        const auto* CurrentSpeech=OwnerRequest.Evidence.FindByPredicate([&](const auto& Fact)
+            { return Fact.EventId==FullInventoryRequest.PlayerMessageId; });
+        if (!TestNotNull(TEXT("容量夹具使用同一条经过确认的主人发言"),CurrentSpeech)) return false;
+        FullInventoryRequest.Evidence.Add(*CurrentSpeech);
+        FGuid LatestFinished;
+        while (FullInventoryRequest.Evidence.Num()<32)
+        {
+            auto& Fact=FullInventoryRequest.Evidence.AddDefaulted_GetRef();
+            Fact.EventId=LatestFinished=FGuid::NewGuid();
+            Fact.Kind=TEXT("ActionFinished");
+            Fact.Source=EDeliveryNpcEvidenceSource::ActionResult;
+            Fact.bNeedsReply=false;
+        }
+        Companion->AddOwnerInventoryCandidates(FullInventoryRequest,OwnerState);
+        const auto ContainsExactSource=[&](const ADeliveryHandheldItem* Item,FName Source)
+        {
+            return FullInventoryRequest.Candidates.ContainsByPredicate([&](const auto& Candidate)
+            {
+                return Candidate.Action==EDeliveryNpcAction::TakeItem && Candidate.ItemChoice.IsValid() &&
+                    Candidate.ItemChoice->Item.Get()==Item && Candidate.ItemChoice->Source==Source &&
+                    FullInventoryRequest.Evidence.ContainsByPredicate([&](const auto& Fact)
+                        { return Fact.EventId==Candidate.ItemChoice->EvidenceId && Fact.SubjectId==Candidate.TargetId; });
+            });
+        };
+        TestEqual(TEXT("追加主人道具后仍遵守 32 条证据上限"),FullInventoryRequest.Evidence.Num(),32);
+        TestTrue(TEXT("证据满额时仍提供主人手里真实物件的候选"),ContainsExactSource(HandGuard,TEXT("OwnerHand")));
+        TestTrue(TEXT("证据满额时仍提供主人背包中真实物件的候选"),ContainsExactSource(Requested,TEXT("OwnerBackpack")));
+        TestTrue(TEXT("让出旧证据不挤掉当前原话和最近的动作结果"),LatestFinished.IsValid() &&
+            FullInventoryRequest.Evidence.ContainsByPredicate([&](const auto& Fact) { return Fact.EventId==LatestFinished; }) &&
+            FullInventoryRequest.Evidence.ContainsByPredicate([&](const auto& Fact) { return Fact.EventId==OwnerRequest.PlayerMessageId; }));
         if (!TestTrue(TEXT("主人确认后进入真实背包取物委托"),StartItem(OwnerRequest,*Take))) return false;
 
         bool bCancelledDuringRelease=false;

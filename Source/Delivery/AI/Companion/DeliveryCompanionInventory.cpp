@@ -45,13 +45,15 @@ void UDeliveryCompanionComponent::AddOwnerInventoryCandidates(FDeliveryNpcDecisi
     // 只在主人当前指令中枚举实际五个槽，访客与场景闲聊看不到私人物品
     for (int32 Slot=0;Slot<UDeliveryInventoryComponent::SlotCount;++Slot)
     {
+        if (Request.Subjects.Num()>=65 || Request.Candidates.Num()>=64) break;
         auto* Item=Inventory->GetItemInSlot(Slot);
-        if (!CanTakeOwnerItem(Item) || Request.Subjects.Num()>=65 || Request.Evidence.Num()>=32) continue;
+        if (!CanTakeOwnerItem(Item)) continue;
         const auto* Data=Item->GetItemComponent();
         FString Name=Data?Data->DisplayName.ToString():FString();
         for (TCHAR& Character:Name) if (Character<32) Character=TEXT(' ');
         Name=Name.TrimStartAndEnd().Left(64);
         if (Name.IsEmpty()) continue;
+        if (!MakeRoomForItemSearchEvidence(Request,true)) break;
         const FGuid Subject=FGuid::NewGuid();
         Request.Subjects.Add({Subject,Name,TEXT("other")});
         FDeliveryNpcEvidence Fact;
