@@ -68,7 +68,8 @@ bool UDeliveryConversationComponent::CanTalkTo(const ADeliveryNpcCharacter* Resi
 {
     const auto* PC=Cast<APlayerController>(GetOwner()); const APawn* Pawn=PC?PC->GetPawn():nullptr;
     if (!Pawn || !IsValid(Resident) || Resident->GetWorld()!=GetWorld() ||
-        (Resident->IsKnockedDown() && !Resident->Combat->IsDeliberatelyProne()) ||
+        // 同伴被打倒时仍听得见主人说话，例如喊他别打了；其他居民倒地时不接话
+        (Resident->IsKnockedDown() && !Resident->Combat->IsDeliberatelyProne() && !Resident->IsA<ADeliveryCompanionCharacter>()) ||
         FVector::DistSquared(Pawn->GetActorLocation(),Resident->GetActorLocation())>
             FMath::Square(DeliveryNpcConversationTrace::LocalConversationRangeCm)) return false;
     if (const auto* Character=ADeliveryHUD::ResolveCharacter(const_cast<APawn*>(Pawn)))

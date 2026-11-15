@@ -141,6 +141,8 @@ public:
     UFUNCTION(BlueprintPure,Category="Delivery|同伴|战斗") AActor* GetAssistTarget() const { return AssistTarget; }
     UFUNCTION(BlueprintPure,Category="Delivery|同伴|战斗") int32 GetAssistRevision() const { return AssistRevision; }
     UFUNCTION(BlueprintPure,Category="Delivery|同伴|战斗") bool HasCommittedAssist() const { return bAssistCommitted; }
+    // 主人真实动手或挨打后直接加入协战；关闭后改由模型从 JoinAssist 候选里选择
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Delivery|同伴|战斗") bool bJoinAssistWithoutModel=true;
     FGuid GetAssistEvidenceId() const { return AssistEvidenceId; }
     bool CanJoinAssist(APlayerState* Requester) const;
     bool CanStopAssist(APlayerState* Requester) const;
@@ -486,6 +488,7 @@ private:
     double PendingAssistExpiresAt=0;
     // 主人叫停后，同一对象的新命中需要主人明确重新加入
     TWeakObjectPtr<AActor> StoppedAssistTarget;
+    double AssistStoppedAt=-1;
     void PauseAssistRound(FName Reason);
     // 当前连续交手各方向最多记一次，切目标、过期或取消后清空；仅服务器使用
     uint8 RememberedAssistHitDirections=0;

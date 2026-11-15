@@ -70,6 +70,8 @@ bool FDeliveryCompanionAssistTest::RunTest(const FString&)
     auto* Target=World->SpawnActor<ADeliveryNpcCharacter>(FVector(300,0,88),FRotator::ZeroRotator);
     if (!TestNotNull(TEXT("创建同伴"),Npc) || !TestNotNull(TEXT("创建受击居民"),Target)) return false;
     auto* Companion=Npc->Companion.Get();
+    // 这组用例检查模型选择协战的流程，命中后直接加入的开关在这里关闭
+    Companion->bJoinAssistWithoutModel=false;
     // 已结识是本测试前置；这里只验证真实 ASC 事件路由和规则权限，不代替挥拳接触或扶起试玩
     Npc->Encounter.Phase=EDeliveryCompanionEncounterPhase::Joined;
     Companion->OwnerPlayerState=OwnerState;
@@ -206,9 +208,6 @@ bool FDeliveryCompanionAssistTest::RunTest(const FString&)
         !Npc->CanExecuteGameplayRule(EDeliveryNpcAction::Fight,Target,Revision));
     Target->Combat->SetDeliberateProne(false);
 
-    TestTrue(TEXT("主人等候命令仅暂停旧战斗回合"),Companion->ApplyCommand(EDeliveryNpcAction::Stay,OwnerState,Companion->GetCommandRevision()));
-    TestTrue(TEXT("等候保留已确认目标及修订"),Companion->HasCommittedAssist() && Companion->GetAssistTarget()==Target &&
-        Companion->GetAssistRevision()==Revision && !Npc->Agent->HasActiveAction());
     TestFalse(TEXT("访客或旧修订都不能让二狗收手"),Companion->StopAssist(Visitor->GetPlayerState(),Revision) ||
         Companion->StopAssist(OwnerState,Revision-1));
     const int32 BeforeStopCommand=Companion->GetCommandRevision();
@@ -222,14 +221,17 @@ bool FDeliveryCompanionAssistTest::RunTest(const FString&)
     { return Candidate.Action==EDeliveryNpcAction::StopAssist && !Candidate.TargetId.IsValid() && Candidate.EvidenceIds.IsEmpty(); });
     if (!TestTrue(TEXT("模型选择收手后正式行为树才解除持续协战"),ApprovedStop &&
         ExecuteModelChoice(OwnerStop,*ApprovedStop,TEXT("AssistStoppedByOwner")))) return false;
-    TestTrue(TEXT("收手保留原等候安排"),!Companion->HasCommittedAssist() && !Companion->GetAssistTarget() &&
-        Companion->GetMode()==EDeliveryCompanionMode::Stay && Companion->GetCommandRevision()==BeforeStopCommand);
+    TestTrue(TEXT("收手保留原跟随安排"),!Companion->HasCommittedAssist() && !Companion->GetAssistTarget() &&
+        Companion->GetMode()==EDeliveryCompanionMode::Follow && Companion->GetCommandRevision()==BeforeStopCommand);
     DeliveryCombatEvents::ReportHit(Owner,Target,ConfirmedPunch,Target->GetActorLocation());
     TestNull(TEXT("取消后重放旧拳不会重新开打"),Companion->GetAssistTarget());
     DeliveryCombatEvents::ReportHit(Owner,Target,FGuid::NewGuid(),Target->GetActorLocation());
     TestTrue(TEXT("已叫停的同一对手不能靠重复互殴自动重开"),!Companion->CanJoinAssist(nullptr) && Companion->CanJoinAssist(OwnerState) &&
         !Companion->HasCommittedAssist());
-    Companion->CancelAssist(TEXT("AssistTargetChanged"));
+    if (!TestTrue(TEXT("主人明确允许后可重新协战"),Companion->JoinAssist(OwnerState,Companion->GetAssistRevision()))) return false;
+    TestTrue(TEXT("主人可以改为等候"),Companion->ApplyCommand(EDeliveryNpcAction::Stay,OwnerState,Companion->GetCommandRevision()));
+    TestTrue(TEXT("改为等候会解除协战并记录对手"),!Companion->HasCommittedAssist() && !Companion->GetAssistTarget() &&
+        Companion->StoppedAssistTarget.Get()==Target && Companion->GetMode()==EDeliveryCompanionMode::Stay);
     const int32 BeforeOwnerHit=Companion->GetAffinity();
     const FGuid OwnerHit=FGuid::NewGuid();
     DeliveryCombatEvents::ReportHit(Owner,Npc,OwnerHit,Npc->GetActorLocation());

@@ -173,6 +173,7 @@ bool UDeliveryCompanionComponent::StopAssist(APlayerState* Requester,int32 Expec
 {
     if (ExpectedAssistRevision!=AssistRevision || !CanStopAssist(Requester)) return false;
     StoppedAssistTarget=AssistTarget.Get();
+    AssistStoppedAt=GetWorld()->GetTimeSeconds();
     CancelAssist(TEXT("OwnerStoppedAssist"));
     return true;
 }
@@ -224,6 +225,9 @@ void UDeliveryCompanionComponent::OnOwnerConfirmedHit(FGameplayTag EventTag,cons
     if (RecentAssistHits.Num()>128) RecentAssistHits.RemoveAt(0);
     auto* Target=bOwnerAttacked?Hit->Target.Get():Hit->Attacker.Get();
     if (!IsAllowedAssistTarget(Target)) return;
+    // 喊停之后只有主人自己又动手打这个对手，才重新算作要帮忙；留三秒避开喊停前已经挥出去的拳
+    if (bOwnerAttacked && StoppedAssistTarget.Get()==Target && GetWorld()->GetTimeSeconds()-AssistStoppedAt>=3.)
+        StoppedAssistTarget.Reset();
     const float Range=GetAssistRange();
     if (FVector::DistSquared(Npc->GetActorLocation(),Hit->ImpactPoint)>FMath::Square(Range) ||
         FVector::DistSquared(Npc->GetActorLocation(),Target->GetActorLocation())>FMath::Square(Range)) return;
@@ -262,7 +266,13 @@ void UDeliveryCompanionComponent::OnOwnerConfirmedHit(FGameplayTag EventTag,cons
         UE_LOG(LogDelivery,Log,TEXT("CompanionAssistPending npc=%s owner=%s target=%s punch=%s revision=%d expires_in=%.1f distance=%.1f"),
             *GetNameSafe(Npc),*GetNameSafe(HitOwner.Get()),*GetNameSafe(Target),*AssistEvidenceId.ToString(),AssistRevision,Lifetime,
             FVector::Dist(Npc->GetActorLocation(),Target->GetActorLocation()));
-        if (CanJoinAssist(nullptr)) Npc->WakeDecision();
+        // 主人真实动手或挨打后直接加入协战，不等模型选择；主人对这个对手喊过停手时仍交给模型判断
+        if (CanJoinAssist(nullptr))
+        {
+            if (bJoinAssistWithoutModel) JoinAssist(nullptr,AssistRevision);
+            if (!IsValid(this) || !IsValid(Npc)) return;
+            Npc->WakeDecision();
+        }
     }
     const uint8 DirectionBit=bOwnerAttacked?OwnerHitResidentMemory:ResidentHitOwnerMemory;
     FString WitnessDescription;
@@ -281,8 +291,10 @@ void UDeliveryCompanionComponent::CancelAssist(FName Reason)
     if (!Npc || !Npc->HasAuthority()) return;
     if (Reason==TEXT("OwnerChangedArrangement"))
     {
-        PauseAssistRound(Reason);
-        return;
+        // 主人给了新安排就停手，和明说别打了一样记下这个对手，之后主人挨打也不再自动冲上去
+        if (!bAssistCommitted) return;
+        StoppedAssistTarget=AssistTarget.Get();
+        AssistStoppedAt=GetWorld()->GetTimeSeconds();
     }
     const int32 OldRevision=AssistRevision;
     const auto State=Npc->Agent->GetPublicState();
@@ -331,8 +343,17 @@ void UDeliveryCompanionComponent::UpdateAssist()
     if (!CanExecuteAssist(AssistTarget,AssistRevision)) return;
     auto* Agent=Npc->Agent.Get();
     // 玩家正在说话或等待本次回复时保留目标，不能用每轮续打抢走停止命令
-    if (Npc->IsKnockedDown() || Npc->Combat->IsReactingToHit() || Agent->IsListening() ||
-        Agent->IsWaitingToReplyToPlayer() || Agent->IsDecisionPending() || Agent->HasActiveAction()) return;
+    // 没人问话时自己的等待、张望和闲聊请求让位给已答应的协战，答应后不再干站几秒
+    const auto IsBusy=[Agent]()
+    {
+        if (Agent->IsListening() || Agent->IsWaitingToReplyToPlayer()) return true;
+        if (!Agent->HasActiveAction()) return false;
+        const auto State=Agent->GetPublicState();
+        const bool bIdleChat=State.Origin==EDeliveryNpcActionOrigin::Model && !State.ReplyToEventId.IsValid() &&
+            (State.Action==EDeliveryNpcAction::Wait || State.Action==EDeliveryNpcAction::LookAt);
+        return !bIdleChat;
+    };
+    if (Npc->IsKnockedDown() || Npc->Combat->IsReactingToHit() || IsBusy()) return;
     if (HasActiveErrand() || HasActiveHomeArrangement() || HomeState.CarriedProp || PendingHomeArrangementId.IsValid()) return;
     const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
     const TWeakObjectPtr<ADeliveryCompanionCharacter> WeakNpc(Npc);
@@ -342,7 +363,7 @@ void UDeliveryCompanionComponent::UpdateAssist()
     {
         return WeakThis.IsValid() && WeakNpc.IsValid() && Target.IsValid() && CanExecuteAssist(Target.Get(),Revision) &&
             !HasActiveErrand() && !HasActiveHomeArrangement() && !HomeState.CarriedProp && !PendingHomeArrangementId.IsValid() &&
-            !Agent->HasActiveAction() && !Agent->IsListening() && !Agent->IsWaitingToReplyToPlayer() && !Agent->IsDecisionPending();
+            !IsBusy();
     };
     if (!EnsureOnFoot() || !StillCurrent() || !Npc->Combat->CanBeginFight(Target.Get(),GetAssistRange())) return;
     StopErrandMovement();
