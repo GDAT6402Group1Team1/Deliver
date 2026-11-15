@@ -25,6 +25,11 @@ Tools/DeliveryAI/vendor/faster_qwen_v032/** text eol=lf
 *.gltf filter=lfs diff=lfs merge=lfs -text
 *.glb filter=lfs diff=lfs merge=lfs -text
 
+# 美术作者压缩包与 glTF 的外部二进制缓冲
+Design/Art/**/*.zip filter=lfs diff=lfs merge=lfs -text
+Design/Art/**/*.rar filter=lfs diff=lfs merge=lfs -text
+Design/Art/**/*.bin filter=lfs diff=lfs merge=lfs -text
+
 # Textures / images
 *.png filter=lfs diff=lfs merge=lfs -text
 *.jpg filter=lfs diff=lfs merge=lfs -text
