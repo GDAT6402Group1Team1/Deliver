@@ -61,21 +61,21 @@ ERRAND_TASK_INSTRUCTIONS = ('errand_task_id 标识 errand_action、errand_phase�
                             'task_id、task_phase 和订单描述属于当前可安排的订单，由实际包裹或任务追踪确认。两个编号不同时，按主人实际问的是哪一单回答。'
                             '已记录的委托取件、送达、失败或奖励只归委托订单。每单结果以游戏对该单的确认为准。\n')
 RETURN_PACKAGE_INSTRUCTIONS = ('主人明确要你把现在携带的原包裹递给他、还给他或给他拿着时，选择可用的 ReturnPackage，'
-                               '沿已约定方式直接交到主人手里。若同一件已在按原安排交给主人且无需改方式，可以继续当前交接。'
+                               '沿已约定方式交给主人。游戏优先使用空手持槽，手持别的物件时可把同一件外卖放进真实空背包槽。若同一件已在按原安排交给主人且无需改方式，可以继续当前交接。'
                                'DeliverPackage 的收件人是订单指定的人，陪主人去收件地址和把包裹交给他也分别判断。'
                                '主人简短确认时，沿用上一句刚确认的交付对象和交接方式；已确认递进主人手里且有候选时就选 ReturnPackage。'
                                '只是问包裹在哪或想看一眼时按现状回答；确实听不清实物、交接方式或收件人时，问清最有歧义的一点。'
-                               'OwnerHandsBusy 表示正在等主人腾手，OwnerRiding 表示正在等主人下车。'
-                               '交到主人手里要等游戏确认 PackageReturned。\n')
+                               'OwnerHandsBusy 表示手持和背包暂时都无法接收原件，OwnerRiding 表示正在等主人下车。'
+                               '只按游戏确认报告落点，PackageReturned 表示进手持槽，PackageStoredInOwnerBackpack 表示进背包。\n')
 STORE_PACKAGE_INSTRUCTIONS = ('主人明确让你把本单原包裹收进他的背包时，选择 StorePackageInBackpack，'
                               '完成后原件占主人背包的一个真实槽位，手中原物保持原样。'
-                              '只说交给他或让他拿着时，按手交选择 ReturnPackage。'
+                              '只说交给他或让他拿着时，选择 ReturnPackage，由游戏优先手交并在需要时尝试空背包槽。'
                               '主人简短确认时，按紧邻问句确认的收取方式选择。'
                               'OwnerBackpackUnavailable 表示当前背包无法接收，二狗仍带着包裹。'
                               '等背包可用后继续，按主人新的明确安排才改交接方式。'
                               '游戏确认 PackageStoredInOwnerBackpack 后才说已收进背包。此结果只确认主人收取，不是订单签收或发奖。\n')
 DROP_PACKAGE_INSTRUCTIONS = ('主人这轮谈的是给你携带的本单原包裹重新安排交接时，先理解交给谁、怎样交，再看出行方式。'
-                             '若他要你把它给他或交到他手里，选 ReturnPackage。正式包裹进玩家手持槽，等腾手后才交接。'
+                             '若他要你把它给他或交到他手里，选 ReturnPackage。游戏按实际手持和背包容量交接，同一原件不会变成新包裹。'
                              '明确要收进背包时，若没有相应候选，说明当前背包交接受限，问主人怎样处理。'
                              '放到主人脚边或附近地面供他拾取选 DropPackage。'
                              '继续按订单给爷爷或实际收件人时才选 DeliverPackage。'

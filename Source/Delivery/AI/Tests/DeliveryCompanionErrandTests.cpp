@@ -267,8 +267,25 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
     TestEqual(TEXT("Take 保留原 Stay 模式"), Companion->GetMode(), EDeliveryCompanionMode::Stay);
     auto* Held = World->SpawnActor<ADeliveryHandheldItem>(FVector(0, 600, 150), FRotator::ZeroRotator);
     if (!TestTrue(TEXT("主人真实拿起普通物品占用手持槽"), Owner->GetInventoryComponent()->TryPickup(Held))) return false;
+    auto* OwnerInventory=Owner->GetInventoryComponent();
+    if (!TestTrue(TEXT("主人手忙时可以直接要求交还外卖"),Apply(EDeliveryNpcAction::ReturnPackage,OwnerState,Snapshot()))) return false;
+    Companion->UpdateErrand();
+    if (!TestTrue(TEXT("普通交还自动将同一外卖收进空背包槽，并保留手持工具"),
+        Owner->IsTaskPackageInBackpack(Package) && OwnerInventory->GetHeldItem()==Held &&
+        !Npc->GetCarriedTaskPackage() && Companion->GetErrand().Reason==TEXT("PackageStoredInOwnerBackpack"))) return false;
+    if (!TestTrue(TEXT("下次委托仍能从实际背包取回同一原件"),Apply(EDeliveryNpcAction::TakePackage,OwnerState,Snapshot()))) return false;
+    Companion->UpdateErrand();
+    if (!TestTrue(TEXT("测试备用槽前同一个外卖已经再次交给二狗"),Npc->GetCarriedTaskPackage()==Package &&
+        OwnerInventory->GetHeldItem()==Held && !Owner->IsTaskPackageInBackpack(Package))) return false;
+    TArray<ADeliveryHandheldItem*> Fillers;
+    for (int32 Slot=UDeliveryInventoryComponent::FirstBackpackSlot; Slot<UDeliveryInventoryComponent::SlotCount; ++Slot)
+    {
+        auto* Filler=World->SpawnActor<ADeliveryHandheldItem>(FVector(0,650,150),FRotator::ZeroRotator);
+        if (!TestTrue(TEXT("主人用实物占满背包槽"),OwnerInventory->TryPickup(Filler))) return false;
+        Fillers.Add(Filler);
+    }
     const auto BeforeBusyReturn = Snapshot();
-    if (!TestTrue(TEXT("主人可安排交还，等待手空"), Apply(EDeliveryNpcAction::ReturnPackage, OwnerState, BeforeBusyReturn))) return false;
+    if (!TestTrue(TEXT("手和背包都满时仍可安排稍后交还"), Apply(EDeliveryNpcAction::ReturnPackage, OwnerState, BeforeBusyReturn))) return false;
     Companion->UpdateErrand();
     TestTrue(TEXT("手忙暂停仍保留当前交还委托"), Companion->HasActiveErrand());
     TestEqual(TEXT("手忙报告不冒充交还成功"), Companion->GetSuspensionReason(), FName(TEXT("OwnerHandsBusy")));
@@ -292,14 +309,6 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
     TestEqual(TEXT("取消之后报告真实结束状态"), AfterCancel.CompanionErrandStatus, FString(TEXT("Cancelled")));
     CheckNotDelivered();
 
-    auto* OwnerInventory=Owner->GetInventoryComponent();
-    TArray<ADeliveryHandheldItem*> Fillers;
-    for (int32 Slot=UDeliveryInventoryComponent::FirstBackpackSlot; Slot<UDeliveryInventoryComponent::SlotCount; ++Slot)
-    {
-        auto* Filler=World->SpawnActor<ADeliveryHandheldItem>(FVector(0,650,150),FRotator::ZeroRotator);
-        if (!TestTrue(TEXT("主人用实物占满背包槽"),OwnerInventory->TryPickup(Filler))) return false;
-        Fillers.Add(Filler);
-    }
     const auto BackpackRequest=Snapshot();
     TestTrue(TEXT("持有原件时主人可以指令收进实际背包"),BackpackRequest.AllowedActions.Contains(EDeliveryNpcAction::StorePackageInBackpack));
     TestFalse(TEXT("旁观者不能用主人的快照收包裹"),Apply(EDeliveryNpcAction::StorePackageInBackpack,StrangerState,BackpackRequest));
@@ -951,6 +960,13 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
     FDeliveryNpcDecisionRequest InventoryPrankRequest;
     if (!TestTrue(TEXT("真实主人可从背包安排同单投放"),BuildPrankRequest(TEXT("好，把我背包里的小绿放进这单"),InventoryPrankRequest))) return false;
     const auto* InventoryPrank=FindPrankOption(InventoryPrankRequest,EDeliveryNpcAction::InsertCaterpillar);
+    if (!InventoryPrank)
+    {
+        AddInfo(FString::Printf(TEXT("背包投放：证据=%d 实体=%d 候选=%d 判为可取=%d 同包裹=%d 位置=%s"),
+            InventoryPrankRequest.Evidence.Num(),InventoryPrankRequest.Subjects.Num(),InventoryPrankRequest.Candidates.Num(),
+            Companion->CanTakeOwnerItem(YardWorm),Companion->GetCommandPackage()==Package,
+            *InventoryPrankRequest.CompanionOwnerPackageLocation.ToString()));
+    }
     if (!TestTrue(TEXT("投放候选封存背包来源、主人和同一包裹"),InventoryPrank &&
         InventoryPrank->ItemChoice->Source==TEXT("OwnerBackpack") && InventoryPrank->ItemChoice->SourceCarrier.Get()==Owner &&
         InventoryPrank->ItemChoice->UsePackage.Get()==Package && InventoryPrankRequest.CompanionOwnerPackageLocation==TEXT("Hand"))) return false;
@@ -1080,6 +1096,14 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
                 return Fact.SubjectId==GroundSubject && Fact.Kind==TEXT("WorldItemSeen") &&
                     Fact.Source==EDeliveryNpcEvidenceSource::Seen && !Fact.bNeedsReply;
             }))) return false;
+        const auto* FirstGroundOption=FindPrankOption(HandPackagePrank,EDeliveryNpcAction::InsertCaterpillar,GroundWorm);
+        if (!TestNotNull(TEXT("首轮候选引用已经封存的实见"),FirstGroundOption)) return false;
+        const FGuid GroundObservationId=FirstGroundOption->ItemChoice->EvidenceId;
+        const double GroundObservedAt=FirstGroundOption->ItemChoice->ObservedAt;
+        ++GFrameCounter;
+        World->Tick(LEVELTICK_TimeOnly,.2f);
+        if (!TestTrue(TEXT("后续主人请求复用已有实见时仍能生成投放候选"),
+            BuildPrankRequest(TEXT("把刚才那只小绿放进你的外卖"),HandPackagePrank))) return false;
         const auto* HandPackageOption=FindPrankOption(HandPackagePrank,EDeliveryNpcAction::InsertCaterpillar,GroundWorm);
         if (!HandPackageOption || HandPackagePrank.CompanionCarriedItemLocation!=TEXT("Hand"))
         {
@@ -1090,6 +1114,8 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
                 *GetNameSafe(HeldParcel->GetRootComponent()->GetAttachParent())));
         }
         if (!TestNotNull(TEXT("二狗持包裹时本轮提供同一地面小绿的投放候选"),HandPackageOption)) return false;
+        TestTrue(TEXT("复用的真实观察时间不能改成当前请求时刻"),HandPackageOption->ItemChoice->EvidenceId==GroundObservationId &&
+            HandPackageOption->ItemChoice->ObservedAt==GroundObservedAt && GroundObservedAt<World->GetTimeSeconds());
         TestEqual(TEXT("实物包裹位置快照仍在二狗手里"),HandPackagePrank.CompanionCarriedItemLocation,FName(TEXT("Hand")));
         TestNull(TEXT("已有包裹时不开放第二个手持物"),FindPrankOption(HandPackagePrank,EDeliveryNpcAction::CollectCaterpillar,GroundWorm));
         if (!TestTrue(TEXT("投放候选封存同一地面小绿及手持原包裹"),

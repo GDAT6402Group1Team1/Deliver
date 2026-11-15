@@ -23,28 +23,30 @@ bool UDeliveryCompanionComponent::MakeRoomForItemSearchEvidence(FDeliveryNpcDeci
 {
     constexpr int32 MaxEvidence=32;
     if (Request.Evidence.Num()<MaxEvidence) return true;
-    const auto IsUnused=[&Request](const FDeliveryNpcEvidence& Fact)
+    const auto IsUnreferenced=[&Request](const FDeliveryNpcEvidence& Fact)
     {
-        return !Fact.bNeedsReply && Fact.EventId!=Request.PlayerMessageId &&
+        return Fact.EventId!=Request.PlayerMessageId &&
             !Request.Candidates.ContainsByPredicate([&Fact](const FDeliveryNpcCandidate& Candidate)
                 { return Candidate.EvidenceIds.Contains(Fact.EventId); });
     };
-    int32 Index=Request.Evidence.IndexOfByPredicate([&IsUnused](const FDeliveryNpcEvidence& Fact)
+    int32 Index=Request.Evidence.IndexOfByPredicate([&IsUnreferenced](const FDeliveryNpcEvidence& Fact)
     {
         const FName Kind=Fact.Kind;
         return (Kind==TEXT("WorldItemLostSight") || Kind==TEXT("WorldItemSeen") || Kind==TEXT("LastSeen") ||
-            Kind==TEXT("LostSight")) && IsUnused(Fact);
+            Kind==TEXT("LostSight")) && !Fact.bNeedsReply && IsUnreferenced(Fact);
     });
     if (Index==INDEX_NONE && bPrioritizeCurrentItem)
     {
-        // 满额时为本轮实际物件让出一条旧动作结果，仍保留最近一次结果和所有在用的事实
-        const int32 Latest=Request.Evidence.FindLastByPredicate([](const FDeliveryNpcEvidence& Fact)
-            { return Fact.Kind==TEXT("ActionFinished"); });
-        for (int32 Older=0;Older<Latest;++Older)
+        // 只从本次快照省略已被后续同类结果覆盖的记录，原事件留在角色记忆中
+        for (int32 Older=0;Older<Request.Evidence.Num()-1;++Older)
         {
             const auto& Fact=Request.Evidence[Older];
-            if (Fact.Kind!=TEXT("ActionFinished") || Fact.Source!=EDeliveryNpcEvidenceSource::ActionResult || !IsUnused(Fact))
-                continue;
+            const FName Kind=Fact.Kind;
+            if (Fact.Source!=EDeliveryNpcEvidenceSource::ActionResult || !IsUnreferenced(Fact) ||
+                (Kind!=TEXT("ActionFinished") && Kind!=TEXT("CompanionErrandFinished") &&
+                    Kind!=TEXT("CompanionErrandPaused") && Kind!=TEXT("CompanionItemErrandFinished"))) continue;
+            if (Request.Evidence.FindLastByPredicate([Kind](const auto& Later)
+                { return Later.Kind==Kind && Later.Source==EDeliveryNpcEvidenceSource::ActionResult; })<=Older) continue;
             Index=Older;
             break;
         }

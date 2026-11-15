@@ -105,6 +105,7 @@ void UDeliveryCompanionComponent::AddCaterpillarItemCandidates(FDeliveryNpcDecis
     const auto* ExistingSubject=Request.Subjects.FindByPredicate([SubjectId](const FDeliveryNpcSubject& Subject)
         { return Subject.SubjectId==SubjectId; });
     if (!ExistingSubject && Request.Subjects.Num()>=65) return;
+    const double Now=GetWorld()->GetTimeSeconds();
 
     // 同一只虫仍实际在手中时复用请求已有的持物事实，满额时也不丢投放候选
     const auto* ExistingFact=bWormInHand && ObservedHeldItem.Get()==Worm && HeldItemEventId.IsValid()?
@@ -129,7 +130,9 @@ void UDeliveryCompanionComponent::AddCaterpillarItemCandidates(FDeliveryNpcDecis
                 ExistingFact=&Fact;
         }
     }
-    if (!ExistingFact && !MakeRoomForItemSearchEvidence(Request,bCompanionHoldsPackage)) return;
+    if (ExistingFact && (ExistingFact->ObservedAt>Now || Now-ExistingFact->ObservedAt>=DeliveryCompanionItemSearch::LeadLifetime*.5 ||
+        ExistingFact->ExpiresAt<=Now)) ExistingFact=nullptr;
+    if (!ExistingFact && !MakeRoomForItemSearchEvidence(Request,bCompanionHoldsPackage || bWormInHand)) return;
     if (!ExistingSubject)
     {
         const int32 Index=Request.Subjects.Add({SubjectId,TEXT("小绿（毛毛虫）"),TEXT("other")});
@@ -140,8 +143,9 @@ void UDeliveryCompanionComponent::AddCaterpillarItemCandidates(FDeliveryNpcDecis
         Request.CompanionHeldItemId=SubjectId;
         Request.CompanionHeldItemName=ExistingSubject->Name;
     }
-    const double Now=GetWorld()->GetTimeSeconds();
     const FGuid EvidenceId=ExistingFact?ExistingFact->EventId:FGuid::NewGuid();
+    const double ObservedAt=ExistingFact?ExistingFact->ObservedAt:Now;
+    const FVector ObservedPoint=ExistingFact && ExistingFact->bHasObservedLocation?ExistingFact->ObservedLocation:Point;
     if (!ExistingFact)
     {
         FDeliveryNpcEvidence Fact;
@@ -171,8 +175,9 @@ void UDeliveryCompanionComponent::AddCaterpillarItemCandidates(FDeliveryNpcDecis
         Choice.bInsertIntoHeldPackage=bCompanionHoldsPackage && Action==EDeliveryNpcAction::InsertCaterpillar;
         Choice.SubjectId=SubjectId;
         Choice.EvidenceId=EvidenceId;
-        Choice.ObservedLocation=Point;
-        Choice.ObservedAt=Now;
+        // 候选复用实见时也沿用这次观察的时间与位置，采纳阶段会用同一份事实校验
+        Choice.ObservedLocation=ObservedPoint;
+        Choice.ObservedAt=ObservedAt;
         Choice.bSearchLead=true;
         Request.AllowedActions.AddUnique(Action);
         Request.Candidates.Add(MoveTemp(Candidate));

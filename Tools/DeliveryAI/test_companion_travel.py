@@ -147,7 +147,8 @@ class CompanionTravelTests(unittest.TestCase):
                 self.assertIn(RETURN_PACKAGE_INSTRUCTIONS, instructions)
                 self.assertIn(DROP_PACKAGE_INSTRUCTIONS, instructions)
                 self.assertIn(STORE_PACKAGE_INSTRUCTIONS, instructions)
-                self.assertIn('正式包裹进玩家手持槽', instructions)
+                self.assertIn('手持别的物件时可把同一件外卖放进真实空背包槽', instructions)
+                self.assertIn('PackageStoredInOwnerBackpack 表示进背包', instructions)
                 self.assertIn('新的明确交接覆盖旧的代送目标', instructions)
                 for shape in (compact_context(data), model_context(data)):
                     self.assertEqual(shape['pending_player_message']['description'], '对。')

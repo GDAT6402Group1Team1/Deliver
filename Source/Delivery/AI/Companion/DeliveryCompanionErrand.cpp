@@ -977,13 +977,15 @@ void UDeliveryCompanionComponent::UpdateErrand()
         if (!IsValid(Errand.Package) || Actual!=Errand.Package || PackageTask(Actual)!=Errand.Task)
         { FinishErrand(EDeliveryNpcActionStatus::Failed,TEXT("ExpectedPackageChanged")); return; }
     }
-    const bool bToBackpack=Errand.Action==EDeliveryNpcAction::StorePackageInBackpack;
+    const bool bRequestedBackpack=Errand.Action==EDeliveryNpcAction::StorePackageInBackpack;
+    bool bToBackpack=bRequestedBackpack;
     if (Errand.Phase==EDeliveryCompanionErrandPhase::ReturnToOwner && Errand.Action!=EDeliveryNpcAction::DropPackage)
     {
-        const bool bCanReceive=bToBackpack?OwnerCarrier->CanReceiveTaskPackageInBackpack(Errand.Package):
-            OwnerCarrier->CanReceiveTaskPackage(Errand.Package);
-        if (!bCanReceive)
-        { ReportErrandPause(bToBackpack?TEXT("OwnerBackpackUnavailable"):TEXT("OwnerHandsBusy")); return; }
+        const bool bCanReceiveInHand=!bRequestedBackpack && OwnerCarrier->CanReceiveTaskPackage(Errand.Package);
+        // 交还仍优先入手。主人手忙时使用真实空背包槽，保留已经手持的物件
+        bToBackpack=!bCanReceiveInHand && OwnerCarrier->CanReceiveTaskPackageInBackpack(Errand.Package);
+        if (!bCanReceiveInHand && !bToBackpack)
+        { ReportErrandPause(bRequestedBackpack?TEXT("OwnerBackpackUnavailable"):TEXT("OwnerHandsBusy")); return; }
     }
     const double Now=GetWorld()->GetTimeSeconds();
     if (Errand.Phase==EDeliveryCompanionErrandPhase::ReceiveFromOwner && Now<NextCargoHandoffAt)
