@@ -50,7 +50,8 @@ def check():
             result['viewports'].append({'width':width,'overflow':False})
         # 长类图需要足够的截图高度，避免软件渲染下截图器反复调整视口
         page.set_viewport_size({'width':1440,'height':2400})
-        for name in ['overview','conversation-sequence','configuration','combat','stream','body-animation','companion']:
+        for name in ['overview','conversation-sequence','configuration','combat','stream','body-animation','companion',
+                     'npc-relationships','npc-model-context']:
             figure=page.locator(f'#diagram-{name}')
             figure.locator('button[data-size="actual"]').click()
             assert figure.locator('svg').evaluate('(e)=>e.style.width.endsWith("px")')
@@ -59,6 +60,17 @@ def check():
         page.emulate_media(media='print')
         assert page.locator('aside').is_hidden()
         page.locator('#diagram-overview').screenshot(path=str(OUT/'print-overview.png'))
+        assert not errors, errors
+        page.goto((ROOT / 'Document/AIIteration.html').as_uri())
+        page.add_style_tag(content='html { scroll-behavior: auto !important; }')
+        page.emulate_media(media='screen')
+        for name in ('npc-relationships', 'npc-model-context'):
+            figure = page.locator(f'#diagram-{name}')
+            assert figure.count() == 1
+            figure.locator('button[data-size="actual"]').click()
+            assert figure.locator('svg').evaluate('(e)=>e.style.width.endsWith("px")')
+            figure.locator('button[data-size="fit"]').click()
+            assert figure.locator('svg').evaluate('(e)=>e.style.width==="100%"')
         assert not errors, errors
         browser.close()
     result.update(jsErrors=errors, anchors='passed', svgTextBounds='passed', zoom='passed', printLayout='passed')

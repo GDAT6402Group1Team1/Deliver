@@ -12,10 +12,10 @@
     button{font:inherit;color:var(--blue);background:#fff;border:1px solid #aebed1;border-radius:3px;padding:5px 12px;cursor:pointer}button:hover{background:#eef3fa}:focus-visible{outline:3px solid #d38c25;outline-offset:3px}summary{cursor:pointer;color:var(--blue);padding:12px;background:#f4f7fb}footer{font-size:13px;color:#596879;margin-top:30px}
     @media(max-width:850px){.layout{display:block;padding:22px 18px}aside{position:static;max-height:none;margin-bottom:28px}nav{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:28px}h2{font-size:23px}}
     @media print{.layout{display:block;padding:0}aside,.diagram-tools,.actions{display:none}body{font-size:10pt}h1{font-size:23pt}h2{font-size:17pt}section{break-before:auto}figure{break-inside:avoid}.diagram-viewport{overflow:visible;padding:0}.diagram-viewport svg{width:100%!important}table{min-width:0;font-size:8pt}th,td{padding:6px}a{color:inherit}pre{font-size:8pt}}
-    </style></head><body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 2026-11-14</div><nav><a href="#chapter-1">系统概述</a><a href="#chapter-2">系统架构</a><a href="#chapter-3">环境感知</a><a href="#chapter-4">玩家交谈</a><a href="#chapter-5">行为树</a><a href="#chapter-6">对话与动画</a><a href="#chapter-7">战斗与拽车</a><a href="#chapter-8">配置管理</a><a href="#chapter-9">性能优化</a><a href="#chapter-10">问题记录</a><a href="#chapter-11">设计参考</a><a href="#chapter-12">参考资料</a><a href="#chapter-13">阅读记录</a><a href="#chapter-14">AI 跟班二狗设计（完整设计与实施状态）</a></nav></aside><main><header><div class="meta">AI / 居民系统 / 架构与接口</div><h1>AI 居民系统</h1><p>从玩家交谈开始，介绍 NPC 如何感知、请求模型、执行动作并同步给其他玩家。</p><div class="notice">二狗完整设计、类职责与当前实施状态见本文末章。源码构建、静态资产检查和实际游戏验收分别记录；最新命令、结果及未完成项目以研究与迭代记录为准。保留已有声音、分段播放和轻量界面。</div><div class="actions"><a href="#diagram-overview">系统类图</a><a href="#diagram-conversation-sequence">交谈时序</a><a href="#chapter-10">问题记录</a><a href="Architecture.md">主文档</a><a href="AIIteration.html">研究与迭代记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header><section id="chapter-1"><h2>系统概述</h2><p>Delivery 中的 NPC 可以听玩家说话，观察附近发生的事，并根据这些信息选择回应。模型生成台词和动作建议，游戏服务器检查动作能否执行，再通过行为树让 NPC 移动、说话、攻击或拽车。</p>
+    </style></head><body><div class="layout"><aside><strong>Delivery · 技术文档</strong><div class="meta">UE 5.8 · 2026-11-14</div><nav><a href="#chapter-1">系统概述</a><a href="#chapter-2">系统架构</a><a href="#chapter-3">环境感知</a><a href="#chapter-4">玩家交谈</a><a href="#chapter-5">行为树</a><a href="#chapter-6">对话与动画</a><a href="#chapter-7">战斗与拽车</a><a href="#chapter-8">配置管理</a><a href="#chapter-9">性能优化</a><a href="#chapter-10">问题记录</a><a href="#chapter-11">设计参考</a><a href="#chapter-12">参考资料</a><a href="#chapter-13">阅读记录</a><a href="#chapter-14">NPC 即时反应（2026-11-15）</a><a href="#chapter-15">AI 跟班二狗设计（完整设计与实施状态）</a></nav></aside><main><header><div class="meta">AI / 居民系统 / 架构与接口</div><h1>AI 居民系统</h1><p>从玩家交谈开始，介绍 NPC 如何感知、请求模型、执行动作并同步给其他玩家。</p><div class="notice">二狗完整设计、类职责与当前实施状态见本文末章。源码构建、静态资产检查和实际游戏验收分别记录；最新命令、结果及未完成项目以研究与迭代记录为准。保留已有声音、分段播放和轻量界面。</div><div class="actions"><a href="#diagram-overview">系统类图</a><a href="#diagram-conversation-sequence">交谈时序</a><a href="#chapter-10">问题记录</a><a href="Architecture.md">主文档</a><a href="AIIteration.html">研究与迭代记录</a><button id="print" type="button">打印 / 保存 PDF</button></div></header><section id="chapter-1"><h2>系统概述</h2><p>Delivery 中的 NPC 可以听玩家说话，观察附近发生的事，并根据这些信息选择回应。模型生成台词和动作建议，游戏服务器检查动作能否执行，再通过行为树让 NPC 移动、说话、攻击或拽车。</p>
 <p><strong>空闲站位避让（2026-11-14）。</strong> 两名 NPC 聊天、等待回复或停手后，服务器会在身体边缘间隔小于 80 厘米时安排其中一人沿导航挪开，目标间隔约 120 厘米。出拳、追赶、受击和倒地时不介入，仍在被对方攻击时也不自动躲拳。控制器只取消自己发起的导航请求，避免旧避让停止新动作；堵住时暂缓重试，不穿墙或瞬移。二狗继续由同伴组件管理站位。参数在 AIController 的“Delivery|站位”分类配置；具体实现与检查记录见<a href="AIIteration.html#npc-standing-space-20261114">站位调整</a>。</p>
-<p><strong>第二次试玩仍未通过：</strong>用户反馈不骑车、“跟我走”却像走开。已定位高亲密度沿订单带路、显式骑车仍被近距步行阈值与到站下车覆盖；新修复和完整出行候选指引已合入，第二次完整目标构建 6 项/9.01 秒成功，后台已重载、普通编辑器重新打开；实际游戏表现仍待用户复测。见<a href="AIIteration.html#ergou-follow-riding-feedback-20261115">最新记录</a>。</p>
-<p><strong>当前进展（2026-11-15）：二狗试玩反馈修复已构建，家具与公开地点已保存并独立重载，后台已加载本轮源码，准备交玩家复测。</strong> 回退提交为 <code>01ab2f7</code>；本轮接入持续跟随、停车实际包裹交接、v8 主人指定出行及获救回应。沙发/高凳、抱枕搬放和留声机已有可编辑配置，其他六件家具目前仅识别。用户尚未认可第一阶段，实际按键、驾驶、完整交接、动画和多人仍待验收；延迟仍未解决。详见<a href="#ergou-design">二狗设计</a>和<a href="AIIteration.html#ergou-owner-instructions-20261115">本轮修复记录</a>。</p>
+<p><strong>第二次试玩反馈（2026-11-15）：用户确认仍不骑车，并要求“跟我走”严格跟随主人。新修复已合入并完整构建，后台已重载，普通编辑器已重新打开；实际跟随与驾驶仍待用户复测，第一阶段仍未通过。</strong> 见<a href="AIIteration.html#ergou-follow-riding-feedback-20261115">最新修复及边界</a>。</p>
+<p><strong>当前进展（2026-11-15）：继续修复玩家反馈的坡路跟丢、门槛越障与包裹交还。</strong> 最新增量构建、四组 UE 离线回归及 162 项 Python 检查通过，六段动画和两份主蓝图已独立读回；试玩交接以迭代记录的最新结果为准。版本 9 增加由模型安排的原包裹放地，沿路自主跳跃属于本能执行。持续跟随、主人指定出行、实物交接和获救回应继续沿用。沙发/高凳、抱枕搬放和留声机已有可编辑配置，其他六件家具目前仅识别。用户尚未认可第一阶段，实际按键、驾驶、完整交接、动画和多人仍待验收；延迟仍未解决。详见<a href="#ergou-design">二狗设计</a>和<a href="AIIteration.html#ergou-slope-continuity-20261115">本轮修复记录</a>。</p>
 <p><strong>上一轮：争执中的行动与最后一句记忆。</strong> 完整回复和流式回复现共用一份人物指导：模型结合人物在意的事和当面的口气决定行动，区分否认传闻、赌气逞强和认真求停。大壮被比较时爱显摆，翠花会拆他的台；两人可以被彼此刚说的话惹急，事实仍按实际听见的内容记录。动作没有按关键词、挑拨次数或随机分支触发，台词也不直接照搬例句。</p>
 <p>闲聊达到上限后，最后一句以前只播给玩家听，邻居却没有记住。现在 <code>HearSpeech(..., bRequestReply=false)</code> 仍检查距离、遮挡和发言编号，记住完整台词，但不安排下一轮、不打断当前语音，也不作废正在等待的模型回复。这个内部标记不进入模型 JSON；三轮自动接话上限保留，新玩家发言仍从零开始。完整回复与流式回复都采用相同规则。</p>
 <p>最终后台对照中，直接点名激将在第一轮选择 <code>Fight</code>，换一种挑拨说法在第三轮选择 <code>Fight</code>；认真道歉后没有攻击。上一版口气的普通寒暄正常，双方已经明确拒绝的场景仍可能拒绝。每个场景仅运行一次，这些结果不能证明固定节奏或游戏里的互殴。65 项后台检查通过，DeliveryEditor 完整构建成功，用时 26.86 秒；新增 C++ 回归已编译，但没有运行 UE 自动化或进入游戏。过程见<a href="AIIteration.html#npc-rivalry-goals-20261114">本次拱火优化</a>，下一任务可使用<a href="AIIteration.html#next-chat-handoff">二狗交接提示词</a>。该轮未开始二狗；当前第一阶段实现见后文二狗章节。</p>
@@ -271,7 +271,7 @@
 <p>居民追打或逃跑时，行为树继续执行，Agent 在行动结束前安排下一次模型判断。模型收到当前行动、目标、剩余时间和真实交手情况，再决定继续、逃跑或停手。同目标的继续决定保留正在挥出的拳与追赶进度；换动作时，服务器先检查新动作能否执行，再停止旧动作。倒地、目标失效或整段行动结束后，原请求的迟到回复不能重新启动它。</p>
 <p>当前行动与每次回复分别使用 <code>ActionId</code> 和 <code>ReplyId</code>。同目标续战保留行动编号，新台词换一个回复编号，声音和字幕按回复编号处理。这样可以继续行动，同时接收新台词，也能让旧声音的取消只影响旧回复。</p>
 <p>请求安排、回复检查和行动切换放在现有 Agent 中，供以后跟随、搬运等持续行为复用；路线、出拳和完成条件仍由各自行为负责。本轮先接入模型来源的 <code>Fight/Flee</code>，二狗 <code>GameplayRule</code> 的护主规则保持原权限与五秒限制。类图、边界和实际验证结果见<a href="AIIteration.html#continuous-decisions-20261114">持续行动与后台决策</a>。</p>
-<p>同一 NPC 的后台请求仍串行：上一轮流式数据收完后可以发下一轮，不等声音在游戏中播放完毕。单次 Fight 最长八秒，提前四秒安排判断，连续 Fight/Flee 最长二十秒，每次延续仍需要新的有效决定。没有及时收到决定时按已批准的期限结束，不能无限沿用旧攻击。</p>
+<p>同一个 NPC 一次只请求一个决定。模型返回动作后，语音还可以继续生成和播放。单次 Fight 最长八秒，通常提前四秒询问下一步。当前对手打中自己或开始逃跑时会提前询问，短时间内的变化合在一起。行为树继续追赶和出拳，剩余时间只够追赶时会追到本轮期限。模型可以选择继续、撤退或停手。连续交战最多二十秒，延期需要服务器接受新的模型决定。</p>
 <p>NPC 也可以通过动作回应玩家。无台词动作真正成功后，Agent 才记录 <code>ActionReply</code>，并注明对应的玩家发言；失败或取消不算已经回答。逐句回复需要同时确认模型没有生成台词和动作已经成功，两个结果谁先到都可以。玩家仍在等回答时，空台词的 <code>Wait</code> 会被拒绝，避免点击之后又没有任何反馈。</p>
 <p>11 月 14 日检查发现，这份成功记录没有通知交谈界面：NPC 已经用动作回应，界面仍可能等满 30 秒，再显示“暂时没有回应”。修复后，同一发言的动作成功结果会送回原玩家的交谈组件；界面保留玩家原话，显示“人物名用动作回应了你”，结束等待。只有动作成功、且整轮确认没有台词时才发送；失败或取消会结束这次等待并显示失败提示，旧发言不能覆盖新结果。此前版本曾在下方提前显示模型的有效首句；用户确认轻量方案 A 后，下方只保留玩家原话，NPC 首句仅在内部记录，人物附近的对白随声音播放。构建及交谈反馈专项已通过。初次三条旧按钮回复均有台词，不能作为无台词分支的实机验证；其后的新按钮互殴与轻量界面结果另见上方记录。检查范围见<a href="AIIteration.html#silent-action-feedback-validation">本轮交谈反馈检查</a>。</p>
 <p>用户随后自行试玩时，四条有台词的发言都留下了听见、调用播放、更新文字和整轮结束的记录。本轮只读取日志，没有操作游戏或增加模型请求；这些记录来自旧 DLL，只确认本机流程，不能作为上面无台词动作修复的验证。实际表情、声音和多人效果仍需检查，逐条时间与原始日志见<a href="AIIteration.html#player-trial-20261114">用户试玩记录</a>。</p>
@@ -731,13 +731,241 @@
 <p><code>character_background()</code> 只返回当前人物的资料，不按显示名猜人；<code>with_character_background()</code> 为普通回复加入相同内容。玩家台词或请求中的同名字段不能覆盖项目配置。没有编号的旧请求仍然可用。资料只帮助人物理解背景，不会成为已经发生的事件，也不会增加可执行动作。</p>
 <p>人物可以相信挑拨、顶嘴、改变看法或停止争论。模型必须分清亲眼看到、听到的原话和别人转述的内容；没有提供的订单、金额、具体年数和职业不能随意补写。口语示例只用于表达习惯，不作为固定回答。研究依据、真实回答和已发现的不足见<a href="AIIteration.html#npc-background-voice">人物背景与翠花的声音</a>。</p>
 <h4>持续交战小模型</h4>
+<p>2026 年 11 月 15 日，用户确认先将小模型加入试玩，依据实际反应速度继续调整，不再要求原来的整套性能指标全部达标后才开放。原来的测试题、评分和失败记录继续保留。这次接入属于试玩，尚未完成的小模型主机、客户端追打与逃跑检查仍单独列出。</p>
+<p>本轮采用第三轮训练的 Qwen3-1.7B Q4。大壮或翠花已经开始追打、逃跑时，小模型读取当前战况，选择继续追打、逃跑或停手。玩家发言、初次挑衅、需要回答的 NPC 对话和二狗仍交给 Luna。行为树执行移动和出拳，游戏服务器确认实际命中；小模型无法自行制造伤害或更换对手。请求超过 1.5 秒或返回无效结果时，由 Luna 继续判断。</p>
+<p>启动配置保存在 <code>Tools/DeliveryAI/combat_model_config.json</code>，本轮标为 <code>release_stage: playtest</code>。采用 18 层 GPU、CPU 输出层、两个各 4096 token 的 F16 缓存，输入和输出各用一条 CPU 线程。两个 B 音色保留，原生 Q8 语音改用已经过波形对照的共享缓存版本。启动结果、测量依据与未完成检查见<a href="AIIteration.html#combat-local-playtest-20261115">小模型试玩接入</a>。</p>
+<p>本轮已于 2026 年 11 月 15 日北京时间 13:40 左右接入本机后端。游戏继续连接 8769，小模型监听 18881，两个 B 音色都已准备完成。两次独立构造的 HTTP 检查中，大壮由小模型选择追打；翠花的小模型请求超过 1.5 秒后，退回 Luna 选择逃跑并生成语音。后台 412 项回归和启动器 6 项检查通过，实际游戏中的主机、客户端追打与逃跑效果交给本轮试玩确认。<a href="../Saved/AIResearch/LocalCombatPlaytest-20261115/backend-smoke.json">本轮请求与结果</a>。</p>
+<p>随后只读当前试玩日志，确认游戏已经收到一次小模型选择的追打决定。请求 <code>0efeb40d…</code> 由 <code>delivery-npc-qwen3</code> 返回 <code>Fight</code>，UE 接受后出现翠花打中大壮的记录。本任务没有操作主机或客户端窗口，也未独立检查这次画面；这条记录说明小模型已进入游戏决策流程，完整追赶、逃跑和双方体验仍待试玩确认。<a href="../Saved/AIResearch/LocalCombatPlaytest-20261115/handoff.json">游戏接收记录</a>。</p>
+<p>三位人物的战斗偏好保存在 <code>Design/AI/NpcProfiles.json</code>。<code>combat_preferences_defaults</code> 提供默认值，每个人的 <code>combat_preferences</code> 可以覆盖其中几项。取值为 0–100，数值越高，这种倾向越明显。后端把它们与人物背景一起交给模型，由模型结合当前对话、真实受击和合法动作选择，没有换算成动手概率或固定出拳阈值。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>倾向（配置字段）</th>
+<th style="text-align: right;">默认</th>
+<th style="text-align: right;">大壮</th>
+<th style="text-align: right;">翠花</th>
+<th style="text-align: right;">牛二狗</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>主动动手（<code>initiate_combat</code>）</td>
+<td style="text-align: right;">25</td>
+<td style="text-align: right;">62</td>
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">12</td>
+</tr>
+<tr>
+<td>被挑衅时反击（<code>respond_to_provocation</code>）</td>
+<td style="text-align: right;">45</td>
+<td style="text-align: right;">75</td>
+<td style="text-align: right;">88</td>
+<td style="text-align: right;">30</td>
+</tr>
+<tr>
+<td>追击（<code>pursue</code>）</td>
+<td style="text-align: right;">45</td>
+<td style="text-align: right;">82</td>
+<td style="text-align: right;">60</td>
+<td style="text-align: right;">54</td>
+</tr>
+<tr>
+<td>挨疼后退（<code>retreat_when_hurt</code>）</td>
+<td style="text-align: right;">65</td>
+<td style="text-align: right;">63</td>
+<td style="text-align: right;">82</td>
+<td style="text-align: right;">66</td>
+</tr>
+<tr>
+<td>接受停手（<code>accept_truce</code>）</td>
+<td style="text-align: right;">70</td>
+<td style="text-align: right;">55</td>
+<td style="text-align: right;">63</td>
+<td style="text-align: right;">91</td>
+</tr>
+<tr>
+<td>护主（<code>protect_owner</code>）</td>
+<td style="text-align: right;">35</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">96</td>
+</tr>
+</tbody>
+</table></div>
+<p>大壮更爱逞强和追人，翠花对挑衅更敏感、挨疼后更愿意跑开，二狗则少惹事、重视护主和停手。二狗的这些资料仍由 Luna 使用，居民小模型只处理大壮和翠花的持续交战。新人物可继承默认值，再覆盖需要的项目。修改文件后重启 AI 后端；本轮没有给 UE 数据表或界面新增这些数字字段。</p>
+<h5>人物关系与模型请求</h5>
+<p>三个人平时怎样相处，单独保存在 <code>Design/AI/NpcRelationships.json</code>。每条关系写清楚“谁怎么看谁”，包括熟悉、信任、较劲和关照四个 0–100 的倾向。同一对人物分别填写两条，所以大壮信任翠花的程度可以与翠花信任大壮的程度不同。</p>
+<figure class="uml" id="diagram-npc-relationships"><figcaption>人物关系，两个方向分别配置</figcaption><div class="diagram-tools"><button data-size="actual" type="button">原始尺寸</button><button data-size="fit" type="button">适应宽度</button><a href="Diagrams/AI/npc-relationships.svg" rel="noopener" target="_blank">单独查看 SVG</a></div><div aria-label="可横向滚动的 UML 图" class="diagram-viewport" tabindex="0"><svg aria-labelledby="npc-relationships-title npc-relationships-description" height="530" id="svg-npc-relationships" role="img" viewbox="0 0 1100 530" width="1100" xmlns="http://www.w3.org/2000/svg">
+<title id="npc-relationships-title">大壮、翠花与牛二狗的基础关系</title>
+<desc id="npc-relationships-description">三个框对应人物配置。大壮与翠花熟悉但互不服气，两人和二狗都是附近街坊。每对人物分别配置各自的态度，两个方向的数值不必相同。</desc>
+<defs>
+<marker id="relationship-arrow" markerheight="9" markerwidth="9" orient="auto-start-reverse" refx="8" refy="4.5"><path d="M1 1 L8 4.5 L1 8" fill="none" stroke="#657b94" stroke-width="1.5"></path></marker>
+<style>#svg-npc-relationships text{font-family:"Segoe UI","Microsoft YaHei",sans-serif;fill:#25374c}#svg-npc-relationships .title{font-size:23px;font-weight:700}#svg-npc-relationships .meta{font-size:14px;fill:#64758a}#svg-npc-relationships .body{font-size:17px}#svg-npc-relationships .label{font-size:16px}#svg-npc-relationships .line{fill:none;stroke:#657b94;stroke-width:1.7;marker-start:url(#relationship-arrow);marker-end:url(#relationship-arrow)}#svg-npc-relationships .box{fill:#fff;stroke:#a5b9cf;stroke-width:1.4}#svg-npc-relationships .head{fill:#eaf1f8}</style>
+</defs>
+<rect fill="#fff" height="530" width="1100"></rect>
+<path class="line" d="M320 112 H780"></path>
+<path class="line" d="M180 190 V390 H410"></path>
+<path class="line" d="M920 190 V390 H690"></path>
+<text class="label" text-anchor="middle" x="550" y="83">老邻居，爱聊天，也爱争个输赢</text>
+<text class="meta" text-anchor="middle" x="550" y="146">两个人分别保存自己的态度</text>
+<rect fill="#f6f8fb" height="76" rx="8" width="370" x="20" y="236"></rect>
+<text class="label" text-anchor="middle" x="205" y="267">大壮：偶尔逗他，也愿意搭把手</text>
+<text class="label" text-anchor="middle" x="205" y="294">二狗：认识，碰见会打招呼</text>
+<rect fill="#f6f8fb" height="76" rx="8" width="370" x="710" y="236"></rect>
+<text class="label" text-anchor="middle" x="895" y="267">翠花：觉得他实在，愿意问问难处</text>
+<text class="label" text-anchor="middle" x="895" y="294">二狗：遇到不懂的事愿意问她</text>
+<g>
+<rect class="box" height="150" rx="8" width="280" x="40" y="40"></rect>
+<path class="head" d="M48 41 H312 Q319 41 319 49 V99 H41 V49 Q41 41 48 41"></path>
+<line stroke="#c0cddd" x1="40" x2="320" y1="100" y2="100"></line>
+<text class="title" x="60" y="76">大壮</text><text class="meta" text-anchor="end" x="300" y="76">chunlai</text>
+<text class="body" x="60" y="130">好面子，爱显摆</text>
+<text class="body" x="60" y="161">不服翠花，也会照应二狗</text>
+</g>
+<g>
+<rect class="box" height="150" rx="8" width="280" x="780" y="40"></rect>
+<path class="head" d="M788 41 H1052 Q1059 41 1059 49 V99 H781 V49 Q781 41 788 41"></path>
+<line stroke="#c0cddd" x1="780" x2="1060" y1="100" y2="100"></line>
+<text class="title" x="800" y="76">翠花</text><text class="meta" text-anchor="end" x="1040" y="76">xiumei</text>
+<text class="body" x="800" y="130">嘴快，好胜，做事直接</text>
+<text class="body" x="800" y="161">爱拆大壮的台，愿意帮二狗</text>
+</g>
+<g>
+<rect class="box" height="150" rx="8" width="280" x="410" y="330"></rect>
+<path class="head" d="M418 331 H682 Q689 331 689 339 V389 H411 V339 Q411 331 418 331"></path>
+<line stroke="#c0cddd" x1="410" x2="690" y1="390" y2="390"></line>
+<text class="title" x="430" y="366">牛二狗</text><text class="meta" text-anchor="end" x="670" y="366">ergou</text>
+<text class="body" x="430" y="420">年轻街坊，愿意帮忙</text>
+<text class="body" x="430" y="451">主人和同行安排由本局确认</text>
+</g>
+<text class="meta" text-anchor="middle" x="550" y="516">基础关系来自 NpcRelationships.json；眼前发生的事由游戏另行提供</text>
+</svg>
+</div></figure>
+<p>下表按当前配置列出各自的态度。数值表示倾向强弱，不能用来推断角色已经看见某个事件。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>谁看谁</th>
+<th style="text-align: right;">熟悉</th>
+<th style="text-align: right;">信任</th>
+<th style="text-align: right;">较劲</th>
+<th style="text-align: right;">关照</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>大壮 → 翠花</td>
+<td style="text-align: right;">90</td>
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">85</td>
+<td style="text-align: right;">45</td>
+</tr>
+<tr>
+<td>翠花 → 大壮</td>
+<td style="text-align: right;">90</td>
+<td style="text-align: right;">35</td>
+<td style="text-align: right;">90</td>
+<td style="text-align: right;">45</td>
+</tr>
+<tr>
+<td>大壮 → 牛二狗</td>
+<td style="text-align: right;">45</td>
+<td style="text-align: right;">55</td>
+<td style="text-align: right;">15</td>
+<td style="text-align: right;">60</td>
+</tr>
+<tr>
+<td>翠花 → 牛二狗</td>
+<td style="text-align: right;">50</td>
+<td style="text-align: right;">60</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">65</td>
+</tr>
+<tr>
+<td>牛二狗 → 大壮</td>
+<td style="text-align: right;">45</td>
+<td style="text-align: right;">50</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">55</td>
+</tr>
+<tr>
+<td>牛二狗 → 翠花</td>
+<td style="text-align: right;">45</td>
+<td style="text-align: right;">60</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">60</td>
+</tr>
+</tbody>
+</table></div>
+<p>模型每次只收到当前 NPC 对其他人的关系。<code>character_relationships(profile_id)</code> 从关系表中读取这些条目；<code>character_background(context)</code> 将其与背景和战斗偏好合并，供 Luna 使用；<code>prepare_runtime_combat_context()</code> 把相同资料加入居民小模型的请求。图中的对象是 JSON 配置与 Python 函数，本轮没有新增 UE 类或组件。</p>
+<figure class="uml" id="diagram-npc-model-context"><figcaption>配置与函数，人物资料进入模型请求</figcaption><div class="diagram-tools"><button data-size="actual" type="button">原始尺寸</button><button data-size="fit" type="button">适应宽度</button><a href="Diagrams/AI/npc-model-context.svg" rel="noopener" target="_blank">单独查看 SVG</a></div><div aria-label="可横向滚动的 UML 图" class="diagram-viewport" tabindex="0"><svg aria-labelledby="npc-model-context-title npc-model-context-description" height="480" id="svg-npc-model-context" role="img" viewbox="0 0 1100 480" width="1100" xmlns="http://www.w3.org/2000/svg">
+<title id="npc-model-context-title">人物配置如何进入模型请求</title>
+<desc id="npc-model-context-description">人物和关系 JSON 通过后端函数读取，加入 Luna 对话或居民小模型的当前请求。这些都是配置和 Python 函数，没有新增 Unreal 组件。</desc>
+<defs>
+<marker id="context-arrow" markerheight="9" markerwidth="9" orient="auto" refx="8" refy="4.5"><path d="M1 1 L8 4.5 L1 8" fill="none" stroke="#657b94" stroke-width="1.5"></path></marker>
+<style>#svg-npc-model-context text{font-family:"Segoe UI","Microsoft YaHei",sans-serif;fill:#25374c}#svg-npc-model-context .title{font-size:21px;font-weight:700}#svg-npc-model-context .meta{font-size:14px;fill:#64758a}#svg-npc-model-context .body{font-size:16px}#svg-npc-model-context .code{font-family:Consolas,"Microsoft YaHei",monospace;font-size:15px}#svg-npc-model-context .line{fill:none;stroke:#657b94;stroke-width:1.7;marker-end:url(#context-arrow)}#svg-npc-model-context .box{fill:#fff;stroke:#a5b9cf;stroke-width:1.4}#svg-npc-model-context .head{fill:#eaf1f8}</style>
+</defs>
+<rect fill="#fff" height="480" width="1100"></rect>
+<path class="line" d="M310 207 H375"></path>
+<path class="line" d="M735 207 H800"></path>
+<g>
+<rect class="box" height="335" rx="8" width="280" x="30" y="40"></rect>
+<path class="head" d="M38 41 H302 Q309 41 309 49 V109 H31 V49 Q31 41 38 41"></path>
+<text class="meta" x="50" y="66">配置文件 · JSON</text>
+<text class="title" x="50" y="95">人物与关系</text>
+<line stroke="#c0cddd" x1="30" x2="310" y1="110" y2="110"></line>
+<text class="code" x="50" y="148">NpcProfiles.json</text>
+<text class="body" x="50" y="177">背景、说话示例、战斗偏好</text>
+<line stroke="#d8e1eb" x1="50" x2="290" y1="203" y2="203"></line>
+<text class="code" x="50" y="240">NpcRelationships.json</text>
+<text class="body" x="50" y="269">熟悉、信任、较劲、关照</text>
+<text class="body" x="50" y="300">分别记录“我怎么看他”</text>
+<text class="meta" x="50" y="350">按 profile_id 关联人物</text>
+</g>
+<g>
+<rect class="box" height="335" rx="8" width="360" x="375" y="40"></rect>
+<path class="head" d="M383 41 H727 Q734 41 734 49 V109 H376 V49 Q376 41 383 41"></path>
+<text class="meta" x="395" y="66">后端函数 · Python</text>
+<text class="title" x="395" y="95">为当前人物准备资料</text>
+<line stroke="#c0cddd" x1="375" x2="735" y1="110" y2="110"></line>
+<text class="code" x="395" y="145">character_relationships(profile_id)</text>
+<text class="body" x="395" y="172">读取这个人对其他人的态度</text>
+<line stroke="#d8e1eb" x1="395" x2="715" y1="193" y2="193"></line>
+<text class="code" x="395" y="221">character_background(context)</text>
+<text class="body" x="395" y="248">合并背景、战斗偏好与关系</text>
+<line stroke="#d8e1eb" x1="395" x2="715" y1="269" y2="269"></line>
+<text class="code" x="395" y="297">prepare_runtime_combat_context()</text>
+<text class="body" x="395" y="324">为小模型加入同一份人物资料</text>
+<text class="meta" x="395" y="350">未配置的关系不加入请求</text>
+</g>
+<g>
+<rect class="box" height="335" rx="8" width="270" x="800" y="40"></rect>
+<path class="head" d="M808 41 H1062 Q1069 41 1069 49 V109 H801 V49 Q801 41 808 41"></path>
+<text class="meta" x="820" y="66">模型请求</text>
+<text class="title" x="820" y="95">结合现场作出决定</text>
+<line stroke="#c0cddd" x1="800" x2="1070" y1="110" y2="110"></line>
+<text class="code" x="820" y="148">Luna</text>
+<text class="body" x="820" y="177">玩家与 NPC 对话、初次挑衅</text>
+<text class="body" x="820" y="207">二狗的语言与行动选择</text>
+<line stroke="#d8e1eb" x1="820" x2="1050" y1="232" y2="232"></line>
+<text class="code" x="820" y="267">Qwen3-1.7B</text>
+<text class="body" x="820" y="296">大壮、翠花的持续交战</text>
+<text class="body" x="820" y="326">继续追打、逃跑或停手</text>
+</g>
+<rect fill="#f3f6fa" height="54" rx="8" width="1040" x="30" y="403"></rect>
+<text class="body" text-anchor="middle" x="550" y="437">当前观察、对话、真实受击和合法动作一并提供；游戏服务器检查并执行模型建议</text>
+</svg>
+</div></figure>
+<p>基础关系描述平日交情。谁在现场、刚才谁打了谁、有没有道歉，仍由游戏提供的 <code>evidence</code> 说明；二狗的主人、安排与共同经历沿用 <code>Companion</code> 的当局记录。关系表不会凭空增加观察到的人、可执行动作或伤害，也暂未实现受击后自动累加并保存关系分数。</p>
+<p>以后新增人物，先在 <code>NpcProfiles.json</code> 登记人物编号和资料，需要说明他与某个人的交情时，再添加对应方向的关系。没有配置的关系不发送，人物之间无需全部连起来。修改这两份文件后重启 AI 后端即可重新读取。</p>
+<h5>训练与早期检查</h5>
 <p>玩家交谈、初次挑衅与人物台词继续使用已接入的大模型。2026 年 11 月 14 日先后完成了 Qwen3-1.7B 的三轮持续交战训练。候选模型只为大壮和翠花选择继续追打、逃跑或停手，不生成台词，也不能更换对手；二狗不使用这份训练模型。</p>
 <p>前两轮在同一组 40 个验收情境中分别答对 31 个和 35 个。用户要求继续改进后，第三轮补充了 32 个训练故事，并修正游戏在逃跑时也声称“受击仍在继续”的错误说明。第三轮 Q8 在原 40 题中答对 40 题，动作和目标格式全部合法；题目、答案和 90% 门槛没有修改。这是同一组题的第三次正式验收，且同时修正了输入处理，不能称为全新盲测，也不能将全部提升归因于训练。额外的 16 个内部情境仅答对 12 个，仍有误会已说开却攻击等问题。</p>
-<p>第三轮 Q8 独立运行的中位耗时为 147 毫秒，P95 为 207 毫秒；当时没有同时运行 UE 或语音，因此不能用这个数字说明游戏中的实际等待。随后 Q4 量化在原 40 题中答对 38 题，正确率为 95%。与双人游戏和两种 B 声音同时运行时，动作选择中位耗时约 208 毫秒，但完整 40 秒的帧时间 P95 增加 12.04%，超过原定 10% 要求，因此正式小模型仍禁用。工作线程改为 1/1、每组观察完整 70 秒的方案仅已准备，尚未执行；没有修改验收标准。原来的失败、训练参数和同机结果见<a href="AIIteration.html#combat-training-round3-20261114">战斗小模型训练记录</a>。完整角色对话训练仍未开展，后续准备方式见<a href="AIIteration.html#npc-role-training">角色对话研究与小模型试验</a>。</p>
+<p>第三轮 Q8 独立运行的中位耗时为 147 毫秒，P95 为 207 毫秒，当时没有同时运行 UE 或语音。随后 Q4 量化在原 40 题中答对 38 题。早期双人游戏与两种 B 声音对照中，动作选择中位耗时约 208 毫秒，但完整 40 秒的帧时间 P95 增加 12.04%，超过原定 10% 要求，因此当时没有启用小模型。后续改用较少的工作线程、18 层 GPU 和共享语音缓存，原 40 题在双人会话仍连接时答对 39 题，61 次合法返回的 P95 约为 1.12 秒。该轮 PIE 提前结束，Luna 组也受到其他 UE 进程影响，整机帧时间对照仍未完成。原来的失败、训练参数和同机结果见<a href="AIIteration.html#combat-training-round3-20261114">战斗小模型训练记录</a>。完整角色对话训练仍未开展，后续准备方式见<a href="AIIteration.html#npc-role-training">角色对话研究与小模型试验</a>。</p>
 <p>模型选择与语音发送已经分开结束：后端发送 <code>model_done</code> 后，游戏可以请求下一次决定，同时接收旧回复的声音；<code>done</code> 表示该回复的声音全部发送完。行为树继续执行当前追打或逃跑，不在每一拳后停下来等模型。玩家插话先停止旧回复，当前活动是否继续由新决定及游戏规则处理；倒地或目标失效时取消相应动作和声音。<code>model_done</code> 还可携带实际模型、路由、排队和处理耗时，供演示面板显示；它不表示客户端已经播放结束。未返回的 token 数或首句时间不补造数值。</p>
 <p>最新试玩发现，旧动作正常结束时会连带取消尚未答复的玩家发言。已写好的补丁会保留这条原话，根据新的现场信息重新请求回答；旧请求返回“继续当前动作”时，不能重新启动已结束的动作。明确取消交谈或角色失效时，仍结束相关请求。该补丁待统一编译和游戏验证，原因与检查范围见<a href="AIIteration.html#playtest-decision-followup-20261114">试玩后的回复与追赶修复记录</a>。</p>
 <p>11 月 14 日晚首轮双人 PIE 实际发送了主机拱火和客户端道歉。Luna 选择交战，日志记录了连续四次命中；道歉后回答“先停手”，另有逃跑完成记录。这轮暴露了首句超时、女声缺音及完整尾音被误判超时的问题，详见<a href="AIIteration.html#npc-evening-playtest-20261114">晚间双人试玩</a>。窗口与运行负载中途变化，不用作受控性能对照。</p>
-<p>尾音和客户端覆盖复制字段的问题已修复并通过对应回归。随后使用原生 KV1024 B 声音运行双人 PIE，八句闲聊在两端均完整播放，日志未见超时、格式错误或缓冲缺音。任务电话反复弹出干扰输入焦点，这轮没有有效玩家发言，因此玩家交谈、道歉、打断和战斗后的声音仍未验收。本地小模型仍关闭，GPU 三档同机对照及完整追打画面也尚未完成，详见<a href="AIIteration.html#npc-audio-recheck-20261114">修复后的声音检查</a>。</p>
+<p>尾音和客户端覆盖复制字段的问题已修复并通过对应回归。随后使用原生 KV1024 B 声音运行双人 PIE，八句闲聊在两端均完整播放，日志未见超时、格式错误或缓冲缺音。任务电话反复弹出干扰输入焦点，这轮没有有效玩家发言，当时小模型也未启用，因此这次声音检查没有覆盖玩家交谈、道歉、打断和小模型战斗。该轮记录见<a href="AIIteration.html#npc-audio-recheck-20261114">修复后的声音检查</a>，当前接入进度以上面的试玩说明为准。</p>
 <p><a id="companion-design"></a></p>
 <h4>后续玩法：跟班 NPC</h4>
 <p>用户将 <a href="https://arxiv.org/html/2609.29837v1">PUBG Ally: A Conversational Embodied Agent as an AI Teammate</a> 指定为后续跟班设计的参考。论文要点与阅读范围保存在 <a href="AIIteration.html#pubg-ally-companion">PUBG Ally 与跟班设计</a>。以下是 Delivery 的设计建议，尚未实现；当前仍先完成街坊交谈、人物声音和动作反馈。</p>
@@ -978,17 +1206,209 @@
 <p><strong>SayPlan 与 LLM-OBTEA。</strong> 已读方法、实验和相关附录。前者从场景图选取相关信息并检查计划，后者根据动作条件生成行为树。Delivery 可以借鉴“开始前检查、结束后确认”的做法，但首版不增加完整规划器；纸面上可执行的计划仍需要游戏实际确认导航和碰撞结果。<a href="https://arxiv.org/abs/2307.06135">SayPlan</a> · <a href="https://arxiv.org/html/2405.07474">LLM-OBTEA</a></p>
 <p><strong>Werewolf Arena 论文与部分代码。</strong> 已读个人观察、公共讨论、轮次控制和记忆相关实现。Delivery 参考每人只知道自己获得的信息，由游戏程序控制轮次。该仓库已归档，本机未运行其模型实验，不作为新增依赖。<a href="https://arxiv.org/html/2407.13943v1">论文</a> · <a href="https://github.com/google/werewolf_arena/tree/4e8994e7ee81514a4a774fd932debd3e8290d622">代码版本</a></p>
 <p><strong>动画和语音资料。</strong> MotionGPT 的动作生成研究不能直接替代本项目的场景交互、碰撞或多人同步。当前方案仍由模型选择已有手势和动作，动画蓝图负责播放。语音打断也需要与游戏动作取消分别处理：停止声音，不代表后台计算和拽车动作自动结束。<a href="https://arxiv.org/abs/2306.14795v2">MotionGPT</a></p>
-<p>原始字幕、关键帧和源码下载记录位于 <code>Saved/AIResearch/2026-11-12/</code>，不加入项目源码。此次源码阅读范围见“设计参考”；未取得全文的 FACUL GDC 录像和 GDC 2026 语音演讲仍未标为已读。</p></section><section id="chapter-14"><h2>AI 跟班二狗设计（完整设计与实施状态）</h2><p><a id="ergou-design"></a></p>
-<p>最近第一单试玩已有接听、取件和结识感谢的运行证据，完整送达、家居操作和斧头实物交接仍待观察。跟车重算与近处道具的处理见<a href="AIIteration.html#ergou-local-item-follow-20261115">就近拿取与跟车重算</a>。</p>
-<p>结识后，右上小地图给主人显示牛二狗的蓝色菱形，超出范围时在圆环边缘显示蓝色方向箭头。二狗在自己的车上时，地图位置随座椅更新；骑乘车辆在远处仍向主人同步。完整步行、骑乘和远端客户端的地图表现仍待试玩。见<a href="AIIteration.html#ergou-door-transfer-playtest-20261115">地图与试玩记录</a>。</p>
-<p>近处包裹交还可用当前安排。二狗持包裹到爷爷家后先在屋外等门，破门后重新计算到实际收件人的路线，由服务器确认交付和结算。见<a href="AIIteration.html#ergou-door-transfer-playtest-20261115">本轮修复与试玩记录</a>。</p>
-<p>持续跟随的界面回执、跟车速度、绕行和鸣笛反馈见<a href="AIIteration.html#ergou-continuous-bike-20261115">本轮实现和试玩证据</a>。同伴逻辑依据已确认的主人和当前路况工作。动作由行为树和服务器执行，模型根据当前事件决定是否吐槽或建议短鸣笛。</p>
-<p>最新用户要求优先：Follow 围绕主人侧后方同行，不自行沿订单带路；明确骑自己的车时应实际取车，近处停车保留骑乘，检查高度与遮挡。LLM 仍解释整句并选择完整候选，BT 执行，服务器确认实际结果。新补丁、普通物品手骨挂点与短对白接续活动已正式接入并构建；普通斧头具体握点、动画和可取开关尚未配置，仍不能视为本版玩法已验收。见<a href="AIIteration.html#ergou-follow-riding-feedback-20261115">第二次试玩反馈</a>。</p>
+<p>原始字幕、关键帧和源码下载记录位于 <code>Saved/AIResearch/2026-11-12/</code>，不加入项目源码。此次源码阅读范围见“设计参考”；未取得全文的 FACUL GDC 录像和 GDC 2026 语音演讲仍未标为已读。</p></section><section id="chapter-14"><h2>NPC 即时反应（2026-11-15）</h2><p>NPC 的小反应只保留三类：看一眼路过的玩家、对近处鸣笛短暂受惊，以及真正挨打后的表情。台词、挑衅、还手和逃跑继续由模型选择；这些小反应不新增模型请求，也不改变已经安排的动作。</p>
+<p><code>UDeliveryNpcLookComponent</code> 沿用现有的转头目标和网络同步。<code>TryStartle(Source)</code> 由服务器收到鸣笛时调用，检查距离、遮挡、人物状态和冷却；返回 <code>true</code> 表示已开始短暂表现。<code>IsStartled()</code> 只供表现系统查询。默认在 220 cm 内显示 0.65 秒，两次受惊至少间隔 10 秒；多人轮流走近时，普通注视也至少间隔 2 秒。人物可以关闭路过关注或鸣笛反应，在蓝图的 Look 组件中调整这些参数，以及受惊、受击使用的表情名称。</p>
+<p>正在交谈、追打、逃跑、搬运或驾驶时跳过小反应。二狗空手站定等候时仍可看一眼，正在跟随移动或返回等候点时保持看路。忙碌结束后的第一次检查只更新玩家位置，期间已经发生的经过不会再补播。转头不设置行为树焦点、不停导航，也不播放新的全身动作。真实命中的动作、伤害和倒地继续由战斗组件处理，选择 <code>None</code> 只关闭额外的受击表情。</p>
+<p>居民和二狗通过已有的表情资产显示眼睛变化；普通行人复用转头，原来的鸣笛过街加速保留。普通行人没有接居民脸部资源，爷爷保留第一单的独立受惊流程。当前只提供共用参数，尚未逐人调整并验收性格差异。源码已合入，构建、专项检查和主机/客户端实际表现由本轮统一验证，不能据此宣称效果已经完成。</p></section><section id="chapter-15"><h2>AI 跟班二狗设计（完整设计与实施状态）</h2><p><a id="ergou-design"></a></p>
+<h4>本轮五项整合</h4>
+<p>玩家试玩已经确认二狗会用专属车跟随、越过低障碍后续走同一跟随路线。后续 17:06 的试玩中，二狗送达第一单原件，爷爷完成收件，服务器向主人发放 80 元。玩家确认物品交付，17:08 服务器也接受了已认领房屋的首个摆放安排。当前 v10 修改继续覆盖实际取物、家具搬放与离座、小绿、持续协战和近战受击。<a href="AIIteration.html#ergou-playtest-review-fixes-20261115">试玩与本批验证记录</a></p>
+<p><code>NpcAgent</code> 用当前主人 <code>PlayerState</code>、当前请求和实物候选封存动作。模型看到物件名、来源、目的地和动作效果。简表引用原候选下标，共用原候选 ID 和证据。<code>BT_Companion</code> 与现有 Task 推进寻找、接近、转向和交互。新动作在旧动作仍退出时也按本次动作 ID 接手，避免黑板的已批准状态保持为真时漏执行。普通道具与主人持物用原物品栏交接。主人手上或背包里的普通道具用 <code>TakeItem</code> 接到二狗手里，地面实物用 <code>FetchItem</code> 找到后带回。登记后箱沿任务包裹入口取件，主人落下的这单原件也须经当前登记、地面接触和 GAS 校验。取件、代送、手交和放地分别保留各自结果。</p>
+<p>共用房屋复用 HomeObject、Smart Objects 与 <code>GA_UseHomeObject</code>。<code>Sit</code> 领取座位，<code>LeaveSeat</code> 只释放本次实际占用的座位，<code>TakeProp</code> 拿起真实物件，<code>PlaceProp</code> 使用已标记的目的家具和槽位，<code>PlaceNearOwner</code> 使用当前主人面前安全地面。已经拿在手里的同一件物可接续摆放。手持缩放、完整尺寸的支撑与净空由服务器检查，摆稳后恢复作者原尺寸。电视放凳、凳放脚边等场景仍需使用正式物件和地图核对。可编辑蓝图继续配置现成动画、站位和槽位，C++ 管理多人物权、复制及原件事务。</p>
+<p>家具搬运中断时释放同一原物，原始尺寸由物件组件保留。静止后先检查原位完整净空和稳定支撑，必要时在 72 厘米内选择同层且沿途有净空的位置恢复。原位置被堵时允许链路结束，现有原件仍可再次拿取。小绿分两条实物路径。外卖在主人手持槽时，二狗按已有拾取路径携带小绿去投放；外卖已经在二狗手里时，俯身接触已封存的小绿，由服务器核对并将其投放到同一件外卖。物品栏收起或车箱状态不能当成手持外卖。</p>
+<p>协战候选保留实际主人命中的服务器证据，等待当前模型请求交接。模型批准后交给已有近战行为树执行。大壮攻击主角时，寻路与起拳门槛使用主角实际配置的胶囊尺寸，即使主动布娃娃已经关闭胶囊碰撞。真实拳头接触主角网格后，由 GAS 和主动布娃娃提交扣血与物理受击。可见受击效果与双方观察留待正式关卡复测。</p>
+<p>行为库 v10 正式数据表有 34 条定义，包含 <code>TakeItem</code>、<code>CollectCaterpillar</code>、<code>InsertCaterpillar</code>、<code>JoinAssist</code>、<code>StopAssist</code>、<code>StorePackageInBackpack</code> 和 <code>SearchNearOwner</code>。家居用途走原来的 <code>HomeAction</code>。当前仍沿用正式 BT Task 和角色配置，整套动作库的剩余类别与素材持续按<a href="DeliveryAIPlan.html#npc-behavior-library-goal">正式交付目标</a>推进。</p>
+<p>骑车跟随的路点取自服务器上当前主人车辆刚驶过的位置。只有车尾直达失败时才依次尝试这些路点，每段仍检查车体净空及地面支撑。见<a href="AIIteration.html#ergou-driven-route-20261115">跟车绕弯</a>。</p>
+<p>主人在身边时，可直接让二狗步行拿取实见的近处普通道具或交还手里的同一物件。该规则只作用于本次委托，远行仍读取主人的出行方式。骑车跟随改点失败时先保留有效原路段，再根据最新车位重试。见<a href="AIIteration.html#ergou-local-item-follow-20261115">就近拿取与跟车重算</a>。</p>
+<p>第一单的近处接件和交还共用交通候选检查。交还只指向主人的当前步行身体，实际转移仍由服务器校验。住宅地址用于导航，订单指定的爷爷确认收件。二狗持件到门外时先停在看得见入口锚点的同层位置，破门后重新算到爷爷的路线。导航到点后由收件组件、遮挡与实物检查决定能否交付。见<a href="AIIteration.html#ergou-door-transfer-playtest-20261115">本轮实机记录</a>。</p>
+<p>代送受阻时保留最多四处近期站位，绑定本单的收件组件和固定位置。位置优先取配置的交互锚点，缺省取收件人原点。贴近距离和遮挡仍按实际交互点计算。收件人换了、锚点累计移动至少 35 厘米或委托结束时，清理对应的站位记录。旧路径的受阻回调必须复核收件身份、参照位置与原移动编号。服务器在最终签收前重新查本单登记的收件组件。<a href="AIIteration.html#ergou-package-receiver-retry-20261115">实物携带与收件恢复</a></p>
+<p>固定取件点仍显示 E 提示和长按进度。本机交互探针跳过这类宿主的高亮模板，避免取件点挂在建筑时外墙变绿。</p>
+<p>扶起结识后，右上小地图按本机 PlayerState 匹配同一 World 的牛二狗。步行或骑车都画蓝色菱形，超出小地图范围时在边缘画同色方向箭头。骑乘位置随专属车座椅更新，服务器在骑乘期间向主人保留车辆同步，其他玩家及空车继续按原距离规则同步。</p>
+<p>结识阶段和座椅附着由各自的 Actor 复制。客户端已有座椅附着时，迟到的结识阶段继续维持骑乘身体的隐藏、碰撞和移动状态。车辆负责骑姿及离座后的恢复。</p>
+<p>步行跟随重用原路径时，核对主人的三维位置与当前路径请求编号。已经走到上一站位时，还要确认站位净空且仍看得见主人。主人要求等候或取消时，如果下车受阻，就在实际下车落脚后定等候锚点。移动回调只更新同一版本、模式和控制对象对应的路径。</p>
+<p>常用步行队形全部受阻时，先从二狗所在方向开始，再搜索主人周围两圈站位，逐点检查个人间距、入口净空和完整路径。受阻期间主人明显移动时立即重算。下车优先选与导航接得上的安全落脚点。</p>
+<p>玩家正看向可交谈的人物时继续选择该人物。没有瞄准对象时，按 T 可从侧后方打开三米内且无遮挡的自家二狗的窗口，准星交互提示仍按镜头目标决定。文字发送复核与 NPC 收到现场发言使用同一条路径规则，临时经过的行人不打断，墙和门仍有效。</p>
+<h4>近处找东西</h4>
+<p>主人提交一轮新发言后，CompanionComponent 从当前世界的交互注册表读一次主人附近的可拾取公共物品。第一版要求主人步行、与二狗相距不超过 16 米，道具在主人 6.5 米内且从主人所在位置有无遮挡的路径。每轮最多给四条二狗尚未看见的地点线索，物品须有公开名称、允许同伴拿取并且无人占用。模型从本轮候选里理解“在我边上找把锤子”之类的指代，可以选择对应的 FetchItem，也能在信息不足时追问。线索保留 15 秒，动作接收时校验归属、指令编号、实物身份和线索编号。</p>
+<p><code>BT_Companion</code> 在普通委托之前增加寻找分支，黑板键 <code>HasNearbyItemSearch</code> 启动可编辑的 <code>/Game/NPC/Shared/AI/BT_SearchNearbyItem</code>。树在 <code>SearchNearby</code> 阶段推进实际步行，先到线索附近，再尝试附近另外三个站位，使用 NPC 原有朝向和视觉检查左右查看。带实物线索的 FetchItem 确认看到同一件物品后续走原有取物、回主人及 GAS 交接。当前没有实物线索时，<code>SearchNearOwner</code> 以本轮发话时主人的同一身体和落脚点为中心搜索，最多走四个同层安全站位；只报告它确实看到的道具，再由后续指令安排取回。倾听和受击暂停搜索，主人改派或取消会结束当前安排。封闭柜子、全区域无目标搜索及 NPC 挥斧破门仍待接入。</p>
+<p>寻找沿用原有步行、转身和斧头握持。走到搜索站位后，只有停稳、踩在平缓的可走地面且线索在脚下附近时，才进入低身查看。服务器在委托状态复制查看起始时间，观看方用服务器时钟，从 <code>DA_CompanionTuning.LowItemInspectionAnimation</code> 指定的现成剪辑取样，复用二狗动画蓝图已有的全身混合及骨盆修正。开始移动、找到目标、受击、暂停、改派或结束时清除查看表现。车辆把二狗带到搜索区后，近处换站位保持步行。动作的高低不改变导航胶囊、取物条件或真实物品结果。</p>
+<p>蹲姿停留、低身向前、跪身操作都来自 Quaternius CC0 动画。蹲姿停留用于这一版的低处查看。低身行走、跪身查看及拾取入手动作仍需检查脚底接触、手部与实物的时序，再配置到对应动作。普通居民可在工作、生活和关系许可时复用寻找行为，人物专属表现可覆盖节奏、姿势与声音。</p>
+<p><a id="npc-behavior-library"></a></p>
+<h4>NPC 动作库</h4>
+<p>完整动作库与二狗三阶段同行交付，覆盖下表全部类别及各角色的专属动作。现有执行入口先迁入可编辑的通用定义和角色配置，再补缺少的行为与表演。每个动作保留可触发的正式入口、服务器或本机表现的职责、实际结果、成功和中断时的清理以及动画来源。实现进度从配置、候选、执行、角色表现和实机结果逐项核对。实施与验收见<a href="DeliveryAIPlan.html#npc-behavior-library-goal">正式交付目标</a>。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>类别</th>
+<th>通用行为的候选</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>移动与陪伴</td>
+<td>步行、奔跑、跟随、等候、过来、带路、让路、路边等车、上下自己的车、停车、鸣笛、绕过挡路物</td>
+</tr>
+<tr>
+<td>观察与寻找</td>
+<td>转头找人、环顾、低头看地、靠近查看、探头看转角、换边搜索、确认同名物、找不到时询问</td>
+</tr>
+<tr>
+<td>道具与交互</td>
+<td>弯身拿取、拾起、递交、接住、双手搬、放下、指给人看、打开箱柜、查看工具、按门铃、敲门、坐下、起身</td>
+</tr>
+<tr>
+<td>社交与反应</td>
+<td>招手、点头、摇头、指路、挥别、撑腰抱怨、挠头犹豫、后退受惊、安抚、拒绝、道歉、感谢、笑、围观、劝架</td>
+</tr>
+<tr>
+<td>日常与家居</td>
+<td>看手机、靠栏杆、喝水、吃饭、记账、扫地、擦桌、理货、浇花、开关灯、归置家具、调整摆放角度</td>
+</tr>
+<tr>
+<td>任务与保护</td>
+<td>查看订单、叫车、开后备箱、取件、搬货、核对收件人、送达、交还、等候打断、护主、格挡、拉开距离</td>
+</tr>
+<tr>
+<td>人物专属</td>
+<td>二狗按主人安排取送和布置新家，熟悉街区后主动指路，围绕小绿惹事。面馆老板忙时一边记单一边回话。爷爷隔门应声、开门后招呼、收货、收拾物件与告别。大壮逞强，翠花拆台，同一套走近、指人、叉腰和退让可有不同节奏和声音</td>
+</tr>
+</tbody>
+</table></div>
+<p>表中同时列有现有能力与后续候选。编辑资产中每个动作使用稳定的 <code>FGameplayTag</code>。动作定义保存目标类型、允许来源、证据要求、占用资源类型、可中断阶段、冷却、服务器执行入口、结果事件和可软加载的动画配置。角色配置引用一组能力并可覆盖声音、动画、节奏和场景点要求。人物日程由世界场景、时间和关系给出，模型决定如何回应当前情境，行为树负责执行获准的动作。</p>
+<p>普通道具找物由 <code>BT_SearchNearbyItem</code> 执行，<code>CompanionComponent</code> 负责当前委托的阶段和实见记录。步行接近时在原实见点 6.5 米内失视超过 0.65 秒，同一委托只触发一次重新搜索。搜索沿不同视点平滑转向并复用低身查看。看见同一原物才继续尝试拿取，再次失视则到最后实见点做短暂朝向确认。取消或抢占时只清除该委托拥有的导航及焦点，原物交接仍由服务器 GAS 校验。研究和验证范围见<a href="AIIteration.html#ergou-search-reacquisition-20261115">重新找物记录</a>。</p>
+<p>通用 <code>LookAt</code> 也可由不同角色做不同表现。二狗对脚边的实见普通道具执行该动作时，<code>ABP_CompanionBody</code> 可通过现有全身混合播放 <code>DA_CompanionTuning.LowItemInspectionAnimation</code>。角色停稳、已转向目标且手空时才选低身姿势，物品离开原状态、角色起步、骑车、讲话、受击或转入其他安排时退回该活动的表现。观看方用已复制的动作时间取样，行为树保留目标复核和注视，物品转移仍走原技能。<a href="AIIteration.html#ergou-look-at-inspection-20261115">这一动作的表现接入</a></p>
+<p>共享 <code>Pace</code> 在主人请求、二狗已结识且安全等候时可用。二狗用原步行寻路计算可用路程，额外按离等候锚点的余量限制范围，行为树记录本次出发点并在折返结束后确认完成。访客会话通过 <code>ContinueCurrent</code> 保留正在进行的踱步。角色仍使用已配置的 Quaternius 步态，观看方沿既有动作及移动复制显示。<a href="AIIteration.html#ergou-pace-at-stay-20261115">等候踱步接入</a></p>
+<p>共享 <code>MoveAside</code> 通过目标人物的现场证据生成候选，行为树沿现有可达侧方站位移动。已配置该标签的角色在让路且实际移动时，沿用动画蓝图的短步混合槽，按人物表的片段和参考速度显示。动作结束、取消或停下后，按角色当前活动的姿势显示。未设置覆盖的角色使用默认走路。首批采用二狗和翠花已导入的 Quaternius 步态，转向后走到侧旁。验证见<a href="AIIteration.html#npc-move-aside-profile-20261115">让路人物表现</a>。</p>
+<p>共享 <code>GetUp</code> 在普通居民主动躺下、脚下有支撑并收到玩家发话时成为模型候选。普通对话继续检查距离和遮挡。行为树接手后从原战斗组件开始或接续起身，完成站立后才记录动作结果和无台词回执。起身动画仍使用原角色动画蓝图，交谈换轮时身体沿原恢复时序继续。真实击倒、初遇扶起以及二狗持续安排各有原来的独立权限。<a href="AIIteration.html#npc-get-up-20261115">居民主动起身</a></p>
+<p>未确认的附近找物线索由 <code>CompanionComponent</code> 加入当前主人请求的证据与 <code>FetchItem</code> 候选。每轮最多四件，描述给出距主人与二狗的约数，坐标、原物弱引用和 15 秒有效期只用于服务器。刚进入二狗视野但常规观察还未刷新时，就近检查可给当轮候选追加实见描述。<code>NpcAgent</code> 采纳时复核本轮身份与证据，开始执行时再从已采纳的动作复核主人、命令版本与时限。后续访客或自主闲聊的常规证据不携带该临时编号。确认看见、拿到和交回仍按原观察和物品事件记录。线索本身只允许进入现有找物子树，玩家取消和真实拾取的生命周期不变。</p>
+<p>普通道具可以配置模型局部拾取握点。二狗行为树在已确认可交互的低处物件旁，从网格内的右手接触点反算站位、朝向和允许偏差。到达平缓地面并停稳后复制服务器时间，现有动画蓝图按该时刻播放全身姿势。服务器在作者剪辑的接触点再次检查原物、主人、视线、相对触点和速度，原 <code>GA_CompanionItemTransfer</code> 仍负责实际拿取。取到后当场登记返还并完成起身；受击、改派或取消清除姿势和精确导航，之后按实际持件状态继续。未配置握点、地形不合适或精确站位超时的物品使用普通交互流程。<a href="AIIteration.html#ergou-ground-pickup-integration-20261115">接入和验证记录</a></p>
+<p>服务器在封存第 5 版以上请求时建立候选编号索引，通过请求编号、候选编号、动作、目标和证据复核结果。候选编号已随联合目标构建，平均 O(1)。首批 26 条定义已保存到 <code>/Game/NPC/Shared/AI/DT_NpcBehaviorCatalog</code>，以 <code>Config/Tags/NpcBehaviors.ini</code> 注册的 Gameplay Tag 为行名，绑定现有执行枚举。源数据和复建入口为 <code>Design/AI/NpcBehaviorCatalog.json</code> 与 <code>Content/Python/update_npc_behavior_catalog.py</code>。新增行先在临时表试导并读回，保留 UE 表里已编辑的字段和权限。旧标签缺失或改绑执行枚举时停止导入。启用 AI 的服务器世界启动时从 <code>UDeliveryAiSettings.NpcBehaviorCatalog</code> 读取配置，建立行为标签和执行枚举索引，定位单个 ID 平均 O(1)。已有角色授权和现场观察先形成候选，表中角色或请求来源限制只收窄可选范围，候选顺序、目标、证据、出行方式和正在执行的活动继续由既有代码维护。普通编辑器通过正式配置与加载器确认了 26 行及 <code>FetchItem</code> 索引。角色专属配置、表现接线、打包和游戏验收见<a href="DeliveryAIPlan.html#npc-behavior-library-goal">交付计划</a>。</p>
+<p>人物表 <code>FDeliveryNpcProfileRow.BehaviorPresentation</code> 按正式 Gameplay Tag 保存各角色的动画覆盖。<code>ADeliveryNpcCharacter::ApplyProfile</code> 在各端保存当前行的配置，动画实例只在原动作的相应姿势被选中时按标签查找，平均 O(1)。<code>Pace</code> 使用人物表片段和视觉参考速度，实际步速继续由导航与角色配置决定。二狗查看低处道具的 <code>LookAt</code> 可用人物表给定片段和播放速率，按原服务器动作时间取样。骨架不兼容、Root Motion 开启、数值无效或未配置时使用原表现。首批少量已导入片段沿人物表一起加载，动画更新不加载资源。受击、抢占及原动作结束仍由现有蓝图分支过渡。动画覆盖不改变候选证据、主人权限或行为树的完成条件。</p>
+<p>更大规模的角色表现可按需提前加载，候选继续按角色与事件构建。能力、占用或场景点变化时更新有关列表。生成候选是 O(k)，k 为受当前事件和角色过滤后的候选数。目标搜索、导航、视线与占用各自执行实际检查。目前找物只在新的一轮主人指令到来时扫描该世界的交互注册表。道具量增加时可用 <code>TMap&lt;FIntVector, FItemIds&gt;</code> 把附近查询限制到有限网格，再检查格内对象，物品换格、被拿取、销毁时更新索引。角色与世界分别持有自己的活动状态。根据同一地图的动作数、候选数、查询耗时、寻路次数与首响应判断收益，当前尚无性能数字。</p>
+<p>等候和取消会结束当前跟随。首次只说“跟着我”时，<code>Unspecified</code> 从步行开始。主人上车后仍须新一轮授权，模型可从明确骑自己的车或已授权自动跟随等候选中选择。已经选定出行方式的安排中，只说“继续跟着我”会保留原方式。<code>Walk</code> 一直步行，<code>OwnVehicle</code> 使用二狗自己的车，<code>Automatic</code> 才根据主人实际控制的步行身体或摩托车切换。跟随和跑腿的出行授权分别保存。</p>
+<p>取专属车时先检查当前位置能否上车。如果车座被遮挡，二狗会寻找两侧可步行到达且看得见座椅的位置。步行候选与实际上车使用同一距离、高差和遮挡检查。停止步行后的回调可能改派，仍需核对原指令和控制器，成功挂到座椅后才登记骑乘。</p>
+<p>跟随步行时，导航间隔内复核已选位置的实际净空、在门的哪一侧及是否堵住订单入口。当前位置仍合法就保留本次导航，失效时仅取消和二狗的当前移动编号一致的请求，再尝试合法站位。主人步行后，二狗的车位若已经停稳却没有安全且能走到主人的下车出口，会改找其它停车位置。暂时避开最多四个失败位置，给动态障碍离开的时间，抵达后用实际车身朝向重新检查出口。<a href="AIIteration.html#ergou-follow-exit-replan-20261115">跟随改路记录</a></p>
+<p>服务器记录主人驾驶到步行的真实控制切换，空 Pawn 不改变记录。主人结束骑行后，二狗可以在清楚的本地出口先离座，再用步行跟随处理后续路线和门口等候。正式停车仍检查坡度和净空。有安全落脚点之前保持坐骑并继续找停车位。重新上车或明确改变跟随方式后才能清除本段步行安排。道路中途通过检测采用专属车的爬坡限制和四角实地支撑，停车继续使用 25 度上限。直追和短绕失败时才沿主人的实驶车迹补查车辆导航。<a href="AIIteration.html#ergou-follow-owner-dismount-20261115">跟车与下车修复</a></p>
+<p>玩家继续试玩仍遇到纵坡受阻和重复跟随时尝试下车。短路预检改用前一段实测支撑高度继续探地，在终点核对真实车迹的楼层；四角支撑、相邻高度和车体扫掠继续检查。同一主人未指定新出行方式且没有跑腿、家居或协战需要结束时，重复 <code>Follow</code> 保留当前修订、车路、座位和实际暂停原因。Agent、执行与行为树使用同一判定。明确换出行方式按新安排执行。<a href="AIIteration.html#ergou-slope-continuity-20261115">证据与验证范围</a></p>
+<p>步行途中受阻由 <code>PathFollowingComponent</code> 的真实结果触发恢复，<code>CompanionComponent</code> 只监听它当前发起的移动编号。记录短时失败位置，下一次行为树更新复查备选路线的起始段，必要时先向旁边安全走一段。开始新导航后根据角色实际进展或到达解除暂停。更换控制对象、转入骑乘、切换安排和对象销毁时处理旧请求或绑定。<a href="AIIteration.html#ergou-walk-blocked-recovery-20261115">中途受阻恢复</a></p>
+<p>当前步行请求还会按导航间隔检查近处的真实碰撞。二狗在同一路段几乎不动、同一车辆或行人持续挡住前进方向时，可在 UE 的常规受阻结果之前开始换路。短暂横穿、导航连线、改派和换 Pawn 各自沿用原路径生命周期。骑车在一次受阻窗口内可根据同一主人车的位置变化提前重算一次，失败仍等原时刻。<a href="AIIteration.html#ergou-follow-early-obstruction-20261115">提前换路条件</a></p>
+<p>步行取专属车时，<code>CompanionComponent</code> 保存自己这一段移动请求的 ID 与上车落脚点，按原导航间隔复查胶囊净空和到车座的视线。人、车、物件占住旧落脚点，或专属车已移出上车距离时，只撤销这一个导航请求，再评估车的两侧。同步回调若已改派、换控制器、换车或启动另一段移动，保留新任务的路径。正式上车沿用车上接口的权限、距离和姿势检查。<a href="AIIteration.html#ergou-first-order-boarding-20261115">上车落脚点重选</a></p>
+<p>跑腿的步行段核对自己的路径请求编号，导航容差判为已到时仍核查同层、距离和无遮挡。改路和停止的同步回调返回后只更新同一委托和阶段，目标或控制器失效时重新由当前安排判断。</p>
+<p>主人直接发话时，接件、送达和奖励仍由服务器确认。协议 v8 用 <code>errand_task_id</code> 关联跑腿动作、阶段、状态和原因，<code>task_id</code> 指当前实物或任务追踪提供的新指令订单。首单已送达并追踪下一单时，模型可按各自订单回答。访客、环境请求和非订单的委托省略该字段。<a href="AIIteration.html#ergou-errand-order-id-20261115">订单快照验证</a></p>
+<p>角色持有待决策标志，<code>NpcAgent</code> 与网关封存请求并入队。入队成功时只清除建请求前记录的标志，旧请求结束、排队同步通知和等待播放期间出现的新事实会留给后续请求。主人询问时若同一轮委托刚由服务器结束，Agent 拒绝基于旧状态的回复，核对本轮仍有效的控制器、主人 PlayerState 和消息编号后，用最新的游戏状态重答。沿用已有重试上限和录音、静默与语音优先规则。失去主人后清除旧请求、事实与待处理标志。<a href="AIIteration.html#ergou-errand-result-wakeup-20261115">调度和签收回归</a></p>
+<p><code>OnTaskCompleted</code> 在实际释放包裹并提交订单完成后同步发出。此时 <code>CompanionComponent</code> 可核对交件载体，并为二狗代送原单记一次 <code>CompanionTaskDelivered</code>。回执随当前主人直接提问发送，即使收件回调同步改派或切换追踪也按原订单解释。旧委托返回后仍复查命令修订，受理的新跟随或等候决定继续怎么走。奖励、原件销毁和客户端成功提示走既有结算。<a href="AIIteration.html#ergou-delivery-receipt-commit-20261115">同一帧改派回归</a></p>
+<p>主人就活跃订单发话时，<code>CompanionComponent</code> 可随本轮请求附带 <code>task_door_state</code>。通过订单的真实收件人、共用房屋和实体门绑定找到门叶，按导航端点确认两人在门口同层，并从二狗视点检查门叶中心无遮挡。状态取门体完整或破碎，只对应本轮 <code>task_id</code>。跟随、代送暂停、敲门语音、碎片导致的通行阻碍和真实签收继续由各自系统确认。缺少在场证据时省略字段。<a href="AIIteration.html#ergou-task-door-observation-20261115">现场门况记录</a></p>
+<p>真正进入收件阶段后，如果当前步行请求被 UE 确认为 <code>Blocked</code>，或者实际到达的站位仍无法通过收件校验，下一次行为树更新就优先检查更近、不同角度的站位。<code>CompanionComponent</code> 只监听当前收件步行的 MoveId，完成通知核对原路径组件、命令修订、阶段和收件者。换车、暂停和取消会清理旧绑定。当前阶段最多记住四处失败站位，同一收件点按水平 55 cm 避开，收件点移动 35 cm 后重新判断。找不到其他可达站位时逐步让旧站位进入候选，以适应临时遮挡。二狗继续携带原件，步行受阻时模型可以说明暂停。任务发奖和爷爷收件由原服务器接口确认。<a href="AIIteration.html#ergou-delivery-path-blocked-20261115">第一单收件路径记录</a></p>
+<p>二狗跑腿到目的地时，服务器沿途从终点往外找停车点，先保持至少 450 cm 或交互半径加 180 cm 的退距，再以 200 cm 为间隔最多多试三处。候选用实际车辆的净空、地面支撑与完整导航校验。改点失败时继续原有可用车路，车路失效时停车保留同一阶段与货物，等待限频重算。主人取消或替换安排、倒地等高优先级中断仍走原有清理和下车流程，最后一段到取件点或爷爷面前仍步行。见<a href="AIIteration.html#ergou-errand-parking-20261115">停车与恢复记录</a>。</p>
+<p>停车位按最后一段的来车方向检查四角支撑与净空，到点后按实时朝向再验一次。沿导航靠近拐角时先扫掠下一段的车身空间，每次最多提前通过一个路点。扫掠受阻就先走近当前点，再由原有碰撞转向和推进。</p>
+<p>车辆集中处理下车及出口被挡时的重试，首次马上检查，之后最多每 0.25 秒检查一次。模型的跑腿快照在 Running 时优先读取当前暂停原因，继续保留原阶段和持件状态。结束后使用已确认的结果原因。步行路径受阻时的暂停由实际导航恢复或交接清除，避免两次限频查询之间误报恢复。</p>
+<p>从主人车辆接件时，后备箱负责按原事务编号确认动画和实物交接。二狗发现开箱暂时中断后，只有同一件仍在主人一侧、自己尚未接到时才保留原委托，半秒后再校验距离、停稳、占用和主人身份。请二狗从接件改为代送时使用新编号，旧编号的结束和回滚仅作用于原交接。</p>
+<p>持续跟车由同伴组件读取主人 PlayerState 控制器的实时 Pawn，二狗专属车按该车服务器速度与间距调油门。BT 接单后保持 Follow，遇到障碍依次尝试前方安全路段、两侧短路和导航。真实堵路进入模型感知；短鸣笛由服务器在执行时复核，复制沿用原载具喇叭状态。见<a href="AIIteration.html#ergou-continuous-bike-20261115">持续跟车、避障和鸣笛</a>。</p>
+<p>主人上下车或换车时，同伴组件以新的 Pawn 同时读取位置、速度和应避让的对象，清除旧车的轨迹、到站标记及重算等待，再执行同一个跟随安排。调用后复核控制对象是否又变化。主人 PlayerState、显式出行安排及二狗的专属车仍由原组件维护。</p>
+<p>能力版本 8 的 <code>companion_context.vehicle_state</code> 描述实际骑乘。<code>Mounted</code> 表示二狗已坐到专属车上，<code>ParkedForWalkingFollow</code> 表示同一个跟随安排已安全离座，正在按临时步行分支处理，<code>NotMounted</code> 表示当前没有坐在专属车上。出口受阻时仍按实际骑乘报告。跟随期间，<code>travel_mode</code> 记录跟随方式，<code>errand_travel_mode</code> 单独保存跑腿方式。跑腿需要远行但仍未约定方式时由模型按原候选询问。旧版请求可省略补充字段。<a href="AIIteration.html#ergou-follow-auto-transport-20261115">出行快照检查</a></p>
+<p>已授权骑行或自动跟随时，主人下车后，二狗赶到附近再寻找安全停车与步行出口。敞开的窄门或车辆持续受阻也会触发出口检查。停车净空合格后，专属车从每个碰撞安全的下车点复查到主人脚下的完整导航，并从第一个可达的同一落脚点下车。没有可达出口时继续保留车辆路线和骑乘状态。爷爷家的实体门洞打开后，可从门外安全停车处用这条步行续程。门两侧的旧站位限制以及原导航连接继续生效。临时步行绑定当前命令版本和主人 Pawn，主人再次上车时按已授权的方式恢复取专属车。<a href="AIIteration.html#ergou-follow-auto-transport-20261115">骑车转步行与门洞记录</a></p>
+<p>重选停车位时，<code>CompanionComponent</code> 提供同一拍投影的主人步行目标，<code>ADeliveryCompanionMotorbike</code> 按完整车路的最终方向和地面支撑预测车身与静止座椅位置。至少一个车旁落脚点需满足碰撞、高差和到主人的完整步行导航。步行可绕墙到主人，近停继续骑乘仍检查直视。经出口检查的路线在距目标最多 30 厘米时确认停车，失效后重算车路和出口。到站后再按实车位置、朝向和旁人占位复查下车。<a href="AIIteration.html#ergou-parking-exit-preflight-20261115">重选停车位的出口核验</a></p>
+<p>爷爷家的原 <code>DoorwayLink</code> 破门后使用普通步行代价的 <code>UDeliveryPedestrianLinkArea</code>，专属车的 <code>UDeliveryCompanionVehicleNavFilter</code> 排除这类连接。车和人物仍共享现有导航网格。服务器按原门状态启用或关闭链接；专属车额外检查旧导航数据里的连接编号。短距直行及驶向当前路点时，用 <code>ADeliveryHome</code> 的现有门与链接两端判断是否跨过同层门叶范围。合法绕行及地面真正下车后走门洞沿原流程处理。<a href="AIIteration.html#ergou-pedestrian-doorway-filter-20261115">门洞步行和车路查询</a></p>
+<p>首次代送遇到完整门叶时，以同一个房屋 <code>ReturnAnchor</code>、门平面和 <code>DoorwayLink</code> 找街侧等候区。<code>CompanionComponent</code> 使用现有 <code>DestinationClearance</code> 和 <code>YieldDistance</code> 校验候选，包含移动接受半径的余量。当前脚点需要真实落地、胶囊有空位且位于等候区，退出原路径并停稳后才报告等门。破门后以街侧作为车辆行程终点，步行重新找爷爷的收件位置。原包裹始终属于当前持件者，等候状态沿原 <code>CommandRevision</code> 复核。<a href="AIIteration.html#ergou-first-order-street-wait-20261115">首单街侧等候</a></p>
+<p>首单代送的车路将街侧步行点传给原 <code>SetDriveDestination</code>，由专属车按预计到站姿态预检出口。真正到站、或车已在附近的短行程，会用当前车座和地面调用 <code>TryDismountForWalk</code>。车位与步行路线暂不相连时保留实际座位和包裹，短期跳过失败位置，可尝试车路上游和道路两侧。成功下车才完成车行这一段，进屋、真实交接和发奖继续走各自的服务器入口。门的碎片用纯物理形态保留落地演出，完整门叶与房屋继续提供原碰撞。<a href="AIIteration.html#ergou-first-order-walk-exit-20261115">首单停车出口与碎片</a></p>
+<p>原包裹主动放下后，<code>InventoryComponent</code> 将引用只同步给实际放件玩家，包裹有新所有者或结束时会清除该记录。<code>DeliveryTaskController</code> 用收件人编号找到唯一爷爷，再以现有任务状态、门叶和手持斧头复核是否引导取回。箭头指实际包裹，当次任务时间继续由原任务管理器提供。<a href="AIIteration.html#ergou-first-order-recover-parcel-20261115">取回提示与状态来源</a></p>
+<p>实际签收先锁住订单和原包裹，<code>DeliveryTargetComponent</code> 清手后复核原收件方、原任务资产、包裹转移状态及原持件方的 <code>PlayerState</code>。<code>TaskManager</code> 复核同一个活跃收款人再提交完成并广播奖励。若回调中断了任一步，留在场景的原件仍可再次投递。<a href="AIIteration.html#ergou-delivery-commit-player-20261115">交付提交与原件复核</a></p>
+<p>钱包只在服务器监听共享结算与入账。它给实际收款的远端连接发送已入账的订单和奖励明细，原任务顶栏和结算页继续监听钱包的 <code>OnTaskPaid</code>，余额走原复制。主机的显示直接用本机钱包事件。<a href="AIIteration.html#ergou-owner-settlement-notice-20261115">远端结算通知</a></p>
+<p>跟随或等候期间，<code>CompanionComponent</code> 识别轻击后仰和同一在线主人短暂无 Pawn 的暂停，只结束自己这段路，保留主人、安排版本及等候锚点。已经坐上专属车的二狗先停车，车辆 Tick 和行为树清理使用同一保座条件。真实倒地、已经开始的下车和新身体动作沿各自状态处理。恢复后用当前的主人位置重新发路。<a href="AIIteration.html#ergou-follow-resume-after-hit-20261115">轻击与控制交接</a></p>
+<p>救起后的原结识事件仍由服务器登记。<code>NpcAgent</code> 封存真实救援主体和创建请求时的主人对话主体。模型选中其中一个旧主体且主人已经上下车时，用同一 <code>PlayerState</code>、登记车辆及实际驾驶关系复核，再绑定到当前控制对象。流式和完整回复完成时的送达记录使用当前同一主人，对话、音色和分句沿现有播放。过期事件、改派和访客不继承回复。<a href="AIIteration.html#ergou-joined-reply-owner-pawn-20261115">救援回复的对象校验</a></p>
+<p>主动道谢以当前主人 Pawn 通过普通谈话的 600 厘米及墙门遮挡检查为准。开始播放前短时走远可等待，播放中离开会让这一轮失去结清原结识事件的资格。服务器只用本轮实际播放完的语音编号结清道谢，超出交谈范围累计等待 6 秒后结束本轮，原结识事件仍按原时效和尝试上限重试。二狗真正坐在专属车座上时，主人按 T 可在同一交谈范围内选中二狗；已经瞄准的合法对象仍优先。隐藏的原角色在现有网络距离内继续复制其对话状态。<a href="AIIteration.html#ergou-joined-audible-and-mounted-dialogue-20261115">可交谈范围与车上对话</a></p>
+<p>普通跟随也识别爷爷家实体门的状态。主人已在屋内时，二狗在室外同层并且两人连线穿过完整门叶才等门。两人都在门外时继续找正常队形，只有敲门区域附近的正常候选失败才找门外锚点旁的让位位置。门外锚点与首单地址重合，实际站位仍需通过入口净空、主人间距、真实胶囊和完整步行路径。骑行二狗只有已停稳且可停车时才留在车上等门。服务端继续保存原 Follow 和主人 PlayerState，<code>FollowWaitingAtGrandpaDoor</code> 可供模型解释当前状态。门实际破开后由房屋启用已有导航连接，下一次行为树更新清除旧门外目标和重试间隔。搬家和签收沿原事实推进。<a href="AIIteration.html#ergou-follow-intact-grandpa-door-20261115">完整门跟随验证</a></p>
+<p>跑腿结束时，二狗按原持续安排恢复。主人和二狗都在爷爷家屋内、门洞已通行且预留的专属车实际在同层屋外时，原骑车 Follow 先按当前主人 Pawn 和命令修订继续步行。主人暂时没有 Pawn，则等同一 <code>PlayerState</code> 恢复控制后复核。延续同一跟随且未指定出行方式时仍复核室内站位，主人再上车或明确命令骑车时重新取车。原安排为 Stay 时，返程状态独立于车辆行程，临时受阻、进入等候范围或站到同 XY 的另一层仍保留原等候点。二狗走到同层合法站位并落地后结束返程。若 Stay 还在等安全下车，新的包裹或道具委托在真正落脚并记录原锚点后才开始移动，旧请求编号和新安排仍由服务器复核。<a href="AIIteration.html#ergou-indoor-follow-resume-20261115">收尾后室内跟随</a></p>
+<h4>沿路本能与任务调度</h4>
+<p>沿路避让、净空和落点判断、自主越过低障碍以及落地后续走属于 NPC 的本能层。服务器及行为树处理每一步，途中不为这些反应发模型请求。大模型读取角色、主人、任务、现场和当前活动，从这一轮实际候选选择 <code>Follow</code>、<code>TakePackage</code>、<code>DeliverPackage</code>、<code>ReturnPackage</code> 或 <code>DropPackage</code> 及适用的出行方式。权限从绑定的主人 <code>PlayerState</code> 取得，模型仍负责理解意图、确定交接方式和在信息不足时发问。</p>
+<p><code>ADeliveryNpcAIController</code> 的低障碍检查为通用居民能力。服务器只探查正在执行的完整步行路径前方，确认障碍为世界物件、原路线允许的导航落点有可走支撑，并用整身胶囊检查按实际重力和起跳初速计算的弧线。贴到门槛时可在原侧通过导航、支撑和胶囊检查后安全退半步，再试一次。骑乘、初遇抛出、倒地、受击、攻击、持车和同伴正执行家居或搬家具时不进入这一分支。调用 <code>LaunchCharacter</code> 后仍用 <code>CharacterMovement</code> 实际移动和碰撞。</p>
+<p>控制器只暂停本次有效的 <code>FAIRequestID</code>，<code>IsTraversingObstacle</code> 供 Follow 和 Errand 行为树检查同一请求，避免跳跃期间改写路线。实际接地后恢复原请求，仍由旧路径和任务条件确认到达。控制权、请求编号或角色状态变更时只清理旧路线或尚未提交物理更新的旧初速。前瞻最多两个同向路点，并核对转角和距离；未知或受控导航链接不越过。唯一共享房屋已开放、注册且属于行人区域的实际门洞链接允许继续探路，仍须通过碰撞验证。同一请求、障碍和附近起点最多后退尝试一次，障碍移动或路线更换才重新评估。</p>
+<p>动画实例根据实际腾空、竖直速度和接地显示起跳、空中循环与落地。<code>ABP_NpcBody</code> 和 <code>ABP_CompanionBody</code> 的十个原姿势后各增三槽，片段取自项目已有 Quaternius CC0 源，经 UE 原生 IK 适配居民和二狗的正式网格；两者沿用共享骨架，禁用 Root Motion，并在核实这六个成品的原始首帧根为单位变换后使用 Zero 根锁。离线适配会丢失该骨架约 140.274 的根参考缩放，每条新分支通过可编辑的 UE 原生缓存、ModifyBone 与 BlendBoneByChannel 恢复身体尺度并保留原骨盆组件平移；不改旧动作、不生成骨骼运动轨道。不能用 RefPose 强制根锁，它会在原片求值时先应用目标参考缩放，令待复制的骨盆平移被放大。首帧锁曾在独立重载中出现不一致，Zero 明确保持已核实的原点、单位旋转和缩放。静态采样必须关闭默认的忽略根锁选项，另用正式动画图检查真实骨点。</p>
+<p>能力版本 9 提供 <code>DropPackage</code>。主人要求把当前原包裹放到附近地面时，由模型选用该候选。二狗走到主人附近后按原包裹、订单、主人和命令修订复核，检查包裹边界空间、地面支撑、可见且够得到的位置。在既有弯身动画的触地时间再验，服务器释放同一件实物，放地后主人可用原 E 交互取回。放下不触发签收或奖励。明确递回主人手中用 <code>ReturnPackage</code>，明确送给本单收件人用 <code>DeliverPackage</code>。方向或交接方式不清楚时由模型确认。手忙、换控制对象或位置受阻继续按原委托等待或失败，另行放地需主人新安排且模型选中该候选。版本 8 及更早的请求不提供 <code>DropPackage</code>。<a href="AIIteration.html#ergou-slope-continuity-20261115">本轮试玩依据与验证范围</a></p>
+<p>主人改口交还自己、放脚边或继续送收件人时，模型按当前交接人和方式选择，简短确认关联最近问清的交接。递到玩家手里用 <code>ReturnPackage</code>，进物品栏的手持槽；明确收进背包用 <code>StorePackageInBackpack</code>，进第一个真实空背包槽。两者复用同一次原实物交接，完成分别报告 <code>PackageReturned</code> 与 <code>PackageStoredInOwnerBackpack</code>。背包满时由二狗继续保管，同一指令可等到有空槽。玩家用快捷栏切换原件与手持物，按第 1 格放地，签收及手动装车时先拿回手里。主人可让二狗从背包取回同一原件，服务器按双方当前角色位置、归属、距离和遮挡核验。角色销毁走原包裹安全落地与补领规则。</p>
+<p>已经可以当面交接时先下车，保留原出行约定。爷爷家破门后，二狗已在同层门内且离收件点近时，继续走到实际收件人，由正常服务器接口判定签收。二狗当前座位以 <code>vehicle_state</code> 为准。v10 的主人本人请求具备稳定控制对象时另有 <code>owner_vehicle_state</code>，由主人真实控制的步行角色或车辆提供。上下车切换过程中省略主人的新字段，访客和环境请求也不提供。出行约定仍保存在 <code>travel_mode</code>。<a href="AIIteration.html#ergou-object-assist-integration-20261115">玩家试玩和本轮修复</a></p>
+<h4>NPC 的街区常识</h4>
+<p><a href="Images/AI/district-layout-reference.png">街区布局参考</a>和<a href="Images/AI/district-zoning-reference.png">商住分区参考</a>是用户提供的约 1 km × 1 km 概念图。道路、河流及商住区用来划分居民议题。建筑色块、星形和其他未标注记号暂不作为店名、过河点或目的地。</p>
+<p>居民 Agent 在收到玩家发言时通过当前世界的地点注册表提供公开名称与用途。作者在关卡的 Location Component 上维护内容，角色仍有各自当下所见和个人关系。当前已登记面馆、住宅、学校和三处公园。UE 只读核对到地形、道路、两个 River 标签对象和爷爷家附近实物。标签查询没有返回 Bridge 或 Market，不能据此判断地图没有桥或市场，也不能将参考图像素当作关卡坐标。</p>
+<p>地点导航另需实地绑定可达入口。比如主人请二狗去一家店，模型应选择服务器当前提供的地点候选，行为树负责行程，服务器确认到达。同一店的取件或送件继续使用任务系统确认货物和结果。普通居民的问路知识同样来自公开资料，当前不开放替玩家执行同伴委托。</p>
+<p>下表是 <code>TestForCharacter</code> 的第一批街区地点清单。坐标为 UE 只读查询得到的 Actor 原点，单位为厘米。公园编号只用来区分资产实例，正式名称与道路关系还需实地核对。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>地点</th>
+<th>UE 对应物</th>
+<th>原点 X / Y / Z</th>
+<th>NPC 可使用的资料</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>面馆</td>
+<td><code>StaticMeshActor_7</code>，<code>SM_NoodleShopOpen</code></td>
+<td>−5020 / −21480 / 2950</td>
+<td>已公开沿街面馆店面，取件沿用任务入口</td>
+</tr>
+<tr>
+<td>住宅</td>
+<td>第一单收件地点，爷爷家前门旁</td>
+<td>—</td>
+<td>已公开沿街住宅入口，第一单交付仍走破门后的收件流程</td>
+</tr>
+<tr>
+<td>学校</td>
+<td><code>StaticMeshActor_11</code>，<code>school</code></td>
+<td>−93 / 18400 / 2530</td>
+<td>已公开，导航入口待核对</td>
+</tr>
+<tr>
+<td>公园点 1</td>
+<td><code>StaticMeshActor_98</code>，<code>park</code></td>
+<td>1223 / 7799 / 2340</td>
+<td>已公开临时称呼，附近道路及入口待核对</td>
+</tr>
+<tr>
+<td>公园点 2</td>
+<td><code>StaticMeshActor_100</code>，<code>park</code></td>
+<td>−3191 / −9480 / 3902</td>
+<td>已公开临时称呼，附近道路及入口待核对</td>
+</tr>
+<tr>
+<td>公园点 3</td>
+<td><code>StaticMeshActor_102</code>，<code>park</code></td>
+<td>11768 / 6881 / 2384</td>
+<td>已公开临时称呼，附近道路及入口待核对</td>
+</tr>
+<tr>
+<td>商铺点 1</td>
+<td><code>StaticMeshActor_68</code>，<code>shop2</code></td>
+<td>27218 / 25468 / 1323</td>
+<td>待确定店名与经营内容</td>
+</tr>
+<tr>
+<td>商铺点 2</td>
+<td><code>StaticMeshActor_87</code>，<code>shop2</code></td>
+<td>−4939 / 1356 / 2850</td>
+<td>待确定店名与经营内容</td>
+</tr>
+<tr>
+<td>河道</td>
+<td>两个 River 标签样条对象</td>
+<td>沿线</td>
+<td>可写进街区概述，过河路线需验证实际通道</td>
+</tr>
+</tbody>
+</table></div>
+<p>普通居民可介绍公开地点和已配置的相对位置。二狗可进一步接受主人的出行委托；地点需具备明确入口，存在多个同类地点时先确认具体哪一处。参考图的未标注星形只保留在设计图中。</p>
+<p>服务器把主人明确安排的骑车跟随与跑腿出行方式分别记录。普通 Follow 步行；Follow + OwnVehicle 取专属车。主人骑车时，有安全近路就跟随车尾，受阻走车辆导航。PlayerState 绑定跨上下车持续有效。第一单交付目标按订单的收件人 ID 定位爷爷，住宅地址仍用于公共地点信息。实际骑行、第一单送达和多人仍待实际输入复测。</p>
+<p><strong>最新试玩失败与待接入修正：</strong> Follow 不再按亲密度改成沿订单路线走前方；明确 OwnVehicle 的跟随应实际取车并保留骑乘。本批 21 文件已接入，修正两处握持编译错误后完整目标构建成功（6 项、9.01 秒）。被动对话持续执行和普通道具手骨挂点也已构建；具体斧头持物动画、握点和可取资产开关尚未配置，实际玩法仍未验收。详见<a href="AIIteration.html#ergou-follow-riding-feedback-20261115">第二次试玩反馈</a>。</p>
 <p><strong>2026-11-15 用户试玩反馈：</strong> 二狗可以聊天，但没有正常跟随、取送货，获救后也缺少感谢回应，因此第一阶段仍未通过玩家验收。按用户要求先提交当前试玩版作为回退点，再修复闭环。取货、交还、目的地、步行或骑自己的车、家具使用与摆放均服从主人的自然语言安排；缺少必要信息时由模型追问，不能擅自替主人改安排。后续需要接上从主人手中或车上取下同一件货物、转移到二狗自己的车、到指定目的地真实交付，以及完整家具功能。执行仍由 BT/GAS 和服务器负责，聊天答应不算完成。修完构建后交用户验收，本聊天不擅自启动 PIE。</p>
-<p>回退提交 <code>01ab2f7</code> 已完成，未推送。反馈修复已接入正式源码并通过完整目标构建：协议 v8 以候选编号保存主人的出行方式，复用停车货箱时间线转交真实包裹，跟随的短对白保留原路径；家具的真实槽位、下载动画和摆放规则已保存并独立重载；实际动画贴合、取放取消及多人仍待玩家试玩。最新职责、接口与边界见 <a href="Architecture.md#ergou-design">架构</a>，具体失败、修复和本轮验证见 <a href="AIIteration.html#ergou-owner-instructions-20261115">试玩反馈修复记录</a>；本段不把源码接入算作玩家验收。</p>
+<p><strong>反馈后的实施（源码已构建，家居已保存并独立重载）：</strong> 回退点为 <code>01ab2f7</code>。协议 v8 在同一 <code>candidate_id</code> 候选中绑定 Walk/OwnVehicle/Automatic，<code>CompanionComponent.TravelMode</code> 只在主人新安排实际接受时写入并复制；Wait/LookAt、上下车与短对白保留原选择。模型依据主人原话及公开订单描述判断，需要补全时先追问；执行端不会用未确认模式启动远行，初次 Follow 和无遮挡 240 cm 内单纯 TakePackage 可步行接近。车辆货源由玩家既有 <code>VehicleSummon</code> 登记和 cargo 装货身份同时确认，<code>Motorbike</code> 复用原开箱卸货时间线与 <code>PackageTransfer</code>；不扫描附近车冒认主人车辆。二狗的专属车挂架仍呈现同一实物，送达仍调用原任务系统。</p>
+<p>跟随的被动 Wait/LookAt 继续同一 BT 导航，取消只处理自己持有的 MoveId。真实 <code>CompanionJoined</code> 触发有限模型回应机会；玩家插话优先，完整非空自述及播放完成才结清回应机会，代码不凭关键词断言感谢质量。公开地点往事复用当局 24 条记忆，其中最多 6 条旧地点记录，保留观察年龄、不当作当前视线或导航授权。家居槽位与现成动画继续由可编辑资产配置，新增座位过渡使用 CMC 原生 RMS、复制起终点与服务器时间，实际未到位不能报告已坐好。</p>
+<p>当前沿一次主人指令追踪：本机语音或输入进入原 Conversation/Agent，服务器生成当时可用的候选；LLM 选择含出行方式的 <code>candidate_id</code> 或先追问，服务器再次核对请求的主人 PlayerState 与命令版本，<code>ApplyCommand/StartErrand/ApplyHomeChoice</code> 接受安排，BT 再持续推进。<code>TravelMode</code>、委托和家居状态由 Companion 修改；实际包裹由 Carrier 接口交接，实际任务由 Target/TaskManager 结算；客户端播放复制后的声音、动作和实物表现。客户端或模型报成功都不能自行发奖。对其他玩家的交谈不提供改安排的候选，执行前仍复核权限；取消、目标销毁和换 Pawn 不能让旧回调结束新安排。</p>
+<p>目的地当前绑定真实订单及其公开描述，未增加任意地点的自由投递结算。模型听到含糊或不匹配的目的地应先澄清，不能伪造新收件点。家居按地图现有实物配置：沙发和高脚凳已配置坐下；留声机与长桌是一体模型，长桌有南北两个摆放位，两抱枕可拿起缩小、搬运、摆好后恢复尺寸；留声机有 Play/Stop。书架、柜子、摆件和电视本批仅识别。下载动画保存为独立资产，C++ 负责座位位移、实际到位判断和退出清理；独立入口/坐姿/出口朝向沿 CharacterMovement 渐转，不生成骨骼动作。</p>
 <p><strong>状态：初遇、跑腿、护主、专属车与第三阶段基础已接入；最新批次补返程、再次扶起、重要记忆和门洞导航，完整构建与独立资产重载断言通过（2026-11-14），尚未 PIE 或多人实机验收。</strong> 完整三阶段设计继续保留；此前“先不启动二狗”的限制属于历史交接。服务器规则来源的 GAS 护主、真实当局关系和 v4 的 <code>OfferCaterpillar/GoHome</code> 已实现；爷爷真实搬离与唯一共用房屋采用原任务确认和可编辑路线，脚本已保存门洞智能连接。模型、源码构建、静态导航与实际操作分别记录，不能将候选或断言通过写成完整玩法完成。先完成功能，再沿已有性能记录处理延迟，文中数值仍为起始配置。</p>
 <h4>初遇、归属与持续安排（现有实现）</h4>
 <p>2026-11-14 继续实施：初遇新增独立 <code>ADeliveryCompanionEncounterScene</code>，固定老板、实物门和触发/抛出起落点，蓝图控制门角度和老板动作；角色以复制阶段快照管理开门、抛飞、实际落地、扶起和加入。抛出用 UE <code>FRootMotionSource_MoveToForce</code> + CharacterMovement碰撞，服务器 <code>Landed</code> 确认后才能扶起；其他玩家与车辆占住门叶转动范围时暂停开关。客户端等待Scene/门状态和服务器时钟，自己建立可与服务器匹配的RMS。曲线为可编辑资产，没有增加新的移动或技能框架。初遇阶段CompanionEncounterBuild4成功27.39秒，包含老板随实际门进度暂停/继续的时间源修复；规则回归只编译，未运行游戏验证。该批曾采用项目SK_NpcBoy独立副本与The_Boss，SceneBP、实物门和曲线已接入正式地图并独立重载，旧随身老板已移除，原Actor变换与11段导航不变。新人物与导入修正见 <a href="AIIteration.html#ergou-project-appearance-20261114">项目人物替换</a>，门源模型和静态净空见 <a href="AIIteration.html#ergou-encounter-motion-20261114">初遇实施</a>。</p>
+<p>面馆初遇触发后，<code>ADeliveryCompanionCharacter</code> 按约 0.2 秒间隔复查门叶、抛出路径及附近玩家。玩家退到门侧时保留原演出和开门角度。全部玩家离开附近超过 <code>DoorWaitSeconds</code> 后才收门并等待新触发，默认 10 秒。<code>ADeliveryCompanionEncounterScene</code> 复制门叶受挡或抛出路径受挡的状态，步行和骑车的本地玩家在触发点 8 米内通过 <code>DeliveryHintComponent</code> 看到提示。净空、离开范围、换控制对象或场景卸载时恢复原操作提示。门、碰撞查询和扶起仍由服务器确认。正常 <code>Landed</code> 与 CMC 已进入地面移动且确认当前可走支撑面都可确认真实落地。二狗停在门内侧时保留通道，扶起后等他和主人越过门叶转动范围或离开附近再请求关门。<a href="AIIteration.html#ergou-noodle-obstruction-20261115">受阻恢复与验证</a></p>
 <p>参考重新细读的 <a href="AIIteration.html#companion-runtime-research-20261114">PUBG Ally、和平精英及公开实现</a>，将持续安排与短动作分开。没有引入新外部框架、关键词指令或模型生成运行时代码。</p>
 <ul>
 <li><code>ADeliveryCompanionCharacter</code> 继承现有居民，组装 <code>Companion</code> 与 <code>HelpUp</code> 交互组件。已接第一单且玩家看见门外触发锚点时开始开门；第一单已经完成也保留初遇资格，不再因 <code>GetTimedTask()</code> 清空而错过二狗。判定只读取本世界已登记且 TaskId 匹配的 AwaitingPickup/InProgress/Completed 记录，未接听、未登记或其他订单不解锁。初遇倒地与扶起使用现有 Down/GetUp；独立 <code>EncounterScene</code> 保存门和老板，角色复制阶段供迟到客户端接上演出，服务器真实落地后才开放扶起。老板预备动作随实际门进度推进；旧角色内老板组件和事件已删除，编织袋挂接保留。二狗复用项目蓝白帽衫模型；老板已换成项目卡通老人的独立资产 <code>SK_NoodleOwner</code>，配套 <code>A_NoodleOwnerEject</code> 已经 MCP 保存并独立重载确认。巨大外观问题定位为背包附着 Spine2 时继承约 140.273970 的骨骼缩放，已用 mesh socket <code>ErgouBagAnchor</code> 抵消该缩放，未缩小人物。三个 Attach 节点的 SocketName 均已保存，五个采样时刻的压缩姿势重载检查通过，记录为 <code>Saved/AIResearch/CompanionVisualFix/pose_probe.json</code>；实际游戏画面仍待检查。此前 The_Boss 方案保留为历史，具体失败与限制见迭代记录。</li>
@@ -1084,13 +1504,45 @@
 </tr>
 </tbody>
 </table></div>
-<p><strong>护主流程。</strong> 玩家真实出拳命中或被命中后产生带 PunchId 的服务器事实，二狗只在当前主人、已结识、范围和期限有效时建立护主目标。起始范围 900 cm、事件期限 30 秒，每轮 Fight 最多 5 秒；排除自己、主人、主人的当前/旧身体和驾驶对象、同属主同伴。空拳、台词和访客命令不触发护主。倒地、倾听或等待模型回复时保留仍有效的目标，不靠每帧续打抢走玩家的停止命令；断线、目标销毁、取消及旧代次结束时解除对应事件、能力和导航。打架暂停跑腿且保留实际包裹，恢复后重新核验。二狗配置 <code>bHarmlessStrikes</code>，轻拍不扣血、不施加冲量、不累计击倒；自己实际挨拳即倒，倒地再击以 PunchId 去重并延长恢复（默认 4 秒）。夸张击飞、恢复与各端观感仍待实机。</p>
+<h4>首单交货后的赶人演出（待接入）</h4>
+<p>场景名《汤喝完再搬》。玩家把汤面交到爷爷手里，结算走原流程。爷爷端碗坐回门边：「汤居然没洒。你先走，碗我自己洗。」他先留下，玩家可以离开、自己拿锤子催他搬，或去找大壮帮忙。镜头留给玩家控制，全程用人物动作和近场字幕表现。</p>
+<div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>路线</th>
+<th>玩家操作</th>
+<th>演出示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>自己拿锤子</td>
+<td>拿着锤子靠近爷爷，按住 E「举锤催爷爷搬走」。举锤是独立交互，松开前可取消</td>
+<td>爷爷看一眼锤子，把碗往身后一藏：「你催我可以，汤还烫着呢。」他试着端碗往外走，又回头抓起小板凳：「等会儿，我这凳子坐了二十年。」</td>
+</tr>
+<tr>
+<td>请大壮出面</td>
+<td>按 T 找大壮，用自己的话请他去劝爷爷搬走。动作候选带上具体收件人、已交货事实和位置，大壮可以答应、询问或拒绝</td>
+<td>大壮拍胸脯：「看我的。街坊搬家这事，我熟。」走到爷爷面前刚要叉腰，爷爷把碗往他手里一塞：「熟是吧？那你把汤端稳。」大壮只好双手捧碗让路：「成，您看路，汤我看着。」</td>
+</tr>
+</tbody>
+</table></div>
+<p>两条路线在爷爷拿起板凳、走出院门时汇合。他临走回头说：「门让你劈坏了，记得给后来的留个门帘。」结算奖励在交货时发一次。爷爷沿现有搬离路线真实走到终点后，沿用原来的房屋解锁。碰到堵门的车或玩家时，他抱着板凳等路通。没有交货、玩家切走锤子、爷爷已经开始搬离、大壮没接受或没到场时，各走对应的提示和退出路径。</p>
+<p><strong>房屋到手反馈。</strong> 爷爷走到终点、服务器确认解锁后，门框冒出一小圈金色星星，亮一下后散开，目标时长约一秒。完成这段演出的玩家看到两秒半的提示「新家到手！」和「你可以回这里休息了」，同时听到一声短促的确认音。门口保留小房子标记，让玩家回头走也能认出这栋房。其他在场玩家看到门口变化，共享房屋的提示写「街坊小屋已解锁」。晚加入玩家可看见已解锁的标记，确认音、星星和提示按现有 <code>ClaimEventId</code> 去重。查不到房屋、爷爷还在等路或服务器尚未确认时保持原场景表现。</p>
+<p>源素材已下载到 <code>Design/Art/VFX/HomeClaim/Source/Kenney</code>，两份原包均含作者和 CC0 许可。门口粒子使用 <a href="https://kenney.nl/assets/particle-pack">Kenney Particle Pack 1.1</a> 的透明 <code>star_01.png</code> 做四角亮点，<code>star_02.png</code> 做边缘带光圈的主闪光，在 UE 中组合成可调 Niagara 效果。音效候选为 <a href="https://kenney.nl/assets/interface-sounds">Kenney Interface Sounds 1.0</a> 的四条 <code>confirmation</code> 短音，接入后在有铃声、结算音和环境音的正式场景试听选定一条。</p>
+<p>接入时由爷爷持有本次演出进度和已交货凭据，原行为树继续执行搬离。服务器校验玩家实际持有锤子、距离和视线，大壮的模型从本次候选中决定是否接受，行为树负责走到位和执行。道具、拿碗和抬手按可用素材配置，示例台词供演出和人物语气参考。两个玩家同时触发时由服务器只接受一条进入演出，取消时释放大壮的导航和临时动作，断线、销毁或切图时清除对应引用和回调。待「牛二狗长期陪伴」交付后核对最新自动搬离条件、正式锤子资源与大壮动作目录，再做接入。验收按两条路线各实玩一次，另测交货前、堵门、松键取消、大壮拒绝和多人同时发起。</p>
+<p><strong>护主流程。</strong> 玩家真实打中对手或被打中后，服务器以 <code>PunchId</code> 记录 <code>OwnerConfirmedAttack</code> 或 <code>OwnerConfirmedHit</code>，并核对世界、当前归属、范围和目标资格。v10 的 <code>JoinAssist</code> 绑定一个真实命中和对应对手，由模型选择开始协战。随后复用大壮、翠花等居民的 <code>Fight</code> 追赶、出拳、取消和 GAS 接触判定。短轮结束、受击、对手暂时倒地或受阻时保留合法的协战安排，聊天可用 <code>ContinueCurrent</code>。主人当前一轮明确收手时，由模型选择 <code>StopAssist</code>，服务器复核归属和协战代次后停止。断线、目标销毁或其它权限失效清理本次路线和能力。跑腿和实际持物在协战期间保留。自己、主人、主人的当前或旧身体、驾驶对象和同属主同伴均排除。二狗轻拍沿用 <code>bHarmlessStrikes</code>，自己挨拳即倒，倒地再击按真实 <code>PunchId</code> 去重。v10 实际协战、停手和远端观感仍待试玩与多人验收。</p>
 <p><strong>专属车跑腿。</strong> 每个跑腿阶段的目标超过约 1200 cm 时，使用地图绑定的 <code>ErrandVehicle</code>，不搜索或征用玩家车辆；短距离与取件、交还、进屋的最后一段步行。二狗保留 AIController，原人物随座位复制，专属 RiderMesh 使用二狗自己的模型、材质和坐姿；不能误显示玩家模型。原角色保持隐藏，跨 Actor 复制顺序变化时修正显示状态而不重播坐姿；持有的同一包裹挂到车后 CompanionCargoAnchor，Owner 仍是二狗，下车恢复原 PackageAnchor，不改变任务和交接权限。完整路径末端退回至少 450 cm 或交互半径加 180 cm 选停车点，停车检查整车净空和四角地面，下车检查周边地板与完整胶囊。堵住出口时保持骑乘并重试，已经到站的阶段不重新开车；交谈、取消、倒地或其他动作先停车，销毁恢复原人物。玩家上车、装卸、乘客及召唤入口拒绝专属车。<code>BP_ErgouMotorbike</code> 与地图二狗的一对一引用已保存并独立重载。独立 <code>A_ErgouRide</code> 按实际座垫、手把和脚踏校准且保留原骨长；最终 CompanionSeat 相对 MeshRoot 为 (-11.920843, -0.612767, -6.578700) cm，货架为 (-68.773634, -0.441100, 8.644033) cm。左右手、左右脚骨点静态偏差分别为 2.91/2.88/1.98/1.98 cm，证据为 <code>Saved/AIResearch/CompanionVehicle/assets.json</code>；原 native 座位高度 65 和临时 40 属于校准前值，未采用。该结果只检查静态骨点，转向时手掌握把、脚底接触和动态驾驶仍待实机；当前不把步行 NavPath 等同于车辆能顺利通过的证明。</p>
-<p><strong>当局记忆与关系。</strong> 记忆与 ActionEvidence 分开，历史共同经历不会给过期命中或旧动作授权续命。初始亲密度 70；真实代送完成 +5、主人送达时二狗在 900 cm 内无遮挡陪伴 +3、结识后真实扶起完成 +5、主人实际打中 -8、倒地再打 -12、主人驾驶车辆实际撞倒 -10，参数在 <code>UDeliveryCompanionTuning</code>。阶段为铁哥们、刚认大哥、受委屈、寒心；低于 50 时跟在后侧。请求仅发送 <code>relationship_stage</code> 和最多 24 条 <code>memories[{event_id,kind,description}]</code>，不暴露亲密度数字。保留 FirstHelp 和各重要经历的最新累计事实；计数只随真实去重事件增加。每次归属最多保存 8192 个去重编号，达到上限后拒绝新记忆与关系结算并记录一次警告，解除主人或 EndPlay 清空，不是跨局存档。喂食道歉、昵称、安静模式、完整战斗小本本生成和逐句往事引用核验尚未闭环。</p>
+<p>主人直接问当前持件时，v8 快照可额外提供 <code>carried_item_location</code> 和 <code>owner_package_location</code>。二狗物件必须实际挂在角色持件锚点，或正在使用的专属车外货架。主人这单物件必须实际附在本人手上或登记车辆的货箱，开箱交接时省略后箱位置。位置字段不改变可选动作或物品归属，原交付事实与结算单独确认。<a href="AIIteration.html#ergou-carried-item-location-20261115">实际挂点观察</a></p>
+<p>原装货车辆与最近用车分别在原召唤组件记录。<code>GetOwnerPackageCarrier</code> 先看玩家实际手持，再从登记车装货者和活跃订单确认同一实物。车辆或货物换主后，旧弱引用不能用于交接。骑车代送中确认的短后仰暂停当前行程并保留原包和座位，恢复后续跑，适用条件由委托修订、实际角色附着和持件共同确定。<a href="AIIteration.html#ergou-registered-cargo-after-switch-20261115">原货车查询</a> · <a href="AIIteration.html#ergou-delivery-ride-hit-pause-20261115">轻击暂停</a></p>
+<p>主人重复同一委托时，<code>CanKeepErrandCommand</code> 核对请求身份和修订、当前动作、实际订单或道具、阶段中的持件一侧或找物线索，以及出行安排。通过时，行为树在旧委托退出及短动作前后保留当前路径，<code>ApplyCommand</code> 或 <code>ApplyItemChoice</code> 保留现有修订、计时和交接编号。明确改派仍按现有入口处理。<code>CompanionErrandContinued</code> 只确认原委托继续，<code>CompanionErrandAccepted</code> 只确认已接下新安排。签收和奖励使用原任务服务器接口。<a href="AIIteration.html#ergou-duplicate-errand-continuation-20261115">重复委托</a></p>
+<p>车箱暂停时已由车辆确认的交接编号留给原委托读取，取消和改派清除它。负责人仍是 <code>UDeliveryCompanionComponent</code>，<code>HasReceivedErrandPackage</code> 允许 Agent 只读确认当前原件已实际交到二狗。若同一主人的待回复问题使用了交接前快照，Agent 让旧进度答复进入现有有界刷新。交接后快照由游戏重建，尚在播放的台词与新一轮回复继续走既有流程。<a href="AIIteration.html#ergou-cargo-commit-and-current-reply-20261115">实际交接与刷新</a></p>
+<p>Agent 按回复是否拥有新同伴指令，选择对应的播音门槛。预收分段的回复同样要等行为树确认指令接收，NPC 快文本和界面文字就绪沿用这个状态。指令被拒绝时，主动撤销该回复的请求与待播内容，即使流已收完。执行状态与正在处理的已有委托分别保存。<a href="AIIteration.html#ergou-command-reply-receipt-20261115">委托播放时序</a></p>
+<p><strong>当局记忆与关系。</strong> 记忆为对话提供往事，当前动作继续按 ActionEvidence 校验。<code>UDeliveryCompanionTuning</code> 的初始亲密度为 70。真实代送完成 +5，主人送达时在 900 cm 内无遮挡陪伴 +3，结识后实际扶起 +5，主人打中 -8，倒地再打 -12，主人驾驶车辆撞倒 -10。模型收到阶段 <code>relationship_stage</code> 与最多 24 条带编号的记忆。保留 <code>FirstHelp</code> 和重要经历的最新累计事实，每次归属最多保存 8192 个去重编号，解除主人或角色结束时清理当局状态。喂食道歉、昵称、完整战斗小本本和逐句往事引用核验仍待接入。</p>
 <p><strong>再次扶起。</strong> Joined 后同一个 HelpUp/E 入口优先处理战斗倒地，站立时才可接小绿。<code>Combat.DownEpisodeId</code> 区分每轮真实倒地；长按仍由原 Interaction 的服务器时长检查确认，<code>CanStartAssistedRecovery/StartAssistedRecovery/CancelAssistedRecovery</code> 复用原起身动画和 1.6 秒时序。当前主人、Pawn、落地、距离、遮挡与可操作状态持续复核，新受击撤销旧长按，完成站立后才通过 <code>RecordAssistedRecovery</code> 写事实和加分；不会再次认主。客户端从复制状态显示当前 E 用途，访客不能代替主人触发该关系事件。真实 E 操作、动画与多人尚待验收。</p>
 <p><strong>专属车返程。</strong> 任务真实交付后立即沿原系统结算，二狗按保留的 Follow/Stay/GoHome 安排返程，不把返程加进订单或再次发奖。FinishErrand 保留原 WaitLocation；Stay 返回该等候区域。去远处取自己的车单独按每阶段首次完整步行路径增加时间预算，不随重寻路累加。Follow 已改走真实行程，不调用原屏幕外补位传送；主人骑车或换 Pawn 时暂停 Follow，与主人无关的取送、返回等候点和回家继续。取消按目的与 MoveID 停止自己的路径，下车受阻仍保留人物附着并重试；车辆销毁只在当前位置处理退出，不送回旧上车点。车宽、转向和动态通行仍须实机验证。</p>
 <p><strong>门洞导航。</strong> 正式地图使用 Static NavMesh，修复前门外到爷爷屋内仅有部分路径。<code>ADeliveryHome.DoorwayLink</code> 使用 UE 的可编辑 NavLinkCustomComponent，门洞两端随房屋标记保存；默认 NavArea_Null，服务器实际破门事件后开放，普通 PathFollowing 和碰撞负责走过门洞。该事件不认领房屋，爷爷仍须真实搬离。EndPlay、门销毁解除连接和订阅。编辑器显式 <code>-SetupGrandpaDoorway</code> 备份并构建导航，静态检查使用正式二狗的导航配置、门外锚点与爷爷屋内点双向查询，并检查路径确实经过此 LinkId；只临时开关导航边，不触发破门或移动人物。</p>
-<p><strong>小绿与回家。</strong> 模型只能在第一单真实配送中、存在尚未投放毛毛虫的当前包裹、二狗距收件地点 900 cm 内时选择 <code>OfferCaterpillar</code>。选择只设置提议状态；主人再实际按 E，在 180 cm 内无遮挡、背包有空位且可交接、二狗已下车时，通过原 Inventory 接收真实 <code>BP_Caterpillar</code>。每次当前归属只交出一次，失败清理临时物品；是否把小绿放进外卖仍由玩家操作原恶作剧系统，不自动投放或发奖。主人在旁、第一单包裹有效且到达收件地点时，服务器记录 CaterpillarOpportunity 并唤醒一次模型，机会有效 45 秒，重新进入冷却 60 秒；离开、任务失效或取消撤销机会。只有 ambient 请求、can_offer_caterpillar 为真且实际候选包含 Offer 时，模型才可自主提议，也可选择 Wait 等其他候选，不伪造 requester_is_owner、不开放其他主人安排。实际接取复用 HelpUp 同一 E 交互组件，Joined 后变为即时接取，避免同键组件互相遮住。<code>GoHome</code> 只有唯一共享房屋已解锁才有候选，接受后取消旧委托和护主，保留实物；远距离沿共用的专属车流程回家，最后一段下车沿完整导航走到等候锚点，真实到达后 Stay 并记录事实。尚未接沙发入住；默认回家锚点在门外等候位置，不能记成已经进入屋内。</p>
+<p><strong>小绿与回家。</strong> <code>OfferCaterpillar</code> 在第一单真实配送中、同单包裹尚未投放、二狗和主人到收件地附近且院子有真实小绿时才开放。提议有效 45 秒，冷却 60 秒。站立时主人还可在同一 HelpUp/E 入口接过已在二狗手中或现场可交接的同一只小绿。v10 的 <code>CollectCaterpillar</code> 和 <code>InsertCaterpillar</code> 只接受主人当轮同意。取虫使用实见或当前主人的近处线索，并经过原拾取动作和 GAS。投放绑定同一只虫及同单原包裹，在主人手中或登记地面有实际可达位置时复核距离和遮挡。关闭的车箱要先取出原包裹。服务器成功后消耗同一只虫并给原包裹标记，任务阶段和奖励仍由原签收流程确认。<code>GoHome</code> 只有唯一共享房屋已解锁才有候选。接受后沿原专属车和步行路线到等候锚点，再切 Stay 并记录事实。房屋交接仍需爷爷实际搬离，室内入住和交接实机待验收。</p>
 <p><strong>爷爷离开与房屋解锁。</strong> <code>TaskManager</code> 继续唯一结算任务和奖励，单独收到 Completed 状态不能认领房屋。爷爷收到本件成功通知后，Delivered 分支由原 Thanks → 等待 → Finished 扩展为 Thanks → 等待 → MoveOut → Finished；新节点沿 Home 可编辑地面路线逐点扫掠，复用爷爷现有 APawn 运动，家具、门、玩家、车辆或缺地面会进入带原因的 Waiting 并重试。取消立即停止，不用 Destroy 或瞬移冒充走完。到达屋外终点后才由 <code>TryClaimAfterDeparture</code> 解锁；爷爷停在终点，旧屋内往返动作不会再把他带回房间。Home 只标记现有建筑，不按玩家生成新房；使用 AlwaysRelevant 复制共享状态，查到重复地点时拒绝选择。<code>setup_grandpa_home.py</code> 通过显式 Setup/Inspect 开关备份并接线地图、BT 和 <code>BTT_GrandpaMoveOut</code>，保留人工修改的回家锚点/路线；初始三段路线来自既有门洞测量，BT、MoveOut 任务蓝图与地图关联已保存，独立重载确认唯一 Home 为 <code>DeliveryHome_0</code>，原 house2/Grandpa 引用正确，BT/BTT 存在且默认未 claimed；Inspect 的 <code>changed_packages</code> 与 <code>unexpected_changes</code> 均为空。实际通行尚未检查。破门状态保留，家务与修门仍不在本轮范围。</p>
 <h4>持续陪伴、城镇知识与日常聊天（2026-11-14 追加细化）</h4>
 <p>用户明确希望二狗持续在场，能了解自己、城镇、周围物件和人物关系，日常聊天与执行安排同时成立。持续安排由现有 Companion/BT 执行；交谈产生新安排时，仍由 LLM 选择并经服务器校验。等候时继续回位、让出入口和有界注意，停止移动有可解释的原因；临时受击、导航受阻、取消、完成和主动安静分别保留原因及恢复条件。不能以请求已发出或模型答应作为完成。</p>
@@ -1132,6 +1584,8 @@
 <p><strong>下一项数据接线：</strong> World 公开地点观察已经进入请求构造，地图上的公开名称与观察点仍待静态校准和保存；普通物品的名称、可见证据与取回候选仍在下述第二批待合入代码中。现有感知事件、家居名称/用途和 24 条重要经历不等于完整关系网。按实际登记和观察补数据，继续保持“能认识、能用、当前能执行”三层区别。城镇熟悉度是人物目标，尚未编写的住户、养狗情况、近路与人际经历不能由模型补成事实。训练先覆盖如何使用这些信息、连续追问、改口与未知，不将每局坐标或物品占用写死在权重里。新增配对评估数据已完成离线准备与独立读回，未运行模型评分或训练。</p>
 <p>地点观察七文件已于 22:18（+08）在编辑器及 UBT 均关闭时合入，随后补齐视觉停用、倒地/隐藏及同 World 守门，并通过本批完整构建：<code>LocationComponent</code> 保存默认关闭的公开描述开关、名称、介绍和独立可编辑观察点；原任务组件位置及调试名称保持原义。<code>Companion::ExtendWorldDecisionRequest</code> 沿本 World 登记表，按现有视点、Sight 视锥/距离、严格遮挡筛选最近公开观察点，最多 32 次视线检查、输出 8 条。<code>Types</code> 只编码 <code>companion_context.observed_places</code>，后端验证可选字段；<code>place_0</code> 等编号只在本次请求用于聊天，不是导航目标或行动证据。每次重建，不缓存跨 World 对象，不触发新的模型请求。原家具继续 <code>home_objects</code>，没有将所有模型扩成可抓物件。空列表和缺字段都表示这次没有相关观察。29 项纯数据检查通过，地图公开资料与观察点尚未配置；后续还需要已知地点记忆和关系来源，当前观察不等于全城知识图。</p>
 <p>已有 <code>ABP_NpcConversation</code> 后处理支持移动时注视，停步后才叠加倾听体态；这部分先核对二狗的实际资源和携物兼容，不重建平行注视系统。持续在场还需要由新见闻、主人的动作和执行结果产生适量主动机会，再由模型决定说话、帮忙或安静；新增地点观察目前只供已有请求读取，尚未接入地点入场唤醒。等候仍允许安静站着，回位、避让与作者动画各做自己的事，不用持续随机走动代替人物判断。</p>
+<p>主人明确要求少说话或恢复时，模型从 <code>ContinueCurrent</code> 的 v8 偏好候选中选择。Agent 只在真正的本轮主人消息上按候选编号核对，CompanionComponent 保存默认 45 秒的服务器截止时间。直接提问和正在进行的移动、委托与说话确认沿原流程。普通闲聊的模型请求在期限内暂停，过期、恢复或解除归属时恢复正常。具名街坊说过的话只有服务器确认直接送达才会进入当局记忆，每位保留最近一句，标注原说话者与内容未经证实。</p>
+<p>步行时实际亲密度从 50 降向 20，现有跟随队形逐步增加后距并收窄侧距，默认最大后距增量 70 厘米。停步也核对后侧与可用空间，关系回暖后回到常规距离。真实位置由原导航推进。参见<a href="AIIteration.html#ergou-relationship-quiet-20261115">关系和安静的验证记录</a>。</p>
 <p>12 组配对、24 份手工合成请求已经离线构造并独立读回，通过正式请求/动作协议及模型输入保留检查，共 156 个请求内唯一候选；<a href="../Saved/AIResearch/CompanionPolish/20261114T132114516042Z/delivery.json">数据入口与复建命令</a>指向 <code>bundle_02</code>。独立评分规范不进入模型输入，未来训练/验证按整组拆分，避免同义改写泄漏。覆盖身份、街坊已知/未知、主人权限、共同记忆、闲聊/取消、引述/新指令、持件人、交付真相、视线失效、房屋解锁、摆放占用和小绿交接。旧 <code>bundle_01</code> 虽通过协议，静态核对发现实物条件不完整，已修正并保留失败过程。没有生成模型回复或进行训练，协议通过不代表模型会选择正确，也不代表 UE 实际完成动作。</p>
 <p><strong>NPC 快通道分步接入：</strong> 后台 <code>model_done</code> 已增加本轮全部已批准文本 <code>reply_text</code>，9 项离线 mock 检查覆盖多句、合法前缀、取消、模型失败及语音失败。后续后端接线也已合入：<code>NpcMessage/ToldBy</code> 是已送达的定向文本，<code>NpcMessageSent/ActionResult</code> 是发送回执；两者不代替玩家发言或实际听闻。<code>needs_reply</code> 缺省或 false 只作历史，发送回执不能标记玩家已答；保留最近回执与原消息，压缩编号不改变人物对应。14 项纯数据/替身回归通过，修复了后到 SelfSpeech 盖住待接 NPC 消息、三人消息回执串错对象，以及原测试在进入主人权限校验前就被拒绝的覆盖缺口。后台没有由本聊天重启。UE 收发接线现已合入并通过完整构建，但本聊天没有运行新事件或声音链路，仍未证明延迟改善。</p>
 <p>UE 闭环 18 文件已正式合入并构建：沿现有 <code>ConversationTurnSubsystem</code> 保存有界消息父关系和播放终态，<code>Agent</code> 按原回复的 Listener 定向投递并处理分支取消，<code>Presentation</code> 保持唯一播音者。玩家实际取得录音/文字输入占用后取消该 NPC 的后续分支，保留祖先给另一玩家的回复；ContinueCurrent 的接话不拥有原主人的持续安排。两种音频路径都要等祖先表现结束，超时明确取消；已发生的命中、交接和已送达文本不回滚。声音、字幕和旁观者原听闻保留。原 TTS 失败后的文本表现仍可能进入 SelfSpeech/HearSpeech，这条旧语义没有被后台字段改动替换，不能称作已严格区分全部声学失败。</p>
@@ -1190,9 +1644,10 @@
 </table></div>
 <p>选型采用 UE 5.8 自带的 SmartObjects 核心插件，避免为多人座位和摆放位置再造占用系统。本机核对核心插件默认未启用、未标 Beta；本批已在工程启用核心并添加 <code>SmartObjectsModule</code>。GameplayInteractions/GameplayBehaviorSmartObjects 在本机标为 Experimental，当前仅需核心槽位能力，继续原 BT/GAS。代价是新增一个引擎模块及 Definition 资产，服务器 Subsystem 不替代客户端表现复制。<a href="https://dev.epicgames.com/documentation/en-us/unreal-engine/smart-objects-in-unreal-engine---overview">Epic：Smart Objects</a>。</p>
 <p>实施顺序：先显式标注真实物件并接可见事实与候选；再接沙发坐下/起身和留声机真实播放/停止；随后把两个现成枕头搬到沙发等可编辑摆放槽。用户明确要求新增动画下载成品，不用代码自造动作；已撤掉未执行的家居姿势生成入口。现有下载原包 Quaternius Universal Animation Library 1 含 <code>Sitting_Enter/Sitting_Idle_Loop/Sitting_Exit</code>，Library 2 含 <code>Walk_Carry_Loop</code>，两份随包许可均为 CC0。已通过 UE 原生 IK Rig/IK Retargeter 导入本批 5 段动作，不写自制骨轨道；<code>PickUp_Table</code> 已导入但当前 Take 仅播放 Carry，坐下/坐姿/起身三段已准备，当前尚无有效 Sit 槽。独立 <code>ABP_CompanionBody</code> 保存原身体分支及家居混合，并用原生 ModifyBone/BlendBoneByChannel 恢复目标参考骨架尺度、保留源剪辑髋部位置。真实 EditorPreview 图求值和过渡检查通过，蓝图默认值已绑定、地图实例未接线。进一步将两库源素材用原生导入 yaw=-90 统一为目标 +X 前向，独立 Aligned IK 资产重定向后，五段首/中/末与作者对应肢段最大方向差不超过 3.079°，原侧向折腿已修正。新版实际图再次完成 90 个静态采样，手持位置仍在校准，不能把方向和图求值通过等同于坐起或搬运效果合格。座位入口、使用点和接触高度按真实成品动画与家具标定，不关闭胶囊碰撞穿过沙发、不拉伸骨长强凑位置。当前 scale3 家具的 60 组只读候选中，长桌南北端各有两抱枕共用支撑点；本次沙发前软垫候选存在支撑不足或碰撞，高凳/主沙发尚无正确坐点，不把未成立的用途交给模型。留声机音量由其蓝图音频组件配置，当前尚未接玩家 MusicVolume；不修改已认可的 NPC 语音和背景音乐音量。床、盆栽等未确认资源暂不假定存在。</p>
-<p>协议已增加能力版本 5，普通居民仍发版本 4；二狗每次候选都有请求内唯一 <code>candidate_id</code>。<code>HomeAction</code> 的 duration 为 0、target_id 为空；服务器保存来源物件、目的物件、槽位、用途、身份及版本，模型只选完整候选，不能产生坐标或任意函数。<code>home_objects</code> 仅提供当时范围内且射线可见的显式实物，最多 24 件、每件 16 槽，家居候选最多 64 项；没有看见的当前状态不会隔墙读给模型，跨次已见物件记忆尚待扩展。PlaceProp 可先取起原道具再搬到目的槽，也可继续使用自己实际拿着的同一件道具。模型返回时再核对身份、版本、用途、槽位及变换；后端拒绝换候选、降版本、访客或环境消息安排家务。候选被接受只记 <code>HomeArrangementAccepted</code>，不等于坐到位或摆放完成。</p>
+<p>家居候选从能力版本 5 起使用请求内唯一 <code>candidate_id</code>。<code>HomeAction</code> 的 duration 为 0、target_id 为空。服务器保存来源物件、目的物件、槽位、用途、身份及版本，模型只选完整候选。<code>home_objects</code> 提供本轮看到的显式实物，二狗真拿在手中的物件也可作为摆放来源。每轮最多 24 件、每件 16 槽，家居候选最多 64 项。PlaceProp 可以先取起再搬到目的槽，也可以继续用手里的同一件物体。模型返回后重新核对当前主人、版本、用途、槽位与变换，实际使用结果由服务器确认。</p>
+<p>共用房屋解锁后，二狗在房屋附近每两秒用原视觉规则观察一次，最多保留十二件亲眼见过的家具及作者填写的用途。本轮已看到或手持物件优先提供现场状态，余下的 v8 <code>remembered_home_objects</code> 最多发八件的名称与描述。旧见闻不含物件编号、占用、开关、位置或可执行槽。房屋变更、解除主人或角色结束时清理缓存，观察本身不启动一次模型请求。归家抵达和发出步行请求后再检查原主人、Pawn、AI 控制器与命令版本，旧路径结果只撤销它自己的移动编号。<a href="AIIteration.html#ergou-home-memory-placement-20261115">家具认知与取放修复</a></p>
 <p>多人流程沿一次主人输入执行：本机原交谈界面 → 服务器确认发话者 → 模型选择该请求中的候选 → Agent 复核 → Companion 接受持续安排 → BT 完整导航 → GAS 发起实际使用 → 家具/抓取接口确认结果并复制。领取与接近、坐下与起身、拿起与摆好分别保存阶段。Place 的 UseOffset 表示真实支撑面中心，纯查询 <code>GetPlacementTransform</code> 根据来源物件原尺度包围盒的 XY 中心与最低 Z 计算各自 root 落点；开始、持续搬放和最终确认共用该查询，厚薄不同的抱枕不共用固定 root 高度。摆放只检查已实际到位并释放的原物体，复核整体空间、五点支撑、大小、角度和标签；成功后原物体继续占着槽，挪走或销毁才释放。再次拿取优先复用这个仍有效的摆放槽入口；无摆放记录时只在原入口 35 cm 内投影到本屋真实地面，复核导航、支撑、胶囊、搬运范围与视线，防止物件放高后取物站位悬空。已实际持件只认同一搬运者与 actionId，不因入口重新投影而丢件。留声机复制开关和服务器起始时间，晚加入客户端等 GameState 就绪再定位播放，停止与 EndPlay 清理重试。异步/同步旧回调均按安排 ID 与 token 清理，不能结束后续安排。</p>
-<p>当前验证：原始缩放、动画工具、按支撑面计算落点与旋转尺寸修正已分别经过 Build3–6；最新 Build6 为 4 项/39.11 秒成功。重复拿取入口、显式质量、实际组件读回与持续安排交谈暂停接口随后纳入统一 DeliveryEditor 构建；首轮遇 UI 工具错误，修正后 DeliverySpeechFullBuildRetry 为 5 项/10.58 秒 Succeeded。长桌单段搬放的中途桌沿碰撞仍待修正，终点通过不作为整段可执行证据。家居协议及相关离线检查 78/78 通过，未启动服务、真实模型或 TTS。家居代码已纳入 DeliveryEditor 构建：首轮 94 项遇到 const 弱指针、复制宏形参名和编辑器工具类型/命名冲突；逐项修正并补上编辑器插件的 SmartObjects 依赖后，第二轮 9 项、12.31 秒构建成功。成品动画与独立 ABP 已完成静态导入和图检查；家具包装蓝图、SO 资产、室内位置及地图实例仍待接线与独立重载。坐起、搬运、装饰、声音同步和双人占用均未实机验收。本会话不启动 PIE 或 Delivery 自动化，不沿用前一批车辆/门洞构建结果声称家居已经可玩。</p>
+<p>正式地图已登记十一件家具。沙发、高脚凳、两只抱枕和留声机桌的可编辑槽位已保存并独立读回。旧的落点和桌沿实验保留在迭代记录。当前构建及协议检查覆盖家居记忆、手持物再摆放与归家换指令。实际坐起、搬运、恢复尺寸、装饰、声音同步和双人占用仍待进游戏验收。<a href="AIIteration.html#ergou-home-memory-placement-20261115">本轮家居验证</a></p>
 <h4>护主接入前接口方案（历史，当前实现见上方）</h4>
 <p>已核对 <code>DeliveryNpcCharacter</code>、<code>DeliveryNpcCombatComponent</code>、<code>BTTask_DeliveryExecuteNpcAction</code> 与 <code>GA_DeliverPunch</code>：NPC 当前没有 ASC 或 CombatInterface，玩家出拳能力直接依赖主角与 Ragdoll，不能直接授予 NPC。下一步先给 NPC 接 UE 原生 ASC 和能力执行接口，再创建可编辑的 <code>GA_NpcStrike</code> 薄能力，调用现有 <code>StartFightStrike/GetStrikeResult/CancelStrike</code>；BT 保留接近目标与 <code>TickFight</code>，NpcCombat 继续唯一负责拳头扫掠、命中结果与复制。开放二狗 Fight 前必须先配置二狗轻拍效果、自己一拳倒及倒地再击延长规则；当前对玩家 10 伤害/900 冲量、居民轻拳累计 4 次倒地不符合该人设，不能直接沿用默认参数解禁。</p>
 <p>随后在主人真实命中或受击确认后，经主人 PlayerState 上的 ASC GameplayEvent 推送带 <code>PunchId</code> 的服务器事实，由 Companion 保存有范围、期限和代次的 Assist 目标并去重；排除主人、自己及同属主同伴，旧代次、过期目标和失效角色不得继续执行。Agent 使用显式 <code>GameplayRule</code> 入口记录规则来源，不能伪造 LLM 建议或回复；访客命令、空拳和台词不触发护主，人物语言及普通街坊行动仍由 LLM 判断。打架期间暂停跑腿并保留实物，取消、断线和销毁只清理本次能力、事件绑定与自己的导航，恢复时重新核验原委托。完成接口和人物规则后，再按授权范围检查实际命中、取消、倒地与多人隔离；以上仅为已读接口和下一实施顺序，尚未实现或验证，具体 GAS 接口以本机 UE 5.8 源码为准。</p>
@@ -1328,6 +1783,7 @@
 </ol>
 <p>第二幕是家里的日常：他陪玩家出门跑单，也可以在家等着；玩家回家时，他讲村里听来的闲话。房子由所有玩家共用。门保持破的样子，修门和打扫以后作为家务加入。</p>
 <h4>跟随与三层反应</h4>
+<p>2026-11-15 用户第二次试玩要求覆盖原前方陪行设计：“跟我走”以主人为目标，明确骑自己的车时需实际骑乘。下表为修正后的设计；本批源码已合入并完整构建，原前方带路和近处不骑车规则已修正，实际效果仍待用户复测。记录见 <a href="AIIteration.html#ergou-follow-riding-feedback-20261115">第二次试玩反馈</a>。</p>
 <div aria-label="可横向滚动的数据表" class="table-scroll" tabindex="0"><table>
 <thead>
 <tr>
@@ -1339,13 +1795,13 @@
 <tbody>
 <tr>
 <td>有当前任务</td>
-<td>沿通往当前目的地的路线，走在玩家前面。目的地取自现有任务追踪 <code>GetTrackedTaskDestination()</code></td>
-<td>前方 2–4 m</td>
+<td>在主人侧后方跟随；任务目的地只用于让开交互入口</td>
+<td>后方 2.8 m、侧方 1.5 m</td>
 </tr>
 <tr>
 <td>没有任务</td>
-<td>走在玩家前侧</td>
-<td>前方 2–4 m</td>
+<td>同样围绕主人跟随，不自行选择远处目的地</td>
+<td>后方 2.8 m、侧方 1.5 m</td>
 </tr>
 <tr>
 <td>玩家只挪了一点</td>
@@ -1353,18 +1809,28 @@
 <td>约 1 m 以内</td>
 </tr>
 <tr>
+<td>主人停下</td>
+<td>在可见、同层且不堵入口的近处陪伴，不为保持队形绕圈</td>
+<td>默认约 3.58 m 范围</td>
+</tr>
+<tr>
 <td>落后太远</td>
-<td>落后超过阈值，而且所有玩家都看不到他时，才瞬移到前面。需要同时检查两名玩家的视野</td>
-<td>约 25 m</td>
+<td>沿真实路径追随，按主人已确定的出行安排使用自己的车；受阻报告原因</td>
+<td>不用瞬移代替行程</td>
 </tr>
 <tr>
 <td>主人骑上摩托车</td>
-<td>原地等候，主人下车后继续跟随</td>
-<td>—</td>
+<td>PlayerState 归属保留，继续当前跟随与出行安排</td>
+<td>不能占用主人的车</td>
+</tr>
+<tr>
+<td>明确骑自己的车跟随</td>
+<td>走到实际专属车上车，近处停驶但保持骑乘，主人走远后继续</td>
+<td>检查高度、遮挡与安全距离</td>
 </tr>
 </tbody>
 </table></div>
-<p>他走在前面是陪着走，指路仍由罗盘、标记和目的地地面圈负责。提到近路时，他说的是自己的经验，例如哪家的狗凶，不播报方向和距离。亲密度处于“受委屈”时，他会有意走在玩家身后几步，这是唯一的例外。</p>
+<p>亲密度影响关系和表现，不改变 Follow 以主人为目标的含义。指路仍由罗盘、标记和目的地地面圈负责；提到近路时，只能依据已有经历。LLM 判断整句安排，服务器从所选完整候选保存出行方式，行为树独占移动执行。最新明确骑车要求应覆盖旧 Automatic；单说“跟我走”不按一个“走”字强制改成步行。</p>
 <p>玩家对他说话或身边出事时，反应分三层：</p>
 <ol>
 <li>约 0.2 秒内转头，并播放一段真人短反应音。这一层由游戏直接触发。</li>
@@ -1548,7 +2014,7 @@
 <li>复用现有链路：Agent → Gateway → AI 后端 → 服务器检查 → 行为树，不另建一套跟班决策系统。</li>
 <li>当前主人命令包含 <code>Follow</code>、<code>Stay</code>、<code>CancelCompanionTask</code>、<code>FetchPackage</code>、<code>TakePackage</code>、<code>DeliverPackage</code>、<code>ReturnPackage</code>，v4 新增 <code>OfferCaterpillar/GoHome</code>，均须匹配当时实际候选。原草案 <code>TakePackageFromOwner/GivePackageToOwner</code> 对应 <code>TakePackage/ReturnPackage</code>；护主 Fight 走服务器 GameplayRule 入口，不属于访客或模型的自由指挥权限。</li>
 <li><code>UDeliveryPickupPointComponent::TryDispenseToCarrier</code> 接收持件角色和 ExpectedTask，服务器核验订单并向角色对应的 PlayerState 确认实际取件。</li>
-<li><code>UDeliveryTargetComponent::TryDeliver</code> 先复核收件门槛与持有者并预约实物，TaskManager 确认完成后从持件接口释放并销毁包裹，避免提前丢件或重复发奖。</li>
+<li><code>UDeliveryTargetComponent::TryDeliver</code> 复核收件门槛和持有者并预约实物，TaskManager 确认从持件接口释放后结算。收件者收到通知、包裹销毁后，服务器按已结算的 PlayerState 只向该玩家的控制器发送一次原送达反馈。主人正在骑车时沿车辆控制链找到实际驾驶员。<a href="TaskSystem.md#45-udeliverytargetcomponent收件人-actor-上">交付接口</a></li>
 <li>后端 <code>server.py</code>、<code>companion_context.py</code> 校验 v4 动作、关系阶段与独立记忆数组，<code>streaming.py</code> 保留原句子解析与声音链路；<code>CapabilityVersion=4</code>，兼容 v1 居民、v2 模式与 v3 跑腿。模型可读记忆不替代动作所需的新鲜现场证据。</li>
 <li>资产放在 <code>/Game/NPC/Companion/</code>：<code>BP_Companion_Ergou</code>、<code>BT_Companion</code>、独立 <code>BB_Companion</code>、<code>BTT_CompanionFollow/Errand</code>、<code>DA_Voice_Ergou</code>、<code>DA_CompanionTuning</code>；当前树沿用居民的高优先级分支，持续分支使用同伴自己的黑板和任务节点。摆放与行为复建分别为 <code>place_companion.py</code>、<code>setup_companion_errands.py</code>。</li>
 <li>爷爷搬走用可编辑蓝图任务 <code>BTT_GrandpaMoveOut</code>，基类负责可取消的持续执行；原 <code>ADeliveryGrandpa</code> 保留服务器扫掠、动画与复制。<code>ADeliveryHome</code> 继承 <code>ADeliveryLocationMarker</code>，地点编号 <code>Location_PlayerHome</code>，同世界只查一份现有房屋标记，复制认领状态与事实编号。复建入口 <code>setup_grandpa_home.py</code> 接旧 BT、house2、爷爷、回家锚点和离开路线，不生成新建筑。</li>

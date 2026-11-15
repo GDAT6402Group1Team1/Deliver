@@ -16,6 +16,9 @@ def build():
     current = source.split(START, 1)[1].split(END, 1)[0]
     graphs = diagrams()
     output = ROOT / 'Document/Diagrams/AI'
+    # 手绘的人物关系图保留原文件，与自动生成的类图一起嵌入正文
+    for name in ('npc-relationships', 'npc-model-context'):
+        graphs[name] = (output / f'{name}.svg').read_text(encoding='utf-8')
     output.mkdir(parents=True, exist_ok=True)
     for name, svg in graphs.items():
         (output / f'{name}.svg').write_text(svg, encoding='utf-8')

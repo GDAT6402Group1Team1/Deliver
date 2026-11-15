@@ -10,12 +10,19 @@
 
 玩家取件后，在 `OldManHouse_FrontDoor` 按住 E 敲门。第一次无回应，第二次回答 “Wait a moment!”。
 **无论等待多久都不开门，必须使用旁边的正式 BP_Axe 破门**。等待、反复敲门和破门均不重置任务计时
+第二次敲门后沿用门口交互提示。手上还有外卖时，先到门洞外有空位的地方用快捷栏第一格放下原包裹，再拾取并装备斧头，用左攻击劈门。破门后捡回同一件外卖，再进屋交付。门的共享提示用条件句面对所有玩家。
+
+主动放下任务包裹或为装备斧头腾手时，服务器按包裹当前尺寸和方向检查同侧的放置路径。前方靠门时依次找两侧和后方空位。附近全堵时，先挪到空地，原包裹与背包里的斧头仍各在原槽。
+
+门破后，仍拿着斧头的玩家可在任务栏看到取回提示与朝向原件的箭头。提示以本人实际放下、还在门附近同层地面的首单包裹为准。原件转手或销毁会清除本人记录。取回、离开门口或切换手持物后，任务栏恢复配送提示。拾取继续使用原交互。[门口取回提示](AIIteration.html#ergou-first-order-recover-parcel-20261115)
+持外卖时按空背包格会保留手持原件。主动使用快捷栏第一格仍可放下外卖，选择确有物品的背包格会按原装备规则腾手。普通道具仍可收进空格。
 破门后进入屋内，手持第一单包裹靠近爷爷，按住 E 交付。沿用 TaskManager 的共享完成状态与原奖励计算，
 交付成功才清空携带并销毁包裹；距离、遮挡、包裹归属、玩家失能和重复交付由服务器复核
 
 `ADeliveryGrandpa` 维护敲门次数、收件条件、服务器屋内移动和复制的表现状态。输入沿用玩家的
 `DeliveryInteractionComponent → PlayerController RPC → 门/爷爷交互组件`，不对无所有权的 NPC 发客户端 RPC
 门沿用 `ADeliveryBreakableDoor` 的斧击判定和复制，`OnDoorBroken` 通知爷爷更新黑板
+服务器用 `DoorAxeHit` 记录实际计入的击数，用 `DoorOpenedByAxe` 记录门第一次破开。玩家操作、门状态和任务完成可分别核对。
 `DeliveryTargetComponent.DeliveryGate` 为收件人提供附加校验，普通收件点未绑定时保持原流程
 
 行为树 `/Game/NPC/Grandpa/AI/BT_Grandpa` 只在服务器 AIController 上运行，黑板为 `BB_Grandpa`：
@@ -36,11 +43,23 @@
 
 收件后由 `DeliveryTargetComponent.OnDeliveryConfirmed` 通知爷爷。服务器先解除实物携带，再结算任务，包裹在收件通知结束后销毁。解除携带失败时不会推进任务或发奖。同一个订单在交付期间拒绝同步重复结算。爷爷以本件 Task_001 的收件事实开始搬离流程，感谢和等待结束后沿 SharedHome 可编辑的地面路线走出房屋，遇阻时暂停并重试。
 
+释放实物会同步通知库存等监听者。提交前服务器复核仍是原收件点、原订单、原包裹和原持件者的 `PlayerState`。若过程中换了持件者归属、收款人失活或原收件点失效，本次结算退出。已经松手且仍在场的原包裹留在场景里，可以重新捡起交付。合法上下车继续沿同一个 `PlayerState` 确认。[结算提交回归](AIIteration.html#ergou-delivery-commit-player-20261115)
+
+钱包入账后将同一份奖励明细送给实际收款客户端，驱动原任务顶栏和结算页。旁观玩家沿共享任务状态看到订单结束，钱包和个人通知都只属于原交付者。[远端结算通知](AIIteration.html#ergou-owner-settlement-notice-20261115)
+
+持件步行角色在服务器被销毁时，真实任务包裹先尝试从当前位置安全落地，由其他玩家继续拾取。没有安全落点会销毁留在原手槽的包裹，正在配送且允许重发的订单回到待补取，沿原任务计时继续。上下车、组件独立退出和换图清理沿原流程。[角色退出后的补领](AIIteration.html#ergou-holder-exit-package-20261115)
+
 `ADeliveryHome` 标记现有房屋，同 World 只保留一个有效地点，不按玩家另造建筑。地图显式连接 `Grandpa.SharedHome`、`Home.FormerResident` 与 `Home.ExistingHouse`；`DepartureRoute` 保存搬离平面路线，运行时按真实地板高度扫掠移动，`ReturnAnchor` 保存二狗回家的等候点。爷爷实际走到屋外终点并落稳后才由 `TryClaimAfterDeparture` 写入并复制 `bClaimed/ClaimEventId/ClaimedServerTime`，随后 BT 进入 Finished，爷爷留在终点且不再执行旧屋内往返。全体和晚加入玩家读取同一房屋状态；二狗通过 `FindSharedHome/IsClaimed/TryGetReturnLocation` 查询已解锁锚点，当前位置为门外等候点，尚无沙发或屋内日常行为。
 
 继续检查发现原三点路线均沿用室内 Z=2010.25，门外实测 Z≈1965.70，旧 20 cm 地板误差检查会让爷爷停在门槛附近。搬离现在沿 XY 路线查询脚下支撑，完整胶囊扫掠处理抬升、前进和分帧下降；默认最多上 20 cm、下 60 cm，超出、缺地板或被门/人/车挡住时等候。底球仍搭在门槛上的下降接触允许继续横移，只有落稳且到达终点才认领，不放宽高度判定让人物悬空完成。该修复仍需实机检查门槛与家具阻挡。
 
 地图使用 Static 导航，完整门在门洞留下不可通行区域。新增 `Home.DoorwayLink` 原生智能连接，编辑器默认禁用，服务器真实 `OnDoorBroken` 才切换可通行区域，门销毁和 Home EndPlay 时关闭并解绑；破门仍不会直接认领房屋。`setup_grandpa_home.py -SetupGrandpaDoorway` 仅备份/保存当前地图及导航，旧完整复建入口也包含导航构建；独立只读检查使用正式二狗配置，核对关闭态、开启后的双向完整路线、实际 LinkId 和最终恢复状态。真实 NPC 穿门、碎片避让及多人仍未验收。
+
+门碎片保持 Chaos 下落、互撞和原音效。破门后碎片只与固定地面、墙体和碎料发生物理碰撞，关闭会阻挡行人、包裹及收件视线的场景查询。完整门板继续约束进出，实际破门后才开放原步行连接。[碎片通行与停车出口回归](AIIteration.html#ergou-first-order-walk-exit-20261115)
+
+二狗代送时，门未破就带着原件先到同层街侧，为主人留出门口操作区。骑行沿街侧目标找车位并下车，步行站位复核导航、入口净空和身体碰撞，站稳后才报告等门。门打开时撤下街侧旧步行请求，步行进入屋内。若收件路线被实物挡停，保留委托与原包裹，重新找能通过收件规则的站位。临时障碍清开后允许再试原站位，破门、移动结果和签收使用各自的服务器确认事件。[闭门等候和日志审核](AIIteration.html#ergou-first-order-street-wait-20261115)
+
+首单代送的候选车位须能从预计下车点步行到街侧等候区。到站后还会从实车位置复查。出口被占用或路线走不通时，二狗带着货留在车上，重选能接上步行的停车位，再从导通的门洞进屋。
 
 本轮 `CompanionVehicleHomeBuild2` 完整构建成功，47 个 actions、49.82 秒、exit 0；新增爷爷搬离/房屋复制回归仅编译。`setup_grandpa_home.py` 已保存 BT_Grandpa、BTT_GrandpaMoveOut 和地图，15:41 独立重载通过全套脚本断言，`GRANDPA_HOME_OK` 确认唯一 `DeliveryHome_0` 与原 house2/Grandpa 引用、BT/BTT 均正确，默认未 claimed，`changed_packages` 和 `unexpected_changes` 均为空。总结果 `COMPANION_DELIVERY_ASSETS_RELOADED_OK` 记录在 `Saved/Logs/CompanionDeliveryAssetsReload.log`；进程仍因既有 native CDO PhysicalMaterial 错误 exit 1，不能写成干净退出。未运行本轮 PIE、真实交付通行或多人验收。测试已移除固定等待三秒即 Finished 的假设，缺 SharedHome 配置会明确失败，并在有上限的等待内检查实际搬离和客户端 Claim 复制；这项测试尚未执行。下方 2026-11-11 的测试结果是修改前的历史记录。
 
@@ -214,6 +233,8 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 `DeliveryPromptSubsystem` 的屏幕下方字幕槽，显示来电人姓名并自动换行；挂断时清空。
 字幕播放完成事件不能用于推进全局电话状态。
 
+首单 `DA_Task_001` 的接单和超时催单均使用中文台词，字幕署名为「爷爷」。2026-11-15 在正式地图的独立游戏窗口中，用 `Delivery.Phone.Call` 和 `Delivery.Phone.Call Task_001 overdue` 各触发一通，分别点击绿色接听按钮，核对了两段完整中文字幕，并确认首通挂断后字幕清除。本轮保留电子拟声和原通话时长，未复测自然超时、多人同步及听感。
+
 **接听是全局的**：任意一个玩家接听，所有人一起进入通话；挂断同理。
 这和"任意玩家取件则全体任务进入进行中"是同一套逻辑。
 
@@ -255,6 +276,8 @@ Idle ──(有电话入队)──► Ringing ──(有人接听)──► InCa
 | `ExpectedTask` / `DeliveryRadius` | 配置：收哪个任务、判定距离 |
 | `bool CanAcceptDelivery(ItemActor, Player) const` | UI 用它决定要不要显示交付提示 |
 | `bool TryDeliver(ItemActor, Player)` | 服务器：完成交付，成功后销毁快递 Actor |
+
+玩家亲自交付和二狗代送都在 `TryDeliver` 成功后发布一次 `DeliverySucceeded`。收件回调可能让玩家换 Pawn，服务器在回调完成后按已结算的 PlayerState 找当前控制器和步行角色或实际驾驶员。`ADeliveryPlayerController` 只向所属客户端转发事件，角色原 `DA_PlayerAudio` 配置继续播放送达提示音；骑车时音频组件以驾驶车辆的本地控制权确认收听者。结算面板仍由本人钱包的 `OnTaskPaid` 驱动。
 
 2026-11-14 二狗持件接口基础：玩家与同伴通过 `IDeliveryPackageCarrierInterface` 查询实物、结算 PlayerState 和可操作状态。玩家沿用 Carry/Inventory；同伴在 CompanionComponent 保存并复制包裹指针。`DeliveryPackageTransfer::TryTransfer` 仅在服务器同世界、同主人、240 cm 内且无遮挡时交接同一实物，复核同步通知后的身份/距离/遮挡，失败尝试归还原持有者；无法回滚时保留实物并返回明确失败原因。交还要求主人空手，不自动丢弃旧物。
 
@@ -401,7 +424,7 @@ UMG 将偏移乘以罗盘条半宽后写入 `Render Translation X`。目标和�
 
 `WBP_Reward` 的父类必须是 `DeliverySettlementWidget`，在 `BP_DeliveryManPC` 的 `Settlement` 组件上填写 `SettlementWidgetClass`。必需的 Text Block 为 `TaskNameText` 和 `FinalRewardText`，其余明细可选。组件负责创建、登记面板、移除和注销；Widget 只负责本机表现，不修改奖励或钱包
 
-`ApplyReward` 先填写所有文本，任务名立即显示，随后按 `TimeGradeText → ElapsedText → BaseRewardText → TimeMultiplierText → SpecialMultiplierText → FinalRewardText` 依次恢复透明度。固定标签已画在背景图上，因此只有动态文本逐行出现。缺少、隐藏或透明度为零的可选明细不占时间，布局不折叠。`OnSettlementShown` 仍在文本赋值后触发，可留空，不需要额外连接 Delay 或 Play Animation
+`ApplyReward` 先填写所有文本，任务名立即显示，随后按 `TimeGradeText → ElapsedText → BaseRewardText → TimeMultiplierText → SpecialMultiplierText → FinalRewardText` 依次恢复透明度。中文标题和栏目保存在 `WBP_Reward` 的 Widget Tree，底图使用 `T_TaskSettlementBackground`，动态数值逐行出现。缺少、隐藏或透明度为零的可选明细不占时间，布局不折叠。`OnSettlementShown` 仍在文本赋值后触发，可留空，不需要额外连接 Delay 或 Play Animation
 
 WBP 的 Class Defaults → `Delivery|Settlement|Reveal` 可关闭 `bRevealRows`，或调整首行延迟 `FirstRowDelay`（0.2 秒）、行间隔 `RowRevealInterval`（0.35 秒）和总收入前停顿 `FinalRowDelay`（0.6 秒）。`Audio` 分类的 `RowRevealSound` 默认使用 `/Game/Sound/SFX/SFX_Settlement_Tone`：0.34 秒、C4 基音的立体声合成音，叠加低八度与泛音，延长保持段；`FinalRevealSound` 使用独立的 `/Game/Sound/SFX/SFX_Settlement_Finale`：2.1 秒的 C 大调六和弦，低音支撑、展开和声与高音琶音。`RevealVolume` 默认及正式 WBP 均为 1。两处声音支持替换 Sound Wave、Cue 或 MetaSound，留空则静音。`Semitones Per Row` 默认 1，每行按十二平均律上升半音，总收入继续接下一音；设为 2 是全音、0 是同音。`Final Note Pitch Multiplier` 默认 1，只在总收入当前音高上乘额外倍率。声音只在拥有面板的本机播放，不广播给其他玩家，循环音不会用于逐行提示
 
