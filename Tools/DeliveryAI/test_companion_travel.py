@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from codex_local import choose
 from companion_context import (ACTIVE_ASSIST_INSTRUCTIONS, CARRIED_ITEM_LOCATION_INSTRUCTIONS, DROP_PACKAGE_INSTRUCTIONS, ERRAND_TASK_INSTRUCTIONS,
+                               ERRAND_INSTRUCTIONS, FOLLOW_ERRAND_INTENT_INSTRUCTIONS,
                                JOIN_ASSIST_INSTRUCTIONS,
                                OWNER_PACKAGE_LOCATION_INSTRUCTIONS, PACE_INSTRUCTIONS, QUIET_PREFERENCE_INSTRUCTIONS,
                                RETURN_PACKAGE_INSTRUCTIONS,
@@ -681,6 +682,61 @@ class CompanionTravelTests(unittest.TestCase):
                     self.assertNotIn('errand_travel_mode', result)
                 continuation = {**data['candidates'][-1], 'speech': '你想让我骑车送，还是走过去？'}
                 self.assertEqual(validate_action(data, continuation)['action'], 'ContinueCurrent')
+
+    def test_follow_departure_and_vehicle_changes_do_not_authorize_a_new_delivery(self):
+        cases = (
+            ('Follow', 'OnFoot', '走。', 'ContinueCurrent', None, '走，我跟着你。'),
+            ('Follow', 'Riding', '咱俩骑车，你上你自己的。', 'Follow', 'OwnVehicle', '我上自己的车跟你。'),
+            ('DeliverPackage', 'Riding', '我让你跟着我走，骑你自己的车。', 'Follow', 'OwnVehicle', '明白，我骑车跟你。'),
+            ('Follow', 'OnFoot', '你把我车里的这份外卖骑车送给爷爷。', 'DeliverPackage', 'OwnVehicle', '我自己骑车去爷爷家送。'),
+            ('DeliverPackage', 'Riding', '接着按刚才说好的送。', 'ContinueCurrent', None, '好，我接着送。'),
+            ('Follow', 'OnFoot', '骑车去爷爷家那边吧。', 'ContinueCurrent', None, '要我跟着你去，还是替你把这份送过去？'),
+        )
+        for active, owner_vehicle, line, action, mode, speech in cases:
+            with self.subTest(active=active, selected=(action, mode)):
+                data = travel_request()
+                data['capability_version'] = 10
+                snapshot = data['companion_context']
+                is_errand = active == 'DeliverPackage'
+                snapshot.update(mode='Follow', task_id='Task_001', task_phase='InProgress',
+                                owner_has_package=True, owner_package_location='RegisteredBikeTrunk',
+                                owner_vehicle_state=owner_vehicle, vehicle_state='NotMounted',
+                                errand_status='Running' if is_errand else 'Idle',
+                                errand_action=active if is_errand else 'None',
+                                errand_phase='ReceiveFromOwner' if is_errand else 'Idle')
+                if not is_errand:
+                    snapshot['errand_travel_mode'] = 'Unspecified'
+                latest = data['evidence'][0]
+                latest.update(kind='PlayerSpeech', source='Heard', description=line)
+                if is_errand and action == 'Follow':
+                    data['evidence'].insert(0, dict(event_id=new_id(), subject_id=data['npc_id'], kind='SelfSpeech',
+                                                   source='ActionResult', description='我自己去送这单。'))
+                data['allowed_actions'].append('DeliverPackage')
+                data['candidates'].extend({**option, 'candidate_id': new_id(), 'action': 'DeliverPackage'}
+                                          for option in list(data['candidates']))
+                add_continuation(data, active)
+                data['current_activity'].update(mode='Follow', errand_action=active if is_errand else '',
+                                                errand_phase=snapshot['errand_phase'] if is_errand else '')
+                validate_context(data)
+                instructions = companion_instructions(data)
+                self.assertLess(instructions.index(FOLLOW_ERRAND_INTENT_INSTRUCTIONS), instructions.index(ERRAND_INSTRUCTIONS))
+                self.assertIn('仅凭订单存在、包裹或收件地点的位置，不能成立代送委托', instructions)
+                self.assertIn('按主人最新的更正执行，恢复同行选 Follow', instructions)
+                self.assertIn('已有明确代送时，单纯催促或要求原样继续沿用该委托', instructions)
+                self.assertIn('由你自己按服务器登记的地址去找收件人', instructions)
+                self.assertIn('只有出行方式尚未确认或实际目的地不清楚时才追问', instructions)
+                for compress in (compact_context, model_context):
+                    payload = compress(data)
+                    self.assertEqual(payload['current_action']['action'], active)
+                    self.assertEqual(payload['pending_player_message']['description'], line)
+                    self.assertTrue({'Follow', 'DeliverPackage', 'ContinueCurrent'} <=
+                                    {option['action'] for option in payload['candidates']})
+                index = next(i for i, option in enumerate(data['candidates'])
+                             if option['action'] == action and option.get('travel_mode') == mode)
+                events = []
+                parser = SentenceParser(data, validate_action, lambda kind, value: events.append((kind, value)))
+                parser.line(json.dumps(dict(candidate_index=index, speech=speech, emotion='Calm')))
+                self.assertEqual(events[0][1]['candidate_id'], data['candidates'][index]['candidate_id'])
 
     def test_errand_travel_mode_is_optional_and_only_accepts_v8_mode_values(self):
         data = travel_request(modes=(None,))

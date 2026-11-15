@@ -1922,11 +1922,16 @@ bool FDeliveryCompanionEncounterOrderTest::RunTest(const FString&)
     if (!TestNotNull(TEXT("取货点配置了真实 PickupE 交互"),Interaction)) return false;
     TestEqual(TEXT("取货距离沿地点组件锚点计算"),Interaction->InteractAnchor.Get(),static_cast<USceneComponent*>(Pickup->GetLocationComponent()));
     TestEqual(TEXT("面馆实际交互半径为一千厘米"),Interaction->InteractRadius,1000.f);
+    const auto* StartRagdoll=FindFProperty<FBoolProperty>(UDeliveryActiveRagdollComponent::StaticClass(),TEXT("bStartOnBeginPlay"));
+    if (!TestNotNull(TEXT("初遇规则夹具可停用开局物理驱动"),StartRagdoll)) return false;
     FActorSpawnParameters Spawn;
     Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    auto* Walker=World->SpawnActor<ADeliveryCharacter>(FVector(1420,0,100),FRotator::ZeroRotator,Spawn);
+    const FTransform WalkerSpawn(FVector(1420,0,100));
+    auto* Walker=World->SpawnActorDeferred<ADeliveryCharacter>(ADeliveryCharacter::StaticClass(),WalkerSpawn,
+        nullptr,nullptr,Spawn.SpawnCollisionHandlingOverride);
     if (!TestNotNull(TEXT("创建真实步行玩家"),Walker)) return false;
-    Walker->GetActiveRagdoll()->StopRagdoll();
+    StartRagdoll->SetPropertyValue_InContainer(Walker->GetActiveRagdoll(),false);
+    Walker->FinishSpawning(WalkerSpawn);
     Walker->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     TestTrue(TEXT("玩家原点在旧九米初遇范围外"),FVector::Dist(Walker->GetActorLocation(),Scene->GetTriggerWorldLocation())>900.f);
     TestTrue(TEXT("玩家原点也略超取货半径，必须沿真实碰撞表面测距"),

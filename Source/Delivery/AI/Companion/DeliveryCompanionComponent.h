@@ -283,6 +283,8 @@ private:
     void UnbindOwnerCombat();
     void OnOwnerConfirmedHit(FGameplayTag EventTag,const FGameplayEventData* EventData);
     bool IsAllowedAssistTarget(const AActor* Target) const;
+    void UpdateFollowMovement();
+    void StopOwnerHandoffFollow();
     void UpdateAssist();
     void CancelAssist(FName Reason);
     UFUNCTION() void OnAssistTargetDestroyed(AActor* DestroyedActor);
@@ -548,6 +550,7 @@ private:
     FVector VehicleParkingGoal=FVector::ZeroVector;
     // 驾驶目标绑定本段主人 Pawn，轨迹保留主人刚驶过的车位
     TWeakObjectPtr<APawn> VehicleFollowOwnerPawn;
+    int32 OwnerHandoffFollowRevision=INDEX_NONE;
     TArray<FVector> FollowRoute;
     // 主人结束一次真实骑行后保持步行，直到再次骑车或明确改出行方式
     bool bFollowOwnerWasRiding=false;

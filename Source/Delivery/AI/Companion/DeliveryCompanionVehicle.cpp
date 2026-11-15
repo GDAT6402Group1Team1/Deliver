@@ -11,6 +11,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
+#include "NPC/DeliveryGrandpa.h"
+#include "World/DeliveryHome.h"
 
 namespace
 {
@@ -303,8 +305,12 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& RequestedGo
     const bool bOwnVehicleAvailable=IsValid(ErrandVehicle) && !ErrandVehicle->IsActorBeingDestroyed() &&
         ErrandVehicle->GetWorld()==GetWorld() &&
         (!ErrandVehicle->GetReservedCompanion() || ErrandVehicle->GetReservedCompanion()==Npc);
-    const bool bKeepMountedFollow=bFollowing && ShouldRideForFollow(FollowOwnerPawn) &&
-        (bOwnVehicleAvailable || FollowTravelMode==EDeliveryCompanionTravelMode::OwnVehicle);
+    const bool bHandoffTravel=bFollowing && OwnerHandoffFollowRevision==Revision && !bUnspecified;
+    const auto FollowPolicy=bHandoffTravel?TravelMode:FollowTravelMode;
+    const bool bRideForFollow=bHandoffTravel?(FollowPolicy==EDeliveryCompanionTravelMode::OwnVehicle ||
+        FollowPolicy==EDeliveryCompanionTravelMode::Automatic):ShouldRideForFollow(FollowOwnerPawn);
+    const bool bKeepMountedFollow=bFollowing && bRideForFollow &&
+        (bOwnVehicleAvailable || FollowPolicy==EDeliveryCompanionTravelMode::OwnVehicle);
     if (bFollowing && VehicleTravelPurpose==EDeliveryCompanionTravelPurpose::Follow &&
         !VehicleFollowOwnerPawn.HasSameIndexAndSerialNumber(ExpectedOwnerPawn))
     {
@@ -387,9 +393,29 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& RequestedGo
         {
             bCheckedErrandWalkingGoal=true;
             auto* Navigation=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-            FNavLocation Projected;
-            if (Navigation && Navigation->ProjectPointToNavigation(*RequiredWalkGoal,Projected,FVector(65,65,75),&Npc->GetNavAgentPropertiesRef()))
+            if (!Navigation) return ErrandWalkingGoal;
+            const auto* Home=ADeliveryHome::FindSharedHome(this);
+            const bool bGrandpaStreet=IsValid(Home) && IsValid(Home->ReturnAnchor) && IsValid(Home->FormerResident) &&
+                ResolveErrandLocation(false)==Home->FormerResident.Get();
+            const double WalkRadius=FMath::Clamp(static_cast<double>(ReachRadius),65.,150.);
+            const auto TryProjection=[&](const FVector& Point,const FVector& Extent)
+            {
+                FNavLocation Projected;
+                if (!Navigation->ProjectPointToNavigation(Point,Projected,Extent,&Npc->GetNavAgentPropertiesRef()) ||
+                    FMath::Abs(Projected.Location.Z-RequiredWalkGoal->Z)>75. ||
+                    FVector::DistSquared2D(Projected.Location,*RequiredWalkGoal)>FMath::Square(WalkRadius) ||
+                    (bGrandpaStreet && !IsSafeDeliveryDoorWait(*Home,Projected.Location))) return false;
                 ErrandWalkingGoal=Projected.Location;
+                return true;
+            };
+            if (!TryProjection(*RequiredWalkGoal,FVector(65,65,75)) && bGrandpaStreet)
+            {
+                // 门外候车点可能正落在台阶或导航边缘，补查同层街侧的实际可站位置
+                const FVector Outward=(*RequiredWalkGoal-Home->ReturnAnchor->GetComponentLocation()).GetSafeNormal2D();
+                const FVector Side=FVector::CrossProduct(FVector::UpVector,Outward);
+                for (const FVector& Offset:{Outward*90.,Side*90.,-Side*90.,Outward*90.+Side*65.,Outward*90.-Side*65.})
+                    if (TryProjection(*RequiredWalkGoal+Offset,FVector(35,35,75))) break;
+            }
         }
         return ErrandWalkingGoal;
     };
@@ -506,8 +532,7 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& RequestedGo
     auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
     if (!AI || !Nav)
     {
-        ReportVehiclePause(bRequiresWalkExit && IsUsingErrandVehicle()?FName(TEXT("CompanionDismountBlocked")):
-            FName(TEXT("CompanionVehicleNavigationUnavailable")));
+        ReportVehiclePause(TEXT("CompanionVehicleNavigationUnavailable"));
         return false;
     }
     if (!IsUsingErrandVehicle())
@@ -649,7 +674,7 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& RequestedGo
         const FVector ParkingFeet=Here-FVector(0,0,ErrandVehicle->GetSimpleCollisionHalfHeight());
         const bool bNeedsDoorwayOnFoot=Distance<=PreferredDistance && IsAcrossOpenFollowDoorway(OwnerOnFoot,ParkingFeet);
         const bool bOwnerSwitchedToWalking=IsValid(OwnerOnFoot) && (bFollowWalkAfterOwnerRide ||
-            (FollowTravelMode!=EDeliveryCompanionTravelMode::OwnVehicle && Distance<=PreferredDistance));
+            (FollowPolicy!=EDeliveryCompanionTravelMode::OwnVehicle && Distance<=PreferredDistance));
         if (bNeedsDoorwayOnFoot || bOwnerSwitchedToWalking)
         {
             const auto Result=ContinueOnFootAtParking(bNeedsDoorwayOnFoot?TEXT("OpenFollowDoorway"):TEXT("OwnerOnFoot"));
@@ -746,6 +771,8 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& RequestedGo
     const float OwnerGoalShift=bKeepMountedFollow?FVector::Dist(Goal,VehicleLegGoal):FVector::Dist2D(Goal,VehicleLegGoal);
     if (bVehicleHasDriveGoal && OwnerGoalShift<GetTuning().RepathDistance &&
         ErrandVehicle->HasActiveDriveRoute((bSeekingWalkParking && !bFollowWalkAfterOwnerRide) || bRequiresWalkExit)) return false;
+    // 未绑定实际下车位置的街外车段只负责接近，终点还要重新确认可停车和可步行
+    if (bRequiresWalkExit && !bVehicleHasDriveGoal && ErrandVehicle->HasActiveDriveRoute()) return false;
     if (!bKeepMountedFollow)
     {
         if (Now<NextVehicleNavigationAt) return false;
@@ -967,7 +994,11 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& RequestedGo
         const auto& WalkingGoal=GetErrandWalkingGoal();
         if (!WalkingGoal.IsSet())
         {
-            if (!bVehicleHasDriveGoal || !ErrandVehicle->HasActiveDriveRoute(true)) ReportVehiclePause(TEXT("CompanionDismountBlocked"));
+            if (bVehicleHasDriveGoal && ErrandVehicle->HasActiveDriveRoute(true)) return false;
+            if (LastErrandPause!=TEXT("CompanionErrandWalkGoalUnavailable"))
+                UE_LOG(LogDelivery,Log,TEXT("CompanionErrandWalkGoalUnavailable npc=%s revision=%d bike=%s requested=%s"),
+                    *GetNameSafe(Npc),Revision,*ErrandVehicle->GetActorLocation().ToCompactString(),*RequiredWalkGoal->ToCompactString());
+            ReportVehiclePause(TEXT("CompanionErrandWalkGoalUnavailable"));
             return false;
         }
         WalkAfterParking=&WalkingGoal.GetValue();
@@ -991,15 +1022,26 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& RequestedGo
     const double ParkingInterval=200.;
     const double MaxSetback=MinimumSetback+3.*ParkingInterval;
     const FVector Start=ErrandVehicle->GetActorLocation();
+    const auto AddErrandTravelBudget=[&](double Length)
+    {
+        if (!bForErrand || bErrandTravelBudgetAdded) return;
+        const float WalkingSpeed=Npc->GetCharacterMovement()->MaxWalkSpeed;
+        if (!FMath::IsFinite(WalkingSpeed) || WalkingSpeed<=0 || !FMath::IsFinite(Length) || Length<0) return;
+        ErrandTimeLimitSeconds+=Length/WalkingSpeed;
+        bErrandTravelBudgetAdded=true;
+    };
     double Covered=0., NextSetback=MinimumSetback;
     FVector Parking=FVector::ZeroVector;
+    FName LastParkingRejection;
+    int32 ParkingAttempts=0;
     bool bHasParking=false;
     const auto TryParkingSpot=[&](const FVector& Candidate)
     {
         if (FMath::Abs(Candidate.Z-Start.Z)<=150. && FVector::Dist2D(Candidate,Start)<=ErrandVehicle->GetParkingAcceptanceRadius()) return false;
         if (bRequiresWalkExit && RejectedErrandParking.ContainsByPredicate([&](const FVector& Rejected){ return IsSameParking(Rejected,Candidate); }))
             return false;
-        if (!ErrandVehicle->SetDriveDestination(Candidate,true,WalkAfterParking)) return false;
+        ++ParkingAttempts;
+        if (!ErrandVehicle->SetDriveDestination(Candidate,true,WalkAfterParking,&LastParkingRejection)) return false;
         Parking=Candidate;
         return true;
     };
@@ -1055,7 +1097,47 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& RequestedGo
     if (!bHasParking)
     {
         if (bVehicleHasDriveGoal && ErrandVehicle->HasActiveDriveRoute(bRequiresWalkExit)) return false;
-        ReportVehiclePause(bRequiresWalkExit?FName(TEXT("CompanionDismountBlocked")):FName(TEXT("CompanionVehicleParkingBlocked")));
+        FName RoadRejection;
+        if (bRequiresWalkExit && bHasParkingGuide && !bAtShortLeg)
+        {
+            const double AdvanceLimit=Path->GetPathLength()-MinimumSetback;
+            double PreviousAdvance=0.;
+            for (const double DistanceLimit:{2200.,1100.,550.})
+            {
+                double Advance=FMath::Min(AdvanceLimit,DistanceLimit);
+                if (Advance<450.) break;
+                if (Advance==PreviousAdvance) continue;
+                PreviousAdvance=Advance;
+                for (int32 Index=1;Index<Path->PathPoints.Num();++Index)
+                {
+                    const FVector From=Path->PathPoints[Index-1];
+                    const FVector Segment=Path->PathPoints[Index]-From;
+                    const double Length=Segment.Size();
+                    if (Length<=UE_KINDA_SMALL_NUMBER) continue;
+                    if (Advance>Length) { Advance-=Length; continue; }
+                    const FVector RoadPoint=From+Segment*(Advance/Length);
+                    if (FVector::Dist2D(RoadPoint,Start)<=ErrandVehicle->GetParkingAcceptanceRadius()+100.f ||
+                        !ErrandVehicle->SetDriveDestination(RoadPoint,true,nullptr,&RoadRejection)) break;
+                    if (!IsCurrent() || !IsUsingErrandVehicle()) return false;
+                    // 街外短程不记已到停车点，停稳后重新核对完整步行出口
+                    bVehicleHasDriveGoal=false;
+                    SetSuspension(NAME_None);
+                    LastErrandPause=NAME_None;
+                    AddErrandTravelBudget(Path->GetPathLength());
+                    UE_LOG(LogDelivery,Log,TEXT("CompanionErrandRoadLeg npc=%s revision=%d bike=%s segment=%s walk=%s parking_rejection=%s"),
+                        *GetNameSafe(Npc),Revision,*Start.ToCompactString(),*RoadPoint.ToCompactString(),
+                        *Approach.Location.ToCompactString(),*LastParkingRejection.ToString());
+                    return false;
+                }
+            }
+        }
+        const FName Failure=bRequiresWalkExit?FName(TEXT("CompanionErrandParkingUnavailable")):
+            FName(TEXT("CompanionVehicleParkingBlocked"));
+        if (bRequiresWalkExit && LastErrandPause!=Failure)
+            UE_LOG(LogDelivery,Log,TEXT("CompanionErrandParkingUnavailable npc=%s revision=%d bike=%s walk=%s guide=%d attempts=%d parking_rejection=%s road_rejection=%s"),
+                *GetNameSafe(Npc),Revision,*Start.ToCompactString(),*Approach.Location.ToCompactString(),
+                bHasParkingGuide,ParkingAttempts,*LastParkingRejection.ToString(),*RoadRejection.ToString());
+        ReportVehiclePause(Failure);
         return false;
     }
     VehicleLegGoal=Goal;
@@ -1063,15 +1145,6 @@ bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& RequestedGo
     bVehicleHasDriveGoal=true;
     SetSuspension(NAME_None);
     if (bForErrand) LastErrandPause=NAME_None;
-    if (bForErrand && !bErrandTravelBudgetAdded)
-    {
-        const float WalkingSpeed=Npc->GetCharacterMovement()->MaxWalkSpeed;
-        const double Length=bHasParkingGuide?Path->GetPathLength():FVector::Dist(Start,Parking)+FVector::Dist(Parking,Approach.Location);
-        if (FMath::IsFinite(WalkingSpeed) && WalkingSpeed>0 && FMath::IsFinite(Length) && Length>=0)
-        {
-            ErrandTimeLimitSeconds+=Length/WalkingSpeed;
-            bErrandTravelBudgetAdded=true;
-        }
-    }
+    AddErrandTravelBudget(bHasParkingGuide?Path->GetPathLength():FVector::Dist(Start,Parking)+FVector::Dist(Parking,Approach.Location));
     return false;
 }

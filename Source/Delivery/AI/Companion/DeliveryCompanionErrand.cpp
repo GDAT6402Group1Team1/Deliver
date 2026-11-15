@@ -420,6 +420,8 @@ void UDeliveryCompanionComponent::StopErrandMovement(bool bKeepVehicleSeat)
     const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
     const int32 Revision=CommandRevision, ErrandRevision=Errand.CommandRevision;
     const auto StillCurrent=[&]() { return WeakThis.IsValid() && CommandRevision==Revision && Errand.CommandRevision==ErrandRevision; };
+    StopOwnerHandoffFollow();
+    if (!StillCurrent()) return;
     // 移动暂停可以中止正在开的箱，但服务器已提交的原交接留给委托读取
     if (HasCommittedPackageHandoff()) bErrandCargoHandoffCommitted=true;
     else CancelPackageHandoff();
@@ -462,6 +464,16 @@ void UDeliveryCompanionComponent::StopErrandMovement(bool bKeepVehicleSeat)
     ErrandMoveId=FAIRequestID::InvalidRequest;
     if (auto* Path=AI?AI->GetPathFollowingComponent():nullptr; Path && OldId.IsValid() && Path->GetCurrentRequestId()==OldId)
         Path->AbortMove(*this,FPathFollowingResultFlags::UserAbort,OldId);
+}
+
+void UDeliveryCompanionComponent::StopOwnerHandoffFollow()
+{
+    if (OwnerHandoffFollowRevision==INDEX_NONE) return;
+    OwnerHandoffFollowRevision=INDEX_NONE;
+    bHasFollowDestination=false;
+    NextNavigationAt=0;
+    NextVehicleNavigationAt=0;
+    StopFollowMovement();
 }
 
 void UDeliveryCompanionComponent::SetErrandPhase(EDeliveryCompanionErrandPhase Phase)
@@ -928,8 +940,32 @@ void UDeliveryCompanionComponent::UpdateErrand()
         Cast<ADeliveryCharacter>(GetOwnerPawn()):GetOwnerPackageCarrier();
     auto* OwnerCarrier=Cast<IDeliveryPackageCarrierInterface>(OwnerCarrierPawn);
     const bool bNeedsOwner=Errand.Phase==EDeliveryCompanionErrandPhase::ReceiveFromOwner || Errand.Phase==EDeliveryCompanionErrandPhase::ReturnToOwner;
-    if (bNeedsOwner && (!OwnerCarrier || !OwnerCarrier->CanHandleTaskPackage()))
-    { ReportErrandPause(GetOwnerPawn() && GetOwnerPawn()->IsA<ADeliveryMotorbike>()?TEXT("OwnerRiding"):TEXT("OwnerUnavailable")); return; }
+    const bool bWaitingForOwner=bNeedsOwner && (!OwnerCarrier || !OwnerCarrier->CanHandleTaskPackage());
+    auto* OwnerBike=bWaitingForOwner?Cast<ADeliveryMotorbike>(GetOwnerPawn()):nullptr;
+    const auto* Driver=IsValid(OwnerBike) && !OwnerBike->IsActorBeingDestroyed()?OwnerBike->GetDriver():nullptr;
+    if (Mode==EDeliveryCompanionMode::Follow && Errand.Phase==EDeliveryCompanionErrandPhase::ReceiveFromOwner &&
+        !Npc->Combat->IsReactingToHit() && IsValid(Driver) && !Driver->IsActorBeingDestroyed() && Driver->GetTaskPlayerState()==OwnerPlayerState &&
+        Driver->GetCurrentVehicle()==OwnerBike && OwnerCarrier && IsValid(Errand.Package) &&
+        OwnerCarrier->GetCarriedTaskPackage()==Errand.Package && PackageTask(Errand.Package)==Errand.Task)
+    {
+        if (OwnerHandoffFollowRevision!=Revision)
+        {
+            ReportErrandPause(TEXT("OwnerRiding"));
+            if (!IsCurrent() || GetOwnerPawn()!=OwnerBike) return;
+            OwnerHandoffFollowRevision=Revision;
+        }
+        // 委托节点保留接件，只复用跟随的移动，停车前不交接原件
+        UpdateFollowMovement();
+        return;
+    }
+    if (OwnerHandoffFollowRevision!=INDEX_NONE)
+    {
+        StopOwnerHandoffFollow();
+        // 停旧路线会同步通知，需要下一帧重读主人身体和交接物
+        return;
+    }
+    if (bWaitingForOwner)
+    { ReportErrandPause(OwnerBike?TEXT("OwnerRiding"):TEXT("OwnerUnavailable")); return; }
     if (bGroundPackage)
     {
         if (!IsValid(Errand.Package) || GetOwnerDroppedPackage()!=Errand.Package || PackageTask(Errand.Package)!=Errand.Task)

@@ -1149,6 +1149,44 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
         RegisteredCargoRequest.CompanionOwnerPackageLocation,FName(TEXT("RegisteredBikeTrunk")));
 
     {
+        auto* PC=OwnerState->GetPlayerController();
+        const auto PriorMode=Companion->Mode;
+        const auto PriorTravel=Companion->TravelMode;
+        const FTransform PriorOwnerTransform=Owner->GetActorTransform();
+        Companion->Mode=EDeliveryCompanionMode::Follow;
+        ON_SCOPE_EXIT
+        {
+            if (Bike->GetDriver()==Owner) Bike->ExitVehicle();
+            Companion->FinishErrand(EDeliveryNpcActionStatus::Cancelled,TEXT("OwnerRendezvousChecked"));
+            Companion->Mode=PriorMode;
+            Companion->TravelMode=PriorTravel;
+            Owner->SetActorTransform(PriorOwnerTransform,false,nullptr,ETeleportType::TeleportPhysics);
+            Summon->RegisterVehicle(RecentBike);
+        };
+        const auto BeforeRendezvous=Snapshot();
+        if (!TestTrue(TEXT("委托原车箱包裹后主人可实际骑同一辆车"),PC && Companion->ApplyCommand(EDeliveryNpcAction::DeliverPackage,
+            OwnerState,BeforeRendezvous.CompanionCommandRevision,BeforeRendezvous.CompanionTask.Get(),Package,
+            EDeliveryCompanionTravelMode::Walk) && Bike->TryEnter(Owner) && PC->GetPawn()==Bike)) return false;
+        const int32 RendezvousRevision=Companion->GetCommandRevision();
+        Companion->UpdateErrand();
+        TestTrue(TEXT("骑乘期间委托保留同一原件并接续跟随，禁止提前开箱交接"),
+            Companion->OwnerHandoffFollowRevision==RendezvousRevision && Companion->HasActiveErrand() &&
+            Companion->GetErrand().Phase==EDeliveryCompanionErrandPhase::ReceiveFromOwner &&
+            Bike->GetCargo()==Package && !Companion->ErrandCargoHandoffId.IsValid() && !Npc->GetCarriedTaskPackage());
+        // 交接规则夹具使用无网格的原生玩家，下车仍会尝试恢复主动布娃娃
+        AddExpectedError(FString::Printf(TEXT("%s: Skeletal mesh has no Physics Asset."),*GetNameSafe(Owner)),
+            EAutomationExpectedErrorFlags::Contains,1);
+        Bike->ExitVehicle();
+        if (!TestTrue(TEXT("主人从实际骑乘恢复步行"),PC->GetPawn()==Owner)) return false;
+        Companion->UpdateErrand();
+        TestTrue(TEXT("恢复交接前仅清掉等车的跟随路径和目标"),Companion->OwnerHandoffFollowRevision==INDEX_NONE &&
+            !Companion->bHasFollowDestination && Companion->GetCommandRevision()==RendezvousRevision &&
+            Companion->GetErrand().Phase==EDeliveryCompanionErrandPhase::ReceiveFromOwner && Bike->GetCargo()==Package &&
+            !Companion->ErrandCargoHandoffId.IsValid());
+        CheckNotDelivered();
+    }
+
+    {
         // 清理上一段结识对话的待回复事件，独立验证行为树换动作
         Agent->ResetContext(TEXT("BehaviorTreeReplacementFixture"));
         auto* AI=Cast<AAIController>(Npc->GetController());
@@ -1596,14 +1634,21 @@ bool FDeliveryCompanionErrandTest::RunTest(const FString&)
         Npc->ExtendDecisionRequest(RidingRequest,OwnerState);
         TestEqual(TEXT("主人所问的包裹位置来自实际专属车货架"),RidingRequest.CompanionCarriedItemLocation,FName(TEXT("OwnBikeRack")));
 
-        // 准备车辆已到站的状态，独立世界的平地只验下车规则，没有烘焙步行导航
+        // 独立世界有真实平地，但没有导航，分别检查尚未派车和已到停车点
         const int32 DeliveryRevision=Companion->GetCommandRevision();
         Companion->VehicleTravelPurpose=EDeliveryCompanionTravelPurpose::Errand;
         Companion->VehicleLegRevision=DeliveryRevision;
         Companion->VehicleLegPhase=Companion->Errand.Phase;
-        Companion->bVehicleLegComplete=true;
         const FVector RequiredWalkGoal(ParkingCenter.X+300,ParkingCenter.Y,0);
         Companion->VehicleLegGoal=RequiredWalkGoal;
+        Companion->bVehicleLegComplete=false;
+        TestFalse(TEXT("未找到出发路线的载件车不能冒充已经到了收件点"),Companion->UpdateVehicleTravel(
+            RequiredWalkGoal,150.f,EDeliveryCompanionTravelPurpose::Errand,&RequiredWalkGoal));
+        TestEqual(TEXT("刚上车未能规划时报告导航不可用"),Companion->GetSuspensionReason(),FName(TEXT("CompanionVehicleNavigationUnavailable")));
+        TestTrue(TEXT("规划失败保留真实座位、原货和原阶段"),Npc->IsMountedOnCompanionBike() &&
+            !Companion->bVehicleHasDriveGoal && !Companion->bVehicleLegComplete &&
+            Npc->GetCarriedTaskPackage()==Package && Companion->Errand.Phase==EDeliveryCompanionErrandPhase::GoToDelivery);
+        Companion->bVehicleLegComplete=true;
         TestFalse(TEXT("到站后没有可确认步行路线就不承认已下车准备送件"),Companion->UpdateVehicleTravel(
             RequiredWalkGoal,150.f,EDeliveryCompanionTravelPurpose::Errand,&RequiredWalkGoal));
         TestTrue(TEXT("不能确认出口时既保留真实车座也不放下原货"),Npc->IsMountedOnCompanionBike() &&

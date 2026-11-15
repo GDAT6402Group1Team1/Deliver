@@ -439,7 +439,8 @@ void UDeliveryCompanionComponent::ExtendDecisionRequest(FDeliveryNpcDecisionRequ
     Request.CompanionErrandPhase=StaticEnum<EDeliveryCompanionErrandPhase>()->GetNameStringByValue(static_cast<int64>(Errand.Phase));
     Request.CompanionErrandStatus=StaticEnum<EDeliveryNpcActionStatus>()->GetNameStringByValue(static_cast<int64>(Errand.Status));
     // 暂停和结束是不同状态，模型需要看到当前真实卡点以及运行中的原委托
-    const FName ErrandReason=HasActiveErrand() && !SuspensionReason.IsNone()?SuspensionReason:Errand.Reason;
+    const FName WaitingReason=OwnerHandoffFollowRevision==CommandRevision?FName(TEXT("OwnerRiding")):Errand.Reason;
+    const FName ErrandReason=HasActiveErrand() && !SuspensionReason.IsNone()?SuspensionReason:WaitingReason;
     Request.CompanionErrandReason=ErrandReason.IsNone()?FString():ErrandReason.ToString();
     if (const auto* Task=Request.CompanionTask.Get())
     {
@@ -926,6 +927,11 @@ void UDeliveryCompanionComponent::UpdateFollow()
     if (HasActiveHomeArrangement() || PendingHomeArrangementId.IsValid()) { UpdateHomeArrangement(); return; }
     if (HasActiveErrand()) { StopFollowMovement(); return; }
     if (Mode==EDeliveryCompanionMode::GoHome) { UpdateGoHome(); return; }
+    UpdateFollowMovement();
+}
+void UDeliveryCompanionComponent::UpdateFollowMovement()
+{
+    auto* Npc=GetCompanion();
     auto* AI=Cast<AAIController>(Npc->GetController());
     auto* Pawn=GetOwnerPawn();
     RefreshFollowOwnerTravel(Pawn);

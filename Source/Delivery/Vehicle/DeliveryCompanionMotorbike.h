@@ -20,7 +20,8 @@ public:
     bool InitializeForCompanion(ADeliveryNpcCharacter* Companion);
     bool TryMount(ADeliveryNpcCharacter* Companion);
     // 接受停车点前可检查从预计下车位置到步行目标的路线，重选失败时可保留已提交的车路
-    bool SetDriveDestination(const FVector& Goal,bool bKeepDrivingWhileReplanning=false,const FVector* WalkAfterParking=nullptr);
+    bool SetDriveDestination(const FVector& Goal,bool bKeepDrivingWhileReplanning=false,const FVector* WalkAfterParking=nullptr,
+        FName* OutRejection=nullptr);
     // 按连续实地支撑检查短路段，真实车迹核对终点高度，临时水平探路可不指定终点高度
     bool TrySetDirectFollowDestination(const FVector& Goal,bool bRequireGoalHeight=true);
     bool HasActiveDriveRoute(bool bRequireWalkExit=false) const;

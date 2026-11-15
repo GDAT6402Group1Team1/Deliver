@@ -233,11 +233,19 @@ bool ADeliveryCompanionMotorbike::TryMount(ADeliveryNpcCharacter* Companion)
     return true;
 }
 
-bool ADeliveryCompanionMotorbike::SetDriveDestination(const FVector& Goal,bool bKeepDrivingWhileReplanning,const FVector* WalkAfterParking)
+bool ADeliveryCompanionMotorbike::SetDriveDestination(const FVector& Goal,bool bKeepDrivingWhileReplanning,
+    const FVector* WalkAfterParking,FName* OutRejection)
 {
-    if (!HasAuthority()) return false;
+    if (OutRejection) *OutRejection=NAME_None;
+    if (!HasAuthority())
+    {
+        if (OutRejection) *OutRejection=TEXT("CompanionUnavailable");
+        return false;
+    }
     const auto Reject=[&](FName Reason)
     {
+        // 保留车路时仍返回本次拒绝原因，规划失败不用覆盖车辆当前公开状态
+        if (OutRejection) *OutRejection=Reason;
         if (!bKeepDrivingWhileReplanning) FailDrive(Reason);
         return false;
     };
