@@ -94,6 +94,25 @@ void ADeliveryPackageItem::BeginPlay()
     RefreshCarrierPresentation();
 }
 
+void ADeliveryPackageItem::EndPlay(const EEndPlayReason::Type Reason)
+{
+    ClearRecoveryInventory();
+    Super::EndPlay(Reason);
+}
+
+void ADeliveryPackageItem::SetOwner(AActor* NewOwner)
+{
+    Super::SetOwner(NewOwner);
+    if (HasAuthority() && GetOwner()) ClearRecoveryInventory();
+}
+
+void ADeliveryPackageItem::ClearRecoveryInventory()
+{
+    if (auto* Inventory = RecoveryInventory.Get())
+        Inventory->ForgetDroppedFirstOrderPackage(this);
+    RecoveryInventory.Reset();
+}
+
 void ADeliveryPackageItem::RefreshCarrierPresentation()
 {
     if (auto* Bike = Cast<ADeliveryMotorbike>(GetOwner()))

@@ -272,6 +272,9 @@ private:
     virtual bool CanHandleTaskPackage() const override;
     virtual bool CanReceiveTaskPackage(ADeliveryPackageItem* Package) const override;
     virtual bool TryReceiveTaskPackage(ADeliveryPackageItem* Package) override;
+    virtual bool CanReceiveTaskPackageInBackpack(ADeliveryPackageItem* Package) const override;
+    virtual bool TryReceiveTaskPackageInBackpack(ADeliveryPackageItem* Package) override;
+    virtual bool IsTaskPackageInBackpack(const ADeliveryPackageItem* Package) const override;
     virtual bool ReleaseTaskPackage(ADeliveryPackageItem* Package) override;
     virtual void ApplyTaskPackagePresentation(ADeliveryPackageItem* Package) override;
 

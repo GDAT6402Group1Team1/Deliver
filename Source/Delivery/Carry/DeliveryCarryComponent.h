@@ -15,7 +15,7 @@ class DELIVERY_API UDeliveryCarryComponent : public UActorComponent
     GENERATED_BODY()
   public:
     // 携带状态
-    /** 骑车时先查询货架，否则查询手持槽位 */
+    /** 骑车时先查询货架，再查询角色的手持和背包槽位 */
     UFUNCTION(BlueprintPure, Category = "Carry")
     ADeliveryPackageItem *GetPackage() const;
     /** 返回角色正在驾驶的车辆 */

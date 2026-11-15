@@ -9,6 +9,7 @@
 
 class ADeliveryCharacter;
 class ADeliveryHandheldItem;
+class ADeliveryPackageItem;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDeliveryInventoryChanged);
 
@@ -54,6 +55,13 @@ class DELIVERY_API UDeliveryInventoryComponent : public UActorComponent
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool HasBackpackSpace() const;
 
+	ADeliveryPackageItem* GetStoredTaskPackage() const;
+	bool IsTaskPackageInBackpack(const ADeliveryPackageItem* Package) const;
+	bool CanStoreTaskPackageInBackpack() const;
+
+	// 只向物品栏所属玩家提供自己主动放下且仍在地面的首单原件
+	const ADeliveryPackageItem* GetDroppedFirstOrderPackage() const;
+
     // 交接失败恢复实物时复用当前库存的掉落偏移
     float GetDropForwardDistance() const { return DropForwardDistance; }
     float GetDropUpOffset() const { return DropUpOffset; }
@@ -65,6 +73,8 @@ class DELIVERY_API UDeliveryInventoryComponent : public UActorComponent
 	// 拾取、切换和移除
 	/** 服务器拾取接口，检查物品和槽位条件后更新背包 */
 	bool TryPickup(ADeliveryHandheldItem* Item);
+	bool TryStoreTaskPackageInBackpack(ADeliveryPackageItem* Package);
+	bool ConsumeTaskPackage(ADeliveryPackageItem* Package);
 
     // 普通交还沿用原容量规则，查询不会挤掉旧手持物或改变槽位
     bool CanReceiveFetchedItem(ADeliveryHandheldItem* Item) const;
@@ -112,9 +122,17 @@ class DELIVERY_API UDeliveryInventoryComponent : public UActorComponent
 	void OnRep_Slots();
 
 	friend class FDeliveryMotorbikeTrunkTest;
+	friend class ADeliveryPackageItem;
+	void ForgetDroppedFirstOrderPackage(const ADeliveryPackageItem* Package);
+	UPROPERTY(Replicated)
+	TObjectPtr<ADeliveryPackageItem> DroppedFirstOrderPackage;
 
 	// 槽位处理与物体显示
 	void PerformSlotAction(int32 SlotIndex);
+	// 主动放快递需要当前位置可放，失败时保留两格；晕倒仍可强制掉落
+	bool TryDropHeldItem(bool bCheckPackagePlacement);
+	bool TryPickupInSlot(ADeliveryHandheldItem* Item, bool bStorePackageInBackpack);
+	bool ConsumeItemInSlot(int32 SlotIndex, ADeliveryHandheldItem* Item);
 	void ApplyPresentation();
 	void StoreItem(int32 SlotIndex, ADeliveryHandheldItem* Item);
 	int32 FindEmptyBackpackSlot() const;

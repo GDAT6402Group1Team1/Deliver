@@ -8,8 +8,9 @@
 #include "DeliveryPackageItem.generated.h"
 
 class UDeliveryItemComponent;
+class UDeliveryInventoryComponent;
 
-/** 带任务信息的快递物体，只能放在手持槽中 */
+/** 带任务信息的快递物体，可放在手持槽和背包中 */
 UCLASS(Blueprintable)
 
 class DELIVERY_API ADeliveryPackageItem : public ADeliveryHandheldItem
@@ -19,6 +20,8 @@ class DELIVERY_API ADeliveryPackageItem : public ADeliveryHandheldItem
   public:
     ADeliveryPackageItem();
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+    virtual void SetOwner(AActor* NewOwner) override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
     virtual bool CanPickup(APawn *Interactor, bool bCheckTaskAvailability) const override;
     virtual bool Pickup(APawn *Interactor) override;
@@ -48,6 +51,9 @@ class DELIVERY_API ADeliveryPackageItem : public ADeliveryHandheldItem
     TObjectPtr<UStaticMeshComponent> CaterpillarVisual;
 
 private:
+    friend class UDeliveryInventoryComponent;
+    void ClearRecoveryInventory();
+    TWeakObjectPtr<UDeliveryInventoryComponent> RecoveryInventory;
     bool bHadCarrierPresentation = false;
     // 状态属于这份外卖，丢弃、换手和装车都保留；销毁后不污染下一份外卖
     UPROPERTY(ReplicatedUsing = OnRep_Caterpillar)

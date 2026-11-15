@@ -132,7 +132,8 @@ bool UDeliveryTargetComponent::CanAcceptDelivery(AActor *ItemActor, APlayerState
         if (!GetWorld() || !IsValid(Holder) || Holder->GetWorld() != GetWorld() || ItemActor->GetWorld() != GetWorld() ||
             !IsValid(Player) || Player->GetWorld() != GetWorld() || Player->IsInactive() ||
             !Package || Carrier->GetCarriedTaskPackage() != Package ||
-            Carrier->GetTaskPlayerState() != Player || !Carrier->CanHandleTaskPackage())
+            Carrier->GetTaskPlayerState() != Player || !Carrier->CanHandleTaskPackage() ||
+            Carrier->IsTaskPackageInBackpack(Package))
         {
             return false;
         }

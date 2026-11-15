@@ -62,18 +62,22 @@ bool FDeliveryPackageTransferTest::RunTest(const FString&)
     TaskState->StartServerTime = -17.f;
     const float OriginalStart = TaskState->StartServerTime;
 
-    const auto MakePlayer = [&](const FVector& Location)
+    const auto MakePlayer = [&](FName Name, const FVector& Location)
     {
         FActorSpawnParameters Spawn;
+        Spawn.Name = Name;
         Spawn.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        // 此夹具只检查交接规则，原生角色启动时会报告没有物理资产
+        AddExpectedError(FString::Printf(TEXT("%s: Skeletal mesh has no Physics Asset."), *Name.ToString()),
+            EAutomationExpectedErrorFlags::Contains, 1);
         auto* Character = World->SpawnActor<ADeliveryCharacter>(Location, FRotator::ZeroRotator, Spawn);
         Character->GetActiveRagdoll()->StopRagdoll();
         Character->SetActorLocation(Location, false, nullptr, ETeleportType::TeleportPhysics);
         Character->SetPlayerState(World->SpawnActor<APlayerState>());
         return Character;
     };
-    auto* Owner = MakePlayer(FVector(0, 0, 88));
-    auto* Stranger = MakePlayer(FVector(0, 400, 88));
+    auto* Owner = MakePlayer(TEXT("PackageTransferOwner"), FVector(0, 0, 88));
+    auto* Stranger = MakePlayer(TEXT("PackageTransferStranger"), FVector(0, 400, 88));
     auto* Npc = World->SpawnActor<ADeliveryCompanionCharacter>(FVector(150, 0, 88), FRotator::ZeroRotator);
     // 此处从结识后的服务器状态开始，扶起按键与视角仍由实机验收覆盖
     Npc->Encounter.EncounterStartedAt = 0;

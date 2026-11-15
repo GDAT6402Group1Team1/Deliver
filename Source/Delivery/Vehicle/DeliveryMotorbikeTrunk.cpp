@@ -87,7 +87,8 @@ bool ADeliveryMotorbike::CanDriveNow(const ADeliveryCharacter* Character) const
 	 */
 	if (const UDeliveryInventoryComponent* Inventory = Character->GetInventoryComponent())
 	{
-		if (Cast<ADeliveryPackageItem>(Inventory->GetHeldItem()))
+		if (Cast<ADeliveryPackageItem>(Inventory->GetHeldItem()) ||
+		    (HasCargo() && Inventory->GetStoredTaskPackage()))
 		{
 			return false;
 		}
@@ -115,7 +116,7 @@ bool ADeliveryMotorbike::CanUnloadTrunk(const ADeliveryCharacter* Character) con
 	// 手上已经有东西就不能再接一件
 	const UDeliveryInventoryComponent* Inventory = Character->GetInventoryComponent();
 
-	return !Inventory || !Inventory->HasHeldItem();
+	return Inventory && !Inventory->HasHeldItem() && !Inventory->GetStoredTaskPackage();
 }
 
 // 左键交互的条件：装和卸任一能做就算可用

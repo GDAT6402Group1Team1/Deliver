@@ -19,7 +19,7 @@ ADeliveryMotorbike *UDeliveryCarryComponent::GetVehicle() const
 
     return (Bike && Bike->GetDriver() == Character) ? Bike : nullptr;
 }
-// 统一查询车上和手中的快递
+// 统一查询车上和角色物品栏中的快递
 ADeliveryPackageItem *UDeliveryCarryComponent::GetPackage() const
 {
     ADeliveryCharacter *Character = Cast<ADeliveryCharacter>(GetOwner());
@@ -36,7 +36,7 @@ ADeliveryPackageItem *UDeliveryCarryComponent::GetPackage() const
         }
     }
 
-    return Inventory ? Cast<ADeliveryPackageItem>(Inventory->GetHeldItem()) : nullptr;
+    return Inventory ? Inventory->GetStoredTaskPackage() : nullptr;
 }
 // 取得任务所属玩家，上车后必要时从车辆获取
 APlayerState *UDeliveryCarryComponent::GetPlayerState() const
@@ -131,5 +131,5 @@ bool UDeliveryCarryComponent::ReleasePackage(ADeliveryPackageItem *ExpectedPacka
         }
     }
     UDeliveryInventoryComponent *Inventory = Character->GetInventoryComponent();
-    return Inventory && Inventory->ConsumeHeldItem(ExpectedPackage);
+    return Inventory && Inventory->ConsumeTaskPackage(ExpectedPackage);
 }

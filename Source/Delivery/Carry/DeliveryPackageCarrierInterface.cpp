@@ -15,7 +15,7 @@ FVector IDeliveryPackageCarrierInterface::GetTaskPackageTransferPoint() const
 namespace DeliveryPackageTransfer
 {
 bool TryTransfer(AActor* From, AActor* To, FName& Reason,
-    ADeliveryPackageItem* ExpectedPackage, TFunction<bool()> CanContinue)
+    ADeliveryPackageItem* ExpectedPackage, TFunction<bool()> CanContinue, bool bToBackpack)
 {
     Reason = NAME_None;
     if (!IsInGameThread()) { Reason = TEXT("WrongThread"); return false; }
@@ -39,7 +39,11 @@ bool TryTransfer(AActor* From, AActor* To, FName& Reason,
     if ((ExpectedPackage && Package != ExpectedPackage) || !Item || Package->IsActorBeingDestroyed() || Package->GetWorld() != From->GetWorld() || Package->GetOwner() != From)
     { Reason = TEXT("PackageOwnershipMismatch"); return false; }
     if (Item->IsTransferInProgress()) { Reason = TEXT("TransferBusy"); return false; }
-    if (!Receiver->CanReceiveTaskPackage(Package))
+    const auto CanReceive = [Receiver, Package, bToBackpack]()
+    {
+        return bToBackpack ? Receiver->CanReceiveTaskPackageInBackpack(Package) : Receiver->CanReceiveTaskPackage(Package);
+    };
+    if (!CanReceive())
     { Reason = TEXT("ReceiverUnavailable"); return false; }
     const auto ReachabilityFailure = [&]() -> FName
     {
@@ -69,11 +73,18 @@ bool TryTransfer(AActor* From, AActor* To, FName& Reason,
     if (!Item->BeginTransfer(To)) { Reason = TEXT("TransferBusy"); return false; }
     ON_SCOPE_EXIT { if (IsValid(Item)) Item->EndTransfer(); };
 
-    const FVector OriginalPackageLocation = Package->GetActorLocation();
+    const bool bFromBackpack = Source->IsTaskPackageInBackpack(Package);
+    const FVector OriginalPackageLocation = bFromBackpack ?
+        Source->GetTaskPackageTransferPoint() + From->GetActorForwardVector().GetSafeNormal2D()*75.f + FVector(0,0,35.f) :
+        Package->GetActorLocation();
     const auto HasPackage = [Package](AActor* Actor)
     {
         const auto* Carrier = IsValid(Actor) ? Cast<IDeliveryPackageCarrierInterface>(Actor) : nullptr;
         return IsValid(Package) && Carrier && Carrier->GetCarriedTaskPackage() == Package && Package->GetOwner() == Actor;
+    };
+    const auto ReceivedInRequestedPlace = [&]()
+    {
+        return HasPackage(To) && Receiver->IsTaskPackageInBackpack(Package)==bToBackpack;
     };
     const auto IdentityStillValid = [&]()
     {
@@ -95,8 +106,13 @@ bool TryTransfer(AActor* From, AActor* To, FName& Reason,
         {
             // 两步之间没有广播或外部调用，预约不会在同步回调中暴露给第三方
             Item->EndTransfer();
-            if (Item->BeginTransfer(From) && Source->CanReceiveTaskPackage(Package))
-                Source->TryReceiveTaskPackage(Package);
+            if (Item->BeginTransfer(From))
+            {
+                if (bFromBackpack)
+                    Source->TryReceiveTaskPackageInBackpack(Package);
+                else
+                    Source->TryReceiveTaskPackage(Package);
+            }
             if (HasPackage(From)) return false;
         }
         // 无法回滚时保留原实物，解除无人持有的手掌表现，并明确上报异常
@@ -114,10 +130,11 @@ bool TryTransfer(AActor* From, AActor* To, FName& Reason,
     if (const FName Failure = ReachabilityFailure(); !Failure.IsNone()) return RollBack(Failure);
     if (Source->GetCarriedTaskPackage() == Package) return RollBack(TEXT("SourceReleaseFailed"));
     // 同步通知中只有预约的目标可能已经接收，实际归属一致即可确认结果
-    if (HasPackage(To)) return true;
-    if (Package->GetOwner() || !Receiver->CanReceiveTaskPackage(Package) || !Receiver->TryReceiveTaskPackage(Package))
+    if (ReceivedInRequestedPlace()) return true;
+    if (Package->GetOwner() || !CanReceive() ||
+        !(bToBackpack ? Receiver->TryReceiveTaskPackageInBackpack(Package) : Receiver->TryReceiveTaskPackage(Package)))
         return RollBack(TEXT("ReceiverRejectedRolledBack"));
-    if (!IdentityStillValid() || !HasPackage(To) || Source->GetCarriedTaskPackage() == Package)
+    if (!IdentityStillValid() || !ReceivedInRequestedPlace() || Source->GetCarriedTaskPackage() == Package)
         return RollBack(TEXT("ReceiverStateChangedRolledBack"));
     if (const FName Failure = ReachabilityFailure(); !Failure.IsNone()) return RollBack(Failure);
     return true;

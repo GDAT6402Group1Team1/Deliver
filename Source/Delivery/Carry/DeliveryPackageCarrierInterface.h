@@ -26,6 +26,10 @@ public:
     // 查询接收条件，不会释放原持有者或挤掉接收者的旧手持物
     virtual bool CanReceiveTaskPackage(ADeliveryPackageItem* Package) const = 0;
     virtual bool TryReceiveTaskPackage(ADeliveryPackageItem* Package) = 0;
+    // 玩家背包是独立目标，其他携带者保持原接收方式
+    virtual bool CanReceiveTaskPackageInBackpack(ADeliveryPackageItem* Package) const { return false; }
+    virtual bool TryReceiveTaskPackageInBackpack(ADeliveryPackageItem* Package) { return false; }
+    virtual bool IsTaskPackageInBackpack(const ADeliveryPackageItem* Package) const { return false; }
     // 仅清除指定实物的持有关系，完成任务后也必须能够释放
     virtual bool ReleaseTaskPackage(ADeliveryPackageItem* Package) = 0;
     virtual void ApplyTaskPackagePresentation(ADeliveryPackageItem* Package) = 0;
@@ -36,5 +40,5 @@ namespace DeliveryPackageTransfer
 // 服务器同步交接同一实物，成功要求持件指针与 Owner 均已转移
 // 失败尽量归还原持有者；回滚失败保留实物并返回明确原因
 DELIVERY_API bool TryTransfer(AActor* From, AActor* To, FName& Reason,
-    ADeliveryPackageItem* ExpectedPackage = nullptr, TFunction<bool()> CanContinue = {});
+    ADeliveryPackageItem* ExpectedPackage = nullptr, TFunction<bool()> CanContinue = {}, bool bToBackpack = false);
 }

@@ -16,8 +16,28 @@ bool ADeliveryCharacter::CanReceiveTaskPackage(ADeliveryPackageItem* Package) co
 {
     const auto* Inventory = GetInventoryComponent();
     const auto* Item = IsValid(Package) ? Package->GetDeliveryItemComponent() : nullptr;
-    return CanHandleTaskPackage() && Inventory && !Inventory->HasHeldItem() &&
+    return CanHandleTaskPackage() && Inventory && !Inventory->HasHeldItem() && !Inventory->GetStoredTaskPackage() &&
         Package && Package->GetWorld() == GetWorld() && Item && Item->CanBeAcquiredBy(this);
+}
+
+bool ADeliveryCharacter::CanReceiveTaskPackageInBackpack(ADeliveryPackageItem* Package) const
+{
+    const auto* Inventory = GetInventoryComponent();
+    const auto* Item = IsValid(Package) ? Package->GetDeliveryItemComponent() : nullptr;
+    return CanHandleTaskPackage() && Inventory && Inventory->CanStoreTaskPackageInBackpack() &&
+        Item && Package->GetWorld() == GetWorld() && Item->CanBeAcquiredBy(this);
+}
+
+bool ADeliveryCharacter::TryReceiveTaskPackageInBackpack(ADeliveryPackageItem* Package)
+{
+    return HasAuthority() && CanReceiveTaskPackageInBackpack(Package) && !Package->GetOwner() &&
+        GetInventoryComponent()->TryStoreTaskPackageInBackpack(Package) && IsTaskPackageInBackpack(Package);
+}
+
+bool ADeliveryCharacter::IsTaskPackageInBackpack(const ADeliveryPackageItem* Package) const
+{
+    const auto* Inventory = GetInventoryComponent();
+    return Inventory && Inventory->IsTaskPackageInBackpack(Package);
 }
 
 bool ADeliveryCharacter::TryReceiveTaskPackage(ADeliveryPackageItem* Package)
@@ -36,5 +56,5 @@ bool ADeliveryCharacter::ReleaseTaskPackage(ADeliveryPackageItem* Package)
 void ADeliveryCharacter::ApplyTaskPackagePresentation(ADeliveryPackageItem* Package)
 {
     if (IsValid(Package) && Package->GetOwner() == this)
-        Package->SetInventoryPresentation(true, false, GetHeldItemAnchor());
+        GetInventoryComponent()->RefreshItemPresentation(Package);
 }
