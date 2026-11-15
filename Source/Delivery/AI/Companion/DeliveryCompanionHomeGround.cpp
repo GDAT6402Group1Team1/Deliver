@@ -91,9 +91,22 @@ void UDeliveryCompanionComponent::UpdateHomeOwnerPlacementApproach(FGuid Id,doub
         if (Now<NextHomeNavigationAt) return;
         if (!ResolveHomeOwnerPlacement(*Source,Player,OwnerPlacementEntrance,PropPlacementTarget))
         {
+            NextHomeNavigationAt=Now+GetTuning().NavigationInterval;
+            if (HomeOwnerPlacementBlockedSince<0) HomeOwnerPlacementBlockedSince=Now;
+            // 主人面前一直放不下原尺寸时，先走到主人身边，再把东西放在脚边，不让它一直卡在手里
+            if (Now-HomeOwnerPlacementBlockedSince>=3.)
+            {
+                const auto* Npc=GetCompanion();
+                const bool bBesideOwner=Npc && FVector::DistSquared2D(Npc->GetActorLocation(),Player->GetActorLocation())<=FMath::Square(200.f);
+                if (bBesideOwner || Now-HomeOwnerPlacementBlockedSince>=18.)
+                { FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomeDroppedAtFeet")); return; }
+                MoveForHome(Player->GetActorLocation(),150.f);
+                if (!IsCurrentHome(Id)) return;
+                SetSuspension(TEXT("HomeWalkingToOwnerToDrop"));
+                return;
+            }
             StopHomeMovement();
             if (!IsCurrentHome(Id)) return;
-            NextHomeNavigationAt=Now+GetTuning().NavigationInterval;
             SetSuspension(TEXT("HomeOwnerPlacementUnavailable"));
             return;
         }
@@ -102,7 +115,7 @@ void UDeliveryCompanionComponent::UpdateHomeOwnerPlacementApproach(FGuid Id,doub
     const bool bReached=MoveForHome(OwnerPlacementEntrance.GetLocation(),FMath::Max(HomeUseReachTolerance,12.f));
     LastHomeUpdateAt=Now;
     if (!bReached || !IsCurrentHome(Id) || !AlignForHome(OwnerPlacementEntrance)) return;
-    if (!IsHomePropAtHand()) { SetSuspension(TEXT("HomePropReturningToHand")); return; }
+    if (!IsHomePropReadyAtHand(Now)) { SetSuspension(TEXT("HomePropReturningToHand")); return; }
     FName Reason;
     if (!Source->CanPlaceAtOriginalSize(PropPlacementTarget,Reason))
     {

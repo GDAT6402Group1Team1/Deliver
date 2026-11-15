@@ -1,4 +1,5 @@
 #include "AI/Companion/DeliveryCompanionComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "AI/Companion/DeliveryCompanionCharacter.h"
 #include "AI/Companion/DeliveryCompanionTuning.h"
 #include "AI/Actions/DeliveryNpcCombatComponent.h"
@@ -48,6 +49,7 @@ namespace
         if (Reason==TEXT("HomePropScaleRestoreBlocked")) return TEXT("放下的位置没有足够空间恢复物品原来的大小，物品留在现场等待安全恢复");
         if (Reason==TEXT("HomePropScaleRejected")) return TEXT("这件物品未能安全缩小，搬运没有开始");
         if (Reason==TEXT("HomeReleasedPropTakenOrLost")) return TEXT("放下的物品已经被拿走或不在原处");
+        if (Reason==TEXT("HomeDroppedAtFeet")) return TEXT("主人面前一直没有放得下它原来大小的空位，我把它放在了自己脚边；它暂时还是缩小的样子，周围空出来后会恢复原来的大小");
         if (Reason==TEXT("HomePropTransferChanged")) return TEXT("家具或搬放中转点已经变化，我停止这次搬放，物品留在现场");
         return TEXT("物件、位置或使用条件发生变化，游戏没有确认完成");
     }
@@ -174,10 +176,23 @@ bool UDeliveryCompanionComponent::MoveForHome(const FVector& Goal,float Radius)
         FVector::Dist2D(Projected.Location,Goal)>FMath::Max(Radius,8.f) || FMath::Abs(Projected.Location.Z-Goal.Z)>15.f ||
         !NavPath || !NavPath->IsValid() || NavPath->IsPartial())
     {
+        if (HomePathBlockedSince<0 || !HomePathBlockedGoal.Equals(Goal,30.f)) { HomePathBlockedSince=Now; HomePathBlockedGoal=Goal; }
+        else if (Now-HomePathBlockedSince>=4.)
+        {
+            // 走不到就直接站到目标站位上，东西照常由后面的拿放流程处理
+            HomePathBlockedSince=-1;
+            const FVector From=Npc->GetActorLocation();
+            Npc->SetActorLocation(Goal+FVector(0,0,Npc->GetCapsuleComponent()->GetScaledCapsuleHalfHeight()+2.f),false,nullptr,ETeleportType::TeleportPhysics);
+            UE_LOG(LogDeliveryCompanionHome,Log,TEXT("HomeMoveTeleport npc=%s from=%s to=%s"),*GetNameSafe(Npc),*From.ToCompactString(),*Goal.ToCompactString());
+            if (!StillCurrent()) return false;
+            NextHomeNavigationAt=Now+.2;
+            return false;
+        }
         SetSuspension(TEXT("HomePathBlocked"));
-        NextHomeNavigationAt=Now+GetTuning().BlockedRetrySeconds;
+        NextHomeNavigationAt=Now+FMath::Min(GetTuning().BlockedRetrySeconds,1.5f);
         return false;
     }
+    HomePathBlockedSince=-1;
     const auto Result=AI->MoveTo(Move);
     if (!StillCurrent())
     {
@@ -282,6 +297,8 @@ bool UDeliveryCompanionComponent::BeginHomeChoice(const FDeliveryCompanionHomeCh
     ActiveHomeChoice=Choice;
     HomeRequester=OwnerPlayerState.Get();
     HomeActiveSeconds=0;
+    HomeOwnerPlacementBlockedSince=-1;
+    HomePropHandWaitStartedAt=-1;
     bHomeUseStarted=false;
     bHomeExitAnimationFinished=false;
     bPlacingHomeProp=false;
@@ -382,7 +399,7 @@ bool UDeliveryCompanionComponent::StartHomeUse(const UDeliveryHomeUseRequest& Re
         ((bTaking || HomeState.Operation==EDeliveryHomeOperation::PlaceProp || HomeState.Operation==EDeliveryHomeOperation::Sit) &&
             (FMath::Abs(FMath::FindDeltaAngleDegrees(Npc->GetActorRotation().Yaw,Entrance.Rotator().Yaw))>HomeUseYawTolerance ||
                 Npc->GetVelocity().Size2D()>=5.f)) ||
-        (!bTaking && HomeState.Operation==EDeliveryHomeOperation::PlaceProp && !IsHomePropAtHand()) ||
+        (!bTaking && HomeState.Operation==EDeliveryHomeOperation::PlaceProp && !IsHomePropAtHand() && !bHomePropHandAccepted) ||
         !Object->BeginUse(Claim,Reason)) return false;
     if (!IsCurrentHome(Request.ArrangementId)) return false;
     bHomeUseStarted=true;
@@ -551,6 +568,28 @@ bool UDeliveryCompanionComponent::IsHomePropAtHand() const
     return IsValid(Prop) && GetHomeHandPose(Hand,Forward) &&
         FVector::Dist(Prop->GetActorLocation(),Hand)<=FMath::Min(4.f,PropCarryReachTolerance) &&
         FMath::Abs(FMath::FindDeltaAngleDegrees(Prop->GetActorRotation().Yaw,Forward.Rotation().Yaw))<=FMath::Min(5.f,HomeUseYawTolerance);
+}
+
+bool UDeliveryCompanionComponent::IsHomePropReadyAtHand(double Now)
+{
+    if (IsHomePropAtHand()) { HomePropHandWaitStartedAt=-1; return true; }
+    const auto* Prop=HomeState.CarriedProp.Get();
+    FVector Hand,Forward;
+    if (!IsValid(Prop) || !GetHomeHandPose(Hand,Forward)) { HomePropHandWaitStartedAt=-1; return false; }
+    if (HomePropHandWaitStartedAt<0) HomePropHandWaitStartedAt=Now;
+    const float Distance=FVector::Dist(Prop->GetActorLocation(),Hand);
+    const double Waited=Now-HomePropHandWaitStartedAt;
+    // 大件被身体或家具顶住时到不了手前的精确点；已经跟在搬运距离内并等过一秒，就从实物当前位置开始下一段
+    const bool bCloseEnough=Waited>=1.0 && Distance<=FMath::Clamp(PropCarryPauseDistance,20.f,100.f);
+    if (Now>=NextHomePropHandLogAt)
+    {
+        NextHomePropHandLogAt=Now+1.0;
+        UE_LOG(LogDeliveryCompanionHome,Log,TEXT("HomePropNotAtHand arrangement=%s prop=%s distance=%.1f yaw_error=%.1f waited=%.1f accepted=%d"),
+            *HomeState.ArrangementId.ToString(),*GetNameSafe(Prop),Distance,
+            FMath::Abs(FMath::FindDeltaAngleDegrees(Prop->GetActorRotation().Yaw,Forward.Rotation().Yaw)),Waited,bCloseEnough);
+    }
+    if (bCloseEnough) HomePropHandWaitStartedAt=-1;
+    return bCloseEnough;
 }
 
 bool UDeliveryCompanionComponent::ValidateHomePropTransfer(FName& OutReason) const
@@ -750,10 +789,16 @@ void UDeliveryCompanionComponent::TickHomeLifecycle()
         if (HasActiveHomeArrangement()) FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomePropCarryLost"));
         else ReleaseHomeProp(TEXT("HomePropCarryLost"));
     }
+    // 走向物件或搬着东西走向目的地时，中途被人或家具挡住视线、暂时离得远都继续走；到位后的近距离复核照常检查
+    const auto IsTravelOnlyFailure=[this](FName Reason)
+    {
+        return (Reason==TEXT("HomeObjectTooFar") || Reason==TEXT("HomeObjectOccluded")) && HasActiveHomeArrangement() && !bHomeUseStarted &&
+            (HomeState.Phase==EDeliveryCompanionHomePhase::GoToObject || HomeState.Phase==EDeliveryCompanionHomePhase::GoToDestination);
+    };
     if (HomeTakeClaim.IsValid())
     {
         FName Reason;
-        if (!HomeTakeClaim.Object->ValidateClaim(HomeTakeClaim,false,Reason))
+        if (!HomeTakeClaim.Object->ValidateClaim(HomeTakeClaim,false,Reason) && !IsTravelOnlyFailure(Reason))
         {
             if (HasActiveHomeArrangement()) FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason);
             else ReleaseHomeProp(Reason);
@@ -762,7 +807,11 @@ void UDeliveryCompanionComponent::TickHomeLifecycle()
     if (HasActiveHomeArrangement() && HomeUseClaim.IsValid())
     {
         FName Reason;
-        if (!HomeUseClaim.Object->ValidateClaim(HomeUseClaim,false,Reason)) FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason);
+        // 拿取动作进行中目的地也可能暂时看不见，同样等走到位再复核
+        if (!HomeUseClaim.Object->ValidateClaim(HomeUseClaim,false,Reason) && !IsTravelOnlyFailure(Reason) &&
+            !((Reason==TEXT("HomeObjectTooFar") || Reason==TEXT("HomeObjectOccluded")) &&
+                HomeState.Phase==EDeliveryCompanionHomePhase::TakeProp && HomeState.Operation==EDeliveryHomeOperation::PlaceProp))
+            FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason);
     }
 }
 
@@ -802,7 +851,13 @@ void UDeliveryCompanionComponent::UpdateHomeArrangement()
     auto* Object=Claim.Object.Get();
     FTransform Entrance,Use,Exit;
     FName Reason;
-    if (!Object || !Object->ValidateClaim(Claim,false,Reason) || !Object->GetUseTransforms(Claim,Entrance,Use,Exit))
+    const bool bTravelling=!bHomeUseStarted && (HomeState.Phase==EDeliveryCompanionHomePhase::GoToObject ||
+        HomeState.Phase==EDeliveryCompanionHomePhase::GoToDestination);
+    bool bClaimValid=Object && Object->ValidateClaim(Claim,false,Reason);
+    // 路上只是暂时看不见或还没走近时继续前进，凭据失效等其他原因照常结束
+    if (Object && !bClaimValid && bTravelling && (Reason==TEXT("HomeObjectTooFar") || Reason==TEXT("HomeObjectOccluded")))
+    { bClaimValid=true; Reason=NAME_None; }
+    if (!bClaimValid || !Object->GetUseTransforms(Claim,Entrance,Use,Exit))
     { FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,Reason.IsNone()?FName(TEXT("HomeClaimExpired")):Reason); return; }
     const auto* Definition=Object->GetUseDefinition(Claim);
     if (!Definition) { FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomeDefinitionMissing")); return; }
@@ -814,12 +869,15 @@ void UDeliveryCompanionComponent::UpdateHomeArrangement()
         // 到点后先按家具入口转身，实际手持位置才与已检查的朝向一致
         if ((bAtSource || HomeState.Operation==EDeliveryHomeOperation::PlaceProp || HomeState.Operation==EDeliveryHomeOperation::Sit) && !AlignForHome(Entrance)) return;
         // 转身后先等真实持件回到当前手前，不能拿转身前的位置直接开始桌面路线
-        if (!bAtSource && HomeState.Operation==EDeliveryHomeOperation::PlaceProp && !IsHomePropAtHand())
+        const bool bPlacingFromHand=!bAtSource && HomeState.Operation==EDeliveryHomeOperation::PlaceProp;
+        if (bPlacingFromHand && !IsHomePropReadyAtHand(Now))
         { SetSuspension(TEXT("HomePropReturningToHand")); return; }
         auto* ASC=HomeAbilitySystem.Get();
         if (!ASC || !HomeAbilityHandle.IsValid()) { FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomeAbilityUnavailable")); return; }
         auto* Request=NewObject<UDeliveryHomeUseRequest>(Npc); Request->ArrangementId=Id;
         FGameplayEventData Event; Event.EventTag=TAG_Event_Home_Use; Event.Instigator=Npc; Event.Target=Object->GetOwner(); Event.OptionalObject=Request;
+        // 本次到位检查的结果只交给紧接着的这一次开始使用
+        TGuardValue<bool> HandAccepted(bHomePropHandAccepted,bPlacingFromHand);
         ASC->HandleGameplayEvent(Event.EventTag,&Event);
         if (IsCurrentHome(Id) && !bHomeUseStarted) FinishHomeArrangement(EDeliveryCompanionHomePhase::Failed,TEXT("HomeAbilityRejected"));
         return;

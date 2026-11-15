@@ -325,10 +325,50 @@ def compact_context(context):
             'evidence': kept_evidence}
 
 
+def _describe_home_candidates(result):
+    """给每个家居候选补一句人话说明，模型按物件名和目的地挑候选，不必自己对照编号"""
+    companion = result.get('companion_context')
+    objects = companion.get('home_objects') if isinstance(companion, dict) else None
+    if not isinstance(objects, list):
+        return
+    names, slots = {}, {}
+    for entry in objects:
+        if not isinstance(entry, dict):
+            continue
+        names[entry.get('object_id')] = entry.get('name')
+        for slot in entry.get('slots') or ():
+            if isinstance(slot, dict):
+                slots[(entry.get('object_id'), slot.get('slot_id'))] = slot.get('name')
+    for item in result['candidates']:
+        choice = item.get('home')
+        if not isinstance(choice, dict):
+            continue
+        name = names.get(choice.get('object_id')) or '这件东西'
+        use = choice.get('use')
+        if use == 'PlaceProp':
+            target = choice.get('destination_object_id')
+            place = slots.get((target, choice.get('destination_slot_id'))) or ''
+            summary = f'把「{name}」放到「{names.get(target) or "那件家具"}」上' + (f'（{place}）' if place else '')
+        elif use == 'PlaceNearOwner':
+            summary = f'把「{name}」放到主人身边'
+        elif use == 'TakeProp':
+            summary = f'拿起「{name}」'
+        elif use == 'Sit':
+            summary = f'坐到「{name}」上'
+        elif use == 'PlayAudio':
+            summary = f'打开「{name}」的声音'
+        elif use == 'StopAudio':
+            summary = f'关掉「{name}」的声音'
+        else:
+            summary = f'对「{name}」做 {use}'
+        item['home_summary'] = summary
+
+
 def model_context(context):
     """只缩短模型输入里的对象编号，保留内容、候选顺序与编号之间的对应关系"""
     result = compact_context(context)
     result['candidates'] = [dict(item) for item in result['candidates']]
+    _describe_home_candidates(result)
     events, subjects = {}, {}
 
     def alias(value, values, prefix):

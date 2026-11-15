@@ -158,7 +158,7 @@ bool UDeliveryHomeObjectComponent::IsOperationAvailable(const UDeliveryHomeBehav
 
 bool UDeliveryHomeObjectComponent::ValidateUse(ADeliveryCompanionCharacter* Companion,
     const UDeliveryHomeBehaviorDefinition* Definition,const FSmartObjectSlotHandle& Slot,bool bClose,FName& OutReason,
-    const AActor* PlacementProp) const
+    const AActor* PlacementProp,bool bHeldByUser) const
 {
     auto* Subsystem=GetWorld()?GetWorld()->GetSubsystem<USmartObjectSubsystem>():nullptr;
     auto* Smart=ResolveSmartObject();
@@ -178,14 +178,16 @@ bool UDeliveryHomeObjectComponent::ValidateUse(ADeliveryCompanionCharacter* Comp
             !Grab->HasAnyCarrier() && !Grab->FindNpcPickupContact(Companion->GetActorLocation(),Companion,Point))
             return Fail(OutReason,TEXT("HomeTakeEntranceTooFar"));
     const float Radius=bClose?Definition->UseRadius:Definition->ApproachRadius;
-    if (FVector::DistSquared(Companion->GetActorLocation(),Point)>FMath::Square(Radius))
+    // 拿取距离在登记搬运前已按边缘接触点通过；登记后不再改用物件中心重量一次，大件抱枕的中心会超出拿取半径
+    if (!(bClose && bHeldByUser) && FVector::DistSquared(Companion->GetActorLocation(),Point)>FMath::Square(Radius))
         return Fail(OutReason,TEXT("HomeObjectTooFar"));
     FCollisionQueryParams Params(SCENE_QUERY_STAT(HomeObjectSight),false,Companion);
     // 原物盖住支撑点后仍需验证家具视线，其余物件和墙继续挡射线
     if (Definition->Operation==EDeliveryHomeOperation::PlaceProp && IsValid(PlacementProp) && !PlacementProp->IsActorBeingDestroyed())
         Params.AddIgnoredActor(PlacementProp);
     FHitResult Hit;
-    if (GetWorld()->LineTraceSingleByChannel(Hit,Companion->GetPawnViewLocation(),Point,ECC_Visibility,Params) &&
+    // 同伴熟悉自己家，隔着家具或背对时也能安排；走到使用点后才要求真的看得见、够得着
+    if (bClose && GetWorld()->LineTraceSingleByChannel(Hit,Companion->GetPawnViewLocation(),Point,ECC_Visibility,Params) &&
         Hit.GetActor()!=GetOwner()) return Fail(OutReason,TEXT("HomeObjectOccluded"));
     if (!Definition->bAllowWithTaskPackage && Companion->Companion->GetCarriedTaskPackage())
         return Fail(OutReason,TEXT("HomeUserCarryingPackage"));
@@ -264,8 +266,9 @@ bool UDeliveryHomeObjectComponent::ResolveTakeStandingPoint(ADeliveryCompanionCh
         FPathFindingQuery PathQuery(Companion,*NavData,Start,Feet);
         PathQuery.SetAllowPartialPaths(false);
         const auto Path=Nav->FindPathSync(Properties,PathQuery);
+        // 这一刻没有完整路线不再直接判失败：二狗可能正站在门槛外或坡上，出发后走不通会直接到站位上
         if (!Path.IsSuccessful() || !Path.Path.IsValid() || Path.Path->IsPartial())
-            return Fail(OutReason,TEXT("HomeTakeEntranceUnreachable"));
+            UE_LOG(LogTemp,Log,TEXT("HomeTakeEntranceNoPath object=%s from=%s to=%s"),*GetNameSafe(GetOwner()),*Start.ToCompactString(),*Feet.ToCompactString());
     }
     OutStanding=FTransform(FRotator(0,Authored.Rotator().Yaw,0),Feet,FVector::OneVector);
     OutReason=NAME_None;
@@ -467,8 +470,9 @@ bool UDeliveryHomeObjectComponent::TryClaimUse(ADeliveryCompanionCharacter* Comp
     if (Candidate.Operation==EDeliveryHomeOperation::PlaceProp)
     {
         auto* Prop=IsValid(PlacementSource)?PlacementSource->GetOwner():nullptr;
+        // 正拿在这位同伴手里的道具可以直接改放到别处
         if (!IsValid(Prop) || PlacementSource==this || PlacementSource->Home!=Home || Prop==GetOwner() ||
-            Prop->GetOwner() || Prop->IsA<APawn>() || Prop->IsA<ADeliveryPackageItem>() ||
+            (Prop->GetOwner() && Prop->GetOwner()!=Companion) || Prop->IsA<APawn>() || Prop->IsA<ADeliveryPackageItem>() ||
             !PlacementSource->AllowedUses.Contains(EDeliveryHomeOperation::TakeProp))
             return Fail(OutReason,TEXT("HomePropUnavailable"));
         if (!PlacementSource->ValidateHome(OutReason)) return false;
@@ -572,7 +576,12 @@ bool UDeliveryHomeObjectComponent::ValidateClaim(const FDeliveryHomeUseClaim& Cl
     if (Definition && Definition->Operation==EDeliveryHomeOperation::PlaceProp &&
         (!IsValid(PlacementProp) || PlacementProp->IsActorBeingDestroyed()))
         return Fail(OutReason,TEXT("HomePropUnavailable"));
-    return ValidateUse(Use->Companion.Get(),Definition,Use->Handle.SlotHandle,bRequireInteractionRange,OutReason,PlacementProp);
+    // 同一份拿取凭据已由这名同伴登记搬运时，近距离复核沿用登记前的接触结果
+    const auto* TakenProp=GetOwner()->FindComponentByClass<UDeliveryGrabbableComponent>();
+    auto* User=Use->Companion.Get();
+    const bool bHeldByUser=Definition && Definition->Operation==EDeliveryHomeOperation::TakeProp && TakenProp && User &&
+        TakenProp->bAllowNpcEdgePickup && TakenProp->IsCarriedByProvider(User->Companion,Claim.ActionId);
+    return ValidateUse(User,Definition,Use->Handle.SlotHandle,bRequireInteractionRange,OutReason,PlacementProp,bHeldByUser);
 }
 
 bool UDeliveryHomeObjectComponent::GetUseTransforms(const FDeliveryHomeUseClaim& Claim,FTransform& OutEntrance,FTransform& OutUse,FTransform& OutExit) const

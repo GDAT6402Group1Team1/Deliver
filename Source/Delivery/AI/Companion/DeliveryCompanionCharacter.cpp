@@ -51,6 +51,8 @@ ADeliveryCompanionCharacter::ADeliveryCompanionCharacter()
     GetCharacterMovement()->AvoidanceConsiderationRadius=400;
     Combat->bHarmlessStrikes=true;
     Combat->bKnockDownOnAnyPunch=true;
+    // 二狗只在模型选择协战后动手，挨打不自动还手
+    Combat->bRetaliateWhenHit=false;
     Combat->bReceiveHitsWhileDown=true;
     Combat->KnockdownHorizontalSpeed=600;
     Combat->KnockdownUpwardSpeed=250;
@@ -333,7 +335,8 @@ void ADeliveryCompanionCharacter::Tick(float DeltaSeconds)
             OnCombatDownChanged(Combat->GetDownEpisodeId());
     }
     UpdateHelpInteraction();
-    ConversationInteractable->bInteractEnabled=!IsKnockedDown();
+    // 认了主人之后倒地也能被叫住，初遇倒在地上时仍只开放扶起
+    ConversationInteractable->bInteractEnabled=!IsKnockedDown() || GetEncounterState().Phase==EDeliveryCompanionEncounterPhase::Joined;
 }
 void ADeliveryCompanionCharacter::UpdateHelpInteraction()
 {

@@ -11,6 +11,7 @@
 #include "Animation/AnimSequence.h"
 #include "GameFramework/GameStateBase.h"
 #include "Kismet/GameplayStatics.h"
+#include "Camera/PlayerCameraManager.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
@@ -229,7 +230,9 @@ void UDeliveryNpcPresentationComponent::TickComponent(float Dt,ELevelTick Type,F
             const int32 Count=FMath::Clamp(int32(GetDisplayedSpeechProgress()*Display.Text.Len())+1,0,Display.Text.Len());
             // 等待回复时用眼神和姿态表现倾听，开口后显示字幕
             FString Line;
-            if (Display.bActive) Line=Resident->DisplayName.ToString()+TEXT("：")+Display.Text.Left(Count);
+            const auto* Camera=UGameplayStatics::GetPlayerCameraManager(this,0);
+            const bool bNear=!Camera || FVector::DistSquared(Camera->GetCameraLocation(),Resident->GetActorLocation())<=FMath::Square(CaptionVisibleDistance);
+            if (Display.bActive && bNear) Line=Resident->DisplayName.ToString()+TEXT("：")+Display.Text.Left(Count);
             Widget->SetCaption(FText::FromString(Line));
         }
 }

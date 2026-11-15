@@ -159,12 +159,21 @@ UDeliveryInteractableComponent *UDeliveryInteractableComponent::FindOn(const AAc
     }
     TArray<UDeliveryInteractableComponent *> Components;
     Actor->GetComponents(Components);
+    // 同一个按键挂了多个入口时优先取当前开放的那个，例如爷爷的收货和催促
+    UDeliveryInteractableComponent *First = nullptr;
     for (UDeliveryInteractableComponent *Component : Components)
     {
         if (Component && Component->InteractionKey == Key)
         {
-            return Component;
+            if (Component->bInteractEnabled)
+            {
+                return Component;
+            }
+            if (!First)
+            {
+                First = Component;
+            }
         }
     }
-    return nullptr;
+    return First;
 }

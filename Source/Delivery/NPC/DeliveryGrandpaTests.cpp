@@ -362,6 +362,8 @@ public:
             }
             // 玩家是原夹具的固定站位，交付后让出门口，爷爷仍须沿真实路线自己走完
             MoveOutOrigin=Grandpa->GetActorLocation();
+            // 这条用例检查搬离路线本身，举斧催促的入口另行实玩验收
+            Grandpa->bRequireUrgeToMoveOut=false;
             Move(AuthorityCharacter,MoveOutOrigin+FVector(180,0,12));
             Move(Character,MoveOutOrigin+FVector(180,0,12));
             Move(HostCharacter,MoveOutOrigin+FVector(-180,0,12));

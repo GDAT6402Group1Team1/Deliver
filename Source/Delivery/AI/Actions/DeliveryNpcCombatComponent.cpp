@@ -526,6 +526,7 @@ void UDeliveryNpcCombatComponent::ReceiveImpact(const FVector& Impulse,AActor* S
     DownEpisodeId=FGuid::NewGuid();
     RememberRecoveryFacing(Source);
     CompletedRecoveryEpisode.Invalidate(); CompletedRecoveryHelper.Reset();
+    KnockdownAttacker=Source;
     CancelStrike(); Resident->Agent->CancelPlan(TEXT("Hit"));
     if (auto* Hold=Resident->GetHeldVehicle()) Hold->Release(TEXT("HolderHit"));
     HitReactionStartedAt=-1; ReceivedLightHits=0;
@@ -596,6 +597,9 @@ void UDeliveryNpcCombatComponent::ReceiveFightHit(AActor* Source,FGuid PunchId,b
     // 使用这次命中的编号播放人物短呼声，声音直接来自游戏资源
     Npc->Presentation->PlayReaction(EDeliveryNpcVoiceReaction::Hit,PunchId);
     Npc->ObserveFact(TEXT("LightMeleeHit"),Source,TEXT("这个人打了我一拳，我后仰了一下，仍然站着"),EDeliveryNpcEvidenceSource::Seen);
+    // 站着挨拳时立即还手，行为树等后仰结束再挥拳
+    if (bRetaliateWhenHit && IsValid(this) && IsValid(Npc) && !bDown && IsValid(Source))
+        Npc->Agent->RequestRetaliation(Source);
 }
 bool UDeliveryNpcCombatComponent::CanStartAssistedRecovery() const
 {
@@ -706,8 +710,15 @@ void UDeliveryNpcCombatComponent::TickComponent(float Dt,ELevelTick Type,FActorC
         OnRecoveryFinished.Broadcast(FinishedEpisode,FinishedHelper.Get());
         if (!IsValid(this) || !IsValid(GetOwner())) return;
         TryFaceSourceAfterRecovery(FinishedEpisode);
+        const TWeakObjectPtr<AActor> Attacker=KnockdownAttacker;
+        KnockdownAttacker.Reset();
         if (auto* Resident=Cast<ADeliveryNpcCharacter>(GetOwner()))
+        {
             Resident->ObserveFact(TEXT("Recovered"),nullptr,TEXT("我已经恢复站立，可以继续行动"),EDeliveryNpcEvidenceSource::ActionResult);
+            // 起身后直接找把自己打倒的人，对方跑远或被挡住时仍交给模型判断
+            if (bRetaliateWhenHit && IsValid(this) && IsValid(Resident) && !bDown && Attacker.IsValid())
+                Resident->Agent->RequestRetaliation(Attacker.Get());
+        }
     }
 }
 void UDeliveryNpcCombatComponent::EndPlay(const EEndPlayReason::Type Reason)

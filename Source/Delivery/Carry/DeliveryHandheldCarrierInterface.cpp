@@ -85,9 +85,19 @@ bool DeliveryHandheldTransfer::TryPickupWorldItem(AActor* Receiver,ADeliveryHand
     { Reason=TEXT("OwnerUnavailable"); return false; }
     const FVector Point=Interaction->GetInteractionPoint(Pawn->GetActorLocation());
     const float PickupReach=Interaction->InteractRadius+Pawn->GetSimpleCollisionRadius();
-    // CanInteract 使用物体表面距离，额外射线仍覆盖角色中心到真实交互点
-    if (!HasClearReach(Pawn,Item,Item,Point,PickupReach))
-    { Reason=TEXT("OutOfReachOrObstructed"); return false; }
+    // CanInteract 已按表面距离放行；这里只按水平距离复核，地上的物件离胶囊中心有近一人高的落差
+    // 射线停在物件上方一点，免得被物件躺着的地面挡下
+    const FVector Center=Pawn->GetActorLocation();
+    const FVector Above=FVector(Point.X,Point.Y,FMath::Max(Point.Z+12.f,FMath::Min(Center.Z,Point.Z+40.f)));
+    const float HalfHeight=Pawn->GetSimpleCollisionHalfHeight();
+    const bool bInPickupReach=FVector::DistSquared2D(Center,Point)<=FMath::Square(PickupReach+20.f) &&
+        FMath::Abs(Center.Z-Point.Z)<=HalfHeight+90.f && HasClearReach(Pawn,Item,Item,Above,PickupReach+HalfHeight+110.f);
+    if (!bInPickupReach)
+    {
+        UE_LOG(LogTemp,Log,TEXT("WorldItemPickupRejected receiver=%s item=%s flat=%.0f height=%.0f reach=%.0f"),*GetNameSafe(Pawn),*GetNameSafe(Item),
+            FVector::Dist2D(Center,Point),Center.Z-Point.Z,PickupReach);
+        Reason=TEXT("OutOfReachOrObstructed"); return false;
+    }
     const FGuid TransferId=Data->BeginTransfer(Receiver);
     if (!TransferId.IsValid()) { Reason=TEXT("TransferBusy"); return false; }
     const TWeakObjectPtr<UDeliveryInventoryItemComponent> WeakData(Data);
@@ -101,7 +111,8 @@ bool DeliveryHandheldTransfer::TryPickupWorldItem(AActor* Receiver,ADeliveryHand
     if (bReceived && (!CanContinue || CanContinue()) && IsLiveActor(Receiver,World) && IsLiveActor(Item,World) && Carrier && WeakOwner.IsValid() &&
         !WeakOwner->IsInactive() && Carrier->GetHandheldOwnerPlayerState()==WeakOwner.Get() &&
         Carrier->CanHandleHandheldItem() && Carrier->OwnsHandheldItem(Item) && Item->GetOwner()==Receiver &&
-        HasClearReach(Receiver,Item,Item,Point,PickupReach)) return true;
+        // 实物已经进手里，位置随手部挂点移动；接收者没被挪走就算数，不再拿原地面点重验
+        FVector::DistSquared2D(Receiver->GetActorLocation(),Center)<=FMath::Square(60.f)) return true;
     // 接收回调可能改变主人或销毁对象，只清理本次仍占有的实物
     if (IsLiveActor(Receiver,World) && IsLiveActor(Item,World) && Carrier && Carrier->OwnsHandheldItem(Item))
         Carrier->ReleaseHandheldItem(Item);

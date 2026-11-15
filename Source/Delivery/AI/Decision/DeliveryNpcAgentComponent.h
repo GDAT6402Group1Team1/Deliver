@@ -61,6 +61,11 @@ public:
     // 服务器凭真实事件安排短轮护主，返回 true 仅表示已接收，命中仍由战斗确认
     // 角色负责核验主人与规则代次，Agent 核验事件和目标，模型不能调用此入口
     bool RequestGameplayRuleAction(EDeliveryNpcAction Action,AActor* Target,int32 RuleRevision,FGuid EvidenceId,float Duration);
+    // 居民被玩家或玩家的同伴打中后立即追打动手的人，目标取自仍有效的真实受击记录，不等模型回复
+    // 居民之间互殴不走这里，仍由各自的模型决定
+    // 返回 true 表示已安排一轮普通交战；之后继续、换目标、逃跑或停手仍由模型在交战中选择
+    // 正在逃跑、执行服务器规则动作，或已在追打动过手的人时返回 false 并保留原安排
+    bool RequestRetaliation(AActor* Attacker);
 
     // 行为树开始动作前再次检查目标，返回 true 后才能执行
     // 动作结束时使用同一 ActionId 报告结果，防止旧回调结束新动作
@@ -268,6 +273,8 @@ private:
     bool bChangingPlan = false;
     bool bApplyingActionUpdate=false;
     bool bReplacingFight=false;
+    // 立即还手已安排但模型还没接话，开打后尽快请求一次
+    bool bRetaliationNeedsReply=false;
     double ActionDeadline = 0;
     double ActionEndsAt=0;
     double CombatDeadline=0;

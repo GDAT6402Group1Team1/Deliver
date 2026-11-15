@@ -51,6 +51,13 @@ ADeliveryGrandpa::ADeliveryGrandpa()
     ReceiveInteraction->HoldDuration = .5f;
     ReceiveInteraction->PromptOffset = FVector(0, 0, 75);
     ReceiveInteraction->PromptText = NSLOCTEXT("Grandpa", "Deliver", "[按住 E] 把外卖交给爷爷");
+    UrgeInteraction = CreateDefaultSubobject<UDeliveryInteractableComponent>(TEXT("UrgeInteraction"));
+    UrgeInteraction->InteractionKey = EDeliveryInteractionKey::PickupE;
+    UrgeInteraction->HoldDuration = .35f;
+    UrgeInteraction->InteractRadius = 260.f;
+    UrgeInteraction->PromptOffset = FVector(0, 0, 75);
+    UrgeInteraction->PromptText = NSLOCTEXT("Grandpa", "UrgeMoveOut", "[按住 E] 举起斧头吓唬爷爷，让他搬走（要先把斧头拿在手上）");
+    UrgeInteraction->bInteractEnabled = false;
     DeliveryTarget = CreateDefaultSubobject<UDeliveryTargetComponent>(TEXT("DeliveryTarget"));
     DeliveryTarget->InteractRadius = 150.f;
     DeliveryTarget->DeliveryRadius = 150.f;
@@ -66,6 +73,8 @@ void ADeliveryGrandpa::BeginPlay()
     HomeLocation = GetActorLocation();
     StrollLocation = HomeLocation + GetActorRightVector() * StrollDistance;
     DeliveryTarget->DeliveryGate.BindUObject(this, &ADeliveryGrandpa::CanReceive);
+    UrgeInteraction->CanUse.BindUObject(this, &ADeliveryGrandpa::CanUrgeMoveOut);
+    UrgeInteraction->Use.BindUObject(this, &ADeliveryGrandpa::UrgeMoveOut);
     if (HasAuthority()) DeliveryTarget->OnDeliveryConfirmed.AddUObject(this,&ADeliveryGrandpa::HandleDeliveryConfirmed);
     OnRep_FrontDoor();
     if (HasAuthority())
@@ -130,6 +139,9 @@ void ADeliveryGrandpa::EndPlay(const EEndPlayReason::Type Reason)
     bMotionActive=false;
     bWalking=false;
     GetWorldTimerManager().ClearTimer(BindTimer);
+    GetWorldTimerManager().ClearTimer(UrgeTimer);
+    UrgeInteraction->CanUse.Unbind();
+    UrgeInteraction->Use.Unbind();
     if (IsValid(TaskManager)) TaskManager->OnTaskStatusChanged.RemoveDynamic(this, &ADeliveryGrandpa::HandleTaskChanged);
     if (IsValid(FrontDoor)) FrontDoor->OnDoorBroken.RemoveDynamic(this, &ADeliveryGrandpa::HandleDoorBroken);
     if (IsValid(KnockInteraction))
@@ -157,6 +169,7 @@ void ADeliveryGrandpa::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
     DOREPLIFETIME(ADeliveryGrandpa, bHomeDeliveryConfirmed);
     DOREPLIFETIME(ADeliveryGrandpa, MoveOutState);
     DOREPLIFETIME(ADeliveryGrandpa, MoveOutWaitReason);
+    DOREPLIFETIME(ADeliveryGrandpa, UrgeStage);
 }
 
 bool ADeliveryGrandpa::IsDoorBroken() const { return IsValid(FrontDoor) && FrontDoor->IsBroken(); }
@@ -237,6 +250,7 @@ void ADeliveryGrandpa::UpdateBlackboard()
 void ADeliveryGrandpa::RefreshInteractions()
 {
     ReceiveInteraction->bInteractEnabled = IsDoorBroken() && !bDelivered;
+    UrgeInteraction->bInteractEnabled = IsWaitingToBeUrged();
     if (IsValid(KnockInteraction))
     {
         KnockInteraction->bInteractEnabled = !IsDoorBroken() && !bDelivered;
@@ -302,7 +316,22 @@ void ADeliveryGrandpa::OnRep_Action()
     case EDeliveryGrandpaAction::MoveOut:
         Clip=bWalking && WalkAnimation?WalkAnimation.Get():IdleAnimation.Get();
         if (MoveOutState==EDeliveryGrandpaMoveOutState::Waiting)
-            Line=NSLOCTEXT("Grandpa","MoveOutWaiting","我先在这儿等等。");
+        {
+            // 还没被催时留在门边；被催后两句台词说完才动身，路上被挡住沿用原来的等候提示
+            if (MoveOutWaitReason==TEXT("WaitingToBeUrged"))
+                Line=NSLOCTEXT("Grandpa","SoupLinger","汤居然没洒。你先走，碗我自己洗。");
+            else if (MoveOutWaitReason==TEXT("PackingUp"))
+            {
+                // 先被斧头吓一跳，再骂骂咧咧地认怂
+                if (UrgeStage>=2) Clip=TalkAnimation?TalkAnimation.Get():IdleAnimation.Get();
+                else { Clip=StartledAnimation?StartledAnimation.Get():IdleAnimation.Get(); bLoop=false; }
+                Line=UrgeStage>=2?NSLOCTEXT("Grandpa","ScaredCurse","走就走！送碗面还带抄家伙的，没王法了！"):
+                    NSLOCTEXT("Grandpa","ScaredGasp","哎哟！你、你把斧头放下！");
+            }
+            else Line=NSLOCTEXT("Grandpa","MoveOutWaiting","我先在这儿等等。");
+        }
+        else if (bRequireUrgeToMoveOut && UrgeStage>=3 && MoveOutState==EDeliveryGrandpaMoveOutState::Walking)
+            Line=NSLOCTEXT("Grandpa","ScaredFlee","门给我劈了，还举着斧头撵人，缺德玩意儿！");
         break;
     default: break;
     }
@@ -313,6 +342,8 @@ void ADeliveryGrandpa::OnRep_Action()
     }
     Speech->SetText(Line);
     Speech->SetVisibility(!Line.IsEmpty());
+    // 催促入口跟着复制来的等候状态开关
+    if (IsValid(UrgeInteraction)) UrgeInteraction->bInteractEnabled=IsWaitingToBeUrged();
 }
 
 // 行为树决定何时走动；服务器只在屋内两点之间扫掠移动，不穿家具、不离开地板

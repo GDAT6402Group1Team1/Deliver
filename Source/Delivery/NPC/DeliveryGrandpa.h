@@ -45,6 +45,9 @@ public:
     TObjectPtr<UDeliveryTargetComponent> DeliveryTarget;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Grandpa|Components")
     TObjectPtr<UDeliveryInteractableComponent> ReceiveInteraction;
+    // 《汤喝完再搬》：送达后爷爷留在门边，玩家拿着斧头长按 E 催他搬走
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Grandpa|Components")
+    TObjectPtr<UDeliveryInteractableComponent> UrgeInteraction;
 
     UPROPERTY(EditInstanceOnly, ReplicatedUsing=OnRep_FrontDoor, BlueprintReadOnly, Category="Grandpa|Task")
     TObjectPtr<ADeliveryBreakableDoor> FrontDoor;
@@ -79,6 +82,17 @@ public:
     UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Grandpa|Home",meta=(ClampMin="0",ClampMax="80",Units="cm"))
     float MoveOutMaxStepDown=60.f;
 
+    // 送达后先留下，被催促并说完两句台词才沿原路线搬离；关闭后恢复送达即自动搬离
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Grandpa|Home") bool bRequireUrgeToMoveOut=true;
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Grandpa|Home",meta=(ClampMin="1",ClampMax="8",Units="s"))
+    float UrgeLineSeconds=1.8f;
+    // 玩家手持斧头站到这个距离内并面向爷爷约一秒，也算催他；固定规则，和长按 E 走同一段演出
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Grandpa|Home",meta=(ClampMin="0",ClampMax="600",Units="cm"))
+    float AxeThreatDistance=260.f;
+    // 被吓到后逃出屋子的速度倍率
+    UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Grandpa|Home",meta=(ClampMin="1",ClampMax="4"))
+    float ScaredSpeedScale=2.4f;
+
     /** 防止连续重复包被当成第二次敲门，不影响原任务计时 */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Grandpa|Task", meta=(ClampMin="0.2", Units="s"))
     float KnockInterval = 1.f;
@@ -92,6 +106,12 @@ public:
     UFUNCTION(BlueprintPure,Category="Grandpa|Home") EDeliveryGrandpaMoveOutState GetMoveOutState() const { return MoveOutState; }
     UFUNCTION(BlueprintPure,Category="Grandpa|Home") FName GetMoveOutWaitReason() const { return MoveOutWaitReason; }
     FGuid GetConfirmedDeliveryId() const { return ConfirmedDeliveryId; }
+    // 已收到汤面、还坐在门边等人催；状态来自复制字段，客户端提示与服务器判断一致
+    UFUNCTION(BlueprintPure,Category="Grandpa|Home") bool IsWaitingToBeUrged() const;
+    bool CanUrgeMoveOut(APawn* Interactor,bool bCheckAvailability) const;
+    // 只能由权威交互调用，返回 true 表示爷爷开始收拾；实际搬离和房屋解锁仍由原路线确认
+    bool UrgeMoveOut(APawn* Interactor);
+    APlayerState* GetUrgedBy() const;
     // 只由行为树驱动，取消后停止走动，保留已经走到的位置与路点
     bool BeginMoveOut();
     void UpdateMoveOut(float DeltaSeconds);
@@ -119,6 +139,18 @@ private:
     UPROPERTY(ReplicatedUsing=OnRep_State) bool bHomeDeliveryConfirmed=false;
     UPROPERTY(ReplicatedUsing=OnRep_Action) EDeliveryGrandpaMoveOutState MoveOutState=EDeliveryGrandpaMoveOutState::NotStarted;
     UPROPERTY(ReplicatedUsing=OnRep_Action) FName MoveOutWaitReason;
+    // 0 还没被催，1 和 2 是两句催促台词，3 开始动身
+    UPROPERTY(ReplicatedUsing=OnRep_Action) uint8 UrgeStage=0;
+    FTimerHandle UrgeTimer;
+    // 只在服务器记录是谁催的，房屋解锁时交给共享房屋区分提示
+    TWeakObjectPtr<APlayerState> UrgedBy;
+    bool StartUrge(APawn* Interactor,const TCHAR* Source);
+    APawn* FindAxeThreat() const;
+    TWeakObjectPtr<APawn> AxeThreatPawn;
+    double AxeThreatSince=-1;
+    // 逃出屋子时被人或杂物挡住的起始时间，挡太久就直接挪到下一个路点
+    double FleeBlockedSince=-1;
+    void AdvanceUrge();
     FGuid ConfirmedDeliveryId;
     int32 DeparturePointIndex=0;
     bool bMoveOutActive=false;

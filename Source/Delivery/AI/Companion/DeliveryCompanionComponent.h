@@ -256,6 +256,32 @@ private:
     void CopyCompanionMemories(TArray<FDeliveryNpcCompanionMemory>& Out) const;
     void RefreshHomeObjectMemories();
     void CopyHomeObjectMemories(const ADeliveryHome& Home,FDeliveryNpcDecisionRequest& Request) const;
+    // 已到手的共用房屋里，二狗熟悉每件家具；人在屋内或门口时不用正对着也能安排
+    bool KnowsSharedHomeObject(const UDeliveryHomeObjectComponent* Object) const;
+    // 实物到了手前，或已经跟在搬运距离内等过一秒，就可以开始下一段搬放
+    bool IsHomePropReadyAtHand(double Now);
+    double HomePropHandWaitStartedAt=-1;
+    double NextHomePropHandLogAt=0;
+    bool bHomePropHandAccepted=false;
+    // 主人面前一直找不到放得下原尺寸的位置时，改为放在自己脚边
+    double HomeOwnerPlacementBlockedSince=-1;
+    // 找不到跟随站位时每两秒记一次原因，查询本身不改变安排
+    mutable double NextFollowBlockedLogAt=0;
+    // 跟随找不到可走的站位时，直接跳到主人身边；翻门槛、下台阶这类导航接不上的落差靠它
+    UPROPERTY(EditAnywhere,Category="Delivery|Companion|跟随") bool bLeapToOwnerWhenFollowBlocked=true;
+    UPROPERTY(EditAnywhere,Category="Delivery|Companion|跟随",meta=(ClampMin="150",ClampMax="1200",Units="cm")) float FollowLeapMaxDistance=750.f;
+    UPROPERTY(EditAnywhere,Category="Delivery|Companion|跟随",meta=(ClampMin="50",ClampMax="800",Units="cm")) float FollowLeapMaxDrop=450.f;
+    UPROPERTY(EditAnywhere,Category="Delivery|Companion|跟随",meta=(ClampMin="0",ClampMax="150",Units="cm")) float FollowLeapMaxRise=90.f;
+    bool TryLeapToOwner(APawn& OwnerPawn,double Now);
+    // 走不到也跳不到的时间超过这个数，直接出现在主人身边；主人在哪都能把二狗叫到跟前
+    UPROPERTY(EditAnywhere,Category="Delivery|Companion|跟随",meta=(ClampMin="2",ClampMax="60",Units="s")) float FollowTeleportAfterSeconds=8.f;
+    bool TeleportToOwner(APawn& OwnerPawn);
+    double FollowStuckSince=-1;
+    // 家居安排途中一直没有路时，过几秒直接到目标站位，和跟随时找不到路的处理一致
+    double HomePathBlockedSince=-1;
+    FVector HomePathBlockedGoal=FVector::ZeroVector;
+    double FollowBlockedSince=-1;
+    double NextFollowLeapAt=0;
     APawn* GetOwnerPawn() const;
     bool FindFollowDestination(APawn* Pawn,FVector& Out,TFunctionRef<bool(const FVector&)> IsOnOwnerSide) const;
     bool IsAcrossOpenFollowDoorway(const APawn* Pawn,const FVector& FromFeet) const;

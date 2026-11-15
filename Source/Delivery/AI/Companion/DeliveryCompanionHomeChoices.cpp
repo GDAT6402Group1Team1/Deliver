@@ -13,6 +13,9 @@
 #include "GameFramework/PlayerState.h"
 #include "Engine/World.h"
 
+// 试玩排查期间默认打开，能直接看到每个摆放槽为什么没给候选；查清后改回 Log
+DEFINE_LOG_CATEGORY_STATIC(LogDeliveryCompanionHomeChoice,Verbose,All);
+
 namespace
 {
     FString SnapshotText(FString Text,int32 Limit)
@@ -103,38 +106,49 @@ namespace
         const auto* Body=Prop?Cast<UPrimitiveComponent>(Prop->GetRootComponent()):nullptr;
         const auto* Grab=Prop?Prop->FindComponentByClass<UDeliveryGrabbableComponent>():nullptr;
         const auto* Capsule=Npc.GetCapsuleComponent();
+        // 打开 LogDeliveryCompanionHomeChoice Verbose 可看到某件道具为什么没有得到某个摆放槽的候选
+        const auto Reject=[&](const TCHAR* Why)
+        {
+            UE_LOG(LogDeliveryCompanionHomeChoice,Verbose,TEXT("HomePlacementNotOffered prop=%s destination=%s slot=%s reason=%s"),
+                *GetNameSafe(Prop),*GetNameSafe(Placement.Object.IsValid()?Placement.Object->GetOwner():nullptr),
+                *Placement.SlotId.ToString(),Why);
+            return false;
+        };
+        // 已经拿在二狗自己手里的东西也能换个地方放，这时它归二狗持有、碰撞暂时关着
+        const bool bHeldByNpc=Prop && Prop->GetOwner()==&Npc;
         if (!Definition || Placement.Operation!=EDeliveryHomeOperation::PlaceProp || !Prop || !Body || !Grab || !Capsule ||
-            !Source->AllowedUses.Contains(EDeliveryHomeOperation::TakeProp) || Prop->GetOwner() ||
-            Body->Mobility!=EComponentMobility::Movable || !Prop->GetActorEnableCollision()) return false;
-        if (!Definition->RequiredPropTags.IsEmpty() && !Definition->RequiredPropTags.Matches(Source->ObjectTags)) return false;
+            !Source->AllowedUses.Contains(EDeliveryHomeOperation::TakeProp) || (Prop->GetOwner() && !bHeldByNpc) ||
+            Body->Mobility!=EComponentMobility::Movable || (!Prop->GetActorEnableCollision() && !bHeldByNpc)) return Reject(TEXT("Configuration"));
+        if (!Definition->RequiredPropTags.IsEmpty() && !Definition->RequiredPropTags.Matches(Source->ObjectTags)) return Reject(TEXT("PropTags"));
         // 当前搬运接口控制水平朝向，不能向模型提供需要倾斜摆放的槽
-        if (FVector::DotProduct(Placement.UseTransform.GetUnitAxis(EAxis::Z),FVector::UpVector)<.9998f) return false;
+        if (FVector::DotProduct(Placement.UseTransform.GetUnitAxis(EAxis::Z),FVector::UpVector)<.9998f) return Reject(TEXT("Tilted"));
         // 拿在手里缩小只影响搬运，摆放候选始终按原尺寸在物件自身坐标中检查
         const FBox Bounds=Source->GetOriginalSizeBounds(FTransform::Identity);
         const FBox Footprint=Source->GetPlacementFootprintBounds(FTransform::Identity);
-        if (!Bounds.IsValid || Bounds.Min.ContainsNaN() || Bounds.Max.ContainsNaN() || !Footprint.IsValid) return false;
+        if (!Bounds.IsValid || Bounds.Min.ContainsNaN() || Bounds.Max.ContainsNaN() || !Footprint.IsValid) return Reject(TEXT("Bounds"));
         const FVector Extent(Footprint.GetExtent().X,Footprint.GetExtent().Y,Bounds.GetExtent().Z);
         if (Extent.GetMin()<=0 || Extent.X>Definition->MaximumPropHalfExtent.X ||
-            Extent.Y>Definition->MaximumPropHalfExtent.Y || Extent.Z>Definition->MaximumPropHalfExtent.Z) return false;
+            Extent.Y>Definition->MaximumPropHalfExtent.Y || Extent.Z>Definition->MaximumPropHalfExtent.Z) return Reject(TEXT("TooLarge"));
         const FQuat Rotation=Placement.UseTransform.GetRotation();
         const FBox Rotated=Source->GetOriginalSizeBounds(FTransform(Rotation));
         const FBox RotatedFootprint=Source->GetPlacementFootprintBounds(FTransform(Rotation));
-        if (!Rotated.IsValid || !RotatedFootprint.IsValid) return false;
+        if (!Rotated.IsValid || !RotatedFootprint.IsValid) return Reject(TEXT("RotatedBounds"));
         const FVector Offset(RotatedFootprint.GetCenter().X,RotatedFootprint.GetCenter().Y,Rotated.Min.Z);
         const FTransform Target(Rotation,Placement.UseTransform.GetLocation()-Offset,Source->GetOriginalActorScale());
         FVector SmallTarget;
         const FVector Stand=Placement.EntranceTransform.GetLocation()+FVector(0,0,Capsule->GetScaledCapsuleHalfHeight());
         if (!Source->GetCarryPlacementLocation(Target,SmallTarget,true) ||
-            !Grab->CanNpcReachPlacement(Npc,Stand,SmallTarget,SmallTarget,SmallTarget)) return false;
+            !Grab->CanNpcReachPlacement(Npc,Stand,SmallTarget,SmallTarget,SmallTarget)) return Reject(TEXT("HandReach"));
         if (Definition->bUsePropTransferPoint)
         {
             // 中转点与 Use 都由同一实时槽位解释，偏移不继承家具缩放
             const FVector PointFromUse=Definition->UseOffset.InverseTransformPositionNoScale(Definition->PropTransferOffset);
             const FVector Transfer=Placement.UseTransform.TransformPositionNoScale(PointFromUse);
-            if (!Grab->CanNpcReachPlacement(Npc,Stand,Transfer,Transfer,Transfer)) return false;
+            if (!Grab->CanNpcReachPlacement(Npc,Stand,Transfer,Transfer,Transfer)) return Reject(TEXT("TransferReach"));
         }
         FName Reason;
-        return Source->CanPlaceAtOriginalSize(Target,Reason,Placement.Object.Get());
+        if (!Source->CanPlaceAtOriginalSize(Target,Reason,Placement.Object.Get())) return Reject(*Reason.ToString());
+        return true;
     }
 
     struct FPerceivedHomeObject
@@ -155,6 +169,11 @@ void UDeliveryCompanionComponent::ExtendHomeDecisionRequest(FDeliveryNpcDecision
     if (!Npc || !Npc->HasAuthority() || !Home) return;
     TArray<UDeliveryHomeObjectComponent*> Objects;
     Home->GetFurnitureObjects(Objects);
+    // 眼前看得见的排在前面，清单或组合数到上限时先保留它们
+    TSet<const UDeliveryHomeObjectComponent*> SeenNow;
+    for (const auto* Object:Objects) if (CanSeeObject(Npc,Object)) SeenNow.Add(Object);
+    Objects.StableSort([&SeenNow](const UDeliveryHomeObjectComponent& A,const UDeliveryHomeObjectComponent& B)
+    { return SeenNow.Contains(&A) && !SeenNow.Contains(&B); });
     TArray<FPerceivedHomeObject> Perceived;
     const bool bCanArrange=Request.bPlayerRequest && CanCommand(Requester) && Home->IsClaimed() &&
         !Npc->IsKnockedDown() && !IsUsingErrandVehicle() && !GetCarriedItem();
@@ -172,7 +191,9 @@ void UDeliveryCompanionComponent::ExtendHomeDecisionRequest(FDeliveryNpcDecision
         if (Request.HomeObjects.Num()>=24) break;
         const bool bInHand=Object==HeldSource;
         const bool bCurrentSeat=Object==CurrentSeat;
-        if ((!bInHand && !bCurrentSeat && !CanSeeObject(Npc,Object)) || SnapshotText(Object->DisplayName.ToString(),64).IsEmpty()) continue;
+        const bool bSeenNow=bInHand || bCurrentSeat || SeenNow.Contains(Object);
+        // 自己家里的家具不用正对着也知道，主人说到哪件都有对应候选
+        if ((!bSeenNow && !KnowsSharedHomeObject(Object)) || SnapshotText(Object->DisplayName.ToString(),64).IsEmpty()) continue;
         FPerceivedHomeObject Seen;
         Seen.Object=Object;
         Seen.ViewIndex=Request.HomeObjects.Num();
@@ -183,7 +204,8 @@ void UDeliveryCompanionComponent::ExtendHomeDecisionRequest(FDeliveryNpcDecision
         View.ObjectId=Object->ObjectId;
         View.Name=SnapshotText(Object->DisplayName.ToString(),64);
         View.State=bInHand?TEXT("正在我手里，属于共用房屋"):bCurrentSeat?TEXT("我正坐在这个座位上，属于共用房屋"):
-            Home->IsClaimed()?TEXT("当前看见，属于共用房屋"):TEXT("当前看见，爷爷尚未搬离，不能安排使用");
+            !bSeenNow?TEXT("屋里的物件，现在不在视线里，属于共用房屋"):
+            Home->IsClaimed()?TEXT("当前看见，属于共用房屋"):TEXT("当前看见；爷爷还住在这里没搬走，房子还没到手，屋里的东西现在都不能搬动或使用，要等主人把爷爷催走、房屋解锁之后");
         const FString Description=SnapshotText(Object->Description.ToString(),100);
         if (!Description.IsEmpty()) View.State+=TEXT("；")+Description;
         if (Object->AllowedUses.Contains(EDeliveryHomeOperation::PlayAudio))
@@ -261,7 +283,8 @@ void UDeliveryCompanionComponent::ExtendHomeDecisionRequest(FDeliveryNpcDecision
         if ((!Take && !bAlreadyCarried) || (GetHomeState().CarriedProp && !bAlreadyCarried)) continue;
         auto* OwnerPawn=GetOwnerPawn();
         FTransform Entrance,Placement;
-        if (ResolveHomeOwnerPlacement(*Source.Object,OwnerPawn,Entrance,Placement))
+        // 能拿的东西都可以请二狗放到主人身边；主人面前暂时摆不下时，执行中会走到主人旁边放在脚边
+        if (IsValid(OwnerPawn))
         {
             FDeliveryCompanionHomeChoice Choice;
             Choice.Operation=EDeliveryHomeOperation::PlaceNearOwner;
@@ -317,13 +340,14 @@ bool UDeliveryCompanionComponent::CanApplyHomeChoice(const FDeliveryCompanionHom
     }
     const bool bPlace=Choice.Operation==EDeliveryHomeOperation::PlaceProp || Choice.Operation==EDeliveryHomeOperation::PlaceNearOwner;
     const bool bPlaceFromHand=bPlace && OwnsHomeSource(Source);
-    if (!bPlaceFromHand && !CanSeeObject(Npc,Source)) return false;
+    if (!bPlaceFromHand && !CanSeeObject(Npc,Source) && !KnowsSharedHomeObject(Source)) return false;
     if (Choice.Operation==EDeliveryHomeOperation::PlaceNearOwner)
     {
         FTransform Entrance,Placement;
-        if (Choice.DestinationObject.IsValid() || Choice.DestinationId.IsValid() || !Choice.DestinationSlotId.IsNone() ||
-            !ResolveHomeOwnerPlacement(*Source,Choice.PlacementOwnerPawn.Get(),Entrance,Placement)) return false;
-        if (bPlaceFromHand) return GetHomeState().CarriedProp==Source->GetOwner();
+        if (Choice.DestinationObject.IsValid() || Choice.DestinationId.IsValid() || !Choice.DestinationSlotId.IsNone()) return false;
+        // 已经拿在手里的东西总可以请二狗放下，主人面前暂时没有空位时执行中会改放在脚边
+        if (bPlaceFromHand) return GetHomeState().CarriedProp==Source->GetOwner() && IsValid(Choice.PlacementOwnerPawn.Get());
+        if (!IsValid(Choice.PlacementOwnerPawn.Get())) return false;
         return !GetHomeState().CarriedProp && Choice.TakeUse.Object.Get()==Source &&
             Choice.TakeUse.Operation==EDeliveryHomeOperation::TakeProp && StillOffered(Choice.TakeUse,Npc,Requester);
     }
@@ -332,7 +356,7 @@ bool UDeliveryCompanionComponent::CanApplyHomeChoice(const FDeliveryCompanionHom
         auto* Destination=Choice.DestinationObject.Get();
         if (!Destination || Destination==Source || Destination->Home!=Home || !Home->ContainsFurniture(Destination) ||
             Destination->ObjectId!=Choice.DestinationId || Destination->GetRevision()!=Choice.DestinationRevision ||
-            !CanSeeObject(Npc,Destination) || Choice.Use.Object.Get()!=Destination || Choice.Use.Operation!=Choice.Operation ||
+            (!CanSeeObject(Npc,Destination) && !KnowsSharedHomeObject(Destination)) || Choice.Use.Object.Get()!=Destination || Choice.Use.Operation!=Choice.Operation ||
             Choice.Use.SlotId!=Choice.DestinationSlotId || !FitsPlacement(*Npc,Source,Choice.Use) ||
             !StillOffered(Choice.Use,Npc,Requester)) return false;
         if (bPlaceFromHand) return GetHomeState().CarriedProp==Source->GetOwner();
@@ -344,6 +368,20 @@ bool UDeliveryCompanionComponent::CanApplyHomeChoice(const FDeliveryCompanionHom
         Choice.Operation==EDeliveryHomeOperation::None) return false;
     if (GetHomeState().CarriedProp && (Choice.Operation==EDeliveryHomeOperation::Sit || Choice.Operation==EDeliveryHomeOperation::TakeProp)) return false;
     return StillOffered(Choice.Use,Npc,Requester);
+}
+
+bool UDeliveryCompanionComponent::KnowsSharedHomeObject(const UDeliveryHomeObjectComponent* Object) const
+{
+    const auto* Npc=GetCompanion();
+    const auto* Home=ADeliveryHome::FindSharedHome(this);
+    const auto* Actor=IsValid(Object)?Object->GetOwner():nullptr;
+    FVector Interior;
+    if (!IsValid(Npc) || !IsValid(Home) || !Home->IsClaimed() || !IsValid(Actor) || Actor->IsHidden() ||
+        Actor->IsActorBeingDestroyed() || !Object->IsRegistered() || Object->Home.Get()!=Home || !Home->ContainsFurniture(Object) ||
+        !FMath::IsFinite(Home->ObjectSightRadius) || !Home->TryGetInteriorLocation(Interior)) return false;
+    // 人要在屋里或门口附近，走远以后只留名称记忆，不能隔着街安排家里的东西
+    return FVector::DistSquared(Npc->GetActorLocation(),Interior)<=
+        FMath::Square(FMath::Clamp(Home->ObjectSightRadius,100.f,3000.f)+600.f);
 }
 
 void UDeliveryCompanionComponent::RefreshHomeObjectMemories()

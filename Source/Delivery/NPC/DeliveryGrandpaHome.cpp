@@ -5,6 +5,12 @@
 #include "Task/World/DeliveryTargetComponent.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "Inventory/DeliveryPackageItem.h"
+#include "Inventory/DeliveryInventoryComponent.h"
+#include "Inventory/DeliveryTestAxe.h"
+#include "Character/DeliveryCharacter.h"
+#include "Interaction/DeliveryInteractableComponent.h"
+#include "TimerManager.h"
+#include "GameFramework/GameStateBase.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/PlayerState.h"
 #include "Engine/World.h"
@@ -27,6 +33,91 @@ void ADeliveryGrandpa::HandleDeliveryConfirmed(UDeliveryTaskDefinition* Task,AAc
     ForceNetUpdate();
     UE_LOG(LogDelivery,Log,TEXT("Grandpa received home delivery event=%s task=%s player=%s"),
         *ConfirmedDeliveryId.ToString(),*Task->TaskId.ToString(),*GetNameSafe(Player));
+}
+
+APlayerState* ADeliveryGrandpa::GetUrgedBy() const { return UrgedBy.Get(); }
+
+bool ADeliveryGrandpa::IsWaitingToBeUrged() const
+{
+    return bRequireUrgeToMoveOut && bHomeDeliveryConfirmed && UrgeStage==0 &&
+        MoveOutState==EDeliveryGrandpaMoveOutState::Waiting && MoveOutWaitReason==TEXT("WaitingToBeUrged");
+}
+
+bool ADeliveryGrandpa::CanUrgeMoveOut(APawn* Interactor,bool) const
+{
+    const auto* Player=Cast<ADeliveryCharacter>(Interactor);
+    return Player && Player->GetWorld()==GetWorld() && !Player->IsIncapacitated() && !Player->IsRidingVehicle() &&
+        IsWaitingToBeUrged();
+}
+
+bool ADeliveryGrandpa::UrgeMoveOut(APawn* Interactor)
+{
+    const auto* Player=Cast<ADeliveryCharacter>(Interactor);
+    const auto* Inventory=Player?Player->GetInventoryComponent():nullptr;
+    const auto* Held=Inventory?Inventory->GetHeldItem():nullptr;
+    // 服务器核对玩家手里确实拿着斧头，距离和长按沿用原交互入口的复核；每次拒绝都留日志方便对照试玩
+    const bool bWaiting=CanUrgeMoveOut(Interactor,true);
+    // 正式斧头是 ADeliveryHandheldItem 的蓝图子类，靠挥斧标记认；测试斧头类照旧算
+    const bool bAxe=Held && (Held->bUsesAxeSwing || Held->IsA<ADeliveryTestAxe>());
+    const bool bReach=IsValid(UrgeInteraction) && UrgeInteraction->CanInteract(Interactor);
+    if (!HasAuthority() || !bWaiting || !bAxe || !bReach)
+    {
+        UE_LOG(LogDelivery,Log,TEXT("Grandpa urge rejected by=%s waiting=%d axe=%d held=%s reach=%d stage=%d state=%d reason=%s"),
+            *GetNameSafe(Interactor),bWaiting,bAxe,*GetNameSafe(Held),bReach,int32(UrgeStage),int32(MoveOutState),*MoveOutWaitReason.ToString());
+        return false;
+    }
+    return StartUrge(Interactor,TEXT("HoldE"));
+}
+
+bool ADeliveryGrandpa::StartUrge(APawn* Interactor,const TCHAR* Source)
+{
+    if (!HasAuthority() || UrgeStage!=0 || !IsValid(Interactor)) return false;
+    UrgeStage=1;
+    UrgedBy=Interactor->GetPlayerState();
+    AxeThreatPawn.Reset(); AxeThreatSince=-1;
+    // 转身面向拿斧头的人再吓一跳
+    const FVector Toward=(Interactor->GetActorLocation()-GetActorLocation()).GetSafeNormal2D();
+    if (!Toward.IsNearlyZero()) SetActorRotation(Toward.Rotation());
+    SetMoveOutWaiting(TEXT("PackingUp"));
+    OnRep_Action();
+    ForceNetUpdate();
+    GetWorldTimerManager().SetTimer(UrgeTimer,this,&ADeliveryGrandpa::AdvanceUrge,FMath::Clamp(UrgeLineSeconds,1.f,8.f),true);
+    UE_LOG(LogDelivery,Log,TEXT("Grandpa urged to move out by=%s source=%s"),*GetNameSafe(Interactor),Source);
+    return true;
+}
+
+APawn* ADeliveryGrandpa::FindAxeThreat() const
+{
+    const auto* State=GetWorld()?GetWorld()->GetGameState():nullptr;
+    if (!State || AxeThreatDistance<=0) return nullptr;
+    for (const APlayerState* Player:State->PlayerArray)
+    {
+        auto* Character=Player?Cast<ADeliveryCharacter>(Player->GetPawn()):nullptr;
+        const auto* Inventory=Character?Character->GetInventoryComponent():nullptr;
+        const auto* Held=Inventory?Inventory->GetHeldItem():nullptr;
+        if (!Held || Character->IsIncapacitated() || Character->IsRidingVehicle() ||
+            !(Held->bUsesAxeSwing || Held->IsA<ADeliveryTestAxe>())) continue;
+        const FVector Offset=GetActorLocation()-Character->GetActorLocation();
+        // 离得近、差不多同一层、镜头朝着爷爷，中间没有墙；玩家身体是物理驱动的，朝向取控制方向
+        if (Offset.SizeSquared2D()>FMath::Square(AxeThreatDistance) || FMath::Abs(Offset.Z)>150.f ||
+            FVector::DotProduct(Character->GetControlRotation().Vector().GetSafeNormal2D(),Offset.GetSafeNormal2D())<.2f) continue;
+        FCollisionQueryParams Query(SCENE_QUERY_STAT(GrandpaAxeThreat),false,this);
+        Query.AddIgnoredActor(Character);
+        FHitResult Hit;
+        if (GetWorld()->LineTraceSingleByChannel(Hit,Character->GetActorLocation()+FVector(0,0,25),GetActorLocation()+FVector(0,0,25),ECC_Visibility,Query))
+            continue;
+        return Character;
+    }
+    return nullptr;
+}
+
+void ADeliveryGrandpa::AdvanceUrge()
+{
+    if (!HasAuthority() || UrgeStage==0 || UrgeStage>=3) { GetWorldTimerManager().ClearTimer(UrgeTimer); return; }
+    ++UrgeStage;
+    if (UrgeStage>=3) GetWorldTimerManager().ClearTimer(UrgeTimer);
+    OnRep_Action();
+    ForceNetUpdate();
 }
 
 bool ADeliveryGrandpa::BeginMoveOut()
@@ -108,6 +199,21 @@ void ADeliveryGrandpa::UpdateMoveOut(float DeltaSeconds)
     const auto* Manager=UDeliveryTaskManagerComponent::Get(this);
     if (!bHomeDeliveryConfirmed || !Manager || Manager->GetTaskStatus(DeliveryTarget->ExpectedTask)!=EDeliveryTaskStatus::Completed)
     { SetMoveOutWaiting(TEXT("DeliveryNotConfirmed")); return; }
+    // 汤喝完再搬：没人催就坐着，被催后把两句话说完才起身
+    if (bRequireUrgeToMoveOut && UrgeStage<3)
+    {
+        SetMoveOutWaiting(UrgeStage==0?FName(TEXT("WaitingToBeUrged")):FName(TEXT("PackingUp")));
+        if (UrgeStage==0)
+        {
+            // 连续两次检查都看到同一个人举着斧头对着自己才算被吓到
+            const double Now=GetWorld()->GetTimeSeconds();
+            auto* Threat=FindAxeThreat();
+            if (!Threat) { AxeThreatPawn.Reset(); AxeThreatSince=-1; }
+            else if (AxeThreatPawn.Get()!=Threat) { AxeThreatPawn=Threat; AxeThreatSince=Now; }
+            else if (Now-AxeThreatSince>=.8) StartUrge(Threat,TEXT("AxeThreat"));
+        }
+        return;
+    }
     if (!IsValid(SharedHome) || SharedHome->GetWorld()!=GetWorld() || SharedHome->FormerResident!=this ||
         ADeliveryHome::FindSharedHome(this)!=SharedHome || !IsValid(SharedHome->ExistingHouse))
     { SetMoveOutWaiting(TEXT("SharedHomeUnavailable")); return; }
@@ -116,11 +222,26 @@ void ADeliveryGrandpa::UpdateMoveOut(float DeltaSeconds)
     FVector Point;
     if (!SharedHome->GetDeparturePoint(DeparturePointIndex,Point))
     { SetMoveOutWaiting(TEXT("DeparturePointInvalid")); return; }
+    if (bRequireUrgeToMoveOut && UrgeStage>=3)
+    {
+        // 被吓跑时玩家、二狗或地上的碎门板挡在门口不该把他卡住：连续挡住三秒就直接挪到当前路点，房屋解锁仍等他走到终点
+        const double Now=GetWorld()->GetTimeSeconds();
+        if (MoveOutState!=EDeliveryGrandpaMoveOutState::Waiting || MoveOutWaitReason!=TEXT("DepartureBlocked")) FleeBlockedSince=-1;
+        else if (FleeBlockedSince<0) FleeBlockedSince=Now;
+        else if (Now-FleeBlockedSince>=3.)
+        {
+            FleeBlockedSince=-1;
+            SetActorLocation(Point+FVector(0,0,Capsule->GetScaledCapsuleHalfHeight()+2.f),false,nullptr,ETeleportType::TeleportPhysics);
+            UE_LOG(LogDelivery,Log,TEXT("Grandpa flee unblocked point=%d at=%s"),DeparturePointIndex,*Point.ToCompactString());
+        }
+    }
     FVector Position=GetActorLocation();
     FVector Support;
     if (!FindMoveOutSupport(Position,Support))
     { SetMoveOutWaiting(TEXT("DepartureFloorUnavailable")); return; }
-    const float Step=FMath::Clamp(MoveOutSpeed,10.f,200.f)*FMath::Min(DeltaSeconds,.1f);
+    // 被斧头吓走时一路小跑
+    const float FleeScale=bRequireUrgeToMoveOut && UrgeStage>=3?FMath::Clamp(ScaredSpeedScale,1.f,4.f):1.f;
+    const float Step=FMath::Clamp(MoveOutSpeed*FleeScale,10.f,480.f)*FMath::Min(DeltaSeconds,.1f);
     const TWeakObjectPtr<ADeliveryGrandpa> WeakThis(this);
     FHitResult Block;
     const auto IsStepEdge=[this](const FHitResult& Hit)

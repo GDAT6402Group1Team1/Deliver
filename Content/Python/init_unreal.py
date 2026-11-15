@@ -68,3 +68,24 @@ def register_delivery_menu():
 
 
 register_delivery_menu()
+
+
+def _import_home_claim_assets_once():
+    """房屋解锁反馈的贴图和确认音缺失时补导入，等编辑器起来后再做"""
+    state = {"ticks": 0, "handle": None}
+
+    def _tick(_delta):
+        state["ticks"] += 1
+        if state["ticks"] < 120:
+            return
+        unreal.unregister_slate_post_tick_callback(state["handle"])
+        try:
+            import import_home_claim_assets
+            import_home_claim_assets.run()
+        except Exception as error:
+            unreal.log_warning(f"房屋解锁素材导入失败：{error}")
+
+    state["handle"] = unreal.register_slate_post_tick_callback(_tick)
+
+
+_import_home_claim_assets_once()

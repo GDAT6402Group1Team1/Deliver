@@ -10,8 +10,10 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/GameStateBase.h"
+#include "GameFramework/PlayerState.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
 #include "Delivery.h"
 
 ADeliveryHome::ADeliveryHome()
@@ -31,12 +33,21 @@ ADeliveryHome::ADeliveryHome()
     DoorwayLink->SetEnabledArea(UDeliveryPedestrianLinkArea::StaticClass());
     DoorwayLink->SetDisabledArea(UNavArea_Null::StaticClass());
     DoorwayLink->SetEnabled(false);
+    // 解锁反馈素材来自 Design/Art/VFX/HomeClaim/Selected，实例上可以换
+    ClaimStarTexture=FSoftObjectPath(TEXT("/Game/UI/HomeClaim/T_HomeClaim_Star01.T_HomeClaim_Star01"));
+    ClaimSparkTexture=FSoftObjectPath(TEXT("/Game/UI/HomeClaim/T_HomeClaim_Star02.T_HomeClaim_Star02"));
+    ClaimMarkerTexture=FSoftObjectPath(TEXT("/Game/UI/HomeClaim/T_HomeClaim_Marker.T_HomeClaim_Marker"));
+    ClaimSound=FSoftObjectPath(TEXT("/Game/UI/HomeClaim/SFX_HomeClaim_Confirm.SFX_HomeClaim_Confirm"));
+    ClaimFallbackSound=FSoftObjectPath(TEXT("/Game/Sound/SFX/SFX_Task_Delivered.SFX_Task_Delivered"));
 }
 
 void ADeliveryHome::BeginPlay()
 {
     Super::BeginPlay();
     DoorwayLink->SetEnabled(false);
+    // 有画面的机器都挂上反馈层，晚加入时只会看到门口的持续标记
+    if (GetNetMode()!=NM_DedicatedServer)
+        GetWorldTimerManager().SetTimer(ClaimOverlayTimer,this,&ADeliveryHome::EnsureClaimOverlay,.5f,true,.1f);
     if (!HasAuthority()) return;
     // 旧地图实例的链接沿用端点和方向，启用时登记行人区域
     DoorwayLink->SetEnabledArea(UDeliveryPedestrianLinkArea::StaticClass());
@@ -65,6 +76,8 @@ void ADeliveryHome::OnDoorDestroyed(AActor* DestroyedActor)
 
 void ADeliveryHome::EndPlay(const EEndPlayReason::Type Reason)
 {
+    GetWorldTimerManager().ClearTimer(ClaimOverlayTimer);
+    RemoveClaimOverlay();
     if (auto* Door=BoundDoor.Get())
     {
         Door->OnDoorBroken.RemoveDynamic(this,&ADeliveryHome::RefreshDoorwayNavigation);
@@ -169,11 +182,14 @@ bool ADeliveryHome::TryClaimAfterDeparture(ADeliveryGrandpa* Resident)
     if (bClaimed) return true;
     bClaimed=true;
     ClaimEventId=Resident->GetConfirmedDeliveryId();
+    ClaimedBy=Resident->GetUrgedBy();
     const auto* State=GetWorld()->GetGameState();
     ClaimedServerTime=State?State->GetServerWorldTimeSeconds():GetWorld()->GetTimeSeconds();
     UE_LOG(LogDelivery,Log,TEXT("SharedHomeClaimed home=%s delivery=%s at=%s"),
         *GetName(),*ClaimEventId.ToString(),*Resident->GetActorLocation().ToCompactString());
     ForceNetUpdate();
+    // 监听服务器上的本机玩家不会收到复制通知，这里直接提示
+    ShowClaimHint();
     return true;
 }
 
@@ -182,5 +198,6 @@ void ADeliveryHome::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ADeliveryHome,bClaimed);
     DOREPLIFETIME(ADeliveryHome,ClaimEventId);
+    DOREPLIFETIME(ADeliveryHome,ClaimedBy);
     DOREPLIFETIME(ADeliveryHome,ClaimedServerTime);
 }

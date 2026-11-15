@@ -430,7 +430,9 @@ class DecisionHandler(BaseHTTPRequestHandler):
                 return
             try:
                 context = validate_context(json.loads(self.rfile.read(length)))
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as error:
+                # 把校验没过的原因写进后端日志，游戏那边只会看到一次传输失败
+                print(f"invalid_context path={self.path} reason={type(error).__name__}:{str(error)[:200]}", flush=True)
                 self.reply(400, {"error": "invalid_context"})
                 return
             received = time.monotonic()
@@ -506,8 +508,9 @@ class DecisionHandler(BaseHTTPRequestHandler):
                     break
             self.wfile.write(b'0\r\n\r\n')
             self.wfile.flush()
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as error:
             if job is None:
+                print(f"invalid_context path={self.path} reason={type(error).__name__}:{str(error)[:200]}", flush=True)
                 self.reply(400, {'error': 'invalid_context'})
         except (OSError, queue.Full):
             if job:

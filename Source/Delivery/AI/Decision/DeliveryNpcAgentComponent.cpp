@@ -831,6 +831,74 @@ bool UDeliveryNpcAgentComponent::RequestGameplayRuleAction(EDeliveryNpcAction Ac
     return IsAuthority() && PublicState.ActionId==AcceptedAction && HasActiveAction();
 }
 
+bool UDeliveryNpcAgentComponent::RequestRetaliation(AActor* Attacker)
+{
+    auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
+    // 只对玩家和玩家的同伴立即还手；居民之间互殴仍由各自的模型决定，否则两人会一来一往打个不停
+    // 被车撞倒时不对车辆挥拳
+    if (!IsAuthority() || bChangingPlan || !Npc || !IsValid(Attacker) || Attacker==GetOwner() || Attacker->GetWorld()!=GetWorld() ||
+        (!Attacker->IsA<ADeliveryCharacter>() && !Attacker->IsA<ADeliveryCompanionCharacter>())) return false;
+    PruneEvidence();
+    const double Now=GetWorld()->GetTimeSeconds();
+    // 取这个人最近一次真实打中我的记录，过期或没有记录时不还手
+    const auto FindHitFrom=[this,Now](const AActor* Actor)
+    {
+        const FDeliveryNpcEvidence* Latest=nullptr;
+        for (const auto& Item:Evidence)
+            if ((Item.Kind==TEXT("LightMeleeHit") || Item.Kind==TEXT("Hit")) && Item.Source==EDeliveryNpcEvidenceSource::Seen &&
+                Item.ExpiresAt>Now && Item.SubjectId.IsValid() && KnownSubjects.FindRef(Item.SubjectId).Get()==Actor) Latest=&Item;
+        return Latest;
+    };
+    const auto* Fact=FindHitFrom(Attacker);
+    if (!Fact) return false;
+    if (HasActiveAction())
+    {
+        if (PublicState.Origin==EDeliveryNpcActionOrigin::GameplayRule || PublicState.Action==EDeliveryNpcAction::Flee) return false;
+        // 已经在追打动过手的人时不来回换目标
+        if (PublicState.Action==EDeliveryNpcAction::Fight && IsValid(PublicState.Target) &&
+            (PublicState.Target==Attacker || FindHitFrom(PublicState.Target))) return false;
+    }
+    const FGuid EvidenceId=Fact->EventId;
+    const FGuid SubjectId=Fact->SubjectId;
+
+    TGuardValue<bool> ChangingPlan(bChangingPlan,true);
+    // 换目标时省去上一轮交战的冷却，随后复用原取消路径停掉旧对白和旧动作
+    TGuardValue<bool> ReplacingFight(bReplacingFight,true);
+    CancelDecision();
+    FinishFailedPlayerReply(PlayerReplyMessage,nullptr,false);
+    CancelPlan(TEXT("Retaliation"));
+    if (!IsAuthority() || !IsValid(Npc) || !IsValid(Attacker) || HasActiveAction()) return false;
+    Npc->Combat->AllowImmediateFight();
+    // 停止旧动作会发出通知，记录或目标可能在通知中失效；对方太远或被挡住时留给模型判断
+    if (!Evidence.ContainsByPredicate([EvidenceId](const auto& Item){ return Item.EventId==EvidenceId; }) ||
+        KnownSubjects.FindRef(SubjectId).Get()!=Attacker ||
+        !Npc->CanExecuteForRequester(EDeliveryNpcAction::Fight,Attacker,nullptr)) return false;
+    PublicState={};
+    PublicState.ActionId=FGuid::NewGuid();
+    PublicState.PlanRevision=++NextPlanRevision;
+    PublicState.Action=EDeliveryNpcAction::Fight;
+    // 沿用模型交战的执行与续判流程，开打后模型照常收到这次受击并决定下一步
+    PublicState.Origin=EDeliveryNpcActionOrigin::Model;
+    PublicState.Status=EDeliveryNpcActionStatus::Accepted;
+    PublicState.Target=Attacker;
+    PublicState.Duration=DeliveryNpc::FightDecisionSeconds;
+    PublicState.Emotion=TEXT("Angry");
+    ActionEvidenceIds={EvidenceId};
+    ActionTargetId=SubjectId;
+    ActionConversationDepth=0;
+    ActionEndsAt=0;
+    CombatDeadline=0;
+    ActionDeadline=Now+1.0;
+    // 动手的同时马上请模型接话，质问、继续追打或收手的台词仍由模型给出
+    bRetaliationNeedsReply=true;
+    // 不改 LastDecisionEventIds，还手不能冒充模型已读过这次受击
+    const FGuid AcceptedAction=PublicState.ActionId;
+    UE_LOG(LogDeliveryNpcAgent,Log,TEXT("Retaliation npc=%s action=%s target=%s evidence=%s"),
+        *NpcId.ToString(),*AcceptedAction.ToString(),*GetNameSafe(Attacker),*EvidenceId.ToString());
+    PublishState();
+    return IsAuthority() && PublicState.ActionId==AcceptedAction && HasActiveAction();
+}
+
 void UDeliveryNpcAgentComponent::CancelDecision()
 {
     if (!IsAuthority()) return;
@@ -2199,7 +2267,9 @@ bool UDeliveryNpcAgentComponent::StartAction(FDeliveryNpcPublicState& OutAction)
         if (PublicState.Duration<=0)
         { TryFinishAction(PublicState.ActionId,EDeliveryNpcActionStatus::Failed,TEXT("CombatTimeLimit")); return false; }
         ScheduleNextActionDecision();
+        if (bRetaliationNeedsReply) NextActionDecisionAt=Now+.25;
     }
+    bRetaliationNeedsReply=false;
     ActionDeadline = ActionEndsAt + 1.0;
     for (auto& Pair:Replies)
         if (Pair.Value.ActionId==PublicState.ActionId && !Pair.Value.RequiresCompanionCommandReceipt())

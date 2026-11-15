@@ -836,18 +836,20 @@ bool UDeliveryCompanionComponent::FindFollowDestination(APawn* Pawn,FVector& Out
         Behind-SideOffset*.5,Behind,Across,-Across};
     const bool bRecoveringRoute=HasRecentFollowObstruction(*Pawn);
     const FVector Feet=Npc->GetNavAgentLocation();
+    // 记下每类落选原因的次数，整轮都找不到站位时写进日志，方便看出是导航、门口避让还是路径不通
+    int32 OffNav=0,WrongSide=0,Occupied=0,Rejected=0,TooNear=0,AtEntrance=0,NoPath=0;
     const auto TryPosition=[&](const FVector& Desired,double MinMoveDistance=0.)
     {
         FNavLocation Projected;
-        if (!Nav->ProjectPointToNavigation(Desired,Projected,FVector(80,80,250),&Npc->GetNavAgentPropertiesRef()) ||
-            !IsOnOwnerSide(Projected.Location) ||
-            !IsDestinationClear(Projected.Location) ||
-            (bRecoveringRoute && IsRejectedFollowStand(*Pawn,Projected.Location)) ||
-            FVector::DistSquared2D(Projected.Location,Feet)<FMath::Square(MinMoveDistance) ||
-            FVector::Dist2D(Projected.Location,OwnerPosition)<Config.YieldDistance ||
-            !IsOutsideTaskEntrance(Projected.Location)) return false;
+        if (!Nav->ProjectPointToNavigation(Desired,Projected,FVector(80,80,250),&Npc->GetNavAgentPropertiesRef())) { ++OffNav; return false; }
+        if (!IsOnOwnerSide(Projected.Location)) { ++WrongSide; return false; }
+        if (!IsDestinationClear(Projected.Location)) { ++Occupied; return false; }
+        if (bRecoveringRoute && IsRejectedFollowStand(*Pawn,Projected.Location)) { ++Rejected; return false; }
+        if (FVector::DistSquared2D(Projected.Location,Feet)<FMath::Square(MinMoveDistance) ||
+            FVector::Dist2D(Projected.Location,OwnerPosition)<Config.YieldDistance) { ++TooNear; return false; }
+        if (!IsOutsideTaskEntrance(Projected.Location)) { ++AtEntrance; return false; }
         auto* Path=Nav->FindPathToLocationSynchronously(GetWorld(),Feet,Projected.Location,Npc);
-        if (!Path || !Path->IsValid() || Path->IsPartial() || (bRecoveringRoute && !IsFollowPathStartClear(*Npc,*Path))) return false;
+        if (!Path || !Path->IsValid() || Path->IsPartial() || (bRecoveringRoute && !IsFollowPathStartClear(*Npc,*Path))) { ++NoPath; return false; }
         Out=Projected.Location; return true;
     };
     for (const FVector& Offset:CloseOffsets)
@@ -869,6 +871,13 @@ bool UDeliveryCompanionComponent::FindFollowDestination(APawn* Pawn,FVector& Out
         const FVector TowardOwner=-TowardNpc;
         for (const float Angle:{55.f,-55.f,90.f,-90.f})
             if (TryPosition(Feet+TowardOwner.RotateAngleAxis(Angle,FVector::UpVector)*Step,60.)) return true;
+    }
+    const double Now=GetWorld()->GetTimeSeconds();
+    if (Now>=NextFollowBlockedLogAt)
+    {
+        NextFollowBlockedLogAt=Now+2.;
+        UE_LOG(LogDeliveryCompanion,Log,TEXT("CompanionFollowNoStand npc=%s from=%s owner=%s off_nav=%d wrong_side=%d occupied=%d rejected=%d too_near=%d at_entrance=%d no_path=%d"),
+            *GetNameSafe(Npc),*Feet.ToCompactString(),*OwnerPosition.ToCompactString(),OffNav,WrongSide,Occupied,Rejected,TooNear,AtEntrance,NoPath);
     }
     return false;
 }
@@ -1232,6 +1241,29 @@ void UDeliveryCompanionComponent::UpdateFollowMovement()
         if (!bWaiting) LastOwnerPosition=Pawn->GetActorLocation();
         bHasFollowDestination=false;
         NextNavigationAt=Now+GetTuning().BlockedRetrySeconds;
+        if (!bWaiting && bLeapToOwnerWhenFollowBlocked)
+        {
+            // 先确认不是一时采样失败，约一秒后仍没有站位就起跳，落地后回到普通跟随
+            if (FollowStuckSince<0) FollowStuckSince=Now;
+            // 跳了几次还是接不上路，就直接到主人身边
+            if (Now-FollowStuckSince>=FollowTeleportAfterSeconds && TeleportToOwner(*Pawn))
+            {
+                if (!IsCurrent()) return;
+                FollowStuckSince=-1; FollowBlockedSince=-1; bReportedBlocked=false;
+                NextNavigationAt=Now+.5;
+                SetSuspension(NAME_None);
+                return;
+            }
+            if (FollowBlockedSince<0 || Now-FollowBlockedSince>10.) { FollowBlockedSince=Now; NextNavigationAt=Now+1.; }
+            else if (Now-FollowBlockedSince>=.9 && Now>=NextFollowLeapAt)
+            {
+                const bool bLeapt=TryLeapToOwner(*Pawn,Now);
+                if (!IsCurrent()) return;
+                NextFollowLeapAt=Now+2.;
+                NextNavigationAt=Now+(bLeapt?1.3:2.);
+                if (bLeapt) { FollowBlockedSince=-1; bReportedBlocked=false; SetSuspension(NAME_None); return; }
+            }
+        }
         if (!bReportedBlocked)
         {
             bReportedBlocked=true;
@@ -1241,6 +1273,7 @@ void UDeliveryCompanionComponent::UpdateFollowMovement()
         }
         return;
     }
+    FollowBlockedSince=-1; FollowStuckSince=-1;
     const float GoalChangeTolerance=Mode==EDeliveryCompanionMode::Follow?40.f:60.f;
     const auto* Path=AI->GetPathFollowingComponent();
     if (bLastDestinationUsable && bOwnsNavigation && Path && Path->GetCurrentRequestId()==FollowMoveId &&
@@ -1295,6 +1328,134 @@ void UDeliveryCompanionComponent::UpdateFollowMovement()
         SetSuspension(bUsingStreetWait?FollowWaitingAtGrandpaDoor:NAME_None);
     }
 }
+bool UDeliveryCompanionComponent::TeleportToOwner(APawn& OwnerPawn)
+{
+    auto* Npc=GetCompanion();
+    auto* World=GetWorld();
+    const auto* Capsule=Npc?Npc->GetCapsuleComponent():nullptr;
+    const auto* Movement=Npc?Npc->GetCharacterMovement():nullptr;
+    if (!World || !Capsule || !Movement || !Npc->HasAuthority() || Mode!=EDeliveryCompanionMode::Follow || Npc->IsKnockedDown() ||
+        Npc->IsMountedOnCompanionBike() || HasActiveHomeArrangement() || GetHomeState().CarriedProp) return false;
+    const float Radius=Capsule->GetScaledCapsuleRadius(),HalfHeight=Capsule->GetScaledCapsuleHalfHeight();
+    const FVector OwnerFeet=OwnerPawn.GetNavAgentLocation();
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(CompanionFollowTeleport),false,Npc);
+    Query.AddIgnoredActor(&OwnerPawn);
+    const FCollisionShape Shape=FCollisionShape::MakeCapsule(Radius,HalfHeight);
+    const FCollisionResponseParams Response(Capsule->GetCollisionResponseToChannels());
+    // 绕主人一圈找脚下有实地、站得下的位置，先试身后
+    const FVector Back=-FRotator(0,OwnerPawn.GetControlRotation().Yaw,0).Vector();
+    for (const double Gap:{Radius+110.,Radius+170.,Radius+70.})
+        for (const double Yaw:{0.,60.,-60.,120.,-120.,180.})
+        {
+            const FVector Above=OwnerFeet+Back.RotateAngleAxis(Yaw,FVector::UpVector)*Gap+FVector(0,0,110);
+            FHitResult Ground;
+            if (!World->LineTraceSingleByChannel(Ground,Above,Above-FVector(0,0,380),ECC_Visibility,Query) ||
+                Ground.ImpactNormal.Z<Movement->GetWalkableFloorZ()) continue;
+            const FVector Center=Ground.ImpactPoint+FVector(0,0,HalfHeight+4);
+            if (World->OverlapBlockingTestByChannel(Center,FQuat::Identity,Capsule->GetCollisionObjectType(),Shape,Query,Response)) continue;
+            const FVector From=Npc->GetActorLocation();
+            StopFollowNavigation();
+            if (!IsValid(Npc) || GetCompanion()!=Npc) return false;
+            Npc->SetActorLocation(Center,false,nullptr,ETeleportType::TeleportPhysics);
+            UE_LOG(LogDeliveryCompanion,Log,TEXT("CompanionFollowTeleport npc=%s from=%s to=%s"),*GetNameSafe(Npc),*From.ToCompactString(),*Center.ToCompactString());
+            return true;
+        }
+    UE_LOG(LogDeliveryCompanion,Log,TEXT("CompanionFollowTeleportRejected npc=%s owner=%s"),*GetNameSafe(Npc),*OwnerFeet.ToCompactString());
+    return false;
+}
+
+bool UDeliveryCompanionComponent::TryLeapToOwner(APawn& OwnerPawn,double Now)
+{
+    auto* Npc=GetCompanion();
+    auto* World=GetWorld();
+    auto* Movement=Npc?Npc->GetCharacterMovement():nullptr;
+    const auto* Capsule=Npc?Npc->GetCapsuleComponent():nullptr;
+    if (!World || !Movement || !Capsule || !Npc->HasAuthority() || Mode!=EDeliveryCompanionMode::Follow ||
+        !Movement->IsMovingOnGround() || Movement->HasAnimRootMotion() || Npc->IsKnockedDown() || Npc->IsMountedOnCompanionBike() ||
+        HasActiveHomeArrangement() || GetHomeState().CarriedProp || !Npc->Combat || Npc->Combat->IsReactingToHit() || Npc->Combat->IsStriking())
+        return false;
+    const float Radius=Capsule->GetScaledCapsuleRadius(),HalfHeight=Capsule->GetScaledCapsuleHalfHeight();
+    const FVector Feet=Npc->GetNavAgentLocation(),OwnerFeet=OwnerPawn.GetNavAgentLocation();
+    const FVector ToOwner=OwnerFeet-Feet;
+    const double Flat=ToOwner.Size2D();
+    const auto Reject=[&](const TCHAR* Reason)
+    {
+        UE_LOG(LogDeliveryCompanion,Log,TEXT("CompanionFollowLeapRejected npc=%s reason=%s from=%s owner=%s"),
+            *GetNameSafe(Npc),Reason,*Feet.ToCompactString(),*OwnerFeet.ToCompactString());
+        return false;
+    };
+    if (Flat<140.) return Reject(TEXT("Distance"));
+    // 主人太远一步跳不到时，朝主人方向分几跳靠过去，直到重新接上能走的路
+    const bool bHop=Flat>FollowLeapMaxDistance;
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(CompanionFollowLeap),false,Npc);
+    Query.AddIgnoredActor(&OwnerPawn);
+    const FCollisionShape Shape=FCollisionShape::MakeCapsule(Radius,HalfHeight);
+    const FCollisionResponseParams Response(Capsule->GetCollisionResponseToChannels());
+    const ECollisionChannel Channel=Capsule->GetCollisionObjectType();
+    // 落点选在主人身前靠自己这一侧，脚下必须有实地且站得下
+    const FVector Direction=ToOwner.GetSafeNormal2D();
+    FVector Landing=FVector::ZeroVector;
+    bool bHasLanding=false;
+    // 分段跳时依次试正前方和左右各偏三十度、由远到近的落点
+    TArray<FVector,TInlineAllocator<9>> Aboves;
+    if (bHop)
+    {
+        for (const double Reach:{430.,300.,200.})
+            for (const double Yaw:{0.,30.,-30.})
+                Aboves.Add(Feet+Direction.RotateAngleAxis(Yaw,FVector::UpVector)*Reach+FVector(0,0,160));
+    }
+    else
+    {
+        for (const double Gap:{Radius+95.,Radius+150.,Radius+60.})
+            if (Flat-Gap>=70.) Aboves.Add(OwnerFeet-Direction*Gap+FVector(0,0,110));
+    }
+    for (const FVector& Above:Aboves)
+    {
+        FHitResult Ground;
+        if (!World->LineTraceSingleByChannel(Ground,Above,Above-FVector(0,0,bHop?FollowLeapMaxDrop+200.:380.),ECC_Visibility,Query) ||
+            Ground.ImpactNormal.Z<Movement->GetWalkableFloorZ()) continue;
+        const FVector Center=Ground.ImpactPoint+FVector(0,0,HalfHeight+4);
+        if (World->OverlapBlockingTestByChannel(Center,FQuat::Identity,Channel,Shape,Query,Response)) continue;
+        Landing=Ground.ImpactPoint; bHasLanding=true; break;
+    }
+    if (!bHasLanding) return Reject(TEXT("NoLanding"));
+    const double Rise=Landing.Z-Feet.Z;
+    if (Rise>FollowLeapMaxRise || -Rise>FollowLeapMaxDrop) return Reject(TEXT("Height"));
+    const double Gravity=FMath::Abs(Movement->GetGravityZ());
+    if (Gravity<1.) return false;
+    const FVector Start=Capsule->GetComponentLocation();
+    const FVector FlatTo=FVector(Landing.X-Feet.X,Landing.Y-Feet.Y,0);
+    for (const double Apex:{55.,110.,170.})
+    {
+        // 抛物线顶点高出起点和落点，逐段扫过身体胶囊，墙和关着的门都会挡下这次起跳
+        const double Top=FMath::Max(0.,Rise)+Apex;
+        const double Up=FMath::Sqrt(2.*Gravity*Top);
+        const double FlightTime=Up/Gravity+FMath::Sqrt(2.*(Top-Rise)/Gravity);
+        const FVector Launch=FlatTo/FlightTime+FVector(0,0,Up);
+        if (Launch.Size2D()>950.) continue;
+        bool bClear=true;
+        FVector Previous=Start;
+        const int32 Samples=FMath::Clamp(FMath::CeilToInt(FlightTime/.035),8,40);
+        // 最后一小段贴近地面，由落点站位检查负责
+        for (int32 Index=1;Index<=Samples && bClear;++Index)
+        {
+            const double Time=FlightTime*.92*Index/Samples;
+            const FVector Next=Start+Launch*Time-FVector(0,0,.5*Gravity*FMath::Square(Time));
+            bClear=!World->SweepTestByChannel(Previous,Next,FQuat::Identity,Channel,Shape,Query,Response);
+            Previous=Next;
+        }
+        if (!bClear) continue;
+        StopFollowNavigation();
+        if (!IsValid(Npc) || GetCompanion()!=Npc || !Movement->IsMovingOnGround()) return false;
+        Npc->SetActorRotation(FRotator(0,Direction.Rotation().Yaw,0));
+        Npc->LaunchCharacter(Launch,true,true);
+        UE_LOG(LogDeliveryCompanion,Log,TEXT("CompanionFollowLeap npc=%s from=%s landing=%s launch=%s flight=%.2f"),
+            *GetNameSafe(Npc),*Feet.ToCompactString(),*Landing.ToCompactString(),*Launch.ToCompactString(),FlightTime);
+        return true;
+    }
+    return Reject(TEXT("ArcBlocked"));
+}
+
 void UDeliveryCompanionComponent::OnTaskCompleted(UDeliveryTaskDefinition* Task,const FDeliveryRewardBreakdown& Reward,APlayerState* Deliverer)
 {
     auto* Npc=GetCompanion();

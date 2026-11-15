@@ -31,6 +31,11 @@ class DELIVERY_API ADeliveryBreakableDoor : public AActor
     int32 GetHitCount() const { return HitCount; }
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Door|Impact", meta=(ClampMin="1", ClampMax="10"))
     int32 HitsToBreak = 3;
+    // 破门后碎片留这么久就收掉，免得一直堆在门口挡路；填 0 表示一直保留
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Door|Impact", meta=(ClampMin="0", ClampMax="60", Units="s"))
+    float FragmentLifetime = 6.f;
+    void ClearFragments();
+    FTimerHandle FragmentTimer;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Door|Impact")
     TObjectPtr<USoundBase> HitSound;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Door|Impact")

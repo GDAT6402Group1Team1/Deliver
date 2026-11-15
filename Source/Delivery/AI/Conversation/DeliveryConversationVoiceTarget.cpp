@@ -42,7 +42,8 @@ bool UDeliveryConversationComponent::CanVoiceTalkTo(const ADeliveryNpcCharacter*
 {
     auto* PC=Cast<APlayerController>(GetOwner());
     FDeliverySpeechPlayerContext Context;
-    if (!IsOwnedVoiceCompanion(Resident,PC,GetWorld()) || !Context.Capture(PC) || Resident->IsKnockedDown()) return false;
+    if (!IsOwnedVoiceCompanion(Resident,PC,GetWorld()) || !Context.Capture(PC)) return false;
+    // 同伴被打倒时主人照样能用语音叫他，例如喊停手
     // 骑车后原角色的 PlayerState 会清空，受击状态仍由同一玩家的 PlayerState 保存
     if (const auto* AbilityOwner=Cast<IAbilitySystemInterface>(PC->PlayerState.Get()))
         if (const auto* ASC=AbilityOwner->GetAbilitySystemComponent();ASC && ASC->HasMatchingGameplayTag(TAG_State_Stunned)) return false;

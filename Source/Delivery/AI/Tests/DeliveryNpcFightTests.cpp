@@ -81,6 +81,8 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
         for (auto* Npc:{Case.Attacker,Case.Target})
         {
             Npc->SetActorTickEnabled(false);
+            // 原有用例检查模型选择的交战，立即还手在单独的用例里打开
+            Npc->Combat->bRetaliateWhenHit=false;
             Npc->GetMesh()->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
             Npc->GetMesh()->bEnableUpdateRateOptimizations=false;
             // 正式蓝图的树先停下，本检查只让下面这一份任务执行动作
@@ -537,6 +539,18 @@ bool FDeliveryNpcFightTest::RunTest(const FString&)
     Tick(Heavy,.44f);
     TestTrue(TEXT("原StrikeOnce仍保留一次重击倒地的规则"),Heavy.Target->IsKnockedDown());
     Close(Heavy);
+
+    auto Reflex=SpawnCase(); Tick(Reflex,.2f);
+    Reflex.Target->Combat->bRetaliateWhenHit=true;
+    if (!TestTrue(TEXT("先由一人实际出拳"),Begin(Reflex,EDeliveryNpcAction::Fight))) return false;
+    Tick(Reflex,.44f);
+    const auto Retaliated=Reflex.Target->Agent->GetPublicState();
+    TestEqual(TEXT("还手用例里第一拳已实际命中"),Reflex.Attacker->Combat->GetFightHitCount(),1);
+    // 立即还手只针对玩家和玩家的同伴，居民互殴仍等各自的模型决定
+    TestFalse(TEXT("居民之间挨拳不会自动还手"),Reflex.Target->Agent->HasActiveAction() &&
+        Retaliated.Action==EDeliveryNpcAction::Fight && Retaliated.Target==Reflex.Attacker);
+    Reflex.Target->Agent->CancelPlan(TEXT("FightTestFinished"));
+    Close(Reflex);
 
     auto* PlayerClass=LoadClass<ADeliveryCharacter>(nullptr,
         TEXT("/Game/Blueprint/Character/DeliverMan/BP_DeliveryMan.BP_DeliveryMan_C"));

@@ -192,7 +192,8 @@ private:
     bool ValidateHome(FName& OutReason,bool bRequireRuntimeHome=true) const;
     bool ValidateUser(ADeliveryCompanionCharacter* Companion,APlayerState* Requester,FName& OutReason) const;
     bool ValidateUse(ADeliveryCompanionCharacter* Companion,const UDeliveryHomeBehaviorDefinition* Definition,
-        const FSmartObjectSlotHandle& Slot,bool bClose,FName& OutReason,const AActor* PlacementProp=nullptr) const;
+        const FSmartObjectSlotHandle& Slot,bool bClose,FName& OutReason,const AActor* PlacementProp=nullptr,
+        bool bHeldByUser=false) const;
     // 候选、领取复核和执行读取同一站位，Take 入口不跟着物件高度悬空
     bool ResolveUseTransforms(ADeliveryCompanionCharacter* Companion,const UDeliveryHomeBehaviorDefinition* Definition,
         const FSmartObjectSlotHandle& Slot,FTransform& OutEntrance,FTransform& OutUse,FTransform& OutExit,FName& OutReason) const;

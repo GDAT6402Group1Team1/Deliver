@@ -204,6 +204,8 @@ private:
     UFUNCTION() void OnRep_Speech();
     UPROPERTY(Transient) TObjectPtr<UDeliveryDialogueVoiceComponent> Voice;
     UPROPERTY(Transient) TObjectPtr<UWidgetComponent> Caption;
+    // 本机镜头离居民超过这个距离就不显示头顶字幕，声音照常按距离衰减
+    UPROPERTY(EditAnywhere,Category="Delivery|语音",meta=(ClampMin="300",ClampMax="10000",Units="cm")) float CaptionVisibleDistance=1500.f;
     UPROPERTY(Transient) TObjectPtr<UAudioComponent> RecordedVoice;
     UPROPERTY(Transient) TObjectPtr<USoundWaveProcedural> RecordedWave;
     UPROPERTY(Transient) TObjectPtr<UAudioComponent> ReactionAudio;

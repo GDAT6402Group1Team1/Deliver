@@ -75,6 +75,10 @@ public:
     UPROPERTY(EditAnywhere,Category="Delivery|攻击效果") bool bHarmlessStrikes=false;
     UPROPERTY(EditAnywhere,Category="Delivery|受击") bool bKnockDownOnAnyPunch=false;
     UPROPERTY(EditAnywhere,Category="Delivery|受击") bool bReceiveHitsWhileDown=false;
+    // 挨打后不等模型回复，后仰结束或起身后直接追打动手的人；继续、逃跑或停手仍由模型在交战中选择
+    UPROPERTY(EditAnywhere,Category="Delivery|受击") bool bRetaliateWhenHit=true;
+    // 还手可以立即开始，不受上一轮交战结束后的冷却限制
+    void AllowImmediateFight() { NextFightAt=0; }
     UPROPERTY(EditAnywhere,Category="Delivery|受击",meta=(ClampMin="0",ClampMax="10",Units="s")) float DownHitExtensionSeconds=4;
     UPROPERTY(EditAnywhere,Category="Delivery|受击",meta=(ClampMin="0",ClampMax="2000",Units="cm/s")) float KnockdownHorizontalSpeed=450;
     UPROPERTY(EditAnywhere,Category="Delivery|受击",meta=(ClampMin="0",ClampMax="2000",Units="cm/s")) float KnockdownUpwardSpeed=100;
@@ -149,6 +153,8 @@ private:
     double HitFacingEndsAt=0;
     bool bHitFacingApplied=false;
     TWeakObjectPtr<AActor> RecoveryFacingSource;
+    // 这轮倒地是谁打的，起身后凭仍有效的受击记录还手
+    TWeakObjectPtr<AActor> KnockdownAttacker;
     FGuid RecoveryFacingEpisode;
     bool bEndingHitFacing=false;
     void ExtendDownTime(AActor* Source);

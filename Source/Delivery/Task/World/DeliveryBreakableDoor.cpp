@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Task/World/DeliveryBreakableDoor.h"
+#include "TimerManager.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
@@ -144,6 +145,17 @@ void ADeliveryBreakableDoor::OnRep_Broken()
 		Fragments->CrumbleActiveClusters();
 		Fragments->AddRadialImpulse(GetActorLocation(), 170.f, 350.f, ERadialImpulseFalloff::RIF_Linear,
 		                            true);
+		// 每台机器各自计时收掉碎片，门洞的通行状态不受影响
+		if (FragmentLifetime > 0.f)
+			GetWorldTimerManager().SetTimer(FragmentTimer, this, &ADeliveryBreakableDoor::ClearFragments, FragmentLifetime, false);
 	}
 	OnDoorBroken.Broadcast();
+}
+
+void ADeliveryBreakableDoor::ClearFragments()
+{
+	if (!Fragments) return;
+	Fragments->SetSimulatePhysics(false);
+	Fragments->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Fragments->SetVisibility(false, true);
 }
