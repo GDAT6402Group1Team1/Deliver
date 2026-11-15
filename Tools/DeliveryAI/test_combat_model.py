@@ -9,6 +9,7 @@ import uuid
 from unittest.mock import patch
 
 from combat_model import LocalCombatClient, choose_combat_action, parse_combat_choice, prepare_combat_context
+from dialogue_background import character_background
 
 
 def context():
@@ -100,6 +101,59 @@ class CombatModelTests(unittest.TestCase):
         self.assertEqual(result.proposal['speech_target_id'], '')
         self.assertEqual(request, original)
 
+    def test_npc_message_needing_a_reply_uses_dialogue_during_combat(self):
+        request = context()
+        own = request['self_subject_id']
+        target = request['current_action']['target_id']
+        message = {'kind': 'NpcMessage', 'source': 'ToldBy', 'event_id': str(uuid.uuid4()),
+                   'subject_id': target, 'addressee_id': own, 'needs_reply': True,
+                   'description': '我刚才那句是冲他说的，你急什么？'}
+        receipt = {'source': 'ActionResult', 'event_id': str(uuid.uuid4()),
+                   'subject_id': own, 'addressee_id': target, 'description': '你早说啊。'}
+        unrelated_reply = {**receipt, 'kind': 'SelfSpeech',
+                           'reply_to_event_id': request['evidence'][0]['event_id']}
+        for action in ('Fight', 'Flee'):
+            with self.subTest(action=action):
+                request['current_action']['action'] = action
+                pending = {**request, 'evidence': request['evidence'] + [message, unrelated_reply]}
+                client = FixedClient()
+                result = choose_combat_action(pending, threading.Event(), client=client)
+                self.assertIsNone(result.proposal)
+                self.assertEqual(result.fallback_reason, 'pending_npc_reply')
+                self.assertEqual(client.calls, 0)
+
+        old_message = dict(message)
+        old_message.pop('needs_reply')
+        histories = {'旧协议消息': [old_message], '无需接话': [{**message, 'needs_reply': False}]}
+        for kind in ('SelfSpeech', 'ActionReply', 'NpcMessageSent'):
+            histories[kind] = [message, {**receipt, 'kind': kind, 'reply_to_event_id': message['event_id']}]
+        for description, history in histories.items():
+            with self.subTest(description=description):
+                completed = {**request, 'evidence': request['evidence'] + history}
+                client = FixedClient('Flee')
+                result = choose_combat_action(completed, threading.Event(), client=client)
+                self.assertEqual(client.calls, 1)
+                self.assertEqual(result.proposal['action'], 'Flee')
+
+    def test_live_model_receives_author_preferences_without_changing_fixed_evaluation(self):
+        class ObservedClient(FixedClient):
+            def choose(self, prompt, candidates, cancel, measure):
+                self.prompt = prompt
+                return super().choose(prompt, candidates, cancel, measure)
+
+        for profile in ('chunlai', 'xiumei'):
+            with self.subTest(profile=profile):
+                request = {**context(), 'profile_id': profile, 'combat_preferences': {'protect_owner': 999}}
+                historical, _ = prepare_combat_context(request)
+                client = ObservedClient()
+                result = choose_combat_action(request, threading.Event(), client=client)
+                expected = character_background(request)['combat_preferences']
+                self.assertEqual(result.proposal['action'], 'Fight')
+                self.assertNotIn('combat_preferences', historical)
+                self.assertNotIn('relationships', historical)
+                self.assertEqual(client.prompt, {**historical, 'combat_preferences': expected,
+                                                'relationships': character_background(request)['relationships']})
+
     def test_new_opponent_and_duplicate_pair_are_not_selected(self):
         request = context()
         request['candidates'].append({**request['candidates'][0], 'target_id': str(uuid.uuid4())})
@@ -126,6 +180,71 @@ class CombatModelTests(unittest.TestCase):
         result = choose_combat_action(context(), cancelled, client=CancelsWhileChoosing())
         self.assertIsNone(result.proposal)
         self.assertEqual(result.fallback_reason, 'cancelled')
+
+    def test_compact_model_can_only_choose_a_complete_offered_action(self):
+        class CompletionHandler(BaseHTTPRequestHandler):
+            result = {'content': 'Flee', 'stop_type': 'eos', 'truncated': False}
+            calls = []
+
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                self.calls.append((self.path, body))
+                if self.path == '/apply-template':
+                    response = {'prompt': 'template'}
+                elif self.path == '/tokenize':
+                    response = {'tokens': [7] if body['content'] == 'template' else [1, 2, 3]}
+                else:
+                    response = self.result
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode())
+
+            def log_message(self, *_args):
+                pass
+
+        server = ThreadingHTTPServer(('127.0.0.1', 0), CompletionHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            client = LocalCombatClient(f'http://127.0.0.1:{server.server_port}', compact_output=True)
+            request = context()
+            request['candidates'] = [row for row in request['candidates'] if row['action'] != 'Fight']
+            reply = choose_combat_action(request, threading.Event(), client=client)
+            self.assertEqual(reply.proposal['action'], 'Flee')
+            self.assertEqual(reply.proposal['target_id'], request['current_action']['target_id'])
+            prefix = CompletionHandler.calls[-2]
+            self.assertEqual(prefix, ('/tokenize', {'content': '{"action":"', 'add_special': False}))
+            path, body = CompletionHandler.calls[-1]
+            self.assertEqual(path, '/completion')
+            self.assertEqual(body['prompt'], [7, 1, 2, 3])
+            self.assertEqual(body['grammar'], 'root ::= "Flee" | "Wait"')
+            self.assertNotIn('id_slot', body)
+            for mutation in ({'content': 'Fight'}, {'content': 'Flee\n'}, {'content': 'F', 'stop_type': 'limit'},
+                             {'content': 'Flee', 'stop_type': 'limit'}, {'truncated': True}):
+                with self.subTest(mutation=mutation):
+                    CompletionHandler.result = {'content': 'Flee', 'stop_type': 'eos', 'truncated': False, **mutation}
+                    reply = choose_combat_action(request, threading.Event(), client=client)
+                    self.assertIsNone(reply.proposal)
+                    self.assertIn(reply.fallback_reason, ('invalid_combat_choice', 'incomplete_combat_choice'))
+
+            CompletionHandler.result = {'content': 'Flee', 'stop_type': 'eos', 'truncated': False}
+            with patch.dict('os.environ', {'DELIVERY_COMBAT_MODEL_URL': f'http://127.0.0.1:{server.server_port}',
+                                           'DELIVERY_COMBAT_MODEL_RESIDENT_CACHE': '1'}, clear=True):
+                for profile, slot in (('chunlai', 0), ('xiumei', 1), ('chunlai', 0)):
+                    with self.subTest(profile=profile):
+                        request.update(profile_id=profile, self_name='改过显示名', id_slot=9)
+                        CompletionHandler.calls.clear()
+                        reply = choose_combat_action(request, threading.Event())
+                        self.assertEqual(reply.proposal['target_id'], request['current_action']['target_id'])
+                        self.assertEqual(CompletionHandler.calls[-1][1]['id_slot'], slot)
+                        self.assertTrue(all('id_slot' not in payload for _, payload in CompletionHandler.calls[:-1]))
+            for invalid_slot in (True, -1, 2, '0'):
+                with self.subTest(invalid_slot=invalid_slot), self.assertRaisesRegex(ValueError, 'invalid_combat_cache_slot'):
+                    client.choose({}, {'Wait': {}}, threading.Event(), cache_slot=invalid_slot)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(1)
 
     def test_invalid_original_candidate_is_still_rejected(self):
         request = context()

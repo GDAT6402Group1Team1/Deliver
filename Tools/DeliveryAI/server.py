@@ -13,18 +13,20 @@ from jev import choose as choose_jev
 from scheduler import Scheduler
 from dialogue_background import (BACKGROUND_INSTRUCTIONS, CHARACTER_DECISION_INSTRUCTIONS,
                                  valid_profile_id, with_character_background)
-from companion_context import (COMPANION_COMMANDS, ERRAND_ACTIONS, LIFE_ACTIONS, ITEM_ACTIONS, companion_instructions,
-                               validate_companion_context, validate_item_context, validate_item_selection)
+from companion_context import (AREA_SEARCH_ACTION, CATERPILLAR_ACTIONS, COMPANION_COMMANDS, DROP_PACKAGE_ACTION, ERRAND_ACTIONS, LIFE_ACTIONS, STORE_PACKAGE_ACTION,
+                               ITEM_ACTIONS, V10_COMPANION_ACTIONS, companion_instructions, validate_companion_context,
+                               validate_assist_selection, validate_item_context, validate_item_selection, with_object_action_options)
 from home_context import (HOME_ACTIONS, candidate_instructions, validate_v5_candidates,
-                          validate_v5_selection, validate_candidate_travel)
+                          validate_v5_selection, validate_candidate_travel, validate_candidate_item_fields)
 from streaming import run_job, close_resources, prepare_resources
-from continued_activity import continuation_instructions, validate_current_activity, validate_continuation
+from continued_activity import (continuation_instructions, validate_current_activity, validate_continuation,
+                                validate_speech_preference)
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ENVELOPE = ("protocol_version", "capability_version", "world_epoch", "npc_id",
             "request_id", "context_revision", "plan_revision")
 ACTIONS = ("Wait", "LookAt", "MoveTo", "StrikeOnce", "HoldVehicle", "ReleaseVehicle", "LieDown", "GetUp", "Pace", "MoveAside", "Fight", "Flee", "ContinueCurrent", "SoundFollowHorn") + COMPANION_COMMANDS
-TARGETED = ("LookAt", "MoveTo", "StrikeOnce", "HoldVehicle", "MoveAside", "Fight", "Flee") + ITEM_ACTIONS
+TARGETED = ("LookAt", "MoveTo", "StrikeOnce", "HoldVehicle", "MoveAside", "Fight", "Flee", "JoinAssist") + ITEM_ACTIONS
 # 与 UE DeliveryNpc 的动作时限保持一致；候选给出的较短时长仍优先
 MAX_FIGHT_DURATION = 8.0
 MAX_ACTION_DURATION = 5.0
@@ -88,9 +90,12 @@ def validate_context(context):
     if type(context.get('pending_player_message', False)) is not bool:
         raise ValueError('invalid pending player message')
     current = context.get('current_action')
-    if context.get('capability_version') in (6, 7, 8):
-        validate_current_activity(context, ACTIONS if context.get('capability_version') in (7, 8)
-                                  else tuple(action for action in ACTIONS if action not in ITEM_ACTIONS))
+    version = context.get('capability_version')
+    if version in (6, 7, 8, 9, 10):
+        activity_actions = tuple(action for action in ACTIONS if (version >= 7 or action not in ITEM_ACTIONS)
+                                 and (version >= 9 or action != DROP_PACKAGE_ACTION)
+                                 and (version >= 10 or action not in V10_COMPANION_ACTIONS))
+        validate_current_activity(context, activity_actions)
     elif current is not None:
         if (not isinstance(current, dict) or current.get('action') not in ('Fight', 'Flee')
                 or current.get('source') != 'Model' or not valid_id(current.get('action_id'))
@@ -100,7 +105,7 @@ def validate_context(context):
         maximum = MAX_FIGHT_DURATION if current['action'] == 'Fight' else MAX_ACTION_DURATION
         if type(remaining) not in (int, float) or not math.isfinite(remaining) or not 0 < remaining <= maximum:
             raise ValueError('invalid current action time')
-    for key, supported in (("protocol_version", (1,)), ("capability_version", (1, 2, 3, 4, 5, 6, 7, 8))):
+    for key, supported in (("protocol_version", (1,)), ("capability_version", range(1, 11))):
         if type(context.get(key)) is not int or context[key] not in supported:
             raise ValueError("unsupported version")
     validate_companion_context(context)
@@ -113,8 +118,12 @@ def validate_context(context):
     actions = context.get("allowed_actions")
     if not isinstance(actions, list) or not actions or len(actions) > len(ACTIONS) or any(a not in ACTIONS for a in actions):
         raise ValueError("invalid capabilities")
+    if context['capability_version'] < 10 and any(a in V10_COMPANION_ACTIONS for a in actions):
+        raise ValueError('additional companion actions require capability version 10')
     if context['capability_version'] < 7 and any(a in ITEM_ACTIONS for a in actions):
         raise ValueError('ordinary item commands require capability version 7')
+    if context['capability_version'] < 9 and DROP_PACKAGE_ACTION in actions:
+        raise ValueError('drop package requires capability version 9')
     if context['capability_version'] < 5 and any(a in HOME_ACTIONS for a in actions):
         raise ValueError('companion home actions require capability version 5')
     if context['capability_version'] < 6 and 'ContinueCurrent' in actions:
@@ -217,6 +226,8 @@ def validate_action(context, action, *, checking_candidate=False):
     if not isinstance(action, dict) or action.get("action") not in context["allowed_actions"]:
         raise ValueError("unsupported action")
     validate_candidate_travel(context, action)
+    validate_candidate_item_fields(context, action)
+    validate_speech_preference(context, action)
     candidate_identity = validate_v5_selection(context, action, checking_candidate=checking_candidate)
     duration = action.get("duration")
     companion_action = action['action'] in COMPANION_COMMANDS
@@ -225,21 +236,36 @@ def validate_action(context, action, *, checking_candidate=False):
     if action['action'] == 'ContinueCurrent':
         validate_continuation(context, action, checking_candidate)
     elif action['action'] == 'SoundFollowHorn':
-        if (context.get('capability_version') != 8 or context.get('request_source', 'ambient') != 'ambient'
+        if (context.get('capability_version') not in (8, 9, 10) or context.get('request_source', 'ambient') != 'ambient'
                 or 'companion_context' not in context or not .1 <= duration <= .5):
             raise ValueError('invalid companion horn')
     elif companion_action:
         validate_companion_context(context)
-        required_version = (7 if action['action'] in ITEM_ACTIONS else 5 if action['action'] in HOME_ACTIONS else 4 if action['action'] in LIFE_ACTIONS
+        required_version = (10 if action['action'] in V10_COMPANION_ACTIONS else 9 if action['action'] == DROP_PACKAGE_ACTION
+                            else 7 if action['action'] in ITEM_ACTIONS
+                            else 5 if action['action'] in HOME_ACTIONS else 4 if action['action'] in LIFE_ACTIONS
                             else 3 if action['action'] in ERRAND_ACTIONS else 2)
-        if context.get('capability_version') not in range(required_version, 9) or duration != 0:
+        if context.get('capability_version') not in range(required_version, 11) or duration != 0:
             raise ValueError('invalid companion command')
         companion = context.get('companion_context', {})
         ambient_offer = (action['action'] == 'OfferCaterpillar' and context.get('capability_version', 1) >= 4
                          and context.get('request_source', 'ambient') == 'ambient'
                          and companion.get('can_offer_caterpillar') is True)
-        if companion.get('requester_is_owner') is not True and not ambient_offer:
+        ambient_assist = action['action'] == 'JoinAssist' and context.get('request_source', 'ambient') == 'ambient'
+        if companion.get('requester_is_owner') is not True and not (ambient_offer or ambient_assist):
             raise ValueError('companion command requires owner')
+        if action['action'] == DROP_PACKAGE_ACTION and (context.get('request_source') != 'player' or
+                companion.get('has_package') is not True or not companion['task_id'].strip()):
+            raise ValueError('drop package requires current owner request and held task package')
+        if action['action'] == STORE_PACKAGE_ACTION and (context.get('request_source') != 'player' or
+                companion.get('has_package') is not True or not companion['task_id'].strip()):
+            raise ValueError('store package requires current owner request and held task package')
+        if action['action'] == AREA_SEARCH_ACTION and (context.get('request_source') != 'player' or
+                context.get('pending_player_message') is not True):
+            raise ValueError('area search requires a pending owner request')
+        if action['action'] in CATERPILLAR_ACTIONS and (context.get('request_source') != 'player' or
+                context.get('pending_player_message') is not True):
+            raise ValueError('caterpillar action requires a pending owner request')
     elif not .1 <= duration <= (MAX_FIGHT_DURATION if action['action'] == 'Fight' else MAX_ACTION_DURATION):
         raise ValueError("invalid duration")
     # 交战和逃跑需要留出动作时间，过短的请求会在游戏开始执行前被拒绝
@@ -253,15 +279,19 @@ def validate_action(context, action, *, checking_candidate=False):
     evidence = {entry["event_id"]: entry for entry in context["evidence"]}
     if any(i not in evidence for i in cited):
         raise ValueError("unknown evidence")
+    if action['action'] == AREA_SEARCH_ACTION and (len(cited) != 1 or evidence[cited[0]].get('kind') != 'PlayerSpeech' or
+            evidence[cited[0]].get('source') != 'Heard'):
+        raise ValueError('area search requires heard owner speech')
     target = action.get("target_id")
     if action["action"] not in TARGETED:
         if target != "":
             raise ValueError("action has no target")
     elif not valid_id(target) or not any(evidence[i]["subject_id"] == target for i in cited):
         raise ValueError("unknown target")
+    validate_assist_selection(context, action)
     validate_item_selection(context, action)
     candidates = context.get("candidates", [])
-    if not checking_candidate and context.get('capability_version') not in (5, 6, 7, 8) and (candidates or companion_action):
+    if not checking_candidate and context.get('capability_version') not in (5, 6, 7, 8, 9, 10) and (candidates or companion_action):
         offered = [c for c in candidates if c["action"] == action["action"] and c["target_id"] == target]
         if not offered:
             raise ValueError("action target pair not offered")
@@ -314,7 +344,7 @@ def decide(context, provider):
     if provider == "fixture":
         # 这是测试用的固定结果，用于检查连接，不用于评价模型效果
         action = {"action": "Wait", "target_id": "", "duration": .5, "evidence_ids": []}
-        if context['capability_version'] in (5, 6, 7, 8):
+        if context['capability_version'] in (5, 6, 7, 8, 9, 10):
             offered = next((item for item in context['candidates'] if item['action'] == 'Wait'), None)
             if offered is None:
                 raise ValueError('fixture Wait candidate not offered')
@@ -323,12 +353,12 @@ def decide(context, provider):
         action = choose_jev(context)
     elif provider == "codex-local":
         from codex_local import choose
-        action = choose(context, instructions)
+        action = choose(with_object_action_options(context), instructions)
     else:
         endpoint = os.environ["DELIVERY_AI_MODEL_URL"]
         payload = {"model": os.environ["DELIVERY_AI_MODEL"], "temperature": .4,
                    "messages": [{"role": "system", "content": instructions},
-                                {"role": "user", "content": json.dumps(context, ensure_ascii=False)}],
+                                {"role": "user", "content": json.dumps(with_object_action_options(context), ensure_ascii=False)}],
                    "response_format": {"type": "json_object"}}
         headers = {"Content-Type": "application/json"}
         if os.environ.get("DELIVERY_AI_API_KEY"):

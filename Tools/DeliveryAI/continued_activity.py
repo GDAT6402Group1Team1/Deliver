@@ -12,7 +12,27 @@ current_action 和 current_activity 描述现在仍在发生的事。只能在�
 
 
 def continuation_instructions(context):
-    return CONTINUE_INSTRUCTIONS if context.get('capability_version') in (6, 7, 8) else ''
+    return CONTINUE_INSTRUCTIONS if context.get('capability_version') in (6, 7, 8, 9, 10) else ''
+
+
+def validate_speech_preference(context, candidate):
+    if 'speech_preference' not in candidate:
+        return None
+    preference = candidate['speech_preference']
+    if (context.get('capability_version') not in (8, 9, 10) or candidate.get('action') != 'ContinueCurrent'
+            or 'ContinueCurrent' not in context.get('allowed_actions', ()) or preference not in ('Quiet', 'Normal')):
+        raise ValueError('invalid candidate speech preference')
+    companion = context.get('companion_context')
+    if (context.get('request_source') != 'player' or context.get('pending_player_message') is not True
+            or not isinstance(companion, dict) or companion.get('requester_is_owner') is not True):
+        raise ValueError('speech preference requires a pending owner request')
+    return preference
+
+
+def validate_speech_preference_echo(candidate, decision):
+    if 'speech_preference' in decision and ('speech_preference' not in candidate
+            or decision['speech_preference'] != candidate['speech_preference']):
+        raise ValueError('decision speech preference differs from selected candidate')
 
 
 def _id(value, empty=False):
@@ -61,7 +81,7 @@ def validate_current_activity(context, actions):
 def validate_continuation(context, action, checking_candidate=False):
     if action.get('action') != 'ContinueCurrent':
         return
-    if context.get('capability_version') not in (6, 7, 8):
+    if context.get('capability_version') not in (6, 7, 8, 9, 10):
         raise ValueError('continue requires capability version 6')
     if context.get('current_action') is None and context.get('current_activity') is None:
         raise ValueError('continue requires current activity')

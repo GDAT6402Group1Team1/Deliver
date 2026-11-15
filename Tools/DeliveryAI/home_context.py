@@ -2,12 +2,18 @@
 import math
 import uuid
 
+from continued_activity import validate_speech_preference, validate_speech_preference_echo
+
 
 HOME_ACTIONS = ('HomeAction',)
 HOME_USES = ('Sit', 'PlayAudio', 'StopAudio', 'TakeProp', 'PlaceProp')
+HOME_USES_V10 = HOME_USES + ('LeaveSeat', 'PlaceNearOwner')
+ITEM_SOURCES = {'FetchItem': ('World',), 'ReturnItem': ('CompanionHand',),
+                'TakeItem': ('OwnerHand', 'OwnerBackpack'), 'CollectCaterpillar': ('World',),
+                'InsertCaterpillar': ('World', 'CompanionHand', 'OwnerHand', 'OwnerBackpack')}
 TRAVEL_MODES = ('Walk', 'OwnVehicle', 'Automatic')
 TRAVEL_ACTIONS = ('Follow', 'FetchPackage', 'TakePackage', 'DeliverPackage', 'ReturnPackage',
-                  'GoHome', 'FetchItem', 'ReturnItem')
+                  'DropPackage', 'StorePackageInBackpack', 'GoHome', 'FetchItem', 'ReturnItem', 'TakeItem')
 MAX_HOME_OBJECTS = 24
 MAX_HOME_SLOTS = 16
 REQUEST_FIELDS = ('protocol_version', 'capability_version', 'world_epoch', 'npc_id',
@@ -18,15 +24,22 @@ CANDIDATE_INSTRUCTIONS = """能力版本5及以后的每个候选都有本次请
 """
 
 HOME_INSTRUCTIONS = """能力版本5增加 HomeAction，是 duration=0、target_id为空的持续家居安排，不能当作五秒短动作
-companion_context.home_objects 是游戏明确配置或实际感知到的家居对象、用途和当前状态；玩家提到一个物品不会创建新对象或槽位，显示名称不能代替 object_id
+companion_context.home_objects 是游戏本轮看见或确认拿在手里的家居物件及其当前用途。玩家说出物件名称不会创建对象或槽位，执行仍以本轮 object_id 为准
 只能选当前完整候选：Sit使用指定座位；PlayAudio/StopAudio打开或关闭指定音频物件；TakeProp拿起指定道具；PlaceProp把 object_id 指定的真实道具放到 destination_object_id 的 destination_slot_id，需要时会先取起。不同目的槽位是不同候选，不能混搭
 只有当前主人直接提出的请求可安排 HomeAction；访客、旁听、环境事件和过去的主人台词不能授权新的家居动作。可以根据主人原话选择合适候选或解释当前做不到，不按关键词固定选择
 候选被接受只代表开始安排，实际到达、坐下、播放、拿取和摆放由后续游戏事件确认。被打断、物品占用、目标销毁或主人改变安排时以游戏报告为准，不能口头宣布已经完成
 """
 
+HOME_MEMORY_INSTRUCTIONS = ('remembered_home_objects 只记得曾在共用房屋见到的物件名称和用途。'
+                            '可以谈起印象，当前具体位置、开关、占用和可用动作以本轮游戏事实为准。\n')
+
 
 def candidate_instructions(context):
-    return CANDIDATE_INSTRUCTIONS if context.get('capability_version') in (5, 6, 7, 8) else ''
+    return CANDIDATE_INSTRUCTIONS if context.get('capability_version') in (5, 6, 7, 8, 9, 10) else ''
+
+
+def _home_uses(context):
+    return HOME_USES_V10 if context.get('capability_version') == 10 else HOME_USES
 
 
 def _valid_id(value):
@@ -43,15 +56,24 @@ def _text(value, limit, *, empty=False):
 
 def validate_home_objects(context):
     """返回本请求的对象表；不查询或修改 UE 世界，旧协议保持原样"""
-    if context.get('capability_version') not in (5, 6, 7, 8) or 'companion_context' not in context:
+    companion = context.get('companion_context')
+    if isinstance(companion, dict) and 'remembered_home_objects' in companion:
+        previous = companion['remembered_home_objects']
+        if context.get('capability_version') not in (8, 9, 10) or not isinstance(previous, list) or len(previous) > 8:
+            raise ValueError('invalid remembered home objects')
+        for item in previous:
+            if (not isinstance(item, dict) or set(item) != {'name', 'description'}
+                    or not _text(item['name'], 64) or not _text(item['description'], 100, empty=True)):
+                raise ValueError('invalid remembered home object')
+    if context.get('capability_version') not in (5, 6, 7, 8, 9, 10) or 'companion_context' not in context:
         return {}
-    companion = context['companion_context']
     if not isinstance(companion, dict):
         raise ValueError('invalid companion context')
     entries = companion.get('home_objects')
     if not isinstance(entries, list) or len(entries) > MAX_HOME_OBJECTS:
         raise ValueError('invalid companion home objects')
     objects = {}
+    allowed_uses = _home_uses(context)
     for item in entries:
         if not isinstance(item, dict) or set(item) != {'object_id', 'name', 'state', 'uses', 'slots'}:
             raise ValueError('invalid home object')
@@ -61,8 +83,8 @@ def validate_home_objects(context):
         if not _text(item['name'], 64) or not _text(item['state'], 256):
             raise ValueError('invalid home object description')
         uses = item['uses']
-        if (not isinstance(uses, list) or len(uses) > len(HOME_USES)
-                or any(not isinstance(use, str) or use not in HOME_USES for use in uses)
+        if (not isinstance(uses, list) or len(uses) > len(allowed_uses)
+                or any(not isinstance(use, str) or use not in allowed_uses for use in uses)
                 or len(set(uses)) != len(uses)):
             raise ValueError('invalid home object uses')
         slots = item['slots']
@@ -96,7 +118,7 @@ def _home_choice(context, candidate, objects):
     object_id, use = choice['object_id'], choice['use']
     if not _valid_id(object_id) or object_id not in objects:
         raise ValueError('unknown home object')
-    if not isinstance(use, str) or use not in HOME_USES or use not in objects[object_id]['uses']:
+    if not isinstance(use, str) or use not in _home_uses(context) or use not in objects[object_id]['uses']:
         raise ValueError('home use not offered by object')
     destination, slot_id = choice['destination_object_id'], choice['destination_slot_id']
     if use != 'PlaceProp':
@@ -118,7 +140,7 @@ def validate_candidate_travel(context, candidate):
     if 'travel_mode' not in candidate:
         return None
     mode = candidate['travel_mode']
-    if (context.get('capability_version') != 8 or candidate.get('action') not in TRAVEL_ACTIONS
+    if (context.get('capability_version') not in (8, 9, 10) or candidate.get('action') not in TRAVEL_ACTIONS
             or not isinstance(mode, str) or mode not in TRAVEL_MODES):
         raise ValueError('invalid candidate travel mode')
     companion = context.get('companion_context', {})
@@ -130,9 +152,34 @@ def validate_candidate_travel(context, candidate):
     return mode
 
 
+def validate_candidate_item_fields(context, candidate):
+    action = candidate.get('action')
+    source = candidate.get('item_source')
+    if ('item_source' in candidate or action == 'TakeItem') and (
+            context.get('capability_version') != 10 or source not in ITEM_SOURCES.get(action, ())):
+        raise ValueError('invalid candidate item source')
+    task_id = candidate.get('package_task_id')
+    if action == 'InsertCaterpillar':
+        task = context.get('companion_context', {}).get('task_id')
+        if context.get('capability_version') != 10 or not _text(task_id, 64) or task_id != task:
+            raise ValueError('invalid caterpillar candidate package task')
+    elif 'package_task_id' in candidate:
+        raise ValueError('candidate has no package task field')
+    meaning = source
+    if source is None and action in ITEM_SOURCES and len(ITEM_SOURCES[action]) == 1:
+        meaning = ITEM_SOURCES[action][0]
+    return meaning, task_id
+
+
+def validate_item_choice_echo(offered, decision):
+    for key in ('item_source', 'package_task_id'):
+        if key in decision and (key not in offered or decision[key] != offered[key]):
+            raise ValueError('decision ' + key.replace('_', ' ') + ' differs from selected candidate')
+
+
 def validate_v5_candidates(context):
     """候选编号仅在当前请求中解析，同一安排不能用多个编号重复提供"""
-    if context.get('capability_version') not in (5, 6, 7, 8):
+    if context.get('capability_version') not in (5, 6, 7, 8, 9, 10):
         return {}
     objects = validate_home_objects(context)
     candidates = context.get('candidates')
@@ -149,12 +196,14 @@ def validate_v5_candidates(context):
         if not isinstance(action, str) or not isinstance(target, str):
             raise ValueError('invalid candidate action or target')
         travel_mode = validate_candidate_travel(context, candidate)
+        preference = validate_speech_preference(context, candidate)
+        item_fields = validate_candidate_item_fields(context, candidate)
         if action == 'HomeAction':
             meaning = (action, target, *_home_choice(context, candidate, objects))
         else:
             if 'home' in candidate:
                 raise ValueError('non-home candidate has home choice')
-            meaning = (action, target, travel_mode)
+            meaning = (action, target, travel_mode, preference, item_fields)
         if meaning in meanings:
             raise ValueError('duplicate candidate meaning')
         meanings.add(meaning)
@@ -164,7 +213,7 @@ def validate_v5_candidates(context):
 
 def validate_v5_selection(context, decision, *, checking_candidate=False):
     """返回需要带给 UE 的编号，执行参数仍由 UE 保存的同一候选快照提供"""
-    if context.get('capability_version') not in (5, 6, 7, 8):
+    if context.get('capability_version') not in (5, 6, 7, 8, 9, 10):
         return {}
     # 模型可省略信封，由后端回填；一旦提供就不能偷换请求或降低版本
     for key in REQUEST_FIELDS:
@@ -191,4 +240,6 @@ def validate_v5_selection(context, decision, *, checking_candidate=False):
         raise ValueError('decision home choice differs from selected candidate')
     if 'travel_mode' in decision and ('travel_mode' not in offered or decision['travel_mode'] != offered['travel_mode']):
         raise ValueError('decision travel mode differs from selected candidate')
+    validate_item_choice_echo(offered, decision)
+    validate_speech_preference_echo(offered, decision)
     return {'candidate_id': candidate_id}

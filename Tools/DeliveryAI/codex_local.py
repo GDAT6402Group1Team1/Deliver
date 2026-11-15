@@ -10,6 +10,9 @@ import shutil
 import subprocess
 import tempfile
 
+from continued_activity import validate_speech_preference_echo
+from home_context import validate_item_choice_echo
+
 
 def choose(context, instructions, runner=subprocess.run):
     executable = os.environ.get("DELIVERY_CODEX_EXE") or shutil.which("codex")
@@ -58,5 +61,7 @@ def choose(context, instructions, runner=subprocess.run):
             raise ValueError("invalid_candidate_index")
         if 'travel_mode' in response and ('travel_mode' not in candidates[index] or response['travel_mode'] != candidates[index]['travel_mode']):
             raise ValueError('decision travel mode differs from selected candidate')
+        validate_speech_preference_echo(candidates[index], response)
+        validate_item_choice_echo(candidates[index], response)
         speech_target = {key: response[key] for key in ('speech_target_id',) if key in response}
         return {**candidates[index], "speech": response.get("speech"), "emotion": response.get("emotion"), **speech_target}

@@ -2,6 +2,8 @@
 import base64
 import array
 import ctypes as C
+import hashlib
+from io import StringIO
 import json
 from pathlib import Path
 import threading
@@ -9,11 +11,13 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
+import wave
 
-from native_tts_abi import TtsParams, Audio, VoiceReference
+from native_tts_abi import COMMIT, InitParams, NativeLibrary, TtsParams, Audio, VoiceReference
 from native_tts_engine import NativeVoiceEngines
 from neural_tts import NeuralTtsError
-from native_tts import NativeQwenSpeechSynthesizer
+from native_tts import NativeQwenSpeechSynthesizer, load_runtime
+from native_tts_worker import warm_up_voices
 
 
 class FakeApi:
@@ -155,6 +159,78 @@ class NativeTtsTests(unittest.TestCase):
         self.assertEqual(engine.config['voices']['male']['provider'], 'qwen')
         self.assertEqual(engine.config['voices']['female']['provider'], 'qwen_base')
 
+    def test_shared_codec_requires_explicit_flag_and_both_voices(self):
+        runtime = {'schema_version': 1, 'source_commit': COMMIT, 'device': 'CUDA0', 'quantization': 'Q8_0',
+                   'library': {'path': 'fake.dll'}, 'dependencies': [],
+                   'models': {name: {'path': name + '.gguf'} for name in ('male', 'female', 'codec')}}
+        with tempfile.TemporaryDirectory() as directory, mock.patch('native_tts.project_path', side_effect=Path):
+            path = Path(directory) / 'runtime.json'
+            for shared, residency, valid in ((True, 'both', True), (False, 'active', True),
+                                             (True, 'active', False), ('true', 'both', False), (1, 'both', False)):
+                with self.subTest(shared=shared, residency=residency):
+                    settings = dict(runtime, shared_codec=shared, voice_residency=residency)
+                    path.write_text(json.dumps(settings), encoding='utf-8')
+                    if valid:
+                        self.assertEqual(load_runtime(path), settings)
+                    else:
+                        with self.assertRaisesRegex(NeuralTtsError, 'native_tts_invalid_runtime'):
+                            load_runtime(path)
+
+    def test_old_library_works_until_shared_codec_is_enabled(self):
+        api = mock.Mock()
+        api.qt_version.return_value = COMMIT[:7].encode()
+        api.qt_init_default_params.side_effect = lambda p: setattr(C.cast(p, C.POINTER(InitParams)).contents,
+                                                                     'abi_version', 6)
+        api.qt_tts_default_params.side_effect = lambda p: setattr(C.cast(p, C.POINTER(TtsParams)).contents,
+                                                                    'abi_version', 6)
+        del api.qt_init_shared_codec
+        path = Path('old.dll').resolve()
+        with mock.patch('native_tts_abi.C.CDLL', return_value=api):
+            self.assertIs(NativeLibrary(path).lib, api)
+            with self.assertRaisesRegex(ValueError, 'native_tts_shared_codec_unavailable'):
+                NativeLibrary(path, shared_codec=True)
+        api.qt_init.assert_not_called()
+
+    def test_shared_codec_reuses_first_handle_and_releases_it_on_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            reference = path / 'reference.wav'
+            with wave.open(str(reference), 'wb') as audio:
+                audio.setparams((1, 2, 24000, 0, 'NONE', 'not compressed'))
+                audio.writeframes(b'\0\0' * 1920)
+            config = {'model_revision': 'test', 'voices': {'male': {'speaker': 'Uncle_Fu'},
+                      'female': {'reference_path': str(reference),
+                                 'reference_sha256': hashlib.sha256(reference.read_bytes()).hexdigest()}}}
+            runtime = {'shared_codec': True, 'library': {'path': str(path / 'qwen.dll')},
+                       'models': {name: {'path': str(path / f'{name}.gguf'), 'source_revision': 'test'}
+                                  for name in ('male', 'female', 'codec')}}
+            for female_handle in (20, None):
+                with self.subTest(female_handle=female_handle):
+                    api = mock.Mock()
+                    api.qt_init.return_value = 10
+                    api.qt_init_shared_codec.return_value = female_handle
+                    api.qt_model_type.side_effect = [b'custom_voice', b'base']
+                    api.qt_n_speakers.return_value = 1
+                    api.qt_speaker_name.return_value = b'Uncle_Fu'
+                    api.qt_extract_voice_ref.return_value = 0
+                    with (mock.patch('native_tts_engine.NativeLibrary', return_value=SimpleNamespace(lib=api)),
+                          mock.patch('native_tts_engine.native_identities', return_value={}),
+                          mock.patch('native_tts_engine.project_path', side_effect=Path)):
+                        if female_handle:
+                            engine = NativeVoiceEngines(config, runtime)
+                            engine.close()
+                            engine.close()
+                            self.assertEqual(api.qt_free.call_args_list, [mock.call(10), mock.call(20)])
+                            api.qt_voice_ref_free.assert_called_once()
+                        else:
+                            with self.assertRaisesRegex(NeuralTtsError, 'native_tts_model_load_failed'):
+                                NativeVoiceEngines(config, runtime)
+                            api.qt_free.assert_called_once_with(10)
+                            api.qt_voice_ref_free.assert_not_called()
+                    api.qt_init.assert_called_once()
+                    api.qt_init_shared_codec.assert_called_once()
+                    self.assertEqual(api.qt_init_shared_codec.call_args.args[1], 10)
+
     def test_converter_rejects_windows_mojibake_in_vocabulary(self):
         from tts_evaluation.prepare_native_qwen import verify_vocabulary
         with tempfile.TemporaryDirectory() as directory:
@@ -182,6 +258,37 @@ class NativeTtsTests(unittest.TestCase):
         engine.close()
         self.assertEqual(engine.api.freed_contexts, [1, 2])
         self.assertFalse(engine.contexts)
+
+    def test_warmup_prepares_configured_voices_without_sending_audio(self):
+        speakers = {'male': 'Uncle_Fu', 'female': 'Xiaofang_B'}
+        for residency, expected in (('both', ['male', 'female']), ('active', ['male'])):
+            with self.subTest(voice_residency=residency):
+                closed = threading.Event()
+                tasks = []
+
+                def synthesize(task, stop, send):
+                    tasks.append(task)
+                    self.assertIs(stop, closed)
+                    self.assertEqual(task.speaker, speakers[task.voice])
+                    self.assertTrue(task.text.strip())
+                    self.assertEqual(task.chunk_frames, 8)
+                    self.assertFalse(task.cancel.is_set())
+                    self.assertIsNot(task.cancel, closed)
+                    self.assertIsNone(send({'type': 'audio_chunk', 'task_id': task.task_id,
+                                            'pcm': base64.b64encode(b'\1\0' * 1920).decode()}))
+                    return {'stream_metrics': {'first_audio_ms': 12, 'synthesis_ms': 34}}
+
+                engine = SimpleNamespace(voice_residency=residency, synthesize=synthesize)
+                with mock.patch('sys.stdout', new_callable=StringIO) as output:
+                    with mock.patch('sys.stderr', new_callable=StringIO) as diagnostics:
+                        self.assertIsNone(warm_up_voices(engine, speakers, closed))
+
+                self.assertEqual([task.voice for task in tasks], expected)
+                self.assertEqual(len({task.task_id for task in tasks}), len(tasks))
+                self.assertEqual(len({id(task.cancel) for task in tasks}), len(tasks))
+                self.assertEqual(output.getvalue(), '')
+                self.assertEqual(diagnostics.getvalue().count('native tts voice_ready'), len(expected))
+                self.assertFalse(closed.is_set())
 
 
 if __name__ == '__main__':

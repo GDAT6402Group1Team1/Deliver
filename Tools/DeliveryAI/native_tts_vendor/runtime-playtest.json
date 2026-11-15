@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "source_commit": "f1a6924789883bd92eeb59176793a94af55730b3",
+  "device": "CUDA0",
+  "quantization": "Q8_0",
+  "library": {
+    "path": "Saved/AIResearch/NativeQwen/shared-kv-experiment/build/qwen.dll",
+    "sha256": "5e2ba460aaf422dc4bfe38799130cf9fc7fefa2931266e902e98b5b2b88d3e24"
+  },
+  "dependencies": [
+    {
+      "path": "Saved/AIResearch/NativeQwen/shared-kv-experiment/build/cublas64_12.dll",
+      "sha256": "9513540e4ec4c51ee9e7304138c2cc255c29a8c181f9e80c38efa25738becd99"
+    },
+    {
+      "path": "Saved/AIResearch/NativeQwen/shared-kv-experiment/build/cublasLt64_12.dll",
+      "sha256": "b199d1ff892a81b7fd3d57ba1781549609b41500b36008fef326038393ad46c7"
+    },
+    {
+      "path": "Saved/AIResearch/NativeQwen/shared-kv-experiment/build/cudart64_12.dll",
+      "sha256": "c2c9a9c22a9bcba90e261825968836787b331038047a26770cffb7a583c28344"
+    },
+    {
+      "path": "Saved/AIResearch/NativeQwen/shared-kv-experiment/build/ggml-base.dll",
+      "sha256": "5825d99d11169093cf39721f025855309acabc57a0c24240fba585f4334ed933"
+    },
+    {
+      "path": "Saved/AIResearch/NativeQwen/shared-kv-experiment/build/ggml-cpu.dll",
+      "sha256": "9bc1b4cab4e93efb3db4432f5b27fb59e53ce4e67f2ef6e6b389a918c3886ff5"
+    },
+    {
+      "path": "Saved/AIResearch/NativeQwen/shared-kv-experiment/build/ggml-cuda.dll",
+      "sha256": "9989c6ce3f099ce01afb49072ff57e47f9c777a7ce286c8400487ede80a8e82a"
+    },
+    {
+      "path": "Saved/AIResearch/NativeQwen/shared-kv-experiment/build/ggml.dll",
+      "sha256": "0f32e83801be02193189df6211c0a2c89bde04b68ee0f6b11e8d36c0762619f9"
+    }
+  ],
+  "models": {
+    "male": {
+      "path": "Saved/AIResearch/NativeQwen/models/male-Q8_0.gguf",
+      "sha256": "4eb38675c736ed6ac72012846ac8d6ef80e5af8bc05726870f0b3a6569588519",
+      "source_revision": "85e237c12c027371202489a0ec509ded67b5e4b5"
+    },
+    "female": {
+      "path": "Saved/AIResearch/NativeQwen/models/female-Q8_0.gguf",
+      "sha256": "d54dbaf10591421fa764ed630d764efa717ae40cd959bd48c66d4eb1af226426",
+      "source_revision": "5d83992436eae1d760afd27aff78a71d676296fc"
+    },
+    "codec": {
+      "path": "Saved/AIResearch/NativeQwen/models/codec-Q8_0.gguf",
+      "sha256": "1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94",
+      "source_revision": "85e237c12c027371202489a0ec509ded67b5e4b5"
+    }
+  },
+  "native_patch": {
+    "upstream_commit": "f1a6924789883bd92eeb59176793a94af55730b3",
+    "ggml_commit": "0d403add5cb6329935290f02462e1072045aacd2",
+    "name": "talker-kv1024",
+    "capacity": 1024,
+    "patch_sha256": "626c39683af6ebf184bcb15dc09404852a9fda1da49c2eb1d151d2a4379913da",
+    "original_source_sha256": "a897cca5165bc901a679819fd9594aa2617a8243cb7771572d88b8e25eb1fc85",
+    "patched_source_sha256": "e1c43c4d4f934c1e535801b9d11cd03bea7168d6470ddb4e5d2fc02ae5568418",
+    "baseline_runtime_sha256": "a8a0b7a0e2b7d048f02a7f35a6f2e51f81255b00a3c201d7842c857454558b53"
+  },
+  "shared_codec": true
+}

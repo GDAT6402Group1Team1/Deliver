@@ -9,6 +9,7 @@ import shutil
 import sys
 
 from train_lora import MODEL_ROOT, TRAINING_ROOT, training_path, file_hash, write_json
+from prepare_training import COMPACT_MODEL_DIRECTORY
 
 
 def main():
@@ -16,15 +17,21 @@ def main():
     parser.add_argument('--adapter', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--run', action='store_true')
+    parser.add_argument('--compact-model', action='store_true', help='合并基于 Qwen3-0.6B 训练的 LoRA')
     parser.add_argument('--quantization', choices=['Q4_K_M', 'Q8_0'], default='Q4_K_M')
     args = parser.parse_args()
     args.adapter, args.output = training_path(args.adapter), training_path(args.output)
+    model_root = training_path(TRAINING_ROOT / COMPACT_MODEL_DIRECTORY if args.compact_model else MODEL_ROOT)
+    adapter_config = json.loads((args.adapter / 'adapter_config.json').read_text(encoding='utf-8'))
+    adapter_uses_compact_model = Path(adapter_config['base_model_name_or_path']).name == COMPACT_MODEL_DIRECTORY
+    if args.compact_model != adapter_uses_compact_model:
+        raise ValueError('LoRA 的原模型与所选权重不一致')
     converter = TRAINING_ROOT / 'converter/llama.cpp/convert_hf_to_gguf.py'
     runtime = TRAINING_ROOT.parent / 'LocalNpcModel/qwen3-1.7b/runtime'
     quantizer = runtime / 'llama-quantize.exe'
     if not args.adapter.is_dir() or not converter.is_file() or not quantizer.is_file():
         raise ValueError('缺少 LoRA、固定版本转换脚本或量化程序')
-    plan = {'adapter': str(args.adapter), 'output': str(args.output), 'device': 'cpu', 'quantization': args.quantization,
+    plan = {'adapter': str(args.adapter), 'model_path': str(model_root), 'output': str(args.output), 'device': 'cpu', 'quantization': args.quantization,
             'production_configuration_changed': False, 'converter_sha256': file_hash(converter),
             'quantizer_sha256': file_hash(quantizer)}
     print(json.dumps(plan), flush=True)
@@ -38,7 +45,7 @@ def main():
     torch.set_num_threads(8)
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from peft import PeftModel
-    model = AutoModelForCausalLM.from_pretrained(str(MODEL_ROOT), dtype=torch.bfloat16,
+    model = AutoModelForCausalLM.from_pretrained(str(model_root), dtype=torch.bfloat16,
         device_map={'': 'cpu'}, local_files_only=True, trust_remote_code=False)
     model = PeftModel.from_pretrained(model, str(args.adapter), local_files_only=True).merge_and_unload(safe_merge=True)
     plan['weight_devices'] = sorted({str(parameter.device) for parameter in model.parameters()})
@@ -46,8 +53,8 @@ def main():
         raise RuntimeError('导出只允许在 CPU 合并权重')
     merged = args.output / 'merged'
     model.save_pretrained(merged, safe_serialization=True, max_shard_size='3GB')
-    AutoTokenizer.from_pretrained(str(MODEL_ROOT), local_files_only=True).save_pretrained(merged)
-    shutil.copyfile(MODEL_ROOT / 'LICENSE', args.output / 'MODEL_LICENSE')
+    AutoTokenizer.from_pretrained(str(model_root), local_files_only=True).save_pretrained(merged)
+    shutil.copyfile(model_root / 'LICENSE', args.output / 'MODEL_LICENSE')
     del model
     import gc
     gc.collect()

@@ -17,6 +17,9 @@ DESTINATION = ROOT / 'Saved/AIResearch/NpcTraining'
 REQUIREMENTS = Path(__file__).with_name('requirements.txt')
 REPOSITORY = 'Qwen/Qwen3-1.7B'
 REVISION = '70d244cc86ccca08cf5af4e1e306ecf908b1ad5e'
+COMPACT_REPOSITORY = 'Qwen/Qwen3-0.6B'
+COMPACT_REVISION = 'c1899de289a04d12100db370d81485cdf75e47ca'
+COMPACT_MODEL_DIRECTORY = 'model-qwen3-0.6b'
 TORCH_SHA256 = '5174f02de8ca14df87c8e333c4c39cf3ce93a323c9d470d690301d110a053b3c'
 TORCH_WHEEL = 'torch-2.7.1+cu128-cp310-cp310-win_amd64.whl'
 
@@ -55,10 +58,10 @@ def verify_model_file(path, entry):
     return git_hash == entry['git_blob_sha1']
 
 
-def fetch_model_file(entry):
-    path = saved_path('model/' + entry['path'])
+def fetch_model_file(entry, repository=REPOSITORY, revision=REVISION, model_directory='model'):
+    path = saved_path(f"{model_directory}/{entry['path']}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    url = f"https://huggingface.co/{REPOSITORY}/resolve/{REVISION}/{entry['path']}"
+    url = f"https://huggingface.co/{repository}/resolve/{revision}/{entry['path']}"
     cached = verify_model_file(path, entry)
     if not cached:
         if path.exists():
@@ -97,6 +100,25 @@ def fetch_model_file(entry):
     result = dict(entry, url=url, actual_sha256=sha256(path), cached=cached)
     print(f'verified model {path.name}', flush=True)
     return result
+
+
+def prepare_compact_model():
+    url = f'https://huggingface.co/api/models/{COMPACT_REPOSITORY}/revision/{COMPACT_REVISION}?blobs=true'
+    request = urllib.request.Request(url, headers={'User-Agent': 'Delivery-NPC-Training-Preparation'})
+    with urllib.request.urlopen(request, timeout=45) as response:
+        metadata = json.load(response)
+    if metadata['sha'] != COMPACT_REVISION or metadata.get('cardData', {}).get('license') != 'apache-2.0':
+        raise RuntimeError('0.6B 模型版本或许可与记录不符')
+    files = {entry['rfilename']: entry for entry in metadata['siblings']}
+    names = ('LICENSE', 'config.json', 'generation_config.json', 'model.safetensors',
+             'tokenizer.json', 'tokenizer_config.json', 'merges.txt', 'vocab.json')
+    entries = [{'path': name, 'bytes': files[name]['size'], 'git_blob_sha1': files[name]['blobId'],
+                'sha256': files[name].get('lfs', {}).get('sha256')} for name in names]
+    if sum(entry['bytes'] for entry in entries) > 1_600_000_000 or not files['model.safetensors'].get('lfs', {}).get('sha256'):
+        raise RuntimeError('0.6B 模型大小超出范围或缺少权重校验值')
+    results = [fetch_model_file(entry, COMPACT_REPOSITORY, COMPACT_REVISION, COMPACT_MODEL_DIRECTORY) for entry in entries]
+    write_json(saved_path(f'{COMPACT_MODEL_DIRECTORY}/download.json'),
+               {'repository': COMPACT_REPOSITORY, 'revision': COMPACT_REVISION, 'license': 'Apache-2.0', 'files': results})
 
 
 def prepare_model():
@@ -219,10 +241,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute', action='store_true', help='安装独立环境并下载原始模型')
     parser.add_argument('--download-model', action='store_true', help='只下载、校验模型')
+    parser.add_argument('--download-compact-model', action='store_true', help='下载并校验动作模型实验用的 Qwen3-0.6B')
     parser.add_argument('--install-env', action='store_true', help='只准备独立 Python 环境')
     parser.add_argument('--base-python', type=Path, default=Path.home() / 'miniconda3/envs/mlagents/python.exe')
     args = parser.parse_args()
     DESTINATION.mkdir(parents=True, exist_ok=True)
+    if args.download_compact_model:
+        prepare_compact_model()
+        if not (args.execute or args.download_model or args.install_env):
+            return
     print(json.dumps({'destination': str(DESTINATION), 'repository': REPOSITORY, 'revision': REVISION,
                       'gpu_or_training_started': False}, ensure_ascii=False), flush=True)
     if not (args.execute or args.download_model or args.install_env):

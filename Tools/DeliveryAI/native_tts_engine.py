@@ -1,4 +1,4 @@
-"""原生模型按顺序生成声音，可选择只保留当前说话者的模型"""
+"""管理原生语音模型，按顺序生成台词"""
 import base64
 import ctypes as C
 import sys
@@ -16,16 +16,18 @@ class NativeVoiceEngines:
         import numpy as np
         self.np, self.config, self.runtime = np, config, runtime
         self.identities = native_identities(config, runtime)
-        self.library = NativeLibrary(project_path(runtime['library']['path']))
+        self.voice_residency = runtime.get('voice_residency', 'both')
+        self.shared_codec = runtime.get('shared_codec', False)
+        if (self.voice_residency not in ('both', 'active') or not isinstance(self.shared_codec, bool)
+                or (self.shared_codec and self.voice_residency != 'both')):
+            raise NeuralTtsError('native_tts_invalid_runtime')
+        self.library = NativeLibrary(project_path(runtime['library']['path']), shared_codec=self.shared_codec)
         self.api = self.library.lib
         self.contexts = {}
         self.reference = VoiceReference()
-        self.voice_residency = runtime.get('voice_residency', 'both')
         self._closed = False
         self._reference_owned = False
         try:
-            if self.voice_residency not in ('both', 'active'):
-                raise NeuralTtsError('native_tts_invalid_runtime')
             if self.voice_residency == 'both':
                 self._load_voice('male')
             self._load_voice('female')
@@ -59,8 +61,12 @@ class NativeVoiceEngines:
         params.talker_path = str(project_path(model['path'])).encode('utf-8')
         params.codec_path = str(project_path(self.runtime['models']['codec']['path'])).encode('utf-8')
         params.device, params.max_batch = b'CUDA0', 1
-        # qt_init 没有取消回调；父进程仍负责超时退出，返回后先检查这句是否已被取消
-        handle = self.api.qt_init(C.byref(params))
+        # 初始化期间由父进程处理超时，返回后再检查取消状态
+        # 女声保留自己的模型，使用男声先加载的编解码器
+        if self.shared_codec and voice == 'female':
+            handle = self.api.qt_init_shared_codec(C.byref(params), self.contexts['male'])
+        else:
+            handle = self.api.qt_init(C.byref(params))
         if not handle:
             self._failure('native_tts_model_load_failed')
         try:

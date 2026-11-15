@@ -8,6 +8,7 @@ import queue
 import re
 import stat
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -153,15 +154,18 @@ class QwenSpeechSynthesizer:
         self.process.stdin.write(json.dumps(message, ensure_ascii=False) + '\n')
         self.process.stdin.flush()
 
-    def _stop_owned_process(self):
+    def _stop_owned_process(self, reason='shutdown'):
         process = self.process
         if process is None:
             return
         self.stopping_failed = True
-        if process.poll() is None:
+        needs_kill = process.poll() is None
+        if needs_kill:
             process.kill()
         # 确认这个子进程退出后才能创建下一份模型
         process.wait(timeout=self.config['process_exit_timeout_seconds'])
+        print(f'tts worker_stopped pid={getattr(process, "pid", 0)} reason={reason} forced={int(needs_kill)}',
+              file=sys.stderr, flush=True)
         for pipe in (process.stdin, process.stdout):
             if pipe:
                 pipe.close()
@@ -175,11 +179,11 @@ class QwenSpeechSynthesizer:
 
     def _start(self):
         if self.stopping_failed:
-            self._stop_owned_process()
+            self._stop_owned_process('previous_stop_pending')
         if self.process and self.process.poll() is None:
             return
         if self.process:
-            self._stop_owned_process()
+            self._stop_owned_process('worker_exited')
         executable = project_path(self.config['python_path'])
         if not executable.is_file():
             raise NeuralTtsError('neural_tts_python_missing')
@@ -203,6 +207,7 @@ class QwenSpeechSynthesizer:
             self.stderr_file = None
             raise
         process, messages, failed = self.process, self.messages, self.reader_failed
+        print(f'tts worker_started pid={process.pid}', file=sys.stderr, flush=True)
 
         def read_output():
             try:
@@ -241,6 +246,7 @@ class QwenSpeechSynthesizer:
     def _prepare_locked(self, cancel):
         if self.closed.is_set() or cancel.is_set():
             raise NeuralTtsError('cancelled')
+        started = time.monotonic()
         self._start()
         if self.ready:
             return True
@@ -262,9 +268,11 @@ class QwenSpeechSynthesizer:
                 self.ready = True
                 version = message.get('audio_stream_version', 0)
                 self.audio_stream_version = version if type(version) is int and version == 1 else 0
+                print(f'tts worker_ready pid={getattr(self.process, "pid", 0)} '
+                      f'prepare_ms={(time.monotonic()-started)*1000:.0f}', file=sys.stderr, flush=True)
                 return True
-        except BaseException:
-            self._stop_owned_process()
+        except BaseException as error:
+            self._stop_owned_process(getattr(error, 'code', type(error).__name__))
             raise
 
     def prepare(self, cancel):
@@ -297,6 +305,7 @@ class QwenSpeechSynthesizer:
         terminal_received = False
         task_sent = False
         abort_error = None
+        abort_started = None
         reuse_after_abort = False
         try:
             self._prepare_locked(cancel)
@@ -306,18 +315,23 @@ class QwenSpeechSynthesizer:
             command = {'type': 'synthesize', 'task_id': task_id, 'text': text, 'voice': voice, 'emotion': emotion}
             if on_chunk is not None:
                 command['chunk_frames'] = chunk_frames
+            if self.closed.is_set() or cancel.is_set():
+                raise NeuralTtsError('cancelled')
             self._send(command)
             task_sent = True
             deadline = time.monotonic() + self.config['synthesis_timeout_seconds']
             chunk_count = total_bytes = 0
 
             def abort(error, can_reuse=False):
-                nonlocal abort_error, deadline, reuse_after_abort
+                nonlocal abort_error, abort_started, deadline, reuse_after_abort
                 if abort_error is None:
                     abort_error = error
                     reuse_after_abort = can_reuse
                     self._send({'type': 'cancel', 'task_id': task_id})
-                    deadline = time.monotonic() + self.config['cancel_grace_seconds']
+                    abort_started = time.monotonic()
+                    deadline = abort_started + self.config['cancel_grace_seconds']
+                    print(f'tts cancel_sent pid={getattr(self.process, "pid", 0)} task={task_id} '
+                          f'reason={getattr(error, "code", type(error).__name__)}', file=sys.stderr, flush=True)
 
             def check_identity(message):
                 if (message.get('sample_rate') != 24000 or message.get('voice_name') != self.speakers[voice]
@@ -329,7 +343,7 @@ class QwenSpeechSynthesizer:
                     reason = 'cancelled' if self.closed.is_set() or cancel.is_set() else 'neural_tts_timeout'
                     abort(NeuralTtsError(reason), can_reuse=True)
                 if abort_error is not None and time.monotonic() >= deadline:
-                    self._stop_owned_process()
+                    self._stop_owned_process('cancel_not_confirmed')
                     raise abort_error
                 message = self._receive()
                 if message is None:
@@ -345,6 +359,8 @@ class QwenSpeechSynthesizer:
                 terminal_received = kind != 'audio_chunk'
                 if abort_error is not None:
                     if terminal_received:
+                        print(f'tts cancel_confirmed pid={getattr(self.process, "pid", 0)} task={task_id} '
+                              f'wait_ms={(time.monotonic()-abort_started)*1000:.0f}', file=sys.stderr, flush=True)
                         raise abort_error
                     continue
                 if kind in ('cancelled', 'error'):
@@ -388,13 +404,14 @@ class QwenSpeechSynthesizer:
             # 已收到明确终态时保留常驻模型；管道或协议异常时停止自身子进程
             terminal_errors = ('cancelled', 'neural_tts_timeout', 'neural_tts_audio_too_long',
                                'neural_tts_generation_failed', 'neural_tts_token_limit')
+            # 台词还未发送时取消，已准备好的进程可以继续处理下一句
             reusable = (not task_sent and isinstance(error, NeuralTtsError)
-                        and error.code == 'neural_tts_stream_unsupported')
+                        and error.code in ('cancelled', 'neural_tts_stream_unsupported'))
             if task_sent and terminal_received:
                 reusable = (reuse_after_abort if abort_error is not None else
                             isinstance(error, NeuralTtsError) and error.code in terminal_errors)
             if not reusable:
-                self._stop_owned_process()
+                self._stop_owned_process(getattr(error, 'code', type(error).__name__))
             raise
         finally:
             self.lock.release()

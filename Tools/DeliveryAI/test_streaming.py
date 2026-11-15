@@ -24,6 +24,29 @@ def request():
     return data
 
 class ContextTests(unittest.TestCase):
+    def test_ambient_request_does_not_reopen_interrupted_player_reply(self):
+        data = request()
+        speech = data['evidence'][0]
+        speech['description'] = '走吧，你骑车，我们一起送快递'
+        ambient = {'event_id': str(uuid.uuid4()), 'kind': 'Seen', 'description': '主人已经上车'}
+        data.update(request_source='ambient', pending_player_message=False, last_decision_event_ids=[])
+        data['evidence'].append(ambient)
+
+        compact = compact_context(data)
+
+        self.assertIsNone(compact['pending_player_message'])
+        self.assertFalse(compact['current_player_message']['has_complete_reply'])
+        self.assertIn(speech['event_id'], {item['event_id'] for item in compact['evidence']})
+        self.assertEqual(compact['new_event_ids'], [ambient['event_id']])
+
+        fresh = {**speech, 'event_id': str(uuid.uuid4())}
+        data['evidence'].append(fresh)
+        data.update(request_source='player', pending_player_message=True,
+                    last_decision_event_ids=[speech['event_id'], ambient['event_id']])
+        compact = compact_context(data)
+        self.assertEqual(compact['pending_player_message']['event_id'], fresh['event_id'])
+        self.assertEqual(compact['new_event_ids'], [fresh['event_id']])
+
     def test_action_reply_finishes_only_the_matching_player_message(self):
         data=request()
         player=data['evidence'][0]

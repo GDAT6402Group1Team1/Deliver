@@ -157,6 +157,86 @@ class NeuralTtsTests(unittest.TestCase):
             client.lock.release()
         self.assertEqual(process.commands, [])
 
+    def test_cancel_after_acquiring_lock_keeps_ready_worker(self):
+        client, process = self.client()
+        cancel = threading.Event()
+        acquire = client._acquire
+
+        def acquire_then_cancel(event):
+            acquire(event)
+            cancel.set()
+
+        with patch.object(client, '_acquire', side_effect=acquire_then_cancel):
+            with self.assertRaisesRegex(NeuralTtsError, '^cancelled$'):
+                client.synthesize('这句话撤回。', 'male', 'Calm', cancel)
+
+        self.assertEqual(process.commands, [])
+        self.assertFalse(process.killed)
+        self.assertIs(client.process, process)
+        self.assertTrue(client.ready)
+        self.assertFalse(client.lock.locked())
+        with patch('neural_tts.subprocess.Popen', side_effect=AssertionError('second worker')):
+            self.assertEqual(client.synthesize('现在听我说。', 'female', 'Calm', threading.Event()),
+                             (b'\0\0\1\0', 24000))
+        self.assertEqual([command['text'] for command in process.commands], ['现在听我说。'])
+
+    def test_cancel_after_prepare_does_not_send_sentence(self):
+        client, process = self.client()
+        cancel = threading.Event()
+        prepare = client._prepare_locked
+
+        def prepare_then_cancel(event):
+            result = prepare(event)
+            cancel.set()
+            return result
+
+        with patch.object(client, '_prepare_locked', side_effect=prepare_then_cancel):
+            with self.assertRaisesRegex(NeuralTtsError, '^cancelled$'):
+                client.synthesize('这句话撤回。', 'male', 'Calm', cancel)
+
+        self.assertEqual(process.commands, [])
+        self.assertFalse(process.killed)
+        self.assertIs(client.process, process)
+        self.assertTrue(client.ready)
+        self.assertFalse(client.lock.locked())
+        with patch('neural_tts.subprocess.Popen', side_effect=AssertionError('second worker')):
+            self.assertEqual(client.synthesize('换我来说。', 'male', 'Calm', threading.Event()),
+                             (b'\0\0\1\0', 24000))
+        self.assertEqual([command['text'] for command in process.commands], ['换我来说。'])
+
+    def test_cancel_during_startup_stops_unready_worker_and_allows_retry(self):
+        client, process = self.client()
+        client.ready = False
+        cancel = threading.Event()
+
+        def cancel_while_waiting_for_ready():
+            cancel.set()
+            return None
+
+        with patch.object(client, '_receive', side_effect=cancel_while_waiting_for_ready):
+            with self.assertRaisesRegex(NeuralTtsError, '^cancelled$'):
+                client.synthesize('还没准备好就撤回。', 'male', 'Calm', cancel)
+
+        self.assertEqual(process.commands, [])
+        self.assertTrue(process.killed)
+        self.assertIsNone(client.process)
+        self.assertFalse(client.ready)
+        self.assertFalse(client.lock.locked())
+        replacement = FakeProcess(client)
+
+        def start_replacement():
+            client.process = replacement
+            client.messages.put({'type': 'ready', 'protocol_version': 1,
+                                 'voice_name': 'Uncle_Fu', 'voices': client.speakers,
+                                 'voice_identities': client.identities, 'sample_rate': 24000})
+
+        with patch.object(client, '_start', side_effect=start_replacement):
+            self.assertEqual(client.synthesize('这次准备好了。', 'male', 'Calm', threading.Event()),
+                             (b'\0\0\1\0', 24000))
+        self.assertIs(client.process, replacement)
+        self.assertFalse(replacement.killed)
+        self.assertEqual([command['text'] for command in replacement.commands], ['这次准备好了。'])
+
     def test_oversized_pcm_is_rejected_and_close_is_repeatable(self):
         client, process = self.client()
         process.reply = lambda task_id: client.messages.put({

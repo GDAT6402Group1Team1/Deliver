@@ -6,11 +6,24 @@ import queue
 import sys
 import threading
 import time
+from types import SimpleNamespace
 
 from neural_tts import NeuralTtsError, load_voice_config, neural_voice_speakers
 from neural_tts_worker import WorkerRequests
 from native_tts import load_runtime, native_identities
 from native_tts_engine import NativeVoiceEngines
+
+
+def warm_up_voices(engine, speakers, closed):
+    """用一条短句准备首次解码，生成的声音留在进程内"""
+    voices = ('male', 'female') if engine.voice_residency == 'both' else ('male',)
+    for voice in voices:
+        task = SimpleNamespace(task_id=f'warmup_{voice}', text='听得见吗？', voice=voice, speaker=speakers[voice],
+                               cancel=threading.Event(), chunk_frames=8)
+        result = engine.synthesize(task, closed, lambda _message: None)
+        metrics = result['stream_metrics']
+        print(f'native tts voice_ready voice={voice} first_audio_ms={metrics["first_audio_ms"]:.0f} '
+              f'synthesis_ms={metrics["synthesis_ms"]:.0f}', file=sys.stderr, flush=True)
 
 
 def main():
@@ -51,6 +64,7 @@ def main():
         runtime = load_runtime(args.runtime, verify=True)
         with redirect_stdout(sys.stderr):
             engine = NativeVoiceEngines(config, runtime)
+            warm_up_voices(engine, speakers, requests.closed)
         send({'type': 'ready', 'protocol_version': 1, 'audio_stream_version': 1,
               'voice_name': 'Uncle_Fu', 'voices': speakers, 'sample_rate': 24000,
               'voice_identities': native_identities(config, runtime)})

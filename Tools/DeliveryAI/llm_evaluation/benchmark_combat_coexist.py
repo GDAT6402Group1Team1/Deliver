@@ -316,6 +316,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--label', required=True)
     parser.add_argument('--endpoint', default='http://127.0.0.1:8771')
+    parser.add_argument('--compact-output', action='store_true', help='本地模型只生成动作名')
     parser.add_argument('--local-process-record', type=Path,
                         default=ROOT/'Saved/AIResearch/LocalNpcModel/qwen3-1.7b/running.json')
     parser.add_argument('--request-timeout', type=float, default=10.)
@@ -333,6 +334,8 @@ def main():
     parser.add_argument('--game-state', choices=('unknown', 'editor_idle', 'single_pie', 'dual_pie'), default='unknown')
     parser.add_argument('--run', action='store_true')
     args = parser.parse_args()
+    if args.compact_output and args.provider != 'local':
+        parser.error('--compact-output 只用于本地模型组')
     warmup_timeout = args.request_timeout if args.warmup_timeout is None else args.warmup_timeout
     if (not 40 <= args.duration_seconds <= 120 or not 0 <= args.wait_seconds <= 120
             or not .1 <= args.request_timeout <= 30 or not 0 <= args.speech_gap_seconds <= 2
@@ -353,6 +356,7 @@ def main():
     engine, client, monitor = None, None, None
     report = {'schema_version': 1, 'usage': 'evaluation_only_not_training', 'status': 'preparing',
               'provider': args.provider, 'label': args.label, 'source_path': str(args.source.resolve()),
+              'local_output_mode': ('action_name' if args.compact_output else 'json') if args.provider == 'local' else None,
               'source_sha256': source_hash, 'case_order': [case['id'] for case in cases],
               'labels_sent_to_model': False, 'instructions_sha256': content_hash(COMBAT_INSTRUCTIONS),
               'game_state_reported_by_operator': args.game_state, 'ue_before': process_snapshot(),
@@ -400,7 +404,8 @@ def main():
             report['cadence_source'] = str(args.cadence_report.resolve())
         report['speech_cadence'] = cadence
         if args.provider == 'local':
-            client = LocalCombatClient(args.endpoint, args.request_timeout, seed=args.seed, temperature=0.)
+            client = LocalCombatClient(args.endpoint, args.request_timeout, seed=args.seed, temperature=0.,
+                                       compact_output=args.compact_output)
             if not client.is_idle():
                 raise RuntimeError('本地服务未就绪或已有请求，未开始测量')
         elif args.provider == 'luna':

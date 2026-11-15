@@ -11,6 +11,7 @@ import random
 import sys
 import time
 
+from prepare_training import COMPACT_MODEL_DIRECTORY, COMPACT_REVISION
 
 ROOT = Path(__file__).resolve().parents[3]
 TRAINING_ROOT = ROOT / 'Saved/AIResearch/NpcTraining'
@@ -340,6 +341,7 @@ def main():
     parser.add_argument('--adapter', type=Path)
     parser.add_argument('--resume-adapter', type=Path, help='从指定 LoRA 继续训练，结果写入新的输出目录')
     parser.add_argument('--learning-rate', type=float, default=2e-4)
+    parser.add_argument('--compact-model', action='store_true', help='使用已校验的 Qwen3-0.6B 训练或评测')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--max-steps', type=int, default=48)
     parser.add_argument('--max-seq-length', type=int, default=3072)
@@ -365,8 +367,11 @@ def main():
                        'TOKENIZERS_PARALLELISM': 'false', 'CUBLAS_WORKSPACE_CONFIG': ':4096:8'})
     if not args.run:
         os.environ['CUDA_VISIBLE_DEVICES'] = ''
+    model_root = training_path(TRAINING_ROOT / COMPACT_MODEL_DIRECTORY if args.compact_model else MODEL_ROOT)
+    model_revision = COMPACT_REVISION if args.compact_model else MODEL_REVISION
+    manifest = model_root / 'download.json' if args.compact_model else TRAINING_ROOT / 'model-downloads.json'
     report = {'started_utc': datetime.now(timezone.utc).isoformat(), 'mode': 'evaluation' if args.evaluate_only else 'training',
-              'status': 'checking', 'model_path': str(MODEL_ROOT), 'model_revision': MODEL_REVISION,
+              'status': 'checking', 'model_path': str(model_root), 'model_revision': model_revision,
               'script_sha256': file_hash(Path(__file__)), 'settings': dict(SETTINGS, max_steps=args.max_steps,
               max_seq_length=args.max_seq_length, learning_rate=args.learning_rate), 'gpu_loaded': False, 'production_configuration_changed': False}
     started = time.perf_counter()
@@ -376,11 +381,11 @@ def main():
         report['versions'] = {name: importlib.metadata.version(name)
                               for name in ('torch', 'transformers', 'peft', 'accelerate', 'tokenizers')}
         report['adapter_used'] = bool(args.adapter)
-        preparation = json.loads((TRAINING_ROOT / 'model-downloads.json').read_text(encoding='utf-8'))
-        if preparation['revision'] != MODEL_REVISION:
+        preparation = json.loads(manifest.read_text(encoding='utf-8'))
+        if preparation['revision'] != model_revision:
             raise ValueError('原模型与固定版本不符')
-        report['model_manifest_sha256'] = file_hash(TRAINING_ROOT / 'model-downloads.json')
-        tokenizer = AutoTokenizer.from_pretrained(str(MODEL_ROOT), local_files_only=True, trust_remote_code=False)
+        report['model_manifest_sha256'] = file_hash(manifest)
+        tokenizer = AutoTokenizer.from_pretrained(str(model_root), local_files_only=True, trust_remote_code=False)
         if tokenizer.eos_token_id is None:
             raise ValueError('分词器没有 EOS，停止训练')
         errors = []
@@ -418,7 +423,7 @@ def main():
         report['device'] = torch.cuda.get_device_name(0)
         report['device_total_memory_bytes'] = torch.cuda.get_device_properties(0).total_memory
         load_started = time.perf_counter()
-        model = AutoModelForCausalLM.from_pretrained(str(MODEL_ROOT), dtype=torch.bfloat16, device_map={'': 0},
+        model = AutoModelForCausalLM.from_pretrained(str(model_root), dtype=torch.bfloat16, device_map={'': 0},
                                                     attn_implementation='sdpa', local_files_only=True, trust_remote_code=False)
         torch.cuda.synchronize()
         report['model_load_seconds'] = time.perf_counter() - load_started

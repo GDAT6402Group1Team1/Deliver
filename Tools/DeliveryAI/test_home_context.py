@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from codex_local import choose
 from companion_context import companion_instructions
-from home_context import HOME_INSTRUCTIONS
+from home_context import HOME_INSTRUCTIONS, HOME_MEMORY_INSTRUCTIONS
 from server import decide, validate_action, validate_context
 from streaming import SentenceParser, model_context
 
@@ -63,6 +63,71 @@ def home_request():
 
 
 class HomeContextTests(unittest.TestCase):
+    def test_v10_object_options_expose_real_seat_exit_and_ground_placement_without_swapping_ids(self):
+        data = home_request()
+        data['capability_version'] = 10
+        data['self_name'] = '牛二狗'
+        data['candidates'][0]['candidate_id'] = new_id()
+        data['companion_context'].update(travel_mode='Walk', own_vehicle_available=False, task_description='',
+                                         held_item_id='', held_item_name='')
+        pillow, chair, _ = data['companion_context']['home_objects']
+        pillow['uses'].append('PlaceNearOwner')
+        chair['uses'].append('LeaveSeat')
+        sit = next(candidate for candidate in data['candidates'] if candidate.get('home', {}).get('use') == 'Sit')
+        leave = {**sit, 'candidate_id': new_id(), 'home': {**sit['home'], 'use': 'LeaveSeat'}}
+        ground = {**leave, 'candidate_id': new_id(), 'home': {**leave['home'], 'object_id': pillow['object_id'],
+                                                               'use': 'PlaceNearOwner'}}
+        data['candidates'].extend((leave, ground))
+        validate_context(data)
+        model = model_context(data)
+        rows = {row['action']: row for row in model['object_actions']['options']}
+        self.assertEqual(rows['Sit']['effect'], '坐上座位')
+        self.assertEqual(rows['LeaveSeat']['effect'], '从当前座位下来')
+        self.assertEqual(model['candidates'][rows['LeaveSeat']['choices'][0]]['candidate_id'], leave['candidate_id'])
+        self.assertEqual(rows['PlaceNearOwner']['destination'], '主人面前安全地面')
+        self.assertEqual(rows['PlaceNearOwner']['effect'], '实际摆放后恢复原尺寸')
+        self.assertSetEqual({row['destination'] for row in model['object_actions']['options']
+                             if row['action'] == 'PlaceProp'}, {'沙发 / 左侧枕位', '沙发 / 右侧枕位'})
+        with self.assertRaisesRegex(ValueError, 'home choice differs'):
+            validate_action(data, {**sit, 'home': ground['home']})
+        with self.assertRaisesRegex(ValueError, 'invalid home object uses'):
+            validate_context({**data, 'capability_version': 9})
+
+    def test_remembered_furniture_carries_no_current_home_authority(self):
+        data = home_request()
+        data['capability_version'] = 8
+        companion = data['companion_context']
+        companion.update(travel_mode='Walk', own_vehicle_available=True, task_description='',
+                         held_item_id='', held_item_name='')
+        carried = data['candidates'][1]
+        companion['remembered_home_objects'] = [{'name': '枕头', 'description': '软布抱枕'}]
+        validate_context(data)
+        self.assertIn(HOME_MEMORY_INSTRUCTIONS, companion_instructions(data))
+        self.assertEqual(model_context(data)['companion_context']['remembered_home_objects'],
+                         companion['remembered_home_objects'])
+        companion['home_objects'] = companion['home_objects'][1:]
+        data['candidates'] = [carried]
+        data['allowed_actions'] = ['HomeAction']
+        with self.assertRaisesRegex(ValueError, 'unknown home object'):
+            validate_context(data)
+
+    def test_remembered_furniture_only_accepts_descriptions_in_v8(self):
+        data = home_request()
+        companion = data['companion_context']
+        companion.update(travel_mode='Walk', own_vehicle_available=False, task_description='',
+                         held_item_id='', held_item_name='')
+        companion['remembered_home_objects'] = [{'name': '沙发', 'description': ''}]
+        with self.assertRaisesRegex(ValueError, 'remembered home objects'):
+            validate_context(data)
+        data['capability_version'] = 8
+        validate_context(data)
+        for extra in ('object_id', 'state', 'slots'):
+            entry = companion['remembered_home_objects'][0]
+            entry[extra] = '过去见过'
+            with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, 'remembered home object'):
+                validate_context(data)
+            del entry[extra]
+
     def test_all_home_uses_keep_the_selected_identity_and_zero_duration(self):
         data = home_request()
         before = copy.deepcopy(data)
@@ -87,6 +152,23 @@ class HomeContextTests(unittest.TestCase):
             validate_action(data, {**selected, 'home': left['home']})
         with self.assertRaisesRegex(ValueError, 'candidate identity'):
             validate_action(data, {key: value for key, value in selected.items() if key != 'candidate_id'})
+
+    def test_held_source_keeps_place_choices_without_another_take(self):
+        data = home_request()
+        data['evidence'][0]['description'] = '把你手里这只放到沙发右侧。'
+        held = data['companion_context']['home_objects'][0]
+        held.update(state='正在我手里，属于共用房屋', uses=['PlaceProp'])
+        second_take = data['candidates'].pop()
+
+        validate_context(data)
+        compact = model_context(data)
+        self.assertEqual(compact['companion_context']['home_objects'][0], held)
+        right = data['candidates'][2]
+        self.assertEqual(right['home']['object_id'], held['object_id'])
+        self.assertEqual(right['home']['destination_slot_id'], 'pillow_right')
+        self.assertEqual(validate_action(data, right)['candidate_id'], right['candidate_id'])
+        with self.assertRaisesRegex(ValueError, 'candidate not offered in current request'):
+            validate_action(data, second_take)
 
     def test_stale_request_candidate_and_version_downgrade_are_rejected(self):
         previous = home_request()

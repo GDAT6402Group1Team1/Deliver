@@ -4,11 +4,13 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import http.client
 import json
+import os
 from pathlib import Path
 import sys
 import threading
 import time
 import uuid
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from combat_model import LocalCombatClient, choose_combat_action, _endpoint
@@ -84,7 +86,7 @@ def check_exclusions():
     return rows
 
 
-def read_slots(endpoint):
+def read_slots(endpoint, slot_count=1):
     host, port = _endpoint(endpoint)
     connection = http.client.HTTPConnection(host, port, timeout=.5)
     try:
@@ -94,27 +96,33 @@ def read_slots(endpoint):
         if response.status != 200 or len(raw) > 65536:
             raise ValueError('slots_unavailable')
         slots = json.loads(raw)
-        if (not isinstance(slots, list) or len(slots) != 1 or
-                type(slots[0].get('is_processing')) is not bool):
+        if (not isinstance(slots, list) or len(slots) != slot_count
+                or not all(isinstance(slot, dict) and type(slot.get('is_processing')) is bool for slot in slots)
+                or {slot.get('id') for slot in slots} != set(range(slot_count))):
             raise ValueError('unexpected_slots')
-        return slots[0]['is_processing']
+        return any(slot['is_processing'] for slot in slots)
     finally:
         connection.close()
 
 
-def wait_for_idle(endpoint, seconds=8.):
+def wait_for_idle(endpoint, seconds=8., slot_count=1):
     started = time.perf_counter()
     while time.perf_counter() - started < seconds:
-        if not read_slots(endpoint):
+        if not read_slots(endpoint, slot_count):
             return round((time.perf_counter() - started) * 1000, 2)
         time.sleep(.02)
     raise TimeoutError('local_model_still_processing')
 
 
-def run_choice(endpoint, label):
+def run_choice(endpoint, label, *, compact_output=False, resident_cache=False):
     context = request(label)
+    if resident_cache and label == 'after_cancel':
+        context.update(profile_id='xiumei', self_name='翠花', persona='翠花是村口老街坊，脾气急，真打疼了会先躲开。')
+        context['subjects'][0]['name'], context['subjects'][1]['name'] = '翠花', '大壮'
+        validate_context(context)
     before = deepcopy(context)
-    client = LocalCombatClient(endpoint, timeout_seconds=1.5, seed=20261114)
+    client = None if resident_cache else LocalCombatClient(endpoint, timeout_seconds=1.5, seed=20261114,
+                                                             compact_output=compact_output)
     stages = []
     started = time.perf_counter()
     result = choose_combat_action(context, threading.Event(),
@@ -130,12 +138,15 @@ def run_choice(endpoint, label):
     return {'name': label, 'method': 'real_model_http', 'passed': valid,
             'elapsed_ms': round((time.perf_counter() - started) * 1000, 2),
             'context': context, 'proposal': proposal, 'fallback_reason': result.fallback_reason,
-            'raw_model_output': client.last_output, 'usage': client.last_usage, 'stages': stages}
+            'raw_model_output': client.last_output if client else None,
+            'usage': client.last_usage if client else None, 'stages': stages}
 
 
-def check_cancellation(endpoint):
+def check_cancellation(endpoint, *, compact_output=False, resident_cache=False):
     context = request('cancel-active-inference')
-    client = LocalCombatClient(endpoint, timeout_seconds=1.5, seed=20261114)
+    client = None if resident_cache else LocalCombatClient(endpoint, timeout_seconds=1.5, seed=20261114,
+                                                             compact_output=compact_output)
+    slot_count = 2 if resident_cache else 1
     cancel, completed = threading.Event(), threading.Event()
     started = time.perf_counter()
     results = []
@@ -154,7 +165,7 @@ def check_cancellation(endpoint):
     observed_processing = False
     try:
         while not completed.is_set() and time.perf_counter() - started < 2:
-            if read_slots(endpoint):
+            if read_slots(endpoint, slot_count):
                 observed_processing = True
                 if not completed.is_set():
                     cancelled_at = time.perf_counter()
@@ -171,7 +182,7 @@ def check_cancellation(endpoint):
         # 服务计算太快、尚未看见忙碌状态时就已结束，只报告未覆盖，不冒充取消成功
         covered = observed_processing and cancelled_at is not None
         passed = covered and result.proposal is None and result.fallback_reason == 'cancelled'
-        idle_ms = wait_for_idle(endpoint)
+        idle_ms = wait_for_idle(endpoint, slot_count=slot_count)
         # 生产适配器每 0.2 秒检查一次空闲，留出一次检查时间再提交后续请求
         time.sleep(.25)
         return {'name': 'cancel_active_inference', 'method': 'real_model_http_and_slots',
@@ -190,13 +201,20 @@ def check_cancellation(endpoint):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', action='store_true')
+    parser.add_argument('--compact-output', action='store_true', help='检查动作名输出及其取消流程')
+    parser.add_argument('--resident-cache', action='store_true', help='通过游戏后端配置检查两位街坊的缓存与取消')
     parser.add_argument('--runtime-record', type=Path, default=INSTALL / 'running.json')
     parser.add_argument('--output', type=Path)
     args = parser.parse_args(argv)
+    if args.resident_cache and not args.compact_output:
+        parser.error('--resident-cache 需要 --compact-output')
+    slot_count = 2 if args.resident_cache else 1
     contexts = [request(name) for name in ('target_mapping', 'cancel-active-inference', 'after_cancel')]
     sources = [Path(__file__).resolve(), *[Path(__file__).resolve().parents[1] / name
                 for name in ('combat_model.py', 'server.py', 'streaming.py', 'continued_activity.py')]]
     plan = {'mode': 'run' if args.run else 'dryrun', 'maximum_model_requests': 3,
+            'output_mode': 'action_name' if args.compact_output else 'json',
+            'resident_cache': args.resident_cache, 'slot_count': slot_count,
             'runtime_record': str(args.runtime_record), 'contexts': contexts,
             'source_hashes': {path.relative_to(ROOT).as_posix(): file_hash(path) for path in sources},
             'routing_checks': check_exclusions(),
@@ -227,21 +245,26 @@ def main(argv=None):
         model = Path(runtime['model_path'])
         if file_hash(model) != runtime['model_sha256']:
             raise ValueError('runtime_model_hash_mismatch')
-        if not existing_process(args.runtime_record, command, runtime['model_sha256']):
+        if not existing_process(args.runtime_record, command, runtime['model_sha256'], slot_count=slot_count):
             raise ValueError('runtime_process_does_not_match_record')
-        if read_slots(endpoint):
+        if read_slots(endpoint, slot_count):
             raise RuntimeError('service_busy_before_probe')
         installation = json.loads((INSTALL / 'installation.json').read_text(encoding='utf-8'))
         report['runtime'] = runtime
         report['runtime_hashes'] = {'record': file_hash(args.runtime_record), 'model': runtime['model_sha256'],
             'executable': file_hash(Path(command[0])), 'installation': file_hash(INSTALL / 'installation.json'),
             'dependencies': {row['path']: file_hash(INSTALL / row['path']) for row in installation['runtime_files']}}
-        report['checks'].append(run_choice(endpoint, 'target_mapping'))
-        if not report['checks'][-1]['passed']:
-            raise RuntimeError('target_mapping_check_failed')
-        wait_for_idle(endpoint)
-        report['checks'].append(check_cancellation(endpoint))
-        report['checks'].append(run_choice(endpoint, 'after_cancel'))
+        options = {'compact_output': args.compact_output, 'resident_cache': args.resident_cache}
+        setup = {'DELIVERY_COMBAT_MODEL_URL': endpoint, 'DELIVERY_COMBAT_MODEL_TIMEOUT_SECONDS': '1.5',
+                 'DELIVERY_COMBAT_MODEL_TEMPERATURE': '0', 'DELIVERY_COMBAT_MODEL_PROFILE_IDS': 'chunlai,xiumei',
+                 'DELIVERY_COMBAT_MODEL_RESIDENT_CACHE': '1' if args.resident_cache else '0'}
+        with patch.dict(os.environ, setup):
+            report['checks'].append(run_choice(endpoint, 'target_mapping', **options))
+            if not report['checks'][-1]['passed']:
+                raise RuntimeError('target_mapping_check_failed')
+            wait_for_idle(endpoint, slot_count=slot_count)
+            report['checks'].append(check_cancellation(endpoint, **options))
+            report['checks'].append(run_choice(endpoint, 'after_cancel', **options))
         report['passed'] = all(row['passed'] for row in [*report['routing_checks'], *report['checks']])
         report['status'] = 'passed' if report['passed'] else 'not_covered' if report['checks'][1]['status'] == 'not_covered' else 'failed'
         code = 0 if report['passed'] else 2

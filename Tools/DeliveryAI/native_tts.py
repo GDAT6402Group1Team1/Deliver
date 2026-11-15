@@ -20,9 +20,12 @@ def file_hash(path):
 
 def load_runtime(path, verify=False):
     runtime = json.loads(project_path(path).read_text(encoding='utf-8'))
+    voice_residency = runtime.get('voice_residency', 'both')
+    shared_codec = runtime.get('shared_codec', False)
     if (runtime.get('schema_version') != 1 or runtime.get('source_commit') != COMMIT
             or runtime.get('device') != 'CUDA0' or runtime.get('quantization') not in ('BF16', 'Q8_0')
-            or runtime.get('voice_residency', 'both') not in ('both', 'active')
+            or voice_residency not in ('both', 'active') or not isinstance(shared_codec, bool)
+            or (shared_codec and voice_residency != 'both')
             or set(runtime.get('models', {})) != {'male', 'female', 'codec'}):
         raise NeuralTtsError('native_tts_invalid_runtime')
     entries = [runtime['library'], *runtime['dependencies'], *runtime['models'].values()]

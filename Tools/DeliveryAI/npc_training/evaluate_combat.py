@@ -11,7 +11,7 @@ import threading
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from combat_model import LocalCombatClient, prepare_combat_context
+from combat_model import ACTION_TOKEN_LIMIT, LocalCombatClient, prepare_combat_context
 from build_combat_data import write_json
 
 
@@ -31,6 +31,7 @@ def main():
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=20261114)
     parser.add_argument('--temperature', type=float, default=0.)
+    parser.add_argument('--compact-output', action='store_true', help='只生成动作名，用原候选表查目标')
     parser.add_argument('--run', action='store_true')
     args = parser.parse_args()
     rows = json.loads(args.source.read_text(encoding='utf-8'))
@@ -49,7 +50,9 @@ def main():
               'input_preparation_sha256': hashlib.sha256(
                   (Path(__file__).resolve().parents[1] / 'combat_model.py').read_bytes()).hexdigest(),
               'split': args.split, 'samples': len(rows), 'timeout_seconds': args.timeout, 'results': [],
-              'status': 'prepared', 'context_tokens': 4096, 'max_output_tokens': 64,
+              'status': 'prepared', 'context_tokens': 4096,
+              'max_output_tokens': ACTION_TOKEN_LIMIT if args.compact_output else 64,
+              'output_mode': 'action_name' if args.compact_output else 'json',
               'sampling': {'temperature': args.temperature, 'top_p': .8, 'top_k': 20, 'min_p': 0, 'seed': args.seed},
               'repeated_identical_prompt_is_separate_metric': True,
               'scoring_definition': 'v2: reasonable action >=90%, 40+ cases, all outputs and targets legal; technical cancellation checks are separate',
@@ -64,7 +67,8 @@ def main():
     if not args.run:
         print(json.dumps({key: report[key] for key in ('status', 'samples', 'split')}))
         return
-    client = LocalCombatClient(args.endpoint, args.timeout, seed=args.seed, temperature=args.temperature)
+    client = LocalCombatClient(args.endpoint, args.timeout, seed=args.seed, temperature=args.temperature,
+                               compact_output=args.compact_output)
     for row in rows:
         prompt, candidates = prepare_combat_context(row['context'])
         expected = row.get('label') or {}

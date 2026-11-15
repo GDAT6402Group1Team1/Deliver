@@ -14,9 +14,9 @@ from tts import SpeechSynthesizer
 from neural_tts import QwenSpeechSynthesizer, uses_neural_voice
 from speech_queue import SpeechQueue
 from dialogue_background import BACKGROUND_INSTRUCTIONS, CHARACTER_DECISION_INSTRUCTIONS, character_background
-from companion_context import companion_instructions
+from companion_context import companion_instructions, with_object_action_options
 from continued_activity import continuation_instructions
-from combat_model import choose_combat_action, prepare_combat_context, COMBAT_INSTRUCTIONS
+from combat_model import choose_combat_action, prepare_runtime_combat_context, COMBAT_INSTRUCTIONS
 
 _local = threading.local()
 _speech_local = threading.local()
@@ -234,9 +234,12 @@ def compact_context(context):
     npc_messages = {e['event_id'] for e in evidence if e.get('kind') == 'NpcMessage'}
     answered_npc = {e.get('reply_to_event_id') for e in replies + npc_sent
                     if e.get('reply_to_event_id') in npc_messages}
+    # 游戏明确结束本轮时，旧原话留在历史中；音频中断仍如实保留为未完整播放
+    player_message_pending = context.get('pending_player_message') is not False
 
     def is_new_event(item):
         return (item.get('kind') not in ('SelfCombat', 'SelfSpeech', 'ActionReply', 'NpcMessageSent') and
+                (item.get('kind') != 'PlayerSpeech' or player_message_pending) and
                 (item.get('kind') != 'NpcMessage' or
                  (item.get('needs_reply', False) and item['event_id'] not in answered_npc)))
 
@@ -294,13 +297,13 @@ def compact_context(context):
     if last_player:
         # 已回答的原话只留在历史中，当前消息只说明编号和回答情况
         current_message = {'event_id': last_player['event_id'], 'has_complete_reply': has_complete_reply}
-        if not has_complete_reply:
+        if player_message_pending and not has_complete_reply:
             pending_message = {key: last_player[key] for key in fields if key in last_player}
     companion = ({'companion_context': dict(context['companion_context'])}
                  if 'companion_context' in context else {})
     familiar_places = ({'familiar_places': context['familiar_places']} if context.get('familiar_places') else {})
     activity = {key: dict(context[key]) for key in ('current_action', 'current_activity')
-                if context.get('capability_version') in (6, 7, 8) and isinstance(context.get(key), dict)}
+                if context.get('capability_version') in (6, 7, 8, 9, 10) and isinstance(context.get(key), dict)}
     if 'current_action' in activity:
         people.add(activity['current_action'].get('target_id', ''))
     return {**character_background(context), **companion, **familiar_places, **activity,
@@ -359,7 +362,7 @@ def model_context(context):
         result['companion_context']['held_item_id'] = alias(result['companion_context']['held_item_id'], subjects, 'p')
     if 'current_action' in result:
         result['current_action']['target_id'] = alias(result['current_action']['target_id'], subjects, 'p')
-    return result
+    return with_object_action_options(context, result)
 
 
 def split_speech(text):
@@ -463,9 +466,10 @@ class SentenceParser:
             if type(index) is not int or not 0 <= index < len(candidates):
                 raise ReplyFormatError('invalid_candidate')
             action = {**candidates[index], 'speech': speech, 'emotion': item.get('emotion')}
-            # 不能悄悄忽略模型回显的另一种出行方式，交给同一候选校验明确拒绝
-            if 'travel_mode' in item:
-                action['travel_mode'] = item['travel_mode']
+            # 交给同一候选校验拒绝模型回显的擅自更改
+            for field in ('travel_mode', 'speech_preference', 'item_source', 'package_task_id'):
+                if field in item:
+                    action[field] = item[field]
             if 'speech_target_id' in item:
                 target = item['speech_target_id']
                 if not isinstance(target, str):
@@ -677,7 +681,7 @@ def run_job(job, provider, validate, fallback):
             emit('proposal', parser.proposal)
             model = 'delivery-npc-qwen3'
             diagnostics.update(model_provider='local_combat', model_name=model, decision_route='local_combat')
-            context, _ = prepare_combat_context(job.context)
+            context, _ = prepare_runtime_combat_context(job.context)
             instructions = COMBAT_INSTRUCTIONS
             print(f"latency request={job.key[2]} stage=model_selected source=combat "
                   f"model={json.dumps(model)} action={parser.proposal['action']}", flush=True)
@@ -714,7 +718,7 @@ def run_job(job, provider, validate, fallback):
         elif provider == 'llm':
             model = os.environ.get('DELIVERY_AI_MODEL', '')
             diagnostics['decision_route'] = 'player_dialogue' if diagnostics['request_source'] == 'player' else 'ambient_dialogue'
-            if 'companion_context' in job.context or job.context.get('capability_version') in (6, 7, 8):
+            if 'companion_context' in job.context or job.context.get('capability_version') in (6, 7, 8, 9, 10):
                 stream_api(prompt, job.cancel, parser.feed, instructions=instructions)
             else:
                 stream_api(prompt, job.cancel, parser.feed)

@@ -40,7 +40,7 @@ class TtsParams(C.Structure):
 
 
 class NativeLibrary:
-    def __init__(self, path):
+    def __init__(self, path, *, shared_codec=False):
         self.directory = os.add_dll_directory(str(path.parent)) if os.name == 'nt' else None
         try:
             self.lib = C.CDLL(str(path))
@@ -69,6 +69,13 @@ class NativeLibrary:
             self.lib.qt_tts_default_params(C.byref(speech))
             if initial.abi_version != 6 or speech.abi_version != 6:
                 raise ValueError('native_tts_abi_changed')
+            if shared_codec:
+                try:
+                    initialize = self.lib.qt_init_shared_codec
+                except AttributeError as error:
+                    raise ValueError('native_tts_shared_codec_unavailable') from error
+                initialize.argtypes = [C.POINTER(InitParams), C.c_void_p]
+                initialize.restype = C.c_void_p
         except BaseException:
             if self.directory:
                 self.directory.close()

@@ -151,7 +151,7 @@ class ModelCompletionTests(unittest.TestCase):
         proposal = validate_action(data, {**data['candidates'][0], 'speech': '', 'emotion': 'Calm'})
         job = Job(data)
         with patch('streaming.choose_combat_action', return_value=CombatDecisionResult(proposal)), \
-             patch('streaming.prepare_combat_context', return_value=({'events': [{'kind': 'SelfCombat'}],
+             patch('streaming.prepare_runtime_combat_context', return_value=({'events': [{'kind': 'SelfCombat'}],
                  'subjects': [{'id': 'self'}, {'id': 'opponent'}], 'candidates': ['Fight', 'Wait']}, {})), \
              patch('streaming.AppServer') as model, patch('streaming.speech_synthesizer') as voice:
             run_job(job, 'codex-local', validate_action, None).result(1)

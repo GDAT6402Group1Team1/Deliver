@@ -4,6 +4,7 @@ from functools import lru_cache
 import json
 from pathlib import Path
 import re
+from npc_relationships import character_relationships
 
 
 PROFILE_PATH = Path(__file__).resolve().parents[2] / 'Design/AI/NpcProfiles.json'
@@ -41,6 +42,14 @@ def valid_profile_id(value):
 
 
 RESIDENT_PROFILE_IDS = ('chunlai', 'xiumei')
+COMBAT_PREFERENCE_KEYS = frozenset((
+    'initiate_combat', 'respond_to_provocation', 'pursue', 'retreat_when_hurt', 'accept_truce', 'protect_owner',
+))
+COMBAT_PREFERENCE_GUIDE = (
+    'initiate_combat 是先动手，respond_to_provocation 是被挑衅后反击，pursue 是继续追人。'
+    'retreat_when_hurt 是挨疼后退开，accept_truce 是愿意收手，protect_owner 是保护已认定且遇险的主人。'
+    '0–100 越高越偏向这项行动。结合现场和候选判断，数值不代表概率或触发门槛。'
+)
 
 
 def select_resident_profiles(source):
@@ -63,6 +72,13 @@ def _text_list(value, maximum):
             all(isinstance(item, str) and 0 < len(item) <= 200 for item in value))
 
 
+def _validate_combat_preferences(values, *, defaults=False):
+    if (not isinstance(values, dict) or values.keys() - COMBAT_PREFERENCE_KEYS or
+            any(type(value) is not int or not 0 <= value <= 100 for value in values.values()) or
+            (defaults and values.keys() != COMBAT_PREFERENCE_KEYS)):
+        raise ValueError('invalid combat preferences')
+
+
 @lru_cache(maxsize=1)
 def _read_profiles():
     # 每次启动读取一次，后续请求不会反复访问文件，也不会载入别的目录
@@ -70,12 +86,18 @@ def _read_profiles():
     shared = source.get('world_background', [])
     if source.get('version') != 1 or not _text_list(shared, 8):
         raise ValueError('invalid world background')
+    defaults = source.get('combat_preferences_defaults', {})
+    # 离线回看旧人物文件时保留当时的输入
+    if 'combat_preferences_defaults' in source:
+        _validate_combat_preferences(defaults, defaults=True)
+    default_profile = {'combat_preferences': {'guide': COMBAT_PREFERENCE_GUIDE, **defaults}} if defaults else {}
     profiles = {}
     for row in source['characters']:
         key = row['id']
         background = row.get('background', [])
         examples = row.get('dialogue_examples', [])
         action_examples = row.get('action_examples', [])
+        combat_preferences = row.get('combat_preferences', {})
         if not key or not valid_profile_id(key) or key in profiles or not _text_list(background, 8):
             raise ValueError('invalid character background')
         if (not isinstance(examples, list) or len(examples) > 3 or
@@ -92,24 +114,33 @@ def _read_profiles():
                     not isinstance(example['speech'], str) or len(example['speech']) > 80
                     for example in action_examples)):
             raise ValueError('invalid action examples')
+        _validate_combat_preferences(combat_preferences)
         profiles[key] = {'background': {'shared': shared, 'personal': background},
                          'dialogue_examples': examples, 'action_examples': action_examples}
-    return profiles
+        if defaults or combat_preferences:
+            profiles[key]['combat_preferences'] = {'guide': COMBAT_PREFERENCE_GUIDE, **defaults, **combat_preferences}
+    return profiles, default_profile
 
 
 def character_background(context):
-    """按游戏服务器提供的人物表行名取配置，未知人物保持原来的交谈方式"""
+    """按游戏服务器提供的人物表行名取配置，新人物可先沿用默认战斗倾向"""
     profile_id = context.get('profile_id', '')
     if not valid_profile_id(profile_id):
         raise ValueError('invalid profile id')
     if not profile_id:
         return {}
     # 不按姓名或玩家台词猜角色，发回的新字典可以修改，不影响下一次请求
-    return copy.deepcopy(_read_profiles().get(profile_id, {}))
+    profiles, default_profile = _read_profiles()
+    result = copy.deepcopy(profiles.get(profile_id, default_profile))
+    relationships = character_relationships(profile_id)
+    if relationships:
+        result['relationships'] = relationships
+    return result
 
 
 def with_character_background(context):
     # 外来的同名字段不能覆盖项目配置，历史请求仍可省略 profile_id
-    result = {key: value for key, value in context.items() if key not in ('background', 'dialogue_examples', 'action_examples')}
+    profile_fields = ('background', 'dialogue_examples', 'action_examples', 'combat_preferences', 'relationships')
+    result = {key: value for key, value in context.items() if key not in profile_fields}
     result.update(character_background(context))
     return result

@@ -8,12 +8,12 @@ param(
     [string]$ServiceTier = 'default',
     [ValidateSet('qwen', 'windows')]
     [string]$SpeechProvider = 'qwen',
-    # 原生实现先显式选择，声音和同机表现通过后再调整默认
+    # 沿用已认可的两个 B 音色，原生实现与本地战斗模型一起运行
     [ValidateSet('torch', 'native')]
-    [string]$SpeechEngine = 'torch',
+    [string]$SpeechEngine = 'native',
     [string]$NativeSpeechRuntime = '',
     [string]$CombatConfig = '',
-    # 临时退回原模型，保留已经验收的小模型文件与配置
+    # 临时把战斗交回 Luna，保留小模型文件与试玩配置
     [switch]$DisableLocalCombat,
     [ValidateRange(1024, 65535)]
     [int]$Port = 8765,
@@ -85,6 +85,7 @@ if ($listeners.Count -gt 0) {
         if ($PSBoundParameters.ContainsKey('ServiceTier')) {
             Write-Host '本次未改变运行中的模型服务档位；脚本不会自动重启服务'
         }
+        Write-Host '模型和声音沿用该进程启动时的配置。修改配置后需要先停止本工程后端再重新启动'
         return
     }
     throw "端口 $Port 已被其他进程占用，未启动或停止任何服务"
@@ -95,18 +96,25 @@ $pythonCommand = Get-Command $PythonExecutable -CommandType Application -ErrorAc
 if (-not $CombatConfig) { $CombatConfig = Join-Path $PSScriptRoot 'combat_model_config.json' }
 $CombatConfig = [IO.Path]::GetFullPath($CombatConfig)
 $env:DELIVERY_COMBAT_MODEL_URL = ''
+$env:DELIVERY_COMBAT_MODEL_RESIDENT_CACHE = ''
 if (-not $DisableLocalCombat -and (Test-Path -LiteralPath $CombatConfig -PathType Leaf)) {
     $combatSettings = Get-Content -LiteralPath $CombatConfig -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($combatSettings.enabled -eq $true) {
         $combatLauncher = Join-Path $PSScriptRoot 'llm_evaluation/start_local_model.py'
         & $pythonCommand.Source -X utf8 $combatLauncher --combat-config $CombatConfig --run
-        if ($LASTEXITCODE -ne 0) { throw '本地战斗模型启动失败，请检查输出；临时使用原模型可加 -DisableLocalCombat' }
-        $combatPort = [int]$combatSettings.port
-        if ($combatPort -lt 1024 -or $combatPort -gt 65535) { throw '本地战斗模型端口无效' }
-        $env:DELIVERY_COMBAT_MODEL_URL = "http://127.0.0.1:$combatPort/v1/chat/completions"
-        $env:DELIVERY_COMBAT_MODEL_TIMEOUT_SECONDS = [string]$combatSettings.timeout_seconds
-        $env:DELIVERY_COMBAT_MODEL_TEMPERATURE = [string]$combatSettings.temperature
-        $env:DELIVERY_COMBAT_MODEL_PROFILE_IDS = $combatSettings.profile_ids -join ','
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning '本地战斗模型启动失败，本次战斗与交谈都使用 Luna，AI 后端继续启动'
+        }
+        else {
+            $combatPort = [int]$combatSettings.port
+            if ($combatPort -lt 1024 -or $combatPort -gt 65535) { throw '本地战斗模型端口无效' }
+            $env:DELIVERY_COMBAT_MODEL_URL = "http://127.0.0.1:$combatPort/v1/chat/completions"
+            $env:DELIVERY_COMBAT_MODEL_TIMEOUT_SECONDS = [string]$combatSettings.timeout_seconds
+            $env:DELIVERY_COMBAT_MODEL_TEMPERATURE = [string]$combatSettings.temperature
+            $env:DELIVERY_COMBAT_MODEL_PROFILE_IDS = $combatSettings.profile_ids -join ','
+            $env:DELIVERY_COMBAT_MODEL_RESIDENT_CACHE = if ($combatSettings.resident_cache -eq $true) { '1' } else { '0' }
+            Write-Host "持续战斗使用本地小模型，配置状态=$($combatSettings.release_stage)，GPU 层数=$($combatSettings.gpu_layers)；交谈保持 Luna"
+        }
     }
 }
 $env:DELIVERY_CODEX_MODEL = $Model
@@ -131,7 +139,7 @@ $env:DELIVERY_TTS_PROVIDER = $SpeechProvider
 $env:DELIVERY_QWEN_ENGINE = $SpeechEngine
 if ($SpeechEngine -eq 'native') {
     if (-not $NativeSpeechRuntime) {
-        $NativeSpeechRuntime = Join-Path $projectRoot 'Saved/AIResearch/NativeQwen/runtime-q8_0.json'
+        $NativeSpeechRuntime = Join-Path $PSScriptRoot 'native_tts_vendor/runtime-playtest.json'
     }
     $NativeSpeechRuntime = [IO.Path]::GetFullPath($NativeSpeechRuntime)
     if (-not (Test-Path -LiteralPath $NativeSpeechRuntime -PathType Leaf)) {

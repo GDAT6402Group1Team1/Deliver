@@ -12,12 +12,17 @@ import threading
 import time
 from urllib.parse import urlsplit
 
+from dialogue_background import character_background
+
 
 COMBAT_INSTRUCTIONS = '''你在送快递游戏中控制一位正在交战或逃跑的街坊。根据性格、最近对话、实际受击和现场情况，决定接下来继续交战、逃跑或停手。
 Fight 表示继续追近当前对手并出拳；Flee 表示继续或开始远离当前对手；Wait 表示停手。只选择 candidates 中已有的动作，不换对手，不生成台词。
 当前行动已经开始，更新时不用再等一次挑衅。轻微擦碰不等于吃亏；明显疼痛、追不上、对方认输或双方已说开都应结合具体情况判断。别按打了几拳、对话几轮固定决定。记录里没有的命中、胜负和意图不能自行补充。
 只输出一个 JSON 对象，例如 {"action":"Wait","target_id":""}。Fight/Flee 的 target_id 必须是 opponent，Wait 必须为空字符串。action 必须来自本次 candidates，不输出说明。'''
 SUPPORTED_ACTIONS = frozenset(('Fight', 'Flee', 'Wait'))
+RESIDENT_CACHE_SLOTS = {'chunlai': 0, 'xiumei': 1}
+ACTION_PREFIX = '{"action":"'
+ACTION_TOKEN_LIMIT = 6
 _slot = threading.BoundedSemaphore(1)
 
 
@@ -97,6 +102,16 @@ def prepare_combat_context(context):
     return prompt, selected
 
 
+def prepare_runtime_combat_context(context):
+    """试玩和判定日志使用同一份人物配置，历史固定评测保留原来的输入"""
+    prompt, candidates = prepare_combat_context(context)
+    profile = character_background(context)
+    for key in ('combat_preferences', 'relationships'):
+        if key in profile:
+            prompt[key] = profile[key]
+    return prompt, candidates
+
+
 def combat_schema(actions):
     return {'oneOf': [{'type': 'object', 'additionalProperties': False,
                         'properties': {'action': {'const': action},
@@ -126,7 +141,8 @@ def _endpoint(value):
 
 class LocalCombatClient:
     """一次调用共用一个截止时间；取消时关掉连接，让本地服务停止当前生成"""
-    def __init__(self, endpoint, timeout_seconds=1.5, model='delivery-npc-qwen3', seed=None, temperature=0.):
+    def __init__(self, endpoint, timeout_seconds=1.5, model='delivery-npc-qwen3', seed=None, temperature=0.,
+                 *, compact_output=False):
         self.host, self.port = _endpoint(endpoint)
         if not .1 <= timeout_seconds <= 30:
             raise ValueError('invalid_timeout')
@@ -138,6 +154,41 @@ class LocalCombatClient:
         if type(temperature) not in (int, float) or not 0 <= temperature <= 1:
             raise ValueError('invalid_temperature')
         self.temperature = temperature
+        self.compact_output = compact_output
+
+    def _choose_compact(self, post, check, mark, messages, candidates, cache_slot):
+        actions = sorted(candidates)
+        if not actions or any(action not in SUPPORTED_ACTIONS for action in actions):
+            raise ValueError('invalid_combat_choices')
+        template = post('/apply-template', {'messages': messages, 'chat_template_kwargs': {'enable_thinking': False}})
+        # 先补上训练时的 JSON 开头，模型只写动作名，目标交给现有候选表
+        tokens = post('/tokenize', {'content': template['prompt'], 'add_special': True, 'parse_special': True})['tokens']
+        prefix = post('/tokenize', {'content': ACTION_PREFIX, 'add_special': False})['tokens']
+        tokens += prefix
+        if len(tokens) + 64 > 4096:
+            raise ValueError('context_exceeds_4096')
+        grammar = 'root ::= ' + ' | '.join(json.dumps(action) for action in actions)
+        payload = {'prompt': tokens, 'grammar': grammar, 'n_predict': ACTION_TOKEN_LIMIT, 'stream': False,
+                   'temperature': self.temperature, 'top_p': .8, 'top_k': 20, 'min_p': 0, 'cache_prompt': True}
+        if cache_slot is not None:
+            payload['id_slot'] = cache_slot
+        if self.seed is not None:
+            payload['seed'] = self.seed
+        mark('combat_prompt_ready')
+        self.requires_drain = True
+        result = post('/completion', payload)
+        self.requires_drain = False
+        check()
+        action = result.get('content')
+        self.last_usage = result.get('timings')
+        if result.get('stop_type') != 'eos' or result.get('truncated') is not False:
+            raise ValueError('incomplete_combat_choice')
+        if not isinstance(action, str) or action not in actions:
+            raise ValueError('invalid_combat_choice')
+        self.last_output = json.dumps({'action': action, 'target_id': '' if action == 'Wait' else 'opponent'},
+                                      separators=(',', ':'))
+        mark('combat_model_done')
+        return action
 
     def is_idle(self):
         connection = http.client.HTTPConnection(self.host, self.port, timeout=.5)
@@ -152,9 +203,11 @@ class LocalCombatClient:
         finally:
             connection.close()
 
-    def choose(self, prompt, candidates, cancel, measure=None):
+    def choose(self, prompt, candidates, cancel, measure=None, *, cache_slot=None):
         self.last_output = ''
         self.last_usage = None
+        if cache_slot is not None and (type(cache_slot) is not int or cache_slot not in RESIDENT_CACHE_SLOTS.values()):
+            raise ValueError('invalid_combat_cache_slot')
         started = time.monotonic()
         deadline = started + self.timeout_seconds
         finished = threading.Event()
@@ -216,6 +269,8 @@ class LocalCombatClient:
         try:
             messages = [{'role': 'system', 'content': COMBAT_INSTRUCTIONS},
                         {'role': 'user', 'content': json.dumps(prompt, ensure_ascii=False, separators=(',', ':'))}]
+            if self.compact_output:
+                return self._choose_compact(post, check, mark, messages, candidates, cache_slot)
             template = post('/apply-template', {'messages': messages, 'chat_template_kwargs': {'enable_thinking': False}})
             tokens = post('/tokenize', {'content': template['prompt'], 'add_special': True})['tokens']
             if len(tokens) + 64 > 4096:
@@ -227,6 +282,8 @@ class LocalCombatClient:
                 'top_p': .8, 'top_k': 20, 'min_p': 0, 'max_tokens': 64, 'cache_prompt': True,
                 'chat_template_kwargs': {'enable_thinking': False},
                 'response_format': {'type': 'json_object', 'schema': combat_schema(candidates)}}
+            if cache_slot is not None:
+                payload['id_slot'] = cache_slot
             if self.seed is not None:
                 payload['seed'] = self.seed
             result = post('/v1/chat/completions', payload)
@@ -267,22 +324,39 @@ def choose_combat_action(context, cancel, measure=None, *, client=None):
         return CombatDecisionResult(fallback_reason='companion_not_in_training_scope')
     allowed_profiles = {value.strip() for value in os.environ.get(
         'DELIVERY_COMBAT_MODEL_PROFILE_IDS', 'chunlai,xiumei').split(',') if value.strip()}
-    if context.get('profile_id') not in allowed_profiles:
+    profile = context.get('profile_id')
+    if profile not in allowed_profiles:
         return CombatDecisionResult(fallback_reason='profile_not_in_training_scope')
     try:
-        prompt, candidates = prepare_combat_context(context)
+        prompt, candidates = prepare_runtime_combat_context(context)
     except (ValueError, TypeError, KeyError) as error:
         return CombatDecisionResult(fallback_reason=str(error))
+    # 对方的话还没接时由对话模型回答，已经回应的消息仍可用于判断战况
+    evidence = context.get('evidence', [])
+    answered = {event.get('reply_to_event_id') for event in evidence
+                if event.get('kind') in ('SelfSpeech', 'ActionReply', 'NpcMessageSent')}
+    if any(event.get('kind') == 'NpcMessage' and event.get('needs_reply') is True
+           and event.get('event_id') not in answered for event in evidence):
+        return CombatDecisionResult(fallback_reason='pending_npc_reply')
     endpoint = os.environ.get('DELIVERY_COMBAT_MODEL_URL', '')
     if client is None and not endpoint:
         return CombatDecisionResult(fallback_reason='disabled')
     if not _slot.acquire(blocking=False):
         return CombatDecisionResult(fallback_reason='busy')
     try:
+        options = {}
         if client is None:
+            resident_cache = os.environ.get('DELIVERY_COMBAT_MODEL_RESIDENT_CACHE') == '1'
+            if resident_cache:
+                if profile not in RESIDENT_CACHE_SLOTS:
+                    return CombatDecisionResult(fallback_reason='profile_not_in_training_scope')
+                # 缓存按服务器登记的人物编号选择，改显示名也不会用到别人的缓存
+                options['cache_slot'] = RESIDENT_CACHE_SLOTS[profile]
             client = LocalCombatClient(endpoint, float(os.environ.get('DELIVERY_COMBAT_MODEL_TIMEOUT_SECONDS', '1.5')),
-                                       temperature=float(os.environ.get('DELIVERY_COMBAT_MODEL_TEMPERATURE', '0')))
-        action = client.choose(prompt, candidates, cancel, measure)
+                                       seed=20261114 if resident_cache else None,
+                                       temperature=float(os.environ.get('DELIVERY_COMBAT_MODEL_TEMPERATURE', '0')),
+                                       compact_output=resident_cache)
+        action = client.choose(prompt, candidates, cancel, measure, **options)
         if cancel.is_set():
             return CombatDecisionResult(fallback_reason='cancelled')
         proposal = {**candidates[action], 'speech': '', 'emotion': 'Calm', 'speech_target_id': ''}
