@@ -19,6 +19,10 @@ constexpr float MaxPlaceObservationRadius=3000;
 constexpr int32 MaxRememberedNeighborLines=4;
 const FName NeighborLineMemoryKind(TEXT("NeighborSaidDirectly"));
 
+// ── 世界信息 ──
+// 把公开地点、街坊对二狗说过的话等现场信息写进模型请求，只读当次世界，不缓存可见性
+
+/// @brief 把文本里的控制字符换成空格，截到 Limit 个字后去掉首尾空白
 FString PublicPlaceText(const FText& Value,int32 Limit)
 {
     FString Result;
@@ -30,6 +34,7 @@ FString PublicPlaceText(const FText& Value,int32 Limit)
     return Result.TrimStartAndEnd();
 }
 
+/// @brief 三个坐标分量都是有限数时返回 true
 bool IsFinitePoint(const FVector& Point)
 {
     return FMath::IsFinite(Point.X) && FMath::IsFinite(Point.Y) && FMath::IsFinite(Point.Z);
@@ -44,6 +49,7 @@ struct FObservedPlaceCandidate
 };
 }
 
+/// @brief 当次读取本世界公开地点，不缓存可见性或创建新行动证据
 void UDeliveryCompanionComponent::CollectObservedPlaces(TArray<FObservedPublicPlace>& Out) const
 {
     Out.Reset();
@@ -126,6 +132,7 @@ void UDeliveryCompanionComponent::CollectObservedPlaces(TArray<FObservedPublicPl
     }
 }
 
+/// @brief 调用 CollectObservedPlaces 收集此刻看得到的公开地点，写进模型请求
 void UDeliveryCompanionComponent::ExtendWorldDecisionRequest(FDeliveryNpcDecisionRequest& Request) const
 {
     TArray<FObservedPublicPlace> Observed;
@@ -134,6 +141,7 @@ void UDeliveryCompanionComponent::ExtendWorldDecisionRequest(FDeliveryNpcDecisio
     for (auto& Place:Observed) Request.CompanionObservedPlaces.Add(MoveTemp(Place.View));
 }
 
+/// @brief 只保存服务器直连已送达二狗的街坊话语，原话仍是说话人的说法
 void UDeliveryCompanionComponent::RecordDeliveredNeighborLine(const FDeliveryNpcMessageHandle& Handle)
 {
     const auto* Npc=GetCompanion();

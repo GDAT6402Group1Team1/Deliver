@@ -8,6 +8,10 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerState.h"
 
+// ── 家居 ──
+// 二狗在共用房屋里的安排入口
+
+/// @brief 请求人是主人、二狗站着，且共用房屋有回家点和屋内点
 bool UDeliveryCompanionComponent::CanGoHome(APlayerState* Requester) const
 {
     const auto* Home=ADeliveryHome::FindSharedHome(this);
@@ -16,6 +20,7 @@ bool UDeliveryCompanionComponent::CanGoHome(APlayerState* Requester) const
         Home->TryGetReturnLocation(Destination) && Home->TryGetInteriorLocation(Destination);
 }
 
+/// @brief 回家模式下导航回共用房屋，对话或其他动作期间先停下
 void UDeliveryCompanionComponent::UpdateGoHome()
 {
     auto* Npc=GetCompanion();

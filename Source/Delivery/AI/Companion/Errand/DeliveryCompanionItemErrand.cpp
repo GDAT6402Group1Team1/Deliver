@@ -24,6 +24,10 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
 
+// ── 取物委托 ──
+// 接过主人的物品、捡地上的物品、交还主人的执行过程
+
+/// @brief Action 有值就用它，否则 bReturnItem 为 true 时是 ReturnItem，为 false 时是 FetchItem
 EDeliveryNpcAction FDeliveryCompanionItemChoice::GetAction() const
 {
     return Action!=EDeliveryNpcAction::None?Action:
@@ -87,6 +91,7 @@ namespace
     }
 }
 
+/// @brief 物品离主人很近时这次取物改为步行，不用骑车
 bool UDeliveryCompanionComponent::CanWalkForNearbyItem(const FDeliveryCompanionItemChoice& Choice) const
 {
     auto* Npc=GetCompanion();
@@ -106,6 +111,7 @@ bool UDeliveryCompanionComponent::CanWalkForNearbyItem(const FDeliveryCompanionI
         FVector::DistSquared(Origin,ItemPosition)<=FMath::Square(LocalItemDistance);
 }
 
+/// @brief 主人重复确认同一件取物安排时沿用当前委托，保留导航和找物阶段
 bool UDeliveryCompanionComponent::CanKeepItemErrand(const FDeliveryCompanionItemChoice& Choice,APlayerState* Requester,
     int32 ExpectedRevision,EDeliveryCompanionTravelMode RequestedTravelMode) const
 {
@@ -135,6 +141,7 @@ bool UDeliveryCompanionComponent::CanKeepItemErrand(const FDeliveryCompanionItem
         FVector::DistSquared(Location,ItemLastSeenLocation)<=FMath::Square(LocationTolerance);
 }
 
+/// @brief 接收取物、还物、找物命令：能沿用就沿用，否则核对候选后开始新委托
 bool UDeliveryCompanionComponent::ApplyItemChoice(const FDeliveryCompanionItemChoice& Choice,APlayerState* Requester,int32 ExpectedRevision,
     EDeliveryCompanionTravelMode RequestedTravelMode)
 {
@@ -192,6 +199,7 @@ bool UDeliveryCompanionComponent::ApplyItemChoice(const FDeliveryCompanionItemCh
     return true;
 }
 
+/// @brief 以 Origin 为中心重新开始找物路线，清空已看过的点
 void UDeliveryCompanionComponent::ResetItemSearchRoute(const FVector& Origin,bool bAlreadyOnFoot)
 {
     ItemSearchPointIndex=0;
@@ -204,6 +212,7 @@ void UDeliveryCompanionComponent::ResetItemSearchRoute(const FVector& Origin,boo
     if (ItemSearchSide.IsNearlyZero()) ItemSearchSide=FVector::ForwardVector;
 }
 
+/// @brief 让二狗转头看向 Point，Angle 是在水平方向上额外偏转的角度
 void UDeliveryCompanionComponent::SetItemSearchFocus(const FVector& Point,float Angle)
 {
     const auto* Npc=GetCompanion();
@@ -217,6 +226,7 @@ void UDeliveryCompanionComponent::SetItemSearchFocus(const FVector& Point,float 
     AI->SetFocalPoint(ItemSearchFocus.GetValue(),EAIFocusPriority::Gameplay);
 }
 
+/// @brief UseId、命令编号和物品都还对应当前这次取物或放物时返回 true
 bool UDeliveryCompanionComponent::IsCurrentItemUse(FGuid UseId,int32 Revision,ADeliveryHandheldItem* Item) const
 {
     const auto* Npc=GetCompanion();
@@ -231,6 +241,7 @@ bool UDeliveryCompanionComponent::IsCurrentItemUse(FGuid UseId,int32 Revision,AD
         (!Npc->Combat || (!Npc->Combat->IsReactingToHit() && !Npc->Combat->IsRecovering() && !Npc->Combat->IsStriking()));
 }
 
+/// @brief 物品技能请二狗执行接过或交出时调用：核对仍是当前这次，再调用背包接口真正转移物品
 bool UDeliveryCompanionComponent::ExecuteHandheldUse(const UDeliveryHandheldUseRequest& Request,FName& Reason)
 {
     auto* Npc=GetCompanion();
@@ -289,12 +300,14 @@ bool UDeliveryCompanionComponent::ExecuteHandheldUse(const UDeliveryHandheldUseR
     return DeliveryHandheldTransfer::TryPickupWorldItem(Npc,Item,Reason,StillCurrent);
 }
 
+/// @brief 物品技能结束时记下成功与否和原因，UpdateItemErrand 下一次读取
 void UDeliveryCompanionComponent::FinishHandheldUse(FGuid UseId,bool bSucceeded,FName Reason)
 {
     if (!UseId.IsValid() || UseId!=ItemUseId || bItemUseResolved) return;
     bItemUseResolved=true; bItemUseSucceeded=bSucceeded; ItemUseReason=Reason;
 }
 
+/// @brief 作废当前物品使用编号，正在执行的物品技能一起取消
 void UDeliveryCompanionComponent::CancelItemUse()
 {
     const bool bWasUsing=ItemUseId.IsValid();
@@ -303,6 +316,7 @@ void UDeliveryCompanionComponent::CancelItemUse()
         if (auto* ASC=ItemAbilitySystem.Get()) ASC->CancelAbilityHandle(ItemAbilityHandle);
 }
 
+/// @brief 取消物品使用、收回物品技能，清空看到的物品和手上物品的记录
 void UDeliveryCompanionComponent::ShutdownItemExecution()
 {
     CancelItemUse();
@@ -312,6 +326,7 @@ void UDeliveryCompanionComponent::ShutdownItemExecution()
     SeenItems.Reset(); HeldItemEventId.Invalidate(); ObservedHeldItem.Reset(); NextItemObservationAt=0;
 }
 
+/// @brief 捡地上物品的过程：先转向对准，再伸手；bInReach 表示已经走到能伸手的位置
 UDeliveryCompanionComponent::EGroundPickupProgress UDeliveryCompanionComponent::UpdateGroundPickup(
     ADeliveryHandheldItem* Item,bool bInReach,TFunctionRef<bool()> IsCurrent)
 {
@@ -366,6 +381,7 @@ UDeliveryCompanionComponent::EGroundPickupProgress UDeliveryCompanionComponent::
     return EGroundPickupProgress::Preparing;
 }
 
+/// @brief 授予并激活物品转移技能，bReturnToOwner 为 true 时是交给主人；失败时 Reason 写入原因
 bool UDeliveryCompanionComponent::RunItemTransfer(bool bReturnToOwner,FName& Reason)
 {
     auto* Npc=GetCompanion();
@@ -394,6 +410,7 @@ bool UDeliveryCompanionComponent::RunItemTransfer(bool bReturnToOwner,FName& Rea
     return bSucceeded;
 }
 
+/// @brief 行为树每帧推进取物委托：找物、走过去、捡起或接过、交还主人
 void UDeliveryCompanionComponent::UpdateItemErrand()
 {
     auto* Npc=GetCompanion();

@@ -38,14 +38,17 @@ HOME_MEMORY_INSTRUCTIONS = ('remembered_home_objects 只记得曾在共用房屋
 
 
 def candidate_instructions(context):
+    """能力版本 5～10 时返回候选说明，否则返回空字符串"""
     return CANDIDATE_INSTRUCTIONS if context.get('capability_version') in (5, 6, 7, 8, 9, 10) else ''
 
 
 def _home_uses(context):
+    """能力版本 10 用新的家居用途表，其他版本用旧表"""
     return HOME_USES_V10 if context.get('capability_version') == 10 else HOME_USES
 
 
 def _valid_id(value):
+    """value 是规范的非零 UUID 字符串"""
     try:
         return isinstance(value, str) and str(uuid.UUID(value)) == value and uuid.UUID(value).int != 0
     except (ValueError, AttributeError):
@@ -53,6 +56,7 @@ def _valid_id(value):
 
 
 def _text(value, limit, *, empty=False):
+    """value 是不超过 limit 字、没有控制字符的字符串；empty 为 False 时不能全是空白"""
     return (isinstance(value, str) and (empty or bool(value.strip())) and len(value) <= limit
             and not any(ord(char) < 32 for char in value))
 
@@ -107,6 +111,7 @@ def validate_home_objects(context):
 
 
 def _home_choice(context, candidate, objects):
+    """检查家居候选：请求人必须是当前主人，家具编号、用途和目的地都要在本次请求里"""
     companion = context.get('companion_context', {})
     if (not isinstance(companion, dict) or companion.get('requester_is_owner') is not True
             or context.get('request_source', 'ambient') != 'player'):
@@ -156,6 +161,7 @@ def validate_candidate_travel(context, candidate):
 
 
 def validate_candidate_item_fields(context, candidate):
+    """检查候选的 item_source 和 package_task_id 字段，只有能力版本 10 的对应动作可以带"""
     action = candidate.get('action')
     source = candidate.get('item_source')
     if ('item_source' in candidate or action == 'TakeItem') and (
@@ -175,6 +181,7 @@ def validate_candidate_item_fields(context, candidate):
 
 
 def validate_item_choice_echo(offered, decision):
+    """模型回复里的 item_source 和 package_task_id 必须和所选候选一致"""
     for key in ('item_source', 'package_task_id'):
         if key in decision and (key not in offered or decision[key] != offered[key]):
             raise ValueError('decision ' + key.replace('_', ' ') + ' differs from selected candidate')

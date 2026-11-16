@@ -14,6 +14,7 @@ from neural_tts import MAX_PCM_BYTES
 
 
 def local_shell():
+    """找到本机可用的 PowerShell，DELIVERY_TTS_SHELL 指定时优先用它"""
     override = os.environ.get('DELIVERY_TTS_SHELL')
     if override:
         executable = shutil.which(override)
@@ -27,7 +28,9 @@ def local_shell():
 
 
 class SpeechSynthesizer:
+    """系统语音：配了 DELIVERY_TTS_URL 时调接口，否则用本机 PowerShell 子进程合成"""
     def __init__(self):
+        """初始化子进程、输出队列和锁"""
         self.process = None
         self.lines = queue.Queue()
         self.lock = threading.Lock()
@@ -37,17 +40,20 @@ class SpeechSynthesizer:
         self.voice_name = ''
 
     def close(self):
+        """标记关闭并结束子进程"""
         self.closed.set()
         with self.lock:
             self._stop_process()
 
     def _stop_process(self):
+        """结束子进程并等它退出"""
         if self.process:
             self.process.kill()
             self.process.wait(timeout=3)
             self.process = None
 
     def prepare(self, cancel):
+        """提前启动本机合成子进程，使用接口时直接返回 False"""
         if os.environ.get('DELIVERY_TTS_URL'):
             return False
         with self.lock:
@@ -55,6 +61,7 @@ class SpeechSynthesizer:
         return True
 
     def _start_local(self, cancel):
+        """启动 PowerShell 合成子进程并等它准备好"""
         if self.closed.is_set() or cancel.is_set():
             raise RuntimeError('cancelled')
         if self.process and self.process.poll() is None:
@@ -68,6 +75,7 @@ class SpeechSynthesizer:
             text=True, encoding='utf-8', creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         process, output = self.process, self.lines
         def read_lines():
+            """后台线程把子进程的每行输出放进队列"""
             for line in process.stdout:
                 output.put(line)
         threading.Thread(target=read_lines, daemon=True).start()
@@ -92,6 +100,7 @@ class SpeechSynthesizer:
             raise
 
     def synthesize(self, text, voice, emotion, cancel):
+        """合成一句话，返回 PCM；voice 只能是 male 或 female"""
         if not text or len(text) > 120 or voice not in ('male', 'female'):
             raise ValueError('invalid_speech')
         if self.closed.is_set() or cancel.is_set():
@@ -121,6 +130,7 @@ class SpeechSynthesizer:
                     continue
 
     def _api(self, text, voice, emotion, cancel):
+        """调用 DELIVERY_TTS_URL 指向的语音接口合成一句话"""
         payload = {'model': os.environ.get('DELIVERY_TTS_MODEL', 'gpt-4o-mini-tts'),
                    'voice': os.environ.get('DELIVERY_TTS_VOICE_'+voice.upper(), 'onyx' if voice == 'male' else 'coral'),
                    'input': text, 'response_format': 'pcm'}

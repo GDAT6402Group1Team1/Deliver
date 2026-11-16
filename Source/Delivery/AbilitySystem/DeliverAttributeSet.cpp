@@ -6,6 +6,9 @@
 #include "Character/DeliveryCharacter.h"
 #include "Vehicle/Trunk/DeliveryTrunkPassengerComponent.h"
 
+// ── 生命周期 ──
+
+/// @brief 初始血量 100、上限 100、回血 6 每秒
 UDeliverAttributeSet::UDeliverAttributeSet()
 {
 	InitHealth(100.f);
@@ -13,7 +16,7 @@ UDeliverAttributeSet::UDeliverAttributeSet()
 	InitHealthRegenRate(6.f);
 }
 
-// 登记需要同步给客户端的生命值属性
+/// @brief 登记需要同步给客户端的生命值属性
 void UDeliverAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -23,7 +26,7 @@ void UDeliverAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 	DOREPLIFETIME_CONDITION_NOTIFY(UDeliverAttributeSet, HealthRegenRate, COND_None, REPNOTIFY_Always);
 }
 
-// 限制生命值和最大生命值，避免出现无效范围
+/// @brief 属性改成新值之前调用，把 Health 限制在 0 到 MaxHealth 之间
 void UDeliverAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
@@ -35,22 +38,30 @@ void UDeliverAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribut
 	}
 }
 
+// ── 同步通知 ──
+
+// ── 同步通知 ──
+// 客户端收到属性同步时调用，GAMEPLAYATTRIBUTE_REPNOTIFY 让 GAS 广播属性变化
+
+/// @brief 客户端收到 Health 同步
 void UDeliverAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDeliverAttributeSet, Health, OldHealth);
 }
 
+/// @brief 客户端收到 MaxHealth 同步
 void UDeliverAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDeliverAttributeSet, MaxHealth, OldMaxHealth);
 }
 
+/// @brief 客户端收到 HealthRegenRate 同步
 void UDeliverAttributeSet::OnRep_HealthRegenRate(const FGameplayAttributeData& OldHealthRegenRate)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDeliverAttributeSet, HealthRegenRate, OldHealthRegenRate);
 }
 
-// 只屏蔽伤害，回血仍通过同一套 GE；复制的当前血量供本机恢复提示使用
+// ── 生命周期 ──
 bool UDeliverAttributeSet::PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data)
 {
     const auto* Character = Cast<ADeliveryCharacter>(Data.Target.GetAvatarActor());

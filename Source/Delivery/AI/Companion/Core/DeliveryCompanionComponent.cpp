@@ -215,17 +215,24 @@ namespace
     }
 }
 
+// ── 主人与安排 ──
+// UDeliveryCompanionComponent 在服务器上保存主人、模式（跟随、等候、回家）和持续安排；模型选的命令由 ApplyCommand 接收，跟随由 UpdateFollow 推进
+
+/// @brief 组件要复制，服务器每 0.25 秒更新一次
 UDeliveryCompanionComponent::UDeliveryCompanionComponent()
 {
     SetIsReplicatedByDefault(true);
     PrimaryComponentTick.bCanEverTick=true;
     PrimaryComponentTick.TickInterval=.25f;
 }
+/// @brief 拥有这个组件的二狗角色
 ADeliveryCompanionCharacter* UDeliveryCompanionComponent::GetCompanion() const { return Cast<ADeliveryCompanionCharacter>(GetOwner()); }
+/// @brief 实例上填了 Tuning 就用它，否则用类默认的调参
 const UDeliveryCompanionTuning& UDeliveryCompanionComponent::GetTuning() const
 {
     return Tuning?*Tuning:*GetDefault<UDeliveryCompanionTuning>();
 }
+/// @brief 客户端关掉 Tick；服务器订阅任务完成事件，两端都更新座位表现
 void UDeliveryCompanionComponent::BeginPlay()
 {
     Super::BeginPlay();
@@ -233,6 +240,7 @@ void UDeliveryCompanionComponent::BeginPlay()
     else BindTaskCompletion();
     UpdateHomeSeatPresentation();
 }
+/// @brief 找到任务管理器后订阅 OnTaskCompleted，已经订阅过就直接返回
 void UDeliveryCompanionComponent::BindTaskCompletion()
 {
     if (BoundTaskManager.IsValid()) return;
@@ -242,6 +250,7 @@ void UDeliveryCompanionComponent::BindTaskCompletion()
         Manager->OnTaskCompleted.AddUniqueDynamic(this,&UDeliveryCompanionComponent::OnTaskCompleted);
     }
 }
+/// @brief 二狗倒在门口等人扶、还没有主人、玩家在 240 cm 内且能直接看到二狗时可以结识
 bool UDeliveryCompanionComponent::CanRecruit(APawn* Helper) const
 {
     const auto* Npc=GetCompanion();
@@ -260,6 +269,8 @@ bool UDeliveryCompanionComponent::CanRecruit(APawn* Helper) const
         if (*It!=Npc && It->Companion->GetOwnerPlayerState()==PC->PlayerState) return false;
     return true;
 }
+
+/// @brief 仅由服务器长按交互完成入口调用，true 表示归属已经写入
 bool UDeliveryCompanionComponent::TryRecruit(APawn* Helper)
 {
     if (!GetOwner()->HasAuthority() || !CanRecruit(Helper)) return false;
@@ -273,10 +284,13 @@ bool UDeliveryCompanionComponent::TryRecruit(APawn* Helper)
     GetOwner()->ForceNetUpdate();
     return true;
 }
+/// @brief Requester 就是当前主人且在同一个世界时返回 true
 bool UDeliveryCompanionComponent::CanCommand(APlayerState* Requester) const
 {
     return IsValid(Requester) && Requester==OwnerPlayerState && Requester->GetWorld()==GetWorld() && !Requester->IsInactive();
 }
+
+/// @brief 只用已经在地面登记的等候点计算余量
 float UDeliveryCompanionComponent::GetWaitAreaRemaining() const
 {
     const auto* Npc=GetCompanion();
@@ -285,12 +299,14 @@ float UDeliveryCompanionComponent::GetWaitAreaRemaining() const
     const float Offset=FVector::Dist2D(Npc->GetNavAgentLocation(),WaitLocation);
     return FMath::Max(0.f,GetTuning().WaitYieldRadius-Offset);
 }
+/// @brief 主人当前控制的 Pawn，主人离线或不在同一世界时返回空
 APawn* UDeliveryCompanionComponent::GetOwnerPawn() const
 {
     const auto* PC=IsValid(OwnerPlayerState)?OwnerPlayerState->GetPlayerController():nullptr;
     return PC && PC->GetWorld()==GetWorld()?PC->GetPawn():nullptr;
 }
 
+/// @brief 已经在跟随且没有其他安排时，主人再说跟着可以沿用当前跟随，不重新排安排
 bool UDeliveryCompanionComponent::CanKeepFollowCommand(APlayerState* Requester,int32 ExpectedRevision,
     EDeliveryCompanionTravelMode RequestedTravelMode) const
 {
@@ -305,6 +321,7 @@ bool UDeliveryCompanionComponent::CanKeepFollowCommand(APlayerState* Requester,i
         Action.RuleRevision!=AssistRevision;
 }
 
+/// @brief 编号必须来自本次模型请求，true 表示安排已接收或原委托继续执行
 bool UDeliveryCompanionComponent::ApplyCommand(EDeliveryNpcAction Action,APlayerState* Requester,int32 ExpectedRevision,
     UDeliveryTaskDefinition* ExpectedTask,ADeliveryPackageItem* ExpectedPackage,EDeliveryCompanionTravelMode RequestedTravelMode)
 {
@@ -397,6 +414,7 @@ bool UDeliveryCompanionComponent::ApplyCommand(EDeliveryNpcAction Action,APlayer
     GetOwner()->ForceNetUpdate();
     return true;
 }
+/// @brief 把主人名字、关系阶段、记忆、模式、委托、协战和可选命令写进模型请求
 void UDeliveryCompanionComponent::ExtendDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const
 {
     Request.bHasCompanionContext=true;
@@ -509,6 +527,7 @@ void UDeliveryCompanionComponent::ExtendDecisionRequest(FDeliveryNpcDecisionRequ
         Request.Candidates.Add(Candidate);
     }
 }
+/// @brief 对话或受击暂停期间，二狗正在骑专属车出行时可以继续坐在车上
 bool UDeliveryCompanionComponent::CanKeepVehicleSeatWhilePaused() const
 {
     const auto* Npc=GetCompanion();
@@ -531,6 +550,7 @@ bool UDeliveryCompanionComponent::CanKeepVehicleSeatWhilePaused() const
         (!Npc->Agent->HasActiveAction() || Npc->Agent->CanContinueCompanionMovement());
 }
 
+/// @brief 停止跟随导航；bKeepVehicleSeat 为 true 且仍可坐车时留在车上，否则先下车
 void UDeliveryCompanionComponent::StopFollowMovement(bool bKeepVehicleSeat)
 {
     if (!GetOwner() || !GetOwner()->HasAuthority()) return;
@@ -555,6 +575,7 @@ void UDeliveryCompanionComponent::StopFollowMovement(bool bKeepVehicleSeat)
     CancelCatchUp();
     if (StillCurrent()) StopFollowNavigation();
 }
+/// @brief 取消跟随导航的监听，只停止本组件自己发起的那次移动请求
 void UDeliveryCompanionComponent::StopFollowNavigation()
 {
     ClearFollowMoveWatch();
@@ -567,6 +588,7 @@ void UDeliveryCompanionComponent::StopFollowNavigation()
         if (auto* Path=AI->GetPathFollowingComponent(); Path && OldId.IsValid() && Path->GetCurrentRequestId()==OldId)
             Path->AbortMove(*this,FPathFollowingResultFlags::UserAbort,OldId);
 }
+/// @brief 解绑跟随导航的完成回调并清空监听记录，可以重复调用
 void UDeliveryCompanionComponent::ClearFollowMoveWatch()
 {
     if (auto* Path=FollowMovePath.Get(); Path && FollowMoveFinishedHandle.IsValid())
@@ -577,6 +599,7 @@ void UDeliveryCompanionComponent::ClearFollowMoveWatch()
     FollowMoveRevision=INDEX_NONE;
     FollowObstructionSample={};
 }
+/// @brief 记下这次跟随导航，订阅完成回调；路上被挡住时记下这个站位，下次不再选它
 void UDeliveryCompanionComponent::WatchFollowMove(UPathFollowingComponent& Path,FAIRequestID MoveId,APawn& FollowedPawn,
     const FVector& Destination,bool bWaitingAtDoor)
 {
@@ -617,6 +640,7 @@ void UDeliveryCompanionComponent::WatchFollowMove(UPathFollowingComponent& Path,
                 *GetNameSafe(Npc),Revision,MoveId.GetID(),*FollowBlockedFeet.ToCompactString(),*Destination.ToCompactString());
         });
 }
+/// @brief 跟随步行途中检查前方有没有东西挡路，返回挡路的组件，没有返回空
 UPrimitiveComponent* UDeliveryCompanionComponent::SampleFollowMoveObstruction(const UPathFollowingComponent& Path,
     const APawn& FollowedPawn,double Now)
 {
@@ -650,6 +674,7 @@ UPrimitiveComponent* UDeliveryCompanionComponent::SampleFollowMoveObstruction(co
     }
     return Now-Sample.Since>=.75?Blocker:nullptr;
 }
+/// @brief 把挡住的站位加进 RejectedFollowStands，主人走开或时间过了就整组清空
 void UDeliveryCompanionComponent::RememberFollowObstruction(APawn& FollowedPawn,const FVector& Destination)
 {
     if (!HasRecentFollowObstruction(FollowedPawn))
@@ -668,20 +693,24 @@ void UDeliveryCompanionComponent::RememberFollowObstruction(APawn& FollowedPawn,
     FollowBlockedFeet=GetCompanion()->GetNavAgentLocation();
     LastOwnerPosition=FollowedPawn.GetActorLocation();
 }
+/// @brief 已有被挡站位记录，并且记录时的命令编号和主人 Pawn 都和现在相同
 bool UDeliveryCompanionComponent::IsSameFollowObstructionContext(const APawn& FollowedPawn) const
 {
     return !RejectedFollowStands.IsEmpty() && RejectedFollowRevision==CommandRevision && RejectedFollowOwnerPawn.Get()==&FollowedPawn;
 }
+/// @brief 同一安排下的挡路记录还没过期，主人也还在记录时的位置附近
 bool UDeliveryCompanionComponent::HasRecentFollowObstruction(const APawn& FollowedPawn) const
 {
     return IsSameFollowObstructionContext(FollowedPawn) && GetWorld()->GetTimeSeconds()<RejectedFollowUntil &&
         FVector::DistSquared(FollowedPawn.GetActorLocation(),RejectedFollowOwnerPosition)<FMath::Square(GetTuning().RepathDistance);
 }
+/// @brief Stand 离最近一次被挡的某个站位很近时返回 true
 bool UDeliveryCompanionComponent::IsRejectedFollowStand(const APawn& FollowedPawn,const FVector& Stand) const
 {
     return HasRecentFollowObstruction(FollowedPawn) && RejectedFollowStands.ContainsByPredicate([&Stand](const FVector& Blocked)
         { return FVector::DistSquared(Stand,Blocked)<FMath::Square(FollowRejectedStandRadius); });
 }
+/// @brief 写入新的暂停原因并立即同步，原因没变就不写
 void UDeliveryCompanionComponent::SetSuspension(FName Reason)
 {
     if (SuspensionReason==Reason) return;
@@ -690,6 +719,7 @@ void UDeliveryCompanionComponent::SetSuspension(FName Reason)
         *GetNameSafe(GetOwner()),CommandRevision,int32(Mode),*Reason.ToString());
     GetOwner()->ForceNetUpdate();
 }
+/// @brief 主人离开或失效时调用：结束物品、家居、扶起、协战和委托，清空归属与记忆，回到未结识
 void UDeliveryCompanionComponent::ReleaseOwner()
 {
     ShutdownItemExecution();
@@ -721,6 +751,7 @@ void UDeliveryCompanionComponent::ReleaseOwner()
     GetCompanion()->ResetForNewOwner();
     GetOwner()->ForceNetUpdate();
 }
+/// @brief 服务器每 0.25 秒检查主人是否还在、订阅任务事件，并更新记忆、物品观察和协战
 void UDeliveryCompanionComponent::TickComponent(float Dt,ELevelTick Type,FActorComponentTickFunction* Fn)
 {
     Super::TickComponent(Dt,Type,Fn);
@@ -751,6 +782,7 @@ void UDeliveryCompanionComponent::TickComponent(float Dt,ELevelTick Type,FActorC
         else if (!HasActiveErrand() && !HasActiveHomeArrangement() && Mode==EDeliveryCompanionMode::Follow && !Pawn) SetSuspension(FollowOwnerChangingPawn);
     }
 }
+/// @brief 二狗的胶囊放在 Destination 时不会和别的东西重叠
 bool UDeliveryCompanionComponent::IsDestinationClear(const FVector& Destination) const
 {
     const auto* Npc=GetCompanion();
@@ -761,6 +793,7 @@ bool UDeliveryCompanionComponent::IsDestinationClear(const FVector& Destination)
     return !GetWorld()->OverlapBlockingTestByChannel(Destination+FVector(0,0,Half+3),FQuat::Identity,ECC_Pawn,
         FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius()+8,Half),Params);
 }
+/// @brief Destination 离主人当前任务目的地的距离不小于 DestinationClearance
 bool UDeliveryCompanionComponent::IsOutsideTaskEntrance(const FVector& Destination) const
 {
     const auto* Tracker=UDeliveryTaskTrackerComponent::FindTracker(OwnerPlayerState);
@@ -768,6 +801,7 @@ bool UDeliveryCompanionComponent::IsOutsideTaskEntrance(const FVector& Destinati
     return !Tracker || !Tracker->GetTrackedTaskDestination(TaskDestination,LocationId) ||
         FVector::Dist2D(Destination,TaskDestination)>=GetTuning().DestinationClearance;
 }
+/// @brief 主人和二狗之间隔着一道开着的门时返回 true
 bool UDeliveryCompanionComponent::IsAcrossOpenFollowDoorway(const APawn* Pawn,const FVector& FromFeet) const
 {
     const auto* Npc=GetCompanion();
@@ -775,6 +809,7 @@ bool UDeliveryCompanionComponent::IsAcrossOpenFollowDoorway(const APawn* Pawn,co
     const auto Doorway=FindFollowDoorway(Pawn,Npc,FromFeet);
     return Doorway.IsSet() && Doorway->bOpen && !Doorway->IsOnOwnerSide(FromFeet,Npc->GetCapsuleComponent()->GetScaledCapsuleRadius());
 }
+/// @brief 门关着且挡在二狗前面时返回 true，OutStreetAnchor 写入门外的等候点
 bool UDeliveryCompanionComponent::IsAcrossClosedFollowDoorway(const APawn* Pawn,const FVector& FromFeet,FVector* OutStreetAnchor) const
 {
     const auto* Npc=GetCompanion();
@@ -783,6 +818,7 @@ bool UDeliveryCompanionComponent::IsAcrossClosedFollowDoorway(const APawn* Pawn,
     if (OutStreetAnchor) *OutStreetAnchor=Doorway->StreetAnchor;
     return true;
 }
+/// @brief 跑腿结束后，如果主人在屋里且要求骑车跟随，先把二狗交还步行跟随
 void UDeliveryCompanionComponent::ResumeIndoorFollowAfterErrand()
 {
     DeferredIndoorFollow={};
@@ -815,6 +851,7 @@ void UDeliveryCompanionComponent::ResumeIndoorFollowAfterErrand()
     FollowOnFootRevision=CommandRevision;
     VehicleFollowOwnerPawn=OwnerPawn;
 }
+/// @brief 在主人周围找一个能走到、不挡任务入口、在主人这一侧的跟随站位
 bool UDeliveryCompanionComponent::FindFollowDestination(APawn* Pawn,FVector& Out,
     TFunctionRef<bool(const FVector&)> IsOnOwnerSide) const
 {
@@ -881,6 +918,7 @@ bool UDeliveryCompanionComponent::FindFollowDestination(APawn* Pawn,FVector& Out
     }
     return false;
 }
+/// @brief 等候模式下在离主人一段距离的地方找一个站位
 bool UDeliveryCompanionComponent::FindWaitDestination(APawn* Pawn,FVector& Out) const
 {
     if (Mode!=EDeliveryCompanionMode::Stay || !Pawn) return false;
@@ -906,6 +944,7 @@ bool UDeliveryCompanionComponent::FindWaitDestination(APawn* Pawn,FVector& Out) 
         }
     return false;
 }
+/// @brief 等候安排要求在步行状态下记录等候点时，下车后记下当前位置；不需要记录时直接返回 true
 bool UDeliveryCompanionComponent::CapturePendingWaitLocation()
 {
     if (!bCaptureWaitLocationOnFoot) return true;
@@ -929,6 +968,8 @@ bool UDeliveryCompanionComponent::CapturePendingWaitLocation()
     if (SuspensionReason==TEXT("WaitLandingPending") || SuspensionReason==TEXT("CompanionDismountBlocked")) SetSuspension(NAME_None);
     return true;
 }
+
+/// @brief 只允许 BT 的持续分支调用，其他分支执行时先 StopFollowMovement
 void UDeliveryCompanionComponent::UpdateFollow()
 {
     auto* Npc=GetCompanion();
@@ -938,6 +979,7 @@ void UDeliveryCompanionComponent::UpdateFollow()
     if (Mode==EDeliveryCompanionMode::GoHome) { UpdateGoHome(); return; }
     UpdateFollowMovement();
 }
+/// @brief 跟随和等候的主体：判断骑车或步行、找站位、发出导航，找不到站位太久时调用 TryLeapToOwner
 void UDeliveryCompanionComponent::UpdateFollowMovement()
 {
     auto* Npc=GetCompanion();
@@ -1328,6 +1370,7 @@ void UDeliveryCompanionComponent::UpdateFollowMovement()
         SetSuspension(bUsingStreetWait?FollowWaitingAtGrandpaDoor:NAME_None);
     }
 }
+/// @brief 跟丢主人且没人看见时，把二狗瞬移到主人附近的空站位
 bool UDeliveryCompanionComponent::TeleportToOwner(APawn& OwnerPawn)
 {
     auto* Npc=GetCompanion();
@@ -1364,6 +1407,7 @@ bool UDeliveryCompanionComponent::TeleportToOwner(APawn& OwnerPawn)
     return false;
 }
 
+/// @brief 跟随找不到站位时跳到主人身边：检查距离、落点地面和抛物线上没有墙或关着的门
 bool UDeliveryCompanionComponent::TryLeapToOwner(APawn& OwnerPawn,double Now)
 {
     auto* Npc=GetCompanion();
@@ -1456,6 +1500,7 @@ bool UDeliveryCompanionComponent::TryLeapToOwner(APawn& OwnerPawn,double Now)
     return Reject(TEXT("ArcBlocked"));
 }
 
+/// @brief 主人交付了二狗参与过的任务时，记一次一起送货的经历
 void UDeliveryCompanionComponent::OnTaskCompleted(UDeliveryTaskDefinition* Task,const FDeliveryRewardBreakdown& Reward,APlayerState* Deliverer)
 {
     auto* Npc=GetCompanion();
@@ -1482,6 +1527,7 @@ void UDeliveryCompanionComponent::OnTaskCompleted(UDeliveryTaskDefinition* Task,
     Npc->ObserveFact(TEXT("OwnerDeliveryCompleted"),Pawn,
         FString::Printf(TEXT("主人刚完成了订单 %s，我在附近陪着；包裹交付和奖励已经由游戏确认，我没有替他交件。"),*Task->TaskId.ToString()),EDeliveryNpcEvidenceSource::ActionResult);
 }
+/// @brief 清空跟随监听、记忆、物品和家居安排，解绑任务事件和主人战斗事件
 void UDeliveryCompanionComponent::EndPlay(const EEndPlayReason::Type Reason)
 {
     ClearFollowMoveWatch();
@@ -1509,6 +1555,7 @@ void UDeliveryCompanionComponent::EndPlay(const EEndPlayReason::Type Reason)
     StopFollowMovement(); BoundTaskManager.Reset();
     Super::EndPlay(Reason);
 }
+/// @brief 复制主人、模式、命令编号、暂停原因、关系、委托和协战等状态
 void UDeliveryCompanionComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);

@@ -186,6 +186,7 @@ QUIET_PREFERENCE_INSTRUCTIONS = ('quiet_seconds_remaining 是服务器记录的�
 
 
 def _is_owner_player_request(context):
+    """请求来自二狗的当前主人本人说话，且能力版本是 8～10"""
     return (context.get('capability_version') in (8, 9, 10) and context.get('request_source') == 'player' and
             context['companion_context'].get('requester_is_owner') is True)
 
@@ -220,6 +221,7 @@ def with_object_action_options(context, model_input=None):
 
 
 def _object_action_effect(candidate, companion, home_objects, subjects, events):
+    """描述选这个候选会对家具、物品或包裹产生什么实际变化，写进候选说明"""
     action = candidate.get('action')
     if action == 'HomeAction':
         home = candidate['home']
@@ -290,6 +292,7 @@ def _object_action_effect(candidate, companion, home_objects, subjects, events):
 
 
 def _is_owner_order_request(context):
+    """主人本人说话，且手上有一单正在待取件或进行中的任务"""
     companion = context['companion_context']
     task_id = companion.get('task_id')
     return (_is_owner_player_request(context) and isinstance(task_id, str) and bool(task_id.strip()) and
@@ -297,6 +300,7 @@ def _is_owner_order_request(context):
 
 
 def companion_instructions(context):
+    """生成二狗专用的系统提示：熟悉的地点、主人关系、跑腿和物品规则"""
     local_knowledge = ('familiar_places 是你熟悉的街区公开地点及用途，可以用来回答问路。'
                        '这些资料不说明你现在看得见它、它正在营业或你能进入室内。'
                        '地点清单不提供行动权限，实际动作仍只能选当前候选。位置细节没有提供时不要猜。\n'
@@ -378,6 +382,7 @@ def companion_instructions(context):
 
 
 def validate_companion_context(context):
+    """检查请求里二狗的上下文字段：地点、记忆、关系、委托、出行方式等，格式不对时抛出 ValueError"""
     if 'familiar_places' in context:
         places = context['familiar_places']
         if not isinstance(places, list) or len(places) > 8:
@@ -546,6 +551,7 @@ ReturnItem 只交还自己已携带的同一普通道具；companion_context.hel
 
 
 def validate_item_context(context):
+    """能力版本 7 以上时检查物品候选和物品上下文的字段"""
     if context.get('capability_version', 1) < 7:
         return
     import uuid
@@ -573,6 +579,7 @@ def validate_item_context(context):
 
 
 def validate_assist_selection(context, action):
+    """模型选了 JoinAssist 或 StopAssist 时，检查协战编号和开打状态与请求一致"""
     command = action.get('action')
     if command not in ASSIST_ACTIONS:
         return
@@ -596,6 +603,7 @@ def validate_assist_selection(context, action):
 
 
 def validate_item_selection(context, action):
+    """模型选了物品动作时，检查物品编号、来源和证据都来自本次请求"""
     command = action.get('action')
     if command not in ITEM_ACTIONS:
         return

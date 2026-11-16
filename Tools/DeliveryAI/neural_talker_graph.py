@@ -16,6 +16,7 @@ FILES = {
 
 
 def checked_vendor():
+    """核对 vendor 里 faster_qwen 源码的提交和许可，再导入它的 Talker Graph"""
     directory = Path(__file__).with_name('vendor') / 'faster_qwen_v032'
     manifest = json.loads((directory / 'source-manifest.json').read_text(encoding='utf-8'))
     if manifest.get('commit') != COMMIT or manifest.get('license') != 'MIT':
@@ -57,6 +58,7 @@ class TalkerForwardAdapter:
     """首步沿用原计算，后续单步复用 Graph；每句话结束后恢复原方法"""
 
     def __init__(self, engine, graph, output_type, compare_hidden=False):
+        """保存原来的 Talker 前向，记录创建线程"""
         self.engine, self.graph, self.output_type = engine, graph, output_type
         self.outer = engine.model.model.talker
         self.model = self.outer.model
@@ -72,6 +74,7 @@ class TalkerForwardAdapter:
         self.use_original = False
 
     def forward(self, *args, **kwargs):
+        """只允许创建线程依次调用，转给 _forward"""
         if threading.get_ident() != self.thread_id or self.busy:
             raise RuntimeError('Talker Graph 只允许创建它的线程依次生成一句话')
         self.busy = True
@@ -81,6 +84,7 @@ class TalkerForwardAdapter:
             self.busy = False
 
     def _forward(self, args, kwargs):
+        """参数是逐 token 生成的形式时走 Graph，否则调用原来的前向"""
         if self.use_original:
             return self.original(*args, **kwargs)
         expected = {'input_ids', 'attention_mask', 'position_ids', 'past_key_values', 'inputs_embeds',
@@ -155,6 +159,7 @@ class TalkerForwardAdapter:
 
 @contextmanager
 def use_talker_graph(engine, graph, *, output_type=None, compare_hidden=False):
+    """用 Talker Graph 替换模型的 Talker 前向，返回替换用的适配器"""
     if output_type is None:
         from transformers.modeling_outputs import BaseModelOutputWithPast
         output_type = BaseModelOutputWithPast

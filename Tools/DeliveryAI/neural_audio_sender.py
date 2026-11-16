@@ -11,6 +11,7 @@ class AudioChunkSender:
     """队列有上限；取消后丢弃未发送的块，退出前等待正在写出的块结束"""
 
     def __init__(self, callback, check, capacity=4):
+        """保存回调，创建最多 capacity 段的发送队列和后台发送线程"""
         self.callback, self.check = callback, check
         self.pending = queue.Queue(maxsize=capacity)
         self.stopped = threading.Event()
@@ -21,11 +22,13 @@ class AudioChunkSender:
         self.thread.start()
 
     def check_error(self):
+        """调用 check，后台发送出过错时抛出那个错误"""
         self.check()
         if self.error is not None:
             raise self.error
 
     def enqueue(self, message, pcm):
+        """把一段音频放进发送队列，队列满时等待"""
         started = time.monotonic()
         while True:
             self.check_error()
@@ -39,6 +42,7 @@ class AudioChunkSender:
                 continue
 
     def _run(self):
+        """后台线程按顺序取出音频并调用回调发送"""
         try:
             while not self.stopped.is_set():
                 try:
@@ -68,6 +72,7 @@ class AudioChunkSender:
             self.stopped.set()
 
     def finish(self):
+        """等队列里的音频全部发完"""
         # 结束消息排在最后一块之后，返回时所有声音都已写出
         while True:
             self.check_error()
@@ -84,6 +89,7 @@ class AudioChunkSender:
         self.check_error()
 
     def close(self):
+        """停止后台线程并清空没发出去的音频"""
         self.stopped.set()
         # 正在写管道的回调必须退出，才能开始下一句；管道失联由父进程超时终止本进程
         self.thread.join()

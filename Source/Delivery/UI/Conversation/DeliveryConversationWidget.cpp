@@ -17,12 +17,15 @@
 #include "Input/Reply.h"
 #include "InputCoreTypes.h"
 
-// 解绑上一次的回调，再把按钮、输入框和交谈组件的通知接到本面板
+// ── 生命周期 ──
+// HUD 把面板加进视口时调用 NativeConstruct，移出视口时调用 NativeDestruct；Esc 由 NativeOnPreviewKeyDown 调用 Close
+
+/// @brief 先取消上一次的订阅，再把按钮、输入框绑到本面板的回调，订阅交谈组件和语音输入组件，最后调用 RefreshVoice 和 RefreshReply
 void UDeliveryConversationWidget::NativeConstruct()
 {
     Super::NativeConstruct();
 
-    // 面板可能被重建，先解除旧的绑定，避免同一事件触发两次
+    // 面板可能被重建：先取消上次订阅的交谈组件和语音输入组件，同一个通知才不会调用两次
     if (auto* Previous = BoundConversation.Get())
     {
         Previous->OnSubmitted.RemoveAll(this);
@@ -78,7 +81,7 @@ void UDeliveryConversationWidget::NativeConstruct()
     RefreshReply();
 }
 
-// 面板移除时解除所有绑定并清空本轮记录
+/// @brief 面板移除时解除所有绑定并清空本轮记录
 void UDeliveryConversationWidget::NativeDestruct()
 {
     if (SendButton)
@@ -116,7 +119,7 @@ void UDeliveryConversationWidget::NativeDestruct()
     Super::NativeDestruct();
 }
 
-// Esc 关闭面板，其他按键交给输入框
+/// @brief Esc 关闭面板，其他按键交给输入框
 FReply UDeliveryConversationWidget::NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent)
 {
     if (KeyEvent.GetKey() == EKeys::Escape)
@@ -127,8 +130,11 @@ FReply UDeliveryConversationWidget::NativeOnPreviewKeyDown(const FGeometry& Geom
     return Super::NativeOnPreviewKeyDown(Geometry, KeyEvent);
 }
 
-// 交谈流程第 4 步，客户端：检查文字，交给交谈组件 Submit
-// Send 和 Retry 都调用这里
+// ── 打字 ──
+// 发送按钮和回车调用 Send，重试按钮调用 Retry，两者都调用 SendText，SendText 再调用交谈组件的 Submit
+// Submit 成功后交谈组件广播 OnSubmitted 调用 HandleSubmitted，服务器确认后广播 OnSubmissionBound 调用 HandleSubmissionBound
+
+/// @brief 交谈流程第 4 步，客户端：去掉首尾空白、检查长度和重复，再调用交谈组件的 Submit；没发出去时在输入框下方提示原因
 void UDeliveryConversationWidget::SendText(const FString& Text)
 {
     auto* PC = GetOwningPlayer();
@@ -167,7 +173,7 @@ void UDeliveryConversationWidget::SendText(const FString& Text)
     }
 }
 
-// 交谈组件 Submit 成功后广播 OnSubmitted，这里记下原话并开始等待回复，最长 30 秒
+/// @brief 交谈组件 Submit 成功后广播 OnSubmitted，这里记下原话并开始等待回复，最长 30 秒
 void UDeliveryConversationWidget::HandleSubmitted(ADeliveryNpcCharacter* Npc, FGuid MessageId, const FString& Text)
 {
     if (Npc != Resident.Get() || !MessageId.IsValid())
@@ -189,14 +195,14 @@ void UDeliveryConversationWidget::HandleSubmitted(ADeliveryNpcCharacter* Npc, FG
         PlayAnimation(MessageArrive);
 }
 
-// 服务器确认后，把客户端编号换成服务器给的发言编号，之后按这个编号匹配回复
+/// @brief 服务器确认后，把客户端编号换成服务器给的发言编号，之后按这个编号匹配回复
 void UDeliveryConversationWidget::HandleSubmissionBound(FGuid ClientId, FGuid MessageId)
 {
     if (SubmittedEventId == ClientId && MessageId.IsValid())
         SubmittedEventId = MessageId;
 }
 
-// 语音轮次被拒绝时，按原因显示一句提示，3 秒后消失
+/// @brief 语音轮次被拒绝时，按原因显示一句提示，3 秒后消失
 void UDeliveryConversationWidget::HandleVoiceError(FName Reason)
 {
     if (Reason == TEXT("Busy"))
@@ -209,7 +215,10 @@ void UDeliveryConversationWidget::HandleVoiceError(FName Reason)
     RefreshReply();
 }
 
-// 连麦开关：已开启就关闭；未开启时检查语音界面，开启成功后关闭本面板
+// ── 开麦 ──
+// 开麦按钮调用 ToggleVoice，交给语音输入组件开关；语音输入组件状态变化时广播 OnDisplayChanged 调用 RefreshVoice
+
+/// @brief 连麦开着时调用 DisableVoice 关掉；关着时先确认 HUD 有语音状态图标，再调用 EnableVoice，打开成功后关闭本面板
 void UDeliveryConversationWidget::ToggleVoice()
 {
     if (auto* Speech = BoundSpeech.Get())
@@ -237,19 +246,19 @@ void UDeliveryConversationWidget::ToggleVoice()
     RefreshVoice();
 }
 
-// 旧蓝图仍可能调用，连续连麦模式下不做任何事
+/// @brief 按住说话按钮的回调，现在不做任何事；连麦一直开着，句子由语音活动检测切分
 void UDeliveryConversationWidget::BeginVoice()
 {
-    // 保留旧蓝图函数入口，连续连麦不再从按住按钮创建轮次
+    // 旧蓝图可能还绑着这个函数，所以保留
 }
 
-// 旧蓝图仍可能调用，连续连麦模式下不做任何事
+/// @brief 松开说话按钮的回调，现在不做任何事
 void UDeliveryConversationWidget::FinishVoice()
 {
-    // 松开按钮不影响由语音活动检测维护的当前句子
+    // 正在说的这句由语音活动检测决定什么时候结束，和按钮无关
 }
 
-// 按语音组件状态更新连麦按钮的文字和可用状态
+/// @brief 按语音组件状态更新连麦按钮的文字和可用状态
 void UDeliveryConversationWidget::RefreshVoice()
 {
     const auto* Speech = BoundSpeech.Get();
@@ -265,19 +274,21 @@ void UDeliveryConversationWidget::RefreshVoice()
     }
 }
 
-// 重试按钮：重新发送上一句原话，输入框里的草稿保持不变
+// ── 打字 ──
+
+/// @brief 重试按钮：再调用一次 SendText 发 LastSubmittedText，然后把焦点放回输入框
 void UDeliveryConversationWidget::Retry()
 {
     if (!RetryButton || RetryButton->GetVisibility() != ESlateVisibility::Visible || !RetryButton->GetIsEnabled() ||
         LastSubmittedText.IsEmpty())
         return;
-    // 重试发送消息区的原话，输入框中的下一句保持原样
+    // 发的是 LastSubmittedText，输入框里正在写的下一句不动
     const FString Message = LastSubmittedText;
     SendText(Message);
     FocusInput();
 }
 
-// 发送按钮和回车键的入口，发送后清空输入框
+/// @brief 发送按钮和回车键的入口，发送后清空输入框
 void UDeliveryConversationWidget::Send()
 {
     if (!Input)
@@ -290,26 +301,28 @@ void UDeliveryConversationWidget::Send()
     // 记下发送前的编号，用来判断这次是否真的发出
     const FGuid PreviousSubmission = SubmittedEventId;
     SendText(Text);
-    // 请求被接收后立即腾空草稿，服务器回执只更新上方原话，不改玩家正在写的下一句
+    // SubmittedEventId 变了说明交谈组件收下了这句：输入框里还是刚才那句时清空它；玩家已经开始写下一句就不清
     if (SubmittedEventId != PreviousSubmission && Input->GetText().ToString() == Draft)
         Input->SetText(FText::GetEmpty());
     FocusInput();
 }
 
-// 输入框提交事件，只有按回车时才发送
+/// @brief 输入框提交事件，只有按回车时才发送
 void UDeliveryConversationWidget::CommitInput(const FText&, ETextCommit::Type Method)
 {
     if (Method == ETextCommit::OnEnter)
         Send();
 }
 
-// 例句区当前是否展开
+// ── 打开 ──
+
+/// @brief 例句列表是否展开
 bool UDeliveryConversationWidget::IsSuggestionsVisible() const
 {
     return Suggestions && Suggestions->GetVisibility() == ESlateVisibility::Visible;
 }
 
-// HUD 按视口计算宽度后调用，只在宽度变化时修改 SizeBox
+/// @brief HUD 按视口计算宽度后调用，只在宽度变化时修改 SizeBox
 void UDeliveryConversationWidget::SetAvailableWidth(float Width)
 {
     if (!ConversationWidth || !FMath::IsFinite(Width) || Width <= 0)
@@ -318,24 +331,26 @@ void UDeliveryConversationWidget::SetAvailableWidth(float Width)
         ConversationWidth->SetWidthOverride(Width);
 }
 
-// 打开面板后把键盘焦点交给输入框
+/// @brief 打开面板后把键盘焦点交给输入框
 void UDeliveryConversationWidget::FocusInput()
 {
-    // 界面加入视口并切换输入模式后，直接把键盘交给输入框
+    // 没有 Input 控件时把焦点给整个面板
     if (Input)
         Input->SetUserFocus(GetOwningPlayer());
     else
         SetUserFocus(GetOwningPlayer());
 }
 
-// 例句按钮：展开或收起例句区
+// ── 打字 ──
+
+/// @brief 例句按钮：展开或收起例句列表
 void UDeliveryConversationWidget::ToggleSuggestions()
 {
     if (Suggestions)
         Suggestions->SetVisibility(IsSuggestionsVisible() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 }
 
-// 关闭按钮和 Esc 的入口，由 HUD 移除面板并恢复输入模式
+/// @brief 关闭按钮和 Esc 的入口，由 HUD 移除面板并恢复输入模式
 void UDeliveryConversationWidget::Close()
 {
     if (auto* PC = GetOwningPlayer())
@@ -343,13 +358,16 @@ void UDeliveryConversationWidget::Close()
             HUD->CloseResidentConversation();
 }
 
-// 每帧检查交谈对象和玩家角色是否还在，然后刷新显示
+// ── 显示 ──
+// NativeTick 每帧调用 RefreshReply；RefreshReply 结束时调用 RefreshFeedback 更新重试按钮和等待动画
+
+/// @brief 每帧：NPC、交谈组件或玩家角色没了就调用 Close，否则调用 RefreshReply
 void UDeliveryConversationWidget::NativeTick(const FGeometry& Geometry, float Dt)
 {
     Super::NativeTick(Geometry, Dt);
     auto* PC = GetOwningPlayer();
     auto* Conversation = PC ? PC->FindComponentByClass<UDeliveryConversationComponent>() : nullptr;
-    // 遮挡或距离变化时保留原话与发送结果，目标销毁或玩家离开控制器才关闭
+    // NPC 没了、交谈组件没了或玩家没有角色时调用 Close；被挡住或走远时不关，原话和送达结果留着
     if (!Resident.IsValid() || !Conversation || !PC->GetPawn())
     {
         Close();
@@ -358,8 +376,8 @@ void UDeliveryConversationWidget::NativeTick(const FGeometry& Geometry, float Dt
     RefreshReply();
 }
 
-// 交谈流程第 21 步，客户端：读取这句话的发送结果和居民当前台词，更新面板
-// 面板不接收回复通知，每帧比较台词的 ReplyToEventId 与本句编号
+/// @brief 交谈流程第 21 步，客户端：读取这句话的发送结果和居民当前台词，更新面板
+/// 面板不订阅回复通知，每帧比较 NPC 台词的 ReplyToEventId 和这句的编号 SubmittedEventId
 void UDeliveryConversationWidget::RefreshReply()
 {
     auto* PC = GetOwningPlayer();
@@ -384,15 +402,15 @@ void UDeliveryConversationWidget::RefreshReply()
     const auto Action = Resident->Agent->GetPublicState();
     const bool bOwnsCompanionCommand =
         Action.ActionId.IsValid() && Action.GetReplyId() == Action.ActionId && DeliveryNpc::IsCompanionCommand(Action.Action);
-    // 首句通过服务器检查后结束本次等待，台词由人物附近的字幕显示
-    // 待播查询同时检查本轮动作编号和停止通知，取消后的旧状态不能重新显示首句
+    // bFirstSentenceReady：服务器已经检查过回复的第一句、本机正在等它播放，就不再转等待提示；台词显示在 NPC 头顶字幕里
+    // 二狗执行主人命令的回复要等命令执行成功；IsWaitingForSpeechPlayback 会排除已经停掉的回复，旧回复不会重新算数
     const bool bFirstSentenceReady = SubmittedEventId.IsValid() && Action.bStreamSpeech && Action.GetReplyId().IsValid() &&
                                      Action.ReplyToEventId == SubmittedEventId &&
                                      (!bOwnsCompanionCommand || Action.Status == EDeliveryNpcActionStatus::Succeeded) &&
                                      !Action.Speech.IsEmpty() && !bRejected && !bReplyFailed &&
                                      Resident->Presentation->IsWaitingForSpeechPlayback();
 
-    // 第一句通过服务器检查：记下文字，日志 reply_text_ready 用于测量等待时间
+    // 第一句到了：记进 LastReplyText，打 reply_text_ready 日志，用来测从发出到收到回复的时间
     if (bFirstSentenceReady && LastReplyText.IsEmpty() && !DisplayedTurnId.IsValid())
     {
         LastReplyText = Action.Speech;
@@ -400,10 +418,10 @@ void UDeliveryConversationWidget::RefreshReply()
                *SubmittedEventId.ToString(), *Action.ActionId.ToString());
     }
 
-    // 新的一句开始播放：拼接到已收到的回复后面
+    // 本机开始播放回答这句的新句子：拼到 LastReplyText 后面，并记下 DisplayedTurnId
     if (bNewSpeech && DisplayedTurnId != Speech.TurnId)
     {
-        // 首句可能已经显示；晚到的第零句也不能清掉后面的句子或退回旧编号
+        // 第一句（Sequence 为 0）可能已经由 bFirstSentenceReady 记过：只有还没记过任何句子时才记它，晚到的第一句不覆盖后面的句子
         if (Speech.Sequence > 0 || !DisplayedTurnId.IsValid())
         {
             if (Speech.Sequence > 0 || LastReplyText.IsEmpty())
@@ -449,7 +467,7 @@ void UDeliveryConversationWidget::RefreshReply()
     };
     if (bReplyTimedOut)
         AppendNotice(TEXT("暂时没有回应，可以再试一次"));
-    // 下方只保留玩家原话和必要反馈，NPC 台词不在这里重复显示
+    // 气泡里只写玩家原话和下面这些提示；NPC 的台词显示在头顶字幕，这里不重复
     if (Result == TEXT("TooFast"))
         AppendNotice(TEXT("刚才发得太快，这句话没有送到。稍后可以重试"));
     if (Result == TEXT("Unavailable"))
@@ -480,7 +498,7 @@ void UDeliveryConversationWidget::RefreshReply()
     RefreshFeedback(!LastSubmittedText.IsEmpty() && (bRejected || bReplyFailed || bReplyTimedOut));
 }
 
-// 更新重试按钮和等待动画，只在可见状态变化时修改控件
+/// @brief 更新重试按钮和等待动画，只在可见状态变化时修改控件
 void UDeliveryConversationWidget::RefreshFeedback(bool bCanRetry)
 {
     if (RetryButton)
@@ -508,7 +526,9 @@ void UDeliveryConversationWidget::RefreshFeedback(bool bCanRetry)
         StopAnimation(WaitingPulse);
 }
 
-// HUD 创建面板后调用：登记交谈对象，清空上一轮记录，填入例句
+// ── 打开 ──
+
+/// @brief HUD 创建面板后调用：在交谈组件上换成新的交谈对象，调用 ResetConversation 清空旧记录，填入例句，再调用 RefreshReply
 void UDeliveryConversationWidget::SetResident(ADeliveryNpcCharacter* Value)
 {
     if (auto* PC = GetOwningPlayer())
@@ -520,7 +540,7 @@ void UDeliveryConversationWidget::SetResident(ADeliveryNpcCharacter* Value)
         }
     ResetConversation();
     Resident = Value;
-    // 建议只是可复制的文字，玩家粘贴和修改后，通过输入框发送
+    // 例句只是文字，玩家复制、修改后从输入框发出去；第一句是交谈组件 GetProvokeText 给的挑衅话
     if (auto* PC = GetOwningPlayer(); PC && Suggestions && Resident.IsValid())
         if (auto* Conversation = PC->FindComponentByClass<UDeliveryConversationComponent>())
             Suggestions->SetText(
@@ -529,7 +549,9 @@ void UDeliveryConversationWidget::SetResident(ADeliveryNpcCharacter* Value)
     RefreshReply();
 }
 
-// 清空原话、回复、提示和等待状态，换人或关闭面板时调用
+// ── 显示 ──
+
+/// @brief 清空原话、回复、提示和等待状态，停止所有动画，控件恢复初始样子；换人或关闭面板时调用
 void UDeliveryConversationWidget::ResetConversation()
 {
     ButtonVoiceToken = {};

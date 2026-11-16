@@ -16,6 +16,9 @@
 #include "GameplayEffect.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 
+// ── 生命周期 ──
+
+/// @brief 每个角色一个实例、本机预测运行；晕倒时不能激活
 UGA_DeliverPunch::UGA_DeliverPunch()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -23,7 +26,9 @@ UGA_DeliverPunch::UGA_DeliverPunch()
 	ActivationBlockedTags.AddTag(TAG_State_Stunned);
 }
 
-// 检查技能条件和身体状态，阻止晕倒或无法控制身体时出拳
+// ── 技能流程 ──
+
+/// @brief 身体不在 Active 模式（晕倒、骑车等）、正在收拳或冷却没过时返回 false，其余交给 GAS 的标签检查
 bool UGA_DeliverPunch::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
                                           const FGameplayAbilityActorInfo* ActorInfo,
                                           const FGameplayTagContainer* SourceTags,
@@ -58,7 +63,7 @@ bool UGA_DeliverPunch::CanActivateAbility(const FGameplayAbilitySpecHandle Handl
 	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
 }
 
-// 启动技能：通过提交检查后请求角色开始出拳，再订阅命中窗口和结束通知
+/// @brief 先调用 CommitAbility，记下出拳时间 LastMeleeAttackTime，再调用角色的 StartMeleeAttack 挥拳，最后订阅 OnPunchHitWindow 和 OnPunchEnded
 void UGA_DeliverPunch::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
                                        const FGameplayAbilityActorInfo* ActorInfo,
                                        const FGameplayAbilityActivationInfo ActivationInfo,
@@ -92,7 +97,7 @@ void UGA_DeliverPunch::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	RagdollCombat->OnPunchEnded.AddDynamic(this, &UGA_DeliverPunch::OnPunchEnded);
 }
 
-// 结束本次攻击
+/// @brief 技能结束：取消订阅战斗组件；bWasCancelled 为 true 时调用 CancelPunch 停下还没打完的这一拳
 void UGA_DeliverPunch::EndAbility(const FGameplayAbilitySpecHandle Handle,
                                   const FGameplayAbilityActorInfo* ActorInfo,
                                   const FGameplayAbilityActivationInfo ActivationInfo,
@@ -114,7 +119,10 @@ void UGA_DeliverPunch::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
-// 在服务器结算当前出拳手的命中目标和伤害
+// ── 战斗组件回调 ──
+
+/// @brief 拳头接触时间段里每帧调用，只在服务器结算：调用角色的 GatherMeleeHits 扫出打到的角色，每人只算一次
+/// 路人和 NPC 调用 ReceiveMeleeHitFrom 推开；玩家没晕倒时应用伤害效果扣 PunchDamage，再推胸口；这一拳打到人时播一次命中音效
 void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 {
 	if (!IsActive() || !CurrentActorInfo || FiredHand != Hand || !CurrentActorInfo->IsNetAuthority() || !PunchId.IsValid())
@@ -152,8 +160,7 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 		// 窗口会连续触发，多帧接触同一角色也只处理一拳
 		if (!IsValid(HitActor) || HitActor->IsActorBeingDestroyed() || HitActors.Contains(HitActor))
 			continue;
-		// 路人这类不走 GAS 的目标：没有血量也没有晕倒，只有被打飞和退场。
-		// 判据是"实现了受击接口"而不是"Cast 成 ADeliveryPedestrian"——
+		// 路人和 NPC 没有 GAS 血量，只吃冲量；判断用 Cast<IDeliveryImpactReceiver>，不用 Cast<ADeliveryPedestrian>：
 		// 后者会让战斗代码反向依赖 NPC 模块，而且同一个判断在撞车那边还要再写一遍
 		if (IDeliveryImpactReceiver* Receiver = Cast<IDeliveryImpactReceiver>(HitActor))
 		{
@@ -221,7 +228,7 @@ void UGA_DeliverPunch::OnHitWindow(EMeleeHand FiredHand)
 	}
 }
 
-// 只结束当前技能对应的那只手，避免左右拳事件互相影响
+/// @brief 只结束当前技能对应的那只手，避免左右拳事件互相影响
 void UGA_DeliverPunch::OnPunchEnded(EMeleeHand FiredHand)
 {
 	if (!IsActive() || !CurrentActorInfo || FiredHand != Hand)
@@ -237,12 +244,18 @@ void UGA_DeliverPunch::OnPunchEnded(EMeleeHand FiredHand)
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 
+// ── 生命周期 ──
+
+// ── 左右拳 ──
+
+/// @brief 挥左手，带标签 Ability.Attack.Punch.Left
 UGA_DeliverPunchLeft::UGA_DeliverPunchLeft()
 {
 	Hand = EMeleeHand::Left;
 	SetAssetTags(FGameplayTagContainer(TAG_Ability_Attack_Punch_Left));
 }
 
+/// @brief 挥右手，带标签 Ability.Attack.Punch.Right
 UGA_DeliverPunchRight::UGA_DeliverPunchRight()
 {
 	Hand = EMeleeHand::Right;

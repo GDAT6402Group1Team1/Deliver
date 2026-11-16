@@ -13,37 +13,30 @@ class UDeliveryImpactReceiver : public UInterface
 };
 
 /**
- * 能被打飞/撞飞但不走 GAS 的东西（当前是路人）
+ * @brief 能被拳头打飞、被车撞飞，但没有 GAS 血量的角色实现这个接口：路人、居民 NPC、二狗
  *
- * 为什么是接口而不是在出拳和撞车两处各写一个 Cast：
- * 那两处都在 Combat/ 和 Traffic/ 里，而路人在 NPC/ 下——加 Cast 等于让战斗代码
- * 反向依赖 NPC 模块，而且**同一个判断会出现在两个地方**。
- * 本项目在"同一个概念两处判断"上吃过亏（箭头指送达点、图钉还是箱子），
- * 所以这里让"谁能被打飞"由被打的那一方声明。
- *
- * 和 IDeliveryCombatInterface 的分工：那个是"我会攻击"（发起方的流程），
- * 这个是"我会被攻击"（受击方的反应）。玩家角色不实现这个接口——
- * 它走 GAS 扣血那条完整路径，有血量、晕倒和起身；路人只有被打飞和退场。
+ * 出拳（GA_DeliverPunch）和撞车（交通车、摩托车）都用 Cast<IDeliveryImpactReceiver> 判断能不能打，
+ * 不各自 Cast 到具体的 NPC 类：那样战斗和交通代码要反向依赖 NPC 模块，同一个判断还要写在两个地方
+ * 玩家角色不实现它，玩家挨打走 GAS 扣血，有血量、晕倒和起身
+ * 发起方的接口是 IDeliveryCombatInterface
  */
 class DELIVERY_API IDeliveryImpactReceiver
 {
 	GENERATED_BODY()
 
   public:
-	/**
-	 * 受到一次外力打击，由服务器调用
-	 * @param Impulse     世界空间冲量，方向和力度都由发起方决定
-	 * @param ImpactPoint 着力点，用来决定被打中的部位
-	 */
+	/// @brief 服务器：受到一次外力打击
+	/// @param Impulse 世界坐标下的冲量，方向和力度由打人或撞人的一方决定
+	/// @param ImpactPoint 着力点，决定打中哪个部位
 	virtual void ReceiveImpact(const FVector& Impulse, const FVector& ImpactPoint) = 0;
 
-	/** 已经被打飞的目标不再重复结算（音效、命中计数都看这个） */
+	/// @brief 已经倒地时返回 true；倒地的目标一般不再结算（命中音效、计数都看它）
 	virtual bool IsKnockedDown() const = 0;
-	// 少数角色允许倒地后继续受击，普通接收者保持原来的拒绝规则
+	/// @brief 倒地后还能挨打时返回 true；默认 false，少数角色（例如居民 NPC）重写
 	virtual bool CanReceiveHitWhileDown() const { return false; }
-	// 来源在命中时采集，旧接收者继续走原接口
+	/// @brief 带上是谁打的或撞的（Source）；默认转给 ReceiveImpact，不关心来源的接收者不用重写
 	virtual void ReceiveImpactFrom(const FVector& Impulse, const FVector& Point, AActor* Source) { ReceiveImpact(Impulse, Point); }
-	// 同一拳的编号供允许倒地受击的角色去重，旧接收者沿用原受击表现
+	/// @brief 出拳专用，带上这一拳的编号 PunchId，倒地后还能挨打的角色用它防止同一拳算两次；默认转给 ReceiveImpactFrom
 	virtual void ReceiveMeleeHitFrom(const FVector& Impulse, const FVector& Point, AActor* Source, FGuid PunchId)
 	{ ReceiveImpactFrom(Impulse, Point, Source); }
 };

@@ -43,17 +43,23 @@ namespace
     }
 }
 
+// ── 骑车 ──
+// 二狗走到专属摩托车、上车、骑行、找安全位置下车的过程
+
+/// @brief 二狗正坐在登记给它的专属车上
 bool UDeliveryCompanionComponent::IsUsingErrandVehicle() const
 {
     return IsValid(ErrandVehicle) && ErrandVehicle->GetReservedCompanion()==GetOwner() && ErrandVehicle->IsMounted();
 }
 
+/// @brief 骑车跟随主人时返回二狗的专属车，否则返回空
 ADeliveryCompanionMotorbike* UDeliveryCompanionComponent::GetFollowMotorbike() const
 {
     return ShouldRideForFollow(GetOwnerPawn()) && !HasActiveErrand() &&
         VehicleTravelPurpose==EDeliveryCompanionTravelPurpose::Follow && IsUsingErrandVehicle()?ErrandVehicle.Get():nullptr;
 }
 
+/// @brief 跟随模式下主人在骑车且要求骑车跟随时返回 true
 bool UDeliveryCompanionComponent::ShouldRideForFollow(const APawn* OwnerPawn) const
 {
     if (Mode!=EDeliveryCompanionMode::Follow || FollowTravelMode==EDeliveryCompanionTravelMode::Walk ||
@@ -66,6 +72,7 @@ bool UDeliveryCompanionComponent::ShouldRideForFollow(const APawn* OwnerPawn) co
         (VehicleTravelPurpose==EDeliveryCompanionTravelPurpose::Follow && IsUsingErrandVehicle());
 }
 
+/// @brief 记下主人是在骑车还是刚下车，二狗据此决定继续骑车还是停车步行
 void UDeliveryCompanionComponent::RefreshFollowOwnerTravel(const APawn* Pawn)
 {
     // 交接控制器期间可能短暂没有 Pawn，等同一主人出现实际步行对象再记录下车
@@ -82,6 +89,7 @@ void UDeliveryCompanionComponent::RefreshFollowOwnerTravel(const APawn* Pawn)
     }
 }
 
+/// @brief 二狗在车上时请求下车，已经步行时直接返回 true
 bool UDeliveryCompanionComponent::EnsureOnFoot()
 {
     if (!IsUsingErrandVehicle()) { bVehicleNeedsDismount=false; return true; }
@@ -94,6 +102,7 @@ bool UDeliveryCompanionComponent::EnsureOnFoot()
     return bExited;
 }
 
+/// @brief Feet 这个落脚点空着，且从这里能上二狗的专属车
 bool UDeliveryCompanionComponent::IsVehicleBoardingSpotUsable(const FVector& Feet) const
 {
     const auto* Npc=GetCompanion();
@@ -103,6 +112,7 @@ bool UDeliveryCompanionComponent::IsVehicleBoardingSpotUsable(const FVector& Fee
     return IsDestinationClear(Feet) && ErrandVehicle->CanBoardFromLocation(Feet+FeetToCenter);
 }
 
+/// @brief 走向车的导航还在进行时继续沿用，落脚点被占时重新选一个
 bool UDeliveryCompanionComponent::KeepVehicleApproach(UPathFollowingComponent& Path,double Now)
 {
     if (!bVehicleOwnsApproach || !VehicleApproachMoveId.IsValid() || Path.GetCurrentRequestId()!=VehicleApproachMoveId ||
@@ -119,6 +129,7 @@ bool UDeliveryCompanionComponent::KeepVehicleApproach(UPathFollowingComponent& P
     return false;
 }
 
+/// @brief 取消走向车的导航，只停止本组件自己发起的那次请求
 void UDeliveryCompanionComponent::StopVehicleApproach()
 {
     const FAIRequestID OldId=VehicleApproachMoveId;
@@ -132,6 +143,7 @@ void UDeliveryCompanionComponent::StopVehicleApproach()
             Path->AbortMove(*this,FPathFollowingResultFlags::UserAbort,OldId);
 }
 
+/// @brief 骑车接管导航前先清掉跟随和委托自己的步行导航
 void UDeliveryCompanionComponent::StopWalkingForVehicle()
 {
     // 接管前先清自己保存的步行编号，迟到的 BT 清理不能误停走向车的新请求
@@ -152,6 +164,7 @@ void UDeliveryCompanionComponent::StopWalkingForVehicle()
     }
 }
 
+/// @brief 停止 Purpose 对应的骑行，跟随骑行时清空跟随路线
 void UDeliveryCompanionComponent::StopVehicleTravel(EDeliveryCompanionTravelPurpose Purpose,bool bKeepVehicleSeat)
 {
     if (!GetOwner() || !GetOwner()->HasAuthority() || Purpose==EDeliveryCompanionTravelPurpose::None || VehicleTravelPurpose!=Purpose) return;
@@ -176,6 +189,7 @@ void UDeliveryCompanionComponent::StopVehicleTravel(EDeliveryCompanionTravelPurp
     EnsureOnFoot();
 }
 
+/// @brief 放弃专属车：清空出行用途，在车上就请求下车
 void UDeliveryCompanionComponent::ReleaseErrandVehicle()
 {
     if (!GetOwner() || !GetOwner()->HasAuthority()) return;
@@ -198,6 +212,7 @@ void UDeliveryCompanionComponent::ReleaseErrandVehicle()
     EnsureOnFoot();
 }
 
+/// @brief 主人骑车时按间隔记下车的位置，二狗沿这条路线骑车跟随
 void UDeliveryCompanionComponent::SampleFollowBikeRoute(ADeliveryMotorbike* Bike)
 {
     if (!IsValid(Bike) || Bike->IsActorBeingDestroyed()) { FollowRoute.Reset(); return; }
@@ -214,6 +229,7 @@ void UDeliveryCompanionComponent::SampleFollowBikeRoute(ADeliveryMotorbike* Bike
     FollowRoute.Add(Position);
 }
 
+/// @brief 骑行暂停时停下；跟随路线走不通时改为直接追主人的车
 void UDeliveryCompanionComponent::ReportVehiclePause(FName Reason)
 {
     const TWeakObjectPtr<UDeliveryCompanionComponent> WeakThis(this);
@@ -258,6 +274,7 @@ void UDeliveryCompanionComponent::ReportVehiclePause(FName Reason)
     if (Purpose==EDeliveryCompanionTravelPurpose::Follow && IsUsingErrandVehicle()) ErrandVehicle->ReportFollowBlocked();
 }
 
+/// @brief true 表示已经可以执行末段步行，false 表示仍在取车、骑行或等待安全下车
 bool UDeliveryCompanionComponent::UpdateVehicleTravel(const FVector& RequestedGoal,float ReachRadius,EDeliveryCompanionTravelPurpose Purpose,
     const FVector* RequiredWalkGoal)
 {

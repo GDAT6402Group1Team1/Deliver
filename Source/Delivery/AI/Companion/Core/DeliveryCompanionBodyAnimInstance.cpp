@@ -16,6 +16,10 @@
 #include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"
 
+// ── 身体动画 ──
+// 二狗身体动画蓝图的父类，每帧把移动、受击、伸手取物、坐下等状态整理给动画蓝图读
+
+/// @brief 每帧先清空家居姿势，再从二狗组件读取移动、受击、取物、放件和家居动作状态写给动画蓝图
 void UDeliveryCompanionBodyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
     Super::NativeUpdateAnimation(DeltaSeconds);
@@ -156,6 +160,7 @@ void UDeliveryCompanionBodyAnimInstance::NativeUpdateAnimation(float DeltaSecond
     bHomeUpperBodyPose=true;
 }
 
+/// @brief 动画实例销毁前清掉家居动画引用和姿势开关
 void UDeliveryCompanionBodyAnimInstance::NativeUninitializeAnimation()
 {
     HomeAnimation=nullptr;

@@ -19,7 +19,7 @@
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Inventory/DeliveryInventoryItemComponent.h"
 
-// 把背包交给界面控制器，并立即刷新已有控件
+/// @brief 把背包交给界面控制器，并立即刷新已有控件
 void UDeliveryHotbarWidget::SetInventory(UDeliveryInventoryComponent *InInventory)
 {
     Inventory = InInventory;
@@ -29,25 +29,32 @@ void UDeliveryHotbarWidget::SetInventory(UDeliveryInventoryComponent *InInventor
     Refresh();
 }
 
+// ── 生命周期 ──
+
+/// @brief 先调用 BuildWidgetTree 建好控件
 TSharedRef<SWidget> UDeliveryHotbarWidget::RebuildWidget()
 {
     BuildWidgetTree();
     return Super::RebuildWidget();
 }
 
+/// @brief 控件建好后调用 Refresh
 void UDeliveryHotbarWidget::NativeConstruct()
 {
     Super::NativeConstruct();
     Refresh();
 }
 
+/// @brief 每帧调用 Refresh
 void UDeliveryHotbarWidget::NativeTick(const FGeometry &MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
     Refresh();
 }
 
-// 创建快捷栏外框、槽位、图标和耐久条
+// ── 显示 ──
+
+/// @brief 创建快捷栏外框、槽位、图标和耐久条
 void UDeliveryHotbarWidget::BuildWidgetTree()
 {
     if (!WidgetTree || SlotBorders.Num() == UDeliveryInventoryComponent::SlotCount)
@@ -122,7 +129,7 @@ void UDeliveryHotbarWidget::BuildWidgetTree()
     }
 }
 
-// 控件从界面控制器取显示值，耐久和满包闪烁继续实时刷新
+/// @brief 控件从界面控制器取显示值，耐久和满包闪烁继续实时刷新
 void UDeliveryHotbarWidget::Refresh()
 {
     if (!WidgetController || SlotBorders.Num() != UDeliveryInventoryComponent::SlotCount)

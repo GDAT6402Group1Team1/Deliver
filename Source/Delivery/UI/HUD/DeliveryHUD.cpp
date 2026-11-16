@@ -29,6 +29,9 @@
 #include "Widgets/SViewport.h"
 #include "Widgets/SWindow.h"
 
+// ── 生命周期 ──
+
+/// @brief 每 0.1 秒更新一次；设置物品栏、交谈面板、语音状态图标和 AI 观察面板的默认 WBP
 ADeliveryHUD::ADeliveryHUD()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -39,6 +42,7 @@ ADeliveryHUD::ADeliveryHUD()
     AiInspectorWidgetClass = FSoftClassPath(TEXT("/Game/UI/Conversation/WBP_AiInspector.WBP_AiInspector_C"));
 }
 
+/// @brief 步行时返回这个角色，骑车时返回车上的驾驶员；物品栏和后备箱状态都读它
 ADeliveryCharacter* ADeliveryHUD::ResolveCharacter(APawn* Pawn)
 {
     if (ADeliveryCharacter* Character = Cast<ADeliveryCharacter>(Pawn)) return Character;
@@ -46,6 +50,7 @@ ADeliveryCharacter* ADeliveryHUD::ResolveCharacter(APawn* Pawn)
     return nullptr;
 }
 
+/// @brief 每 0.1 秒：应用还没生效的输入模式，刷新物品栏和后备箱状态，摆放交谈面板、语音状态图标和 AI 观察面板
 void ADeliveryHUD::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
@@ -58,6 +63,9 @@ void ADeliveryHUD::Tick(float DeltaSeconds)
     RefreshAiInspectorLayout();
 }
 
+// ── 物品栏 ──
+
+/// @brief 本机：找到当前角色（骑车时是驾驶员），第一次时创建物品栏，背包换了就重新绑定；角色还没同步时隐藏
 void ADeliveryHUD::RefreshHotbar()
 {
     APlayerController* Player = GetOwningPlayerController();
@@ -94,6 +102,7 @@ void ADeliveryHUD::RefreshHotbar()
     HotbarWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 }
 
+/// @brief 移除物品栏并清空绑定；换了角色时调用，同一个角色上下车时复用
 void ADeliveryHUD::RemoveHotbar()
 {
     if (HotbarWidget)
@@ -106,6 +115,9 @@ void ADeliveryHUD::RemoveHotbar()
     BoundCharacter.Reset();
 }
 
+// ── 生命周期 ──
+
+/// @brief 关掉所有界面和处理器，关闭麦克风，清空面板记录；之后不再请求鼠标或键盘焦点
 void ADeliveryHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     // 清理面板时只更新本机状态，退出的世界不再请求鼠标或键盘焦点
@@ -145,6 +157,7 @@ void ADeliveryHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+/// @brief 依次调用 InitializeStartupMenu、GetPhoneController、InitializeSpeechStatus、InitializeAiInspector
 void ADeliveryHUD::BeginPlay()
 {
     Super::BeginPlay();
@@ -154,6 +167,9 @@ void ADeliveryHUD::BeginPlay()
     InitializeAiInspector();
 }
 
+// ── AI 观察面板 ──
+
+/// @brief 非 Shipping 本机：创建观察面板和处理器 UDeliveryAiInspectorController，放在右上角
 void ADeliveryHUD::InitializeAiInspector()
 {
 #if !UE_BUILD_SHIPPING
@@ -176,12 +192,14 @@ void ADeliveryHUD::InitializeAiInspector()
 #endif
 }
 
+/// @brief F6：展开或收起 AI 观察面板，再调用 RefreshAiInspectorLayout 重新摆放
 void ADeliveryHUD::ToggleAiInspector()
 {
     if (AiInspectorController) AiInspectorController->ToggleExpanded();
     RefreshAiInspectorLayout();
 }
 
+/// @brief 把观察面板放在小地图下方，底部避开交谈面板，告诉面板最多能占多大
 void ADeliveryHUD::RefreshAiInspectorLayout()
 {
     auto* Player=GetOwningPlayerController();
@@ -243,6 +261,9 @@ void ADeliveryHUD::RefreshAiInspectorLayout()
         AiInspectorWidget->SetPositionInViewport(Position);
 }
 
+// ── 语音状态图标 ──
+
+/// @brief 本机：订阅麦克风组件的状态变化，创建语音状态图标放在左下角
 void ADeliveryHUD::InitializeSpeechStatus()
 {
     auto* Player=Cast<ADeliveryPlayerController>(GetOwningPlayerController());
@@ -266,18 +287,21 @@ void ADeliveryHUD::InitializeSpeechStatus()
     RefreshSpeechStatusLayout();
 }
 
+/// @brief 麦克风状态变化：没有语音状态图标时关掉麦克风，玩家不会在看不到提示的情况下被收音
 void ADeliveryHUD::HandleSpeechStateChanged(EDeliverySpeechInputState State)
 {
-    // 对话按钮先检查正式界面，这里兜底阻止其他入口留下没有指示的麦克风
+    // 交谈面板的开麦按钮会先调用 HasSpeechStatusWidget 检查；其他地方开了麦克风而图标不在时，这里把麦克风关掉
     if (!HasSpeechStatusWidget() && State!=EDeliverySpeechInputState::Off && State!=EDeliverySpeechInputState::Error)
         if (auto* Input=BoundSpeechInput.Get()) Input->DisableVoice();
 }
 
+/// @brief 语音状态图标是否已经在视口里；交谈面板开麦前先查它，没有图标时不开麦
 bool ADeliveryHUD::HasSpeechStatusWidget() const
 {
     return IsValid(SpeechStatusWidget) && SpeechStatusWidget->IsInViewport();
 }
 
+/// @brief 把语音状态图标放在物品栏上方；和交谈面板重叠时移到交谈面板上方
 void ADeliveryHUD::RefreshSpeechStatusLayout()
 {
     if (!SpeechStatusWidget || !GetOwningPlayerController()) return;
@@ -306,6 +330,9 @@ void ADeliveryHUD::RefreshSpeechStatusLayout()
         SpeechStatusWidget->SetPositionInViewport(Position);
 }
 
+// ── 开始菜单 ──
+
+/// @brief 本机且还没开局时：订阅 ADeliveryStartupFlow 的阶段变化，登记 Startup 面板打开，创建开始菜单
 void ADeliveryHUD::InitializeStartupMenu()
 {
     APlayerController* Player = GetOwningPlayerController();
@@ -321,6 +348,7 @@ void ADeliveryHUD::InitializeStartupMenu()
     }
 }
 
+/// @brief 进入 Playing 阶段时，下一帧调用 CloseStartupMenu；这一帧先让菜单自己也收到 Playing
 void ADeliveryHUD::HandleStartupPhase(EDeliveryStartupPhase Phase)
 {
     if (Phase != EDeliveryStartupPhase::Playing) return;
@@ -329,6 +357,7 @@ void ADeliveryHUD::HandleStartupPhase(EDeliveryStartupPhase Phase)
         StartupCloseTimer = GetWorldTimerManager().SetTimerForNextTick(this, &ADeliveryHUD::CloseStartupMenu);
 }
 
+/// @brief 登记 Startup 面板关闭（恢复输入模式），再移除开始菜单
 void ADeliveryHUD::CloseStartupMenu()
 {
     // 控件还在焦点路径中时恢复模式，再移除菜单
@@ -337,6 +366,9 @@ void ADeliveryHUD::CloseStartupMenu()
     StartupWidget = nullptr;
 }
 
+// ── 面板与鼠标 ──
+
+/// @brief 手机处理器；第一次调用时在本机创建
 UDeliveryPhoneController* ADeliveryHUD::GetPhoneController()
 {
     auto* Player = Cast<ADeliveryPlayerController>(GetOwningPlayerController());
@@ -348,6 +380,7 @@ UDeliveryPhoneController* ADeliveryHUD::GetPhoneController()
     return PhoneController;
 }
 
+/// @brief 登记面板打开或关闭；从有面板变成没有（或反过来）、或开始菜单开关时，调用 ApplyInputMode 切换鼠标和输入模式
 void ADeliveryHUD::SetPanelOpen(FName PanelId, bool bOpen)
 {
     if (PanelId.IsNone()) return;
@@ -359,6 +392,7 @@ void ADeliveryHUD::SetPanelOpen(FName PanelId, bool bOpen)
     if (bWasOpen != IsAnyPanelOpen() || bStartupWasOpen != IsPanelOpen(TEXT("Startup"))) ApplyInputMode();
 }
 
+/// @brief 按 IsAnyPanelOpen 设置是否显示鼠标，记下要切换输入模式，再调用 TryApplyInputMode
 void ADeliveryHUD::ApplyInputMode()
 {
     APlayerController* Player = GetOwningPlayerController();
@@ -368,6 +402,7 @@ void ADeliveryHUD::ApplyInputMode()
     TryApplyInputMode();
 }
 
+/// @brief 游戏窗口在前台、键盘焦点在这个视口里时返回 true；PIE 嵌在编辑器里时不能只看编辑器窗口
 bool ADeliveryHUD::CanApplyInputMode() const
 {
     if (bEndingPlay || !GetWorld() || !FSlateApplication::IsInitialized()) return false;
@@ -388,6 +423,7 @@ bool ADeliveryHUD::CanApplyInputMode() const
         SlateUser.IsValid() && SlateUser->IsWidgetInFocusPath(Viewport);
 }
 
+/// @brief 游戏窗口有焦点时才切换输入模式：开始菜单开着用 UIOnly，有面板开着用 GameAndUI，全关用 GameOnly
 void ADeliveryHUD::TryApplyInputMode()
 {
     if (!bInputModePending || !CanApplyInputMode()) return;
@@ -410,6 +446,9 @@ void ADeliveryHUD::TryApplyInputMode()
     else Player->SetInputMode(FInputModeGameOnly());
 }
 
+// ── 物品栏 ──
+
+/// @brief 玩家躺在后备箱里时显示后备箱状态条（文字和进度），否则隐藏
 void ADeliveryHUD::RefreshTrunkStatus()
 {
     auto* PC=GetOwningPlayerController();
@@ -432,6 +471,9 @@ void ADeliveryHUD::RefreshTrunkStatus()
     TrunkStatus->SetStatus(Passenger->GetStatusText(),bTransition ? Passenger->GetPhaseProgress():Passenger->GetRecoveryProgress());
 }
 
+// ── 交谈面板 ──
+
+/// @brief 关掉旧的交谈面板，新建 WBP_Conversation、调用 SetResident，让 AI 观察面板看这位 NPC，登记面板打开，再把焦点给输入框
 void ADeliveryHUD::OpenResidentConversation(ADeliveryNpcCharacter* Resident)
 {
     CloseResidentConversation();
@@ -453,6 +495,8 @@ void ADeliveryHUD::OpenResidentConversation(ADeliveryNpcCharacter* Resident)
     SetPanelOpen(TEXT("ResidentConversation"),true);
     if (CanApplyInputMode()) ConversationWidget->FocusInput();
 }
+
+/// @brief 交谈面板宽度取屏幕宽的 52%（440 到 720），居中放在物品栏上方
 void ADeliveryHUD::RefreshConversationLayout()
 {
     if (!ConversationWidget || !GetOwningPlayerController()) return;
@@ -473,6 +517,8 @@ void ADeliveryHUD::RefreshConversationLayout()
     if (!FMath::IsNearlyEqual(Current.Left,float(Position.X)/Scale) || !FMath::IsNearlyEqual(Current.Top,float(Position.Y)/Scale))
         ConversationWidget->SetPositionInViewport(Position);
 }
+
+/// @brief 登记交谈面板关闭（恢复输入模式），再把面板移出视口
 void ADeliveryHUD::CloseResidentConversation()
 {
     // 先处理当前焦点，再解除文本框与视口的联系

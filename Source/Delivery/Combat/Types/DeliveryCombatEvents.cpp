@@ -10,6 +10,7 @@
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Event_Combat_ConfirmedHit,"Event.Combat.ConfirmedHit");
 
+/// @brief Actor 是玩家正在控制的角色时返回他的 PlayerState；控制器已经不控制它、PlayerState 失效或不在同一个世界时返回 nullptr
 APlayerState* DeliveryCombatEvents::FindPlayerState(const AActor* Actor)
 {
     if (!IsValid(Actor) || Actor->IsActorBeingDestroyed()) return nullptr;
@@ -21,13 +22,14 @@ APlayerState* DeliveryCombatEvents::FindPlayerState(const AActor* Actor)
         Controller->GetWorld()==Actor->GetWorld() && State->GetWorld()==Actor->GetWorld()?State:nullptr;
 }
 
+/// @brief 服务器：建一个 UDeliveryCombatHitEvent，给出拳和被打的玩家的 ASC 各调用一次 HandleGameplayEvent
 void DeliveryCombatEvents::ReportHit(AActor* Attacker,AActor* Target,FGuid PunchId,const FVector& Point)
 {
     if (!IsInGameThread() || !IsValid(Attacker) || Attacker->IsActorBeingDestroyed() || !Attacker->HasAuthority() ||
         !IsValid(Target) || Target->IsActorBeingDestroyed() || !Target->HasAuthority() || Target==Attacker ||
         !Attacker->GetWorld() || Attacker->GetWorld()->GetNetMode()==NM_Client ||
         Target->GetWorld()!=Attacker->GetWorld() || !PunchId.IsValid() || Point.ContainsNaN()) return;
-    // 事件仅在同步回调期间保活，接收者自行保存所需事实，不保活任一参战角色
+    // Event 只在这次函数调用期间有效；收到事件的代码要什么自己存下来，Event 只用弱引用指着双方，不让角色多活
     const TStrongObjectPtr<UDeliveryCombatHitEvent> Event(NewObject<UDeliveryCombatHitEvent>());
     Event->PunchId=PunchId; Event->Attacker=Attacker; Event->Target=Target; Event->ImpactPoint=Point;
     Event->AttackerPlayerState=FindPlayerState(Attacker);
@@ -35,7 +37,7 @@ void DeliveryCombatEvents::ReportHit(AActor* Attacker,AActor* Target,FGuid Punch
     FGameplayEventData Data;
     Data.EventTag=TAG_Event_Combat_ConfirmedHit;
     Data.Instigator=Attacker; Data.Target=Target; Data.OptionalObject=Event.Get();
-    // 先捕获双方身份，第一次同步通知中的换 Pawn 不能改变第二次通知的归属
+    // 先把双方的 PlayerState 存进 Players 再逐个发：第一次通知里有人换了角色，第二次通知发给谁也不变
     TArray<TWeakObjectPtr<APlayerState>> Players;
     Players.AddUnique(Event->AttackerPlayerState);
     Players.AddUnique(Event->TargetPlayerState);

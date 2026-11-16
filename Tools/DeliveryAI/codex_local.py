@@ -15,6 +15,7 @@ from home_context import validate_item_choice_echo
 
 
 def choose(context, instructions, runner=subprocess.run):
+    """调用本机 codex 命令行执行一次决策，返回解析后的 JSON"""
     executable = os.environ.get("DELIVERY_CODEX_EXE") or shutil.which("codex")
     if not executable:
         raise RuntimeError("codex_not_installed")

@@ -7,6 +7,10 @@
 #include "NavigationSystem.h"
 #include "World/Home/DeliveryHomeObjectComponent.h"
 
+// ── 摆放落点 ──
+// 检查家具摆放的位置有没有地面、放不放得下
+
+/// @brief GroundPoint 在主人身前、高度差不大、距离合适时返回 true
 bool UDeliveryCompanionComponent::IsHomePlacementInFrontOfOwner(const APawn* Pawn,const FVector& GroundPoint,const AActor* Prop) const
 {
     const auto* Player=Cast<ADeliveryCharacter>(Pawn);
@@ -22,6 +26,7 @@ bool UDeliveryCompanionComponent::IsHomePlacementInFrontOfOwner(const APawn* Paw
     return !GetWorld()->LineTraceTestByChannel(Player->GetPawnViewLocation(),GroundPoint+FVector(0,0,9),ECC_Visibility,Query);
 }
 
+/// @brief 在主人面前找一个能放下这件家具原尺寸的位置，Entrance 是二狗站的位置，Placement 是家具的位置
 bool UDeliveryCompanionComponent::ResolveHomeOwnerPlacement(const UDeliveryHomeObjectComponent& Source,const APawn* Pawn,
     FTransform& Entrance,FTransform& Placement) const
 {
@@ -74,6 +79,7 @@ bool UDeliveryCompanionComponent::ResolveHomeOwnerPlacement(const UDeliveryHomeO
     return false;
 }
 
+/// @brief 搬着家具走到主人面前的落点，主人走开或换了人就结束安排
 void UDeliveryCompanionComponent::UpdateHomeOwnerPlacementApproach(FGuid Id,double Now)
 {
     auto* Source=ActiveHomeChoice.SourceObject.Get();

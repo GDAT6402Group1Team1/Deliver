@@ -17,7 +17,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogDeliveryNpcTraversal, Log, All);
 
 namespace
 {
-// 在接下来几段路径中找可以直接走过的门洞连接
+/// @brief 在接下来几段路径中找可以直接走过的门洞连接
 FNavLinkId FindOpenObstacleWalkThroughLink(const UNavigationSystemV1& Nav, const FNavigationPath& Route, uint32 NextPathIndex)
 {
     const auto& Points = Route.GetPathPoints();
@@ -41,7 +41,11 @@ FNavLinkId FindOpenObstacleWalkThroughLink(const UNavigationSystemV1& Nav, const
 }
 } // namespace
 
-// 某次寻路是否正在越障
+// ── 越障 ──
+// AI 控制器每帧调用 UpdateObstacleTraversal：正在跳时检查落地、超时或换了寻路；没在跳时每隔一段时间调用 TryStartObstacleTraversal 探前方
+// TryStartObstacleTraversal 找到挡路的矮障碍后算起跳速度，调用 HasClearObstacleJumpArc 确认抛物线不撞东西，再调用 LaunchCharacter 起跳
+
+/// @brief 编号为 Request 的这次寻路正在越障时返回 true
 bool ADeliveryNpcAIController::IsTraversingObstacle(FAIRequestID Request) const
 {
     const auto* Npc = ObstacleTraversal.Pawn.Get();
@@ -51,7 +55,7 @@ bool ADeliveryNpcAIController::IsTraversingObstacle(FAIRequestID Request) const
            CanTraverseObstacle(*Npc);
 }
 
-// 越障前提：开关打开、角色可见、有碰撞、在地面上
+/// @brief 越障前提：开关打开、角色可见、有碰撞、在地面上
 bool ADeliveryNpcAIController::CanTraverseObstacle(const ADeliveryNpcCharacter& Npc) const
 {
     const auto* Movement = Npc.GetCharacterMovement();
@@ -64,7 +68,7 @@ bool ADeliveryNpcAIController::CanTraverseObstacle(const ADeliveryNpcCharacter& 
                           !Companion->Companion->HasActiveHomeArrangement() && !Companion->Companion->GetHomeState().CarriedProp);
 }
 
-// 结束越障，撤销还没生效的起跳速度
+/// @brief 结束越障，撤销还没生效的起跳速度
 void ADeliveryNpcAIController::StopObstacleTraversal()
 {
     const auto Previous = ObstacleTraversal;
@@ -80,7 +84,7 @@ void ADeliveryNpcAIController::StopObstacleTraversal()
         Path->AbortMove(*this, FPathFollowingResultFlags::UserAbort, Previous.Request, EPathFollowingVelocityMode::Keep);
 }
 
-// 每帧：跟踪正在进行的跳跃，按间隔探测前方低障碍
+/// @brief 每帧：跟踪正在进行的跳跃，按间隔探测前方低障碍
 void ADeliveryNpcAIController::UpdateObstacleTraversal()
 {
     auto* Npc = Cast<ADeliveryNpcCharacter>(GetPawn());
@@ -171,7 +175,7 @@ void ADeliveryNpcAIController::UpdateObstacleTraversal()
     TryStartObstacleTraversal(*Npc, *Path, Now);
 }
 
-// 沿跳跃抛物线逐段扫掠胶囊，确认不会撞墙
+/// @brief 沿跳跃抛物线逐段扫掠胶囊，确认不会撞墙
 bool ADeliveryNpcAIController::HasClearObstacleJumpArc(const ADeliveryNpcCharacter& Npc, const FVector& LaunchVelocity,
                                                        double FlightTime) const
 {
@@ -198,7 +202,7 @@ bool ADeliveryNpcAIController::HasClearObstacleJumpArc(const ADeliveryNpcCharact
     return true;
 }
 
-// 把当前路径点沿路线往前延伸，作为跳跃落点的参考
+/// @brief 把当前路径点沿路线往前延伸，作为跳跃落点的参考
 FVector ADeliveryNpcAIController::ExtendObstacleRouteTarget(const FNavigationPath& Route, uint32 NextPathIndex,
                                                             const FVector& Feet, const FVector& Direction,
                                                             const FVector& CurrentTarget, const FNavLinkId& WalkThroughLink,
@@ -250,7 +254,7 @@ FVector ADeliveryNpcAIController::ExtendObstacleRouteTarget(const FNavigationPat
     return End;
 }
 
-// 这次寻路是否已在同一障碍前后退过
+/// @brief 这次寻路是否已在同一障碍前后退过
 bool ADeliveryNpcAIController::HasTriedObstacleRetreat(FAIRequestID Request, const UPrimitiveComponent& Blocker,
                                                        const FVector& Feet) const
 {
@@ -263,7 +267,7 @@ bool ADeliveryNpcAIController::HasTriedObstacleRetreat(FAIRequestID Request, con
         });
 }
 
-// 前方有低障碍时计算起跳速度，检查落点和抛物线，必要时先后退半步
+/// @brief 前方有低障碍时计算起跳速度，检查落点和抛物线，必要时先后退半步
 bool ADeliveryNpcAIController::TryStartObstacleTraversal(ADeliveryNpcCharacter& Npc, UPathFollowingComponent& Path, double Now)
 {
     const auto Route = Path.GetPath();

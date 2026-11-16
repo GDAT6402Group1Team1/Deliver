@@ -13,6 +13,10 @@
 #include "Task/Data/DeliveryTaskDefinition.h"
 #include "Task/World/DeliveryItemComponent.h"
 
+// ── 小绿执行 ──
+// 走过去拾取小绿、把小绿放进包裹的执行过程
+
+/// @brief 主人同意后检查能否捡起小绿（CollectCaterpillar）或把它放进包裹（InsertCaterpillar）
 bool UDeliveryCompanionComponent::CanArrangeCaterpillar(EDeliveryNpcAction Action,ADeliveryHandheldItem* Item,
     APlayerState* Requester,bool bSearchLead) const
 {
@@ -44,6 +48,7 @@ bool UDeliveryCompanionComponent::CanArrangeCaterpillar(EDeliveryNpcAction Actio
     return IsCurrentPrankPackage(GetCommandPackage(),Requester,bCompanionHoldsPackage);
 }
 
+/// @brief Package 是初遇那一单的原包裹，且包裹此刻能接收二狗放进来的小绿
 bool UDeliveryCompanionComponent::IsCurrentPrankPackage(const ADeliveryPackageItem* Package,APlayerState* Requester,
     bool bCompanionHoldsPackage) const
 {
@@ -54,6 +59,7 @@ bool UDeliveryCompanionComponent::IsCurrentPrankPackage(const ADeliveryPackageIt
         Package->CanAcceptCompanionCaterpillar(Npc,Requester,false,bCompanionHoldsPackage);
 }
 
+/// @brief 在主人附近找小绿；bSeen 表示二狗能直接看见，看不见时 Point 取小绿的模型中心
 ADeliveryCaterpillarItem* UDeliveryCompanionComponent::FindCaterpillarForOwnerRequest(FVector& Point,bool& bSeen) const
 {
     constexpr float Radius=DeliveryCompanionItemSearch::Radius;
@@ -69,6 +75,7 @@ ADeliveryCaterpillarItem* UDeliveryCompanionComponent::FindCaterpillarForOwnerRe
     return bSeen?Worm:nullptr;
 }
 
+/// @brief 主人说话时立即检查刚看见的小绿，能放进包裹就记下这次看见
 void UDeliveryCompanionComponent::RefreshCaterpillarObservationForOwnerRequest(APlayerState* Requester)
 {
     if (!GetCarriedTaskPackage() || !CanCommand(Requester)) return;
@@ -82,6 +89,7 @@ void UDeliveryCompanionComponent::RefreshCaterpillarObservationForOwnerRequest(A
     }
 }
 
+/// @brief 主人这次说话时把捡小绿、放小绿进包裹的候选写进模型请求
 void UDeliveryCompanionComponent::AddCaterpillarItemCandidates(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const
 {
     auto* Npc=GetCompanion();
@@ -186,6 +194,7 @@ void UDeliveryCompanionComponent::AddCaterpillarItemCandidates(FDeliveryNpcDecis
     if (bCanInsert) Add(EDeliveryNpcAction::InsertCaterpillar,GetCommandPackage());
 }
 
+/// @brief 走到包裹旁并把小绿放进去；返回 true 表示这一步还在进行或已完成
 bool UDeliveryCompanionComponent::UpdateCaterpillarInsertion()
 {
     auto* Npc=GetCompanion();

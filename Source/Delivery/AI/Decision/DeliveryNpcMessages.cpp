@@ -9,7 +9,11 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 
-// 服务器：订阅轮次子系统的接话失效通知
+// ── 接话 ──
+// NPC 之间接话：Agent 采纳回复后调用 RegisterReplyMessageContext 向轮次子系统登记，回复说完后 TryDeliverReplyMessage 把完整台词发给收话的 NPC
+// 对方的 ReceiveNpcMessage 写成 NpcMessage 事件并请求决策；某一层失效时轮次子系统通知 HandleNpcMessageCancellations 取消下游的回复
+
+/// @brief 服务器：订阅轮次子系统的接话失效通知
 void UDeliveryNpcAgentComponent::BindNpcMessageTurns()
 {
     if (!IsAuthority())
@@ -21,7 +25,7 @@ void UDeliveryNpcAgentComponent::BindNpcMessageTurns()
     }
 }
 
-// 这次回复所接的上一句话是否仍然有效
+/// @brief 这次回复所接的上一句话是否仍然有效
 bool UDeliveryNpcAgentComponent::IsNpcMessageParentCurrent(const FDeliveryNpcMessageHandle& Parent) const
 {
     if (!Parent.IsValid())
@@ -30,7 +34,7 @@ bool UDeliveryNpcAgentComponent::IsNpcMessageParentCurrent(const FDeliveryNpcMes
     return IsAuthority() && Turns && Turns->IsNpcMessageCurrent(Parent, Cast<ADeliveryNpcCharacter>(GetOwner()));
 }
 
-// 玩家是否正在对这位 NPC 录音或等待转写
+/// @brief 玩家是否正在对这位 NPC 录音或等待转写
 bool UDeliveryNpcAgentComponent::IsPlayerInputBeingRecorded() const
 {
     auto* Turns = BoundNpcTurns.Get();
@@ -40,7 +44,7 @@ bool UDeliveryNpcAgentComponent::IsPlayerInputBeingRecorded() const
             Lease.Phase == EDeliveryConversationTurnPhase::FinalPending);
 }
 
-// 请求附上“正在回应哪位 NPC 的哪句话”，玩家请求不附加
+/// @brief 请求是在回应另一位 NPC 的话时，附上那位 NPC 和那句话的编号；玩家的请求不附加
 void UDeliveryNpcAgentComponent::AttachNpcMessageContext(FDeliveryNpcDecisionRequest& Request) const
 {
     Request.ParentNpcMessage = {};
@@ -76,7 +80,7 @@ void UDeliveryNpcAgentComponent::AttachNpcMessageContext(FDeliveryNpcDecisionReq
     }
 }
 
-// 采纳后向轮次子系统登记这一轮回复，之后可以把台词定向发给另一位 NPC
+/// @brief 采纳后向轮次子系统登记这一轮回复，之后可以把台词定向发给另一位 NPC
 bool UDeliveryNpcAgentComponent::RegisterReplyMessageContext(FReply& Reply, const FDeliveryNpcDecisionRequest& Request,
                                                              bool bPlainText)
 {
@@ -119,7 +123,7 @@ bool UDeliveryNpcAgentComponent::RegisterReplyMessageContext(FReply& Reply, cons
     return Reply.bNpcMessageTracked || !Reply.ParentNpcMessage.IsValid();
 }
 
-// 定向回复的声音能否开始播放
+/// @brief 定向回复的声音能否开始播放
 bool UDeliveryNpcAgentComponent::CanStartReplyMessageAudio(FGuid ReplyId) const
 {
     for (const auto& Pair : Replies)
@@ -132,7 +136,7 @@ bool UDeliveryNpcAgentComponent::CanStartReplyMessageAudio(FGuid ReplyId) const
     return !Turns || !Turns->HasNpcReplyRecord(ReplyId) || Turns->CanStartNpcReplyPresentation(ReplyId);
 }
 
-// 接话链失效后，已经在播的这一轮能否继续说完
+/// @brief 接话链失效后，已经在播的这一轮能否继续说完
 bool UDeliveryNpcAgentComponent::CanRetainReplySpeech(FGuid ReplyId) const
 {
     const auto* Turns = BoundNpcTurns.Get();
@@ -146,7 +150,7 @@ bool UDeliveryNpcAgentComponent::CanRetainReplySpeech(FGuid ReplyId) const
     return false;
 }
 
-// 是否有别的 NPC 对我说了话、还没回应
+/// @brief 是否有别的 NPC 对我说了话、还没回应
 bool UDeliveryNpcAgentComponent::HasPendingNpcMessage() const
 {
     if (!IsAuthority() || bPlayerRequest)
@@ -169,7 +173,7 @@ bool UDeliveryNpcAgentComponent::HasPendingNpcMessage() const
         });
 }
 
-// 读取整轮回复的完整文字，供纯文字回复使用
+/// @brief 读取整轮回复的完整文字，供纯文字回复使用
 bool UDeliveryNpcAgentComponent::GetCompleteReply(FGuid ReplyId, FDeliveryNpcCompleteReply& OutReply) const
 {
     OutReply = {};
@@ -189,7 +193,7 @@ bool UDeliveryNpcAgentComponent::GetCompleteReply(FGuid ReplyId, FDeliveryNpcCom
     return false;
 }
 
-// 能否接收另一位 NPC 发来的定向消息
+/// @brief 能否接收另一位 NPC 发来的定向消息
 bool UDeliveryNpcAgentComponent::CanReceiveNpcMessage(const FDeliveryNpcMessage& Message) const
 {
     const auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner());
@@ -212,7 +216,7 @@ bool UDeliveryNpcAgentComponent::CanReceiveNpcMessage(const FDeliveryNpcMessage&
            !PlayerReplyMessage.IsValid();
 }
 
-// 接收另一位 NPC 的定向消息：写成 NpcMessage 事件并请求下一次决策
+/// @brief 接收另一位 NPC 的定向消息：写成 NpcMessage 事件并请求下一次决策
 bool UDeliveryNpcAgentComponent::ReceiveNpcMessage(const FDeliveryNpcMessageHandle& Handle)
 {
     auto* Turns = BoundNpcTurns.Get();
@@ -243,7 +247,7 @@ bool UDeliveryNpcAgentComponent::ReceiveNpcMessage(const FDeliveryNpcMessageHand
     return true;
 }
 
-// 把这一轮回复的完整台词定向发给说话对象，对方据此接话
+/// @brief 把这一轮回复的完整台词定向发给说话对象，对方据此接话
 void UDeliveryNpcAgentComponent::TryDeliverReplyMessage(FGuid RequestId)
 {
     if (!IsAuthority() || bChangingPlan)
@@ -318,14 +322,14 @@ void UDeliveryNpcAgentComponent::TryDeliverReplyMessage(FGuid RequestId)
     }
 }
 
-// 这一轮回复的文字是否已送到某位 NPC
+/// @brief 这一轮回复的文字是否已送到某位 NPC
 bool UDeliveryNpcAgentComponent::WasReplyTextDelivered(FGuid ReplyId, const ADeliveryNpcCharacter* Receiver) const
 {
     const auto* Turns = BoundNpcTurns.Get();
     return Turns && Turns->WasNpcMessageDelivered(ReplyId, Receiver);
 }
 
-// 把回复的播放结果报告给轮次子系统，处理随之失效的下游
+/// @brief 把回复的播放结果报告给轮次子系统，处理随之失效的下游
 void UDeliveryNpcAgentComponent::ReportNpcReplyPresentation(FGuid ReplyId, EDeliveryNpcReplyPresentation State)
 {
     if (auto* Turns = BoundNpcTurns.Get())
@@ -337,7 +341,7 @@ void UDeliveryNpcAgentComponent::ReportNpcReplyPresentation(FGuid ReplyId, EDeli
     }
 }
 
-// 让这位 NPC 参与的接话分支失效
+/// @brief 让这位 NPC 参与的接话分支失效
 void UDeliveryNpcAgentComponent::InvalidateNpcMessageTurns(FName Reason, bool bLeavingWorld)
 {
     if (auto* Turns = BoundNpcTurns.Get())
@@ -349,7 +353,7 @@ void UDeliveryNpcAgentComponent::InvalidateNpcMessageTurns(FName Reason, bool bL
     }
 }
 
-// 接话失效通知：取消对应的回复和由它引出的动作
+/// @brief 接话失效通知：取消对应的回复和由它引出的动作
 void UDeliveryNpcAgentComponent::HandleNpcMessageCancellations(const TArray<FDeliveryNpcMessageCancellation>& Cancelled)
 {
     if (!IsAuthority())

@@ -626,6 +626,9 @@ private:
     std::atomic<int32> LastDelayMs{0};
 };
 
+// ── 对外接口 ──
+// 下面的函数都直接转给 FImpl；音频处理线程的实际处理写在上面的 FImpl 里，各函数的说明见头文件
+
 FDeliverySpeechAudioProcessor::FDeliverySpeechAudioProcessor() : Impl(MakeUnique<FImpl>()) {}
 FDeliverySpeechAudioProcessor::~FDeliverySpeechAudioProcessor() = default;
 
@@ -633,15 +636,21 @@ bool FDeliverySpeechAudioProcessor::Start(FDeliverySpeechAudioCallbacks&& Callba
 {
     return Impl->Start(MoveTemp(Callbacks), OutputLatencyMs, OutError);
 }
+
+/// @brief 先拒绝新回调，再等待工作线程结束；回调不得反向调用 Stop
 void FDeliverySpeechAudioProcessor::Stop() { Impl->Shutdown(); }
 bool FDeliverySpeechAudioProcessor::IsRunning() const { return Impl->IsRunning(); }
 bool FDeliverySpeechAudioProcessor::IsReady() const { return Impl->IsReady(); }
 bool FDeliverySpeechAudioProcessor::EnableContinuousListening() { return Impl->EnableContinuousListening(); }
 bool FDeliverySpeechAudioProcessor::BeginDetectedTurn(uint64 DetectionId, uint64 TurnId)
 { return Impl->BeginDetectedTurn(DetectionId, TurnId); }
+
+/// @brief true 表示命令已排入音频队列，不能据此认为已经产生识别结果
 bool FDeliverySpeechAudioProcessor::BeginTurn(uint64 TurnId) { return Impl->BeginTurn(TurnId); }
 bool FDeliverySpeechAudioProcessor::FinishTurn(uint64 TurnId) { return Impl->FinishTurn(TurnId); }
 void FDeliverySpeechAudioProcessor::CancelTurn(uint64 TurnId) { Impl->CancelTurn(TurnId); }
+
+/// @brief 输入为交错 float PCM；只复制到有界队列，不在设备回调执行 AEC
 bool FDeliverySpeechAudioProcessor::PushCapture(const float* Samples, int32 NumFrames, int32 NumChannels, int32 SampleRate,
                                                double ArrivedAtSeconds, bool bOverflow)
 {

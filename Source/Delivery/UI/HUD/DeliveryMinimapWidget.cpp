@@ -23,6 +23,7 @@
 
 namespace DeliveryMinimapDrawing
 {
+/// @brief 把世界里的水平偏移换算到地图坐标：X 为地图右方、Y 为地图上方，单位仍是 cm
 FVector2f ProjectOffset(const FVector& Delta)
 {
 	const double North = FMath::DegreesToRadians(UDeliveryMapSettings::GetMapNorthWorldYaw());
@@ -30,7 +31,7 @@ FVector2f ProjectOffset(const FVector& Delta)
 	return FVector2f(Delta.Y * Cos - Delta.X * Sin, Delta.X * Cos + Delta.Y * Sin);
 }
 
-// 纹理直接映射到圆形三角扇，没有方形背景漏出，也无需额外遮罩材质
+/// @brief 纹理直接映射到圆形三角扇，没有方形背景漏出，也无需额外遮罩材质
 void Disc(FSlateWindowElementList& Elements, int32 Layer, const FGeometry& Geometry, FVector2f Centre,
           float Radius, const FSlateBrush& Brush, FColor Color)
 {
@@ -60,6 +61,7 @@ void Disc(FSlateWindowElementList& Elements, int32 Layer, const FGeometry& Geome
 	    nullptr, 0, 0, ESlateDrawEffect::IgnoreTextureAlpha);
 }
 
+/// @brief 在地图中心画玩家的方向箭头，左右两半用不同颜色，Heading 是箭头在地图上的角度
 void DirectionMarker(FSlateWindowElementList& Elements, int32 Layer, const FGeometry& Geometry,
                      FVector2f Centre, float Heading, float Scale, FColor LeftColor, FColor RightColor)
 {
@@ -87,6 +89,8 @@ void DirectionMarker(FSlateWindowElementList& Elements, int32 Layer, const FGeom
 	                                   Vertices, Indices, nullptr, 0, 0);
 }
 
+/// @brief 按 OffsetCm 画一个世界位置的标记：在地图范围内画圆点或菱形，超出时夹到圆边画成朝外的三角
+/// 比例尺是 2 × MapRadius / MapWorldWidth：纹理的宽度对应地图直径
 void WorldMarker(FSlateWindowElementList& Elements, int32 Layer, const FGeometry& Geometry,
                  FVector2f Centre, FVector2f OffsetCm, float MapRadius, float MapWorldWidth,
                  float MarkerScale, FColor Fill, bool bDiamond)
@@ -127,7 +131,9 @@ void WorldMarker(FSlateWindowElementList& Elements, int32 Layer, const FGeometry
 }
 }
 
-// 创建小地图控件并准备显示材质
+// ── 生命周期 ──
+
+/// @brief 创建小地图控件并准备显示材质
 TSharedRef<SWidget> UDeliveryMinimapWidget::RebuildWidget()
 {
 	// 保留 WBP_Minimap 的引用和主 HUD 插槽；方形 Image 由本类的圆形绘制替代
@@ -144,7 +150,7 @@ TSharedRef<SWidget> UDeliveryMinimapWidget::RebuildWidget()
 	        });
 }
 
-// 初始化小地图显示与本机数据
+/// @brief 初始化小地图显示与本机数据
 void UDeliveryMinimapWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -161,7 +167,9 @@ void UDeliveryMinimapWidget::NativeConstruct()
 	EnsureCapture();
 }
 
-// 准备小地图使用的场景捕获组件
+// ── 镜头 ──
+
+/// @brief 准备小地图使用的场景捕获组件
 void UDeliveryMinimapWidget::EnsureCapture()
 {
 	APlayerController* Controller = GetOwningPlayer();
@@ -185,15 +193,14 @@ void UDeliveryMinimapWidget::EnsureCapture()
 	Capture->bCaptureEveryFrame = false;
 	Capture->bCaptureOnMovement = false;
 	Capture->bAlwaysPersistRenderingState = true;
-	// 俯拍：Pitch −90 看正下方；此时 Yaw 绕的就是视线轴，所以它直接等于"图像转多少度"
-	// 这里设一次是为了创建时就对，真正每帧生效的是下面更新里那一句——
-	// 改 WBP 默认值不用重编，靠的就是每帧重设
+	// 俯拍：Pitch 为 -90 时镜头看正下方，Yaw 绕的是视线轴，等于地图图像转的角度
+	// 这里先设一次，创建时方向就对；NativeTick 每帧还会重设，改了项目设置里的朝北方向立刻生效
 	Capture->SetWorldRotation(FRotator(-90.f, UDeliveryMapSettings::GetMapNorthWorldYaw(), 0.f));
 	Capture->RegisterComponent();
 	SuspendLegacyCaptures();
 }
 
-// 停用旧捕获组件，避免重复渲染同一张地图
+/// @brief 停用旧捕获组件，避免重复渲染同一张地图
 void UDeliveryMinimapWidget::SuspendLegacyCaptures()
 {
 	// 旧人物蓝图仍保留组件，但不再重复渲染那张共享 RT；每名本机玩家现在有自己的纹理
@@ -216,7 +223,7 @@ void UDeliveryMinimapWidget::SuspendLegacyCaptures()
 	}
 }
 
-// 更新地图捕获位置、缩放和任务标记
+/// @brief 更新地图捕获位置、缩放和任务标记
 void UDeliveryMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
@@ -239,9 +246,9 @@ void UDeliveryMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 	}
 	// —— 任务目的地在地图上的位置 ——
 	
-	// 换到地图空间再存：图上的"上"是世界 yaw MapNorthWorldYaw，"右"是它 +90
-	// 把世界偏移投影到这两根轴上，Paint 里就只剩"乘个比例尺 + 夹到圆内"，
-	// 不用再碰朝向——朝向这件事只在这里算一次，和相机读的是同一个值
+	// 换算到地图上再存：地图的上方是世界 Yaw 为 MapNorthWorldYaw 的方向，右方是它加 90 度
+	// 世界偏移投影到这两根轴上存进 TargetMapOffsetCm，NativePaint 里只需乘比例尺、夹到圆内
+	// 朝向只在这里算一次，和地图镜头读的是同一个 MapNorthWorldYaw
 	if (const UDeliveryTaskTrackerComponent* Tracker =
 	        UDeliveryTaskTrackerComponent::FindTracker(GetOwningPlayer()))
 	{
@@ -287,6 +294,7 @@ void UDeliveryMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDel
 	}
 }
 
+/// @brief 找到自己的二狗（没找到时每 0.5 秒找一次），把它相对玩家的位置换算到地图坐标
 void UDeliveryMinimapWidget::UpdateCompanionMarker(float DeltaTime)
 {
 	const auto* Player = GetOwningPlayer();
@@ -323,7 +331,9 @@ void UDeliveryMinimapWidget::UpdateCompanionMarker(float DeltaTime)
 	}
 }
 
-// 绘制小地图中的玩家与任务方向标记
+// ── 生命周期 ──
+
+/// @brief 绘制小地图中的玩家与任务方向标记
 int32 UDeliveryMinimapWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
                                           const FSlateRect& MyCullingRect,
                                           FSlateWindowElementList& OutDrawElements, int32 LayerId,
@@ -367,7 +377,7 @@ int32 UDeliveryMinimapWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 	return Base + 10;
 }
 
-// 释放地图显示资源并恢复需要恢复的场景状态
+/// @brief 释放地图显示资源并恢复需要恢复的场景状态
 void UDeliveryMinimapWidget::NativeDestruct()
 {
 	if (Capture)

@@ -125,10 +125,10 @@ private:
     /// 点击开麦按钮：开或关
     UFUNCTION() void ToggleVoice();
 
-    /// 按下按住说话的按钮
+    /// 按住说话按钮的回调；连麦现在一直开着，这个函数什么都不做，只为旧蓝图保留
     UFUNCTION() void BeginVoice();
 
-    /// 松开按住说话的按钮
+    /// 松开说话按钮的回调；什么都不做，只为旧蓝图保留
     UFUNCTION() void FinishVoice();
 
     /// 按开麦状态刷新按钮文字

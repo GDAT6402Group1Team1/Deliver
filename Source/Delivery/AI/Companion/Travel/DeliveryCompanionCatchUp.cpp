@@ -8,6 +8,10 @@
 #include "NavigationPath.h"
 #include "Engine/World.h"
 
+// ── 补位 ──
+// 二狗跟丢主人时，先问所有玩家看不看得见起点和终点，都看不见才瞬移到主人附近
+
+/// @brief 离主人够远、目的地空着、不挡任务入口且能走到时，可以把这个点作为补位终点
 bool UDeliveryCompanionComponent::CanUseCatchUpDestination(APawn* Pawn,const FVector& Destination) const
 {
     auto* Npc=GetCompanion();
@@ -28,6 +32,7 @@ bool UDeliveryCompanionComponent::CanUseCatchUpDestination(APawn* Pawn,const FVe
         FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius()+8,Half),Params);
 }
 
+/// @brief 记下所有玩家的视角，调用 SendCatchUpQueries 问他们看不看得见起点和终点
 bool UDeliveryCompanionComponent::TryBeginCatchUp(APawn* Pawn,const FVector& Destination)
 {
     const double Now=GetWorld()->GetTimeSeconds();
@@ -66,6 +71,7 @@ bool UDeliveryCompanionComponent::TryBeginCatchUp(APawn* Pawn,const FVector& Des
     return true;
 }
 
+/// @brief 生成新的查询编号，给每个玩家发看不看得见的查询，0.6 秒内要回复
 void UDeliveryCompanionComponent::SendCatchUpQueries()
 {
     CatchUpRequestId=FGuid::NewGuid();
@@ -77,6 +83,7 @@ void UDeliveryCompanionComponent::SendCatchUpQueries()
             CatchUpStartCenter,CatchUpEndCenter,CatchUpExtent);
 }
 
+/// @brief 玩家数量、Pawn 和视角目标都和发查询时一样
 bool UDeliveryCompanionComponent::AreCatchUpViewersCurrent() const
 {
     int32 Count=0;
@@ -92,6 +99,7 @@ bool UDeliveryCompanionComponent::AreCatchUpViewersCurrent() const
     return Count>0 && Count==CatchUpViewers.Num();
 }
 
+/// @brief 由发送查询的拥有者PC转交结果，只记录可见性，不在RPC中移动角色
 void UDeliveryCompanionComponent::AcceptCatchUpVisibility(APlayerController* Player,FGuid RequestId,
     APawn* ViewPawn,AActor* ViewTarget,bool bUnseen)
 {
@@ -103,6 +111,7 @@ void UDeliveryCompanionComponent::AcceptCatchUpVisibility(APlayerController* Pla
         GetWorld()->GetTimeSeconds()>CatchUpDeadline || !AreCatchUpViewersCurrent()) bCatchUpDenied=true;
 }
 
+/// @brief 所有玩家都回复看不见时调用 TeleportToOwner；有人看见、超时或情况变了就取消
 bool UDeliveryCompanionComponent::UpdateCatchUp(APawn* Pawn)
 {
     if (!CatchUpRequestId.IsValid()) return false;
@@ -138,6 +147,7 @@ bool UDeliveryCompanionComponent::UpdateCatchUp(APawn* Pawn)
     return true;
 }
 
+/// @brief 清空补位查询，取消检查可见性的暂停原因
 void UDeliveryCompanionComponent::CancelCatchUp()
 {
     CatchUpRequestId.Invalidate(); CatchUpViewers.Reset(); CatchUpOwnerPawn.Reset(); bCatchUpDenied=false;

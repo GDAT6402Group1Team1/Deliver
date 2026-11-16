@@ -1,4 +1,3 @@
-// 创建五槽快捷栏，并根据背包数据更新图标和耐久
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
@@ -14,7 +13,12 @@ class UImage;
 class UProgressBar;
 class UTexture2D;
 
-/** 五格快捷栏，由代码创建控件并根据背包状态更新 */
+/**
+ * @brief 屏幕底部的五格物品栏，由 HUD 创建
+ *
+ * 控件树在 RebuildWidget 里用代码建好（连贯背景、五个格子、图标、耐久条）
+ * 显示的数据从 UDeliveryHotbarController 取；NativeTick 每帧调用 Refresh，耐久和背包满时的红色闪烁实时更新
+ */
 UCLASS(Blueprintable)
 
 class DELIVERY_API UDeliveryHotbarWidget : public UUserWidget
@@ -22,36 +26,56 @@ class DELIVERY_API UDeliveryHotbarWidget : public UUserWidget
     GENERATED_BODY()
 
   public:
+    /// @brief 物品栏的界面处理器
     UFUNCTION(BlueprintPure, Category = "Inventory")
     UDeliveryHotbarController *GetWidgetController() const
     {
         return WidgetController;
     }
+
+    /// 界面处理器，SetInventory 第一次调用时创建
     UPROPERTY(Transient)
     TObjectPtr<UDeliveryHotbarController> WidgetController;
-    // 背包绑定
+
+    /// @brief 换成显示这个背包，交给界面处理器，再调用 Refresh
     void SetInventory(UDeliveryInventoryComponent *InInventory);
 
   protected:
+    // ── 生命周期 ──
+
+    /// @brief 先调用 BuildWidgetTree 建好控件
     virtual TSharedRef<SWidget> RebuildWidget() override;
+
+    /// @brief 控件建好后调用 Refresh
     virtual void NativeConstruct() override;
+
+    /// @brief 每帧调用 Refresh
     virtual void NativeTick(const FGeometry &MyGeometry, float InDeltaTime) override;
 
   private:
-    // 界面构建与刷新
+    // ── 显示 ──
+
+    /// @brief 建好外框、五个格子、图标和耐久条；已经建过时直接返回
     void BuildWidgetTree();
+
+    /// @brief 从界面处理器取每格的图标、耐久和是否有东西，更新控件；背包满时其他四格闪红
     void Refresh();
 
-    // 数据源与控件缓存
+    // ── 控件 ──
+
+    /// 正在显示的背包
     UPROPERTY(Transient)
     TObjectPtr<UDeliveryInventoryComponent> Inventory;
 
+    /// 五个格子的边框，下标就是格子序号
     UPROPERTY(Transient)
     TArray<TObjectPtr<UBorder>> SlotBorders;
 
+    /// 五个格子的图标
     UPROPERTY(Transient)
     TArray<TObjectPtr<UImage>> SlotIcons;
 
+    /// 五个格子的耐久条
     UPROPERTY(Transient)
     TArray<TObjectPtr<UProgressBar>> DurabilityBars;
 

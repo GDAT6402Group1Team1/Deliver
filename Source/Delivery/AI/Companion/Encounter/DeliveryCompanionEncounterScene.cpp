@@ -7,6 +7,10 @@
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 
+// ── 初遇场景 ──
+// 面馆门口的初遇场景 Actor：开关门、抛出路线和门口是否被挡住
+
+/// @brief 开启复制、30 次每秒同步，创建门叶、门洞检测盒和几个定位点
 ADeliveryCompanionEncounterScene::ADeliveryCompanionEncounterScene()
 {
     bReplicates = true;
@@ -49,26 +53,31 @@ ADeliveryCompanionEncounterScene::ADeliveryCompanionEncounterScene()
     DoorwayClearance->SetBoxExtent(FVector::ZeroVector);
 }
 
+/// @brief 门口触发点的世界坐标
 FVector ADeliveryCompanionEncounterScene::GetTriggerWorldLocation() const
 {
     return TriggerAnchor->GetComponentLocation();
 }
 
+/// @brief 抛出起点的世界变换
 FTransform ADeliveryCompanionEncounterScene::GetThrowStartTransform() const
 {
     return ThrowStart->GetComponentTransform();
 }
 
+/// @brief 抛出起点的世界坐标
 FVector ADeliveryCompanionEncounterScene::GetThrowStartWorldLocation() const
 {
     return ThrowStart->GetComponentLocation();
 }
 
+/// @brief 抛出落点的世界坐标
 FVector ADeliveryCompanionEncounterScene::GetThrowLandingWorldLocation() const
 {
     return ThrowLanding->GetComponentLocation();
 }
 
+/// @brief 门叶、门洞检测盒、开门时长和蓝图里的门动画都配好时返回 true
 bool ADeliveryCompanionEncounterScene::HasDoorConfiguration() const
 {
     if (!IsValid(DoorLeaf) || !DoorLeaf->GetStaticMesh() || !DoorLeaf->IsQueryCollisionEnabled() ||
@@ -82,6 +91,7 @@ bool ADeliveryCompanionEncounterScene::HasDoorConfiguration() const
     return !Extent.ContainsNaN() && Extent.GetMin() > UE_SMALL_NUMBER;
 }
 
+/// @brief 只接收服务器请求；返回 true 表示接受目标，门被挡住时会等待，不表示已经开关到位
 bool ADeliveryCompanionEncounterScene::RequestDoorOpen(bool bOpen)
 {
     if (!HasAuthority() || IsActorBeingDestroyed() || !GetWorld() || !HasDoorConfiguration()) return false;
@@ -95,11 +105,13 @@ bool ADeliveryCompanionEncounterScene::RequestDoorOpen(bool bOpen)
     return true;
 }
 
+/// @brief 门已经完全打开
 bool ADeliveryCompanionEncounterScene::IsDoorOpen() const
 {
     return DoorProgress >= 1.f - UE_KINDA_SMALL_NUMBER;
 }
 
+/// @brief 用实际门框和抛出方向判断玩家是否已经离开面馆内侧
 bool ADeliveryCompanionEncounterScene::IsPastDoorway(const FVector& Position) const
 {
     const FVector Outward=(GetThrowLandingWorldLocation()-GetThrowStartWorldLocation()).GetSafeNormal2D();
@@ -111,11 +123,13 @@ bool ADeliveryCompanionEncounterScene::IsPastDoorway(const FVector& Position) co
     return FVector::DotProduct(Outward,FromDoor)>DoorwayDepth || FromDoor.SizeSquared2D()>FMath::Square(900.f);
 }
 
+/// @brief 客户端开始抛出演出前同时确认服务器进度和本机门叶表现，等待跨 Actor 复制到齐
 bool ADeliveryCompanionEncounterScene::IsDoorPresentationOpen() const
 {
     return HasActorBegunPlay() && IsDoorOpen() && DisplayedDoorProgress >= 1.f - UE_KINDA_SMALL_NUMBER;
 }
 
+/// @brief 门洞检测盒里有人、车或物理物体时返回 true，配置不全也按占用处理
 bool ADeliveryCompanionEncounterScene::IsDoorwayOccupied() const
 {
     const UWorld* World = GetWorld();
@@ -133,6 +147,7 @@ bool ADeliveryCompanionEncounterScene::IsDoorwayOccupied() const
         FCollisionShape::MakeBox(DoorwayClearance->GetScaledBoxExtent()), Query);
 }
 
+/// @brief 写入门是否被挡并同步，没变化就不写
 void ADeliveryCompanionEncounterScene::SetDoorBlocked(bool bBlocked)
 {
     if (bDoorBlocked == bBlocked) return;
@@ -140,6 +155,7 @@ void ADeliveryCompanionEncounterScene::SetDoorBlocked(bool bBlocked)
     ForceNetUpdate();
 }
 
+/// @brief 服务器写入初遇被什么挡住并同步，再调用 OnRep_EncounterObstruction
 void ADeliveryCompanionEncounterScene::SetEncounterObstruction(EDeliveryCompanionEncounterObstruction Obstruction)
 {
     if (!HasAuthority() || EncounterObstruction==Obstruction) return;
@@ -148,11 +164,13 @@ void ADeliveryCompanionEncounterScene::SetEncounterObstruction(EDeliveryCompanio
     OnRep_EncounterObstruction();
 }
 
+/// @brief 广播 OnEncounterObstructionChanged
 void ADeliveryCompanionEncounterScene::OnRep_EncounterObstruction()
 {
     OnEncounterObstructionChanged.Broadcast();
 }
 
+/// @brief 按当前门的进度摆好门叶，服务器门还没到目标位置时开启 Tick
 void ADeliveryCompanionEncounterScene::BeginPlay()
 {
     Super::BeginPlay();
@@ -161,6 +179,7 @@ void ADeliveryCompanionEncounterScene::BeginPlay()
     if (HasAuthority()) SetActorTickEnabled(!FMath::IsNearlyEqual(DoorProgress, bRequestedOpen ? 1.f : 0.f));
 }
 
+/// @brief 服务器推进门的进度，门洞有人时停住；客户端把显示进度平滑追到服务器进度
 void ADeliveryCompanionEncounterScene::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
@@ -200,6 +219,7 @@ void ADeliveryCompanionEncounterScene::Tick(float DeltaSeconds)
     if (FMath::IsNearlyEqual(DisplayedDoorProgress, DoorProgress)) SetActorTickEnabled(false);
 }
 
+/// @brief 客户端收到门的进度：第一次或门已全开时直接对齐，否则开 Tick 平滑追上
 void ADeliveryCompanionEncounterScene::OnRep_DoorState()
 {
     // 初次收到状态直接对齐；已确认完全打开时结束尾部插值，避免本机门叶挡住随后到达的抛出阶段
@@ -212,12 +232,14 @@ void ADeliveryCompanionEncounterScene::OnRep_DoorState()
     if (HasActorBegunPlay()) SetActorTickEnabled(!FMath::IsNearlyEqual(DisplayedDoorProgress, DoorProgress));
 }
 
+/// @brief 关掉 Tick
 void ADeliveryCompanionEncounterScene::EndPlay(const EEndPlayReason::Type Reason)
 {
     SetActorTickEnabled(false);
     Super::EndPlay(Reason);
 }
 
+/// @brief 复制门的进度、是否被挡和初遇阻挡状态
 void ADeliveryCompanionEncounterScene::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);

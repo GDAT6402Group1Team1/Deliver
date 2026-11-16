@@ -28,6 +28,7 @@ _slot = threading.BoundedSemaphore(1)
 
 @dataclass(frozen=True)
 class CombatDecisionResult:
+    """本地战斗模型一次选择的结果：proposal 是选中的动作，失败时 fallback_reason 写原因"""
     proposal: dict | None = None
     fallback_reason: str = ''
 
@@ -84,6 +85,7 @@ def prepare_combat_context(context):
         if person.get('subject_id') not in aliases:
             aliases[person['subject_id']] = 'person_' + str(len(aliases) - 2)
     def alias(value):
+        """把实际编号换成提示里用的别名，没有对应的返回 unknown"""
         return aliases.get(value, 'unknown')
     events = []
     evidence = context.get('evidence', [])
@@ -113,6 +115,7 @@ def prepare_runtime_combat_context(context):
 
 
 def combat_schema(actions):
+    """只允许 actions 里的动作的 JSON 输出格式，Wait 不带目标，其他动作目标固定为 opponent"""
     return {'oneOf': [{'type': 'object', 'additionalProperties': False,
                         'properties': {'action': {'const': action},
                                        'target_id': {'const': '' if action == 'Wait' else 'opponent'}},
@@ -120,6 +123,7 @@ def combat_schema(actions):
 
 
 def parse_combat_choice(text, candidates):
+    """解析模型输出的 JSON，动作不在 candidates 里或目标不对时抛出 ValueError"""
     value = json.loads(text)
     if (not isinstance(value, dict) or set(value) != {'action', 'target_id'} or value['action'] not in candidates
             or value['target_id'] != ('' if value['action'] == 'Wait' else 'opponent')):
@@ -128,6 +132,7 @@ def parse_combat_choice(text, candidates):
 
 
 def _endpoint(value):
+    """把 endpoint 解析成本机的主机和端口，不是本机 http 地址时抛出 ValueError"""
     parsed = urlsplit(value)
     if parsed.scheme != 'http' or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError('invalid_local_endpoint')
@@ -143,6 +148,7 @@ class LocalCombatClient:
     """一次调用共用一个截止时间；取消时关掉连接，让本地服务停止当前生成"""
     def __init__(self, endpoint, timeout_seconds=1.5, model='delivery-npc-qwen3', seed=None, temperature=0.,
                  *, compact_output=False):
+        """保存本地模型的地址、超时、模型名和采样参数"""
         self.host, self.port = _endpoint(endpoint)
         if not .1 <= timeout_seconds <= 30:
             raise ValueError('invalid_timeout')
@@ -157,6 +163,7 @@ class LocalCombatClient:
         self.compact_output = compact_output
 
     def _choose_compact(self, post, check, mark, messages, candidates, cache_slot):
+        """紧凑模式：先套聊天模板，再只让模型补全动作名，返回解析后的选择"""
         actions = sorted(candidates)
         if not actions or any(action not in SUPPORTED_ACTIONS for action in actions):
             raise ValueError('invalid_combat_choices')
@@ -191,6 +198,7 @@ class LocalCombatClient:
         return action
 
     def is_idle(self):
+        """查询本地模型的 /slots，没有正在处理的请求时返回 True"""
         connection = http.client.HTTPConnection(self.host, self.port, timeout=.5)
         try:
             connection.request('GET', '/slots')
@@ -204,6 +212,7 @@ class LocalCombatClient:
             connection.close()
 
     def choose(self, prompt, candidates, cancel, measure=None, *, cache_slot=None):
+        """让本地战斗模型从 candidates 里选一个动作；cancel 被设置或超时就停止并关闭连接"""
         self.last_output = ''
         self.last_usage = None
         if cache_slot is not None and (type(cache_slot) is not int or cache_slot not in RESIDENT_CACHE_SLOTS.values()):
@@ -214,17 +223,20 @@ class LocalCombatClient:
         current = [None]
         active_socket = [None]
         def check():
+            """已取消时抛出 cancelled，超时时抛出 TimeoutError"""
             if cancel.is_set():
                 raise RuntimeError('cancelled')
             if time.monotonic() >= deadline:
                 raise TimeoutError('combat_model_timeout')
         def mark(stage):
+            """记录从开始到 stage 这一步用了多少毫秒"""
             if measure:
                 try:
                     measure(stage, (time.monotonic() - started) * 1000)
                 except Exception:
                     pass
         def close_connection():
+            """关闭当前的 HTTP 连接，让阻塞的读取立即返回"""
             connection = current[0]
             if connection is not None:
                 try:
@@ -234,11 +246,13 @@ class LocalCombatClient:
                     pass
                 connection.close()
         def watch_cancel():
+            """后台每 0.02 秒检查一次，取消或超时就关闭连接"""
             while not finished.wait(.02):
                 if cancel.is_set() or time.monotonic() >= deadline:
                     close_connection()
                     return
         def post(path, body):
+            """向本地模型发送一个 POST 请求并返回解析后的 JSON"""
             check()
             connection = http.client.HTTPConnection(self.host, self.port, timeout=max(.01, deadline-time.monotonic()))
             current[0] = connection
@@ -309,6 +323,7 @@ class LocalCombatClient:
 def _release_when_idle(client):
     """HTTP 已取消后仍可能有短暂推理；确认服务空闲才接受下一次本地决定"""
     def wait_for_slot():
+        """等本地模型空闲后释放调用名额"""
         while not client.is_idle():
             time.sleep(.2)
         _slot.release()

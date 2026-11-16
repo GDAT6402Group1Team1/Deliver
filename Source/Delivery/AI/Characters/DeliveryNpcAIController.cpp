@@ -15,7 +15,12 @@
 #include "Navigation/PathFollowingComponent.h"
 #include "Engine/OverlapResult.h"
 
-// 创建视觉和听觉感知，视距 1200 cm
+// ── 生命周期 ──
+// 构造函数建好视觉和听觉感知；OnPossess 控制 NPC 后订阅感知通知并启动行为树
+// Tick 每帧在服务器上调用 UpdateObstacleTraversal（越障）和 UpdateStandingSpace（站位）；OnUnPossess 和 EndPlay 停掉这两种移动
+
+/// @brief 建好感知组件：视觉看 1200 cm、前方左右各 100 度，走出 1400 cm 才算看不见；听觉 900 cm
+/// 感知记录 6 秒后过期，敌方、友方、中立都能感知到
 ADeliveryNpcAIController::ADeliveryNpcAIController()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -38,7 +43,7 @@ ADeliveryNpcAIController::ADeliveryNpcAIController()
     Senses->SetDominantSense(Sight->GetSenseImplementation());
 }
 
-// 服务器每帧：处理越障和站位避让
+/// @brief 服务器每帧先调用 UpdateObstacleTraversal 处理越过矮障碍，再调用 UpdateStandingSpace 处理站位
 void ADeliveryNpcAIController::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
@@ -49,7 +54,11 @@ void ADeliveryNpcAIController::Tick(float DeltaSeconds)
     }
 }
 
-// 停止站位避让的移动，只停自己发出的那次寻路
+// ── 站位 ──
+// NPC 空闲时，UpdateStandingSpace 每 0.4 秒看一次身边，和别的 NPC 身体间隔小于 MinStandingGap 就挪开
+// 挪到间隔至少 ComfortableStandingGap 的位置；挪动最多 3 秒，对方忙起来或者已经够远就停，StopSpacingMove 停止这次移动
+
+/// @brief 停止站位用的移动，清掉 SpacingMoveId 和 SpacingNeighbor
 void ADeliveryNpcAIController::StopSpacingMove()
 {
     const FAIRequestID OldId = SpacingMoveId;
@@ -57,12 +66,13 @@ void ADeliveryNpcAIController::StopSpacingMove()
     SpacingNeighbor.Reset();
     SpacingMoveEndsAt = 0;
     auto* Path = GetPathFollowingComponent();
-    // 新动作可能已经替换这条路径，只取消自己发起的那一次移动
+
+    // 路径跟随组件当前的请求编号还是 OldId 才调用 AbortMove；已经被新动作换掉的移动不取消
     if (OldId.IsValid() && Path && Path->GetCurrentRequestId() == OldId)
         Path->AbortMove(*this, FPathFollowingResultFlags::UserAbort, OldId);
 }
 
-// 检查落点周围是否有别的角色挡着
+/// @brief 检查 Destination 周围放不放得下这位 NPC：半径加 MinStandingGap 的范围内没有别的可见 NPC 返回 true
 bool ADeliveryNpcAIController::HasRoomToStand(const ADeliveryNpcCharacter* Npc, const FVector& Destination) const
 {
     const float Gap = FMath::Clamp(MinStandingGap, 20.f, 150.f);
@@ -84,7 +94,8 @@ bool ADeliveryNpcAIController::HasRoomToStand(const ADeliveryNpcCharacter* Npc, 
     return true;
 }
 
-// 空闲时与邻居靠得太近，就挪到留出间隔的位置
+/// @brief 空闲时和最近的 NPC 拉开距离；正在挪的话检查要不要停
+/// bKeepDistanceWhenIdle 为 false、NPC 隐藏或者 CanAdjustStandingPosition 为 false（正在做别的事）时，调用 StopSpacingMove 并返回
 void ADeliveryNpcAIController::UpdateStandingSpace()
 {
     auto* Npc = Cast<ADeliveryNpcCharacter>(GetPawn());
@@ -98,7 +109,8 @@ void ADeliveryNpcAIController::UpdateStandingSpace()
     const float StartGap = FMath::Clamp(MinStandingGap, 20.f, 150.f);
     const float StopGap = FMath::Max(StartGap + 30.f, FMath::Clamp(ComfortableStandingGap, 40.f, 200.f));
 
-    // 正在挪步：拉开距离或超时后停下
+    // SpacingMoveId 有效说明正在挪：移动结束、邻居没了、邻居开始做别的事、距离已经够远（StopGap 再留 8 cm 余量）或超过 SpacingMoveEndsAt，就停下
+    // 停下后 1.2 秒内不再检查
     if (SpacingMoveId.IsValid())
     {
         const auto* Other = SpacingNeighbor.Get();
@@ -113,12 +125,14 @@ void ADeliveryNpcAIController::UpdateStandingSpace()
         }
         return;
     }
+
+    // 没到检查时间、正在走路或者身体还在动，这一帧不检查；检查过后 0.4 秒再查下一次
     if (Now < NextSpacingCheck || GetMoveStatus() != EPathFollowingStatus::Idle ||
         Npc->GetVelocity().SizeSquared2D() > FMath::Square(20.f))
         return;
     NextSpacingCheck = Now + .4;
 
-    // 找出身体间隔小于下限的最近邻居
+    // 在 StartGap 范围内找身体间隔最小的邻居：邻居要站着不动、没在做别的事、上下没错开，而且两人之间没有墙挡着
     TArray<FOverlapResult> Nearby;
     GetWorld()->OverlapMultiByObjectType(Nearby, Npc->GetActorLocation(), FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn),
                                          FCollisionShape::MakeSphere(Npc->GetSimpleCollisionRadius() + StartGap),
@@ -131,7 +145,8 @@ void ADeliveryNpcAIController::UpdateStandingSpace()
         if (!IsValid(Other) || Other == Npc || Other->IsHidden())
             continue;
         const auto& Action = Other->Agent->GetPublicState();
-        // 对方还在向自己出拳或追打时，不用空闲避让替模型决定逃跑
+
+        // 邻居正对着这位 NPC 出拳或交战时直接返回，不挪开，要不要逃跑由模型决定
         if (Other->Agent->HasActiveAction() && Action.Target == Npc &&
             (Action.Action == EDeliveryNpcAction::Fight || Action.Action == EDeliveryNpcAction::StrikeOnce))
             return;
@@ -157,7 +172,8 @@ void ADeliveryNpcAIController::UpdateStandingSpace()
     if (!Neighbor)
         return;
 
-    // 找到新站位后发起寻路
+    // FindStandingSpace 算出离开邻居的新站位，HasRoomToStand 确认那里放得下，再调用 MoveTo；找不到或寻路失败，1.5 秒后再试
+    // 寻路成功后记下 SpacingMoveId 和 SpacingNeighbor，最多挪 3 秒
     FVector Destination;
     if (!Npc->FindStandingSpace(Neighbor, StopGap, Destination) || !HasRoomToStand(Npc, Destination))
     {
@@ -181,7 +197,7 @@ void ADeliveryNpcAIController::UpdateStandingSpace()
         NextSpacingCheck = Now + 1.5;
 }
 
-// 订阅感知更新，启动人物配置的行为树 BT_Resident
+/// @brief 控制 NPC 时调用：服务器上订阅 OnTargetPerceptionUpdated，运行 NPC 配置的 BehaviorTree，再调用一次 RefreshBlackboard
 void ADeliveryNpcAIController::OnPossess(APawn* InPawn)
 {
     Super::OnPossess(InPawn);
@@ -194,7 +210,7 @@ void ADeliveryNpcAIController::OnPossess(APawn* InPawn)
     RefreshBlackboard();
 }
 
-// 停止越障和站位移动，取消感知订阅
+/// @brief 不再控制 NPC 时调用：停止越障和站位移动，清掉受击朝向，取消感知订阅，再调用 Agent->CancelPlan 取消当前计划
 void ADeliveryNpcAIController::OnUnPossess()
 {
     StopObstacleTraversal();
@@ -208,7 +224,7 @@ void ADeliveryNpcAIController::OnUnPossess()
     Super::OnUnPossess();
 }
 
-// 停止越障和站位移动
+/// @brief 控制器结束时停止越障和站位移动
 void ADeliveryNpcAIController::EndPlay(const EEndPlayReason::Type Reason)
 {
     StopObstacleTraversal();
@@ -217,7 +233,12 @@ void ADeliveryNpcAIController::EndPlay(const EEndPlayReason::Type Reason)
     Super::EndPlay(Reason);
 }
 
-// 感知回调：看见记为 Perceived，看不见记为 LostSight，写入 Agent
+// ── 感知 ──
+// UE 的感知组件看见或听见某个角色时调用 OnTargetSeenOrHeard，这里写成一条 FDeliveryNpcObservation 交给 Agent->ObserveEvent
+// 看见写成 Perceived，看不见写成 LostSight；ObserveEvent 返回 true（这件事值得回应）时调用 WakeDecision
+
+/// @brief 感知组件的回调：只处理视觉和听觉，听觉只处理听见，不处理听觉记录过期
+/// 事件保存 45 秒，描述里写对方是谁、当时离多远；看不见时写明可能只是转头或被挡住
 void ADeliveryNpcAIController::OnTargetSeenOrHeard(AActor* Target, FAIStimulus Stimulus)
 {
     auto* Resident = Cast<ADeliveryNpcCharacter>(GetPawn());
@@ -226,7 +247,8 @@ void ADeliveryNpcAIController::OnTargetSeenOrHeard(AActor* Target, FAIStimulus S
     const bool bSight = Stimulus.Type == Sight->GetSenseID();
     const bool bHearing = Stimulus.Type == Hearing->GetSenseID();
     const bool bSensed = Stimulus.WasSuccessfullySensed();
-    // 听觉记录到期不能说明说话的人离开了视线
+
+    // 听觉记录过期不代表说话的人走了，所以听觉只处理 bSensed 为 true 的回调
     if ((!bSight && !bHearing) || (bHearing && !bSensed))
         return;
 
@@ -234,13 +256,14 @@ void ADeliveryNpcAIController::OnTargetSeenOrHeard(AActor* Target, FAIStimulus S
     Event.Kind = bSensed ? TEXT("Perceived") : TEXT("LostSight");
     Event.Subject = Target;
     Event.Source = bHearing ? EDeliveryNpcEvidenceSource::Heard : EDeliveryNpcEvidenceSource::Seen;
-    // 视觉失效回调保留 UE 上次看见的位置，不读取对象当前的坐标
+
+    // 位置用 StimulusLocation：看不见的回调里它是最后一次看见的位置，不读 Target 当前的坐标
     Event.bHasObservedLocation = FAISystem::IsValidLocation(Stimulus.StimulusLocation);
     if (Event.bHasObservedLocation)
         Event.ObservedLocation = Stimulus.StimulusLocation;
     Event.Lifetime = 45;
 
-    // 按对象类型写描述
+    // 按对象类型写名字：NPC 用 DisplayName，摩托车写电瓶车，玩家角色写快递员，其他写行人
     const auto* OtherResident = Cast<ADeliveryNpcCharacter>(Target);
     const FString Subject = OtherResident                       ? OtherResident->DisplayName.ToString()
                             : Target->IsA<ADeliveryMotorbike>() ? TEXT("电瓶车")
@@ -264,7 +287,11 @@ void ADeliveryNpcAIController::OnTargetSeenOrHeard(AActor* Target, FAIStimulus S
         Resident->WakeDecision();
 }
 
-// 角色每帧调用：把 Agent 状态写进黑板键，行为树据此选择分支
+// ── 行为树 ──
+// NPC 角色每帧调用 RefreshBlackboard，把 Agent 和 NPC 的状态写进黑板，行为树按黑板键选择分支
+
+/// @brief 写黑板键：Unavailable、Listening、HasApprovedAction、HasCompanionErrand、HasNearbyItemSearch、ActionTarget、PlanRevision
+/// 另外每 15 秒把视线里最多 8 个角色写成 VisibleNow 事件交给 Agent，模型请求还在等回复时不写
 void ADeliveryNpcAIController::RefreshBlackboard()
 {
     const auto* Resident = Cast<ADeliveryNpcCharacter>(GetPawn());
@@ -272,14 +299,17 @@ void ADeliveryNpcAIController::RefreshBlackboard()
     if (!Resident || !BB)
         return;
 
-    // 写入 Unavailable、Listening、HasApprovedAction、ActionTarget、PlanRevision 等键
+    // Unavailable：被打倒且不是故意躺下时为 true；Listening 键存在时写 ShouldPauseForConversation
     const auto State = Resident->Agent->GetPublicState();
     BB->SetValueAsBool(TEXT("Unavailable"), Resident->IsKnockedDown() && !Resident->Combat->IsDeliberatelyProne());
     if (BB->GetKeyID(TEXT("Listening")) != FBlackboard::InvalidKey)
         BB->SetValueAsBool(TEXT("Listening"), Resident->Agent->ShouldPauseForConversation());
-    // 旧黑板资产仍使用这个键名，函数重命名时保留它以兼容已有行为树
+
+    // HasApprovedAction 写 HasActiveAction；函数改过名字，但已有的黑板资产还用这个键名，所以键名不改
     BB->SetValueAsBool(TEXT("HasApprovedAction"), Resident->Agent->HasActiveAction());
-    // 二狗使用独立黑板，普通居民不增加同伴状态；暂停不抹掉已经确认的委托
+
+    // 二狗的黑板有 HasCompanionErrand 键，普通 NPC 的黑板没有，所以先用 GetKeyID 查键在不在
+    // 委托暂停时 HasActiveErrand 仍为 true，黑板不清掉这个委托
     if (BB->GetKeyID(TEXT("HasCompanionErrand")) != FBlackboard::InvalidKey)
     {
         const auto* Companion = Resident->FindComponentByClass<UDeliveryCompanionComponent>();
@@ -289,8 +319,9 @@ void ADeliveryNpcAIController::RefreshBlackboard()
     }
     BB->SetValueAsObject(TEXT("ActionTarget"), State.Target);
     BB->SetValueAsInt(TEXT("PlanRevision"), State.PlanRevision);
-    // 定时更新视野内的角色，让 NPC 记得仍在眼前的人
-    // 这里只更新可见时间，是否请求模型由后续交谈或事件决定
+
+    // 每 15 秒把视线里最多 8 个角色写成 VisibleNow 事件，让 NPC 记得谁还在眼前
+    // 这里只调用 ObserveEvent，不调用 WakeDecision；要不要问模型由之后的交谈或别的事件决定
     const double Now = GetWorld()->GetTimeSeconds();
     if (Now >= NextSightRefresh && !Resident->Agent->IsDecisionPending())
     {

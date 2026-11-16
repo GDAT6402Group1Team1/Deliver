@@ -10,22 +10,26 @@ AudioCallback = C.CFUNCTYPE(C.c_bool, FloatPtr, C.c_int, C.c_void_p)
 
 
 class InitParams(C.Structure):
+    """本地语音库初始化参数，字段顺序和 C 结构体一致"""
     _fields_ = [('abi_version', C.c_int), ('talker_path', C.c_char_p),
                 ('codec_path', C.c_char_p), ('use_fa', C.c_bool), ('clamp_fp16', C.c_bool),
                 ('max_batch', C.c_int), ('codec_chunk_sec', C.c_float), ('device', C.c_char_p)]
 
 
 class Audio(C.Structure):
+    """本地语音库返回的一段音频"""
     _fields_ = [('samples', FloatPtr), ('n_samples', C.c_int),
                 ('sample_rate', C.c_int), ('channels', C.c_int)]
 
 
 class VoiceReference(C.Structure):
+    """克隆音色用的参考数据：说话人向量和参考音频编码"""
     _fields_ = [('ref_spk_emb', FloatPtr), ('ref_spk_dim', C.c_int),
                 ('ref_codes', IntPtr), ('ref_T', C.c_int), ('num_codebooks', C.c_int)]
 
 
 class TtsParams(C.Structure):
+    """一次合成的参数，字段顺序和 C 结构体一致"""
     _fields_ = [('abi_version', C.c_int), ('text', C.c_char_p), ('lang', C.c_char_p),
                 ('instruct', C.c_char_p), ('speaker', C.c_char_p),
                 ('ref_audio_24k', FloatPtr), ('ref_n_samples', C.c_int), ('ref_text', C.c_char_p),
@@ -40,7 +44,9 @@ class TtsParams(C.Structure):
 
 
 class NativeLibrary:
+    """加载本地语音动态库并声明各个导出函数的参数和返回类型"""
     def __init__(self, path, *, shared_codec=False):
+        """加载 path 指向的动态库，shared_codec 为 True 时声明共享编码器用的函数"""
         self.directory = os.add_dll_directory(str(path.parent)) if os.name == 'nt' else None
         try:
             self.lib = C.CDLL(str(path))

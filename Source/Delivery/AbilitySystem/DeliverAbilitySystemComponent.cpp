@@ -13,6 +13,9 @@
 #include "GameplayEffect.h"
 #include "Vehicle/Trunk/DeliveryTrunkPassengerComponent.h"
 
+// ── 生命周期 ──
+
+/// @brief 同步给所有客户端，复制方式为 Mixed：本机玩家收到完整的效果和属性，其他客户端只收到标签和特效
 UDeliverAbilitySystemComponent::UDeliverAbilitySystemComponent()
 {
 	// ASC 跟随 PlayerState 复制
@@ -22,7 +25,7 @@ UDeliverAbilitySystemComponent::UDeliverAbilitySystemComponent()
 	SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 }
 
-// 连接技能拥有者与角色，并在服务器授予初始拳击技能
+/// @brief 设置技能的拥有者（PlayerState）和执行者（角色），从角色读取配置；服务器上第一次调用时授予左右拳技能并订阅血量变化
 void UDeliverAbilitySystemComponent::InitializeAbilityActor(AActor* Owner, AActor* Avatar)
 {
 	/** 初始化技能拥有者和实际执行技能的角色 */
@@ -62,7 +65,10 @@ void UDeliverAbilitySystemComponent::InitializeAbilityActor(AActor* Owner, AActo
 	    .AddUObject(this, &UDeliverAbilitySystemComponent::OnHealthChanged);
 }
 
-// 根据生命值切换晕倒状态，并在需要时启动回血
+// ── 晕倒 ──
+
+/// @brief 服务器：血量变化时调用；没晕倒时血量到 0 就调用 SetStunned(true)，晕倒时血量回到起身线就调用 SetStunned(false)
+/// 在后备箱里时血量到 40% 调用 RequestExit 请求出箱；血量低于上限、而且还没有回血效果时应用 HealthRegenEffect
 void UDeliverAbilitySystemComponent::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
 	const float MaxHealth = GetNumericAttribute(UDeliverAttributeSet::GetMaxHealthAttribute());
@@ -106,7 +112,7 @@ void UDeliverAbilitySystemComponent::OnHealthChanged(const FOnAttributeChangeDat
 	}
 }
 
-// 统一处理晕倒和苏醒，包括技能中断、手持物和身体控制
+/// @brief 服务器：进入或退出晕倒；晕倒时挂 State.Stunned、打断技能、松手、丢下手持物、身体瘫软，起身时让拖着自己的玩家松手、身体站起
 void UDeliverAbilitySystemComponent::SetStunned(bool bNewStunned)
 {
 	if (bStunned == bNewStunned || !GetOwner() || !GetOwner()->HasAuthority())
@@ -151,6 +157,8 @@ void UDeliverAbilitySystemComponent::SetStunned(bool bNewStunned)
 	}
 }
 
+/// @brief 服务器：玩家从后备箱出来后调用；血量够了才调用 SetStunned(false) 起身，还在箱里时不起身
+/// @param bWakeAtFortyPercent true 时血量到 40% 就起身，false 时按 StunRecoverHealthPercent
 void UDeliverAbilitySystemComponent::CompleteTrunkRecovery(bool bWakeAtFortyPercent)
 {
     if (!GetOwner() || !GetOwner()->HasAuthority()) return;

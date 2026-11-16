@@ -38,6 +38,7 @@ CHARACTER_DECISION_INSTRUCTIONS = '''这是夸张的街坊动作喜剧，人物�
 
 
 def valid_profile_id(value):
+    """人物编号为空，或是小写字母开头、最多 48 位的小写字母数字下划线"""
     return isinstance(value, str) and (not value or re.fullmatch(r'[a-z][a-z0-9_]{0,47}', value) is not None)
 
 
@@ -68,11 +69,13 @@ def select_resident_profiles(source):
 
 
 def _text_list(value, maximum):
+    """value 是最多 maximum 条、每条 1～200 字的字符串列表"""
     return (isinstance(value, list) and len(value) <= maximum and
             all(isinstance(item, str) and 0 < len(item) <= 200 for item in value))
 
 
 def _validate_combat_preferences(values, *, defaults=False):
+    """战斗倾向的每一项都是 0～100 的整数；defaults 为 True 时必须写全所有项"""
     if (not isinstance(values, dict) or values.keys() - COMBAT_PREFERENCE_KEYS or
             any(type(value) is not int or not 0 <= value <= 100 for value in values.values()) or
             (defaults and values.keys() != COMBAT_PREFERENCE_KEYS)):
@@ -81,6 +84,7 @@ def _validate_combat_preferences(values, *, defaults=False):
 
 @lru_cache(maxsize=1)
 def _read_profiles():
+    """读取 NpcProfiles.json，检查版本和字段后返回世界背景和每个人物的配置"""
     # 每次启动读取一次，后续请求不会反复访问文件，也不会载入别的目录
     source = json.loads(PROFILE_PATH.read_text(encoding='utf-8'))
     shared = source.get('world_background', [])
@@ -139,6 +143,7 @@ def character_background(context):
 
 
 def with_character_background(context):
+    """去掉请求里自带的人物字段，换成人物表里这个人物的背景、示例和战斗倾向"""
     # 外来的同名字段不能覆盖项目配置，历史请求仍可省略 profile_id
     profile_fields = ('background', 'dialogue_examples', 'action_examples', 'combat_preferences', 'relationships')
     result = {key: value for key, value in context.items() if key not in profile_fields}

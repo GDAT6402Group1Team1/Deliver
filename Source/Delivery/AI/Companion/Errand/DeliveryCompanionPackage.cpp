@@ -12,35 +12,46 @@
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 
+// ── 快递包裹 ──
+// 二狗接过、拿着、交出快递包裹；包裹归属仍走原来的携带接口
+
+/// @brief 二狗手上的任务包裹，转给组件的 GetCarriedTaskPackage
 ADeliveryPackageItem* ADeliveryCompanionCharacter::GetCarriedTaskPackage() const
 {
     return Companion->GetCarriedTaskPackage();
 }
+/// @brief 二狗代表的玩家就是主人，任务和奖励按主人结算
 APlayerState* ADeliveryCompanionCharacter::GetTaskPlayerState() const
 {
     return Companion->GetOwnerPlayerState();
 }
+/// @brief 二狗站着、没在骑车、主人在线时可以拿任务包裹
 bool ADeliveryCompanionCharacter::CanHandleTaskPackage() const
 {
     const auto* Player = GetTaskPlayerState();
     return !IsKnockedDown() && !Companion->IsUsingErrandVehicle() && IsValid(Player) && Player->GetWorld() == GetWorld() && !Player->IsInactive();
 }
+/// @brief 转给组件的 CanReceiveTaskPackage
 bool ADeliveryCompanionCharacter::CanReceiveTaskPackage(ADeliveryPackageItem* Package) const
 {
     return Companion->CanReceiveTaskPackage(Package);
 }
+/// @brief 转给组件的 TryReceiveTaskPackage
 bool ADeliveryCompanionCharacter::TryReceiveTaskPackage(ADeliveryPackageItem* Package)
 {
     return Companion->TryReceiveTaskPackage(Package);
 }
+/// @brief 转给组件的 ReleaseTaskPackage
 bool ADeliveryCompanionCharacter::ReleaseTaskPackage(ADeliveryPackageItem* Package)
 {
     return Companion->ReleaseTaskPackage(Package);
 }
+/// @brief 包裹按普通手持物品的方式挂到二狗身上，转给 ApplyHandheldItemPresentation
 void ADeliveryCompanionCharacter::ApplyTaskPackagePresentation(ADeliveryPackageItem* Package)
 {
     ApplyHandheldItemPresentation(Package);
 }
+/// @brief 把二狗手上的物品挂到手上或车上：骑专属车时挂到车的货位，否则挂到手持挂点
 void ADeliveryCompanionCharacter::ApplyHandheldItemPresentation(ADeliveryHandheldItem* Item)
 {
     if (!IsValid(Companion) || !IsValid(Item) || Item->IsActorBeingDestroyed() || IsActorBeingDestroyed() ||
@@ -128,10 +139,12 @@ void ADeliveryCompanionCharacter::ApplyHandheldItemPresentation(ADeliveryHandhel
     if (IsCurrent() && HasAuthority()) Item->ForceNetUpdate();
 }
 
+/// @brief 二狗手上的东西是任务包裹时返回它
 ADeliveryPackageItem* UDeliveryCompanionComponent::GetCarriedTaskPackage() const
 {
     return Cast<ADeliveryPackageItem>(GetCarriedItem());
 }
+/// @brief 二狗能拿包裹、手上空着、没有家居安排，且包裹允许被二狗取走
 bool UDeliveryCompanionComponent::CanReceiveTaskPackage(ADeliveryPackageItem* Package) const
 {
     const auto* Npc = GetCompanion();
@@ -141,6 +154,7 @@ bool UDeliveryCompanionComponent::CanReceiveTaskPackage(ADeliveryPackageItem* Pa
     // 查询容量时物品仍可属于原持有人，真正接收必须等服务器交接释放
     return Item && Item->CanBeAcquiredBy(Npc);
 }
+/// @brief 服务器把包裹放进二狗唯一的持物槽，再按任务状态登记取件，不重复接单
 bool UDeliveryCompanionComponent::TryReceiveTaskPackage(ADeliveryPackageItem* Package)
 {
     if (!GetOwner()->HasAuthority() || !CanReceiveTaskPackage(Package) || Package->GetOwner()) return false;
@@ -149,7 +163,7 @@ bool UDeliveryCompanionComponent::TryReceiveTaskPackage(ADeliveryPackageItem* Pa
     const TWeakObjectPtr<ADeliveryPackageItem> WeakPackage(Package);
     auto* Item = Package->GetDeliveryItemComponent();
     const auto* Manager = UDeliveryTaskManagerComponent::Get(this);
-    // 换手时任务已经进行中，不重复接单、重置计时或把“未推进任务”当作接收失败
+    // 换手时任务已经在进行中：不再接单、不重置计时，也不把任务状态没有前进当成接收失败
     if (!Manager || (Manager->GetTaskStatus(Item->OwningTask) != EDeliveryTaskStatus::InProgress &&
         !Item->NotifyAcquired(OwnerPlayerState)))
     {
@@ -162,21 +176,25 @@ bool UDeliveryCompanionComponent::TryReceiveTaskPackage(ADeliveryPackageItem* Pa
     if (IsValid(Package)) Package->ForceNetUpdate();
     return GetCarriedTaskPackage() == Package;
 }
+/// @brief 二狗手上拿的就是 Package 时释放它
 bool UDeliveryCompanionComponent::ReleaseTaskPackage(ADeliveryPackageItem* Package)
 {
     return IsValid(Package) && GetCarriedTaskPackage()==Package && ReleaseCarriedItem(Package);
 }
 
+/// @brief 客户端收到持物变化时刷新包裹的挂载表现
 void UDeliveryCompanionComponent::OnRep_CarriedPackage()
 {
     if (IsValid(CarriedPackage)) CarriedPackage->RefreshCarrierPresentation();
 }
+/// @brief 手上的物品被销毁时清空持物槽并同步
 void UDeliveryCompanionComponent::OnCarriedPackageDestroyed(AActor* DestroyedActor)
 {
     if (!GetOwner()->HasAuthority() || CarriedPackage != DestroyedActor) return;
     CarriedPackage = nullptr;
     GetOwner()->ForceNetUpdate();
 }
+/// @brief 把手上的物品原地放到地上，任务和奖励不变
 void UDeliveryCompanionComponent::DropCarriedItem()
 {
     auto* Item=GetCarriedItem();
@@ -186,12 +204,14 @@ void UDeliveryCompanionComponent::DropCarriedItem()
     if (IsValid(Item)) Item->ForceNetUpdate();
 }
 
+/// @brief 持物槽里仍属于二狗的那件物品，没有返回空
 ADeliveryHandheldItem* UDeliveryCompanionComponent::GetCarriedItem() const
 {
     return IsValid(CarriedPackage) && !CarriedPackage->IsActorBeingDestroyed() &&
         CarriedPackage->GetOwner()==GetOwner()?CarriedPackage.Get():nullptr;
 }
 
+/// @brief 二狗手上空着、没有家居安排，且这件普通物品允许转给二狗
 bool UDeliveryCompanionComponent::CanReceiveCarriedItem(ADeliveryHandheldItem* Item) const
 {
     const auto* Npc=GetCompanion();
@@ -201,11 +221,13 @@ bool UDeliveryCompanionComponent::CanReceiveCarriedItem(ADeliveryHandheldItem* I
         !HasActiveHomeArrangement() && !PendingHomeArrangementId.IsValid();
 }
 
+/// @brief 服务器检查 CanReceiveCarriedItem 后调用 StoreCarriedItem 放进持物槽
 bool UDeliveryCompanionComponent::TryReceiveCarriedItem(ADeliveryHandheldItem* Item)
 {
     return GetOwner() && GetOwner()->HasAuthority() && CanReceiveCarriedItem(Item) && StoreCarriedItem(Item);
 }
 
+/// @brief 把物品写进持物槽、设所有者为二狗、订阅销毁事件，并刷新挂载表现
 bool UDeliveryCompanionComponent::StoreCarriedItem(ADeliveryHandheldItem* Item)
 {
     if (!GetOwner() || !GetOwner()->HasAuthority() || !IsValid(Item) || Item->IsActorBeingDestroyed() ||
@@ -222,6 +244,7 @@ bool UDeliveryCompanionComponent::StoreCarriedItem(ADeliveryHandheldItem* Item)
     return GetCarriedItem()==Item;
 }
 
+/// @brief 清空持物槽和所有者，解绑销毁事件；挂载表现由接收方或掉落流程负责
 bool UDeliveryCompanionComponent::ReleaseCarriedItem(ADeliveryHandheldItem* Item)
 {
     if (!GetOwner() || !GetOwner()->HasAuthority() || !IsValid(Item) || GetCarriedItem()!=Item) return false;
@@ -234,26 +257,33 @@ bool UDeliveryCompanionComponent::ReleaseCarriedItem(ADeliveryHandheldItem* Item
     return true;
 }
 
+/// @brief 二狗手上的普通物品
 ADeliveryHandheldItem* ADeliveryCompanionCharacter::GetCarriedHandheldItem() const { return Companion->GetCarriedItem(); }
+/// @brief 手持物品按主人结算
 APlayerState* ADeliveryCompanionCharacter::GetHandheldOwnerPlayerState() const { return Companion->GetOwnerPlayerState(); }
+/// @brief 已结识、主人在线、没在受击反应时可以拿普通物品
 bool ADeliveryCompanionCharacter::CanHandleHandheldItem() const
 {
     const auto* Player=GetHandheldOwnerPlayerState();
     return CanHandleTaskPackage() && IsValid(Player->GetPlayerController()) &&
         Companion->GetMode()!=EDeliveryCompanionMode::Unrecruited && (!Combat || !Combat->IsReactingToHit());
 }
+/// @brief Item 就在二狗的持物槽里时返回 true
 bool ADeliveryCompanionCharacter::OwnsHandheldItem(const ADeliveryHandheldItem* Item) const
 {
     return IsValid(Item) && Companion->GetCarriedItem()==Item && Item->GetOwner()==this;
 }
+/// @brief 转给组件的 CanReceiveCarriedItem
 bool ADeliveryCompanionCharacter::CanReceiveHandheldItem(ADeliveryHandheldItem* Item) const
 {
     return Companion->CanReceiveCarriedItem(Item);
 }
+/// @brief 转给组件的 TryReceiveCarriedItem
 bool ADeliveryCompanionCharacter::TryReceiveHandheldItem(ADeliveryHandheldItem* Item)
 {
     return Companion->TryReceiveCarriedItem(Item);
 }
+/// @brief 只释放普通物品，转给组件的 ReleaseCarriedItem
 bool ADeliveryCompanionCharacter::ReleaseHandheldItem(ADeliveryHandheldItem* Item)
 {
     return DeliveryHandheldTransfer::IsOrdinaryItem(Item) && Companion->ReleaseCarriedItem(Item);

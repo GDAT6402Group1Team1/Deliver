@@ -9,6 +9,7 @@ class AudioStreamComplete(Exception):
     """官方生成已确认结束，流式调用直接完成尾音，省去再次整句解码"""
 
     def __init__(self, stream):
+        """保存所属的音频流"""
         self.stream = stream
 
 
@@ -16,6 +17,7 @@ class AudioChunkStream:
     """每次合成使用一个实例，退出时移除模型回调，不保留已发送的 PCM"""
 
     def __init__(self, engine, task, check, on_chunk):
+        """准备一句话的流式解码：每生成 chunk_frames 帧就解码一次，0 表示不分段"""
         self.engine, self.task = engine, task
         self.check, self.on_chunk = check, on_chunk
         self.chunk_frames = getattr(task, 'chunk_frames', 0)
@@ -40,6 +42,7 @@ class AudioChunkStream:
         self.decode_ms = 0.0
 
     def __enter__(self):
+        """在模型上挂钩子收集每一帧的音频编码，开始后台发送"""
         if not self.chunk_frames:
             return self
         self.check()
@@ -69,6 +72,7 @@ class AudioChunkStream:
         return self
 
     def __exit__(self, *_):
+        """去掉钩子，恢复分词器设置"""
         if self.hook is not None:
             self.hook.remove()
             self.hook = None
@@ -84,6 +88,7 @@ class AudioChunkStream:
             self.sender.close()
 
     def complete_generation(self, items):
+        """生成结束后核对最终音频编码和流式收集的编码一致"""
         self.check()
         if (self.finished or self.final_codes_checked or not self.codes
                 or not isinstance(items, list) or len(items) != 1
@@ -98,12 +103,14 @@ class AudioChunkStream:
         raise AudioStreamComplete(self)
 
     def _all_codes(self):
+        """把参考音频编码和已生成的编码拼在一起"""
         codes = self.engine.torch.stack(self.codes)
         if self.reference_codes is not None:
             codes = self.engine.torch.cat((self.reference_codes.to(codes.device), codes), dim=0)
         return codes
 
     def observe(self, _module, _args, _kwargs, output):
+        """钩子回调：收集这一帧的编码，凑够 chunk_frames 帧就调用 decode_prefix"""
         self.check()
         if self.sender is not None:
             self.sender.check_error()
@@ -133,6 +140,7 @@ class AudioChunkStream:
             self.decode_prefix()
 
     def decode_prefix(self):
+        """解码到目前为止的全部编码，只发出上次之后新增的那段音频"""
         self.check()
         if self.finished or len(self.codes) <= self.last_decoded_frame:
             raise NeuralTtsError('neural_tts_stream_layout_changed')
@@ -168,6 +176,7 @@ class AudioChunkStream:
         self.last_decoded_frame = len(self.codes)
 
     def send_pcm(self, pcm):
+        """检查 PCM 长度后交给后台发送"""
         self.check()
         if (self.finished or not pcm or len(pcm) % 2 or self.chunk_count >= MAX_STREAM_CHUNKS
                 or len(pcm) > self.chunk_frames * 3840):
@@ -183,6 +192,7 @@ class AudioChunkStream:
         self.chunk_count += 1
 
     def finish(self, full_pcm_bytes=None):
+        """发出最后一段音频；full_pcm_bytes 给出时核对总长度一致"""
         self.check()
         expected_bytes = len(self.codes) * 3840
         if full_pcm_bytes is None:

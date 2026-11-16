@@ -159,6 +159,10 @@ namespace
     };
 }
 
+// ── 家居候选 ──
+// 列出这间房里可以使用、搬动、摆放的家具，写进模型请求
+
+/// @brief 把共用房屋里能使用、搬动、摆放的家具和记得的家具写进模型请求
 void UDeliveryCompanionComponent::ExtendHomeDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const
 {
     Request.RequestedCapabilityVersion=5;
@@ -320,6 +324,7 @@ void UDeliveryCompanionComponent::ExtendHomeDecisionRequest(FDeliveryNpcDecision
     }
 }
 
+/// @brief 模型选的家居候选仍对应本次请求、当前主人，且二狗空着手、房屋已解锁时返回 true
 bool UDeliveryCompanionComponent::CanApplyHomeChoice(const FDeliveryCompanionHomeChoice& Choice,APlayerState* Requester,int32 ExpectedRevision) const
 {
     auto* Npc=GetCompanion();
@@ -370,6 +375,7 @@ bool UDeliveryCompanionComponent::CanApplyHomeChoice(const FDeliveryCompanionHom
     return StillOffered(Choice.Use,Npc,Requester);
 }
 
+/// @brief 已到手的共用房屋里，二狗熟悉每件家具；人在屋内或门口时不用正对着也能安排
 bool UDeliveryCompanionComponent::KnowsSharedHomeObject(const UDeliveryHomeObjectComponent* Object) const
 {
     const auto* Npc=GetCompanion();
@@ -384,6 +390,7 @@ bool UDeliveryCompanionComponent::KnowsSharedHomeObject(const UDeliveryHomeObjec
         FMath::Square(FMath::Clamp(Home->ObjectSightRadius,100.f,3000.f)+600.f);
 }
 
+/// @brief 每 2 秒检查屋里看得到的家具，最多记 12 件
 void UDeliveryCompanionComponent::RefreshHomeObjectMemories()
 {
     constexpr double ObservationInterval=2.0;
@@ -440,6 +447,7 @@ void UDeliveryCompanionComponent::RefreshHomeObjectMemories()
     }
 }
 
+/// @brief 把这次没在请求里出现、但之前记得的家具写进模型请求，最多 8 件
 void UDeliveryCompanionComponent::CopyHomeObjectMemories(const ADeliveryHome& Home,FDeliveryNpcDecisionRequest& Request) const
 {
     constexpr int32 MaxRequestMemories=8;

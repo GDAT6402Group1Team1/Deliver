@@ -36,11 +36,13 @@ _DIAGNOSTIC_MODEL_NAMES = frozenset(('delivery-npc-qwen3', 'gpt-6-luna', 'gpt-6.
 
 
 def uses_neural_speech(voice):
+    """这个音色使用 Qwen 语音时返回 True"""
     # 每位人物使用声音配置中选定的模型和音色
     return uses_neural_voice(voice)
 
 
 def reply_speech_voice(context):
+    """二狗配置了专属的 Qwen 音色时用 ergou，否则用请求里的 voice"""
     voice = context.get('voice', 'male')
     if voice == 'male' and context.get('profile_id') == 'ergou' and uses_neural_speech('ergou'):
         return 'ergou'
@@ -48,6 +50,7 @@ def reply_speech_voice(context):
 
 
 def neural_speech_queue():
+    """返回 Qwen 语音专用的合成队列，第一次调用时创建，服务关闭后抛出错误"""
     global _neural_speech_pool
     with _resource_lock:
         if _resource_stop.is_set():
@@ -58,6 +61,7 @@ def neural_speech_queue():
 
 
 def neural_speech_synthesizer():
+    """返回 Qwen 语音合成器，第一次调用时创建并登记，服务关闭后抛出错误"""
     global _neural_synth
     with _resource_lock:
         if _resource_stop.is_set():
@@ -75,6 +79,7 @@ def neural_speech_synthesizer():
         return _neural_synth
 
 def register_resource(resource):
+    """登记需要在关闭时释放的资源，服务已关闭时立即关闭它并抛出错误"""
     with _resource_lock:
         if _resource_stop.is_set():
             resource.close()
@@ -83,6 +88,7 @@ def register_resource(resource):
     return resource
 
 def close_resources():
+    """关闭所有语音队列和合成器，正在关闭时返回 False"""
     global _resource_generation, _neural_speech_pool, _neural_synth, _resource_closing
     with _resource_lock:
         if _resource_closing:
@@ -124,6 +130,7 @@ def close_resources():
 
 
 def speech_synthesizer():
+    """返回当前线程用的系统语音合成器，第一次调用时创建并登记"""
     with _resource_lock:
         if _resource_closing or _closing_speech_queues or (_resource_stop.is_set() and _resources):
             raise RuntimeError('server_close_incomplete')
@@ -136,6 +143,7 @@ def speech_synthesizer():
 
 
 def prepare_resources(local_speech=True):
+    """启动时提前准备语音：local_speech 为 True 时预热系统语音，配置了 Qwen 时预加载模型"""
     global _resource_stop
     with _resource_lock:
         if _resource_closing or _closing_speech_queues or (_resource_stop.is_set() and _resources):
@@ -148,6 +156,7 @@ def prepare_resources(local_speech=True):
         futures = []
         if uses_neural_speech('male'):
             def prepare_neural():
+                """后台预加载 Qwen 语音模型，stop 被设置时放弃"""
                 started = time.monotonic()
                 try:
                     neural_speech_synthesizer().prepare(stop)
@@ -162,6 +171,7 @@ def prepare_resources(local_speech=True):
             return futures
         ready = threading.Barrier(2)
         def prepare():
+            """工作线程启动时预热系统语音，之后的台词在同一线程合成"""
             started = time.monotonic()
             try:
                 # 两个工作线程各自准备语音服务，后续台词在同一线程合成
@@ -230,6 +240,7 @@ STREAM_INSTRUCTIONS += BACKGROUND_INSTRUCTIONS + CHARACTER_DECISION_INSTRUCTIONS
 
 
 def compact_context(context):
+    """裁剪请求上下文：只留候选引用的证据、最近的玩家话和新事件，去掉模型用不到的字段"""
     # 先找出玩家这次是否已经得到完整回答，相同文字的新发言仍按编号单独处理
     candidates = context.get('candidates', [])
     needed = {ref for item in candidates for ref in item.get('evidence_ids', [])}
@@ -245,6 +256,7 @@ def compact_context(context):
     player_message_pending = context.get('pending_player_message') is not False
 
     def is_new_event(item):
+        """这条证据是还没回应过的新事件：玩家刚说的话，或需要回复的街坊话"""
         return (item.get('kind') not in ('SelfCombat', 'SelfSpeech', 'ActionReply', 'NpcMessageSent') and
                 (item.get('kind') != 'PlayerSpeech' or player_message_pending) and
                 (item.get('kind') != 'NpcMessage' or
@@ -372,6 +384,7 @@ def model_context(context):
     events, subjects = {}, {}
 
     def alias(value, values, prefix):
+        """把编号换成 prefix 加序号的短别名，同一个编号始终得到同一个别名"""
         if not value:
             return value
         if value not in values:
@@ -465,7 +478,9 @@ class ReplyFormatError(ValueError):
 
 
 class SentenceParser:
+    """按行解析模型的流式输出：第一行是动作提议，之后每行是一句台词，每句通过检查后立即推送"""
     def __init__(self, context, validate, emit):
+        """保存上下文、校验函数和推送函数，初始化行缓冲和计数"""
         self.context, self.validate, self.emit = context, validate, emit
         self.pending = ''
         self.total = 0
@@ -477,6 +492,7 @@ class SentenceParser:
         self.speech_targets = {short['subject_id']: raw['subject_id'] for raw, short in zip(original, encoded)}
 
     def feed(self, delta):
+        """追加一段模型输出，每凑齐一行就调用 line"""
         self.pending += delta
         if len(self.pending) > 8192:
             raise ReplyFormatError('model_line_too_large')
@@ -491,6 +507,7 @@ class SentenceParser:
             self.line(line)
 
     def line(self, line):
+        """解析一行 JSON：第一行当作动作提议校验，之后的行拆成句子推送"""
         if not line.strip():
             return
         try:
@@ -533,6 +550,7 @@ class SentenceParser:
             self.count += 1
 
     def finish(self):
+        """处理最后剩下的半行，没有收到动作提议时抛出 missing_reply"""
         self.line(self.pending)
         self.pending = ''
         if self.proposal is None:
@@ -540,6 +558,7 @@ class SentenceParser:
 
 
 def stream_api(prompt, cancel, on_delta, instructions=STREAM_INSTRUCTIONS):
+    """调用 DELIVERY_AI_MODEL 指定的接口流式生成，每收到一段文字调用 on_delta"""
     payload = {'model': os.environ['DELIVERY_AI_MODEL'], 'stream': True, 'temperature': .4,
                'messages': [{'role': 'system', 'content': instructions}, {'role': 'user', 'content': prompt}]}
     headers = {'Content-Type': 'application/json'}
@@ -582,6 +601,7 @@ def run_job(job, provider, validate, fallback):
     transport_logged = False
 
     def report_transport(mode, reason):
+        """记录这次请求用的是流式接口还是本地模型，只记一次"""
         nonlocal transport_logged
         with completion_lock:
             if transport_logged:
@@ -590,6 +610,7 @@ def run_job(job, provider, validate, fallback):
         print(f"latency request={job.key[2]} stage=transport_selected transport={mode} reason={reason}", flush=True)
 
     def finish_reply(_=None):
+        """模型结束且所有句子的语音都合成完时，推送完成事件"""
         with completion_lock:
             if not model_finished or job.completion.done() or any(not future.done() for future in futures):
                 return
@@ -608,6 +629,7 @@ def run_job(job, provider, validate, fallback):
                 job.completion.set_result(None)
 
     def synthesize(sentence, queued_at):
+        """合成一句台词的语音并推送；支持流式时按段推送音频"""
         started = time.monotonic()
         queue_ms = int((started-queued_at)*1000)
         stream_started = False
@@ -626,6 +648,7 @@ def run_job(job, provider, validate, fallback):
                 job.emit('speech_begin', **sentence, sample_rate=24000, audio_stream_version=1)
                 stream_started = True
                 def on_chunk(pcm):
+                    """把一段音频编码成 base64 推送给游戏，记录第一段音频的时间"""
                     nonlocal chunk_count, total_bytes
                     job.emit('audio_chunk', sequence=sentence['sequence'], chunk_index=chunk_count,
                              offset_bytes=total_bytes, pcm=base64.b64encode(pcm).decode())
@@ -670,6 +693,7 @@ def run_job(job, provider, validate, fallback):
                 else:
                     job.emit('sentence', **sentence, pcm='', sample_rate=16000, audio_error=type(error).__name__)
     def emit(kind, data):
+        """SentenceParser 推送的回调：提议直接发给游戏，台词放进语音队列合成"""
         nonlocal first_sentence
         if job.cancel.is_set():
             raise RuntimeError('cancelled')
@@ -713,6 +737,7 @@ def run_job(job, provider, validate, fallback):
         combat = None
         if provider in ('codex-local', 'llm', 'hybrid'):
             def measure_combat(stage, elapsed_ms):
+                """打印战斗模型各阶段的耗时"""
                 print(f"latency request={job.key[2]} stage={stage} combat_ms={int(elapsed_ms)} "
                       f"elapsed_ms={int((time.monotonic()-job.created)*1000)}", flush=True)
             combat = choose_combat_action(job.context, job.cancel, measure_combat)
@@ -744,6 +769,7 @@ def run_job(job, provider, validate, fallback):
             if not hasattr(_local, 'model'):
                 _local.model = register_resource(AppServer())
             def measure(stage, elapsed_ms):
+                """打印模型连接各阶段的耗时"""
                 print(f"latency request={job.key[2]} stage=model_connection_{stage} "
                       f"connection_ms={int(elapsed_ms)} elapsed_ms={int((time.monotonic()-job.created)*1000)}", flush=True)
             _local.model.stream(prompt, instructions, job.cancel, parser.feed, model=model, measure=measure)

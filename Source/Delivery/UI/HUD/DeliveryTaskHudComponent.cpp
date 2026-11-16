@@ -3,6 +3,9 @@
 #include "Interaction/DeliveryPromptSubsystem.h"
 #include "GameFramework/PlayerController.h"
 
+// ── 生命周期 ──
+
+/// @brief 每 0.05 秒更新一次，不同步
 UDeliveryTaskHudComponent::UDeliveryTaskHudComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
@@ -10,7 +13,7 @@ UDeliveryTaskHudComponent::UDeliveryTaskHudComponent()
     SetIsReplicatedByDefault(false);
 }
 
-// 只为本机玩家创建任务界面控制器
+/// @brief 只为本机玩家创建任务界面控制器
 void UDeliveryTaskHudComponent::BeginPlay()
 {
     Super::BeginPlay();
@@ -22,7 +25,7 @@ void UDeliveryTaskHudComponent::BeginPlay()
     }
 }
 
-// 关闭界面控制器并解除事件订阅
+/// @brief 关闭界面控制器并解除事件订阅
 void UDeliveryTaskHudComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     if (WidgetController)
@@ -30,7 +33,7 @@ void UDeliveryTaskHudComponent::EndPlay(const EEndPlayReason::Type EndPlayReason
     Super::EndPlay(EndPlayReason);
 }
 
-// 读取控制器生成的内容，交给现有任务提示控件显示
+/// @brief 读取控制器生成的内容，交给现有任务提示控件显示
 void UDeliveryTaskHudComponent::TickComponent(float DeltaTime, ELevelTick TickType,
                                               FActorComponentTickFunction *ThisTickFunction)
 {

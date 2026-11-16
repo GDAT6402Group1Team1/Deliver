@@ -10,14 +10,17 @@
 
 namespace
 {
+// 五个分页按钮在 WBP 里的名字，顺序和 ActiveTab 的编号一致
 const TCHAR* TabNames[] = { TEXT("OverviewTab"), TEXT("PerceptionTab"), TEXT("ActionsTab"), TEXT("TimingTab"), TEXT("HistoryTab") };
 
+/// @brief 去掉首尾空白后最多取 Limit 个字；为空时返回未提供
 FString Provided(const FString& Value, int32 Limit = 512)
 {
     FString Text = Value.TrimStartAndEnd();
     return Text.IsEmpty() ? TEXT("未提供") : Text.Left(Limit);
 }
 
+/// @brief 把决策记录的阶段名换成面板上显示的中文
 FString StageText(FName Stage)
 {
     if (Stage == TEXT("Queued")) return TEXT("等待模型");
@@ -33,6 +36,7 @@ FString StageText(FName Stage)
     return TEXT("尚无本轮记录");
 }
 
+/// @brief 把回复的阶段名换成面板上显示的中文
 FString ReplyStageText(FName Stage)
 {
     if (Stage == TEXT("Received")) return TEXT("收到回复文字");
@@ -43,6 +47,7 @@ FString ReplyStageText(FName Stage)
     return TEXT("未提供");
 }
 
+/// @brief 不到 1 秒写毫秒，否则写秒；数值无效或为负时返回未提供
 FString Milliseconds(double Value)
 {
     if (!FMath::IsFinite(Value) || Value < 0) return TEXT("未提供");
@@ -50,14 +55,16 @@ FString Milliseconds(double Value)
         : FString::Printf(TEXT("%.2f 秒"), Value / 1000);
 }
 
+/// @brief 写出 token 数量；为负时返回未提供
 FString Count(int32 Value)
 {
     return Value < 0 ? TEXT("未提供") : FString::FromInt(Value);
 }
 
+/// @brief 把开头的动作名（例如 StrikeOnce）换成中文，后面的说明照原样保留
 FString ActionLabel(const FString& Value)
 {
-    // 只翻译协议动作名的完整前缀，不替换玩家原话或模型台词中的词语
+    // 只换整个动作名，而且后面必须接空格或中文分号；玩家原话和模型台词里出现的同名英文词不换
     struct FActionLabel { const TCHAR* Code; const TCHAR* Label; };
     const FActionLabel Labels[] = {
         { TEXT("ContinueCurrent"), TEXT("继续当前活动") }, { TEXT("Wait"), TEXT("等待") },
@@ -90,6 +97,7 @@ FString ActionLabel(const FString& Value)
     return Provided(Text);
 }
 
+/// @brief 取前 Limit 条，每条前面加圆点、最多 160 字，一行一条；bActions 为 true 时每条先调用 ActionLabel
 FString Lines(const TArray<FString>& Values, int32 Limit, bool bActions = false)
 {
     FString Result;
@@ -102,12 +110,13 @@ FString Lines(const TArray<FString>& Values, int32 Limit, bool bActions = false)
     return Result.IsEmpty() ? TEXT("未提供") : Result;
 }
 
-// 面板没有实时计时器，耗时只在收到带实测数值的快照后变化
+/// @brief 文字和控件上现有的不同时才写入
 void SetLabel(UTextBlock* Label, const FString& Value)
 {
     if (Label && Label->GetText().ToString() != Value) Label->SetText(FText::FromString(Value));
 }
 
+/// @brief 两条记录是同一个世界、同一个请求、同一修订号、同一个人物、同一阶段时返回 true
 bool SameRevision(const FDeliveryNpcDecisionTrace& First, const FDeliveryNpcDecisionTrace& Second)
 {
     return First.WorldEpoch == Second.WorldEpoch && First.RequestId == Second.RequestId &&
@@ -115,22 +124,31 @@ bool SameRevision(const FDeliveryNpcDecisionTrace& First, const FDeliveryNpcDeci
 }
 }
 
+// ── 生命周期 ──
+
+/// @brief 控件建好：调用 BindButtons(true)，再依次调用 RefreshTrace、RefreshHistory、RefreshPresentation
 void UDeliveryAiInspectorWidget::NativeConstruct()
 {
     Super::NativeConstruct();
     BindButtons(true);
-    // HUD 可以先传快照再加入视口，构建时补一次显示即可
+
+    // HUD 可能在控件建好之前就调用了 SetTrace，这里把已经收到的内容显示出来
     RefreshTrace();
     RefreshHistory();
     RefreshPresentation();
 }
 
+/// @brief 控件销毁：调用 BindButtons(false) 解绑所有按钮
 void UDeliveryAiInspectorWidget::NativeDestruct()
 {
     BindButtons(false);
     Super::NativeDestruct();
 }
 
+// ── 数据 ──
+// 观察面板处理器 UDeliveryAiInspectorController 先调用 SetTrace 或 SetHistory，这里再调用 RefreshTrace 或 RefreshHistory 写进控件
+
+/// @brief 记下记录并调用 RefreshTrace 和 RefreshPresentation；RequestId 无效且修订号为 0 时当作没有记录
 void UDeliveryAiInspectorWidget::SetTrace(const FDeliveryNpcDecisionTrace& Value, bool bHistorical)
 {
     const bool bHasValue = Value.RequestId.IsValid() || Value.Revision > 0;
@@ -142,6 +160,7 @@ void UDeliveryAiInspectorWidget::SetTrace(const FDeliveryNpcDecisionTrace& Value
     RefreshPresentation();
 }
 
+/// @brief 清空正在显示的记录，再调用 RefreshTrace 和 RefreshPresentation
 void UDeliveryAiInspectorWidget::ClearTrace()
 {
     Trace = {};
@@ -151,6 +170,7 @@ void UDeliveryAiInspectorWidget::ClearTrace()
     RefreshPresentation();
 }
 
+/// @brief 取前 8 条和现有的逐条比较，有变化才替换并调用 RefreshHistory
 void UDeliveryAiInspectorWidget::SetHistory(const TArray<FDeliveryNpcDecisionTrace>& Values)
 {
     const int32 NewCount = FMath::Min(Values.Num(), 8);
@@ -163,6 +183,9 @@ void UDeliveryAiInspectorWidget::SetHistory(const TArray<FDeliveryNpcDecisionTra
     RefreshHistory();
 }
 
+// ── 布局 ──
+
+/// @brief 记下 HUD 给的最大尺寸（至少 1×1），变化超过半个像素才调用 ApplySize
 void UDeliveryAiInspectorWidget::SetAvailableSize(FVector2D MaxSize)
 {
     if (!FMath::IsFinite(MaxSize.X) || !FMath::IsFinite(MaxSize.Y)) return;
@@ -173,6 +196,7 @@ void UDeliveryAiInspectorWidget::SetAvailableSize(FVector2D MaxSize)
     ApplySize();
 }
 
+/// @brief 设置 InspectorSize：宽度收起时 330、展开时 460，高度最多 540；展开时固定高度，收起时按内容
 void UDeliveryAiInspectorWidget::ApplySize()
 {
     const float Width = FMath::Min(bExpanded ? 460.f : 330.f, float(AvailableSize.X));
@@ -184,10 +208,14 @@ void UDeliveryAiInspectorWidget::ApplySize()
         if (bExpanded) InspectorSize->SetHeightOverride(Height);
         else InspectorSize->ClearHeightOverride();
     }
-    // 详情在 WBP 的 Fill 槽中使用标题与标签之后的剩余空间，不估算文字高度
+
+    // DetailsArea 不设高度：它在 WBP 里是填满剩余空间的槽，标题和分页按钮之外的地方都给它
     if (DetailsArea) DetailsArea->ClearHeightOverride();
 }
 
+// ── 刷新 ──
+
+/// @brief 把 Trace 写进收起时的摘要和五个分页的文字；没有记录时各分页都显示空记录的提示
 void UDeliveryAiInspectorWidget::RefreshTrace()
 {
     SetLabel(NpcName, Trace.NpcName.IsEmpty() ? TEXT("尚未选择人物") : Trace.NpcName.Left(48));
@@ -245,6 +273,7 @@ void UDeliveryAiInspectorWidget::RefreshTrace()
     SetLabel(TimingText, Timing);
 }
 
+/// @brief 有记录的 HistoryButton 显示人物名、阶段、模型建议和执行结果，没有记录的隐藏；没有任何记录时显示 HistoryEmptyLabel
 void UDeliveryAiInspectorWidget::RefreshHistory()
 {
     if (!WidgetTree) return;
@@ -262,6 +291,8 @@ void UDeliveryAiInspectorWidget::RefreshHistory()
     }
 }
 
+/// @brief 按展开状态切换 ExpandedPanel、CompactSummary、EmptyLabel；查看历史时显示历史横幅和回到最新按钮
+/// 当前分页的按钮设为不可点，最后调用 ApplySize
 void UDeliveryAiInspectorWidget::RefreshPresentation()
 {
     if (ExpandedPanel) ExpandedPanel->SetVisibility(bExpanded ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
@@ -278,11 +309,15 @@ void UDeliveryAiInspectorWidget::RefreshPresentation()
     ApplySize();
 }
 
+// ── 按钮回调 ──
+
+/// @brief 调用 SetExpanded 切换展开和收起
 void UDeliveryAiInspectorWidget::ToggleExpanded()
 {
     SetExpanded(!bExpanded);
 }
 
+/// @brief 状态变化时调用 RefreshPresentation，再广播 OnExpandedChanged
 void UDeliveryAiInspectorWidget::SetExpanded(bool bValue)
 {
     if (bExpanded == bValue) return;
@@ -291,7 +326,10 @@ void UDeliveryAiInspectorWidget::SetExpanded(bool bValue)
     OnExpandedChanged.Broadcast(bExpanded);
 }
 
+/// @brief 回到最新按钮：广播 OnLatestRequested，处理器收到后换回最新的记录
 void UDeliveryAiInspectorWidget::RequestLatest() { OnLatestRequested.Broadcast(); }
+
+/// @brief 切到第 Index 个分页，调用 RefreshPresentation，再把 DetailsScroll 滚回顶部
 void UDeliveryAiInspectorWidget::SelectTab(int32 Index)
 {
     if (Index < 0 || Index >= UE_ARRAY_COUNT(TabNames) || ActiveTab == Index) return;
@@ -299,15 +337,21 @@ void UDeliveryAiInspectorWidget::SelectTab(int32 Index)
     RefreshPresentation();
     if (DetailsScroll) DetailsScroll->ScrollToStart();
 }
+
+/// @brief 五个分页按钮的回调，各自调用 SelectTab
 void UDeliveryAiInspectorWidget::ShowOverview() { SelectTab(0); }
 void UDeliveryAiInspectorWidget::ShowPerception() { SelectTab(1); }
 void UDeliveryAiInspectorWidget::ShowActions() { SelectTab(2); }
 void UDeliveryAiInspectorWidget::ShowTiming() { SelectTab(3); }
 void UDeliveryAiInspectorWidget::ShowHistory() { SelectTab(4); }
+
+/// @brief 第 Index 条历史存在时广播 OnHistorySelected，处理器收到后调用 SetTrace 显示那一条
 void UDeliveryAiInspectorWidget::SelectHistory(int32 Index)
 {
     if (History.IsValidIndex(Index)) OnHistorySelected.Broadcast(Index);
 }
+
+/// @brief 八个历史按钮的回调，各自调用 SelectHistory
 void UDeliveryAiInspectorWidget::SelectHistory0() { SelectHistory(0); }
 void UDeliveryAiInspectorWidget::SelectHistory1() { SelectHistory(1); }
 void UDeliveryAiInspectorWidget::SelectHistory2() { SelectHistory(2); }
@@ -317,6 +361,7 @@ void UDeliveryAiInspectorWidget::SelectHistory5() { SelectHistory(5); }
 void UDeliveryAiInspectorWidget::SelectHistory6() { SelectHistory(6); }
 void UDeliveryAiInspectorWidget::SelectHistory7() { SelectHistory(7); }
 
+/// @brief 按 WBP 里的控件名找到展开、回到最新、五个分页和八个历史按钮，bBind 为 true 时绑定点击回调，false 时解绑
 void UDeliveryAiInspectorWidget::BindButtons(bool bBind)
 {
     if (!WidgetTree) return;

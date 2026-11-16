@@ -28,6 +28,7 @@ KNOWN_ACTIONS = frozenset(('Wait', 'LookAt', 'MoveTo', 'Pace', 'MoveAside', 'Str
 
 @dataclass(frozen=True)
 class ActionPromptSelection:
+    """按请求裁剪后的动作说明，以及裁剪前后的长度和哈希"""
     instructions: str
     status: str
     candidate_actions: tuple
@@ -43,6 +44,7 @@ def select_action_instructions(instructions, allowed_actions, candidates):
     offered = ()
 
     def result(text, status, removed=()):
+        """用裁剪后的文字 text 生成选择结果，记录删掉的动作和长度差"""
         return ActionPromptSelection(text, status, offered, removed, len(instructions)-len(text),
             len(instructions.encode('utf-8'))-len(text.encode('utf-8')),
             hashlib.sha256(instructions.encode('utf-8')).hexdigest(),

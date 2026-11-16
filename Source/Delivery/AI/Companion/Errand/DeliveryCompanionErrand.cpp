@@ -154,10 +154,15 @@ namespace
     }
 }
 
+// ── 跑腿委托 ──
+// 取件、接过主人的包裹、送件、交回主人的委托：ApplyCommand 接收后，行为树每帧调用 UpdateErrand 推进阶段
+
+/// @brief 委托状态是 Running
 bool UDeliveryCompanionComponent::HasActiveErrand() const
 {
     return Errand.Status==EDeliveryNpcActionStatus::Running;
 }
+/// @brief 委托正在送货或交回主人，且二狗手上拿的就是这单的原包裹
 bool UDeliveryCompanionComponent::HasErrandPackageInTransit() const
 {
     return HasActiveErrand() &&
@@ -165,6 +170,7 @@ bool UDeliveryCompanionComponent::HasErrandPackageInTransit() const
         IsValid(Errand.Task) && IsValid(Errand.Package) && GetCarriedTaskPackage()==Errand.Package && PackageTask(Errand.Package)==Errand.Task;
 }
 
+/// @brief 当前委托已经接到原件，包括车辆已确认而行为树尚未推进阶段的情况
 bool UDeliveryCompanionComponent::HasReceivedErrandPackage() const
 {
     return HasErrandPackageInTransit() || (HasActiveErrand() && Errand.Phase==EDeliveryCompanionErrandPhase::ReceiveFromOwner &&
@@ -172,6 +178,7 @@ bool UDeliveryCompanionComponent::HasReceivedErrandPackage() const
         PackageTask(Errand.Package)==Errand.Task && HasCommittedPackageHandoff());
 }
 
+/// @brief 主人身上或车上实际拿着包裹的那个 Actor，作为交接时的转出方
 APawn* UDeliveryCompanionComponent::GetOwnerPackageCarrier() const
 {
     auto* Pawn=GetOwnerPawn();
@@ -186,6 +193,7 @@ APawn* UDeliveryCompanionComponent::GetOwnerPackageCarrier() const
     return Character;
 }
 
+/// @brief 这次命令对应的包裹：先看二狗手上，再看主人身上或车上，最后看主人脚边掉落的包裹
 ADeliveryPackageItem* UDeliveryCompanionComponent::GetCommandPackage() const
 {
     if (auto* Package=GetCarriedTaskPackage()) return Package;
@@ -195,6 +203,7 @@ ADeliveryPackageItem* UDeliveryCompanionComponent::GetCommandPackage() const
     return const_cast<ADeliveryPackageItem*>(GetOwnerDroppedPackage());
 }
 
+/// @brief 主人刚掉在附近地上的任务包裹，没有就返回空
 const ADeliveryPackageItem* UDeliveryCompanionComponent::GetOwnerDroppedPackage() const
 {
     const auto* Pawn=GetOwnerPawn();
@@ -211,6 +220,7 @@ const ADeliveryPackageItem* UDeliveryCompanionComponent::GetOwnerDroppedPackage(
         Tasks->GetTaskStatus(Task)==EDeliveryTaskStatus::InProgress && Tasks->IsTaskAccepted(Task)?Package:nullptr;
 }
 
+/// @brief 这次命令对应的任务：有包裹按包裹的任务，没有就取主人正在追踪的任务
 UDeliveryTaskDefinition* UDeliveryCompanionComponent::GetCommandTask() const
 {
     if (auto* Task=PackageTask(GetCommandPackage())) return Task;
@@ -218,6 +228,7 @@ UDeliveryTaskDefinition* UDeliveryCompanionComponent::GetCommandTask() const
     return Tracker?Tracker->GetTrackedTask():nullptr;
 }
 
+/// @brief 根据二狗亲眼看到的情况判断收件人家门是开着、关着还是看不到
 EDeliveryCompanionTaskDoorState UDeliveryCompanionComponent::GetObservedTaskDoorState(const UDeliveryTaskDefinition* Task) const
 {
     using EDoorState=EDeliveryCompanionTaskDoorState;
@@ -263,6 +274,7 @@ EDeliveryCompanionTaskDoorState UDeliveryCompanionComponent::GetObservedTaskDoor
     return Door->IsBroken()?EDoorState::Broken:EDoorState::Intact;
 }
 
+/// @brief 主人已接单、任务能取件，且包裹状态允许这个跑腿动作时返回 true
 bool UDeliveryCompanionComponent::CanArrangeErrand(EDeliveryNpcAction Action,APlayerState* Requester) const
 {
     const auto* Npc=GetCompanion();
@@ -288,6 +300,7 @@ bool UDeliveryCompanionComponent::CanArrangeErrand(EDeliveryNpcAction Action,APl
         ((Held && PackageTask(Held)==Task) || bOwnerHasTask || bCanPickup || bCanRecoverGround);
 }
 
+/// @brief 行为树切换短动作前检查是否应保留当前委托的移动
 bool UDeliveryCompanionComponent::CanKeepErrandCommand(const FDeliveryNpcPublicState& State) const
 {
     if (DeliveryNpc::IsCompanionItemErrand(State.Action))
@@ -298,6 +311,7 @@ bool UDeliveryCompanionComponent::CanKeepErrandCommand(const FDeliveryNpcPublicS
         State.CompanionCommandRevision,State.CompanionTask,State.CompanionPackage,State.CompanionTravelMode);
 }
 
+/// @brief 主人重复下达同一个跑腿命令时可以沿用当前委托，不重新开始
 bool UDeliveryCompanionComponent::CanKeepPackageErrand(EDeliveryNpcAction Action,APlayerState* Requester,int32 ExpectedRevision,
     UDeliveryTaskDefinition* ExpectedTask,ADeliveryPackageItem* ExpectedPackage,EDeliveryCompanionTravelMode RequestedTravelMode) const
 {
@@ -323,6 +337,7 @@ bool UDeliveryCompanionComponent::CanKeepPackageErrand(EDeliveryNpcAction Action
         Errand.Phase==EDeliveryCompanionErrandPhase::ReturnToOwner);
 }
 
+/// @brief 接收跑腿命令：先看能否沿用当前委托，否则核对任务和包裹后开始新委托并决定出行方式
 bool UDeliveryCompanionComponent::StartErrand(EDeliveryNpcAction Action,APlayerState* Requester,int32 ExpectedRevision,
     UDeliveryTaskDefinition* ExpectedTask,ADeliveryPackageItem* ExpectedPackage,EDeliveryCompanionTravelMode RequestedTravelMode)
 {
@@ -390,6 +405,7 @@ bool UDeliveryCompanionComponent::StartErrand(EDeliveryNpcAction Action,APlayerS
     return true;
 }
 
+/// @brief 和车辆的货物交接已经确认完成
 bool UDeliveryCompanionComponent::HasCommittedPackageHandoff() const
 {
     if (!ErrandCargoHandoffId.IsValid()) return false;
@@ -401,6 +417,7 @@ bool UDeliveryCompanionComponent::HasCommittedPackageHandoff() const
         bComplete && bSucceeded;
 }
 
+/// @brief 取消和车辆的货物交接，清空交接编号
 void UDeliveryCompanionComponent::CancelPackageHandoff()
 {
     auto* Bike=ErrandCargoVehicle.Get();
@@ -412,6 +429,7 @@ void UDeliveryCompanionComponent::CancelPackageHandoff()
     if (IsValid(Bike) && OldId.IsValid()) Bike->CancelCargoHandoff(OldId);
 }
 
+/// @brief 停止委托的导航和收件路线监听；bKeepVehicleSeat 为 true 时留在车上
 void UDeliveryCompanionComponent::StopErrandMovement(bool bKeepVehicleSeat)
 {
     if (!GetOwner() || !GetOwner()->HasAuthority()) return;
@@ -466,6 +484,7 @@ void UDeliveryCompanionComponent::StopErrandMovement(bool bKeepVehicleSeat)
         Path->AbortMove(*this,FPathFollowingResultFlags::UserAbort,OldId);
 }
 
+/// @brief 停止交回主人时的跟随移动
 void UDeliveryCompanionComponent::StopOwnerHandoffFollow()
 {
     if (OwnerHandoffFollowRevision==INDEX_NONE) return;
@@ -476,6 +495,7 @@ void UDeliveryCompanionComponent::StopOwnerHandoffFollow()
     StopFollowMovement();
 }
 
+/// @brief 停下当前移动后切换委托阶段并立即同步
 void UDeliveryCompanionComponent::SetErrandPhase(EDeliveryCompanionErrandPhase Phase)
 {
     if (!HasActiveErrand() || !GetOwner() || !GetOwner()->HasAuthority()) return;
@@ -496,6 +516,7 @@ void UDeliveryCompanionComponent::SetErrandPhase(EDeliveryCompanionErrandPhase P
     GetOwner()->ForceNetUpdate();
 }
 
+/// @brief 结束委托：取消交接、停下移动，记录结果原因并通知模型这次动作的结果
 void UDeliveryCompanionComponent::FinishErrand(EDeliveryNpcActionStatus Status,FName Reason)
 {
     if (!HasActiveErrand() || !GetOwner() || !GetOwner()->HasAuthority()) return;
@@ -558,6 +579,7 @@ void UDeliveryCompanionComponent::FinishErrand(EDeliveryNpcActionStatus Status,F
         EDeliveryNpcEvidenceSource::ActionResult);
 }
 
+/// @brief 委托暂停时停下移动；bKeepMounted 为 true 且正在骑车时留在车上
 void UDeliveryCompanionComponent::ReportErrandPause(FName Reason,bool bKeepMounted)
 {
     if (!HasActiveErrand() || !GetOwner() || !GetOwner()->HasAuthority()) return;
@@ -579,11 +601,13 @@ void UDeliveryCompanionComponent::ReportErrandPause(FName Reason,bool bKeepMount
         EDeliveryNpcEvidenceSource::ActionResult);
 }
 
+/// @brief bPickup 为 true 时返回取件点，否则返回收件点
 AActor* UDeliveryCompanionComponent::ResolveErrandLocation(bool bPickup) const
 {
     return FindErrandLocation(this,Errand.Task,bPickup);
 }
 
+/// @brief 清空送货时被挡住的站位记录
 void UDeliveryCompanionComponent::ResetDeliveryStandRejections()
 {
     RejectedDeliveryStands.Reset();
@@ -592,6 +616,7 @@ void UDeliveryCompanionComponent::ResetDeliveryStandRejections()
     ErrandDeliveryTarget.Reset();
 }
 
+/// @brief 收件点或参考位置变了就清空被挡站位记录
 void UDeliveryCompanionComponent::RefreshDeliveryStandRejections(const UDeliveryTargetComponent& Delivery)
 {
     const auto Reference=GetDeliveryStandReference(Delivery);
@@ -609,6 +634,7 @@ void UDeliveryCompanionComponent::RefreshDeliveryStandRejections(const UDelivery
     RejectedDeliveryReference=*Reference;
 }
 
+/// @brief 把送货时走不到的站位记下来，最多保留 MaxRejectedDeliveryStands 个
 void UDeliveryCompanionComponent::RejectDeliveryStand(const UDeliveryTargetComponent& Delivery,const FVector& Stand)
 {
     RefreshDeliveryStandRejections(Delivery);
@@ -618,6 +644,7 @@ void UDeliveryCompanionComponent::RejectDeliveryStand(const UDeliveryTargetCompo
     bHasErrandDestination=false;
 }
 
+/// @brief 解绑送货导航的完成回调
 void UDeliveryCompanionComponent::ClearDeliveryApproachWatch()
 {
     if (auto* Path=DeliveryApproachPath.Get(); Path && DeliveryApproachFinishedHandle.IsValid())
@@ -626,6 +653,7 @@ void UDeliveryCompanionComponent::ClearDeliveryApproachWatch()
     DeliveryApproachPath.Reset();
 }
 
+/// @brief 订阅送货导航的完成回调，没走到时调用 RejectDeliveryStand 记下这个站位
 void UDeliveryCompanionComponent::WatchDeliveryApproach(UPathFollowingComponent& Path,FAIRequestID MoveId,AActor& Target)
 {
     ClearDeliveryApproachWatch();
@@ -671,6 +699,7 @@ void UDeliveryCompanionComponent::WatchDeliveryApproach(UPathFollowingComponent&
         });
 }
 
+/// @brief Feet 在收件人家门外的街边，不挡门也不挡主人时返回 true
 bool UDeliveryCompanionComponent::IsSafeDeliveryDoorWait(const ADeliveryHome& Home,const FVector& Feet,float AcceptanceMargin) const
 {
     const auto Street=ResolveDeliveryDoorStreet(Home);
@@ -686,6 +715,7 @@ bool UDeliveryCompanionComponent::IsSafeDeliveryDoorWait(const ADeliveryHome& Ho
         IsDestinationClear(Feet);
 }
 
+/// @brief 委托的导航入口：到了 Goal 附近返回 true，否则发出导航请求
 bool UDeliveryCompanionComponent::MoveForErrand(const FVector& Goal,float ReachRadius,AActor* InteractionTarget,float PreferredOffset,
     UDeliveryTargetComponent* Delivery,const ADeliveryHome* DoorWaitHome)
 {
@@ -824,6 +854,7 @@ bool UDeliveryCompanionComponent::MoveForErrand(const FVector& Goal,float ReachR
     return false;
 }
 
+/// @brief 仅行为树调用，执行移动和已验证的物品接口；暂停只停本任务导航
 void UDeliveryCompanionComponent::UpdateErrand()
 {
     auto* Npc=GetCompanion();

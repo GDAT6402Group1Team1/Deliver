@@ -111,6 +111,9 @@ struct FDeliverySpeechInputBridge
     EDeliverySpeechTurnFailure PendingFailure = EDeliverySpeechTurnFailure::None;
 };
 
+// ── 生命周期 ──
+
+/// @brief 默认不每帧更新，EnableVoice 成功后才开始
 UDeliverySpeechInputComponent::UDeliverySpeechInputComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
@@ -121,6 +124,10 @@ UDeliverySpeechInputComponent::UDeliverySpeechInputComponent()
 
 UDeliverySpeechInputComponent::~UDeliverySpeechInputComponent() = default;
 
+// ── 开关 ──
+
+/// @brief 打开和二狗的连麦：检查窗口焦点、已经结识二狗、能对它说话，再启动识别线程和麦克风
+/// @return true 表示开始准备，准备好后状态变成 Ready；之后检测到人声才开始录一句
 bool UDeliverySpeechInputComponent::EnableVoice()
 {
     check(IsInGameThread());
@@ -215,11 +222,15 @@ bool UDeliverySpeechInputComponent::EnableVoice()
     return bVoiceEnabled;
 }
 
+/// @brief 关闭语音，调用 CloseVoice
 void UDeliverySpeechInputComponent::DisableVoice()
 {
     CloseVoice(TEXT("语音已关闭"));
 }
 
+// ── 按住说话 ──
+
+/// @brief 开始对 Npc 录一句话；语音没准备好、已经在录或不能对它说话时返回 false
 bool UDeliverySpeechInputComponent::BeginHold(ADeliveryNpcCharacter* Npc)
 {
     check(IsInGameThread());
@@ -259,6 +270,7 @@ bool UDeliverySpeechInputComponent::BeginHold(ADeliveryNpcCharacter* Npc)
     return TurnState.IsCurrent(Token);
 }
 
+/// @brief 松开：这一句录完，等识别结果
 void UDeliverySpeechInputComponent::FinishHold()
 {
     check(IsInGameThread());
@@ -299,6 +311,7 @@ void UDeliverySpeechInputComponent::FinishHold()
     PublishState();
 }
 
+/// @brief 服务器拒收编号为 Token 的那一句时调用：只取消那一句，已经开始的下一句不受影响
 bool UDeliverySpeechInputComponent::ReportTurnRejected(const FDeliverySpeechTurnToken& Token, FName Reason)
 {
     check(IsInGameThread());
@@ -313,6 +326,7 @@ bool UDeliverySpeechInputComponent::ReportTurnRejected(const FDeliverySpeechTurn
     return true;
 }
 
+/// @brief 取消正在录的这一句
 void UDeliverySpeechInputComponent::CancelHold()
 {
     check(IsInGameThread());
@@ -323,6 +337,9 @@ void UDeliverySpeechInputComponent::CancelHold()
     PublishState();
 }
 
+// ── 内部 ──
+
+/// @brief 关闭语音：先停麦克风和识别线程，再取消正在录的一句并通知；Message 作为状态文字
 void UDeliverySpeechInputComponent::CloseVoice(const FString& Message)
 {
     check(IsInGameThread());
@@ -337,6 +354,7 @@ void UDeliverySpeechInputComponent::CloseVoice(const FString& Message)
     PublishState();
 }
 
+/// @brief 出错关闭：记下错误，再调用 CloseVoice
 void UDeliverySpeechInputComponent::FailSession(EDeliverySpeechTurnFailure Failure, const FString& Message)
 {
     const auto Token = TurnState.GetActiveToken();
@@ -350,6 +368,7 @@ void UDeliverySpeechInputComponent::FailSession(EDeliverySpeechTurnFailure Failu
     PublishState();
 }
 
+/// @brief 清掉编号为 Token 的那一句；bNotifyCancelled 为 true 时广播 OnTurnCancelled
 void UDeliverySpeechInputComponent::ClearActiveTurn(const FDeliverySpeechTurnToken& Token, bool bNotifyCancelled)
 {
     if (Bridge)
@@ -367,6 +386,7 @@ void UDeliverySpeechInputComponent::ClearActiveTurn(const FDeliverySpeechTurnTok
     if (bNotifyCancelled && bWasStarted && Token.IsValid()) OnTurnCancelled.Broadcast(Token);
 }
 
+/// @brief 停止麦克风，让识别线程停止接收；识别线程退出后由 CollectStoppedRecognizer 释放
 void UDeliverySpeechInputComponent::StopSessionResources()
 {
     if (Bridge)
@@ -388,6 +408,7 @@ void UDeliverySpeechInputComponent::StopSessionResources()
     bContinuousMode = false;
 }
 
+/// @brief 识别线程已经退出时释放它
 void UDeliverySpeechInputComponent::CollectStoppedRecognizer()
 {
     if (!bVoiceEnabled && Bridge && Bridge->Recognizer->IsStopped())
@@ -398,6 +419,10 @@ void UDeliverySpeechInputComponent::CollectStoppedRecognizer()
     if (!bVoiceEnabled && !Bridge) SetComponentTickEnabled(false);
 }
 
+// ── 生命周期 ──
+
+/// @brief 语音开着时每帧：检查焦点、控制关系、音频设备和二狗，不对就关闭；处理录完的一句、取识别结果广播 OnFinalText；
+/// 连麦就绪且上一句已经提交完时，取出音频线程检测到的人声，调用 BeginDetectedSpeech 开始录下一句
 void UDeliverySpeechInputComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     FActorComponentTickFunction* ThisTickFunction)
 {
@@ -551,14 +576,21 @@ void UDeliverySpeechInputComponent::TickComponent(float DeltaTime, ELevelTick Ti
     }
 }
 
+// ── 查询 ──
+
+/// @brief 连麦的对象（二狗）
 ADeliveryNpcCharacter* UDeliverySpeechInputComponent::GetConnectedNpc() const { return ConnectedNpc.Get(); }
 
+// ── 内部 ──
+
+/// @brief 连麦中的状态文字，例如与二狗连麦中
 FString UDeliverySpeechInputComponent::ConnectedStatus() const
 {
     const auto* Npc = ConnectedNpc.Get();
     return Npc ? FString::Printf(TEXT("与%s连麦中"), *Npc->DisplayName.ToString()) : TEXT("语音连麦中");
 }
 
+/// @brief 音频线程检测到人声（DetectionId）后，开始对二狗录一句
 bool UDeliverySpeechInputComponent::BeginDetectedSpeech(uint64 DetectionId)
 {
     if (!bVoiceEnabled || !bContinuousMode || !Bridge || !AudioCapture || !CanTalkTo(ConnectedNpc.Get())) return false;
@@ -585,6 +617,7 @@ bool UDeliverySpeechInputComponent::BeginDetectedSpeech(uint64 DetectionId)
     return TurnState.IsCurrent(Token);
 }
 
+/// @brief 连麦时检查音频线程是否已经报告这一句说完，说完就进入等识别结果
 void UDeliverySpeechInputComponent::PollContinuousEnd()
 {
     if (!bContinuousMode || !Bridge) return;
@@ -603,6 +636,7 @@ void UDeliverySpeechInputComponent::PollContinuousEnd()
     PublishState();
 }
 
+/// @brief 检查开麦时记下的玩家和人物是否还对得上：对得上返回 Valid，上下车同步还没到齐时返回 Pending（最多等 2 秒），否则 Invalid
 EDeliverySpeechPlayerContextState UDeliverySpeechInputComponent::CheckSessionContext(double Now)
 {
     const auto State = SessionContext.Check(Cast<APlayerController>(GetOwner()));
@@ -621,6 +655,7 @@ EDeliverySpeechPlayerContextState UDeliverySpeechInputComponent::CheckSessionCon
     return EDeliverySpeechPlayerContextState::Pending;
 }
 
+/// @brief 游戏窗口在前台、键盘焦点在游戏视口上时返回 true
 bool UDeliverySpeechInputComponent::HasLocalViewportFocus() const
 {
     if (!GetWorld() || !FSlateApplication::IsInitialized()) return false;
@@ -633,6 +668,7 @@ bool UDeliverySpeechInputComponent::HasLocalViewportFocus() const
     return Window.IsValid() && Window == Slate.GetActiveTopLevelWindow();
 }
 
+/// @brief 键盘焦点在游戏视口上、不在输入框里时返回 true；在输入框里打字时按字母键不应开始录音
 bool UDeliverySpeechInputComponent::CanUsePushToTalkKey() const
 {
     if (!HasLocalViewportFocus()) return false;
@@ -646,6 +682,7 @@ bool UDeliverySpeechInputComponent::CanUsePushToTalkKey() const
     return true;
 }
 
+/// @brief 交谈组件允许用语音对 Npc 说话时返回 true
 bool UDeliverySpeechInputComponent::CanTalkTo(ADeliveryNpcCharacter* Npc) const
 {
     const auto* PC = Cast<APlayerController>(GetOwner());
@@ -654,6 +691,7 @@ bool UDeliverySpeechInputComponent::CanTalkTo(ADeliveryNpcCharacter* Npc) const
     return Conversation && (bContinuousMode ? Conversation->CanVoiceTalkTo(Npc) : Conversation->CanTalkTo(Npc));
 }
 
+/// @brief 订阅音频设备变化（麦克风、扬声器换了），变化时关闭语音
 void UDeliverySpeechInputComponent::BindDeviceNotifications()
 {
     auto* Notifications = GEngine ? GEngine->GetEngineSubsystem<UAudioDeviceNotificationSubsystem>() : nullptr;
@@ -672,6 +710,7 @@ void UDeliverySpeechInputComponent::BindDeviceNotifications()
     });
 }
 
+/// @brief 取消订阅音频设备变化
 void UDeliverySpeechInputComponent::UnbindDeviceNotifications()
 {
     if (auto* Notifications = DeviceNotifications.Get())
@@ -686,6 +725,7 @@ void UDeliverySpeechInputComponent::UnbindDeviceNotifications()
     DeviceSwitchedHandle.Reset();
 }
 
+/// @brief 关闭语音；世界销毁时等识别线程退出，运行库和模型要在组件之前释放
 void UDeliverySpeechInputComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     bEndingPlay = true;
@@ -699,6 +739,7 @@ void UDeliverySpeechInputComponent::EndPlay(const EEndPlayReason::Type EndPlayRe
     Super::EndPlay(EndPlayReason);
 }
 
+/// @brief 状态变了时广播 OnStateChanged，再广播 OnDisplayChanged
 void UDeliverySpeechInputComponent::PublishState()
 {
     const auto State = TurnState.GetState();
@@ -710,6 +751,7 @@ void UDeliverySpeechInputComponent::PublishState()
     OnDisplayChanged.Broadcast();
 }
 
+/// @brief 当前状态的名字，调试用
 FName UDeliverySpeechInputComponent::GetVoiceStateName() const
 {
     switch (TurnState.GetState())
@@ -723,6 +765,7 @@ FName UDeliverySpeechInputComponent::GetVoiceStateName() const
     }
 }
 
+/// @brief 出错原因对应的提示文字
 FString UDeliverySpeechInputComponent::FailureText(EDeliverySpeechTurnFailure Failure) const
 {
     switch (Failure)

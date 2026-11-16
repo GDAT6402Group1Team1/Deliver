@@ -5,6 +5,9 @@
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Event_Companion_ItemTransfer,"Event.Companion.ItemTransfer");
 
+// ── 生命周期 ──
+
+/// @brief 每个角色一个实例，只在服务器运行，由 Event.Companion.ItemTransfer 事件触发
 UGA_CompanionItemTransfer::UGA_CompanionItemTransfer()
 {
     InstancingPolicy=EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -16,6 +19,7 @@ UGA_CompanionItemTransfer::UGA_CompanionItemTransfer()
     AbilityTriggers.Add(Trigger);
 }
 
+/// @brief 检查请求属于这个角色、执行组件存在，再调用 ExecuteHandheldUse 交接，最后调用 FinishHandheldUse 报告结果并结束技能
 void UGA_CompanionItemTransfer::ActivateAbility(FGameplayAbilitySpecHandle Handle,const FGameplayAbilityActorInfo* ActorInfo,
     FGameplayAbilityActivationInfo ActivationInfo,const FGameplayEventData* TriggerEventData)
 {
@@ -42,6 +46,7 @@ void UGA_CompanionItemTransfer::ActivateAbility(FGameplayAbilitySpecHandle Handl
         EndAbility(Handle,ActorInfo,ActivationInfo,false,!bSucceeded);
 }
 
+/// @brief 技能结束；交接还没执行就被结束时，调用 FinishHandheldUse 报告 ItemAbilityCancelled
 void UGA_CompanionItemTransfer::EndAbility(FGameplayAbilitySpecHandle Handle,const FGameplayAbilityActorInfo* ActorInfo,
     FGameplayAbilityActivationInfo ActivationInfo,bool bReplicateEndAbility,bool bWasCancelled)
 {

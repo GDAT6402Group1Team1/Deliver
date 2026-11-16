@@ -10,6 +10,10 @@
 #include "Vehicle/Motorbike/DeliveryMotorbike.h"
 #include "Engine/World.h"
 
+// ── 手上的物品 ──
+// 二狗只有一个持物槽，普通物品和快递包裹共用
+
+/// @brief 主人此刻的角色（骑车时取车上的驾驶员），用来找主人身上的物品
 ADeliveryCharacter* UDeliveryCompanionComponent::GetOwnerItemCarrier() const
 {
     auto* Pawn=GetOwnerPawn();
@@ -19,6 +23,7 @@ ADeliveryCharacter* UDeliveryCompanionComponent::GetOwnerItemCarrier() const
         Character->GetTaskPlayerState()==OwnerPlayerState?Character:nullptr;
 }
 
+/// @brief 物品是主人手上或背包里的普通物品，二狗手上空着、站着且没有家居安排时可以接过来
 bool UDeliveryCompanionComponent::CanTakeOwnerItem(const ADeliveryHandheldItem* Item) const
 {
     const auto* Player=GetOwnerItemCarrier();
@@ -29,6 +34,7 @@ bool UDeliveryCompanionComponent::CanTakeOwnerItem(const ADeliveryHandheldItem* 
         !Npc->IsKnockedDown() && !HasActiveHomeArrangement() && !HomeState.CarriedProp;
 }
 
+/// @brief 物品在主人手上返回 OwnerHand，在背包里返回 OwnerBackpack，拿不了返回空
 FName UDeliveryCompanionComponent::GetCurrentOwnerItemSource(const ADeliveryHandheldItem* Item) const
 {
     if (!CanTakeOwnerItem(Item)) return NAME_None;
@@ -36,6 +42,7 @@ FName UDeliveryCompanionComponent::GetCurrentOwnerItemSource(const ADeliveryHand
     return Inventory->GetHeldItem()==Item?FName(TEXT("OwnerHand")):FName(TEXT("OwnerBackpack"));
 }
 
+/// @brief 主人这次说话时，把主人五个物品栏里的普通物品写进模型请求作为可取候选
 void UDeliveryCompanionComponent::AddOwnerInventoryCandidates(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const
 {
     auto* Player=GetOwnerItemCarrier();

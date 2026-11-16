@@ -6,6 +6,7 @@ import urllib.request
 
 
 def choose(context):
+    """测试用的假模型：选第一个候选，没有候选时等一秒"""
     candidates = context.get("candidates", [])
     if not candidates:
         candidates = [{"action": "Wait", "target_id": "", "duration": 1,

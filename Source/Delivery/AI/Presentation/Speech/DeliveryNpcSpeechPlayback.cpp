@@ -19,6 +19,15 @@
 #include "Async/Async.h"
 #include "VoiceModule.h"
 
+// ── 回复 ──
+// 一轮回复最多 3 句。Agent 收到模型的回答后调用 BeginReply 登记这一轮，之后每句的数据有两种来法：
+// 整句一次到（QueueSentence，后台用 DeliveryNpcVoice::Encode 一次压完），或者边合成边到（Speech 生成文件里的 BeginSentenceAudio 等三个函数）
+// 服务器每帧在 TickSentences 里按顺序开始下一句，把压缩后的声音分段发给客户端；句子说完、这一轮的句数也够了，就调用 Agent->FinishReplyPlayback
+// NPC 还在说上一轮时，新的一轮先放进 PendingReply 排队，上一轮说完由 PromotePendingReply 接上；CancelReply 和 CancelReplies 打断指定的回复
+
+/// @brief 服务器：登记一轮新回复，ActionId 是这轮回复的编号，MessageId 是在回答哪句话
+/// 正在说别的话时排进 PendingReply；没在说话时这一轮马上成为当前轮 ReplyAction
+/// Agent 的 CanRetainReplySpeech 不同意（这轮已经作废）时不登记
 void UDeliveryNpcPresentationComponent::BeginReply(FGuid ActionId, FGuid MessageId, int32 Depth,AActor* Listener)
 {
     if (!GetOwner()->HasAuthority() || !ActionId.IsValid() || HasReply(ActionId)) return;
@@ -29,7 +38,8 @@ void UDeliveryNpcPresentationComponent::BeginReply(FGuid ActionId, FGuid Message
     const FGuid OriginalSpeech=Speech.TurnId;
     if (ReplyAction.IsValid() || Speech.bActive)
     {
-        // 同一请求者可以更新待播内容，另一玩家的回复不能被无条件覆盖
+        // PendingReply 已经有一轮在等：Agent 的 CanReplacePendingReply 同意才换掉它（例如同一位玩家又说了一句），否则这一轮不登记
+        // DiscardPendingReply 会通知 Agent，收到通知的代码可能改动状态，所以之后再检查一遍 NPC、PendingReply、当前轮和当前句都没变
         if (PendingReply.ReplyId.IsValid())
         {
             if (!Npc || !Npc->Agent->CanReplacePendingReply(PendingReply.ReplyId,ActionId)) return;
@@ -42,6 +52,8 @@ void UDeliveryNpcPresentationComponent::BeginReply(FGuid ActionId, FGuid Message
         PendingReply.Listener=Listener?Listener:State.SpeechTarget.Get();
         return;
     }
+
+    // 没在说话：清掉残留的旧记录，这一轮成为当前轮，收话人取 Listener，没有时取 PublicState.SpeechTarget
     if (ReplyAction.IsValid() || Speech.bActive || PendingReply.ReplyId.IsValid()) CancelSpeech();
     Sentences.Reset(); SpokenReply.Reset(); NextSentence=0; ExpectedSentences=INDEX_NONE;
     ReplyAction=ActionId; ReplyMessage=MessageId;
@@ -51,6 +63,7 @@ void UDeliveryNpcPresentationComponent::BeginReply(FGuid ActionId, FGuid Message
     ReplyListener=Listener?Listener:State.SpeechTarget.Get();
 }
 
+/// @brief 丢掉排队的下一轮，并调用 Agent->CancelReply 告诉 Agent 这一轮不播了
 void UDeliveryNpcPresentationComponent::DiscardPendingReply()
 {
     const FGuid Removed=PendingReply.ReplyId;
@@ -58,11 +71,14 @@ void UDeliveryNpcPresentationComponent::DiscardPendingReply()
     if (auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner())) Npc->Agent->CancelReply(Removed);
 }
 
+/// @brief 打断一轮回复，转给 CancelReplies
 void UDeliveryNpcPresentationComponent::CancelReply(FGuid ReplyId)
 {
     CancelReplies({ReplyId});
 }
 
+/// @brief 服务器：打断 ReplyIds 里的回复，可能是当前轮、排队的下一轮，或者已经说完但客户端还在播的旧轮
+/// 排队的下一轮不在 ReplyIds 里时保留下来，当前轮停掉后由 PromotePendingReply 接上
 void UDeliveryNpcPresentationComponent::CancelReplies(const TArray<FGuid>& ReplyIds)
 {
     if (!GetOwner()->HasAuthority() || ReplyIds.IsEmpty()) return;
@@ -71,9 +87,12 @@ void UDeliveryNpcPresentationComponent::CancelReplies(const TArray<FGuid>& Reply
     PendingReply={};
     if (ReplyIds.Contains(ReplyAction) || ReplyIds.Contains(Speech.ActionId) ||
         (!Speech.ActionId.IsValid() && ReplyIds.Contains(Speech.TurnId))) CancelSpeech(false,true);
-    // 即使旧回复已离开服务器播放队首，远端仍须可靠地收到该 ReplyId 的取消
+
+    // 每个编号都调用一次 StopStreamSpeech：服务器上这轮已经说完，客户端可能还在播，也要收到停止通知
     for (const FGuid& ReplyId:ReplyIds) if (ReplyId.IsValid()) StopStreamSpeech(ReplyId,false);
     if (!IsValid(this) || !IsValid(GetOwner()) || GetOwner()->IsActorBeingDestroyed()) return;
+
+    // 把先取出来的下一轮放回 PendingReply；这期间又有新的一轮排进来，或者 Agent 不再保留它时，通知 Agent 取消
     if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()); Npc && Waiting.ReplyId.IsValid())
     {
         if (!PendingReply.ReplyId.IsValid() && Npc->Agent->CanRetainReplySpeech(Waiting.ReplyId)) PendingReply=MoveTemp(Waiting);
@@ -82,6 +101,7 @@ void UDeliveryNpcPresentationComponent::CancelReplies(const TArray<FGuid>& Reply
     if (!ReplyAction.IsValid()) PromotePendingReply();
 }
 
+/// @brief 服务器：模型说完了，这一轮共有 Count 句（0 到 3）；Count 为 0 时记进 LastSilentReply，表示这轮没有台词
 void UDeliveryNpcPresentationComponent::SetReplySentenceCount(FGuid ReplyId,int32 Count)
 {
     if (!GetOwner()->HasAuthority() || !ReplyId.IsValid() || Count<0 || Count>3) return;
@@ -90,17 +110,21 @@ void UDeliveryNpcPresentationComponent::SetReplySentenceCount(FGuid ReplyId,int3
     else if (ReplyId==PendingReply.ReplyId) PendingReply.SentenceCount=Count;
 }
 
+/// @brief 服务器：当前没在说话时，让排队的下一轮成为当前轮，并把它攒下的数据按句子顺序重新交给对应的函数
+/// Agent 不再保留它时丢掉；它是在回答当前轮里一句还没播完的话时继续等
 void UDeliveryNpcPresentationComponent::PromotePendingReply()
 {
     if (!PendingReply.ReplyId.IsValid() || Speech.bActive) return;
     if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()); Npc && !Npc->Agent->CanRetainReplySpeech(PendingReply.ReplyId))
     { DiscardPendingReply(); return; }
-    // A→B→A 的子回复不能在 A 首句结束时挤掉仍未播完的祖先
+
+    // NPC 之间接话时，A 说的话 B 回答、B 的话 A 再回答；CanStartReplyMessageAudio 不同意时，A 第一轮还有句子没说完，先不接上第二轮
     if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
         Npc && !Npc->Agent->CanStartReplyMessageAudio(PendingReply.ReplyId)) return;
     FDeliveryNpcPendingReply Waiting=MoveTemp(PendingReply);
     PendingReply={};
-    // 当前句已经说完，只记下已经播出的内容；其余旧台词不再播放
+
+    // 调用 CancelSpeech(true)：当前轮已经播出的句子写进记忆，还没播的句子丢掉
     CancelSpeech(true);
     if (!IsValid(this) || !IsValid(GetOwner()) || GetOwner()->IsActorBeingDestroyed()) return;
     if (const auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner()); Npc && !Npc->Agent->CanRetainReplySpeech(Waiting.ReplyId)) return;
@@ -110,6 +134,8 @@ void UDeliveryNpcPresentationComponent::PromotePendingReply()
         return;
     }
     BeginReply(Waiting.ReplyId,Waiting.MessageId,Waiting.Depth,Waiting.Listener.Get());
+
+    // 这一轮是只有文字的完整回复：交给 QueueCompleteReply；否则把攒下的整句、开始、分段、结束通知按句子顺序重放一遍
     if (Waiting.CompleteReply.ReplyId.IsValid()) { QueueCompleteReply(Waiting.CompleteReply); return; }
     for (int32 Sequence=0;Sequence<3;++Sequence)
     {
@@ -126,6 +152,8 @@ void UDeliveryNpcPresentationComponent::PromotePendingReply()
     if (Waiting.bTransferFinished) FinishSentences(Waiting.ReplyId,Waiting.SentenceCount);
 }
 
+/// @brief 服务器：后端一次给出一整句（文字和可选的整段声音），属于排队的下一轮时先存进 PendingReply.Whole
+/// 属于当前轮时存进 Sentences，有声音就交给线程池调用 DeliveryNpcVoice::Encode 一次压完，结果放进 EncodedSentences
 void UDeliveryNpcPresentationComponent::QueueSentence(FGuid ActionId, FGuid MessageId, const FDeliveryNpcSentence& Sentence)
 {
     if (GetOwner()->HasAuthority() && ActionId.IsValid() && ActionId==PendingReply.ReplyId && MessageId==PendingReply.MessageId)
@@ -147,7 +175,8 @@ void UDeliveryNpcPresentationComponent::QueueSentence(FGuid ActionId, FGuid Mess
         EncodedSentences.Add(Sentence.Sequence);
         return;
     }
-    // 先在游戏线程加载 UE 模块，后台任务只处理独立的声音数据
+
+    // UE 要求语音模块在游戏线程加载；后台任务只拿着这句声音的副本，不碰组件
     FVoiceModule::Get();
     const TWeakObjectPtr<UDeliveryNpcPresentationComponent> WeakThis(this);
     const int32 Sequence=Sentence.Sequence, SampleRate=Sentence.SampleRate;
@@ -163,7 +192,8 @@ void UDeliveryNpcPresentationComponent::QueueSentence(FGuid ActionId, FGuid Mess
             auto* Component=WeakThis.Get();
             if (!Component) return;
             --Component->PendingEncodeTasks;
-            // 插话、倒地或结束关卡后，旧任务即使完成也不能重新安排播放
+
+            // 回到游戏线程：组件没了，或者当前轮已经换了（被插话、倒地、关卡结束打断），结果丢掉
             if (Component->ReplyAction!=ActionId || Component->ReplyMessage!=MessageId || !Component->Sentences.Contains(Sequence)) return;
             UE_LOG(LogTemp,Log,TEXT("NpcSpeech encode_ready action=%s sequence=%d worker_ms=%.2f bytes=%d"),
                 *ActionId.ToString(),Sequence,Result.EncodeMs,Result.Audio.Num());
@@ -174,6 +204,7 @@ void UDeliveryNpcPresentationComponent::QueueSentence(FGuid ActionId, FGuid Mess
         *ActionId.ToString(),Sequence,Sentence.Pcm.Num(),(FPlatformTime::Seconds()-SubmitStarted)*1000);
 }
 
+/// @brief 服务器：后端说这一轮的句子都发完了，共 Count 句；核对收到的句子，缺句或多句时取消这一轮
 void UDeliveryNpcPresentationComponent::FinishSentences(FGuid ActionId, int32 Count)
 {
     if (GetOwner()->HasAuthority() && ActionId.IsValid() && ActionId==PendingReply.ReplyId)
@@ -190,7 +221,8 @@ void UDeliveryNpcPresentationComponent::FinishSentences(FGuid ActionId, int32 Co
         return;
     }
     if (!GetOwner()->HasAuthority() || ActionId!=ReplyAction) return;
-    // 检查本次回复是否收齐，缺少句子时取消播放
+
+    // 还没说的每一句都要已经收到（整句或边合成边收的都算），边合成的还要已经收到结束通知；不对就调用 CancelSpeech
     if (Count<NextSentence || Count>3) { CancelSpeech(); return; }
     for (int32 Index=NextSentence;Index<Count;++Index)
         if (!Sentences.Contains(Index) && !GeneratingSentences.Contains(Index)) { CancelSpeech(); return; }
@@ -201,12 +233,17 @@ void UDeliveryNpcPresentationComponent::FinishSentences(FGuid ActionId, int32 Co
     ExpectedSentences=Count;
 }
 
+// ── 补听 ──
+// ServerVoices 留着已经说过的几句声音，刚走近的客户端可以通过交谈组件的 ServerRequestNpcAudio 补要；每句说完后最多再留 5 秒
+
+/// @brief 删掉过期的声音，并只保留最近说完的 3 句
 void UDeliveryNpcPresentationComponent::TrimVoiceCache()
 {
     const double Now=FPlatformTime::Seconds();
     for (auto It=ServerVoices.CreateIterator();It;++It)
         if (It.Value().ExpiresAt>0 && Now>=It.Value().ExpiresAt) It.RemoveCurrent();
-    // 最多保留三句已经说完的声音，当前正在播放的一句另由播放状态管理
+
+    // ExpiresAt 大于 0 的是已经说完的句子；超过 3 句时删掉最早过期的，正在说的那句 ExpiresAt 是 0，不算在内
     while (true)
     {
         int32 Completed=0;
@@ -223,25 +260,37 @@ void UDeliveryNpcPresentationComponent::TrimVoiceCache()
     }
 }
 
+// ── 播放 ──
+// 服务器：TickSentences 每帧开始下一句，按播放进度把压缩声音分段调用 ReceiveAudio 发给客户端
+// 客户端：收到的数据放进 LocalVoices 队列解压播放；数据停住超过半秒就向服务器补要
+
+/// @brief 每帧调用：服务器上推进当前轮的句子和发送；客户端上检查要不要补要声音
 void UDeliveryNpcPresentationComponent::TickSentences()
 {
     auto* Npc=Cast<ADeliveryNpcCharacter>(GetOwner());
     if (!Npc) return;
     TrimVoiceCache();
-    // 流式父回复上一帧结束后队首已空，子回复仍须有提升机会
+
+    // 当前轮已经结束而 PendingReply 里有一轮在等：先接上它（NPC 之间接话的下一层就是这样排进来的）
     if (GetOwner()->HasAuthority() && !ReplyAction.IsValid() && !Speech.bActive && PendingReply.ReplyId.IsValid())
     {
         PromotePendingReply();
         if (!IsValid(this) || !IsValid(Npc) || Npc->IsActorBeingDestroyed()) return;
     }
+
+    // 当前轮：Agent 不再保留时打断；NPC 被打倒（故意躺下除外）时停止说话；有等着的完整回复就先开始它
     if (GetOwner()->HasAuthority() && ReplyAction.IsValid())
     {
         if (!Npc->Agent->CanRetainReplySpeech(ReplyAction)) { CancelReply(ReplyAction); return; }
         if (Npc->IsKnockedDown() && !Npc->Combat->IsDeliberatelyProne()) { CancelSpeech(); return; }
         if (DeferredCompleteReply.ReplyId.IsValid())
         { StartDeferredCompleteReply(); return; }
+
+        // 结束到时间的句子；当前句说完、排队的下一轮在等时接上它
         FinishSentence();
         if (!Speech.bActive && PendingReply.ReplyId.IsValid()) PromotePendingReply();
+
+        // 这一轮的句子都说完了：RecordSpokenReply 写进记忆，清掉 ReplyAction，调用 Agent->FinishReplyPlayback
         if (!Speech.bActive && ExpectedSentences==NextSentence)
         {
             const FGuid CompletedReply=ReplyAction;
@@ -251,6 +300,9 @@ void UDeliveryNpcPresentationComponent::TickSentences()
             Npc->Agent->FinishReplyPlayback(CompletedReply,CompletedSpeech);
             GetOwner()->ForceNetUpdate();
         }
+
+        // 还有句子要说，Agent 也同意开口：先试边合成边压的句子（TryStartGeneratedSentence），不行再用一次压完的整句
+        // 整句：0.25 秒后开始，有声音时时长按声音算，没声音时按字数算；有声音就存进 ServerVoices 留着补发，本机直接播放原始声音
         else if (!Speech.bActive && Npc->Agent->CanStartReplySpeech(ReplyAction))
         {
             FDeliveryNpcSentence Sentence;FDeliveryNpcEncodedSentence Encoded;
@@ -301,12 +353,14 @@ void UDeliveryNpcPresentationComponent::TickSentences()
             }
         }
     }
-    // 按播放进度发送语音，提前准备约 0.4 秒的声音
-    // 网络只传 Opus 压缩数据，主机播放保留的原始声音
+
+    // 服务器给客户端发 Opus 压缩数据，自己播放保留的原始声音；按播放进度发，比实际播到的位置提前约 0.4 秒
     if (GetOwner()->HasAuthority() && Speech.bActive)
     {
         const bool bGenerating=Speech.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion;
-        // 生成中的声音尽快发出，单帧仍保持 2 KB 上限
+
+        // 边合成边压的句子：压好多少发多少，一帧最多 2 KB；一次压完的整句按 GetSendBytes 跟着播放进度发
+        // 每段调用 ReceiveAudio，带上这段的起始位置和整句总长；边合成的句子没压完时总长传 0
         int32 SendBytes=bGenerating?FMath::Clamp(SendingAudio.Num()-SendingOffset,0,2048):
             DeliveryNpcSpeech::GetSendBytes(ServerTime()-Speech.StartTime,Speech.Duration,SendingAudio.Num(),SendingOffset);
         while (SendBytes>0)
@@ -318,13 +372,16 @@ void UDeliveryNpcPresentationComponent::TickSentences()
             SendBytes-=Size;
         }
     }
+
+    // 客户端：本机正在播的这句（LocalVoices[0]）换了，重置补要的次数和时间
     if (GetNetMode()==NM_Client && !LocalVoices.IsEmpty())
     {
         auto& Local=LocalVoices[0];
         if (RequestedAudioTurn!=Local.State.TurnId)
         { AudioAttempts=0;NextAudioRetry=0;RequestedAudioTurn=Local.State.TurnId; }
         const double Now=FPlatformTime::Seconds();
-        // 收到的声音停在同一位置超过半秒时，请求下一小段内容
+
+        // 收到的声音超过 0.5 秒没有新数据、而且还没收全时，调用 ServerRequestNpcAudio 从已收到的位置补要；每 0.25 秒最多一次，每句最多 32 次
         if (Local.State.bRecordedVoice && AudioAttempts<32 && Now>=NextAudioRetry && Now-Local.LastDataAt>.5 &&
             ((Local.State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion && !Local.State.bAudioComplete) ||
              Local.Encoded.Num()<Local.State.EncodedBytes))
@@ -335,9 +392,16 @@ void UDeliveryNpcPresentationComponent::TickSentences()
                     Conversation->ServerRequestNpcAudio(Npc,Local.State.TurnId,Local.Encoded.Num());
                 }
     }
+
+    // 不是专用服务器时，把解压出的声音送进本机的播放器
     if (GetNetMode()!=NM_DedicatedServer) PlayRecordedVoice();
 }
 
+// ── 开麦收听 ──
+// 二狗回答主人开麦说的话时，这句话直接传到主人耳边，不按距离衰减；其他玩家仍按距离听见
+// ResolveRadioListener 在说这句前找出主人的 PlayerState，写进 Speech.RadioListener
+
+/// @brief 服务器：这句回复是在回答主人开麦说的 MessageId 时，返回主人的 PlayerState；否则返回 nullptr
 APlayerState* UDeliveryNpcPresentationComponent::ResolveRadioListener(FGuid MessageId) const
 {
     const auto* Companion=Cast<ADeliveryCompanionCharacter>(GetOwner());
@@ -355,6 +419,7 @@ APlayerState* UDeliveryNpcPresentationComponent::ResolveRadioListener(FGuid Mess
     return nullptr;
 }
 
+/// @brief Player 就是 Listener 这位主人，而且他现在仍是这只二狗的主人时返回 true
 bool UDeliveryNpcPresentationComponent::IsRadioListenerForPlayer(const APlayerController* Player,const APlayerState* Listener) const
 {
     const auto* Companion=Cast<ADeliveryCompanionCharacter>(GetOwner());
@@ -365,6 +430,7 @@ bool UDeliveryNpcPresentationComponent::IsRadioListenerForPlayer(const APlayerCo
         Companion->Companion->GetOwnerPlayerState()==Listener;
 }
 
+/// @brief 本机玩家就是这句话的 RadioListener 时返回 true，本机播放时不按距离衰减
 bool UDeliveryNpcPresentationComponent::IsLocalRadioListener(const FDeliveryNpcSpeechState& State) const
 {
     if (!State.RadioListener || !GetWorld()) return false;
@@ -374,6 +440,7 @@ bool UDeliveryNpcPresentationComponent::IsLocalRadioListener(const FDeliveryNpcS
     return false;
 }
 
+/// @brief 服务器：Player 是这句开麦回复的主人、而且这句声音还没过期时返回 true；离得远也可以补要这句声音
 bool UDeliveryNpcPresentationComponent::CanPlayerReceiveLinkedAudio(const APlayerController* Player,FGuid TurnId) const
 {
     const auto* Saved=ServerVoices.Find(TurnId);
@@ -382,6 +449,9 @@ bool UDeliveryNpcPresentationComponent::CanPlayerReceiveLinkedAudio(const APlaye
         IsRadioListenerForPlayer(Player,Saved->RadioListener.Get());
 }
 
+/// @brief 服务器：从 ServerVoices 里取出 TurnId 这句从 Offset 开始、最多 2 KB 的压缩声音，给交谈组件补发
+/// OutTotal 是这句压缩后的总长；边合成边压的句子还没压完时为 0
+/// @return 没有这句、已经过期或 Offset 超出范围时返回 false
 bool UDeliveryNpcPresentationComponent::GetSpeechAudioChunk(FGuid TurnId,int32 Offset,int32 MaxBytes,TArray<uint8>& OutData,int32& OutTotal) const
 {
     OutData.Reset(); OutTotal=0;
@@ -394,17 +464,26 @@ bool UDeliveryNpcPresentationComponent::GetSpeechAudioChunk(FGuid TurnId,int32 O
     return true;
 }
 
+/// @brief 本机正在播放后端合成的声音时返回 true
 bool UDeliveryNpcPresentationComponent::IsRecordedVoicePlaying() const
 { return RecordedVoice && RecordedVoice->IsPlaying(); }
 
+// ── 客户端接收 ──
+// 服务器开始一句时调用 StartStreamSpeech 通知所有客户端，之后 ReceiveAudio 分段送来压缩声音，FinishStreamAudio 送来句末的总长
+// Speech 的属性同步也会调用 AcceptLocalSpeech；两条路先到的那条把这句排进 LocalVoices，后到的那条只补句末信息
+
+/// @brief 多播：服务器开始说一句流式回复，客户端把这句排进 LocalVoices；已取消或已播完的句子不再排
 void UDeliveryNpcPresentationComponent::StartStreamSpeech_Implementation(FDeliveryNpcSpeechState State)
 {
-    // 先接收台词和编号，随后收到的声音归入对应句子
+    // 已经取消的轮、已经播完的句子不再排
     if (!State.bActive || CancelledVoiceActions.Contains(State.ActionId) || FinishedVoiceTurns.Contains(State.TurnId)) return;
-    // 开始通知只更新本机队列，复制字段仍由服务器更新，避免随后到达的字段差量混入旧值
+
+    // 这里只调用 AcceptLocalSpeech 改本机的 LocalVoices，不改 Speech；Speech 只由服务器写，同步过来的差量才不会和本机改过的值混在一起
     AcceptLocalSpeech(State,false);
 }
 
+/// @brief 客户端（和主机本机）：检查这句的声音格式、采样率和长度，合法就排进 LocalVoices，最多排 3 句
+/// @param bFromReplication true 表示由 Speech 的属性同步调用，false 表示由 StartStreamSpeech 调用
 void UDeliveryNpcPresentationComponent::AcceptLocalSpeech(const FDeliveryNpcSpeechState& State,bool bFromReplication)
 {
     if (GetNetMode()==NM_DedicatedServer || !State.bActive ||
@@ -423,12 +502,13 @@ void UDeliveryNpcPresentationComponent::AcceptLocalSpeech(const FDeliveryNpcSpee
     }
     if (LocalVoices.ContainsByPredicate([&](const auto& Item){ return Item.State.TurnId==State.TurnId; }))
     {
-        // 复制与可靠通知的先后可能不同，同一句只补上句末信息，不重新排队
+        // 这句已经在 LocalVoices 里（属性同步和 StartStreamSpeech 都到了）：边合成的句子带着句末信息时调用 FinishStreamAudio_Implementation，不重新排队
         if (bGenerating && State.bAudioComplete)
             FinishStreamAudio_Implementation(State.TurnId,State.PcmBytes,State.EncodedBytes,State.bRecordedVoice);
         return;
     }
-    // 刚进入附近的玩家略过已经结束的句子，随后接收新的对白
+
+    // 由属性同步调用、按时间这句已经说完：刚走近的玩家跳过这句，等下一句
     if (bFromReplication && !bGenerating && ServerTime()>=State.StartTime+State.Duration)
     {
         UE_LOG(LogTemp,Log,TEXT("NpcSpeech joined_after_sentence turn=%s"),*State.TurnId.ToString());
@@ -439,6 +519,8 @@ void UDeliveryNpcPresentationComponent::AcceptLocalSpeech(const FDeliveryNpcSpee
         UE_LOG(LogTemp,Warning,TEXT("NpcSpeech playback_queue_full turn=%s"),*State.TurnId.ToString());
         return;
     }
+
+    // 排进队列；不是主机时为这句建一个解码器 Decoder
     auto& Local=LocalVoices.AddDefaulted_GetRef();
     Local.State=State;
     Local.TotalBytes=State.bRecordedVoice?DeliveryNpcVoice::GetDecodedPcmBytes(State.PcmBytes,State.SampleRate):0;
@@ -446,6 +528,8 @@ void UDeliveryNpcPresentationComponent::AcceptLocalSpeech(const FDeliveryNpcSpee
     if (State.bRecordedVoice && !GetOwner()->HasAuthority()) Local.Decoder=MakeShared<FDeliveryNpcVoiceDecoder>();
 }
 
+/// @brief 多播：边合成边压的这句已经压完，告诉客户端原始声音长度 PcmBytes 和压缩后长度 EncodedBytes
+/// 数字不合理、和已经收到的数据对不上、或者 bSucceeded 为 false 时，这句改用 UseTextForLocalVoice 只显示文字
 void UDeliveryNpcPresentationComponent::FinishStreamAudio_Implementation(FGuid TurnId,int32 PcmBytes,int32 EncodedBytes,bool bSucceeded)
 {
     auto* Local=LocalVoices.FindByPredicate([&](const auto& Item){ return Item.State.TurnId==TurnId; });
@@ -459,6 +543,8 @@ void UDeliveryNpcPresentationComponent::FinishStreamAudio_Implementation(FGuid T
         UseTextForLocalVoice(*Local);
         return;
     }
+
+    // 先存下当前字幕进度 CaptionProgress，总长确定后字幕不往回退
     if (DisplayedSpeech.bActive && DisplayedSpeech.TurnId==TurnId)
         Local->CaptionProgress=GetDisplayedSpeechProgress();
     Local->State.bAudioComplete=true;
@@ -474,11 +560,13 @@ void UDeliveryNpcPresentationComponent::FinishStreamAudio_Implementation(FGuid T
     if (DisplayedSpeech.TurnId==TurnId && DisplayedSpeech.bActive) DisplayedSpeech=Local->State;
 }
 
+/// @brief 本机这句声音出错：清掉声音数据，改成按字数计时、只显示文字；正在显示时从当前字幕进度接着显示
 void UDeliveryNpcPresentationComponent::UseTextForLocalVoice(FDeliveryNpcLocalVoice& Local)
 {
     const bool bDisplayed=DisplayedSpeech.bActive && DisplayedSpeech.TurnId==Local.State.TurnId;
     const float DisplayedProgress=bDisplayed?GetDisplayedSpeechProgress():0.f;
-    // 单句声音失败时保留已经确认的文字，后句继续使用自己的声音
+
+    // 只改这一句，LocalVoices 里后面的句子仍然播放自己的声音
     Local.State.bRecordedVoice=false; Local.State.bAudioComplete=true;
     Local.State.Duration=FMath::Clamp(Local.State.Text.Len()*.075f+.5f,1.f,10.f);
     Local.Pcm.Reset();Local.Encoded.Reset();Local.Decoder.Reset();
@@ -495,26 +583,36 @@ void UDeliveryNpcPresentationComponent::UseTextForLocalVoice(FDeliveryNpcLocalVo
     }
 }
 
+// ── 停止 ──
+// FinishReplyAfterSentence：ActionId 这轮说完当前句就停；StopStreamSpeech：马上停下 ActionId 这轮，bStopAll 为 true 时停下所有轮
+// 停掉的轮编号记进 CancelledVoiceActions（最多 16 个），之后晚到的数据和同步都按这份记录丢掉
+
+/// @brief 多播：ActionId 这轮说完当前句就停，LocalVoices 里这轮后面的句子删掉
 void UDeliveryNpcPresentationComponent::FinishReplyAfterSentence_Implementation(FGuid ActionId)
 {
     if (!ActionId.IsValid()) return;
     CancelledVoiceActions.AddUnique(ActionId);
     if (CancelledVoiceActions.Num()>16) CancelledVoiceActions.RemoveAt(0);
     if (GetOwner()->HasAuthority() && Speech.ActionId==ActionId) Speech.bActive=false;
-    // 远端可能比主机晚几帧播完，保留它正在说的这句，后续旧句直接移除
+
+    // 客户端可能比主机晚几帧播到这句：保留本机正在播的这句，给它 5 秒（ReceiveUntil）收完剩下的声音
     const FGuid KeepTurn=!LocalVoices.IsEmpty() && LocalVoices[0].State.ActionId==ActionId?LocalVoices[0].State.TurnId:FGuid();
     LocalVoices.RemoveAll([&](const auto& Item){ return Item.State.ActionId==ActionId && Item.State.TurnId!=KeepTurn; });
     if (KeepTurn.IsValid() && LocalVoices[0].ReceiveUntil==0)
         LocalVoices[0].ReceiveUntil=FPlatformTime::Seconds()+5;
 }
 
+/// @brief 本机这句还能收声音数据时返回 true
 bool UDeliveryNpcPresentationComponent::CanReceiveVoiceData(const FDeliveryNpcLocalVoice& Local) const
 {
-    // 只补齐普通续接时保留下来的那一句，不能借补发重新开始其他旧句
+    // 设了 ReceiveUntil 的句子（FinishReplyAfterSentence 保留下来的那句）只在期限内能收；其他句子所在的轮被取消后就不收
     if (Local.ReceiveUntil>0) return Local.ReceiveUntil>FPlatformTime::Seconds();
     return !CancelledVoiceActions.Contains(Local.State.ActionId);
 }
 
+/// @brief 多播：马上停下 ActionId 这轮的声音和字幕，删掉 LocalVoices 里这轮的句子
+/// ActionId 也可能是一句完整回复的 TurnId，这时停掉电子语音 Voice
+/// @param bStopAll true 时（玩家插话）本机所有轮都停下
 void UDeliveryNpcPresentationComponent::StopStreamSpeech_Implementation(FGuid ActionId,bool bStopAll)
 {
     auto RememberCancellation=[this](FGuid Id)
@@ -533,11 +631,12 @@ void UDeliveryNpcPresentationComponent::StopStreamSpeech_Implementation(FGuid Ac
     if (GetOwner()->HasAuthority() && Speech.ActionId==ActionId) Speech.bActive=false;
     if (bStopAll)
     {
-        // 玩家插话时也停止前一轮尚未播完的尾音
+        // bStopAll：本机队列里、正在显示的、Speech 上的每一轮都记进 CancelledVoiceActions
         for (const auto& Local:LocalVoices) RememberCancellation(Local.State.ActionId);
         RememberCancellation(DisplayedSpeech.ActionId);
         RememberCancellation(Speech.ActionId.IsValid()?Speech.ActionId:Speech.TurnId);
-        // 复制字段只在服务器修改，本机取消结果由播放队列和取消编号保存
+
+        // Speech 只在服务器上改；客户端靠 LocalVoices 和 CancelledVoiceActions 记住已经停了
         if (GetOwner()->HasAuthority()) Speech.bActive=false;
         UE_LOG(LogTemp,Log,TEXT("NpcSpeech stream_stop_received role=%d turn=%s action=%s"),
             int32(GetOwner()->GetLocalRole()),*Speech.TurnId.ToString(),*ActionId.ToString());
@@ -553,6 +652,10 @@ void UDeliveryNpcPresentationComponent::StopStreamSpeech_Implementation(FGuid Ac
     LocalVoices.RemoveAll([&](const auto& Item){ return bStopAll || Item.State.ActionId==ActionId; });
 }
 
+// ── 显示查询 ──
+// 字幕、口型和动画通过这几个函数读本机正在说的句子和进度
+
+/// @brief 本机正在显示的句子：流式回复取 DisplayedSpeech，只有文字的完整回复取 Speech；已经停了的返回空
 FDeliveryNpcSpeechState UDeliveryNpcPresentationComponent::GetDisplayedSpeech() const
 {
     if (DisplayedSpeech.bActive || !LocalVoices.IsEmpty() || Speech.ActionId.IsValid()) return DisplayedSpeech;
@@ -560,6 +663,7 @@ FDeliveryNpcSpeechState UDeliveryNpcPresentationComponent::GetDisplayedSpeech() 
     return Speech;
 }
 
+/// @brief Agent 已经有一轮回复、但本机还没开始播放（声音还在压缩或传输）时返回 true；动画用它让 NPC 保持倾听姿势
 bool UDeliveryNpcPresentationComponent::IsWaitingForSpeechPlayback() const
 {
     if (DisplayedSpeech.bActive) return false;
@@ -567,19 +671,23 @@ bool UDeliveryNpcPresentationComponent::IsWaitingForSpeechPlayback() const
     if (!Npc || !Npc->Agent) return false;
     const auto State=Npc->Agent->GetPublicState();
     if (!State.GetReplyId().IsValid() || CancelledVoiceActions.Contains(State.GetReplyId())) return false;
-    // 后台结束时声音可能还在编码或传输，服务器会在播放结束或取消时清除本轮编号
+
+    // 本机还没收到任何句子：服务器上 ReplyAction 就是这轮时算在等；服务器播完或取消这轮时会清掉 ReplyAction
     if (LocalVoices.IsEmpty()) return ReplyAction==State.GetReplyId();
     const auto& Local=LocalVoices[0];
-    // 只查看客户端收到的当前回复，旧句子不能让新一轮交谈继续保持等待姿态
+
+    // LocalVoices[0] 必须属于 Agent 当前这轮回复、回答的是同一句话，还没播完
     if (Local.State.ActionId!=State.GetReplyId() ||
         Local.State.ReplyToEventId!=State.ReplyToEventId || !Local.State.bActive ||
         FinishedVoiceTurns.Contains(Local.State.TurnId)) return false;
     const bool bGenerating=Local.State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion && Local.State.bRecordedVoice;
     const double WaitingSince=bGenerating?FMath::Max(Local.FrontSince,Local.LastDataAt):(Local.FrontSince>0?Local.FrontSince:Local.LastDataAt);
-    // 与播放器使用相同的超时范围，音频中断后不继续保持注视
+
+    // 超时和 PlayRecordedVoice 一致：边合成的句子 5 秒没新数据，整句超过时长加 5 秒，就不再等
     return WaitingSince>0 && FPlatformTime::Seconds()-WaitingSince<=(bGenerating?5:Local.State.Duration+5);
 }
 
+/// @brief 本机播放器已经读走的声音字节数（已送进播放器的减去播放器里还剩的）
 int32 UDeliveryNpcPresentationComponent::GetConsumedVoiceBytes() const
 {
     if (!RecordedWave || LocalVoices.IsEmpty() || !DisplayedSpeech.bActive || LocalVoices[0].State.TurnId!=DisplayedSpeech.TurnId) return 0;
@@ -588,6 +696,7 @@ int32 UDeliveryNpcPresentationComponent::GetConsumedVoiceBytes() const
     return FMath::Clamp(Local.QueuedBytes-RecordedWave->GetAvailableAudioByteCount(),0,Limit);
 }
 
+/// @brief 本机正在显示的句子进度，0 到 1；字幕按它显示到第几个字
 float UDeliveryNpcPresentationComponent::GetDisplayedSpeechProgress() const
 {
     if (DisplayedSpeech.bActive && !LocalVoices.IsEmpty())
@@ -597,7 +706,7 @@ float UDeliveryNpcPresentationComponent::GetDisplayedSpeechProgress() const
             return FMath::Clamp(float((FPlatformTime::Seconds()-Local.TextStartedAt)/FMath::Max(.01f,Local.State.Duration)),0.f,1.f);
         if (Local.State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion)
         {
-            // 声音总长尚未确定时按阅读速度展开字幕，句末到达后保持已显示字数
+            // 边合成的句子总长还不知道时按字数估算总长，最多显示到 95%；不比 CaptionProgress 小，字幕不往回退
             const float Estimate=FMath::Clamp(Local.State.Text.Len()*.075f+.5f,1.f,10.f)*Local.State.SampleRate*2;
             const float Progress=float(GetConsumedVoiceBytes())/(Local.TotalBytes>0?Local.TotalBytes:FMath::Max(1.f,Estimate));
             return FMath::Max(Local.CaptionProgress,FMath::Clamp(Progress,0.f,Local.State.bAudioComplete?1.f:.95f));
@@ -607,6 +716,7 @@ float UDeliveryNpcPresentationComponent::GetDisplayedSpeechProgress() const
     return Speech.bActive?FMath::Clamp(float((ServerTime()-Speech.StartTime)/FMath::Max(.01f,Speech.Duration)),0.f,1.f):0.f;
 }
 
+/// @brief 本机这句播完：记进 FinishedVoiceTurns（最多 16 个），停掉播放器，从 LocalVoices 删掉这句
 void UDeliveryNpcPresentationComponent::FinishLocalSentence()
 {
     if (LocalVoices.IsEmpty()) return;
@@ -621,18 +731,20 @@ void UDeliveryNpcPresentationComponent::FinishLocalSentence()
     LocalVoices.RemoveAt(0);
 }
 
+/// @brief 服务器：当前句的时间到了、声音也都发出去了，而且本机播放器已经播完时返回 true
 bool UDeliveryNpcPresentationComponent::HasFinishedSentence() const
 {
     if (!ReplyAction.IsValid() || Speech.ActionId!=ReplyAction || !Speech.bActive ||
         (Speech.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion && !Speech.bAudioComplete) ||
         ServerTime()<Speech.StartTime+Speech.Duration || SendingOffset<SendingAudio.Num()) return false;
-    // 主机按自己的实际播放进度记录，远端玩家的接收速度不会阻止 NPC 接着行动
-    // 专用服务器和关闭音频的世界按安排的播放时间结束
+
+    // 主机看自己播完没有（FinishedVoiceTurns），不等客户端；专用服务器和没有音频设备的世界只看时间
     const bool bHasLocalPlayback=GetNetMode()!=NM_DedicatedServer && GetWorld()->AllowAudioPlayback() &&
         (!Speech.bRecordedVoice || GetWorld()->GetAudioDeviceRaw()!=nullptr);
     return !bHasLocalPlayback || FinishedVoiceTurns.Contains(Speech.TurnId);
 }
 
+/// @brief 服务器：当前句说完了，结束它；声音在 ServerVoices 里再留 5 秒，文字加进 SpokenReply
 void UDeliveryNpcPresentationComponent::FinishSentence()
 {
     if (!HasFinishedSentence()) return;
@@ -645,6 +757,8 @@ void UDeliveryNpcPresentationComponent::FinishSentence()
     GetOwner()->ForceNetUpdate(); OnRep_Speech();
 }
 
+/// @brief 服务器：把这轮已经说完的句子 SpokenReply 作为一条 SelfSpeech 事件写进记忆
+/// @param bCompleteReply true 时这轮完整说完：事件带上回答的是哪句话，并让 800 cm 内的 NPC 听到
 void UDeliveryNpcPresentationComponent::RecordSpokenReply(bool bCompleteReply)
 {
     auto* Npc=CastChecked<ADeliveryNpcCharacter>(GetOwner());
@@ -653,14 +767,16 @@ void UDeliveryNpcPresentationComponent::RecordSpokenReply(bool bCompleteReply)
     Said.Description=SpokenReply; Said.Lifetime=60;
     const TWeakObjectPtr<AActor> Listener(Npc->Agent->GetReplyListenerForPlayback(ReplyAction,ReplyListener.Get()));
     Said.Subject=Npc; Said.Addressee=Listener.Get();
-    // 整段说完才标记玩家的问题已回答，中途停止仍保留前面说过的内容
+
+    // bCompleteReply 为 true 时才写 ReplyToEventId（这轮回答了那句话）；中途停下时只记住说过的内容
     if (bCompleteReply)
     {
         Said.EventId=Speech.TurnId;
         if (Npc->Agent->CanLinkReplyPlayback(ReplyAction)) Said.ReplyToEventId=ReplyMessage;
     }
     Npc->Agent->ObserveEvent(Said);
-    // 最后一轮仍让邻居记住完整台词，但不再安排下一轮接话
+
+    // 让 800 cm 内还没收到的 NPC 听到；第三层或开麦对话时 bRequestReply 为 false，他们只记住不回话
     if (bCompleteReply)
         for (TActorIterator<ADeliveryNpcCharacter> It(GetWorld());It;++It)
             if (*It!=Npc && !Npc->Agent->WasReplyTextDelivered(ReplyAction,*It) &&
@@ -678,6 +794,12 @@ void UDeliveryNpcPresentationComponent::RecordSpokenReply(bool bCompleteReply)
     SpokenReply.Reset();
 }
 
+// ── 本机播放 ──
+// 客户端：ReceiveAudio 收到一段压缩声音就用 Decoder 解压，追加进 LocalVoices 里这句的 Pcm
+// PlayRecordedVoice 每帧把还没送的 Pcm 送进播放器 RecordedWave；主机本机直接用原始声音，不解压
+
+/// @brief 客户端 RPC：收到 TurnId 这句从 Offset 开始的一段压缩声音 Data，Total 是总长（边合成的句子没压完时为 0）
+/// 解压出错或长度对不上时，这句改用 UseTextForLocalVoice 只显示文字
 void UDeliveryNpcPresentationComponent::ReceiveAudio_Implementation(FGuid TurnId,int32 Offset,int32 Total,const TArray<uint8>& Data)
 {
     if (GetOwner()->HasAuthority() || !TurnId.IsValid() || Total<0 || Total>DeliveryNpcVoice::MaxEncodedBytes ||
@@ -689,7 +811,8 @@ void UDeliveryNpcPresentationComponent::ReceiveAudio_Implementation(FGuid TurnId
         (Total>0 && (Offset>Total || Data.Num()>Total-Offset)) ||
         (bGenerating && Local->State.bAudioComplete && (Offset+Data.Num()>Local->State.EncodedBytes ||
             (Total>0 && Total!=Local->State.EncodedBytes)))) return;
-    // 补发内容可能与已收到的部分重叠，只添加后面的新内容
+
+    // 补发的数据可能和已经收到的重叠：只追加 Encoded 末尾之后的部分；中间有缺口或全部重复时丢掉
     if (Offset>Local->Encoded.Num() || Offset+Data.Num()<=Local->Encoded.Num()) return;
     const int32 AlreadyReceived=Local->Encoded.Num()-Offset;
     Local->Encoded.Append(Data.GetData()+AlreadyReceived,Data.Num()-AlreadyReceived);
@@ -714,7 +837,8 @@ void UDeliveryNpcPresentationComponent::ReceiveAudio_Implementation(FGuid TurnId
     }
     Local->Pcm.Append(Decoded);
     Local->LastDataAt=FPlatformTime::Seconds();
-    // 编码数据本身也带句末通知，可靠 RPC 或状态复制较晚到达时仍能确认总长
+
+    // 解码器在数据里读到了句末标记：直接调用 FinishStreamAudio_Implementation，不等 FinishStreamAudio 和属性同步
     if (bGenerating && Local->Decoder->IsComplete())
         FinishStreamAudio_Implementation(TurnId,Local->Decoder->GetSourcePcmBytes(),Local->Encoded.Num(),true);
     if (Offset==0 || Local->Encoded.Num()==Total)
@@ -722,12 +846,13 @@ void UDeliveryNpcPresentationComponent::ReceiveAudio_Implementation(FGuid TurnId
             *TurnId.ToString(),int32(GetOwner()->GetLocalRole()),Local->Encoded.Num(),Total,Local->Pcm.Num(),(FPlatformTime::Seconds()-DecodeStarted)*1000);
 }
 
+/// @brief 每帧：播放 LocalVoices[0] 这句；还没开始时攒够起播缓冲再开始，播放中把新收到的声音送进播放器，播完调用 FinishLocalSentence
 void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
 {
     if (LocalVoices.IsEmpty()) return;
     if (bPlayingRadioVoice && !IsLocalRadioListener(DisplayedSpeech))
     {
-        // 已离开本玩家归属的同伴不能继续使用旧句子的连麦播放权限
+        // 这句正按开麦方式播放，但本机玩家已经不是二狗的主人：结束这句
         UE_LOG(LogTemp,Log,TEXT("NpcSpeech radio_listener_revoked turn=%s"),*DisplayedSpeech.TurnId.ToString());
         FinishLocalSentence();
         return;
@@ -737,14 +862,18 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
     if (Local.FrontSince==0) Local.FrontSince=Now;
     const bool bGenerating=Local.State.AudioFormatVersion==DeliveryNpcVoice::StreamingFormatVersion && Local.State.bRecordedVoice;
     const bool bHasBufferedAudio=RecordedWave && RecordedWave->GetAvailableAudioByteCount()>0;
-    // 整句已经收齐后不再等网络数据，让播放器正常播完尾音
+
+    // bHasCompleteAudio：这句的声音全部收齐，之后不再等网络数据，播放器照常播完结尾
     const bool bHasCompleteAudio=Local.State.bAudioComplete && Local.TotalBytes>0 && Local.Pcm.Num()==Local.TotalBytes;
-    // 后一句可能早已收齐，轮到它播放时重新计算缺音等待时间
+
+    // 等待时间从这句排到队首（FrontSince）和最后收到数据（LastDataAt）里较晚的那个算起；收齐的句子不算缺音
     const double DataWaitingSince=FMath::Max(Local.FrontSince,Local.LastDataAt);
     const bool bTimedOut=bGenerating?
         (Now-Local.FrontSince>30 || (!bHasCompleteAudio && !bHasBufferedAudio && Now-DataWaitingSince>5)):
         Now-Local.FrontSince>Local.State.Duration+5;
-    // 网络中断时结束本机播放，界面不会一直保留等待中的句子
+
+    // 超时：边合成的句子在队首超过 30 秒，或者没收齐、播放器也空了、5 秒没新数据；整句超过时长加 5 秒
+    // 主机调用 CancelSpeech，客户端只停本机这轮
     if (bTimedOut)
     {
         UE_LOG(LogTemp,Warning,TEXT("NpcSpeech audio_timeout turn=%s received=%d total=%d"),*Local.State.TurnId.ToString(),Local.Pcm.Num(),Local.TotalBytes);
@@ -752,6 +881,8 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
         else StopStreamSpeech_Implementation(Local.State.ActionId,false);
         return;
     }
+
+    // 只有文字的句子：到了 StartTime 开始显示字幕，过了时长就结束
     if (!Local.State.bRecordedVoice)
     {
         if (ServerTime()<Local.State.StartTime) return;
@@ -767,16 +898,20 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
     if (DisplayedSpeech.bActive && DisplayedSpeech.TurnId==Local.State.TurnId)
     {
         Local.CaptionProgress=GetDisplayedSpeechProgress();
-        // 句末通知可能先于剩余音频到达，已知总长时也要检查本机是否真正播完
+
+        // 这句已经在播：播放器空了而声音还没收完（或还没读完），记为缺音 bRebuffering
         if (bGenerating && RecordedWave && !bHasBufferedAudio)
         {
             const bool bNeedsMoreAudio=!Local.State.bAudioComplete || GetConsumedVoiceBytes()<Local.TotalBytes;
-            // 记录游戏帧观察到的缺音，和后台生成时间一起定位句中停顿
+
+            // 刚开始缺音时打一条日志，和后台合成的时间对照，查句子中间的停顿
             if (bNeedsMoreAudio && !Local.bRebuffering)
                 UE_LOG(LogTemp,Log,TEXT("NpcLatency turn=%s stage=audio_buffer_empty role=%d received=%d queued=%d complete=%d"),
                     *Local.State.TurnId.ToString(),int32(GetOwner()->GetLocalRole()),Local.Pcm.Num(),Local.QueuedBytes,int32(Local.State.bAudioComplete));
             Local.bRebuffering=bNeedsMoreAudio;
         }
+
+        // 缺音后攒够 StreamingResumeBufferSeconds（默认 0.32 秒，按音高换算）或者已经收齐，才继续往播放器里送
         const float ConfiguredResume=VoiceSet?VoiceSet->StreamingResumeBufferSeconds:.32f;
         const float ResumeSeconds=FMath::IsFinite(ConfiguredResume)?FMath::Clamp(ConfiguredResume,.08f,1.f):.32f;
         const float Pitch=RecordedVoice?RecordedVoice->PitchMultiplier:1.f;
@@ -786,7 +921,7 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
         const bool bCanResume=!Local.bRebuffering || PendingBytes>=ResumeBytes || bHasWholeTail;
         if (RecordedWave && PendingBytes>0 && bCanResume)
         {
-            // 短暂缺音后先积累一小段，再沿用同一个声音对象接着播放
+            // 送进同一个 RecordedWave 接着播，不重新建播放器
             RecordedWave->QueueAudio(Local.Pcm.GetData()+Local.QueuedBytes,PendingBytes);
             UE_LOG(LogTemp,Log,TEXT("NpcLatency turn=%s stage=audio_buffer_fill role=%d bytes=%d buffered_ms=%d resumed=%d"),
                 *Local.State.TurnId.ToString(),int32(GetOwner()->GetLocalRole()),PendingBytes,
@@ -796,13 +931,15 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
         }
         if ((!bGenerating || Local.State.bAudioComplete) && Local.TotalBytes>0 && GetConsumedVoiceBytes()==Local.TotalBytes)
         {
-            // 最后一段声音进入混音器后，留出一个短缓冲时间再停止组件
+            // 声音全部读完后再等 0.15 秒（混音器里还有最后一点），然后调用 FinishLocalSentence
             if (Local.DrainedAt==0) Local.DrainedAt=Now;
             if (Now-Local.DrainedAt>=.15) FinishLocalSentence();
         }
         else Local.DrainedAt=0;
         return;
     }
+
+    // 还没开始播：边合成的句子要攒够 StreamingStartBufferSeconds，整句攒够 0.12 秒；二狗按 DialoguePitch 调音高
     const float DefaultStart=GetDefault<UDeliveryNpcVoiceSet>()->StreamingStartBufferSeconds;
     const float ConfiguredStart=VoiceSet?VoiceSet->StreamingStartBufferSeconds:DefaultStart;
     const float StartSeconds=bGenerating?(FMath::IsFinite(ConfiguredStart)?FMath::Clamp(ConfiguredStart,.16f,2.f):DefaultStart):.12f;
@@ -812,6 +949,8 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
     int32 InitialBuffer=FMath::CeilToInt(Local.State.SampleRate*StartSeconds*Pitch)*2;
     if (Local.TotalBytes>0) InitialBuffer=FMath::Min(InitialBuffer,Local.TotalBytes);
     if ((!bGenerating && Local.TotalBytes<=0) || Local.Pcm.Num()<InitialBuffer || ServerTime()<Local.State.StartTime) return;
+
+    // 第一次播放时建 RecordedVoice；每句新建一个 RecordedWave
     if (!RecordedVoice)
     {
         RecordedVoice=NewObject<UAudioComponent>(GetOwner());
@@ -826,9 +965,11 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
     RecordedWave->SetSampleRate(Local.State.SampleRate); RecordedWave->NumChannels=1;
     RecordedWave->Duration=INDEFINITELY_LOOPING_DURATION;
     RecordedWave->SoundGroup=SOUNDGROUP_Voice;
-    // 主机离得较远时仍推进声音，保证句末和记忆记录能够正常完成
+
+    // PlayWhenSilent：主机离得远听不见时播放器也照样往前读，HasFinishedSentence 才能等到这句播完
     RecordedWave->VirtualizationMode=EVirtualizationMode::PlayWhenSilent;
-    // 从这句话的开头播放，字幕按音频组件实际读取的进度显示
+
+    // 从这句开头把已收到的声音全部送进播放器；字幕进度按 GetConsumedVoiceBytes 算
     RecordedWave->QueueAudio(Local.Pcm.GetData(),Local.Pcm.Num());
     Local.QueuedBytes=Local.Pcm.Num();
     Local.bRebuffering=false;
@@ -839,11 +980,13 @@ void UDeliveryNpcPresentationComponent::PlayRecordedVoice()
         *Local.State.ReplyToEventId.ToString(),*Local.State.TurnId.ToString(),int32(GetOwner()->GetLocalRole()),int32((ServerTime()-Local.State.StartTime)*1000));
 }
 
+/// @brief 设置 RecordedVoice 的音量和衰减：bRadio 为 true 时不按距离衰减；VoiceSet 没配衰减资产时用 600 cm 内不衰减、1800 cm 外听不见
 void UDeliveryNpcPresentationComponent::ConfigureRecordedVoice(bool bRadio)
 {
     if (!RecordedVoice) return;
     bPlayingRadioVoice=bRadio;
-    // 每句恢复人物配置，上一句连麦不能改变下一句普通对白的音量和范围
+
+    // 每句都按 VoiceSet 重新设一遍，上一句开麦播放的设置不会留到下一句
     const float Volume=VoiceSet?VoiceSet->DialogueVolume:1.f;
     RecordedVoice->SetVolumeMultiplier(FMath::IsFinite(Volume)?FMath::Clamp(Volume,0.f,2.f):1.f);
     RecordedVoice->bAllowSpatialization=!bRadio;
@@ -861,6 +1004,7 @@ void UDeliveryNpcPresentationComponent::ConfigureRecordedVoice(bool bRadio)
     }
 }
 
+/// @brief 本机正在播的声音在当前位置之后 640 字节（约 20 毫秒）的响度，0 到 1；口型用它张嘴
 float UDeliveryNpcPresentationComponent::GetVoiceAmplitude() const
 {
     if (!DisplayedSpeech.bActive || !DisplayedSpeech.bRecordedVoice || LocalVoices.IsEmpty() || LocalVoices[0].bRebuffering) return 0;

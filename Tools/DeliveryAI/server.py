@@ -71,6 +71,7 @@ SYSTEM_PROMPT += BACKGROUND_INSTRUCTIONS + CHARACTER_DECISION_INSTRUCTIONS
 
 
 def valid_id(value):
+    """value 是格式规范且不为全零的 UUID 字符串时返回 True"""
     try:
         return isinstance(value, str) and str(uuid.UUID(value)) == value and uuid.UUID(value).int != 0
     except (ValueError, AttributeError):
@@ -78,6 +79,7 @@ def valid_id(value):
 
 
 def validate_context(context):
+    """检查游戏发来的决策请求字段，格式不对时抛出 ValueError"""
     if not isinstance(context, dict):
         raise ValueError("context must be an object")
     if context.get('request_source', 'ambient') not in ('player', 'ambient') or context.get('voice', 'male') not in ('male', 'female'):
@@ -223,6 +225,7 @@ def validate_context(context):
 
 
 def validate_action(context, action, *, checking_candidate=False):
+    """检查模型选的动作是否在 allowed_actions 里、候选字段是否合法；checking_candidate 为 True 时只检查候选本身"""
     if not isinstance(action, dict) or action.get("action") not in context["allowed_actions"]:
         raise ValueError("unsupported action")
     validate_candidate_travel(context, action)
@@ -320,6 +323,7 @@ def validate_action(context, action, *, checking_candidate=False):
 
 
 def decide(context, provider):
+    """一次决策：校验请求、补人物背景、拼接系统提示，按 provider 调用模型并校验返回的动作"""
     validate_context(context)
     context = with_character_background(context)
     instructions = SYSTEM_PROMPT + companion_instructions(context) + candidate_instructions(context) + continuation_instructions(context)
@@ -373,15 +377,18 @@ def decide(context, provider):
 
 
 class DecisionServer(ThreadingHTTPServer):
+    """HTTP 服务：最多同时执行两个模型调用，由 scheduler 排队"""
     daemon_threads = True
 
     def __init__(self, address, provider):
+        """保存模型提供方，创建两个调用名额和请求调度器"""
         super().__init__(address, DecisionHandler)
         self.provider = provider
         self.slots = threading.BoundedSemaphore(2)
         # 最多同时执行两个模型调用，另外两个请求可短暂等待正在执行的调用结束
         self.admission = threading.BoundedSemaphore(4)
         def run(job):
+            """在名额内执行一个排队的决策任务，任务已取消就跳过"""
             # 旧接口和逐句接口共用模型数量限制
             waiting = time.monotonic()
             with self.slots:
@@ -394,17 +401,21 @@ class DecisionServer(ThreadingHTTPServer):
         prepare_resources(local_speech=provider!='fixture')
 
     def server_close(self):
+        """关闭调度器和模型资源后关闭 HTTP 服务"""
         self.scheduler.close()
         close_resources()
         super().server_close()
 
 
 class DecisionHandler(BaseHTTPRequestHandler):
+    """处理游戏发来的 HTTP 请求"""
     def setup(self):
+        """连接建立后设置 8 秒超时"""
         super().setup()
         self.connection.settimeout(8)
 
     def reply(self, status, data):
+        """把 data 编码成 JSON 作为响应发回"""
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -413,6 +424,7 @@ class DecisionHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        """POST 入口：流式决策和取消转给 stream_request，/v1/decisions 走一次性决策"""
         if self.path in ('/v1/decisions/stream', '/v1/decisions/cancel'):
             self.stream_request()
             return
@@ -467,6 +479,7 @@ class DecisionHandler(BaseHTTPRequestHandler):
             self.server.admission.release()
 
     def stream_request(self):
+        """读取请求体，提交流式决策任务或取消已有任务"""
         job = None
         try:
             size = int(self.headers.get('Content-Length', '0'))
@@ -517,6 +530,7 @@ class DecisionHandler(BaseHTTPRequestHandler):
                 job.cancel_request()
 
     def log_message(self, fmt, *args):
+        """访问日志直接打印到标准输出"""
         # 只记录 HTTP 状态，不记录玩家文本和模型凭据
         print(fmt % args, flush=True)
 

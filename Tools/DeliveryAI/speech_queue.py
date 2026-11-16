@@ -9,6 +9,7 @@ import time
 
 @dataclass
 class _Work:
+    """排队中的一次语音合成：要执行的函数、参数、结果和取消事件"""
     function: object
     args: tuple
     future: Future
@@ -19,16 +20,20 @@ class _PlayerReservation:
     """玩家仍在生成台词时保留优先权，释放可以重复调用"""
 
     def __init__(self, owner, key):
+        """保存所属队列和预留的 key"""
         self._owner = owner
         self._key = key
 
     def release(self):
+        """释放这次为玩家对话预留的合成位置"""
         self._owner._release_player_reservation(self._key)
 
     def __enter__(self):
+        """进入 with 时返回自身"""
         return self
 
     def __exit__(self, *_):
+        """离开 with 时调用 release"""
         self.release()
 
 
@@ -36,6 +41,7 @@ class SpeechQueue:
     """后端持有的语音队列，每个实例独立管理线程、等待任务和取消通知"""
 
     def __init__(self, workers=1, capacity=24):
+        """检查参数，启动 workers 个合成线程和一个检查取消的线程"""
         if type(workers) is not int or workers < 1 or type(capacity) is not int or capacity < 1:
             raise ValueError('workers and capacity must be positive integers')
         self._capacity = capacity
@@ -71,11 +77,13 @@ class SpeechQueue:
         return _PlayerReservation(self, key)
 
     def _release_player_reservation(self, key):
+        """移除 key 对应的玩家预留并唤醒等待的线程"""
         with self._condition:
             self._player_reservations.pop(key, None)
             self._condition.notify_all()
 
     def _remove_cancelled_reservations_locked(self):
+        """移除已经取消的玩家预留"""
         cancelled = [key for key, cancel in self._player_reservations.items() if cancel.is_set()]
         for key in cancelled:
             del self._player_reservations[key]
@@ -119,11 +127,13 @@ class SpeechQueue:
         return future
 
     def _wake_on_cancel(self, future):
+        """future 被取消时唤醒等待的线程"""
         if future.cancelled():
             with self._condition:
                 self._condition.notify_all()
 
     def _remove_cancelled_locked(self):
+        """把已取消的任务移出等待队列，返回被移出的任务"""
         removed, remaining = [], []
         for item in self._waiting:
             work = item[2]
@@ -139,10 +149,12 @@ class SpeechQueue:
 
     @staticmethod
     def _cancel_waiting(tasks):
+        """把 tasks 里每个任务的结果标记为已取消"""
         for work in tasks:
             work.future.cancel()
 
     def _watch_cancellations(self):
+        """后台线程定期清理已取消的任务和预留"""
         while True:
             with self._condition:
                 removed = self._remove_cancelled_locked()
@@ -155,6 +167,7 @@ class SpeechQueue:
             self._cancel_waiting(removed)
 
     def _worker(self):
+        """合成线程按优先级取出任务执行，有玩家预留时先等玩家的任务"""
         while True:
             work = None
             with self._condition:

@@ -25,12 +25,15 @@ MAX_WORKER_MESSAGES = MAX_STREAM_CHUNKS + 2
 
 
 class NeuralTtsError(RuntimeError):
+    """语音合成失败，code 是错误代码"""
     def __init__(self, code):
+        """保存错误代码"""
         self.code = code
         super().__init__(code)
 
 
 def project_path(relative):
+    """把相对路径转成项目目录里的路径，路径或其上级是符号链接、越出项目目录时抛出错误"""
     path = PROJECT_ROOT / relative
     path.absolute().relative_to(PROJECT_ROOT)
     for current in (path, *path.parents):
@@ -45,6 +48,7 @@ def project_path(relative):
 
 
 def load_voice_config(config_path=None):
+    """读取音色配置 neural_voice_config.json，检查版本、采样率和每个音色的字段"""
     config = json.loads(project_path(config_path or CONFIG_PATH).read_text(encoding='utf-8-sig'))
     if (not isinstance(config, dict) or type(config.get('schema_version')) is not int
             or config.get('schema_version') != 1 or config.get('sample_rate') != 24000
@@ -91,11 +95,13 @@ def load_voice_config(config_path=None):
 
 
 def neural_voice_speakers(config):
+    """返回使用 Qwen 的音色和它对应的说话人名字"""
     return {voice: entry['speaker'] for voice, entry in config['voices'].items()
             if entry['provider'] in ('qwen', 'qwen_base')}
 
 
 def neural_voice_identities(config):
+    """返回每个 Qwen 音色的身份信息，用来核对子进程回传的音频是否来自同一个音色"""
     identities = {}
     for voice, entry in config['voices'].items():
         if entry['provider'] not in ('qwen', 'qwen_base'):
@@ -115,6 +121,7 @@ def neural_voice_identities(config):
 
 
 def uses_neural_voice(voice):
+    """DELIVERY_TTS_PROVIDER 是 qwen 且这个音色配置为 Qwen 时返回 True"""
     # 只有明确启用 Qwen 时才接入，普通测试和 fixture 不启动模型
     if os.environ.get('DELIVERY_TTS_PROVIDER', '').lower() != 'qwen':
         return False
@@ -124,6 +131,7 @@ def uses_neural_voice(voice):
 class QwenSpeechSynthesizer:
     """后端共享一个实例，GPU 任务由调用方按玩家优先顺序提交"""
     def __init__(self, config_path=None):
+        """读取音色配置，初始化子进程、消息队列和锁"""
         self.config_path = project_path(config_path or CONFIG_PATH)
         self.config = load_voice_config(self.config_path)
         self.speakers = neural_voice_speakers(self.config)
@@ -141,10 +149,12 @@ class QwenSpeechSynthesizer:
 
     @property
     def voice_name(self):
+        """最近一次合成用的说话人名字，还没合成过时用男声"""
         # 每个调用线程记录自己的结果，男女同时排队时日志不会串音色
         return getattr(self._completed_voice, 'name', self.speakers['male'])
 
     def _acquire(self, cancel):
+        """在锁上等待，期间关闭或取消时抛出 cancelled"""
         while True:
             if self.closed.is_set() or cancel.is_set():
                 raise NeuralTtsError('cancelled')
@@ -152,10 +162,12 @@ class QwenSpeechSynthesizer:
                 return
 
     def _send(self, message):
+        """把一条消息写成一行 JSON 发给子进程"""
         self.process.stdin.write(json.dumps(message, ensure_ascii=False) + '\n')
         self.process.stdin.flush()
 
     def _stop_owned_process(self, reason='shutdown'):
+        """结束自己启动的子进程；子进程没按时退出时标记为停止失败，下次启动前再处理"""
         process = self.process
         if process is None:
             return
@@ -179,6 +191,7 @@ class QwenSpeechSynthesizer:
         self.stopping_failed = False
 
     def _start(self):
+        """子进程没在运行时启动它，并开后台线程读取它的输出"""
         if self.stopping_failed:
             self._stop_owned_process('previous_stop_pending')
         if self.process and self.process.poll() is None:
@@ -211,6 +224,7 @@ class QwenSpeechSynthesizer:
         print(f'tts worker_started pid={process.pid}', file=sys.stderr, flush=True)
 
         def read_output():
+            """后台线程逐行读取子进程输出，超长或无法解析时标记读取失败"""
             try:
                 while True:
                     line = process.stdout.readline(MAX_PROTOCOL_LINE + 1)
@@ -228,13 +242,16 @@ class QwenSpeechSynthesizer:
         threading.Thread(target=read_output, name='qwen-speech-output', daemon=True).start()
 
     def _worker_command(self, executable):
+        """启动 Qwen 语音子进程的命令行"""
         return [str(executable), '-B', '-X', 'utf8', '-u',
                 str(Path(__file__).with_name('neural_tts_worker.py')), '--config', str(self.config_path)]
 
     def _worker_log_path(self):
+        """Qwen 语音子进程的日志位置"""
         return project_path('Saved/Logs/QwenSpeechWorker.log')
 
     def _receive(self):
+        """取出子进程的下一条消息，没有就返回 None"""
         if self.reader_failed.is_set():
             raise NeuralTtsError('neural_tts_invalid_worker_output')
         try:
@@ -245,6 +262,7 @@ class QwenSpeechSynthesizer:
             return None
 
     def _prepare_locked(self, cancel):
+        """已经拿到锁时启动子进程并等它报告模型加载完成"""
         if self.closed.is_set() or cancel.is_set():
             raise NeuralTtsError('cancelled')
         started = time.monotonic()
@@ -277,6 +295,7 @@ class QwenSpeechSynthesizer:
             raise
 
     def prepare(self, cancel):
+        """拿到锁后调用 _prepare_locked 提前加载模型"""
         self._acquire(cancel)
         try:
             return self._prepare_locked(cancel)
@@ -285,9 +304,11 @@ class QwenSpeechSynthesizer:
 
     @property
     def supports_audio_stream(self):
+        """子进程已就绪且支持流式音频"""
         return self.ready and self.audio_stream_version == 1
 
     def synthesize(self, text, voice, emotion, cancel):
+        """合成一句话，等全部音频生成后一次返回"""
         return self._synthesize(text, voice, emotion, cancel)
 
     def synthesize_stream(self, text, voice, emotion, cancel, on_chunk, chunk_frames=8):
@@ -297,6 +318,7 @@ class QwenSpeechSynthesizer:
         return self._synthesize(text, voice, emotion, cancel, on_chunk, chunk_frames)
 
     def _synthesize(self, text, voice, emotion, cancel, on_chunk=None, chunk_frames=0):
+        """合成一句话：发请求给子进程，按顺序收音频段并核对音色；on_chunk 给出时每收到一段就回调"""
         if (not isinstance(text, str) or not text.strip() or len(text) > 120
                 or not isinstance(voice, str) or voice not in self.speakers):
             raise NeuralTtsError('neural_tts_invalid_speech')
@@ -324,6 +346,7 @@ class QwenSpeechSynthesizer:
             chunk_count = total_bytes = 0
 
             def abort(error, can_reuse=False):
+                """记下第一次出错的原因并向子进程发取消；can_reuse 为 True 时子进程之后还能继续用"""
                 nonlocal abort_error, abort_started, deadline, reuse_after_abort
                 if abort_error is None:
                     abort_error = error
@@ -335,6 +358,7 @@ class QwenSpeechSynthesizer:
                           f'reason={getattr(error, "code", type(error).__name__)}', file=sys.stderr, flush=True)
 
             def check_identity(message):
+                """核对子进程回传的采样率、说话人和音色身份"""
                 if (message.get('sample_rate') != 24000 or message.get('voice_name') != self.speakers[voice]
                         or message.get('voice_identity') != self.identities[voice]):
                     raise NeuralTtsError('neural_tts_invalid_audio_format')
@@ -418,6 +442,7 @@ class QwenSpeechSynthesizer:
             self.lock.release()
 
     def close(self):
+        """标记关闭，等当前合成结束后结束子进程"""
         self.closed.set()
         wait = self.config['cancel_grace_seconds'] + self.config['process_exit_timeout_seconds'] + 1
         if not self.lock.acquire(timeout=wait):

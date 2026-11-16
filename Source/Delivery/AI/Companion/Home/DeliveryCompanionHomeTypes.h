@@ -9,7 +9,9 @@ class APawn;
 class UAnimSequence;
 class UPrimitiveComponent;
 
-// 物件清单只包含实际感知和已实现的用途，不向模型发送 UObject 或 SO 句柄
+/**
+ * @brief 物件清单只包含实际感知和已实现的用途，不向模型发送 UObject 或 SO 句柄
+ */
 struct FDeliveryNpcHomeSlotView
 {
     FString SlotId;
@@ -26,7 +28,9 @@ struct FDeliveryNpcHomeObjectView
     TArray<FDeliveryNpcHomeSlotView> Slots;
 };
 
-// 请求快照绑定实物和用途，接受、开始和实际交接都重新检查弱身份与版本
+/**
+ * @brief 请求快照绑定实物和用途，接受、开始和实际交接都重新检查弱身份与版本
+ */
 struct FDeliveryCompanionHomeChoice
 {
     FGuid CandidateId;
@@ -46,13 +50,18 @@ struct FDeliveryCompanionHomeChoice
     TWeakObjectPtr<APawn> PlacementOwnerPawn;
 };
 
+/**
+ * @brief 家居安排的阶段：走向家具、拿起、走向目的地、进入使用、使用中、放下、起身，以及完成、失败、取消
+ */
 UENUM(BlueprintType)
 enum class EDeliveryCompanionHomePhase : uint8
 {
     None, GoToObject, TakeProp, GoToDestination, EnterUse, Using, PlaceProp, LeaveUse, Completed, Failed, Cancelled
 };
 
-// 服务器给出本次座位移动，模拟代理创建同参数 RMS，由 CMC 负责位移和碰撞
+/**
+ * @brief 服务器给出本次座位移动，模拟代理创建同参数 RMS，由 CMC 负责位移和碰撞
+ */
 USTRUCT()
 struct FDeliveryCompanionSeatMotion
 {
@@ -68,7 +77,9 @@ struct FDeliveryCompanionSeatMotion
     UPROPERTY() bool bMoving=false;
 };
 
-// 仅保存这个组件实际接管的资源，复制状态与本机 RMS 编号分开
+/**
+ * @brief 仅保存这个组件实际接管的资源，复制状态与本机 RMS 编号分开
+ */
 struct FDeliveryCompanionSeatRuntime
 {
     FGuid ArrangementId;
@@ -86,7 +97,9 @@ struct FDeliveryCompanionSeatRuntime
     bool bSavedControllerRotation=false;
 };
 
-// 所有人看到同一动作与实物结果，槽位是否可用仍由服务器 Smart Objects 判断
+/**
+ * @brief 所有人看到同一动作与实物结果，槽位是否可用仍由服务器 Smart Objects 判断
+ */
 USTRUCT(BlueprintType)
 struct FDeliveryCompanionHomeState
 {

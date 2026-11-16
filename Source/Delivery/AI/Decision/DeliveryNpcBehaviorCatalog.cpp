@@ -1,8 +1,11 @@
 #include "AI/Decision/DeliveryNpcBehaviorCatalog.h"
 
+// ── 行为表 ──
+// 策划在 DT_NpcBehaviorCatalog 里配置每个动作给不给模型选、哪些人物不能用；Load 读这张表建索引
+// Agent 问模型之前调用 FilterModelOptions，从 AllowedActions 和 Candidates 里删掉这位 NPC 不能用的动作
 namespace
 {
-// 等待和继续当前活动始终保留，行为表不能移除
+/// @brief Wait、ContinueCurrent、CancelCompanionTask 三个动作始终留给模型，行为表里怎么配都不会删掉
 bool IsEssentialChoice(EDeliveryNpcAction Action)
 {
     return Action == EDeliveryNpcAction::Wait || Action == EDeliveryNpcAction::ContinueCurrent ||
@@ -10,7 +13,8 @@ bool IsEssentialChoice(EDeliveryNpcAction Action)
 }
 } // namespace
 
-// 读取 DT_NpcBehaviorCatalog，建立行为标签到行号的索引
+/// @brief 读取 DT_NpcBehaviorCatalog，建立行为标签到行号、动作到行号两份索引
+/// 行结构不对、标签无效、动作为 None 或重复、缺少 DisplayName 或 Category 时整张表作废，返回 false，原来的索引不变
 bool FDeliveryNpcBehaviorCatalog::Load(const UDataTable& Table)
 {
     if (Table.GetRowStruct() != FDeliveryNpcBehaviorCatalogRow::StaticStruct())
@@ -35,14 +39,16 @@ bool FDeliveryNpcBehaviorCatalog::Load(const UDataTable& Table)
     return true;
 }
 
-// 按行为标签查一行
+/// @brief 按行为标签查一行，查不到返回 nullptr
 const FDeliveryNpcBehaviorCatalogRow* FDeliveryNpcBehaviorCatalog::Find(FGameplayTag Tag) const
 {
     const int32* Index = IndexByTag.Find(Tag);
     return Index ? &Definitions[*Index] : nullptr;
 }
 
-// 从请求中移除这个人物不能使用的动作和候选
+/// @brief 从发给模型的请求里删掉这位 NPC 不能用的动作和候选
+/// 删除条件：bOfferToModel 为 false；bPlayerRequestOnly 为 true 但这次不是回应玩家；ExcludedProfiles 里有这位 NPC 的人物配置 Profile
+/// 行为表里没有的动作和 IsEssentialChoice 的三个动作不删
 void FDeliveryNpcBehaviorCatalog::FilterModelOptions(FDeliveryNpcDecisionRequest& Request, FName Profile) const
 {
     if (Definitions.IsEmpty())
@@ -56,7 +62,8 @@ void FDeliveryNpcBehaviorCatalog::FilterModelOptions(FDeliveryNpcDecisionRequest
         return !Row.bOfferToModel || (Row.bPlayerRequestOnly && !Request.bPlayerRequest) ||
                Row.ExcludedProfiles.Contains(Profile);
     };
-    // 顺序、目标、证据及同一动作的多个方式保留，编号随后由原入口封存
+
+    // RemoveAll 只删不符合的项，其余候选的顺序、目标、证据不变；候选编号之后由调用方统一生成
     Request.AllowedActions.RemoveAll(Excluded);
     Request.Candidates.RemoveAll(
         [&](const auto& Candidate)

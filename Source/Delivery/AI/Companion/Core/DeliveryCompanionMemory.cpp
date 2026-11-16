@@ -25,7 +25,10 @@ constexpr int32 MaxCompanionMemories=24;
 constexpr int32 MaxPublicPlaceMemories=6;
 // 沿既有服务器组件 Tick，每秒最多一次地点观察，不唤醒模型
 constexpr double PublicPlaceObservationInterval=1.0;
-// 这些事实的最新一条携带真实累计次数，后续闲聊不能把重要经历挤出上下文
+// ── 记忆 ──
+// 记下首次结识和和主人一起经历的事（扶起、送货、挨打、被车撞），按事实编号去重，作为模型请求里的记忆发出去
+
+/// @brief 这些事实的最新一条携带真实累计次数，后续闲聊不能把重要经历挤出上下文
 bool IsImportantCompanionMemory(FName Kind)
 {
     return Kind==TEXT("FirstHelp") || Kind==TEXT("HelpedUp") || Kind==TEXT("DeliveryTogether") ||
@@ -33,6 +36,7 @@ bool IsImportantCompanionMemory(FName Kind)
 }
 }
 
+/// @brief 按关系值 Affinity 返回关系阶段的文字，没有主人时是未结识
 FString UDeliveryCompanionComponent::GetRelationshipStage() const
 {
     if (!IsValid(OwnerPlayerState)) return TEXT("未结识");
@@ -42,6 +46,7 @@ FString UDeliveryCompanionComponent::GetRelationshipStage() const
     return TEXT("寒心");
 }
 
+/// @brief 请求人是主人且已经结识时，可以让二狗安静一会儿或恢复说话
 bool UDeliveryCompanionComponent::CanChangeSpeechPreference(APlayerState* Requester) const
 {
     const auto* Npc=GetCompanion();
@@ -49,12 +54,14 @@ bool UDeliveryCompanionComponent::CanChangeSpeechPreference(APlayerState* Reques
         Npc->GetEncounterState().Phase==EDeliveryCompanionEncounterPhase::Joined;
 }
 
+/// @brief 安静模式还剩几秒，取整后限制在 0～180
 int32 UDeliveryCompanionComponent::GetQuietSecondsRemaining() const
 {
     const UWorld* World=GetWorld();
     return World?FMath::CeilToInt(FMath::Clamp(QuietSpeechUntil-World->GetTimeSeconds(),0.0,180.0)):0;
 }
 
+/// @brief 编号对得上时设置或取消安静模式，时长取 QuietSpeechSeconds（15～180 秒）
 bool UDeliveryCompanionComponent::ApplySpeechPreference(APlayerState* Requester,int32 ExpectedCommandRevision,
     EDeliveryCompanionSpeechPreference Preference)
 {
@@ -68,6 +75,7 @@ bool UDeliveryCompanionComponent::ApplySpeechPreference(APlayerState* Requester,
     return true;
 }
 
+/// @brief 按事件编号 EventId 去重后新增一条记忆并调整关系值 AffinityDelta，达到上限后只报告一次不再新增
 bool UDeliveryCompanionComponent::RecordMemory(FGuid EventId,FName Kind,const FString& Description,int32 AffinityDelta)
 {
     if (!GetOwner()->HasAuthority() || !CanCommand(OwnerPlayerState) || !EventId.IsValid() || Kind.IsNone() ||
@@ -108,6 +116,7 @@ bool UDeliveryCompanionComponent::RecordMemory(FGuid EventId,FName Kind,const FS
     return true;
 }
 
+/// @brief 删掉 RememberedPublicPlaces 里已经没有对应记忆的地点
 void UDeliveryCompanionComponent::PrunePublicPlaceMemoryIndex()
 {
     RememberedPublicPlaces.RemoveAll([this](const FRememberedPublicPlace& Place)
@@ -117,6 +126,7 @@ void UDeliveryCompanionComponent::PrunePublicPlaceMemoryIndex()
     });
 }
 
+/// @brief 沿既有服务器生命周期更新旧见闻，读取请求时只复制并计算观察年龄
 void UDeliveryCompanionComponent::RefreshPublicPlaceMemories()
 {
     const auto* Npc=GetCompanion();
@@ -142,6 +152,7 @@ void UDeliveryCompanionComponent::RefreshPublicPlaceMemories()
             { return Memory.Location==Place.Location; })) RecordPublicPlaceMemory(Place,Now);
 }
 
+/// @brief 看到一个公开地点时新增或更新它的记忆，同一个地点只保留一条
 void UDeliveryCompanionComponent::RecordPublicPlaceMemory(const FObservedPublicPlace& Place,double ObservedAt)
 {
     const auto* Location=Place.Location.Get();
@@ -179,6 +190,7 @@ void UDeliveryCompanionComponent::RecordPublicPlaceMemory(const FObservedPublicP
     // 地点编号只标记这条往事，不进入命中去重表，也不改变关系或发网络更新
 }
 
+/// @brief 复制全部记忆给模型请求，地点记忆补上距离这次看到过了多久
 void UDeliveryCompanionComponent::CopyCompanionMemories(TArray<FDeliveryNpcCompanionMemory>& Out) const
 {
     Out=Memories;
@@ -197,12 +209,14 @@ void UDeliveryCompanionComponent::CopyCompanionMemories(TArray<FDeliveryNpcCompa
     }
 }
 
+/// @brief 结识时记下被主人救起这件事，已经有这条就不再记
 void UDeliveryCompanionComponent::RecordRecruitMemory()
 {
     if (Memories.ContainsByPredicate([](const FDeliveryNpcCompanionMemory& Memory){ return Memory.Kind==TEXT("FirstHelp"); })) return;
     RecordMemory(FGuid::NewGuid(),TEXT("FirstHelp"),TEXT("现在这位主人伸手救我，我已接受他的帮助并认他为主人；起身是否完成要以随后游戏确认的结识事件为准"),0);
 }
 
+/// @brief 主人扶起二狗后记一次经历，累计次数加一并提高关系值
 bool UDeliveryCompanionComponent::RecordAssistedRecovery(FGuid DownEpisode,APawn* Helper)
 {
     auto* Npc=GetCompanion();
@@ -223,6 +237,7 @@ bool UDeliveryCompanionComponent::RecordAssistedRecovery(FGuid DownEpisode,APawn
     return true;
 }
 
+/// @brief 主人交付任务时二狗在附近且看得见，记一次一起送货的经历，同一任务只记一次
 bool UDeliveryCompanionComponent::RecordDeliveryMemory(UDeliveryTaskDefinition* Task,APlayerState* Deliverer,bool bDeliveredByCompanion)
 {
     const auto* Manager=UDeliveryTaskManagerComponent::Get(this);
@@ -243,6 +258,7 @@ bool UDeliveryCompanionComponent::RecordDeliveryMemory(UDeliveryTaskDefinition* 
     return true;
 }
 
+/// @brief 主人打中二狗时记一条经历并降低关系值，二狗已经倒地时扣得更多
 void UDeliveryCompanionComponent::RecordOwnerPunch(FGuid PunchId,bool bWasDown)
 {
     const int32 NewCount=OwnerPunchCount<MAX_int32?OwnerPunchCount+1:MAX_int32;
@@ -254,6 +270,7 @@ void UDeliveryCompanionComponent::RecordOwnerPunch(FGuid PunchId,bool bWasDown)
     { OwnerPunchCount=NewCount; OwnerDownPunchCount=NewDownCount; }
 }
 
+/// @brief 主人骑车把二狗撞倒时记一条经历，同一次倒地只记一次
 void UDeliveryCompanionComponent::RecordOwnerVehicleHit(AActor* Source)
 {
     const auto* Bike=Cast<ADeliveryMotorbike>(Source);
@@ -269,6 +286,7 @@ void UDeliveryCompanionComponent::RecordOwnerVehicleHit(AActor* Source)
     { RememberedVehicleKnockdowns.Add(DownEpisode); OwnerVehicleHitCount=NewCount; }
 }
 
+/// @brief 清空所有记忆、去重记录和累计次数，解除主人时调用
 void UDeliveryCompanionComponent::ClearCompanionMemories()
 {
     Memories.Reset(); RecordedMemoryEvents.Reset(); RememberedDeliveries.Reset(); RememberedVehicleKnockdowns.Reset();

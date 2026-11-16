@@ -126,6 +126,9 @@ public:
     TUniquePtr<Audio::FAudioCapture> Capture;
 };
 
+// ── 对外接口 ──
+// 下面的函数都直接转给 FImpl；麦克风采集的实际处理写在上面的 FImpl 里，各函数的说明见头文件
+
 FDeliverySpeechAudioCapture::FDeliverySpeechAudioCapture() : Impl(MakeUnique<FImpl>()) {}
 FDeliverySpeechAudioCapture::~FDeliverySpeechAudioCapture() { Stop(); }
 

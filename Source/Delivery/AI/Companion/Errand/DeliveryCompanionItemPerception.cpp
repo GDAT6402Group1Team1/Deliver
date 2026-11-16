@@ -19,6 +19,10 @@
 #include "GameFramework/PlayerState.h"
 #include "Engine/World.h"
 
+// ── 看见的物品 ──
+// 记下二狗看到过的物品和位置，生成取物候选写进模型请求
+
+/// @brief 模型请求的证据满 32 条时，删掉一条没有被候选引用的证据给找物线索腾位置
 bool UDeliveryCompanionComponent::MakeRoomForItemSearchEvidence(FDeliveryNpcDecisionRequest& Request,bool bPrioritizeCurrentItem)
 {
     constexpr int32 MaxEvidence=32;
@@ -93,6 +97,7 @@ namespace
     }
 }
 
+/// @brief 二狗能从眼睛位置直接看到地上的物品时返回 true，Point 写入看到的位置
 bool UDeliveryCompanionComponent::CanSeeWorldItem(const ADeliveryHandheldItem* Item,FVector& ObservedPoint) const
 {
     const auto* Npc=GetCompanion();
@@ -118,6 +123,7 @@ bool UDeliveryCompanionComponent::CanSeeWorldItem(const ADeliveryHandheldItem* I
     return !ObservedPoint.ContainsNaN();
 }
 
+/// @brief 主人本人在旁边步行、二狗站着且没有其他安排时，可以在主人周围找东西
 bool UDeliveryCompanionComponent::CanArrangeOwnerAreaSearch(APlayerState* Requester) const
 {
     const auto* Npc=GetCompanion();
@@ -129,6 +135,7 @@ bool UDeliveryCompanionComponent::CanArrangeOwnerAreaSearch(APlayerState* Reques
         FVector::DistSquared(Npc->GetActorLocation(),Pawn->GetActorLocation())<=FMath::Square(1600.);
 }
 
+/// @brief 主人这次说话时加入在主人周围找东西的候选
 void UDeliveryCompanionComponent::AddOwnerAreaSearchCandidate(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const
 {
     if (!Request.bPlayerRequest || !Request.bPendingPlayerMessage || !Request.bRequesterIsCompanionOwner ||
@@ -155,6 +162,7 @@ void UDeliveryCompanionComponent::AddOwnerAreaSearchCandidate(FDeliveryNpcDecisi
     Request.AllowedActions.AddUnique(EDeliveryNpcAction::SearchNearOwner);
 }
 
+/// @brief 主人这次说话时，把附近看到过的普通物品写进模型请求作为可取候选
 void UDeliveryCompanionComponent::AddNearbyItemSearchCandidates(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const
 {
     auto* Npc=GetCompanion();
@@ -241,6 +249,7 @@ void UDeliveryCompanionComponent::AddNearbyItemSearchCandidates(FDeliveryNpcDeci
     }
 }
 
+/// @brief 记下看到的物品和位置，第一次看到或隔久了再看到时写一条观察事实
 void UDeliveryCompanionComponent::RecordVisibleWorldItem(ADeliveryHandheldItem* Item,const FVector& Point,double Now)
 {
     FSeenItem* Seen=SeenItems.FindByPredicate([Item](const auto& Entry) { return Entry.Item.Get()==Item; });
@@ -256,6 +265,7 @@ void UDeliveryCompanionComponent::RecordVisibleWorldItem(ADeliveryHandheldItem* 
     if (Agent->ObserveEvent(Fact)) { Seen->EventId=Fact.EventId; Seen->FactAt=Now; }
 }
 
+/// @brief 按 ItemObservationInterval 的间隔扫描附近地上的物品，更新看到的物品列表
 void UDeliveryCompanionComponent::RefreshItemObservations()
 {
     auto* Npc=GetCompanion();
@@ -321,6 +331,7 @@ void UDeliveryCompanionComponent::RefreshItemObservations()
     }
 }
 
+/// @brief 普通道具的短动作只跟踪当前实见物或同槽实际自持物，不把旧记录当当前位置
 bool UDeliveryCompanionComponent::CanUseObservedItemTarget(const ADeliveryHandheldItem* Item) const
 {
     const auto* Npc=GetCompanion();
@@ -332,6 +343,7 @@ bool UDeliveryCompanionComponent::CanUseObservedItemTarget(const ADeliveryHandhe
     return CanSeeWorldItem(Item,Seen);
 }
 
+/// @brief 检查能否对 Item 安排取物、还物或找物，小绿交给 CanArrangeCaterpillar
 bool UDeliveryCompanionComponent::CanArrangeItem(EDeliveryNpcAction Action,ADeliveryHandheldItem* Item,APlayerState* Requester,bool bSearchLead) const
 {
     if (Action==EDeliveryNpcAction::SearchNearOwner) return !Item && !bSearchLead && CanArrangeOwnerAreaSearch(Requester);
@@ -350,6 +362,7 @@ bool UDeliveryCompanionComponent::CanArrangeItem(EDeliveryNpcAction Action,ADeli
     return CanSeeWorldItem(Item,Point) && Item->GetItemComponent()->CanTransferTo(Npc);
 }
 
+/// @brief 把二狗手上的物品、主人物品栏和附近物品的候选写进模型请求
 void UDeliveryCompanionComponent::ExtendItemDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const
 {
     Request.RequestedCapabilityVersion=7;
@@ -389,6 +402,7 @@ void UDeliveryCompanionComponent::ExtendItemDecisionRequest(FDeliveryNpcDecision
     AddCaterpillarItemCandidates(Request,Requester);
 }
 
+/// @brief 模型选的物品候选仍对应本次请求的编号、证据和当前主人时返回 true
 bool UDeliveryCompanionComponent::CanApplyItemChoice(const FDeliveryCompanionItemChoice& Choice,APlayerState* Requester,int32 ExpectedRevision) const
 {
     const auto* Npc=GetCompanion();

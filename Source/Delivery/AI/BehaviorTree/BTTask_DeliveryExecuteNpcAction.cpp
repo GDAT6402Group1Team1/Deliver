@@ -20,7 +20,7 @@ namespace
 // NPC 动作使用单独的朝向优先级，不覆盖导航或其他玩法设置的朝向
 const EAIFocusPriority::Type ResidentActionFocus = EAIFocusPriority::LastFocusPriority + 1;
 
-// 同伴的踱步是否仍是当前这一次
+/// @brief 同伴的踱步是否仍是当前这一次
 bool IsCurrentPace(const ADeliveryCompanionCharacter* Npc, const AAIController* AI, const FDeliveryNpcPublicState& Expected)
 {
     if (!IsValid(Npc) || Npc->IsActorBeingDestroyed() || !IsValid(AI) || AI->GetPawn() != Npc || Npc->GetController() != AI)
@@ -32,7 +32,10 @@ bool IsCurrentPace(const ADeliveryCompanionCharacter* Npc, const AAIController* 
 }
 } // namespace
 
-// 每个 NPC 各用一个节点实例，需要逐帧更新
+// ── 生命周期 ──
+// 每个 NPC 有自己的节点实例；行为树进入这个任务时调用 ExecuteTask，之后每帧调用 TickTask，被中止时调用 AbortTask，结束时调用 OnTaskFinished
+
+/// @brief 每个 NPC 各用一个节点实例，需要逐帧更新
 UBTTask_DeliveryExecuteNpcAction::UBTTask_DeliveryExecuteNpcAction()
 {
     NodeName = TEXT("Delivery 执行 NPC 动作");
@@ -41,7 +44,10 @@ UBTTask_DeliveryExecuteNpcAction::UBTTask_DeliveryExecuteNpcAction()
     bNotifyTaskFinished = true;
 }
 
-// 交谈流程第 16 步，服务器：向 Agent 领取已采纳的动作，交给角色启动，再按动作类型发起移动
+// ── 执行 ──
+// ExecuteTask 先向 Agent 领取已采纳的动作，调用 NPC 的 ExecuteAction 启动它；移动类动作再调用 StartNearbyMove 或 MoveToActor 发起寻路
+
+/// @brief 交谈流程第 16 步，服务器：向 Agent 领取已采纳的动作，交给角色启动，再按动作类型发起移动
 EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
     ReleaseFocus();
@@ -199,7 +205,7 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::ExecuteTask(UBehaviorTreeC
     return EBTNodeResult::InProgress;
 }
 
-// 发起一次不允许部分路径的短距离寻路
+/// @brief 发起一次不允许部分路径的短距离寻路
 bool UBTTask_DeliveryExecuteNpcAction::StartNearbyMove(const FVector& Destination, const FDeliveryNpcPublicState* CompanionPace)
 {
     if (!Controller.IsValid())
@@ -225,7 +231,7 @@ bool UBTTask_DeliveryExecuteNpcAction::StartNearbyMove(const FVector& Destinatio
     return Move.Code != EPathFollowingRequestResult::Failed;
 }
 
-// 每帧检查动作是否仍在执行，按动作类型推进，超时后结束
+/// @brief 每帧检查动作是否仍在执行，按动作类型推进，超时后结束
 void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds)
 {
     if (!Agent.IsValid())
@@ -432,7 +438,10 @@ void UBTTask_DeliveryExecuteNpcAction::TickTask(UBehaviorTreeComponent& OwnerCom
     }
 }
 
-// 用本次动作编号向 Agent 报告交战结果，结束行为树任务
+// ── 交战 ──
+// Fight 动作每帧由 TickTask 调用 TickFight：该停就调用 FinishFight，够得着就出拳，够不着就追
+
+/// @brief 用本次动作编号向 Agent 报告交战结果，结束行为树任务
 void UBTTask_DeliveryExecuteNpcAction::FinishFight(UBehaviorTreeComponent& OwnerComp, FName Reason, bool bFailed)
 {
     if (Agent.IsValid())
@@ -441,7 +450,7 @@ void UBTTask_DeliveryExecuteNpcAction::FinishFight(UBehaviorTreeComponent& Owner
     FinishLatentTask(OwnerComp, bFailed ? EBTNodeResult::Failed : EBTNodeResult::Succeeded);
 }
 
-// 交战流程第 17 步，服务器每帧：判断是否停手，够得着就出拳，够不着就追
+/// @brief 交战流程第 17 步，服务器每帧：判断是否停手，够得着就出拳，够不着就追
 void UBTTask_DeliveryExecuteNpcAction::TickFight(UBehaviorTreeComponent& OwnerComp, ADeliveryNpcCharacter* Npc,
                                                  const FDeliveryNpcPublicState& State)
 {
@@ -544,7 +553,10 @@ void UBTTask_DeliveryExecuteNpcAction::TickFight(UBehaviorTreeComponent& OwnerCo
     }
 }
 
-// 服务器每帧：逃跑，按间隔重新找远离威胁的落点，跑够距离或时间后结束
+// ── 逃跑 ──
+// Flee 动作每帧由 TickTask 调用 TickFlee：按间隔重新找远离威胁的落点，跑够距离或时间后结束
+
+/// @brief 服务器每帧：逃跑，按间隔重新找远离威胁的落点，跑够距离或时间后结束
 void UBTTask_DeliveryExecuteNpcAction::TickFlee(UBehaviorTreeComponent& OwnerComp, ADeliveryNpcCharacter* Npc,
                                                 const FDeliveryNpcPublicState& State)
 {
@@ -634,7 +646,10 @@ void UBTTask_DeliveryExecuteNpcAction::TickFlee(UBehaviorTreeComponent& OwnerCom
     PreviousThreatPosition = State.Target->GetActorLocation();
 }
 
-// 行为树中止节点时，按取消结束当前动作
+// ── 结束 ──
+// 行为树中止节点时调用 AbortTask；节点结束时调用 OnTaskFinished，它调用 ReleaseFocus 清掉注视并停止本动作发起的移动
+
+/// @brief 行为树中止节点时，按取消结束当前动作
 EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::AbortTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
     if (Agent.IsValid())
@@ -643,7 +658,7 @@ EBTNodeResult::Type UBTTask_DeliveryExecuteNpcAction::AbortTask(UBehaviorTreeCom
     return EBTNodeResult::Aborted;
 }
 
-// 清除本节点设置的注视目标
+/// @brief 清除本节点设置的注视目标
 void UBTTask_DeliveryExecuteNpcAction::ReleaseFocus(bool bReplacingOwnAction)
 {
     if (Controller.IsValid() && ActionId.IsValid() && FocusTarget.IsValid() &&
@@ -653,7 +668,7 @@ void UBTTask_DeliveryExecuteNpcAction::ReleaseFocus(bool bReplacingOwnAction)
     FocusTarget.Reset();
 }
 
-// 节点结束：清除注视，停止本动作发起的移动
+/// @brief 节点结束：清除注视，停止本动作发起的移动
 void UBTTask_DeliveryExecuteNpcAction::OnTaskFinished(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory,
                                                       EBTNodeResult::Type TaskResult)
 {

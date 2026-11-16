@@ -12,7 +12,9 @@ from native_tts_abi import NativeLibrary, InitParams, TtsParams, Audio, VoiceRef
 
 
 class NativeVoiceEngines:
+    """按音色管理本地语音库里的模型上下文，逐句合成并分块回调音频"""
     def __init__(self, config, runtime):
+        """加载动态库，按 voice_residency 决定哪些音色常驻"""
         import numpy as np
         self.np, self.config, self.runtime = np, config, runtime
         self.identities = native_identities(config, runtime)
@@ -52,6 +54,7 @@ class NativeVoiceEngines:
             raise
 
     def _load_voice(self, voice, check=None):
+        """加载一个音色的模型和参考数据，版本对不上时抛出错误；check 在耗时步骤之间检查是否已取消"""
         model = self.runtime['models'][voice]
         revision = self.config['voices'][voice].get('model_revision', self.config['model_revision'])
         if model['source_revision'] != revision:
@@ -89,6 +92,7 @@ class NativeVoiceEngines:
         return handle
 
     def _release_contexts(self):
+        """释放所有已加载的模型上下文"""
         handles = tuple(self.contexts.values())
         self.contexts.clear()
         for handle in handles:
@@ -113,10 +117,12 @@ class NativeVoiceEngines:
         return self.contexts[voice]
 
     def _failure(self, code):
+        """打印动态库的最后错误，再抛出 code 对应的错误"""
         print(f'native qwen error={self.api.qt_last_error()!r}', file=sys.stderr, flush=True)
         raise NeuralTtsError(code)
 
     def close(self):
+        """关闭引擎并释放模型上下文，可以重复调用"""
         if self._closed:
             return
         self._closed = True
@@ -126,6 +132,7 @@ class NativeVoiceEngines:
             self.api.qt_voice_ref_free(C.byref(self.reference))
 
     def synthesize(self, task, closed, on_chunk):
+        """合成 task 的一句话，每生成一段音频调用 on_chunk；task 或 closed 被取消时停止"""
         np = self.np
         deadline = time.monotonic() + self.config['synthesis_timeout_seconds']
         started = time.monotonic()
@@ -136,6 +143,7 @@ class NativeVoiceEngines:
         buffered = bytearray()
 
         def check():
+            """已关闭、已取消或回调里出过错时抛出错误"""
             if self._closed or task.cancel.is_set() or closed.is_set():
                 raise NeuralTtsError('cancelled')
             if error is not None:
@@ -144,6 +152,7 @@ class NativeVoiceEngines:
                 raise NeuralTtsError('neural_tts_timeout')
 
         def cancelled(_):
+            """动态库在生成过程中询问是否取消，返回非零表示取消"""
             nonlocal error
             try:
                 check()
@@ -158,6 +167,7 @@ class NativeVoiceEngines:
                   'voice_identity': self.identities[task.voice], 'sample_rate': 24000}
 
         def chunk(samples, sample_count, _):
+            """动态库每生成一段音频就调用一次，检查长度后转成 PCM 交给 on_chunk"""
             nonlocal error, count, total, first_audio_ms
             try:
                 check()

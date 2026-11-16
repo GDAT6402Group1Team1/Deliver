@@ -5,7 +5,7 @@
 #include "Task/World/DeliveryItemComponent.h"
 #include "Inventory/Items/DeliveryPackageItem.h"
 
-// 优先显示目标无法操作的原因，否则使用目标配置的提示
+/// @brief 优先显示目标无法操作的原因，否则使用目标配置的提示
 FText UDeliveryInteractionController::GetPrompt(UDeliveryInteractableComponent *Target, bool bPickup,
                                                 const APawn *Interactor) const
 {
@@ -28,7 +28,7 @@ FText UDeliveryInteractionController::GetPrompt(UDeliveryInteractableComponent *
     return Target->PromptText;
 }
 
-// 查询角色当前对指定目标的长按进度
+/// @brief 查询角色当前对指定目标的长按进度
 float UDeliveryInteractionController::GetProgress(const ADeliveryCharacter *Character, AActor *Target) const
 {
     return IsValid(Character) ? Character->GetPickupHoldProgress(Target) : -1.f;

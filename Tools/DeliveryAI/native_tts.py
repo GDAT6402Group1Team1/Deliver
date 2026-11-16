@@ -11,6 +11,7 @@ DEFAULT_RUNTIME = 'Saved/AIResearch/NativeQwen/runtime-q8_0.json'
 
 
 def file_hash(path):
+    """按 1 MB 分块计算文件的 SHA-256"""
     digest = hashlib.sha256()
     with path.open('rb') as source:
         for block in iter(lambda: source.read(1024 * 1024), b''):
@@ -19,6 +20,7 @@ def file_hash(path):
 
 
 def load_runtime(path, verify=False):
+    """读取本地语音运行时配置，检查版本、源码提交和模型文件；verify 为 True 时同时核对文件哈希"""
     runtime = json.loads(project_path(path).read_text(encoding='utf-8'))
     voice_residency = runtime.get('voice_residency', 'both')
     shared_codec = runtime.get('shared_codec', False)
@@ -37,6 +39,7 @@ def load_runtime(path, verify=False):
 
 
 def native_identities(config, runtime):
+    """按音色配置生成本地语音用的音色信息，去掉只给旧引擎用的字段"""
     identities = neural_voice_identities(config)
     for voice, value in identities.items():
         value.pop('talker_mode', None)
@@ -51,15 +54,18 @@ def native_identities(config, runtime):
 class NativeQwenSpeechSynthesizer(QwenSpeechSynthesizer):
     """正式声音保持原配置；只有显式创建本类时才使用原生对照进程"""
     def __init__(self, config_path=None, runtime_path=DEFAULT_RUNTIME):
+        """读取音色配置和本地运行时配置"""
         super().__init__(config_path)
         self.runtime_path = project_path(runtime_path)
         self.runtime = load_runtime(self.runtime_path)
         self.identities = native_identities(self.config, self.runtime)
 
     def _worker_command(self, executable):
+        """启动本地语音子进程的命令行"""
         return [str(executable), '-B', '-X', 'utf8', '-u',
                 str(Path(__file__).with_name('native_tts_worker.py')),
                 '--config', str(self.config_path), '--runtime', str(self.runtime_path)]
 
     def _worker_log_path(self):
+        """本地语音子进程的日志位置"""
         return project_path('Saved/Logs/NativeQwenSpeechWorker.log')

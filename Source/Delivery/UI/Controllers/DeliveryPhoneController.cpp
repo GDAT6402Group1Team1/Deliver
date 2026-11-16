@@ -10,11 +10,15 @@
 
 const FName UDeliveryPhoneController::PanelId(TEXT("DeliveryPhoneUI"));
 
+/// @brief 玩家所在的世界
 UWorld* UDeliveryPhoneController::GetWorld() const
 {
     return Player.IsValid() ? Player->GetWorld() : nullptr;
 }
 
+// ── 生命周期 ──
+
+/// @brief 绑定本机玩家和 HUD，订阅电子语音的逐字通知，再调用 BindPhone
 void UDeliveryPhoneController::Initialize(ADeliveryPlayerController* InPlayer, ADeliveryHUD* InHUD)
 {
     Shutdown();
@@ -26,7 +30,9 @@ void UDeliveryPhoneController::Initialize(ADeliveryPlayerController* InPlayer, A
     BindPhone();
 }
 
-// 客户端可能先收到 HUD，稍后才收到电话队列
+// ── 手机面板 ──
+
+/// @brief 客户端可能先收到 HUD，稍后才收到电话队列
 void UDeliveryPhoneController::BindPhone()
 {
     if (!GetWorld()) return;
@@ -42,6 +48,7 @@ void UDeliveryPhoneController::BindPhone()
     if (Phone->GetCurrentCall(Call)) HandleCallChanged(Phone->GetCallState(), Call);
 }
 
+/// @brief 手机键：播放开关音效，打开或收起面板，再调用蓝图事件 TogglePhoneUI
 void UDeliveryPhoneController::Toggle()
 {
     if (!Player.IsValid() || !HUD.IsValid()) return;
@@ -51,27 +58,31 @@ void UDeliveryPhoneController::Toggle()
     Player->TogglePhoneUI();
 }
 
+/// @brief 手机面板是否开着
 bool UDeliveryPhoneController::IsOpen() const
 {
     return HUD.IsValid() && HUD->IsPanelOpen(PanelId);
 }
 
+/// @brief 登记手机面板打开或收起
 void UDeliveryPhoneController::SetOpen(bool bOpen)
 {
     if (HUD.IsValid()) HUD->SetPanelOpen(PanelId, bOpen);
 }
 
+/// @brief 接听，转给玩家控制器的 RequestAnswerCall
 void UDeliveryPhoneController::Answer()
 {
     if (Player.IsValid()) Player->RequestAnswerCall();
 }
 
+/// @brief 挂断，转给玩家控制器的 RequestHangUpCall
 void UDeliveryPhoneController::HangUp()
 {
     if (Player.IsValid()) Player->RequestHangUpCall();
 }
 
-// 通话内容来自电话队列，不在界面里再保存一份任务状态
+/// @brief 通话内容来自电话队列，不在界面里再保存一份任务状态
 void UDeliveryPhoneController::HandleCallChanged(EDeliveryPhoneCallState State, const FDeliveryPhoneCall& Call)
 {
     if (State != EDeliveryPhoneCallState::InCall)
@@ -89,6 +100,7 @@ void UDeliveryPhoneController::HandleCallChanged(EDeliveryPhoneCallState State, 
     if (Voice.IsValid()) Voice->SpeakText(Content.Dialogue);
 }
 
+/// @brief 电子语音念出一个字时调用，加到字幕后面显示
 void UDeliveryPhoneController::HandleGlyph(const FString& Glyph, int32 GlyphIndex)
 {
     if (ActiveCallId <= 0) return;
@@ -97,6 +109,7 @@ void UDeliveryPhoneController::HandleGlyph(const FString& Glyph, int32 GlyphInde
         Prompt->SetSubtitle(CallerName, FText::FromString(Subtitle));
 }
 
+/// @brief 清掉来电人和字幕
 void UDeliveryPhoneController::ClearSubtitle()
 {
     CallerName = FText::GetEmpty();
@@ -104,7 +117,7 @@ void UDeliveryPhoneController::ClearSubtitle()
     if (auto* Prompt = UDeliveryPromptSubsystem::Get(this)) Prompt->ClearSubtitle();
 }
 
-// HUD 销毁时解除订阅，避免旧处理器继续接收新电话
+/// @brief HUD 销毁时解除订阅，避免旧处理器继续接收新电话
 void UDeliveryPhoneController::Shutdown()
 {
     if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(BindTimer);

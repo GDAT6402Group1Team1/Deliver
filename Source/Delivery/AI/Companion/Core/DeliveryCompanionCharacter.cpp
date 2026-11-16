@@ -29,6 +29,10 @@
 #include "Carry/DeliveryHandheldCarrierInterface.h"
 #include "Vehicle/Companion/DeliveryCompanionMotorbike.h"
 
+// ── 二狗角色 ──
+// ADeliveryCompanionCharacter 在居民 NPC 的基础上加上主人权限检查、二狗专用的交互入口和组件
+
+/// @brief 创建二狗组件、包裹挂点、手持物挂点和扶起交互入口
 ADeliveryCompanionCharacter::ADeliveryCompanionCharacter()
 {
     Companion=CreateDefaultSubobject<UDeliveryCompanionComponent>(TEXT("Companion"));
@@ -58,6 +62,7 @@ ADeliveryCompanionCharacter::ADeliveryCompanionCharacter()
     Combat->KnockdownUpwardSpeed=250;
 }
 
+/// @brief 二狗正坐在登记给它的专属摩托车座位上时返回 true
 bool ADeliveryCompanionCharacter::IsMountedOnCompanionBike() const
 {
     const auto* Bike=Cast<ADeliveryCompanionMotorbike>(GetAttachParentActor());
@@ -66,6 +71,7 @@ bool ADeliveryCompanionCharacter::IsMountedOnCompanionBike() const
         GetRootComponent()->GetAttachParent()==Bike->CompanionSeat.Get();
 }
 
+/// @brief 骑车时原角色隐藏在车上，主人和按距离能看到车的玩家仍要收到二狗的复制数据
 bool ADeliveryCompanionCharacter::IsNetRelevantFor(const AActor* RealViewer,const AActor* ViewTarget,const FVector& SrcLocation) const
 {
     if (Super::IsNetRelevantFor(RealViewer,ViewTarget,SrcLocation)) return true;
@@ -77,6 +83,7 @@ bool ADeliveryCompanionCharacter::IsNetRelevantFor(const AActor* RealViewer,cons
         IsWithinNetRelevancyDistance(SrcLocation));
 }
 
+/// @brief 授予家居能力，绑定扶起交互的 CanUse/Use 和战斗组件的倒地、起身事件
 void ADeliveryCompanionCharacter::BeginPlay()
 {
     Super::BeginPlay();
@@ -90,6 +97,7 @@ void ADeliveryCompanionCharacter::BeginPlay()
     OnRep_Encounter();
     UpdateHelpInteraction();
 }
+/// @brief 同一个 E 入口的可用条件：没结识时判断能否结识，倒地时判断能否扶起，站着时判断能否接过小绿
 bool ADeliveryCompanionCharacter::CanHelp(APawn* Helper,bool bCheckAvailability)
 {
     if (Encounter.Phase!=EDeliveryCompanionEncounterPhase::Joined)
@@ -98,6 +106,7 @@ bool ADeliveryCompanionCharacter::CanHelp(APawn* Helper,bool bCheckAvailability)
         return Combat->CanStartAssistedRecovery() && CanContinueAssistedHelp(Helper,Combat->GetDownEpisodeId());
     return Companion->CanAcceptCaterpillar(Helper);
 }
+/// @brief 服务器执行 E 入口：结识调用 TryRecruit，倒地调用 StartAssistedRecovery，站着调用 AcceptCaterpillar
 bool ADeliveryCompanionCharacter::Help(APawn* Helper)
 {
     if (!HasAuthority() || !CanHelp(Helper,true)) return false;
@@ -105,6 +114,7 @@ bool ADeliveryCompanionCharacter::Help(APawn* Helper)
     if (Combat->IsDown()) return Combat->StartAssistedRecovery(Combat->GetDownEpisodeId(),Helper);
     return Companion->AcceptCaterpillar(Helper);
 }
+/// @brief 扶起期间每帧检查：同一次倒地、主人本人在旁边、能看见且仍在按住 E
 bool ADeliveryCompanionCharacter::CanContinueAssistedHelp(APawn* Helper,FGuid DownEpisode) const
 {
     const auto* Player=Cast<ADeliveryCharacter>(Helper);
@@ -124,6 +134,7 @@ bool ADeliveryCompanionCharacter::CanContinueAssistedHelp(APawn* Helper,FGuid Do
     FHitResult Obstacle;
     return !GetWorld()->LineTraceSingleByObjectType(Obstacle,GetActorLocation(),Player->GetActorLocation(),Objects,Params);
 }
+/// @brief 二狗被击倒或倒地又挨打时取消主人旧的按住进度，并刷新交互提示
 void ADeliveryCompanionCharacter::OnCombatDownChanged(FGuid DownEpisode)
 {
     if (!HasAuthority()) return;
@@ -134,17 +145,21 @@ void ADeliveryCompanionCharacter::OnCombatDownChanged(FGuid DownEpisode)
     if (Player && Player->GetInteractionComponent()) Player->GetInteractionComponent()->CancelServerHold(this);
     UpdateHelpInteraction();
 }
+/// @brief 起身完成后刷新交互提示，有人扶起时调用 RecordAssistedRecovery 记下这次经历
 void ADeliveryCompanionCharacter::OnCombatRecoveryFinished(FGuid DownEpisode,APawn* Helper)
 {
     UpdateHelpInteraction();
     if (HasAuthority() && IsValid(Helper)) Companion->RecordAssistedRecovery(DownEpisode,Helper);
 }
+
+/// @brief 撤销 Joined 后的辅助起身和旧长按，不改变主人或持续安排
 void ADeliveryCompanionCharacter::CancelAssistedHelp()
 {
     if (!HasAuthority() || !Combat) return;
     Combat->CancelAssistedRecovery(Combat->GetDownEpisodeId());
     OnCombatDownChanged(Combat->GetDownEpisodeId());
 }
+/// @brief 服务器记下这一拳的编号和挨打前是否已倒地，再交给居民的受击流程
 void ADeliveryCompanionCharacter::ReceiveMeleeHitFrom(const FVector& Impulse,const FVector& Point,AActor* Source,FGuid PunchId)
 {
     if (HasAuthority() && PunchId.IsValid())
@@ -154,6 +169,7 @@ void ADeliveryCompanionCharacter::ReceiveMeleeHitFrom(const FVector& Impulse,con
     }
     Super::ReceiveMeleeHitFrom(Impulse,Point,Source,PunchId);
 }
+/// @brief 等候模式下空闲站着、手上没东西也没有其他安排时可以踱步
 bool ADeliveryCompanionCharacter::HasPaceContext() const
 {
     return HasAuthority() && Encounter.Phase==EDeliveryCompanionEncounterPhase::Joined &&
@@ -163,6 +179,7 @@ bool ADeliveryCompanionCharacter::HasPaceContext() const
         !Companion->GetCarriedItem() && !Companion->GetAssistTarget() &&
         !Combat->IsRecovering() && !Combat->IsReactingToHit() && !Combat->IsStriking();
 }
+/// @brief 一次踱步能走的距离：受等候区剩余半径和踱步时长限制
 float ADeliveryCompanionCharacter::GetPaceTravelBudget() const
 {
     // 保留转身和停步时间，低速时缩短两段路程
@@ -170,12 +187,15 @@ float ADeliveryCompanionCharacter::GetPaceTravelBudget() const
     const float LegTime=(DeliveryNpc::CandidateDuration(EDeliveryNpcAction::Pace)-TurnAndStopSeconds)*.5f;
     return FMath::Min(Companion->GetWaitAreaRemaining()-12.f,PaceSpeed*LegTime);
 }
+
+/// @brief 已批准的踱步还需要在每段导航期间维持原等候安排
 bool ADeliveryCompanionCharacter::CanContinuePace(const FDeliveryNpcPublicState& State) const
 {
     return State.Action==EDeliveryNpcAction::Pace && State.Origin==EDeliveryNpcActionOrigin::Model &&
         Companion->CanCommand(State.Requester) && State.CompanionCommandRevision==Companion->GetCommandRevision() &&
         HasPaceContext() && Companion->GetWaitAreaRemaining()>0.f;
 }
+/// @brief 二狗专用动作的执行条件：协战、踱步和同伴命令，其他动作交给居民的判断
 bool ADeliveryCompanionCharacter::CanExecute(EDeliveryNpcAction Action,AActor* Target) const
 {
     if (Action==EDeliveryNpcAction::JoinAssist)
@@ -208,6 +228,7 @@ bool ADeliveryCompanionCharacter::CanExecute(EDeliveryNpcAction Action,AActor* T
     if (Action!=EDeliveryNpcAction::Wait && Action!=EDeliveryNpcAction::LookAt && Action!=EDeliveryNpcAction::MoveAside) return false;
     return Super::CanExecute(Action,Target);
 }
+/// @brief 和 CanExecute 相同，但按 Requester 检查主人权限
 bool ADeliveryCompanionCharacter::CanExecuteForRequester(EDeliveryNpcAction Action,AActor* Target,APlayerState* Requester) const
 {
     if (Action==EDeliveryNpcAction::JoinAssist)
@@ -223,17 +244,20 @@ bool ADeliveryCompanionCharacter::CanExecuteForRequester(EDeliveryNpcAction Acti
     if (DeliveryNpc::IsCompanionCommand(Action)) return CanExecute(Action,Target) && Companion->CanCommand(Requester);
     return CanExecute(Action,Target);
 }
+/// @brief 规则发起的协战出手：只允许 Fight，且护主目标和规则编号都要对得上
 bool ADeliveryCompanionCharacter::CanExecuteGameplayRule(EDeliveryNpcAction Action,AActor* Target,int32 RuleRevision) const
 {
     return HasAuthority() && Action==EDeliveryNpcAction::Fight && !IsKnockedDown() && !GetHeldVehicle() &&
         !Companion->IsUsingErrandVehicle() && !Companion->HasActiveHomeArrangement() && !Companion->GetHomeState().CarriedProp &&
         Companion->CanExecuteAssist(Target,RuleRevision);
 }
+/// @brief 规则发起的协战用协战距离接近对手
 float ADeliveryCompanionCharacter::GetGameplayRuleFightApproachRange() const
 {
     return Companion->GetAssistRange();
 }
 
+/// @brief 按顺序把同伴、家居、物品、出行和协战信息写进模型请求
 void ADeliveryCompanionCharacter::ExtendDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const
 {
     Companion->ExtendDecisionRequest(Request,Requester);
@@ -276,6 +300,7 @@ void ADeliveryCompanionCharacter::ExtendDecisionRequest(FDeliveryNpcDecisionRequ
         Request.AllowedActions.AddUnique(Candidate.Action);
     }
 }
+/// @brief 执行动作前先看是否继续同伴已有的移动安排，踱步要先通过 CanContinuePace
 bool ADeliveryCompanionCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
 {
     if (State.Action==EDeliveryNpcAction::Pace) return CanContinuePace(State) && Super::ExecuteAction(State);
@@ -314,12 +339,14 @@ bool ADeliveryCompanionCharacter::ExecuteAction(const FDeliveryNpcPublicState& S
         Presentation->PublishSpeech(State.Speech,State.Emotion,Agent->GetActionConversationDepth(),State.ReplyToEventId,State.GetReplyId());
     return true;
 }
+/// @brief 被动动作只清掉 PassiveActionId，其他动作交给居民的 StopAction
 void ADeliveryCompanionCharacter::StopAction(FGuid ActionId)
 {
     if (ActionId.IsValid() && ActionId==PassiveActionId)
     { PassiveActionId.Invalidate(); return; }
     Super::StopAction(ActionId);
 }
+/// @brief 服务器推进初遇流程，客户端播放抛出动作，倒地时检查主人是否还在扶起
 void ADeliveryCompanionCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
@@ -338,6 +365,7 @@ void ADeliveryCompanionCharacter::Tick(float DeltaSeconds)
     // 认了主人之后倒地也能被叫住，初遇倒在地上时仍只开放扶起
     ConversationInteractable->bInteractEnabled=!IsKnockedDown() || GetEncounterState().Phase==EDeliveryCompanionEncounterPhase::Joined;
 }
+/// @brief 按当前阶段更新 E 入口的提示文字和按住时长
 void ADeliveryCompanionCharacter::UpdateHelpInteraction()
 {
     const bool bJoined=Encounter.Phase==EDeliveryCompanionEncounterPhase::Joined;
@@ -349,6 +377,7 @@ void ADeliveryCompanionCharacter::UpdateHelpInteraction()
     HelpInteractable->bInteractEnabled=bJoined?(bCombatDown?Combat->CanStartAssistedRecovery():Companion->HasCaterpillarOffer()):
         IsWaitingForHelp() && HasFinishedEncounterFall();
 }
+/// @brief 取消扶起、解绑战斗事件、停止抛出动作并清理初遇场景的表现
 void ADeliveryCompanionCharacter::EndPlay(const EEndPlayReason::Type Reason)
 {
     CancelAssistedHelp();
@@ -367,6 +396,7 @@ void ADeliveryCompanionCharacter::EndPlay(const EEndPlayReason::Type Reason)
     HelpInteractable->CanUse.Unbind(); HelpInteractable->Use.Unbind();
     Super::EndPlay(Reason);
 }
+/// @brief 复制初遇状态和初遇场景
 void ADeliveryCompanionCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);

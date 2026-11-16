@@ -12,10 +12,12 @@ current_action 和 current_activity 描述现在仍在发生的事。只能在�
 
 
 def continuation_instructions(context):
+    """能力版本 6～10 时返回继续当前安排的说明，否则返回空字符串"""
     return CONTINUE_INSTRUCTIONS if context.get('capability_version') in (6, 7, 8, 9, 10) else ''
 
 
 def validate_speech_preference(context, candidate):
+    """检查候选里的说话偏好（安静或恢复说话），没有这个字段时返回 None"""
     if 'speech_preference' not in candidate:
         return None
     preference = candidate['speech_preference']
@@ -30,12 +32,14 @@ def validate_speech_preference(context, candidate):
 
 
 def validate_speech_preference_echo(candidate, decision):
+    """模型回复的说话偏好必须和所选候选里的一致"""
     if 'speech_preference' in decision and ('speech_preference' not in candidate
             or decision['speech_preference'] != candidate['speech_preference']):
         raise ValueError('decision speech preference differs from selected candidate')
 
 
 def _id(value, empty=False):
+    """value 是规范的非零 UUID 字符串；empty 为 True 时也接受空字符串"""
     if empty and value == '':
         return True
     try:
@@ -79,6 +83,7 @@ def validate_current_activity(context, actions):
 
 
 def validate_continuation(context, action, checking_candidate=False):
+    """模型选 ContinueCurrent 时检查当前动作编号和计划编号都对得上"""
     if action.get('action') != 'ContinueCurrent':
         return
     if context.get('capability_version') not in (6, 7, 8, 9, 10):

@@ -4,13 +4,13 @@
 #include "Inventory/DeliveryInventoryItemComponent.h"
 #include "Engine/Texture2D.h"
 
-// 替换界面读取的背包，不保存额外的槽位副本
+/// @brief 替换界面读取的背包，不保存额外的槽位副本
 void UDeliveryHotbarController::SetInventory(UDeliveryInventoryComponent *InInventory)
 {
     Inventory = InInventory;
 }
 
-// 将指定物品转换为图标、占用状态和耐久比例
+/// @brief 将指定物品转换为图标、占用状态和耐久比例
 FDeliveryHotbarSlot UDeliveryHotbarController::GetSlot(int32 Index) const
 {
     FDeliveryHotbarSlot Result;
@@ -28,13 +28,13 @@ FDeliveryHotbarSlot UDeliveryHotbarController::GetSlot(int32 Index) const
     return Result;
 }
 
-// 读取背包已满提示当前的闪烁强度
+/// @brief 读取背包已满提示当前的闪烁强度
 float UDeliveryHotbarController::GetFullFeedback() const
 {
     return Inventory.IsValid() ? Inventory->GetFullFeedbackAlpha() : 0.f;
 }
 
-// 把界面槽位操作交给背包自己的请求入口
+/// @brief 把界面槽位操作交给背包自己的请求入口
 void UDeliveryHotbarController::SelectSlot(int32 Index)
 {
     if (Inventory.IsValid())

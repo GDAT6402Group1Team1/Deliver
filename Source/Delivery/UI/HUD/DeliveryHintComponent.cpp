@@ -13,6 +13,9 @@
 #include "GameFramework/PlayerController.h"
 #include "TimerManager.h"
 
+// ── 生命周期 ──
+
+/// @brief 不需要每帧更新；设置召唤的默认提示文字
 UDeliveryHintComponent::UDeliveryHintComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
@@ -20,6 +23,7 @@ UDeliveryHintComponent::UDeliveryHintComponent()
     CooldownText = NSLOCTEXT("Delivery", "SummonCooling", "召唤冷却 {0} 秒");
 }
 
+/// @brief 订阅控制对象变化和 Actor 生成、销毁，调用 BindInput，再按当前控制对象调用 HandlePawnChanged
 void UDeliveryHintComponent::BeginPlay()
 {
     Super::BeginPlay();
@@ -35,6 +39,9 @@ void UDeliveryHintComponent::BeginPlay()
     HandlePawnChanged(nullptr, Player->GetPawn());
 }
 
+// ── 刷新 ──
+
+/// @brief 本机：第一次调用时订阅场景里所有二狗初遇场景；订阅 Enhanced Input 的映射重建通知，然后调用 RefreshHint
 void UDeliveryHintComponent::BindInput()
 {
     Player = Cast<APlayerController>(GetOwner());
@@ -56,6 +63,9 @@ void UDeliveryHintComponent::BindInput()
     RefreshHint();
 }
 
+// ── 通知 ──
+
+/// @brief 取消对旧控制对象（召唤组件、车辆事件、身体位置）的订阅
 void UDeliveryHintComponent::UnbindPawn()
 {
     BindEncounterPawnRoot(nullptr);
@@ -65,6 +75,7 @@ void UDeliveryHintComponent::UnbindPawn()
     VehicleEvents = nullptr;
 }
 
+/// @brief 控制对象换了：取消旧对象的订阅；新对象是角色时订阅召唤组件的冷却变化，是摩托车时订阅车辆事件
 void UDeliveryHintComponent::HandlePawnChanged(APawn* OldPawn, APawn* NewPawn)
 {
     UnbindPawn();
@@ -82,11 +93,13 @@ void UDeliveryHintComponent::HandlePawnChanged(APawn* OldPawn, APawn* NewPawn)
     RefreshHint();
 }
 
+/// @brief 车辆事件：切换视角 CameraChanged 时调用 RefreshHint
 void UDeliveryHintComponent::HandleVehicleEvent(EDeliveryEvent Event)
 {
     if (Event == EDeliveryEvent::CameraChanged) RefreshHint();
 }
 
+/// @brief 生成了初遇场景就订阅它；生成了摩托车就调用 HandleVehicleChanged
 void UDeliveryHintComponent::HandleActorSpawned(AActor* Actor)
 {
     if (!Player || !Player->IsLocalController()) return;
@@ -98,6 +111,7 @@ void UDeliveryHintComponent::HandleActorSpawned(AActor* Actor)
     else HandleVehicleChanged(Actor);
 }
 
+/// @brief 订阅初遇场景的受阻变化和销毁
 void UDeliveryHintComponent::BindEncounterScene(ADeliveryCompanionEncounterScene* Scene)
 {
     if (!IsValid(Scene) || Scene->IsActorBeingDestroyed() || Scene->GetWorld() != GetWorld()) return;
@@ -108,6 +122,7 @@ void UDeliveryHintComponent::BindEncounterScene(ADeliveryCompanionEncounterScene
     Scene->OnEndPlay.AddUniqueDynamic(this, &UDeliveryHintComponent::HandleEncounterEndPlay);
 }
 
+/// @brief 初遇场景被销毁时取消订阅，再调用 UpdateEncounterHint
 void UDeliveryHintComponent::HandleEncounterEndPlay(AActor* Actor, EEndPlayReason::Type Reason)
 {
     auto* Scene = CastChecked<ADeliveryCompanionEncounterScene>(Actor);
@@ -117,6 +132,9 @@ void UDeliveryHintComponent::HandleEncounterEndPlay(AActor* Actor, EEndPlayReaso
     UpdateEncounterHint();
 }
 
+// ── 二狗初遇 ──
+
+/// @brief 订阅玩家身体的位置变化，玩家走动时调用 UpdateEncounterHint；传入空时取消订阅
 void UDeliveryHintComponent::BindEncounterPawnRoot(USceneComponent* Root)
 {
     if (Root && EncounterPawnRoot.Get() == Root && EncounterPawnTransformHandle.IsValid()) return;
@@ -128,6 +146,8 @@ void UDeliveryHintComponent::BindEncounterPawnRoot(USceneComponent* Root)
             [this](USceneComponent*, EUpdateTransformFlags, ETeleportType) { UpdateEncounterHint(); });
 }
 
+/// @brief 找到 800 cm 内最近的、被挡住的初遇场景：挡着门口提示让开门口，挡着弹出路线提示留出空地
+/// 只有存在受阻场景时才订阅玩家位置；提示变了才调用 RefreshHint
 void UDeliveryHintComponent::UpdateEncounterHint()
 {
     if (!Player || !Player->IsLocalController() || !GetWorld()) return;
@@ -164,7 +184,9 @@ void UDeliveryHintComponent::UpdateEncounterHint()
     RefreshHint();
 }
 
-// 地图车辆增减也会影响能否召唤，等生成或销毁完成后再查询
+// ── 通知 ──
+
+/// @brief 地图车辆增减也会影响能否召唤，等生成或销毁完成后再查询
 void UDeliveryHintComponent::HandleVehicleChanged(AActor* Actor)
 {
     if (!Player || !Player->IsLocalController() || !Cast<ADeliveryMotorbike>(Actor)) return;
@@ -172,6 +194,9 @@ void UDeliveryHintComponent::HandleVehicleChanged(AActor* Actor)
     RefreshTimer = GetWorld()->GetTimerManager().SetTimerForNextTick(this, &UDeliveryHintComponent::RefreshHint);
 }
 
+// ── 刷新 ──
+
+/// @brief 玩家换了输入设备（手柄或键鼠），换了就调用 RefreshHint 显示对应的键名
 void UDeliveryHintComponent::SetInputDevice(bool bGamepad)
 {
     if (bUsingGamepad == bGamepad) return;
@@ -179,6 +204,7 @@ void UDeliveryHintComponent::SetInputDevice(bool bGamepad)
     RefreshHint();
 }
 
+/// @brief Action 在当前设备上映射的键名；没有映射时返回空
 FText UDeliveryHintComponent::GetKeyText(const UInputAction* Action) const
 {
     if (!Input || !Action) return FText::GetEmpty();
@@ -189,6 +215,7 @@ FText UDeliveryHintComponent::GetKeyText(const UInputAction* Action) const
     return FText::GetEmpty();
 }
 
+/// @brief 按当前状态重新算提示文字：初遇提示优先，其次骑车的视角提示，最后步行的召唤提示
 void UDeliveryHintComponent::RefreshHint()
 {
     if (!Player || !Player->IsLocalController() || !GetWorld()) return;
@@ -223,6 +250,7 @@ void UDeliveryHintComponent::RefreshHint()
     else ShowHint(FText::Format(ReadyText, Key));
 }
 
+/// @brief 记下文字，交给 DeliveryPromptSubsystem 显示；文字为空时清掉提示；bDimmed 为 true 时显示成灰色（冷却中）
 void UDeliveryHintComponent::ShowHint(const FText& Text, bool bDimmed)
 {
     CurrentText = Text;
@@ -233,6 +261,9 @@ void UDeliveryHintComponent::ShowHint(const FText& Text, bool bDimmed)
     }
 }
 
+// ── 生命周期 ──
+
+/// @brief 取消所有订阅和计时器，清掉左下角提示
 void UDeliveryHintComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     UnbindPawn();

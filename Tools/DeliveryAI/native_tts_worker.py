@@ -29,6 +29,7 @@ def warm_up_voices(engine, speakers, closed):
 
 
 def main():
+    """本地语音子进程入口：从标准输入读请求，合成后把音频写到标准输出"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', required=True)
     parser.add_argument('--runtime', required=True)
@@ -36,6 +37,7 @@ def main():
     output, output_lock = sys.stdout, threading.Lock()
 
     def send(message):
+        """把一条消息写成一行 JSON 发给父进程"""
         with output_lock:
             output.write(json.dumps(message, ensure_ascii=False, separators=(',', ':')) + '\n')
             output.flush()
@@ -46,6 +48,7 @@ def main():
     engine = None
 
     def read_input():
+        """后台读取父进程发来的请求和取消消息，标准输入关闭就结束"""
         try:
             while not requests.closed.is_set():
                 line = sys.stdin.readline(8193)

@@ -16,6 +16,7 @@ EDGE_FIELDS = {*TENDENCIES, 'source_profile_id', 'other_profile_id', 'descriptio
 
 @lru_cache(maxsize=1)
 def _read_relationships():
+    """读取 NpcProfiles.json 和 NpcRelationships.json，返回按人物编号整理的有向关系"""
     profiles = json.loads(PROFILE_PATH.read_text(encoding='utf-8'))
     if not isinstance(profiles, dict) or profiles.get('version') != 1 or not isinstance(profiles.get('characters'), list):
         raise ValueError('人物关系需要版本 1 的 NPC 人物表')

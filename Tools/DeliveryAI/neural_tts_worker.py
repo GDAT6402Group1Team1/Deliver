@@ -34,6 +34,7 @@ _torch_threads_lock = threading.Lock()
 
 
 def initialize_torch_threads(torch):
+    """第一次调用时把 PyTorch 的线程数设为 4"""
     global _torch_threads_initialized
     with _torch_threads_lock:
         if not _torch_threads_initialized:
@@ -43,6 +44,7 @@ def initialize_torch_threads(torch):
 
 
 def file_sha256(path):
+    """按 1 MB 分块计算文件的 SHA-256"""
     digest = hashlib.sha256()
     with path.open('rb') as source:
         for block in iter(lambda: source.read(1024 * 1024), b''):
@@ -51,6 +53,7 @@ def file_sha256(path):
 
 
 def checked_clone_assets(entry):
+    """核对克隆音色的模型清单和参考音频的哈希，返回模型目录和参考数据"""
     model_dir = project_path(entry['model_path'])
     manifest_path = project_path(entry['model_manifest_path'])
     if file_sha256(manifest_path) != entry['model_manifest_sha256']:
@@ -90,6 +93,7 @@ def checked_clone_assets(entry):
 
 
 def check_cancel(cancel, closed, deadline):
+    """已取消或已关闭时抛出 cancelled，超过 deadline 时抛出超时"""
     if cancel.is_set() or closed.is_set():
         raise NeuralTtsError('cancelled')
     if time.monotonic() >= deadline:
@@ -97,7 +101,9 @@ def check_cancel(cancel, closed, deadline):
 
 
 class WorkerRequests:
+    """子进程这边收到的请求：同一时刻只合成一句，新请求会取消旧的"""
     def __init__(self, send, speakers):
+        """保存发送函数和说话人表，初始化当前任务和锁"""
         self.send = send
         self.speakers = speakers
         self.closed = threading.Event()
@@ -106,6 +112,7 @@ class WorkerRequests:
         self.current = None
 
     def receive(self, message):
+        """处理父进程的一条消息：close 结束、cancel 取消当前句、speak 开始新的一句"""
         if not isinstance(message, dict):
             raise ValueError('invalid_command')
         kind = message.get('type')
@@ -141,11 +148,13 @@ class WorkerRequests:
             self.pending.put_nowait(self.current)
 
     def finish(self, task):
+        """当前任务就是 task 时清空当前任务"""
         with self.lock:
             if self.current is task:
                 self.current = None
 
     def close(self):
+        """标记关闭并取消当前任务"""
         self.closed.set()
         with self.lock:
             if self.current:
@@ -163,6 +172,7 @@ def generation_controls(engine, cancel, closed, deadline):
                 'temperature': .9, 'output_hidden_states': True, 'return_dict_in_generate': True}
 
     def predict(*args, **kwargs):
+        """包住预测器调用，先检查取消，再核对参数形式没有变"""
         check_cancel(cancel, closed, deadline)
         if args or set(kwargs) != {'inputs_embeds', *expected}:
             raise NeuralTtsError('neural_tts_predictor_interface_changed')
@@ -176,11 +186,14 @@ def generation_controls(engine, cancel, closed, deadline):
         return SimpleNamespace(sequences=tokens.unsqueeze(0))
 
     class CancellationCriterion(engine.StoppingCriteria):
+        """生成过程中每一步检查取消"""
         def __call__(self, input_ids, scores, **kwargs):
+            """每一步都检查取消，不提前停止生成"""
             check_cancel(cancel, closed, deadline)
             return False
 
     def generate(*args, **kwargs):
+        """包住 Talker 生成，加上检查取消的停止条件"""
         check_cancel(cancel, closed, deadline)
         criteria = list(kwargs.get('stopping_criteria') or [])
         kwargs['stopping_criteria'] = engine.StoppingCriteriaList([*criteria, CancellationCriterion()])
@@ -223,6 +236,7 @@ def capture_predictor_graph(model, torch, stage):
     original_sample = module.sample_logits
 
     def sample(logits, **kwargs):
+        """把 logits 转成 float32 后交给原来的采样函数"""
         return original_sample(logits.float(), **kwargs)
 
     # 录图时使用与原 HF 生成相同的 float32 采样精度
@@ -239,6 +253,7 @@ def capture_predictor_graph(model, torch, stage):
 
 
 def configured_talker_graph(engine, stage):
+    """配置要求时捕获 Talker Graph，官方模式返回 None"""
     if engine.config.get('talker_mode', 'official') == 'official':
         return None
     stage('capturing_talker_graph')
@@ -249,6 +264,7 @@ def configured_talker_graph(engine, stage):
 
 
 def talker_generation(engine):
+    """使用 Talker Graph 时返回替换前向的上下文，官方模式返回空上下文"""
     if engine.config.get('talker_mode', 'official') == 'official':
         return nullcontext()
     graph = getattr(engine, 'talker_graph', None)
@@ -258,8 +274,11 @@ def talker_generation(engine):
 
 
 class QwenEngine:
+    """加载 Qwen CustomVoice 模型，按音色合成一句话"""
     def __init__(self, config, closed, check_startup=False):
+        """检查环境、禁止联网，加载模型并按配置捕获加速图"""
         def stage(name):
+            """把加载进度打印到标准错误"""
             print(f'qwen startup={name}', file=sys.stderr, flush=True)
         stage('checking_environment')
         self.config = config
@@ -290,6 +309,7 @@ class QwenEngine:
                            'GRADIO_ANALYTICS_ENABLED': 'False'})
 
         def reject_network(event, _args):
+            """模型加载期间拒绝任何网络连接"""
             if event in ('socket.connect', 'socket.getaddrinfo'):
                 raise NeuralTtsError('neural_tts_network_disabled')
         sys.addaudithook(reject_network)
@@ -328,9 +348,11 @@ class QwenEngine:
         stage('ready')
 
     def synchronize(self):
+        """等待 GPU 上的计算完成"""
         self.torch.cuda.synchronize()
 
     def synthesize(self, task, closed, on_chunk=None):
+        """合成 task 的一句话，返回 PCM；on_chunk 给出时按段流式发送"""
         torch, np = self.torch, self.np
         deadline = time.monotonic() + self.config['synthesis_timeout_seconds']
         check_cancel(task.cancel, closed, deadline)
@@ -374,11 +396,14 @@ def clone_generation_controls(engine, cancel, closed, deadline):
     original = talker.generate
 
     class CancellationCriterion(engine.StoppingCriteria):
+        """生成过程中每一步检查取消"""
         def __call__(self, input_ids, scores, **kwargs):
+            """每一步都检查取消，不提前停止生成"""
             check_cancel(cancel, closed, deadline)
             return False
 
     def generate(*args, **kwargs):
+        """包住克隆音色的生成，加上检查取消的停止条件"""
         check_cancel(cancel, closed, deadline)
         kwargs['stopping_criteria'] = engine.StoppingCriteriaList(
             [*(kwargs.get('stopping_criteria') or []), CancellationCriterion()])
@@ -402,6 +427,7 @@ def clone_generation_controls(engine, cancel, closed, deadline):
 class QwenCloneEngine:
     """女声 Base 模型常驻，固定参考只在启动时建立一次"""
     def __init__(self, config, closed, runtime, check_startup=False):
+        """加载女声的克隆音色模型和参考数据"""
         self.config = config
         self.entry = config['voices']['female']
         self.predictor_mode = self.entry.get('predictor_mode', 'official')
@@ -432,6 +458,7 @@ class QwenCloneEngine:
         print('qwen startup=female_reference_ready', file=sys.stderr, flush=True)
         if self.predictor_mode == 'cuda_graph':
             def stage(name):
+                """把女声加载进度打印到标准错误"""
                 print(f'qwen startup=female_{name}', file=sys.stderr, flush=True)
             self.graph, self.hidden_size = capture_predictor_graph(self.model, self.torch, stage)
             self.synchronize()
@@ -440,9 +467,11 @@ class QwenCloneEngine:
             f'qwen startup=female_{name}', file=sys.stderr, flush=True))
 
     def synchronize(self):
+        """等待 GPU 上的计算完成"""
         self.torch.cuda.synchronize()
 
     def synthesize(self, task, closed, on_chunk=None):
+        """用克隆音色合成 task 的一句话"""
         torch, np = self.torch, self.np
         deadline = time.monotonic() + self.config['synthesis_timeout_seconds']
         check_cancel(task.cancel, closed, deadline)
@@ -483,6 +512,7 @@ class QwenCloneEngine:
 class QwenVoiceEngines:
     """预设与参考音色共用现有单任务队列"""
     def __init__(self, config, closed, check_startup=False):
+        """按配置为每个音色选择 CustomVoice 或克隆音色的引擎"""
         self.custom = QwenEngine(config, closed, check_startup=check_startup)
         self.identities = neural_voice_identities(config)
         self.engines = {voice: self.custom for voice, entry in config['voices'].items() if entry['provider'] == 'qwen'}
@@ -517,11 +547,13 @@ class QwenVoiceEngines:
                   f'{int((time.monotonic() - started) * 1000)}', file=sys.stderr, flush=True)
 
     def synthesize(self, task, closed, on_chunk=None):
+        """按 task 的音色选引擎合成，流式时在每段音频上补音色身份"""
         engine = self.engines.get(task.voice)
         if engine is None or task.speaker != self.identities[task.voice]['speaker']:
             raise NeuralTtsError('neural_tts_invalid_speech')
         if getattr(task, 'chunk_frames', 0):
             def forward_chunk(message):
+                """给音频段补上音色身份后转给 on_chunk"""
                 message['voice_identity'] = self.identities[task.voice]
                 on_chunk(message)
             if not callable(on_chunk):
@@ -533,11 +565,13 @@ class QwenVoiceEngines:
         return result
 
     def synchronize(self):
+        """等待 GPU 上的计算完成"""
         # 同一 CUDA 设备上的两份模型都确认结束后，才能通知主后端开始下一句
         self.custom.synchronize()
 
 
 def main():
+    """Qwen 语音子进程入口：从标准输入读请求，合成后把音频写到标准输出"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check-startup', action='store_true', help='仅检查环境和导入，不加载模型或使用 CUDA')
     parser.add_argument('--config', help='使用项目目录内的语音配置，省略时读取正式配置')
@@ -546,6 +580,7 @@ def main():
     output_lock = threading.Lock()
 
     def send(message):
+        """把一条消息写成一行 JSON 发给父进程"""
         with output_lock:
             protocol_output.write(json.dumps(message, ensure_ascii=False, separators=(',', ':')) + '\n')
             protocol_output.flush()
@@ -555,6 +590,7 @@ def main():
     requests = WorkerRequests(send, speakers)
 
     def read_input():
+        """后台读取父进程发来的消息，标准输入关闭就结束"""
         try:
             while not requests.closed.is_set():
                 line = sys.stdin.readline(8193)

@@ -5,6 +5,9 @@
 #include "UI/Conversation/DeliveryAiInspectorWidget.h"
 #include "UI/HUD/DeliveryHUD.h"
 
+// ── 生命周期 ──
+
+/// @brief 绑定本机玩家、HUD 和面板，订阅交谈组件的决策记录和发言通知，订阅面板的展开、历史和回到最新事件
 void UDeliveryAiInspectorController::Initialize(APlayerController* InPlayer,ADeliveryHUD* InHUD,UDeliveryAiInspectorWidget* InWidget)
 {
     Shutdown();
@@ -22,11 +25,13 @@ void UDeliveryAiInspectorController::Initialize(APlayerController* InPlayer,ADel
     ResetView();
 }
 
+/// @brief 玩家所在的世界
 UWorld* UDeliveryAiInspectorController::GetWorld() const
 {
     return Player.IsValid()?Player->GetWorld():nullptr;
 }
 
+/// @brief 取消所有订阅，交谈组件停止转发记录，登记面板关闭，清空记录
 void UDeliveryAiInspectorController::Shutdown()
 {
     if (auto* Source=Conversation.Get())
@@ -44,12 +49,14 @@ void UDeliveryAiInspectorController::Shutdown()
     LatestTrace={}; History.Reset(); bShowingHistory=false; bInitialized=false;
 }
 
+/// @brief 清空记录和面板
 void UDeliveryAiInspectorController::ResetView()
 {
     LatestTrace={}; History.Reset(); bShowingHistory=false;
     if (auto* View=Widget.Get()) { View->ClearTrace(); View->SetHistory(History); }
 }
 
+/// @brief 换成看 Npc：清空面板和记录，让交谈组件开始转发这位 NPC 的决策记录；已经在看它时直接返回
 void UDeliveryAiInspectorController::ObserveNpc(ADeliveryNpcCharacter* Npc)
 {
     auto* PC=Player.Get(); auto* Source=Conversation.Get();
@@ -59,6 +66,7 @@ void UDeliveryAiInspectorController::ObserveNpc(ADeliveryNpcCharacter* Npc)
     Source->WatchNpcDiagnostics(Npc);
 }
 
+/// @brief HUD 每 0.1 秒调用：玩家换了角色或看的 NPC 没了时清空面板，交谈组件停止转发
 void UDeliveryAiInspectorController::ValidateContext()
 {
     const auto* PC=Player.Get();
@@ -71,11 +79,13 @@ void UDeliveryAiInspectorController::ValidateContext()
     if (auto* Source=Conversation.Get()) Source->StopWatchingNpcDiagnostics();
 }
 
+/// @brief 玩家对某位 NPC 说了一句话时调用 ObserveNpc 看那位 NPC
 void UDeliveryAiInspectorController::HandleSubmitted(ADeliveryNpcCharacter* Npc,FGuid MessageId,const FString& Text)
 {
     ObserveNpc(Npc);
 }
 
+/// @brief 收到一条决策记录：更新或插到 History 最前面（最多 8 条），没在看历史时显示它
 void UDeliveryAiInspectorController::HandleTrace(const FDeliveryNpcDecisionTrace& Trace)
 {
     if (!bInitialized) return;
@@ -96,6 +106,7 @@ void UDeliveryAiInspectorController::HandleTrace(const FDeliveryNpcDecisionTrace
     }
 }
 
+/// @brief 玩家点了第 Index 条历史，面板显示那一条
 void UDeliveryAiInspectorController::ShowHistory(int32 Index)
 {
     if (!History.IsValidIndex(Index)) return;
@@ -103,17 +114,20 @@ void UDeliveryAiInspectorController::ShowHistory(int32 Index)
     if (auto* View=Widget.Get()) View->SetTrace(History[Index],true);
 }
 
+/// @brief 玩家点了回到最新，面板显示 LatestTrace
 void UDeliveryAiInspectorController::ShowLatest()
 {
     bShowingHistory=false;
     if (auto* View=Widget.Get()) View->SetTrace(LatestTrace,false);
 }
 
+/// @brief F6：让面板展开或收起
 void UDeliveryAiInspectorController::ToggleExpanded()
 {
     if (auto* View=Widget.Get()) View->ToggleExpanded();
 }
 
+/// @brief 面板展开或收起时登记面板开关，展开时显示鼠标
 void UDeliveryAiInspectorController::HandleExpanded(bool bExpanded)
 {
     if (auto* OwnerHUD=HUD.Get()) OwnerHUD->SetPanelOpen(TEXT("AiInspector"),bExpanded);

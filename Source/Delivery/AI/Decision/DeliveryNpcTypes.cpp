@@ -8,13 +8,13 @@
 
 namespace
 {
-// 编号转成带连字符的小写字符串，与后端格式一致
+/// @brief 编号转成带连字符的小写字符串，与后端格式一致
 FString Id(const FGuid& Value)
 {
     return Value.ToString(EGuidFormats::DigitsWithHyphensLower);
 }
 
-// 读取一个编号字段
+/// @brief 读取一个编号字段
 bool ReadId(const FJsonObject& Object, const TCHAR* Key, FGuid& Out, bool bOptional = false)
 {
     FString Value;
@@ -28,7 +28,7 @@ bool ReadId(const FJsonObject& Object, const TCHAR* Key, FGuid& Out, bool bOptio
     return FGuid::ParseExact(Value, EGuidFormats::DigitsWithHyphens, Out) && Out.IsValid();
 }
 
-// 读取一个非负整数版本号
+/// @brief 读取一个非负整数版本号
 bool ReadRevision(const FJsonObject& Object, const TCHAR* Key, int32& Out)
 {
     double Value = 0;
@@ -40,14 +40,17 @@ bool ReadRevision(const FJsonObject& Object, const TCHAR* Key, int32& Out)
 }
 } // namespace
 
-// 动作状态是否已经结束
+// ── 动作分类 ──
+// Agent、行为树任务和二狗组件用这些函数判断动作属于哪一类，不各自写一份列表
+
+/// @brief 动作状态是否已经结束
 bool DeliveryNpc::IsTerminal(EDeliveryNpcActionStatus Status)
 {
     return Status == EDeliveryNpcActionStatus::Succeeded || Status == EDeliveryNpcActionStatus::Failed ||
            Status == EDeliveryNpcActionStatus::Cancelled;
 }
 
-// 是否是同伴专用的指令类动作
+/// @brief 是否是同伴专用的指令类动作
 bool DeliveryNpc::IsCompanionCommand(EDeliveryNpcAction Action)
 {
     return Action == EDeliveryNpcAction::Follow || Action == EDeliveryNpcAction::Stay ||
@@ -56,7 +59,7 @@ bool DeliveryNpc::IsCompanionCommand(EDeliveryNpcAction Action)
            Action == EDeliveryNpcAction::JoinAssist || Action == EDeliveryNpcAction::StopAssist || IsCompanionErrand(Action);
 }
 
-// 是否是同伴的跑腿类动作
+/// @brief 是否是同伴的跑腿类动作
 bool DeliveryNpc::IsCompanionErrand(EDeliveryNpcAction Action)
 {
     return Action == EDeliveryNpcAction::FetchPackage || Action == EDeliveryNpcAction::TakePackage ||
@@ -65,7 +68,7 @@ bool DeliveryNpc::IsCompanionErrand(EDeliveryNpcAction Action)
            IsCompanionItemErrand(Action);
 }
 
-// 是否是同伴的取物类动作
+/// @brief 是否是同伴的取物类动作
 bool DeliveryNpc::IsCompanionItemErrand(EDeliveryNpcAction Action)
 {
     return Action == EDeliveryNpcAction::FetchItem || Action == EDeliveryNpcAction::ReturnItem ||
@@ -73,7 +76,7 @@ bool DeliveryNpc::IsCompanionItemErrand(EDeliveryNpcAction Action)
            Action == EDeliveryNpcAction::InsertCaterpillar || Action == EDeliveryNpcAction::SearchNearOwner;
 }
 
-// 每种动作的默认时长上限
+/// @brief 每种动作的默认时长上限
 float DeliveryNpc::CandidateDuration(EDeliveryNpcAction Action)
 {
     if (Action == EDeliveryNpcAction::SoundFollowHorn)
@@ -86,7 +89,7 @@ float DeliveryNpc::CandidateDuration(EDeliveryNpcAction Action)
     return bNeedsMovementTime ? MaxDecisionDuration(Action) : 4.f;
 }
 
-// 动作的协议名称，与后端和日志一致
+/// @brief 动作的协议名称，与后端和日志一致
 FString DeliveryNpc::ActionName(EDeliveryNpcAction Action)
 {
     if (Action == EDeliveryNpcAction::ContinueCurrent)
@@ -134,7 +137,10 @@ FString DeliveryNpc::ActionName(EDeliveryNpcAction Action)
     return TEXT("None");
 }
 
-// 把请求编码成 JSON，网关 Dispatch 时作为 POST 请求体
+// ── 发给模型 ──
+// 网关的 Dispatch 调用 EncodeRequest 把请求写成 JSON 作为请求体，后端读到的字段名和这里一一对应
+
+/// @brief 把请求编码成 JSON，网关 Dispatch 时作为 POST 请求体
 FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
 {
     auto Root = MakeShared<FJsonObject>();
@@ -425,7 +431,10 @@ FString DeliveryNpc::EncodeRequest(const FDeliveryNpcDecisionRequest& Request)
     return Result;
 }
 
-// 解析后端返回的建议 JSON，字段缺失或越界时返回 false 并写入原因
+// ── 读模型的建议 ──
+// 网关的 ReadStream 收到 type 为 proposal 的一行后调用 DecodeProposal，解析出的建议交给 Agent 检查后再采纳
+
+/// @brief 解析后端返回的建议 JSON，字段缺失或越界时返回 false 并写入原因
 bool DeliveryNpc::DecodeProposal(const FString& Json, FDeliveryNpcDecisionProposal& OutProposal, FName& Reason)
 {
     Reason = TEXT("InvalidSchema");

@@ -15,6 +15,10 @@
 #include "GameFramework/PlayerState.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 
+// ── 小绿 ──
+// 小绿的递出和交接：二狗提出要给，主人长按 E 时由 AcceptCaterpillar 交到主人背包
+
+/// @brief 在 Pawn 周围 Radius 内找一只登记在交互注册表里、看得见的院子小绿
 ADeliveryCaterpillarItem* UDeliveryCompanionComponent::FindReachableYardCaterpillar(const APawn* Pawn,float Radius) const
 {
     const auto* Registry=GetWorld()?GetWorld()->GetSubsystem<UDeliveryInteractionRegistry>():nullptr;
@@ -42,6 +46,7 @@ ADeliveryCaterpillarItem* UDeliveryCompanionComponent::FindReachableYardCaterpil
     return Nearest;
 }
 
+/// @brief 院子里发现小绿的机会还没过期、还没提议过，且主人就在二狗身边
 bool UDeliveryCompanionComponent::HasCaterpillarOpportunity() const
 {
     const auto* Pawn=GetOwnerPawn();
@@ -50,6 +55,7 @@ bool UDeliveryCompanionComponent::HasCaterpillarOpportunity() const
         Pawn && FVector::DistSquared(Pawn->GetActorLocation(),GetOwner()->GetActorLocation())<=FMath::Square(900.f);
 }
 
+/// @brief 还没提议过时：有请求人就按请求人检查，没有请求人只认当前院子里的机会
 bool UDeliveryCompanionComponent::CanRequestCaterpillarOffer(APlayerState* Requester) const
 {
     if (bCaterpillarOffered) return false;
@@ -57,6 +63,7 @@ bool UDeliveryCompanionComponent::CanRequestCaterpillarOffer(APlayerState* Reque
     return Requester?CanOfferCaterpillar(Requester):HasCaterpillarOpportunity();
 }
 
+/// @brief 主人带着初遇那一单走到院子附近时生成一次提议小绿的机会，离开就作废
 void UDeliveryCompanionComponent::UpdateCaterpillarOpportunity()
 {
     auto* Npc=GetCompanion();
@@ -91,6 +98,7 @@ void UDeliveryCompanionComponent::UpdateCaterpillarOpportunity()
     Npc->WakeDecision();
 }
 
+/// @brief 请求人是主人，且手上是初遇那一单的包裹、离收件人还有一段距离时可以提议
 bool UDeliveryCompanionComponent::CanOfferCaterpillar(APlayerState* Requester) const
 {
     const auto* Npc=GetCompanion();
@@ -110,6 +118,7 @@ bool UDeliveryCompanionComponent::CanOfferCaterpillar(APlayerState* Requester) c
     return Cast<ADeliveryCaterpillarItem>(GetCarriedItem()) || Nearby;
 }
 
+/// @brief 已经提议过、主人站在 180 cm 内、背包有空位且二狗手上或院子里有小绿时可以接过
 bool UDeliveryCompanionComponent::CanAcceptCaterpillar(APawn* Interactor) const
 {
     const auto* Player=Cast<ADeliveryCharacter>(Interactor);
@@ -129,6 +138,7 @@ bool UDeliveryCompanionComponent::CanAcceptCaterpillar(APawn* Interactor) const
     return !GetWorld()->LineTraceSingleByChannel(Hit,GetOwner()->GetActorLocation(),Player->GetActorLocation(),ECC_Visibility,Params);
 }
 
+/// @brief 只由主人实际交互调用，true 表示原背包接口已收到真实道具
 bool UDeliveryCompanionComponent::AcceptCaterpillar(APawn* Interactor)
 {
     if (!GetOwner()->HasAuthority() || !CanAcceptCaterpillar(Interactor) || !EnsureOnFoot()) return false;

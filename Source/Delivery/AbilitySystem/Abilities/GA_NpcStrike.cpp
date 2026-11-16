@@ -4,6 +4,9 @@
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Event_Npc_Strike,"Event.Npc.Strike");
 
+// ── 生命周期 ──
+
+/// @brief 每个角色一个实例，只在服务器运行，由 Event.Npc.Strike 事件触发
 UGA_NpcStrike::UGA_NpcStrike()
 {
     InstancingPolicy=EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -15,6 +18,7 @@ UGA_NpcStrike::UGA_NpcStrike()
     AbilityTriggers.Add(Trigger);
 }
 
+/// @brief 检查请求属于这个 NPC、目标有效，订阅完成通知，再调用 StartNpcStrike 开始挥拳；开始成功后调用蓝图事件 OnStrikeStarted
 void UGA_NpcStrike::ActivateAbility(FGameplayAbilitySpecHandle Handle,const FGameplayAbilityActorInfo* ActorInfo,
     FGameplayAbilityActivationInfo ActivationInfo,const FGameplayEventData* TriggerEventData)
 {
@@ -42,6 +46,7 @@ void UGA_NpcStrike::ActivateAbility(FGameplayAbilitySpecHandle Handle,const FGam
     if (IsActive()) OnStrikeStarted(Request->Target,ExecutingActionId,ExecutingPunchId);
 }
 
+/// @brief NPC 广播这一拳结束时调用；编号和本次技能一致才结束技能
 void UGA_NpcStrike::OnStrikeFinished(FGuid ActionId,FGuid PunchId,bool bCancelled)
 {
     if (!IsActive() || ActionId!=ExecutingActionId || PunchId!=ExecutingPunchId) return;
@@ -49,6 +54,7 @@ void UGA_NpcStrike::OnStrikeFinished(FGuid ActionId,FGuid PunchId,bool bCancelle
     EndAbility(CurrentSpecHandle,CurrentActorInfo,CurrentActivationInfo,false,bCancelled);
 }
 
+/// @brief 技能结束：取消订阅完成通知；这一拳还没打完就被结束时调用 CancelNpcStrike
 void UGA_NpcStrike::EndAbility(FGameplayAbilitySpecHandle Handle,const FGameplayAbilityActorInfo* ActorInfo,
     FGameplayAbilityActivationInfo ActivationInfo,bool bReplicateEndAbility,bool bWasCancelled)
 {

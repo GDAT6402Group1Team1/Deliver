@@ -15,6 +15,7 @@ _path = Path(__file__).resolve().parents[2] / 'Saved' / 'Logs' / 'NpcDialogue.nd
 
 
 def enabled():
+    """设置了环境变量 DELIVERY_AI_DIALOGUE_LOG 时记录对话日志"""
     return bool(os.environ.get('DELIVERY_AI_DIALOGUE_LOG'))
 
 

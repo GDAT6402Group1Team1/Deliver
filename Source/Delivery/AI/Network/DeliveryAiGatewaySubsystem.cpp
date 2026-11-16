@@ -26,7 +26,7 @@ namespace
 constexpr int64 MaxStreamResponseBytes = 3 * 1024 * 1024;
 constexpr int32 MaxStreamLineBytes = DeliveryNpcVoice::MaxPcmBase64Chars + 16 * 1024;
 
-// 从后端诊断信息中读取一个短标签，含路径、地址或控制字符时丢弃
+/// @brief 从后端诊断信息中读取一个短标签，含路径、地址或控制字符时丢弃
 FString ReadDiagnosticLabel(const FJsonObject& Json, const TCHAR* Key, int32 Limit)
 {
     FString Value;
@@ -40,21 +40,21 @@ FString ReadDiagnosticLabel(const FJsonObject& Json, const TCHAR* Key, int32 Lim
     return Value.TrimStartAndEnd();
 }
 
-// 读取一个非负数值，读不到时返回 -1
+/// @brief 读取一个非负数值，读不到时返回 -1
 double ReadDiagnosticTime(const FJsonObject& Json, const TCHAR* Key)
 {
     double Value = -1;
     return Json.TryGetNumberField(Key, Value) && FMath::IsFinite(Value) && Value >= 0 ? Value : -1;
 }
 
-// 读取一个非负整数，读不到时返回 -1
+/// @brief 读取一个非负整数，读不到时返回 -1
 int32 ReadDiagnosticCount(const FJsonObject& Json, const TCHAR* Key)
 {
     const double Value = ReadDiagnosticTime(Json, Key);
     return Value >= 0 && Value <= MAX_int32 && FMath::FloorToDouble(Value) == Value ? static_cast<int32>(Value) : -1;
 }
 
-// 读取后端随建议附带的诊断：模型名、路由、各段耗时和 token 数，供 AI 检查器显示
+/// @brief 读取后端随建议附带的诊断：模型名、路由、各段耗时和 token 数，供 AI 检查器显示
 bool ReadDiagnostics(const FJsonObject& Event, FDeliveryNpcDecisionTrace& Trace)
 {
     Trace.InputSummary = TEXT("实际模型输入：未提供");
@@ -90,7 +90,7 @@ bool ReadDiagnostics(const FJsonObject& Event, FDeliveryNpcDecisionTrace& Trace)
     return true;
 }
 
-// 读取一个在给定范围内的整数字段
+/// @brief 读取一个在给定范围内的整数字段
 bool ReadInteger(const FJsonObject& Json, const TCHAR* Key, int32 Minimum, int32 Maximum, int32& Out)
 {
     double Value = 0;
@@ -101,7 +101,7 @@ bool ReadInteger(const FJsonObject& Json, const TCHAR* Key, int32 Minimum, int32
     return true;
 }
 
-// 读取一句台词和情绪，台词不超过 120 字
+/// @brief 读取一句台词和情绪，台词不超过 120 字
 bool ReadSpeechText(const FJsonObject& Json, FString& Text, FName& Emotion)
 {
     FString Value;
@@ -114,13 +114,16 @@ bool ReadSpeechText(const FJsonObject& Json, FString& Text, FName& Emotion)
 }
 } // namespace
 
-// 只在游戏和 PIE 世界创建
+// ── 生命周期 ──
+// 每个游戏世界一个网关；Initialize 生成世界编号并加载共享行为表，世界结束或销毁时调用 Shutdown 取消全部请求
+
+/// @brief 只在游戏和 PIE 世界创建
 bool UDeliveryAiGatewaySubsystem::DoesSupportWorldType(EWorldType::Type WorldType) const
 {
     return WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
 }
 
-// 生成世界编号，服务器加载共享行为表 DT_NpcBehaviorCatalog
+/// @brief 生成世界编号，服务器加载共享行为表 DT_NpcBehaviorCatalog
 void UDeliveryAiGatewaySubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
@@ -142,7 +145,10 @@ void UDeliveryAiGatewaySubsystem::Initialize(FSubsystemCollectionBase& Collectio
     }
 }
 
-// 交谈流程第 11 步，服务器：请求入队，玩家请求排在 NPC 闲聊前面
+// ── 发送 ──
+// Agent 调用 Enqueue 把请求排进队列，Tick 按并发上限调用 Dispatch 发出 HTTP 请求；Cancel、CancelRequest 和 Remove 取消请求，Complete 结束请求并通知 Agent
+
+/// @brief 交谈流程第 11 步，服务器：请求入队，玩家请求排在 NPC 闲聊前面
 bool UDeliveryAiGatewaySubsystem::Enqueue(UDeliveryNpcAgentComponent* Agent, const FDeliveryNpcDecisionRequest& Request)
 {
     const auto* Settings = GetDefault<UDeliveryAiSettings>();
@@ -190,7 +196,7 @@ bool UDeliveryAiGatewaySubsystem::Enqueue(UDeliveryNpcAgentComponent* Agent, con
     return true;
 }
 
-// 移除一个请求：向后端发 /cancel，再取消本地 HTTP 连接
+/// @brief 移除一个请求：向后端发 /cancel，再取消本地 HTTP 连接
 void UDeliveryAiGatewaySubsystem::Remove(FGuid RequestId)
 {
     FPending Entry;
@@ -215,7 +221,7 @@ void UDeliveryAiGatewaySubsystem::Remove(FGuid RequestId)
     }
 }
 
-// 取消某个 NPC 的全部请求
+/// @brief 取消某个 NPC 的全部请求
 void UDeliveryAiGatewaySubsystem::Cancel(UDeliveryNpcAgentComponent* Agent)
 {
     TArray<FGuid> Ids;
@@ -230,7 +236,7 @@ void UDeliveryAiGatewaySubsystem::Cancel(UDeliveryNpcAgentComponent* Agent)
     }
 }
 
-// 取消某个 NPC 的一个请求，并在诊断记录中标记为已取消
+/// @brief 取消某个 NPC 的一个请求，并在诊断记录中标记为已取消
 void UDeliveryAiGatewaySubsystem::CancelRequest(UDeliveryNpcAgentComponent* Agent, FGuid RequestId)
 {
     const auto* Entry = Pending.Find(RequestId);
@@ -243,7 +249,7 @@ void UDeliveryAiGatewaySubsystem::CancelRequest(UDeliveryNpcAgentComponent* Agen
     }
 }
 
-// 请求结束：超时、失败或非流式回复，先移除请求，再通知 Agent
+/// @brief 请求结束：超时、失败或非流式回复，先移除请求，再通知 Agent
 void UDeliveryAiGatewaySubsystem::Complete(FGuid RequestId, const FString& Body, FName Error)
 {
     check(IsInGameThread());
@@ -278,7 +284,7 @@ void UDeliveryAiGatewaySubsystem::Complete(FGuid RequestId, const FString& Body,
     }
 }
 
-// 交谈流程第 11 步，服务器：创建 HTTP 请求，POST 到后端 /stream，日志 http_start
+/// @brief 交谈流程第 11 步，服务器：创建 HTTP 请求，POST 到后端 /stream，日志 http_start
 void UDeliveryAiGatewaySubsystem::Dispatch(FGuid RequestId)
 {
     FPending* Entry = Pending.Find(RequestId);
@@ -368,7 +374,10 @@ void UDeliveryAiGatewaySubsystem::Dispatch(FGuid RequestId)
         Complete(RequestId, {}, TEXT("TransportFailure"));
 }
 
-// 服务器每帧：读取流式数据，处理超时，按并发上限发出排队中的请求
+// ── 读流 ──
+// Tick 每帧依次做三件事：把每个请求收到的新行交给 ReadStream（HTTP 已结束的再调用 FinishStreamRequest），按超时结束过期的请求，按并发上限调用 Dispatch 发出排队的请求
+
+/// @brief 服务器每帧：先读流式数据，再结束超时的请求，最后按并发上限发出排队的请求；玩家的请求在等时不发新的闲聊请求，闲聊同时最多一个
 void UDeliveryAiGatewaySubsystem::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -440,7 +449,7 @@ void UDeliveryAiGatewaySubsystem::Tick(float DeltaTime)
     }
 }
 
-// 流式请求的 HTTP 结束后，按是否完整收到回复通知 Agent
+/// @brief 流式请求的 HTTP 结束后，按是否完整收到回复通知 Agent
 void UDeliveryAiGatewaySubsystem::FinishStreamRequest(FGuid RequestId)
 {
     const auto* Entry = Pending.Find(RequestId);
@@ -459,7 +468,7 @@ void UDeliveryAiGatewaySubsystem::FinishStreamRequest(FGuid RequestId)
     }
 }
 
-// 流式数据格式错误：记录原因，按失败结束本次请求
+/// @brief 流式数据格式错误：记录原因，按失败结束本次请求
 void UDeliveryAiGatewaySubsystem::RejectStream(FGuid RequestId, const TCHAR* Reason)
 {
     const auto* Entry = Pending.Find(RequestId);
@@ -476,7 +485,7 @@ void UDeliveryAiGatewaySubsystem::RejectStream(FGuid RequestId, const TCHAR* Rea
     }
 }
 
-// 交谈流程第 14 步，服务器：读取后端发来的一行 JSON，按类型交给 Agent
+/// @brief 交谈流程第 14 步，服务器：读取后端发来的一行 JSON，按类型交给 Agent
 void UDeliveryAiGatewaySubsystem::ReadStream(FGuid RequestId, const FString& Line)
 {
     auto* Entry = Pending.Find(RequestId);
@@ -749,7 +758,9 @@ void UDeliveryAiGatewaySubsystem::ReadStream(FGuid RequestId, const FString& Lin
     RejectStream(RequestId, TEXT("UnknownEvent"));
 }
 
-// 取消全部请求并清空队列，之后不再接收回复
+// ── 生命周期 ──
+
+/// @brief 取消全部请求并清空队列，之后不再接收回复
 void UDeliveryAiGatewaySubsystem::Shutdown()
 {
     if (bShuttingDown)
@@ -777,21 +788,21 @@ void UDeliveryAiGatewaySubsystem::Shutdown()
     }
 }
 
-// 世界结束时取消全部请求
+/// @brief 世界结束时取消全部请求
 void UDeliveryAiGatewaySubsystem::OnWorldEndPlay(UWorld& InWorld)
 {
     Shutdown();
     Super::OnWorldEndPlay(InWorld);
 }
 
-// 子系统销毁时取消全部请求
+/// @brief 子系统销毁时取消全部请求
 void UDeliveryAiGatewaySubsystem::Deinitialize()
 {
     Shutdown();
     Super::Deinitialize();
 }
 
-// 性能统计用
+/// @brief 性能统计用
 TStatId UDeliveryAiGatewaySubsystem::GetStatId() const
 {
     RETURN_QUICK_DECLARE_CYCLE_STAT(UDeliveryAiGatewaySubsystem, STATGROUP_Tickables);

@@ -10,7 +10,9 @@ import time
 
 
 class AppServer:
+    """管理本机 Codex app-server 子进程，通过 JSON-RPC 发起一次模型回合"""
     def __init__(self):
+        """初始化进程、会话和用量统计的状态"""
         self.process = None
         self.folder = None
         self.serial = 0
@@ -83,6 +85,7 @@ class AppServer:
         return self.session_config, effort, service_tier
 
     def _record_token_usage(self, usage):
+        """累计这次回合的 token 用量"""
         # 只保存协议中的计数，异常统计不能影响本轮台词
         if not isinstance(usage, dict):
             return
@@ -103,6 +106,7 @@ class AppServer:
         self.last_token_usage = counts
 
     def close(self):
+        """清空会话缓存并结束子进程"""
         self.session_config = None
         self.model_catalog = None
         self.model_service_tiers = {}
@@ -124,6 +128,7 @@ class AppServer:
             self.folder = None
 
     def _send(self, method, params, request=True):
+        """发送一条 JSON-RPC 消息，request 为 True 时带编号并返回编号"""
         self.serial += 1
         body = {'method': method, 'params': params}
         if request:
@@ -133,6 +138,7 @@ class AppServer:
         return self.serial
 
     def _read(self, deadline, cancel=None):
+        """在 deadline 前读取下一条子进程输出，cancel 被设置时抛出 cancelled"""
         while time.monotonic() < deadline:
             if cancel is not None and cancel.is_set():
                 raise RuntimeError('cancelled')
@@ -145,6 +151,7 @@ class AppServer:
         raise TimeoutError('app_server_timeout')
 
     def _rpc(self, method, params, cancel=None):
+        """发送请求并等待同编号的回复，最多 10 秒"""
         if cancel is not None and cancel.is_set():
             raise RuntimeError('cancelled')
         ident = self._send(method, params)
@@ -158,6 +165,7 @@ class AppServer:
             self.saved.append(message)
 
     def _start(self, cancel=None):
+        """子进程没在运行时启动它并完成初始化握手"""
         if cancel is not None and cancel.is_set():
             raise RuntimeError('cancelled')
         if self.process and self.process.poll() is None:
@@ -180,6 +188,7 @@ class AppServer:
                                         creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         process, events = self.process, self.events
         def read_lines():
+            """后台线程逐行读取子进程输出，超长或无法解析的行丢弃"""
             for line in process.stdout:
                 if len(line) > 262144:
                     continue
@@ -201,6 +210,7 @@ class AppServer:
             raise RuntimeError('cancelled')
         started = time.monotonic()
         def mark(stage):
+            """记录从开始到 stage 这一步用了多少毫秒"""
             if measure is not None:
                 try:
                     measure(stage, (time.monotonic()-started)*1000)
@@ -240,6 +250,7 @@ class AppServer:
             first_delta = False
 
             def interrupt_if_cancelled():
+                """cancel 被设置时向子进程发送一次中断回合的请求"""
                 nonlocal interrupted, deadline
                 if cancel.is_set() and not interrupted:
                     self._send('turn/interrupt', {'threadId': thread, 'turnId': turn})

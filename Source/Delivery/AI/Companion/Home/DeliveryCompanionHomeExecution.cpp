@@ -55,12 +55,17 @@ namespace
     }
 }
 
+// ── 家居执行 ──
+// 走到家具旁、搬起、摆放、使用；行为树每帧调用 UpdateHomeArrangement 推进
+
+/// @brief 家居动作用的服务器时间
 double UDeliveryCompanionComponent::GetHomeServerTime() const
 {
     const auto* Clock=GetWorld()?GetWorld()->GetGameState():nullptr;
     return Clock?Clock->GetServerWorldTimeSeconds():GetWorld()?GetWorld()->GetTimeSeconds():0;
 }
 
+/// @brief ASC 完成初始化后由角色调用，只授予本组件负责的家居能力
 void UDeliveryCompanionComponent::InitializeHomeAbility()
 {
     auto* Npc=GetCompanion();
@@ -71,17 +76,20 @@ void UDeliveryCompanionComponent::InitializeHomeAbility()
     HomeAbilityHandle=ASC->GiveAbility(FGameplayAbilitySpec(Class,1,INDEX_NONE,this));
 }
 
+/// @brief 有家居安排且还在进行中的阶段
 bool UDeliveryCompanionComponent::HasActiveHomeArrangement() const
 {
     return HomeState.ArrangementId.IsValid() && IsHomeRunning(HomeState.Phase);
 }
 
+/// @brief ArrangementId 仍是当前进行中的家居安排，且组件没有在结束
 bool UDeliveryCompanionComponent::IsCurrentHome(FGuid ArrangementId) const
 {
     return IsValid(this) && !bHomeEndingPlay && IsValid(GetOwner()) && !GetOwner()->IsActorBeingDestroyed() &&
         HasActiveHomeArrangement() && HomeState.ArrangementId==ArrangementId;
 }
 
+/// @brief 坐下之后结束安排前要先播起身动作
 bool UDeliveryCompanionComponent::NeedsHomeExit() const
 {
     return HasActiveHomeArrangement() && HomeState.Operation==EDeliveryHomeOperation::Sit && bHomeUseStarted &&
@@ -89,6 +97,7 @@ bool UDeliveryCompanionComponent::NeedsHomeExit() const
             (HomeState.Phase==EDeliveryCompanionHomePhase::EnterUse && HomeState.PoseAnimation));
 }
 
+/// @brief Source 就是二狗正在搬的家具，搬运编号和占用都还有效
 bool UDeliveryCompanionComponent::OwnsHomeSource(const UDeliveryHomeObjectComponent* Source) const
 {
     FName Reason;
@@ -98,6 +107,7 @@ bool UDeliveryCompanionComponent::OwnsHomeSource(const UDeliveryHomeObjectCompon
         HomeGrabbable->IsCarriedByProvider(this,HomePropCarryId) && Source->ValidateClaim(HomeTakeClaim,false,Reason);
 }
 
+/// @brief 设置要复制的家居姿势动画、是否循环、是否只用上半身，并记下开始时间
 void UDeliveryCompanionComponent::SetHomePose(UAnimSequence* Animation,bool bLoop,bool bUpperBody)
 {
     HomeState.PoseAnimation=Animation;
@@ -107,12 +117,14 @@ void UDeliveryCompanionComponent::SetHomePose(UAnimSequence* Animation,bool bLoo
     GetOwner()->ForceNetUpdate();
 }
 
+/// @brief 手上有家具就播搬运姿势，没有就清空姿势
 void UDeliveryCompanionComponent::RefreshHomeCarryPose()
 {
     if (IsValid(HomeState.CarriedProp)) SetHomePose(PropCarryAnimation,true,true);
     else SetHomePose(nullptr,false,false);
 }
 
+/// @brief 切换家居阶段，重置这一阶段的计时和导航间隔
 void UDeliveryCompanionComponent::SetHomePhase(EDeliveryCompanionHomePhase Phase)
 {
     HomeState.Phase=Phase;
@@ -124,6 +136,7 @@ void UDeliveryCompanionComponent::SetHomePhase(EDeliveryCompanionHomePhase Phase
     GetOwner()->ForceNetUpdate();
 }
 
+/// @brief 取消家居导航，只停止本组件自己发起的那次移动请求
 void UDeliveryCompanionComponent::StopHomeMovement()
 {
     auto* Npc=GetCompanion();
@@ -141,6 +154,7 @@ void UDeliveryCompanionComponent::StopHomeMovement()
         Path->AbortMove(*this,FPathFollowingResultFlags::UserAbort,OldId);
 }
 
+/// @brief 家居导航入口：到了 Goal 附近返回 true，否则发出导航请求
 bool UDeliveryCompanionComponent::MoveForHome(const FVector& Goal,float Radius)
 {
     auto* Npc=GetCompanion();
@@ -209,6 +223,7 @@ bool UDeliveryCompanionComponent::MoveForHome(const FVector& Goal,float Radius)
     return false;
 }
 
+/// @brief 转向家具的使用方向，坐姿移动中由座位过程负责
 bool UDeliveryCompanionComponent::AlignForHome(const FTransform& Use)
 {
     auto* Npc=GetCompanion();
@@ -230,6 +245,7 @@ bool UDeliveryCompanionComponent::AlignForHome(const FTransform& Use)
         Npc->GetVelocity().Size2D()<5.f;
 }
 
+/// @brief 释放家具的占用并解绑使用结束事件
 void UDeliveryCompanionComponent::ReleaseHomeClaim(FDeliveryHomeUseClaim& Claim,FName Reason)
 {
     const FDeliveryHomeUseClaim Old=Claim;
@@ -250,6 +266,7 @@ void UDeliveryCompanionComponent::ReleaseHomeClaim(FDeliveryHomeUseClaim& Claim,
     if (Pending.TakeUse.Object.Get()==Object && Pending.TakeUse.Revision==Before) Pending.TakeUse.Revision=Before+1;
 }
 
+/// @brief 按操作类型占用来源和目的家具，开始一次新的家居安排
 bool UDeliveryCompanionComponent::BeginHomeChoice(const FDeliveryCompanionHomeChoice& Choice,FGuid ArrangementId,FName& OutReason)
 {
     auto* Npc=GetCompanion();
@@ -310,6 +327,7 @@ bool UDeliveryCompanionComponent::BeginHomeChoice(const FDeliveryCompanionHomeCh
     return true;
 }
 
+/// @brief 接收模型选的家居候选：起身直接处理，正在坐着时先排队等起身后再开始
 bool UDeliveryCompanionComponent::ApplyHomeChoice(const FDeliveryCompanionHomeChoice& Choice,APlayerState* Requester,int32 ExpectedRevision)
 {
     auto* Npc=GetCompanion();
@@ -360,6 +378,7 @@ bool UDeliveryCompanionComponent::ApplyHomeChoice(const FDeliveryCompanionHomeCh
     return true;
 }
 
+/// @brief 起身结束后开始排队中的家居安排，过期就放弃
 void UDeliveryCompanionComponent::StartPendingHomeChoice()
 {
     if (!PendingHomeArrangementId.IsValid() || HasActiveHomeArrangement() || bChangingHomeArrangement || bHomeEndingPlay) return;
@@ -381,6 +400,7 @@ void UDeliveryCompanionComponent::StartPendingHomeChoice()
     GetOwner()->ForceNetUpdate();
 }
 
+/// @brief 家居技能开始执行时调用：取家具时开始搬运，其他操作占用目的家具并进入使用阶段
 bool UDeliveryCompanionComponent::StartHomeUse(const UDeliveryHomeUseRequest& Request)
 {
     auto* Npc=GetCompanion();
@@ -456,11 +476,13 @@ bool UDeliveryCompanionComponent::StartHomeUse(const UDeliveryHomeUseRequest& Re
     return true;
 }
 
+/// @brief ArrangementId 是当前安排时调用 CancelHomeArrangement
 void UDeliveryCompanionComponent::CancelHomeUse(FGuid ArrangementId,FName Reason)
 {
     if (IsCurrentHome(ArrangementId)) CancelHomeArrangement(Reason,false);
 }
 
+/// @brief 进入起身阶段，播放家具的退出动作
 void UDeliveryCompanionComponent::BeginLeavingHomeUse(FName Reason)
 {
     if (!HasActiveHomeArrangement() || HomeState.Phase==EDeliveryCompanionHomePhase::LeaveUse) return;
@@ -474,6 +496,7 @@ void UDeliveryCompanionComponent::BeginLeavingHomeUse(FName Reason)
     if (!HomeState.SeatMotion.bMoving) SetHomePose(Definition?Definition->ExitAnimation.Get():nullptr,false,false);
 }
 
+/// @brief 取消家居安排；bForce 为 false 且坐着时先起身，否则立即结束
 void UDeliveryCompanionComponent::CancelHomeArrangement(FName Reason,bool bForce)
 {
     auto* Npc=GetCompanion();
@@ -485,6 +508,7 @@ void UDeliveryCompanionComponent::CancelHomeArrangement(FName Reason,bool bForce
     else ReleaseHomeProp(Reason);
 }
 
+/// @brief 结束家居安排：释放占用和家具，记录结果并通知模型
 void UDeliveryCompanionComponent::FinishHomeArrangement(EDeliveryCompanionHomePhase Phase,FName Reason,bool bKeepProp)
 {
     const FGuid OldId=HomeState.ArrangementId;
@@ -539,6 +563,7 @@ void UDeliveryCompanionComponent::FinishHomeArrangement(EDeliveryCompanionHomePh
     if (IsValid(GetOwner())) GetOwner()->ForceNetUpdate();
 }
 
+/// @brief 搬运家具时手前的目标位置和朝向，由 PropCarrySocket 和 PropCarryOffset 决定
 bool UDeliveryCompanionComponent::GetHomeHandPose(FVector& OutLocation,FVector& OutForward) const
 {
     const auto* Npc=GetCompanion();
@@ -554,6 +579,7 @@ bool UDeliveryCompanionComponent::GetHomeHandPose(FVector& OutLocation,FVector& 
     return !OutLocation.ContainsNaN() && !OutForward.IsNearlyZero();
 }
 
+/// @brief 家具离手前位置超过 PropCarryPauseDistance 时返回 true
 bool UDeliveryCompanionComponent::IsHomePropLagging() const
 {
     FVector Hand,Forward;
@@ -561,6 +587,7 @@ bool UDeliveryCompanionComponent::IsHomePropLagging() const
         FVector::Dist(HomeState.CarriedProp->GetActorLocation(),Hand)>FMath::Clamp(PropCarryPauseDistance,20.f,100.f);
 }
 
+/// @brief 家具已经到了手前位置并转到了手前朝向
 bool UDeliveryCompanionComponent::IsHomePropAtHand() const
 {
     const auto* Prop=HomeState.CarriedProp.Get();
@@ -570,6 +597,7 @@ bool UDeliveryCompanionComponent::IsHomePropAtHand() const
         FMath::Abs(FMath::FindDeltaAngleDegrees(Prop->GetActorRotation().Yaw,Forward.Rotation().Yaw))<=FMath::Min(5.f,HomeUseYawTolerance);
 }
 
+/// @brief 实物到了手前，或已经跟在搬运距离内等过一秒，就可以开始下一段搬放
 bool UDeliveryCompanionComponent::IsHomePropReadyAtHand(double Now)
 {
     if (IsHomePropAtHand()) { HomePropHandWaitStartedAt=-1; return true; }
@@ -592,6 +620,7 @@ bool UDeliveryCompanionComponent::IsHomePropReadyAtHand(double Now)
     return bCloseEnough;
 }
 
+/// @brief 搬运要经过门洞交接点时检查交接点仍然有效
 bool UDeliveryCompanionComponent::ValidateHomePropTransfer(FName& OutReason) const
 {
     if (!HomePropTransferPoint.bEnabled) { OutReason=NAME_None; return true; }
@@ -600,12 +629,14 @@ bool UDeliveryCompanionComponent::ValidateHomePropTransfer(FName& OutReason) con
     return Object->ValidatePropTransferPoint(HomePropTransferPoint,OutReason);
 }
 
+/// @brief 清空门洞交接点
 void UDeliveryCompanionComponent::ClearHomePropTransfer()
 {
     HomePropTransferPoint={};
     bMovingToPropTransferPoint=false;
 }
 
+/// @brief 开始新的一段搬运，从家具当前位置平滑移到手前或交接点
 void UDeliveryCompanionComponent::BeginHomePropSegment(bool bToTransferPoint)
 {
     bMovingToPropTransferPoint=bToTransferPoint;
@@ -618,6 +649,7 @@ void UDeliveryCompanionComponent::BeginHomePropSegment(bool bToTransferPoint)
     }
 }
 
+/// @brief 家具已经到了门洞交接点
 bool UDeliveryCompanionComponent::HasReachedHomePropTransferPoint() const
 {
     const auto* Prop=HomeState.CarriedProp.Get();
@@ -627,6 +659,7 @@ bool UDeliveryCompanionComponent::HasReachedHomePropTransferPoint() const
         FMath::Abs(FMath::FindDeltaAngleDegrees(Prop->GetActorRotation().Yaw,PropBlendForward.Rotation().Yaw))<=FMath::Min(5.f,HomeUseYawTolerance);
 }
 
+/// @brief 可抓取组件每帧查询：家具应该在的位置和朝向
 bool UDeliveryCompanionComponent::GetObjectCarryPose(const AActor* Object,const FGuid& CarryId,FVector& OutLocation,FVector& OutForward) const
 {
     const auto* Npc=GetCompanion();
@@ -654,6 +687,7 @@ bool UDeliveryCompanionComponent::GetObjectCarryPose(const AActor* Object,const 
     return !OutLocation.ContainsNaN() && !OutForward.ContainsNaN();
 }
 
+/// @brief 二狗正在把这件家具放到目的家具上时返回 true
 bool UDeliveryCompanionComponent::IsObjectCarryInPlacement(const AActor* Object,const FGuid& CarryId) const
 {
     const auto* Destination=HomeUseClaim.Object.Get();
@@ -670,6 +704,7 @@ bool UDeliveryCompanionComponent::IsObjectCarryInPlacement(const AActor* Object,
     return Definition && Definition->Operation==EDeliveryHomeOperation::PlaceProp;
 }
 
+/// @brief 开始搬起占用的家具，失败时 OutReason 写入原因
 bool UDeliveryCompanionComponent::BeginHomePropCarry(FName& OutReason)
 {
     auto* Source=HomeTakeClaim.Object.Get();
@@ -707,6 +742,7 @@ bool UDeliveryCompanionComponent::BeginHomePropCarry(FName& OutReason)
     return false;
 }
 
+/// @brief 放开正在搬的家具并释放来源占用
 void UDeliveryCompanionComponent::ReleaseHomeProp(FName Reason)
 {
     ClearHomePropTransfer();
@@ -726,6 +762,7 @@ void UDeliveryCompanionComponent::ReleaseHomeProp(FName Reason)
     if (IsValid(GetOwner())) GetOwner()->ForceNetUpdate();
 }
 
+/// @brief 可抓取组件通知家具被放开：放置中的按完成处理，其他情况结束安排
 void UDeliveryCompanionComponent::OnObjectCarryReleased(AActor* Object,const FGuid& CarryId,EDeliveryObjectCarryReleaseReason Reason)
 {
     if (!GetOwner() || !GetOwner()->HasAuthority() || CarryId!=HomePropCarryId || !CarryId.IsValid()) return;
@@ -753,6 +790,7 @@ void UDeliveryCompanionComponent::OnObjectCarryReleased(AActor* Object,const FGu
     }
 }
 
+/// @brief 家具使用被别处结束时结束当前家居安排或放开家具
 void UDeliveryCompanionComponent::OnHomeObjectUseEnded(FGuid ActionId,FName Reason)
 {
     if (bHomeEndingPlay || (bCommittingHomeUse && (Reason==TEXT("HomeAudioCommitted") || Reason==TEXT("HomePlacementCommitted")))) return;
@@ -763,6 +801,7 @@ void UDeliveryCompanionComponent::OnHomeObjectUseEnded(FGuid ActionId,FName Reas
     }
 }
 
+/// @brief 服务器每帧检查家居安排还能否继续，并开始排队中的安排
 void UDeliveryCompanionComponent::TickHomeLifecycle()
 {
     auto* Npc=GetCompanion();
@@ -815,6 +854,7 @@ void UDeliveryCompanionComponent::TickHomeLifecycle()
     }
 }
 
+/// @brief BT 持续分支调用，普通中断仅暂停本组件自己的路径
 void UDeliveryCompanionComponent::UpdateHomeArrangement()
 {
     auto* Npc=GetCompanion();
@@ -986,6 +1026,7 @@ void UDeliveryCompanionComponent::UpdateHomeArrangement()
     if (HomeState.Phase==EDeliveryCompanionHomePhase::PlaceProp) UpdateHomePropPlacement(Id,Now,Object);
 }
 
+/// @brief 放置家具的过程：放开后等它停稳，超时或被拿走就失败
 void UDeliveryCompanionComponent::UpdateHomePropPlacement(FGuid Id,double Now,UDeliveryHomeObjectComponent* Destination)
 {
     auto* Source=ActiveHomeChoice.SourceObject.Get();
@@ -1087,6 +1128,7 @@ void UDeliveryCompanionComponent::UpdateHomePropPlacement(FGuid Id,double Now,UD
     SetHomePose(nullptr,false,false);
 }
 
+/// @brief 组件结束时强制取消家居安排、座位移动，收回家居技能
 void UDeliveryCompanionComponent::ShutdownHomeExecution()
 {
     bHomeEndingPlay=true;

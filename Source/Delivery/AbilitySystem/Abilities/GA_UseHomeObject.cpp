@@ -5,6 +5,9 @@
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Event_Home_Use,"Event.Home.Use");
 
+// ── 生命周期 ──
+
+/// @brief 每个角色一个实例，只在服务器运行，由 Event.Home.Use 事件触发
 UGA_UseHomeObject::UGA_UseHomeObject()
 {
     InstancingPolicy=EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -16,6 +19,7 @@ UGA_UseHomeObject::UGA_UseHomeObject()
     AbilityTriggers.Add(Trigger);
 }
 
+/// @brief 检查请求属于这个角色、执行组件存在，订阅完成通知，再调用 StartHomeUse；没开始成功就结束技能
 void UGA_UseHomeObject::ActivateAbility(FGameplayAbilitySpecHandle Handle,const FGameplayAbilityActorInfo* ActorInfo,
     FGameplayAbilityActivationInfo ActivationInfo,const FGameplayEventData* TriggerEventData)
 {
@@ -43,6 +47,7 @@ void UGA_UseHomeObject::ActivateAbility(FGameplayAbilitySpecHandle Handle,const 
         EndAbility(Handle,ActorInfo,ActivationInfo,false,true);
 }
 
+/// @brief 执行组件广播用完时调用；安排编号一致才结束技能
 void UGA_UseHomeObject::OnHomeUseFinished(FGuid ArrangementId,bool bSucceeded,FName Reason)
 {
     if (!IsActive() || ArrangementId!=ExecutingArrangement) return;
@@ -50,6 +55,7 @@ void UGA_UseHomeObject::OnHomeUseFinished(FGuid ArrangementId,bool bSucceeded,FN
     EndAbility(CurrentSpecHandle,CurrentActorInfo,CurrentActivationInfo,false,!bSucceeded);
 }
 
+/// @brief 技能结束：取消订阅完成通知；还没用完就被结束时调用 CancelHomeUse
 void UGA_UseHomeObject::EndAbility(FGameplayAbilitySpecHandle Handle,const FGameplayAbilityActorInfo* ActorInfo,
     FGameplayAbilityActivationInfo ActivationInfo,bool bReplicateEndAbility,bool bWasCancelled)
 {

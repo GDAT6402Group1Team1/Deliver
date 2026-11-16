@@ -5,7 +5,9 @@ import time
 
 
 class Job:
+    """一个决策请求：key 由世界编号、NPC 编号和请求编号组成，玩家说话的请求优先"""
     def __init__(self, context):
+        """保存请求上下文，计算 key 和优先级，创建取消事件和完成结果"""
         self.context = context
         self.key = tuple(context[k] for k in ('world_epoch', 'npc_id', 'request_id'))
         self.priority = 0 if context.get('request_source') == 'player' else 1
@@ -22,6 +24,7 @@ class Job:
         self.completion = None
 
     def emit(self, kind, **data):
+        """向游戏推送一条事件；kind 为 error 时改为调用 fail 结束这次请求"""
         if kind == 'error':
             self.fail(data.get('reason', 'reply_failed'))
             return
@@ -74,7 +77,9 @@ class Job:
 
 
 class Scheduler:
+    """决策请求的调度：玩家请求优先，玩家交谈期间暂停新的闲聊，同一个 key 不能重复提交"""
     def __init__(self, run, workers=2, capacity=8):
+        """保存执行函数和容量，启动 workers 个工作线程"""
         self.run = run
         self.capacity = capacity
         self.condition = threading.Condition()
@@ -88,6 +93,7 @@ class Scheduler:
             thread.start()
 
     def submit(self, context):
+        """提交一个请求，已关闭或同一个 key 已经在处理时抛出 busy，队列满时挤掉优先级最低的旧请求"""
         job = Job(context)
         with self.condition:
             if self.closed or job.key in self.jobs:
@@ -105,6 +111,7 @@ class Scheduler:
         return job
 
     def _remove_waiting(self, job):
+        """取消一个还在排队的请求并移出队列"""
         # 调用时已持有 condition；没有开始的请求可以立即结束
         job.cancel_request()
         job.finished = True
@@ -112,6 +119,7 @@ class Scheduler:
         self.jobs.pop(job.key, None)
 
     def cancel(self, key):
+        """按 key 取消请求，还在排队时直接移出"""
         with self.condition:
             job = self.jobs.get(tuple(key))
             if job:
@@ -122,6 +130,7 @@ class Scheduler:
             return job is not None
 
     def _worker(self):
+        """工作线程按优先级取出请求执行，玩家交谈期间不取新的闲聊"""
         while True:
             with self.condition:
                 # 玩家交谈期间暂停新的闲聊；已开始的闲聊按原流程结束
@@ -154,6 +163,7 @@ class Scheduler:
                     job.completion.add_done_callback(lambda _, current=job: self._finish(current))
 
     def _finish_model(self, job):
+        """模型调用结束时标记并唤醒等待的工作线程"""
         with self.condition:
             if job.model_finished:
                 return
@@ -165,6 +175,7 @@ class Scheduler:
             self.condition.notify_all()
 
     def _finish(self, job):
+        """请求全部结束时从 jobs 里移除"""
         with self.condition:
             if self.jobs.get(job.key) is not job:
                 return
@@ -173,6 +184,7 @@ class Scheduler:
             self.condition.notify_all()
 
     def close(self):
+        """关闭调度器，取消所有请求并等待工作线程退出"""
         with self.condition:
             self.closed = True
             for job in self.jobs.values():

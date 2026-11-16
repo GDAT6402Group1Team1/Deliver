@@ -19,6 +19,10 @@ namespace
     }
 }
 
+// ── 出行方式 ──
+// 按主人的设置和距离决定步行还是骑车
+
+/// @brief 服务器接收新安排时记下主人指定的出行方式，Unspecified 时保留上次的选择
 void UDeliveryCompanionComponent::ApplyTravelInstruction(EDeliveryCompanionTravelMode NewMode)
 {
     // 只在服务器接受新安排的位置调用，短对白和空参数都保留主人的上次选择
@@ -26,6 +30,7 @@ void UDeliveryCompanionComponent::ApplyTravelInstruction(EDeliveryCompanionTrave
         TravelMode=NewMode;
 }
 
+/// @brief 主人就在附近时，接过或交还包裹改为步行就近完成
 bool UDeliveryCompanionComponent::CanTransferNearbyPackage(EDeliveryNpcAction Action) const
 {
     const bool bFetch=Action==EDeliveryNpcAction::FetchPackage;
@@ -68,6 +73,7 @@ bool UDeliveryCompanionComponent::CanTransferNearbyPackage(EDeliveryNpcAction Ac
     return CanReach(Npc->GetActorLocation(),Carrier->GetTaskPackageTransferPoint(),CarrierPawn,Package);
 }
 
+/// @brief 把当前出行方式和可选的出行方式写进模型请求
 void UDeliveryCompanionComponent::ExtendTravelDecisionRequest(FDeliveryNpcDecisionRequest& Request,APlayerState* Requester) const
 {
     Request.RequestedCapabilityVersion=FDeliveryNpcDecisionRequest::CapabilityVersion;

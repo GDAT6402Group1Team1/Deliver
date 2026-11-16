@@ -9,14 +9,16 @@ struct FDeliverySpeechSegmentCallbacks
     TFunction<void(uint64 TurnId)> OnFinished;
 };
 
-// AEC 工作线程按 10ms 推进；VAD 提供概率，这里只负责分句、预卷和有界接续
+/**
+ * @brief AEC 工作线程按 10ms 推进；VAD 提供概率，这里只负责分句、预卷和有界接续
+ */
 class FDeliverySpeechSegmentation
 {
 public:
     static constexpr int32 PreRollMilliseconds = 250;
     static constexpr int32 StartVoiceMilliseconds = 100;
     static constexpr int32 EndSilenceMilliseconds = 800;
-    // 包括预卷，给游戏线程和服务器的 15s 录入期限留出余量
+    /// 包括预卷，给游戏线程和服务器的 15s 录入期限留出余量
     static constexpr int32 SegmentSoftLimitMilliseconds = 14000;
     static constexpr int32 PendingAudioLimitMilliseconds = 2000;
 
@@ -38,7 +40,7 @@ public:
         bContinueNextFrame = bSuppressUntilSilence = false;
     }
 
-    // false 表示输入或缓存失败，所属会话必须显式停止，不能丢弃一段后假装正常
+    /// @brief false 表示输入或缓存失败，所属会话必须显式停止，不能丢弃一段后假装正常
     bool PushFrame(const float* Samples, int32 Count, float SpeechProbability)
     {
         if (!Samples || Count != BlockSamples || !Rate || !FMath::IsFinite(SpeechProbability)) return false;
@@ -80,7 +82,7 @@ public:
         AppendHistory(Samples, Count);
         StartFrames = bVoice ? StartFrames + 1 : 0;
         if (!bContinueNextFrame && StartFrames < StartVoiceMilliseconds / 10) return true;
-        // 最多保留两段尚未交给识别的内容，另有总音频时长限制
+        /// @brief 最多保留两段尚未交给识别的内容，另有总音频时长限制
         if (Segments.Num() >= 2) return false;
         auto& Segment = Segments.AddDefaulted_GetRef();
         Segment.DetectionId = ++NextDetection;
@@ -97,7 +99,7 @@ public:
         return true;
     }
 
-    // 游戏线程已领取上一句 final 后，经音频队列为最早的待识别段绑定轮次
+    /// @brief 游戏线程已领取上一句 final 后，经音频队列为最早的待识别段绑定轮次
     bool Accept(uint64 DetectionId, uint64 TurnId)
     {
         if (!TurnId || Segments.IsEmpty() || Segments[0].DetectionId != DetectionId || Segments[0].TurnId) return false;
@@ -130,7 +132,7 @@ public:
         Segments.RemoveAt(Index, 1, EAllowShrinking::No);
         if (bWasSpeaking)
         {
-            // 拒绝或取消后等待这次说话结束，避免同一句不断重新申请交谈
+            /// 拒绝或取消后等待这次说话结束，避免同一句不断重新申请交谈
             bSuppressUntilSilence = true;
             HistoryCount = HistoryWrite = StartFrames = SilenceFrames = 0;
             bContinueNextFrame = false;

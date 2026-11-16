@@ -32,7 +32,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogDeliveryNpcAgent, Log, All);
 
 namespace
 {
-// 截断文字并把控制字符换成空格，用于诊断显示
+/// @brief 截断文字并把控制字符换成空格，用于诊断显示
 FString TraceText(const FString& Text, int32 Limit)
 {
     FString Result = Text.Left(Limit);
@@ -42,7 +42,7 @@ FString TraceText(const FString& Text, int32 Limit)
     return Result.TrimStartAndEnd();
 }
 
-// 按编号取对象名称，用于诊断显示
+/// @brief 按编号取对象名称，用于诊断显示
 FString TraceSubject(const FDeliveryNpcDecisionRequest& Request, FGuid Id)
 {
     const auto* Subject = Request.Subjects.FindByPredicate(
@@ -53,14 +53,14 @@ FString TraceSubject(const FDeliveryNpcDecisionRequest& Request, FGuid Id)
     return Subject ? TraceText(Subject->Name, 64) : FString();
 }
 
-// 对话类事件，保存时间比现场事件长
+/// @brief 对话类事件，保存时间比现场事件长
 bool IsConversationMemory(FName Kind)
 {
     return Kind == TEXT("NpcMessage") || Kind == TEXT("NpcMessageSent") || Kind == TEXT("PlayerSpeech") ||
            Kind == TEXT("Speech") || Kind == TEXT("OverheardSpeech") || Kind == TEXT("SelfSpeech") || Kind == TEXT("ActionReply");
 }
 
-// 看见、看不见类事件
+/// @brief 看见、看不见类事件
 bool IsSightMemory(const FDeliveryNpcEvidence& Item)
 {
     return Item.Source == EDeliveryNpcEvidenceSource::Seen &&
@@ -68,7 +68,7 @@ bool IsSightMemory(const FDeliveryNpcEvidence& Item)
             Item.Kind == TEXT("LastSeen"));
 }
 
-// 给每个候选分配编号，模型回复里的候选序号按这个编号还原，能力版本低于 5 时不需要
+/// @brief 给每个候选分配编号，模型回复里的候选序号按这个编号还原，能力版本低于 5 时不需要
 bool PrepareCandidateIdentities(FDeliveryNpcDecisionRequest& Request, APlayerState* Requester)
 {
     if (Request.RequestedCapabilityVersion < 1 ||
@@ -147,7 +147,10 @@ bool PrepareCandidateIdentities(FDeliveryNpcDecisionRequest& Request, APlayerSta
 }
 } // namespace
 
-// 组件需要复制，每 0.1 秒 Tick 一次
+// ── 生命周期 ──
+// BeginPlay 在服务器上订阅轮次子系统；TickComponent 推进动作计时和事件过期；EndPlay 取消所有请求、回复和动作
+
+/// @brief 组件需要复制，每 0.1 秒 Tick 一次
 UDeliveryNpcAgentComponent::UDeliveryNpcAgentComponent()
 {
     SetIsReplicatedByDefault(true);
@@ -155,7 +158,7 @@ UDeliveryNpcAgentComponent::UDeliveryNpcAgentComponent()
     PrimaryComponentTick.TickInterval = .1f;
 }
 
-// 服务器上生成 NPC 编号，并订阅 NPC 之间的接话事件
+/// @brief 服务器上生成 NPC 编号，并订阅 NPC 之间的接话事件
 void UDeliveryNpcAgentComponent::BeginPlay()
 {
     Super::BeginPlay();
@@ -168,13 +171,16 @@ void UDeliveryNpcAgentComponent::BeginPlay()
         SetComponentTickEnabled(false);
 }
 
-// 是否在服务器上
+// ── 诊断 ──
+// 决策记录 FDeliveryNpcDecisionTrace 每到一个阶段就更新一次，AI 观察面板读它显示这一轮的观察、候选、建议和耗时
+
+/// @brief 是否在服务器上
 bool UDeliveryNpcAgentComponent::IsAuthority() const
 {
     return !bEndingPlay && GetOwner() && GetOwner()->HasAuthority() && GetWorld() && GetWorld()->GetNetMode() != NM_Client;
 }
 
-// 服务器时间，客户端按它对齐动画和声音
+/// @brief 服务器时间，客户端按它对齐动画和声音
 double UDeliveryNpcAgentComponent::ServerTime() const
 {
     if (const auto* State = GetWorld()->GetGameState())
@@ -182,7 +188,7 @@ double UDeliveryNpcAgentComponent::ServerTime() const
     return GetWorld()->GetTimeSeconds();
 }
 
-// 请求入队时建立诊断记录：事件、候选、记忆和当前活动
+/// @brief 请求入队时建立诊断记录：事件、候选、记忆和当前活动
 void UDeliveryNpcAgentComponent::BeginDecisionTrace(const FDeliveryNpcDecisionRequest& Request)
 {
     if (!IsAuthority() || Request.NpcId != NpcId || !Request.RequestId.IsValid())
@@ -279,7 +285,7 @@ void UDeliveryNpcAgentComponent::BeginDecisionTrace(const FDeliveryNpcDecisionRe
     PublishDecisionTrace();
 }
 
-// 诊断记录是否属于这次请求和当前世界
+/// @brief 诊断记录是否属于这次请求和当前世界
 bool UDeliveryNpcAgentComponent::IsDecisionTraceCurrent(FGuid WorldEpoch, FGuid RequestId) const
 {
     if (!IsAuthority() || !RequestId.IsValid() || DecisionTrace.RequestId != RequestId || DecisionTrace.WorldEpoch != WorldEpoch)
@@ -288,7 +294,7 @@ bool UDeliveryNpcAgentComponent::IsDecisionTraceCurrent(FGuid WorldEpoch, FGuid 
     return Gateway && Gateway->GetWorldEpoch() == WorldEpoch;
 }
 
-// 增加修订号并通知订阅者
+/// @brief 增加修订号并通知订阅者
 void UDeliveryNpcAgentComponent::PublishDecisionTrace()
 {
     if (!IsAuthority() || !DecisionTrace.RequestId.IsValid())
@@ -299,7 +305,7 @@ void UDeliveryNpcAgentComponent::PublishDecisionTrace()
     OnDecisionTraceChanged.Broadcast(Snapshot);
 }
 
-// 记录请求阶段：发出、完成、失败、取消，并计算耗时
+/// @brief 记录请求阶段：发出、完成、失败、取消，并计算耗时
 void UDeliveryNpcAgentComponent::TraceRequestEvent(FGuid WorldEpoch, FGuid RequestId, FName Stage, FName Error)
 {
     if (!IsDecisionTraceCurrent(WorldEpoch, RequestId))
@@ -317,7 +323,7 @@ void UDeliveryNpcAgentComponent::TraceRequestEvent(FGuid WorldEpoch, FGuid Reque
     PublishDecisionTrace();
 }
 
-// 记录后端返回的诊断：实际模型、路由、各段耗时和 token 数
+/// @brief 记录后端返回的诊断：实际模型、路由、各段耗时和 token 数
 void UDeliveryNpcAgentComponent::TraceDiagnostics(FGuid WorldEpoch, FGuid RequestId, const FDeliveryNpcDecisionTrace& Diagnostics)
 {
     if (!IsDecisionTraceCurrent(WorldEpoch, RequestId))
@@ -340,7 +346,7 @@ void UDeliveryNpcAgentComponent::TraceDiagnostics(FGuid WorldEpoch, FGuid Reques
     // 紧接着由 ModelDone 事件统一发布，避免同一回包重复通知
 }
 
-// 记录模型建议的动作和目标
+/// @brief 记录模型建议的动作和目标
 void UDeliveryNpcAgentComponent::TraceProposal(const FDeliveryNpcDecisionProposal& Proposal)
 {
     if (!IsDecisionTraceCurrent(ActiveRequest.WorldEpoch, ActiveRequest.RequestId))
@@ -358,7 +364,7 @@ void UDeliveryNpcAgentComponent::TraceProposal(const FDeliveryNpcDecisionProposa
     // 校验完成后一起发布，建议与执行许可始终分别保存
 }
 
-// 记录校验结果和拒绝原因
+/// @brief 记录校验结果和拒绝原因
 void UDeliveryNpcAgentComponent::TraceValidation(FGuid WorldEpoch, FGuid RequestId, bool bAccepted, FName Error)
 {
     if (!IsDecisionTraceCurrent(WorldEpoch, RequestId))
@@ -387,7 +393,7 @@ void UDeliveryNpcAgentComponent::TraceValidation(FGuid WorldEpoch, FGuid Request
     PublishDecisionTrace();
 }
 
-// 记录第一句台词
+/// @brief 记录第一句台词
 void UDeliveryNpcAgentComponent::TraceReplyText(FGuid RequestId, const FString& Text)
 {
     if (!IsDecisionTraceCurrent(DecisionTrace.WorldEpoch, RequestId) || Text.IsEmpty())
@@ -404,7 +410,7 @@ void UDeliveryNpcAgentComponent::TraceReplyText(FGuid RequestId, const FString& 
     PublishDecisionTrace();
 }
 
-// 记录动作开始和结束
+/// @brief 记录动作开始和结束
 void UDeliveryNpcAgentComponent::TraceAction(FGuid ActionId, FName Stage)
 {
     if (!ActionId.IsValid() || DecisionTrace.ActionId != ActionId ||
@@ -429,7 +435,10 @@ void UDeliveryNpcAgentComponent::TraceAction(FGuid ActionId, FName Stage)
     PublishDecisionTrace();
 }
 
-// 删除过期事件和失效对象，正在被动作或回复引用的事件保留
+// ── 采纳 ──
+// 网关解析出模型的建议后调用 ReceiveStreamDecision，TryAcceptProposal 逐项检查动作、目标、台词和权限，通过后写入 PublicState
+
+/// @brief 删除过期事件和失效对象，正在被动作或回复引用的事件保留
 void UDeliveryNpcAgentComponent::PruneEvidence()
 {
     const double Now = GetWorld()->GetTimeSeconds();
@@ -517,7 +526,10 @@ void UDeliveryNpcAgentComponent::PruneEvidence()
     }
 }
 
-// 服务器：把一条观察写成事件，相同编号只记一次
+// ── 记忆 ──
+// NPC 自己调用 ObserveEvent 记下见闻和听到的话；事件按有效期过期，过期前作为模型请求里的观察发出去
+
+/// @brief 服务器：把一条观察写成事件，相同编号只记一次
 bool UDeliveryNpcAgentComponent::ObserveEvent(const FDeliveryNpcObservation& Observation)
 {
     if (!IsAuthority() || Observation.Kind.IsNone() || !FMath::IsFinite(Observation.Lifetime) || Observation.Lifetime <= 0 ||
@@ -596,7 +608,10 @@ bool UDeliveryNpcAgentComponent::ObserveEvent(const FDeliveryNpcObservation& Obs
     return true;
 }
 
-// 交谈流程第 10 步，服务器：把事件、对象和候选动作整理成一份请求
+// ── 决策 ──
+// RequestDecision 安排一次请求，网关发送时调用 BuildDecisionRequest 列出观察、记忆和候选动作；请求结束时调用 FinishDecision 广播 OnDecisionFinished
+
+/// @brief 交谈流程第 10 步，服务器：把事件、对象和候选动作整理成一份请求
 bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliveryNpcDecisionRequest& OutRequest)
 {
     if (!IsAuthority() || bChangingPlan || !WorldEpoch.IsValid() ||
@@ -919,7 +934,7 @@ bool UDeliveryNpcAgentComponent::BuildDecisionRequest(FGuid WorldEpoch, FDeliver
     return PrepareCandidateIdentities(OutRequest, RequestPlayerState.Get());
 }
 
-// 交谈流程第 9 步，服务器：整理请求并交给网关排队
+/// @brief 交谈流程第 9 步，服务器：整理请求并交给网关排队
 bool UDeliveryNpcAgentComponent::RequestDecision()
 {
     if (!IsAuthority() || bChangingPlan)
@@ -973,7 +988,9 @@ bool UDeliveryNpcAgentComponent::RequestDecision()
     return true;
 }
 
-// 规则动作引用的受击事件是否仍然有效
+// ── 采纳 ──
+
+/// @brief 规则动作引用的受击事件是否仍然有效
 bool UDeliveryNpcAgentComponent::HasGameplayRuleEvidence(AActor* Target, FGuid EvidenceId) const
 {
     if (!IsValid(Target) || Target == GetOwner() || Target->GetWorld() != GetWorld() || !EvidenceId.IsValid())
@@ -991,7 +1008,7 @@ bool UDeliveryNpcAgentComponent::HasGameplayRuleEvidence(AActor* Target, FGuid E
         });
 }
 
-// 当前规则动作的目标和证据是否仍然有效
+/// @brief 当前规则动作的目标和证据是否仍然有效
 bool UDeliveryNpcAgentComponent::IsGameplayRuleActionValid() const
 {
     const auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner());
@@ -1007,7 +1024,9 @@ bool UDeliveryNpcAgentComponent::IsGameplayRuleActionValid() const
            Npc->CanExecuteGameplayRule(PublicState.Action, PublicState.Target, PublicState.RuleRevision);
 }
 
-// 服务器规则安排一轮短时交战，例如同伴护主，不经过模型
+// ── 决策 ──
+
+/// @brief 服务器规则安排一轮短时交战，例如同伴护主，不经过模型
 bool UDeliveryNpcAgentComponent::RequestGameplayRuleAction(EDeliveryNpcAction Action, AActor* Target, int32 RuleRevision,
                                                            FGuid EvidenceId, float Duration)
 {
@@ -1068,7 +1087,7 @@ bool UDeliveryNpcAgentComponent::RequestGameplayRuleAction(EDeliveryNpcAction Ac
     return IsAuthority() && PublicState.ActionId == AcceptedAction && HasActiveAction();
 }
 
-// 居民被玩家或玩家的同伴打中后，不等模型立即还手
+/// @brief 居民被玩家或玩家的同伴打中后，不等模型立即还手
 bool UDeliveryNpcAgentComponent::RequestRetaliation(AActor* Attacker)
 {
     auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner());
@@ -1154,7 +1173,7 @@ bool UDeliveryNpcAgentComponent::RequestRetaliation(AActor* Attacker)
     return IsAuthority() && PublicState.ActionId == AcceptedAction && HasActiveAction();
 }
 
-// 停止等待当前回复，取消网关中的请求
+/// @brief 停止等待当前回复，取消网关中的请求
 void UDeliveryNpcAgentComponent::CancelDecision()
 {
     if (!IsAuthority())
@@ -1181,7 +1200,10 @@ void UDeliveryNpcAgentComponent::CancelDecision()
     Replies.Reset();
 }
 
-// 同伴的初遇回应是否仍属于当前主人
+// ── 回复 ──
+// 网关把每句台词和声音交给 ReceiveSentence 等函数，这里核对编号后转给表现组件；整轮说完时表现组件调用 FinishReplyPlayback
+
+/// @brief 同伴的初遇回应是否仍属于当前主人
 bool UDeliveryNpcAgentComponent::IsJoinedResponseOwnerCurrent() const
 {
     const auto* Npc = Cast<ADeliveryCompanionCharacter>(GetOwner());
@@ -1191,7 +1213,7 @@ bool UDeliveryNpcAgentComponent::IsJoinedResponseOwnerCurrent() const
            Npc->Companion->CanCommand(PendingJoinedOwner.Get());
 }
 
-// 本次请求是否需要回应初遇事件
+/// @brief 本次请求是否需要回应初遇事件
 FGuid UDeliveryNpcAgentComponent::GetJoinedResponseEvent(const FDeliveryNpcDecisionRequest& Request) const
 {
     if (!IsJoinedResponseOwnerCurrent() || Request.ParentNpcMessage.IsValid() ||
@@ -1213,7 +1235,7 @@ FGuid UDeliveryNpcAgentComponent::GetJoinedResponseEvent(const FDeliveryNpcDecis
                : FGuid();
 }
 
-// 初遇回应的对象：主人当前控制的角色
+/// @brief 初遇回应的对象：主人当前控制的角色
 APawn* UDeliveryNpcAgentComponent::GetJoinedResponseListener() const
 {
     if (!IsJoinedResponseOwnerCurrent())
@@ -1226,7 +1248,7 @@ APawn* UDeliveryNpcAgentComponent::GetJoinedResponseListener() const
                : nullptr;
 }
 
-// 主人是否在能听到回应的范围内
+/// @brief 主人是否在能听到回应的范围内
 bool UDeliveryNpcAgentComponent::CanHearJoinedResponse(const APawn* Listener) const
 {
     const auto* Npc = GetOwner();
@@ -1236,7 +1258,7 @@ bool UDeliveryNpcAgentComponent::CanHearJoinedResponse(const APawn* Listener) co
            DeliveryNpcConversationTrace::HasClearSpeechPath(Listener, Npc);
 }
 
-// 模型选择的说话对象是否就是主人
+/// @brief 模型选择的说话对象是否就是主人
 bool UDeliveryNpcAgentComponent::IsJoinedReplyTarget(const FDeliveryNpcDecisionRequest& Request, FGuid SubjectId,
                                                      const APawn& Listener) const
 {
@@ -1278,7 +1300,7 @@ bool UDeliveryNpcAgentComponent::IsJoinedReplyTarget(const FDeliveryNpcDecisionR
            Summon->GetRegisteredVehicle() == Bike;
 }
 
-// 把初遇事件关联到这一轮回复
+/// @brief 把初遇事件关联到这一轮回复
 void UDeliveryNpcAgentComponent::BindJoinedResponse(FReply& Reply, const FDeliveryNpcDecisionRequest& Request) const
 {
     const FGuid Event = GetJoinedResponseEvent(Request);
@@ -1292,7 +1314,7 @@ void UDeliveryNpcAgentComponent::BindJoinedResponse(FReply& Reply, const FDelive
     Reply.JoinedOwner = PendingJoinedOwner;
 }
 
-// 主人插话时推迟初遇回应，6 秒后再试
+/// @brief 主人插话时推迟初遇回应，6 秒后再试
 void UDeliveryNpcAgentComponent::DeferJoinedResponse()
 {
     if (!IsAuthority() || !PendingJoinedEvent.IsValid())
@@ -1341,7 +1363,10 @@ void UDeliveryNpcAgentComponent::DeferJoinedResponse()
     }
 }
 
-// 同伴是否有持续安排：跟随、跑腿、家居等
+// ── 执行 ──
+// 行为树任务调用 StartAction 领取已采纳的动作，做完调用 TryFinishAction 写回结果；被替换或打断时调用 CancelAction
+
+/// @brief 同伴是否有持续安排：跟随、跑腿、家居等
 bool UDeliveryNpcAgentComponent::HasCompanionActivity() const
 {
     const auto* Companion = GetOwner()->FindComponentByClass<UDeliveryCompanionComponent>();
@@ -1352,7 +1377,7 @@ bool UDeliveryNpcAgentComponent::HasCompanionActivity() const
             Companion->GetMode() == EDeliveryCompanionMode::GoHome);
 }
 
-// 聊天类动作期间，行为树能否继续执行同伴的持续安排
+/// @brief 聊天类动作期间，行为树能否继续执行同伴的持续安排
 bool UDeliveryNpcAgentComponent::CanContinueCompanionMovement() const
 {
     if (!IsAuthority() || !HasActiveAction() || PublicState.Origin != EDeliveryNpcActionOrigin::Model)
@@ -1378,19 +1403,24 @@ bool UDeliveryNpcAgentComponent::CanContinueCompanionMovement() const
             Companion->GetMode() == EDeliveryCompanionMode::GoHome);
 }
 
-// 是否需要停下来听玩家说话
+// ── 倾听 ──
+// 玩家对 NPC 说话时 BeginListening 让它停下来看着玩家，等这句话的回复开始或被取消时结束
+
+/// @brief 是否需要停下来听玩家说话
 bool UDeliveryNpcAgentComponent::ShouldPauseForConversation() const
 {
     return IsListening() && !HasActiveAction() && !HasCompanionActivity();
 }
 
-// 是否正在回复这位玩家
+/// @brief 是否正在回复这位玩家
 bool UDeliveryNpcAgentComponent::IsPlayerReplyActive(APlayerController* Requester) const
 {
     return GetReplyMessage(Requester).IsValid();
 }
 
-// 新回复能否替换还没开始播放的旧回复
+// ── 回复 ──
+
+/// @brief 新回复能否替换还没开始播放的旧回复
 bool UDeliveryNpcAgentComponent::CanReplacePendingReply(FGuid ExistingReplyId, FGuid NewReplyId) const
 {
     const FReply* Existing = nullptr;
@@ -1406,7 +1436,7 @@ bool UDeliveryNpcAgentComponent::CanReplacePendingReply(FGuid ExistingReplyId, F
            Existing->RequesterPlayerState.HasSameIndexAndSerialNumber(Replacement->RequesterPlayerState);
 }
 
-// 这一轮回复能否开始播放
+/// @brief 这一轮回复能否开始播放
 bool UDeliveryNpcAgentComponent::CanStartReplySpeech(FGuid ReplyId) const
 {
     for (const auto& Pair : Replies)
@@ -1433,7 +1463,7 @@ bool UDeliveryNpcAgentComponent::CanStartReplySpeech(FGuid ReplyId) const
            PublicState.Status == EDeliveryNpcActionStatus::Succeeded;
 }
 
-// 播放时的收听对象，初遇回应固定为主人
+/// @brief 播放时的收听对象，初遇回应固定为主人
 AActor* UDeliveryNpcAgentComponent::GetReplyListenerForPlayback(FGuid ReplyId, AActor* Fallback) const
 {
     for (const auto& Pair : Replies)
@@ -1449,7 +1479,9 @@ AActor* UDeliveryNpcAgentComponent::GetReplyListenerForPlayback(FGuid ReplyId, A
     return Fallback;
 }
 
-// 正在回复这位玩家的哪一句话
+// ── 倾听 ──
+
+/// @brief 正在回复这位玩家的哪一句话
 FGuid UDeliveryNpcAgentComponent::GetReplyMessage(APlayerController* Requester) const
 {
     if (!IsValid(Requester))
@@ -1465,7 +1497,7 @@ FGuid UDeliveryNpcAgentComponent::GetReplyMessage(APlayerController* Requester) 
     return Latest ? Latest->MessageId : FGuid();
 }
 
-// 玩家又开口时，取消这位玩家之前的请求和回复
+/// @brief 玩家又开口时，取消这位玩家之前的请求和回复
 void UDeliveryNpcAgentComponent::InterruptPlayerReply(APlayerController* Requester)
 {
     if (!IsAuthority() || !IsValid(Requester) || Requester->GetWorld() != GetWorld())
@@ -1519,7 +1551,7 @@ void UDeliveryNpcAgentComponent::InterruptPlayerReply(APlayerController* Request
     GetOwner()->ForceNetUpdate();
 }
 
-// 交谈流程第 9 步，服务器：玩家对我说话，开始倾听
+/// @brief 交谈流程第 9 步，服务器：玩家对我说话，开始倾听
 bool UDeliveryNpcAgentComponent::BeginListening(AActor* Speaker, FGuid MessageId)
 {
     if (!IsAuthority() || bChangingPlan || !IsValid(Speaker) || !MessageId.IsValid())
@@ -1584,12 +1616,14 @@ bool UDeliveryNpcAgentComponent::BeginListening(AActor* Speaker, FGuid MessageId
         Npc->Presentation->PlayReaction(EDeliveryNpcVoiceReaction::HeardPlayer, MessageId);
     GetOwner()->ForceNetUpdate();
 
-    // 播放“听见了”的短反应，日志 listening
+    // 上面已经调用 PlayReaction 播放 HeardPlayer 短反应；这里打 listening 日志，用来测从玩家说完到 NPC 有反应的时间
     UE_LOG(LogDeliveryNpcAgent, Log, TEXT("NpcLatency speech=%s stage=listening"), *MessageId.ToString());
     return true;
 }
 
-// 结束倾听并通知客户端
+// ── 回复 ──
+
+/// @brief 结束倾听并通知客户端
 void UDeliveryNpcAgentComponent::EndListening()
 {
     ListeningSpeaker = nullptr;
@@ -1597,7 +1631,7 @@ void UDeliveryNpcAgentComponent::EndListening()
     GetOwner()->ForceNetUpdate();
 }
 
-// 交谈流程第 15 步，服务器：收到模型建议，校验后登记这一轮回复
+/// @brief 交谈流程第 15 步，服务器：收到模型建议，校验后登记这一轮回复
 bool UDeliveryNpcAgentComponent::ReceiveStreamDecision(FGuid RequestId, const FDeliveryNpcDecisionProposal& Proposal)
 {
     if (!IsAuthority() || bChangingPlan || !RequestId.IsValid() || RequestId != ActiveRequest.RequestId)
@@ -1649,7 +1683,7 @@ bool UDeliveryNpcAgentComponent::ReceiveStreamDecision(FGuid RequestId, const FD
     return true;
 }
 
-// 把回复交给表现组件开始播放，初遇回应过期时不播
+/// @brief 把回复交给表现组件开始播放，初遇回应过期时不播
 bool UDeliveryNpcAgentComponent::StartReplyPresentation(FReply Reply)
 {
     if (auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner()))
@@ -1689,13 +1723,13 @@ bool UDeliveryNpcAgentComponent::StartReplyPresentation(FReply Reply)
     return false;
 }
 
-// 取消一轮回复
+/// @brief 取消一轮回复
 void UDeliveryNpcAgentComponent::CancelReply(FGuid ReplyId)
 {
     RemoveReply(ReplyId, TEXT("ReplyCancelled"));
 }
 
-// 回复播完后能否关联到初遇事件
+/// @brief 回复播完后能否关联到初遇事件
 bool UDeliveryNpcAgentComponent::CanLinkReplyPlayback(FGuid ReplyId) const
 {
     for (const auto& Pair : Replies)
@@ -1710,7 +1744,7 @@ bool UDeliveryNpcAgentComponent::CanLinkReplyPlayback(FGuid ReplyId) const
     return true;
 }
 
-// 表现组件报告整轮播放完成，释放交谈占用并结清初遇回应
+/// @brief 表现组件报告整轮播放完成，释放交谈占用并结清初遇回应
 void UDeliveryNpcAgentComponent::FinishReplyPlayback(FGuid ReplyId, FGuid CompletedSpeechEventId)
 {
     if (CompletedSpeechEventId.IsValid() && IsJoinedResponseOwnerCurrent() &&
@@ -1751,7 +1785,7 @@ void UDeliveryNpcAgentComponent::FinishReplyPlayback(FGuid ReplyId, FGuid Comple
     RemoveReply(ReplyId, TEXT("ReplyCompleted"));
 }
 
-// 删除一轮回复，取消后台合成并释放交谈占用
+/// @brief 删除一轮回复，取消后台合成并释放交谈占用
 void UDeliveryNpcAgentComponent::RemoveReply(FGuid ReplyId, FName Reason)
 {
     if (!IsAuthority() || !ReplyId.IsValid())
@@ -1800,7 +1834,7 @@ void UDeliveryNpcAgentComponent::RemoveReply(FGuid ReplyId, FName Reason)
         OnPlayerReplyEnded.Broadcast(Removed.RequesterPC.Get(), Removed.MessageId, Reason);
 }
 
-// 网关收到整句，交给表现组件
+/// @brief 网关收到整句，交给表现组件
 void UDeliveryNpcAgentComponent::ReceiveSentence(FGuid RequestId, const FDeliveryNpcSentence& Sentence)
 {
     if (!CanReceiveReply(RequestId))
@@ -1815,7 +1849,7 @@ void UDeliveryNpcAgentComponent::ReceiveSentence(FGuid RequestId, const FDeliver
     }
 }
 
-// 这个请求编号的回复是否仍在等待数据
+/// @brief 这个请求编号的回复是否仍在等待数据
 bool UDeliveryNpcAgentComponent::CanReceiveReply(FGuid RequestId) const
 {
     const auto* Reply = Replies.Find(RequestId);
@@ -1826,7 +1860,7 @@ bool UDeliveryNpcAgentComponent::CanReceiveReply(FGuid RequestId) const
     return IsAuthority() && !bChangingPlan && Reply && !Reply->bTransferFinished;
 }
 
-// 网关收到一句的开头，交给表现组件
+/// @brief 网关收到一句的开头，交给表现组件
 bool UDeliveryNpcAgentComponent::ReceiveSpeechBegin(FGuid RequestId, const FDeliveryNpcSpeechBegin& Begin)
 {
     if (!CanReceiveReply(RequestId))
@@ -1841,7 +1875,7 @@ bool UDeliveryNpcAgentComponent::ReceiveSpeechBegin(FGuid RequestId, const FDeli
     return bAccepted;
 }
 
-// 网关收到一段声音，交给表现组件
+/// @brief 网关收到一段声音，交给表现组件
 bool UDeliveryNpcAgentComponent::ReceiveAudioChunk(FGuid RequestId, const FDeliveryNpcAudioChunk& Chunk)
 {
     if (!CanReceiveReply(RequestId))
@@ -1851,7 +1885,7 @@ bool UDeliveryNpcAgentComponent::ReceiveAudioChunk(FGuid RequestId, const FDeliv
     return Npc && Npc->Presentation->AppendSentenceAudio(Reply.ReplyId, Reply.MessageId, Chunk);
 }
 
-// 网关收到一句的结束，交给表现组件
+/// @brief 网关收到一句的结束，交给表现组件
 bool UDeliveryNpcAgentComponent::ReceiveAudioEnd(FGuid RequestId, const FDeliveryNpcAudioEnd& End)
 {
     if (!CanReceiveReply(RequestId))
@@ -1861,7 +1895,7 @@ bool UDeliveryNpcAgentComponent::ReceiveAudioEnd(FGuid RequestId, const FDeliver
     return Npc && Npc->Presentation->EndSentenceAudio(Reply.ReplyId, Reply.MessageId, End);
 }
 
-// 模型输出结束，记下共有几句，声音继续按原请求接收
+/// @brief 模型输出结束，记下共有几句，声音继续按原请求接收
 bool UDeliveryNpcAgentComponent::FinishModelReply(FGuid RequestId, int32 SentenceCount, TOptional<FString> ApprovedText)
 {
     if (!IsAuthority() || bChangingPlan || SentenceCount < 0 || SentenceCount > 3)
@@ -1887,7 +1921,7 @@ bool UDeliveryNpcAgentComponent::FinishModelReply(FGuid RequestId, int32 Sentenc
     return true;
 }
 
-// 整轮回复的数据接收结束：成功时等表现组件播完，失败时清理
+/// @brief 整轮回复的数据接收结束：成功时等表现组件播完，失败时清理
 void UDeliveryNpcAgentComponent::FinishReply(FGuid RequestId, bool bSucceeded, int32 SentenceCount)
 {
     if (!IsAuthority() || bChangingPlan || !RequestId.IsValid())
@@ -1922,7 +1956,7 @@ void UDeliveryNpcAgentComponent::FinishReply(FGuid RequestId, bool bSucceeded, i
     FailReply(RequestId);
 }
 
-// 回复失败：清理队列，播放失败反馈
+/// @brief 回复失败：清理队列，播放失败反馈
 void UDeliveryNpcAgentComponent::FailReply(FGuid RequestId)
 {
     // 已收到完整流的指令也可能在执行时被拒绝，按原回复编号清队列
@@ -1953,7 +1987,9 @@ void UDeliveryNpcAgentComponent::FailReply(FGuid RequestId)
     }
 }
 
-// 流式请求结束等待：失败时按需重试，成功时安排下一次决策
+// ── 采纳 ──
+
+/// @brief 流式请求结束等待：失败时按需重试，成功时安排下一次决策
 void UDeliveryNpcAgentComponent::FinishDecisionWait(FGuid RequestId, bool bSucceeded, int32 SentenceCount)
 {
     if (ActiveRequest.RequestId != RequestId)
@@ -2004,7 +2040,7 @@ void UDeliveryNpcAgentComponent::FinishDecisionWait(FGuid RequestId, bool bSucce
     GetOwner()->ForceNetUpdate();
 }
 
-// 当前请求是否已经包含这个人的攻击
+/// @brief 当前请求是否已经包含这个人的攻击
 bool UDeliveryNpcAgentComponent::IsRespondingToAttackFrom(const AActor* Attacker) const
 {
     if (!bDecisionPending || !IsValid(Attacker))
@@ -2017,7 +2053,7 @@ bool UDeliveryNpcAgentComponent::IsRespondingToAttackFrom(const AActor* Attacker
         });
 }
 
-// 能否看向这个对象：在视线内、距离不超过上限
+/// @brief 能否看向这个对象：在视线内、距离不超过上限
 bool UDeliveryNpcAgentComponent::CanLookAt(AActor* Target) const
 {
     // 已知名称不授权跟踪实物当前位置，二狗的普通道具候选沿用当前视觉守门
@@ -2041,7 +2077,7 @@ bool UDeliveryNpcAgentComponent::CanLookAt(AActor* Target) const
            Hit.GetActor() == Target;
 }
 
-// 交谈流程第 15 步，服务器：逐项校验模型建议，全部通过才写入 PublicState
+/// @brief 交谈流程第 15 步，服务器：逐项校验模型建议，全部通过才写入 PublicState
 bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionProposal& Proposal, FName& Reason)
 {
     Reason = TEXT("StaleProposal");
@@ -2535,7 +2571,9 @@ bool UDeliveryNpcAgentComponent::TryAcceptProposal(const FDeliveryNpcDecisionPro
     return true;
 }
 
-// 请求发出时记录的当前活动，现在是否仍然一样
+// ── 回复 ──
+
+/// @brief 请求发出时记录的当前活动，现在是否仍然一样
 bool UDeliveryNpcAgentComponent::IsActivitySnapshotCurrent(const FDeliveryNpcDecisionRequest& Request) const
 {
     if (Request.RunningActionId.IsValid())
@@ -2587,7 +2625,7 @@ bool UDeliveryNpcAgentComponent::IsActivitySnapshotCurrent(const FDeliveryNpcDec
     return Request.RunningActionId.IsValid() || Request.bRunningCompanion;
 }
 
-// 同伴的委托在模型思考期间变了，需要重新请求时返回原因
+/// @brief 同伴的委托在模型思考期间变了，需要重新请求时返回原因
 FName UDeliveryNpcAgentComponent::GetRequestedCompanionErrandRefreshReason(EDeliveryNpcAction ProposedAction) const
 {
     if (!bPlayerRequest || !ActiveRequest.bPlayerRequest || !ActiveRequest.bPendingPlayerMessage ||
@@ -2632,7 +2670,7 @@ FName UDeliveryNpcAgentComponent::GetRequestedCompanionErrandRefreshReason(EDeli
                                                                                      : NAME_None;
 }
 
-// 校验 ContinueCurrent：当前活动仍然一样才保留原安排
+/// @brief 校验 ContinueCurrent：当前活动仍然一样才保留原安排
 bool UDeliveryNpcAgentComponent::AcceptContinueCurrent(const FDeliveryNpcDecisionProposal& Proposal,
                                                        EDeliveryCompanionSpeechPreference Preference, FName& Reason)
 {
@@ -2708,7 +2746,9 @@ bool UDeliveryNpcAgentComponent::AcceptContinueCurrent(const FDeliveryNpcDecisio
     return true;
 }
 
-// 非流式回复或请求失败时的统一入口：校验建议、记录结果、按需重试
+// ── 决策 ──
+
+/// @brief 非流式回复或请求失败时的统一入口：校验建议、记录结果、按需重试
 void UDeliveryNpcAgentComponent::ReceiveDecision(FGuid RequestId, const FDeliveryNpcDecisionProposal* Proposal, FName Error)
 {
     if (!IsAuthority() || bChangingPlan || !RequestId.IsValid() || RequestId != ActiveRequest.RequestId)
@@ -2835,7 +2875,9 @@ void UDeliveryNpcAgentComponent::ReceiveDecision(FGuid RequestId, const FDeliver
     GetOwner()->ForceNetUpdate();
 }
 
-// 当前请求在回答哪位玩家的哪句话
+// ── 采纳 ──
+
+/// @brief 当前请求在回答哪位玩家的哪句话
 void UDeliveryNpcAgentComponent::GetRequestedPlayerMessage(FGuid& OutMessage, AActor*& OutSpeaker) const
 {
     OutMessage.Invalidate();
@@ -2853,7 +2895,7 @@ void UDeliveryNpcAgentComponent::GetRequestedPlayerMessage(FGuid& OutMessage, AA
     OutSpeaker = KnownSubjects.FindRef(Message->SubjectId).Get();
 }
 
-// 回答玩家失败：会重试时保留，不再重试时通知交谈面板
+/// @brief 回答玩家失败：会重试时保留，不再重试时通知交谈面板
 void UDeliveryNpcAgentComponent::FinishFailedPlayerReply(FGuid MessageId, AActor* Speaker, bool bWillRetry)
 {
     // 失败通知只处理原来那句玩家发言，新的插话和新请求继续按自己的状态执行
@@ -2891,13 +2933,13 @@ void UDeliveryNpcAgentComponent::FinishFailedPlayerReply(FGuid MessageId, AActor
         OnPlayerReplyEnded.Broadcast(Controller, MessageId, TEXT("ReplyFailed"));
 }
 
-// 是否有已采纳或正在执行的动作
+/// @brief 是否有已采纳或正在执行的动作
 bool UDeliveryNpcAgentComponent::HasActiveAction() const
 {
     return PublicState.Status == EDeliveryNpcActionStatus::Accepted || PublicState.Status == EDeliveryNpcActionStatus::Running;
 }
 
-// 交战或逃跑期间，模型能否决定下一步
+/// @brief 交战或逃跑期间，模型能否决定下一步
 bool UDeliveryNpcAgentComponent::CanUpdateRunningAction() const
 {
     if (!IsAuthority() || bChangingPlan || PublicState.Status != EDeliveryNpcActionStatus::Running ||
@@ -2911,7 +2953,7 @@ bool UDeliveryNpcAgentComponent::CanUpdateRunningAction() const
     return PublicState.Action != EDeliveryNpcAction::Fight || Npc->Combat->GetFightStopReason(PublicState.ActionId).IsNone();
 }
 
-// 交战中只给交战相关的选项，其余交给角色 CanExecuteForRequester 判断
+/// @brief 交战中只给交战相关的选项，其余交给角色 CanExecuteForRequester 判断
 bool UDeliveryNpcAgentComponent::CanChooseAction(EDeliveryNpcAction Action, AActor* Target, APlayerState* Requester) const
 {
     const auto* Npc = Cast<ADeliveryNpcCharacter>(GetOwner());
@@ -2924,20 +2966,22 @@ bool UDeliveryNpcAgentComponent::CanChooseAction(EDeliveryNpcAction Action, AAct
     return Npc->CanExecuteForRequester(Action, Target, Requester);
 }
 
-// 当前动作还剩多少秒
+/// @brief 当前动作还剩多少秒
 double UDeliveryNpcAgentComponent::GetActionTimeRemaining() const
 {
     return GetWorld() ? FMath::Max(0.0, ActionEndsAt - GetWorld()->GetTimeSeconds()) : 0;
 }
 
-// 交战中安排下一次决策的时间
+/// @brief 交战中安排下一次决策的时间
 void UDeliveryNpcAgentComponent::ScheduleNextActionDecision()
 {
     NextActionDecisionAt =
         GetWorld()->GetTimeSeconds() + FMath::Max(.25, GetActionTimeRemaining() - DeliveryNpc::CombatDecisionLeadSeconds);
 }
 
-// 交谈流程第 16 步，服务器：行为树领取动作前做最后一次检查
+// ── 执行 ──
+
+/// @brief 交谈流程第 16 步，服务器：行为树领取动作前做最后一次检查
 bool UDeliveryNpcAgentComponent::StartAction(FDeliveryNpcPublicState& OutAction)
 {
     if (!IsAuthority() || bChangingPlan || PublicState.Status != EDeliveryNpcActionStatus::Accepted)
@@ -3054,7 +3098,7 @@ bool UDeliveryNpcAgentComponent::StartAction(FDeliveryNpcPublicState& OutAction)
     return IsAuthority() && PublicState.ActionId == OutAction.ActionId && PublicState.Status == EDeliveryNpcActionStatus::Running;
 }
 
-// 交谈流程第 23 步，服务器：动作结束，停止执行并把结果写成事件
+/// @brief 交谈流程第 23 步，服务器：动作结束，停止执行并把结果写成事件
 bool UDeliveryNpcAgentComponent::TryFinishAction(FGuid ActionId, EDeliveryNpcActionStatus Result, FName Reason)
 {
     if (!IsAuthority() || !HasActiveAction() || ActionId != PublicState.ActionId || !DeliveryNpc::IsTerminal(Result) ||
@@ -3227,7 +3271,10 @@ bool UDeliveryNpcAgentComponent::TryFinishAction(FGuid ActionId, EDeliveryNpcAct
     return true;
 }
 
-// 动作成功且带台词时，记下“已回答”
+// ── 采纳 ──
+
+/// @brief 动作成功、回答的是一句话、但这次没有台词时，写一条 ActionReply 事件，表示 NPC 用动作回应了那句话
+/// 同一句话已经有 ActionReply 时不再写；有台词的回复由表现组件说完后写记忆
 void UDeliveryNpcAgentComponent::RecordActionReply()
 {
     if (PublicState.Status != EDeliveryNpcActionStatus::Succeeded || !PublicState.ReplyToEventId.IsValid())
@@ -3271,7 +3318,7 @@ void UDeliveryNpcAgentComponent::RecordActionReply()
     FinishReplyPlayback(PublicState.GetReplyId());
 }
 
-// 取消请求和当前动作，已发生的命中不撤销
+/// @brief 取消请求和当前动作，已发生的命中不撤销
 void UDeliveryNpcAgentComponent::CancelPlan(FName Reason)
 {
     if (!IsAuthority())
@@ -3287,7 +3334,9 @@ void UDeliveryNpcAgentComponent::CancelPlan(FName Reason)
         Npc->Presentation->CancelSpeech();
 }
 
-// 同伴换主人时清空对话和经历，旧请求失效
+// ── 决策 ──
+
+/// @brief 同伴换主人时清空对话和经历，旧请求失效
 void UDeliveryNpcAgentComponent::ResetContext(FName Reason)
 {
     if (!IsAuthority())
@@ -3311,7 +3360,9 @@ void UDeliveryNpcAgentComponent::ResetContext(FName Reason)
     PublishState();
 }
 
-// 服务器每 0.1 秒：清理孤立回复，处理倾听超时，安排初遇回应和交战中的下一次决策
+// ── 生命周期 ──
+
+/// @brief 服务器每 0.1 秒：清理孤立回复，处理倾听超时，安排初遇回应和交战中的下一次决策
 void UDeliveryNpcAgentComponent::TickComponent(float DeltaTime, ELevelTick TickType,
                                                FActorComponentTickFunction* ThisTickFunction)
 {
@@ -3437,20 +3488,20 @@ void UDeliveryNpcAgentComponent::TickComponent(float DeltaTime, ELevelTick TickT
     }
 }
 
-// 状态变化后强制复制，并在服务器本机触发通知
+/// @brief 状态变化后强制复制，并在服务器本机触发通知
 void UDeliveryNpcAgentComponent::PublishState()
 {
     GetOwner()->ForceNetUpdate();
     OnRep_PublicState();
 }
 
-// 客户端收到新状态，通知界面和表现组件
+/// @brief 客户端收到新状态，通知界面和表现组件
 void UDeliveryNpcAgentComponent::OnRep_PublicState()
 {
     OnPublicStateChanged.Broadcast(PublicState);
 }
 
-// 复制公开状态、等待标记和倾听对象
+/// @brief 复制公开状态、等待标记和倾听对象
 void UDeliveryNpcAgentComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -3460,7 +3511,7 @@ void UDeliveryNpcAgentComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProp
     DOREPLIFETIME(UDeliveryNpcAgentComponent, ListeningStartedAt);
 }
 
-// 退出时禁止新请求，取消请求、回复和动作
+/// @brief 退出时禁止新请求，取消请求、回复和动作
 void UDeliveryNpcAgentComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     // 退出时先禁止新请求，再取消剩余操作，不再通知即将销毁的表现组件
@@ -3522,7 +3573,9 @@ void UDeliveryNpcAgentComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
     Super::EndPlay(EndPlayReason);
 }
 
-// 按对象查编号
+// ── 决策 ──
+
+/// @brief 按对象查编号
 FGuid UDeliveryNpcAgentComponent::FindKnownSubjectId(const AActor* Actor) const
 {
     if (!IsValid(Actor) || Actor->GetWorld() != GetWorld())
@@ -3533,7 +3586,7 @@ FGuid UDeliveryNpcAgentComponent::FindKnownSubjectId(const AActor* Actor) const
     return FGuid();
 }
 
-// 这个事件是否仍然记得
+/// @brief 这个事件是否仍然记得
 bool UDeliveryNpcAgentComponent::HasObservationEvent(FGuid EventId) const
 {
     const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0;

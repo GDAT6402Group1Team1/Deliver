@@ -27,12 +27,13 @@
 
 namespace
 {
-// 控制台变量：设为 1 时，导航不可达会写出原因
+// 控制台变量 Delivery.Npc.NavigationDiagnostics：设为 1 时，CanReachTarget 把寻路的起点、终点和结果写进日志
 TAutoConsoleVariable<int32> CVarNpcNavigationDiagnostics(TEXT("Delivery.Npc.NavigationDiagnostics"), 0,
                                                          TEXT("记录 NPC 行动候选的导航起点、终点和路径结果"), ECVF_Default);
 }
 
-// 创建 GAS、决策、战斗、表现、注视和交谈组件，由 ADeliveryNpcAIController 控制
+// ── 生命周期 ──
+// 构造函数建好各组件；BeginPlay 读人物配置、绑交谈提示；EndPlay 停下动作并解除绑定
 ADeliveryNpcCharacter::ADeliveryNpcCharacter()
 {
     bReplicates = true;
@@ -73,7 +74,7 @@ ADeliveryNpcCharacter::ADeliveryNpcCharacter()
     DisplayName = FText::FromString(TEXT("居民"));
 }
 
-// 服务器授予出拳技能，读取人物配置，设置交谈提示和碰撞，订阅决策结束
+/// @brief 服务器授予出拳技能 StrikeAbilityClass，调用 ApplyProfile 读取人物配置，设置交谈提示和碰撞，订阅 Agent->OnDecisionFinished
 void ADeliveryNpcCharacter::BeginPlay()
 {
     Super::BeginPlay();
@@ -106,7 +107,8 @@ void ADeliveryNpcCharacter::BeginPlay()
     NextDecision = GetWorld()->GetTimeSeconds() + 2;
 }
 
-// 从 DT_NpcProfiles 读取一行：姓名、性格、TTS 音色、表情和动作表现
+// ── 人物 ──
+// ApplyProfile 在 BeginPlay 里调用，读取 Profile 指向的那行配置
 bool ADeliveryNpcCharacter::ApplyProfile()
 {
     if (!Profile.DataTable || Profile.RowName.IsNone() ||
@@ -132,7 +134,8 @@ bool ADeliveryNpcCharacter::ApplyProfile()
     return true;
 }
 
-// 查找某个行为标签对应的动画，骨架不兼容或参数无效时返回空
+/// @brief 在 BehaviorPresentation 里查找 Behavior 这个行为标签对应的动画
+/// 动画骨架和网格不一致、带根运动、是叠加动画，或者播放速率、参考速度超出范围时返回 nullptr
 const FDeliveryNpcBehaviorPresentation* ADeliveryNpcCharacter::FindBehaviorPresentation(FGameplayTag Behavior) const
 {
     const auto* Variant = Behavior.IsValid() ? BehaviorPresentation.Find(Behavior) : nullptr;
@@ -151,7 +154,9 @@ const FDeliveryNpcBehaviorPresentation* ADeliveryNpcCharacter::FindBehaviorPrese
     return Variant;
 }
 
-// 交互组件询问能否显示和使用交谈提示，条件交给玩家的交谈组件判断
+// ── 交谈 ──
+// 玩家按 T：交互组件先调用 CanTalk，再调用 OpenConversation 打开交谈面板
+// 听到的话由 HearSpeech 写进 Agent，现场见闻由 ObserveFact 写进 Agent
 bool ADeliveryNpcCharacter::CanTalk(APawn* Interactor, bool bCheckAvailability)
 {
     if (!Interactor)
@@ -164,7 +169,7 @@ bool ADeliveryNpcCharacter::CanTalk(APawn* Interactor, bool bCheckAvailability)
     return !PC->IsLocalController() || Conversation->GetAimedNpc() == this;
 }
 
-// 交互组件触发交谈时调用，服务器通知玩家打开交谈面板
+/// @brief 交互组件触发交谈时调用，服务器通知玩家打开交谈面板
 bool ADeliveryNpcCharacter::OpenConversation(APawn* Interactor)
 {
     if (!HasAuthority() || !CanTalk(Interactor, true) || !Interactor->GetController())
@@ -177,7 +182,7 @@ bool ADeliveryNpcCharacter::OpenConversation(APawn* Interactor)
     return false;
 }
 
-// 服务器：把一条见闻写成 Agent 事件，有效期 30 秒
+/// @brief 服务器：把一条见闻写成 Agent 事件，有效期 45 秒；Agent 收下后调用 WakeDecision 尽快重新决策
 void ADeliveryNpcCharacter::ObserveFact(FName Kind, AActor* Subject, const FString& Text, EDeliveryNpcEvidenceSource Source)
 {
     if (!HasAuthority())
@@ -200,14 +205,16 @@ void ADeliveryNpcCharacter::ObserveFact(FName Kind, AActor* Subject, const FStri
     }
 }
 
-// 现场听见的话，转交 HearSpeechInternal
+/// @brief 现场听见的话，转交 HearSpeechInternal
 bool ADeliveryNpcCharacter::HearSpeech(AActor* Speaker, const FString& Text, FGuid TurnId, int32 Depth, AActor* Addressee,
                                        FGuid ReplyToEventId, bool bRequestReply)
 {
     return HearSpeechInternal(Speaker, Text, TurnId, Depth, Addressee, ReplyToEventId, bRequestReply, false);
 }
 
-// 交谈流程第 8 步，服务器：过滤距离和遮挡，把这句话写成事件，按说话人决定何时请求模型
+/// @brief 交谈流程第 8 步，服务器：说话人在 900 cm 内、没被挡住（二狗开麦时两条都不查）才算听见，把这句话写成事件交给 Agent
+/// 再按说话人和收话人决定要不要马上请求模型
+/// @param bCompanionVoice true 表示主人开麦对二狗说的话
 bool ADeliveryNpcCharacter::HearSpeechInternal(AActor* Speaker, const FString& Text, FGuid TurnId, int32 Depth, AActor* Addressee,
                                                FGuid ReplyToEventId, bool bRequestReply, bool bCompanionVoice)
 {
@@ -245,7 +252,7 @@ bool ADeliveryNpcCharacter::HearSpeechInternal(AActor* Speaker, const FString& T
     if (bPlayerSpeaking && Addressee != this)
         return true;
 
-    // 玩家对我说：播放“听见了”的短反应，立即请求模型
+    // 玩家对我说：调用 Agent->BeginListening 进入倾听，马上调用 RequestDecision 请求模型；请求没发出时调用 MarkDecisionNeeded，由 Tick 再发
     if (Event.Kind == TEXT("PlayerSpeech"))
     {
         DecisionRetryCount = 0;
@@ -267,7 +274,8 @@ bool ADeliveryNpcCharacter::HearSpeechInternal(AActor* Speaker, const FString& T
     return true;
 }
 
-// 判断某个动作当前能否执行，生成候选和校验建议时都会调用
+// ── 执行条件 ──
+// Agent 生成候选动作、检查模型选的动作时调用 CanExecute；各种移动动作用下面几个 Find 函数找落点
 bool ADeliveryNpcCharacter::CanExecute(EDeliveryNpcAction Action, AActor* Target) const
 {
     if (Action == EDeliveryNpcAction::GetUp)
@@ -316,13 +324,13 @@ bool ADeliveryNpcCharacter::CanExecute(EDeliveryNpcAction Action, AActor* Target
     return Action == EDeliveryNpcAction::Wait || Action == EDeliveryNpcAction::LookAt || Action == EDeliveryNpcAction::LieDown;
 }
 
-// 普通居民不区分请求者，同伴子类在这里检查主人权限
+/// @brief 普通居民不区分请求者，同伴子类在这里检查主人权限
 bool ADeliveryNpcCharacter::CanExecuteForRequester(EDeliveryNpcAction Action, AActor* Target, APlayerState* Requester) const
 {
     return CanExecute(Action, Target);
 }
 
-// 用导航的到达判断检查是否已走到目标旁边
+/// @brief 用导航的到达判断检查是否已走到目标旁边
 bool ADeliveryNpcCharacter::HasReachedMoveTarget(AActor* Target) const
 {
     const auto* AI = Cast<AAIController>(GetController());
@@ -336,7 +344,7 @@ bool ADeliveryNpcCharacter::HasReachedMoveTarget(AActor* Target) const
     return PathFollowing->HasReached(Request);
 }
 
-// 检查导航能否完整走到目标，查询本身不移动角色
+/// @brief 检查导航能否完整走到目标，查询本身不移动角色
 bool ADeliveryNpcCharacter::CanReachTarget(AActor* Target) const
 {
     const auto* AI = Cast<AAIController>(GetController());
@@ -377,7 +385,7 @@ bool ADeliveryNpcCharacter::CanReachTarget(AActor* Target) const
     return Result.IsSuccessful() && Result.Path.IsValid() && Result.Path->IsValid() && !Result.Path->IsPartial();
 }
 
-// 在导航网格上找一个可走到、胶囊能站下、路程不超过上限的落点
+/// @brief 在导航网格上找一个可走到、胶囊能站下、路程不超过上限的落点
 bool ADeliveryNpcCharacter::FindNearbyWalkDestination(const FVector& Desired, float MaxTravel, FVector& OutLocation) const
 {
     auto* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
@@ -410,7 +418,7 @@ bool ADeliveryNpcCharacter::FindNearbyWalkDestination(const FVector& Desired, fl
     return true;
 }
 
-// 为踱步找一个附近落点
+/// @brief 为踱步找一个附近落点
 bool ADeliveryNpcCharacter::FindPaceDestination(FVector& OutLocation) const
 {
     if (!HasAuthority() || IsKnockedDown() || GetHeldVehicle())
@@ -427,7 +435,7 @@ bool ADeliveryNpcCharacter::FindPaceDestination(FVector& OutLocation) const
     return false;
 }
 
-// 为让开找一个对方侧面的落点
+/// @brief 为让开找一个对方侧面的落点
 bool ADeliveryNpcCharacter::FindSideStepDestination(AActor* Target, FVector& OutLocation) const
 {
     const auto* Person = Cast<APawn>(Target);
@@ -446,7 +454,7 @@ bool ADeliveryNpcCharacter::FindSideStepDestination(AActor* Target, FVector& Out
     return false;
 }
 
-// 为逃跑找一个远离威胁的落点，要比现在离得更远
+/// @brief 为逃跑找一个远离威胁的落点，要比现在离得更远
 bool ADeliveryNpcCharacter::FindFleeDestination(AActor* Threat, float RemainingTravel, FVector& OutLocation) const
 {
     const auto* Person = Cast<APawn>(Threat);
@@ -477,7 +485,7 @@ bool ADeliveryNpcCharacter::FindFleeDestination(AActor* Threat, float RemainingT
     return false;
 }
 
-// 空闲、聊天或等回复时可以挪步调整站位
+/// @brief 空闲、聊天或等回复时可以挪步调整站位
 bool ADeliveryNpcCharacter::CanAdjustStandingPosition() const
 {
     if (!HasAuthority() || IsKnockedDown() || GetHeldVehicle() || Combat->IsStriking() || Combat->IsReactingToHit() ||
@@ -487,7 +495,7 @@ bool ADeliveryNpcCharacter::CanAdjustStandingPosition() const
     return !Agent->HasActiveAction() || State.Action == EDeliveryNpcAction::Wait || State.Action == EDeliveryNpcAction::LookAt;
 }
 
-// 与邻居太近时，找一个拉开距离的站位
+/// @brief 与邻居太近时，找一个拉开距离的站位
 bool ADeliveryNpcCharacter::FindStandingSpace(AActor* Neighbor, float BodyGap, FVector& OutLocation) const
 {
     if (!CanAdjustStandingPosition() || !IsValid(Neighbor) || Neighbor == this || Neighbor->GetWorld() != GetWorld())
@@ -518,7 +526,8 @@ bool ADeliveryNpcCharacter::FindStandingSpace(AActor* Neighbor, float BodyGap, F
     return false;
 }
 
-// 交谈流程第 16 步，服务器：行为树开始动作时调用，按动作类型启动移动、战斗或对白
+// ── 执行 ──
+// 行为树任务开始动作时调用 ExecuteAction，动作结束或被替换时调用 StopAction
 bool ADeliveryNpcCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
 {
     const bool bAllowed = State.Origin == EDeliveryNpcActionOrigin::GameplayRule
@@ -578,7 +587,7 @@ bool ADeliveryNpcCharacter::ExecuteAction(const FDeliveryNpcPublicState& State)
     return bStarted;
 }
 
-// 停止指定编号的动作：停止寻路、恢复速度、取消出拳和交战
+/// @brief 停止指定编号的动作：停止寻路、恢复速度、取消出拳和交战
 void ADeliveryNpcCharacter::StopAction(FGuid Id)
 {
     if (!Id.IsValid() || Id != ExecutingAction)
@@ -598,26 +607,28 @@ void ADeliveryNpcCharacter::StopAction(FGuid Id)
     ExecutingAction.Invalidate();
 }
 
-// 拽住车时关闭行走，松手后恢复
+/// @brief 拽住车时关闭行走，松手后恢复
 void ADeliveryNpcCharacter::SetHeldVehicle(UDeliveryVehicleHoldComponent* Hold)
 {
     HeldVehicle = Hold;
     GetCharacterMovement()->SetMovementMode(Hold ? MOVE_None : MOVE_Walking);
 }
 
-// 是否倒地，查询战斗组件
+// ── 受击 ──
+// 车撞、拳打由 ReceiveImpactFrom 交给战斗组件；鸣笛由 ReceiveHornFrom 写成见闻
 bool ADeliveryNpcCharacter::IsKnockedDown() const
 {
     return Combat && Combat->IsDown();
 }
 
-// 无来源的撞击，转交 ReceiveImpactFrom
+/// @brief 无来源的撞击，转交 ReceiveImpactFrom
 void ADeliveryNpcCharacter::ReceiveImpact(const FVector& Impulse, const FVector& Point)
 {
     ReceiveImpactFrom(Impulse, Point, nullptr);
 }
 
-// 服务器：被撞时停止对白，交给战斗组件处理击退；刚倒地时取消当前安排
+/// @brief 服务器：被撞或被打时调用 CancelSpeech 停止说话，再调用 Combat->ReceiveImpact 处理击退
+/// 这一下把 NPC 打倒时播放受击短反应 Hit
 void ADeliveryNpcCharacter::ReceiveImpactFrom(const FVector& Impulse, const FVector& Point, AActor* Source)
 {
     if (!HasAuthority())
@@ -629,13 +640,13 @@ void ADeliveryNpcCharacter::ReceiveImpactFrom(const FVector& Impulse, const FVec
         Presentation->PlayReaction(EDeliveryNpcVoiceReaction::Hit, FGuid::NewGuid());
 }
 
-// 无来源的鸣笛，转交 ReceiveHornFrom
+/// @brief 无来源的鸣笛，转交 ReceiveHornFrom
 void ADeliveryNpcCharacter::ReceiveHorn(float Multiplier)
 {
     ReceiveHornFrom(Multiplier, nullptr, nullptr);
 }
 
-// 服务器：被鸣笛时受惊转头，每 1.5 秒最多记一次鸣笛事件，并记下驾驶的玩家
+/// @brief 服务器：被鸣笛时受惊转头，每 1.5 秒最多记一次鸣笛事件，并记下驾驶的玩家
 void ADeliveryNpcCharacter::ReceiveHornFrom(float Multiplier, AActor* Vehicle, AActor* Driver)
 {
     if (!HasAuthority())
@@ -656,7 +667,9 @@ void ADeliveryNpcCharacter::ReceiveHornFrom(float Multiplier, AActor* Vehicle, A
         ObserveFact(TEXT("HornDriver"), Driver, TEXT("鸣笛时这名玩家正在驾驶该车辆"), EDeliveryNpcEvidenceSource::Seen);
 }
 
-// 服务器每帧：刷新黑板，动作结束后标记需要决策，条件满足时发出下一次模型请求
+// ── 决策 ──
+// 有新情况时 MarkDecisionNeeded 置上 bDecisionNeeded，Tick 在条件满足时调用 Agent->RequestDecision
+// 请求结束后 Agent 广播 OnDecisionFinished，失败的请求在这里安排重试
 void ADeliveryNpcCharacter::Tick(float Dt)
 {
     Super::Tick(Dt);
@@ -676,7 +689,9 @@ void ADeliveryNpcCharacter::Tick(float Dt)
             MarkDecisionNeeded();
     }
 
-    // 发请求的条件：有新情况、没在说话、没倒地、没在受击后仰、手上没有动作、上一个请求已结束
+    // bDecisionNeeded 为 true 时，满足下面全部条件才调用 RequestDecision，之后 4 秒内不再发：
+    // 没在说话（等着回答玩家或别的 NPC 时不管这条）、没倒地（故意躺下等着回答玩家时不管）、不在受击后仰、
+    // 手上没有动作（等着回答玩家时不管）、上一个请求已经结束、到了 NextDecision
     const bool bCanDecide = !IsKnockedDown() || (Combat->IsDeliberatelyProne() && Agent->IsWaitingToReplyToPlayer());
     if (bDecisionNeeded &&
         (Agent->IsWaitingToReplyToPlayer() || Agent->HasPendingNpcMessage() || !Presentation->HasPendingSpeech()) && bCanDecide &&
@@ -688,7 +703,7 @@ void ADeliveryNpcCharacter::Tick(float Dt)
     }
 }
 
-// 停止动作，移除出拳技能，松开车辆，解除所有绑定
+// ── 生命周期 ──
 void ADeliveryNpcCharacter::EndPlay(const EEndPlayReason::Type Reason)
 {
     StopAction(ExecutingAction);
@@ -707,14 +722,14 @@ void ADeliveryNpcCharacter::EndPlay(const EEndPlayReason::Type Reason)
     Super::EndPlay(Reason);
 }
 
-// 标记需要决策，序号用来识别请求发出后又到达的新情况
+// ── 决策 ──
 void ADeliveryNpcCharacter::MarkDecisionNeeded()
 {
     ++DecisionWakeSerial;
     bDecisionNeeded = true;
 }
 
-// 请求入队后，若期间没有新情况就清除标记
+/// @brief 请求入队后，若期间没有新情况就清除标记
 void ADeliveryNpcCharacter::ConfirmDecisionRequestQueued(uint64 WakeSerial)
 {
     if (WakeSerial == DecisionWakeSerial)
@@ -722,7 +737,7 @@ void ADeliveryNpcCharacter::ConfirmDecisionRequestQueued(uint64 WakeSerial)
     bDecisionRetryScheduled = false;
 }
 
-// 清除决策标记和重试计数
+/// @brief 清除决策标记和重试计数
 void ADeliveryNpcCharacter::ResetDecisionScheduling()
 {
     bDecisionNeeded = false;
@@ -730,7 +745,7 @@ void ADeliveryNpcCharacter::ResetDecisionScheduling()
     DecisionRetryCount = 0;
 }
 
-// 让下一次请求在 0.25 秒内发出
+/// @brief 让下一次请求在 0.25 秒内发出
 void ADeliveryNpcCharacter::WakeDecision()
 {
     MarkDecisionNeeded();
@@ -745,7 +760,7 @@ void ADeliveryNpcCharacter::WakeDecision()
     NextDecision = FMath::Min(NextDecision, GetWorld()->GetTimeSeconds() + .25);
 }
 
-// 决策结束：成功时清零重试计数；传输失败、超时、过期等情况最多重试两次
+/// @brief 决策结束：成功时清零重试计数；传输失败、超时、过期等情况最多重试两次
 void ADeliveryNpcCharacter::OnDecisionFinished(FName Reason)
 {
     if (!HasAuthority())

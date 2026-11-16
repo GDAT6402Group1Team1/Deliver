@@ -30,11 +30,16 @@ namespace
     }
 }
 
+// ── 座位 ──
+// 坐下和起身用的座位位置
+
+/// @brief 客户端收到家居状态时更新座位表现
 void UDeliveryCompanionComponent::OnRep_HomeState()
 {
     UpdateHomeSeatPresentation();
 }
 
+/// @brief 去掉坐下或起身的根运动并恢复移动设置；bClearState 为 true 时服务器同时清空复制的座位状态
 void UDeliveryCompanionComponent::ReleaseHomeSeatMove(bool bClearState)
 {
     auto* Npc=GetCompanion();
@@ -64,6 +69,7 @@ void UDeliveryCompanionComponent::ReleaseHomeSeatMove(bool bClearState)
     }
 }
 
+/// @brief 两端按复制的座位状态加上或去掉坐下、起身的根运动
 void UDeliveryCompanionComponent::UpdateHomeSeatPresentation()
 {
     auto* Npc=GetCompanion();
@@ -149,6 +155,7 @@ void UDeliveryCompanionComponent::UpdateHomeSeatPresentation()
     HomeSeatRuntime.MotionId=Movement->ApplyRootMotionSource(Move);
 }
 
+/// @brief 开始坐下或起身的移动，时长取动画长度；失败时 OutReason 写入原因
 bool UDeliveryCompanionComponent::BeginHomeSeatMove(const FTransform& FeetGoal,UAnimSequence* Animation,FName& OutReason)
 {
     OutReason=NAME_None;
@@ -206,6 +213,7 @@ bool UDeliveryCompanionComponent::BeginHomeSeatMove(const FTransform& FeetGoal,U
     return true;
 }
 
+/// @brief 检查坐下或起身的移动是否还对应当前安排，移动结束时返回 true
 bool UDeliveryCompanionComponent::UpdateHomeSeatMove(const FTransform& FeetGoal,FName& OutReason)
 {
     OutReason=NAME_None;

@@ -7,6 +7,7 @@
 #include "Components/TextBlock.h"
 #include "Components/ProgressBar.h"
 
+/// @brief 第一次时用代码建好面板、文字和进度条
 TSharedRef<SWidget> UDeliveryTrunkStatusWidget::RebuildWidget()
 {
     if (WidgetTree && !Label)
@@ -24,6 +25,8 @@ TSharedRef<SWidget> UDeliveryTrunkStatusWidget::RebuildWidget()
     }
     return Super::RebuildWidget();
 }
+
+/// @brief 显示状态文字和进度（0 到 1）
 void UDeliveryTrunkStatusWidget::SetStatus(const FText& Text,float Progress)
 {
     if (Label) Label->SetText(Text);

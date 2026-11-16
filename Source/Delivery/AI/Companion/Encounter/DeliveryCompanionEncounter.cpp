@@ -23,6 +23,10 @@
 #include "AIController.h"
 #include "Engine/World.h"
 
+// ── 初遇 ──
+// 二狗被扔出面馆、倒地、玩家扶起结识这一段的服务器流程
+
+/// @brief 初遇用的服务器时间；客户端还没收到 GameState 时返回 -1
 double ADeliveryCompanionCharacter::GetEncounterServerTime() const
 {
     if (!GetWorld()) return 0;
@@ -31,21 +35,25 @@ double ADeliveryCompanionCharacter::GetEncounterServerTime() const
     return State?State->GetServerWorldTimeSeconds():GetWorld()->GetTimeSeconds();
 }
 
+/// @brief 初遇开始后过了多少秒，还没开始时返回 -1
 double ADeliveryCompanionCharacter::GetEncounterElapsed() const
 {
     return HasEncounterStarted()?FMath::Max(0.0,GetEncounterServerTime()-Encounter.EncounterStartedAt):-1;
 }
 
+/// @brief 二狗正被扔出或正在下落时返回 true
 bool ADeliveryCompanionCharacter::IsEncounterAirborne() const
 {
     return Encounter.Phase==EDeliveryCompanionEncounterPhase::Ejecting || Encounter.Phase==EDeliveryCompanionEncounterPhase::Falling;
 }
 
+/// @brief 二狗倒在地上等人扶且还没有主人
 bool ADeliveryCompanionCharacter::IsWaitingForHelp() const
 {
     return Encounter.Phase==EDeliveryCompanionEncounterPhase::AwaitingHelp && !Companion->GetOwnerPlayerState();
 }
 
+/// @brief 等人扶时倒地动画已经播完、人也站在地面上，玩家才能开始扶
 bool ADeliveryCompanionCharacter::HasFinishedEncounterFall() const
 {
     const double FallSeconds=Presentation->DownAnimation?Presentation->DownAnimation->GetPlayLength():0;
@@ -53,16 +61,19 @@ bool ADeliveryCompanionCharacter::HasFinishedEncounterFall() const
         Encounter.FallAnimationStartedAt>=0 && GetEncounterServerTime()-Encounter.FallAnimationStartedAt>=FallSeconds;
 }
 
+/// @brief 正处在被扶起的阶段
 bool ADeliveryCompanionCharacter::IsBeingHelpedUp() const
 {
     return Encounter.Phase==EDeliveryCompanionEncounterPhase::Helping;
 }
 
+/// @brief 还没结识时一律算倒地，结识后按居民的倒地状态判断
 bool ADeliveryCompanionCharacter::IsKnockedDown() const
 {
     return Encounter.Phase!=EDeliveryCompanionEncounterPhase::Joined || Super::IsKnockedDown();
 }
 
+/// @brief 服务器切换初遇阶段，记下开始时间、编号加一，并立即同步
 void ADeliveryCompanionCharacter::SetEncounterPhase(EDeliveryCompanionEncounterPhase Phase)
 {
     if (!HasAuthority() || Encounter.Phase==Phase) return;
@@ -73,6 +84,7 @@ void ADeliveryCompanionCharacter::SetEncounterPhase(EDeliveryCompanionEncounterP
     ForceNetUpdate();
 }
 
+/// @brief 有人开始扶时从等人扶切到被扶起阶段
 void ADeliveryCompanionCharacter::BeginHelpUp()
 {
     if (!HasAuthority() || Encounter.Phase!=EDeliveryCompanionEncounterPhase::AwaitingHelp || !Companion->GetOwnerPlayerState()) return;
@@ -80,6 +92,7 @@ void ADeliveryCompanionCharacter::BeginHelpUp()
     SetEncounterPhase(EDeliveryCompanionEncounterPhase::Helping);
 }
 
+/// @brief 失去主人后就在当前位置倒下等新主人扶，不回面馆重演初遇
 void ADeliveryCompanionCharacter::ResetForNewOwner()
 {
     if (!HasAuthority()) return;
@@ -89,6 +102,7 @@ void ADeliveryCompanionCharacter::ResetForNewOwner()
     SetEncounterPhase(GetCharacterMovement()->IsMovingOnGround()?EDeliveryCompanionEncounterPhase::AwaitingHelp:EDeliveryCompanionEncounterPhase::Falling);
 }
 
+/// @brief 按初遇阶段切换表现：骑车时隐藏本体，抛出阶段播放抛出动作，结识后恢复正常
 void ADeliveryCompanionCharacter::OnRep_Encounter()
 {
     const auto* AttachedBike=Cast<ADeliveryCompanionMotorbike>(GetAttachParentActor());
@@ -132,6 +146,7 @@ void ADeliveryCompanionCharacter::OnRep_Encounter()
     UpdateEncounterPresentation();
 }
 
+/// @brief 开门和抛出阶段显示老板，并按门的进度同步老板的动画时间
 void ADeliveryCompanionCharacter::UpdateEncounterPresentation()
 {
     if (!IsValid(EncounterScene) || EncounterScene->GetWorld()!=GetWorld() || !EncounterScene->HasActorBegunPlay()) return;
@@ -146,6 +161,7 @@ void ADeliveryCompanionCharacter::UpdateEncounterPresentation()
     EncounterScene->UpdateBossPresentation(BossElapsed,bShowBoss);
 }
 
+/// @brief 初遇绑定的任务已经开始、进行中或已完成时返回 true
 bool ADeliveryCompanionCharacter::HasEncounterOrderStarted() const
 {
     const auto* Manager=UDeliveryTaskManagerComponent::Get(this);
@@ -161,6 +177,7 @@ bool ADeliveryCompanionCharacter::HasEncounterOrderStarted() const
     return false;
 }
 
+/// @brief Pawn 在门口触发范围内，或者是在取餐点附近的玩家
 bool ADeliveryCompanionCharacter::CanWitnessEncounter(const APawn* Pawn) const
 {
     if (!IsValid(Pawn) || Pawn->GetWorld()!=GetWorld() || !IsValid(EncounterScene) || EncounterScene->GetWorld()!=GetWorld()) return false;
@@ -201,6 +218,7 @@ bool ADeliveryCompanionCharacter::CanWitnessEncounter(const APawn* Pawn) const
     return !GetWorld()->LineTraceSingleByChannel(Hit,Pawn->GetPawnViewLocation(),Trigger,ECC_Visibility,Params);
 }
 
+/// @brief 有玩家在门口附近，触发后的范围放宽，让玩家可以退到门边让开
 bool ADeliveryCompanionCharacter::HasNearbyEncounterWitness() const
 {
     const FVector Trigger=EncounterScene->GetTriggerWorldLocation();
@@ -216,6 +234,7 @@ bool ADeliveryCompanionCharacter::HasNearbyEncounterWitness() const
     return false;
 }
 
+/// @brief 场景和抛出曲线都配好、任务已开始、有玩家在旁边时开始初遇并请求开门
 bool ADeliveryCompanionCharacter::TryStartEncounter()
 {
     if (!IsValid(EncounterScene) || EncounterScene->GetWorld()!=GetWorld() || !Companion->GetTuning().EjectionCurve)
@@ -243,6 +262,7 @@ bool ADeliveryCompanionCharacter::TryStartEncounter()
     return false;
 }
 
+/// @brief 检查抛出路线：参数是否合法、路线上有没有东西挡住
 ADeliveryCompanionCharacter::EEjectionPathStatus ADeliveryCompanionCharacter::GetEjectionPathStatus(
     const FDeliveryCompanionEncounterState& State) const
 {
@@ -275,6 +295,7 @@ ADeliveryCompanionCharacter::EEjectionPathStatus ADeliveryCompanionCharacter::Ge
     return EEjectionPathStatus::Clear;
 }
 
+/// @brief 门开好后计算抛出起点、落点和时长，路线通畅就切到抛出阶段，被挡就等待
 void ADeliveryCompanionCharacter::TryStartEjection()
 {
     FDeliveryCompanionEncounterState Proposed=Encounter;
@@ -310,6 +331,7 @@ void ADeliveryCompanionCharacter::TryStartEjection()
     if (!EjectionMotionId) BeginEncounterFall(TEXT("MotionStartFailed"));
 }
 
+/// @brief 给角色移动加上抛出的根运动；客户端要等本机门叶也开好才开始
 void ADeliveryCompanionCharacter::ApplyEjectionMotion()
 {
     // 门与角色分属两个复制 Actor，先等本机门叶到达服务器确认的开门姿势
@@ -368,6 +390,7 @@ void ADeliveryCompanionCharacter::ApplyEjectionMotion()
     }
 }
 
+/// @brief 客户端在抛出阶段移动模式变成 None 时记下来，之后重新加上抛出动作
 void ADeliveryCompanionCharacter::OnMovementModeChanged(EMovementMode PreviousMovementMode,uint8 PreviousCustomMode)
 {
     Super::OnMovementModeChanged(PreviousMovementMode,PreviousCustomMode);
@@ -375,6 +398,7 @@ void ADeliveryCompanionCharacter::OnMovementModeChanged(EMovementMode PreviousMo
         GetCharacterMovement()->MovementMode==MOVE_None) bClientMotionWasDisabled=true;
 }
 
+/// @brief 去掉抛出根运动，恢复原来的转向设置
 void ADeliveryCompanionCharacter::RemoveEjectionMotion()
 {
     auto* Movement=GetCharacterMovement();
@@ -388,6 +412,7 @@ void ADeliveryCompanionCharacter::RemoveEjectionMotion()
     }
 }
 
+/// @brief 抛出结束或被打断时停下移动，切到下落阶段
 void ADeliveryCompanionCharacter::BeginEncounterFall(FName Reason)
 {
     if (!HasAuthority()) return;
@@ -398,6 +423,7 @@ void ADeliveryCompanionCharacter::BeginEncounterFall(FName Reason)
     if (!Reason.IsNone()) UE_LOG(LogTemp,Warning,TEXT("CompanionEncounter %s ejection ended: %s"),*GetName(),*Reason.ToString());
 }
 
+/// @brief 初遇没开始成功时关门、清掉阻挡状态，回到等待开始
 void ADeliveryCompanionCharacter::ResetUnstartedEncounter(FName Reason)
 {
     Encounter.FailureReason=Reason;
@@ -412,6 +438,7 @@ void ADeliveryCompanionCharacter::ResetUnstartedEncounter(FName Reason)
     UE_LOG(LogTemp,Log,TEXT("CompanionEncounter %s reset before ejection: %s"),*GetName(),*Reason.ToString());
 }
 
+/// @brief 服务器按初遇阶段推进：等待开始、开门、抛出、下落、等人扶和被扶起
 void ADeliveryCompanionCharacter::UpdateEncounter()
 {
     const double Now=GetEncounterServerTime();
@@ -495,6 +522,7 @@ void ADeliveryCompanionCharacter::UpdateEncounter()
     }
 }
 
+/// @brief 下落阶段落到地面时调用 ConfirmEncounterLanding
 void ADeliveryCompanionCharacter::Landed(const FHitResult& Hit)
 {
     Super::Landed(Hit);
@@ -503,6 +531,7 @@ void ADeliveryCompanionCharacter::Landed(const FHitResult& Hit)
     ConfirmEncounterLanding();
 }
 
+/// @brief 切到等人扶；二狗被截在店里时门先开着，否则关门
 void ADeliveryCompanionCharacter::ConfirmEncounterLanding()
 {
     // 先确认真实支撑面。被截停在店内时保留通行，等两人都离开再关门
@@ -512,6 +541,7 @@ void ADeliveryCompanionCharacter::ConfirmEncounterLanding()
     if (IsValid(EncounterScene) && !bKeepDoorOpenForRescue) EncounterScene->RequestDoorOpen(false);
 }
 
+/// @brief 在空中被撞时改为下落，其余情况交给居民的受击流程
 void ADeliveryCompanionCharacter::ReceiveImpactFrom(const FVector& Impulse,const FVector& Point,AActor* Source)
 {
     if (!HasAuthority() || Impulse.ContainsNaN() || IsHidden()) return;

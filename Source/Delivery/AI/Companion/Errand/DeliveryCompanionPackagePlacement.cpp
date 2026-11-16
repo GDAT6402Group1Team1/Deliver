@@ -16,6 +16,10 @@
 #include "Misc/ScopeExit.h"
 #include "Delivery.h"
 
+// ── 放下包裹 ──
+// 在地上找一个安全的落点放下包裹
+
+/// @brief 在二狗和主人之间找一个有地面、放得下包裹的落点
 bool UDeliveryCompanionComponent::FindPackageGroundLocation(const ADeliveryPackageItem& Package,const APawn& Receiver,FVector& OutLocation) const
 {
     const auto* Npc=GetCompanion();
@@ -63,6 +67,7 @@ bool UDeliveryCompanionComponent::FindPackageGroundLocation(const ADeliveryPacka
     return false;
 }
 
+/// @brief 把手上的包裹放到主人身边的地上；失败时 Failure 写入原因
 bool UDeliveryCompanionComponent::TryPlacePackageOnGround(FName& Failure)
 {
     Failure=TEXT("PackagePlacementUnavailable");
@@ -136,6 +141,7 @@ bool UDeliveryCompanionComponent::TryPlacePackageOnGround(FName& Failure)
     return true;
 }
 
+/// @brief 走到地上的原包裹旁捡起来；失败时 Failure 写入原因
 bool UDeliveryCompanionComponent::TryRecoverGroundPackage(FName& Failure)
 {
     Failure=TEXT("GroundPackageUnavailable");

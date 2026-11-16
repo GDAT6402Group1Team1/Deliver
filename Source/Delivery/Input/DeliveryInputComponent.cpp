@@ -16,6 +16,10 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Delivery.h"
 
+// ── 生命周期 ──
+// 构造函数加载 IA；组件结束时 EndPlay 清掉组合键计时器
+
+/// @brief 不需要每帧更新；构造时加载移动、视角、跳跃、左右拳的 IA，交互、拾取、召唤和五个物品栏 IA 只存路径，Bind 时再加载
 UDeliveryInputComponent::UDeliveryInputComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
@@ -75,15 +79,17 @@ UDeliveryInputComponent::UDeliveryInputComponent()
 
 }
 
-// 输入动作绑定
+// ── 绑定 ──
+// 角色被玩家占有时 SetupPlayerInputComponent 调用 Bind；失去控制时角色调用 ResetInput
 
-// 绑定步行输入，玩法组件仍负责检查操作条件
+/// @brief 把所有步行动作绑到 PlayerInputComponent 上，同一个组件已经绑过时直接返回；最后调用 DoMove(0, 0) 清掉移动意图
+/// 这里只绑定，按键时能不能做由角色和各玩法组件检查
 void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
 {
     // 同一个输入组件只绑定一次，避免按一次键触发多次操作
 #if !UE_BUILD_SHIPPING
-    // 同名不等于同一个对象，所以要打指针；"绑过了"这道早退一旦误判，
-    // 表现就是整具身体一个键都不响应，而外部完全看不出来
+    // 日志打出两个组件的指针：同名的组件不一定是同一个对象
+    // 下面这行判断误以为已经绑过时，整具身体一个键都不响应，从外面完全看不出来
     UE_LOG(LogDelivery, Log,
            TEXT("InputDiag %.3f Bind 请求 input=%s(%p) 已绑=%s(%p) 早退=%s owner=%s"),
            GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f, *GetNameSafe(PlayerInputComponent),
@@ -183,17 +189,18 @@ void UDeliveryInputComponent::Bind(UInputComponent *PlayerInputComponent)
                                            &UDeliveryInputComponent::SummonVehiclePressed);
     }
 
-    // 刚接手的身体从"没有移动意图"开始。
-    // 不能只靠失去控制权时的 ResetInput：那一帧 Enhanced Input 还会再派发一次
-    // Triggered，把刚清掉的意图重新写回去（实测日志里 ResetInput 和 Move=(0,1)
-    // 是同一个时间戳），而之后这具身体就被解除占有了，那次松开永远收不到。
-    // 结果是上车时按着 W，下车后人就一直往前走；上车时没按，就定在原地。
-    // 玩家真按着键的话，下一帧的 Triggered 自然会把意图补回来，不影响手感。
+    // 刚接手的身体先把移动意图清零
+    // 失去控制时 ResetInput 虽然清过一次，但同一帧 Enhanced Input 还会再派发一次 Triggered，把意图写回去
+    // （日志里 ResetInput 和 Move=(0,1) 时间戳相同）；之后这具身体不再被控制，松开键的事件收不到
+    // 不在这里清零的话，上车时按着 W，下车后人会一直往前走
+    // 玩家真按着键时，下一帧的 Triggered 会重新写入意图
     Character->DoMove(0.f, 0.f);
 }
 
-// 移动与视角
+// ── 移动 ──
+// Enhanced Input 每帧派发 Triggered 时调用 Move、Look、MouseLook，按下跳跃键时调用 JumpStarted
 
+/// @brief 移动轴；本机不再控制这具身体、或玩家控制器不接受步行输入时按松开处理
 void UDeliveryInputComponent::Move(const FInputActionValue &Value)
 {
     // 交接控制权当帧仍可能收到旧输入栈的 Triggered
@@ -208,11 +215,13 @@ void UDeliveryInputComponent::Move(const FInputActionValue &Value)
     Character->DoMove(Axis.X, Axis.Y);
 }
 
+/// @brief 移动键松开或取消：移动意图清零
 void UDeliveryInputComponent::MoveEnded(const FInputActionValue &)
 {
     if (IsValid(Character)) Character->DoMove(0.0f, 0.0f);
 }
 
+/// @brief 手柄右摇杆转视角
 void UDeliveryInputComponent::Look(const FInputActionValue &Value)
 {
     if (!IsValid(Character)) return;
@@ -220,6 +229,7 @@ void UDeliveryInputComponent::Look(const FInputActionValue &Value)
     Character->DoLook(Axis.X, Axis.Y);
 }
 
+/// @brief 鼠标转视角；同时记进 RightMouseGesture，用来区分右键单击和拖动
 void UDeliveryInputComponent::MouseLook(const FInputActionValue &Value)
 {
     if (!IsValid(Character)) return;
@@ -229,20 +239,25 @@ void UDeliveryInputComponent::MouseLook(const FInputActionValue &Value)
     Character->DoLook(Axis.X, Axis.Y);
 }
 
+/// @brief 跳跃键按下
 void UDeliveryInputComponent::JumpStarted(const FInputActionValue & /* 未使用 */)
 {
     if (!IsValid(Character)) return;
     Character->DoJumpStart();
 }
 
-// 左右拳与双键抓取
+// ── 出拳与抓取 ──
+// 左右键按下调用 MousePressed，开始等 0.2 秒；0.2 秒内按下另一只键开始双手抓取，到时调用 ResolveSingleMousePress 出单拳
+// 松开调用 MouseReleased，被取消调用 MouseCanceled
 
+/// @brief 左键按下，调用 MousePressed(true)
 void UDeliveryInputComponent::AttackLeftStarted(const FInputActionValue & /* 未使用 */)
 {
     if (!IsValid(Character)) return;
     MousePressed(true);
 }
 
+/// @brief 右键按下，调用 MousePressed(false)；是鼠标右键（不是手柄）时开始记录拖动
 void UDeliveryInputComponent::AttackRightStarted(const FInputActionValue & /* 未使用 */)
 {
     if (!IsValid(Character)) return;
@@ -250,29 +265,34 @@ void UDeliveryInputComponent::AttackRightStarted(const FInputActionValue & /* �
     MousePressed(false,Player && Player->IsInputKeyDown(EKeys::RightMouseButton));
 }
 
+/// @brief 左键松开，调用 MouseReleased(true)
 void UDeliveryInputComponent::AttackLeftEnded(const FInputActionValue & /* 未使用 */)
 {
     if (!IsValid(Character)) return;
     MouseReleased(true);
 }
 
+/// @brief 右键松开，调用 MouseReleased(false)
 void UDeliveryInputComponent::AttackRightEnded(const FInputActionValue & /* 未使用 */)
 {
     if (!IsValid(Character)) return;
     MouseReleased(false);
 }
 
+/// @brief 左键被取消，调用 MouseCanceled(true)
 void UDeliveryInputComponent::AttackLeftCanceled(const FInputActionValue &)
 {
     MouseCanceled(true);
 }
 
+/// @brief 右键被取消，调用 MouseCanceled(false)
 void UDeliveryInputComponent::AttackRightCanceled(const FInputActionValue &)
 {
     MouseCanceled(false);
 }
 
-// 等待短暂的组合键窗口，再决定出拳还是抓取
+/// @brief 记下这只键按下：第一只键开始等 0.2 秒；等待期间按下第二只键就调用 GrabComponent->RequestBegin 开始抓取
+/// 第一只键已经按单键出过拳时，第二只键也单独出拳
 void UDeliveryInputComponent::MousePressed(bool bLeft,bool bMouseRight)
 {
     if (!IsValid(Character)) return;
@@ -312,7 +332,7 @@ void UDeliveryInputComponent::MousePressed(bool bLeft,bool bMouseRight)
     }
 }
 
-// 等待结束后只处理第一次按下的键
+/// @brief 0.2 秒到了还没按第二只键：第一只是左键就出左拳，是手柄右键就出右拳；鼠标右键等松开时再判断单击还是拖动
 void UDeliveryInputComponent::ResolveSingleMousePress()
 {
     if (!IsValid(Character)) return;
@@ -325,7 +345,7 @@ void UDeliveryInputComponent::ResolveSingleMousePress()
         Character->DoAttackRight();
 }
 
-// 释放抓取，或将尚未处理的短按交给攻击入口
+/// @brief 这只键松开：在抓取时只松开这只手；鼠标右键按单击还是拖动判断要不要出右拳；还没出过拳的短按补出一拳
 void UDeliveryInputComponent::MouseReleased(bool bLeft)
 {
     if (!IsValid(Character)) return;
@@ -379,6 +399,7 @@ void UDeliveryInputComponent::MouseReleased(bool bLeft)
     }
 }
 
+/// @brief 这只键被取消（例如打开界面）：不出拳，只按松开处理抓取
 void UDeliveryInputComponent::MouseCanceled(bool bLeft)
 {
     if (!IsValid(Character) || !(bLeft?bLeftMouseDown:bRightMouseDown)) return;
@@ -388,27 +409,31 @@ void UDeliveryInputComponent::MouseCanceled(bool bLeft)
     MouseReleased(bLeft);
 }
 
-// 交互与物品栏
+// ── 交互与物品 ──
+// 都转给角色或背包、召唤组件，能不能做由它们检查
 
+/// @brief 交互键按下，调用角色的 DoInteract
 void UDeliveryInputComponent::InteractStarted(const FInputActionValue & /* 未使用 */)
 {
     if (!IsValid(Character)) return;
     Character->DoInteract();
 }
 
+/// @brief 拾取键按下，调用角色的 DoPickup 开始长按
 void UDeliveryInputComponent::PickupStarted(const FInputActionValue & /* 未使用 */)
 {
     if (!IsValid(Character)) return;
     Character->DoPickup();
 }
 
+/// @brief 拾取键松开或取消，调用角色的 DoPickupRelease
 void UDeliveryInputComponent::PickupEnded(const FInputActionValue & /* 未使用 */)
 {
     if (!IsValid(Character)) return;
     Character->DoPickupRelease();
 }
 
-// 把动作对应的槽位交给背包，拾取和丢弃条件仍由背包检查
+/// @brief 物品栏键按下，调用背包的 RequestSlotAction(Slot)；能不能拿出或丢下由背包检查
 void UDeliveryInputComponent::InventorySlotSelected(int32 Slot)
 {
     if (!IsValid(Character)) return;
@@ -418,6 +443,7 @@ void UDeliveryInputComponent::InventorySlotSelected(int32 Slot)
     }
 }
 
+/// @brief 召唤键按下；没晕倒时调用召唤组件的 RequestSummon
 void UDeliveryInputComponent::SummonVehiclePressed()
 {
     if (!IsValid(Character)) return;
@@ -429,9 +455,9 @@ void UDeliveryInputComponent::SummonVehiclePressed()
     }
 }
 
-// 输入状态清理
+// ── 绑定 ──
 
-// 清除未完成的输入，避免控制权切换后继续执行旧操作
+/// @brief 失去控制时调用：清掉鼠标组合键状态和 BoundInput，停止移动和长按拾取，松开抓取，取消出拳
 void UDeliveryInputComponent::ResetInput()
 {
 #if !UE_BUILD_SHIPPING
@@ -443,10 +469,8 @@ void UDeliveryInputComponent::ResetInput()
     bLeftMouseDown = bRightMouseDown = bGrabChordActive = false;
     bSingleMouseResolved = bFirstMouseLeft = false;
     RightMouseGesture.Reset();
-    // 失去控制权时引擎会销毁这具身体的 InputComponent，绑定记录按定义当场作废。
-    // 不清的话，下次重新占有时新建的组件可能复用同一个对象槽位，
-    // Bind() 开头那道"已经绑过了"的早退就会误判，结果是一个键都不绑、
-    // 整具身体彻底没反应——而且从外面看绑定关系是"对"的，极难查。
+    // 失去控制时引擎会销毁这具身体的 InputComponent，BoundInput 记的那个组件已经没了，这里清掉
+    // 不清的话，下次重新占有时新建的组件可能占用旧组件的对象槽位，Bind 开头的判断会以为已经绑过而直接返回，一个键都不绑
     BoundInput.Reset();
     ADeliveryCharacter* OwnerCharacter = Cast<ADeliveryCharacter>(GetOwner());
     if (!IsValid(OwnerCharacter)) return;
@@ -465,6 +489,9 @@ void UDeliveryInputComponent::ResetInput()
         Combat->CancelPunch();
 }
 
+// ── 生命周期 ──
+
+/// @brief 组件结束时清掉组合键计时器；网络和玩法状态由各组件自己的 EndPlay 清理
 void UDeliveryInputComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     // 销毁时只清本机计时器，网络和玩法状态由各组件自己的结束流程清理
@@ -472,7 +499,9 @@ void UDeliveryInputComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+// ── 绑定 ──
 
+/// @brief 召唤车辆的 IA，提示组件用它查当前映射的按键
 UInputAction* UDeliveryInputComponent::GetSummonAction() const
 {
     return SummonAction.LoadSynchronous();

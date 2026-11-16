@@ -468,17 +468,31 @@ private:
     decltype(&dsr_destroy) Destroy = nullptr;
 };
 
+// ── 对外接口 ──
+// 下面的函数都直接转给 FImpl；识别线程的实际处理写在上面的 FImpl 里，各函数的说明见头文件
+
 FDeliverySpeechRecognizer::FDeliverySpeechRecognizer() : Impl(MakeUnique<FImpl>()) {}
 FDeliverySpeechRecognizer::~FDeliverySpeechRecognizer() = default;
+
+/// @brief 返回 true 表示准备任务已启动，模型加载成功通过 Ready 通知
+/// 上次工作线程尚未退出时返回 false，不在这里等待模型加载或释放
 bool FDeliverySpeechRecognizer::Start(const FString& Directory, const FString& Hotwords, FString& Error)
 { return Impl->StartWorker(Directory, Hotwords, Error); }
+
+/// @brief 立即禁止新命令并丢弃结果，工作线程完成手头的原生调用后自行释放模型
 void FDeliverySpeechRecognizer::RequestStop() { Impl->RequestStop(); }
 bool FDeliverySpeechRecognizer::IsStopped() const { return Impl->IsStopped(); }
+
+/// @brief 正常关闭时先调用 RequestStop，等 IsStopped 返回 true 后再调用它；析构时也会调用，确保线程已经退出
 void FDeliverySpeechRecognizer::Stop() { Impl->Shutdown(); }
+
+/// @brief 同一工作线程会话的编号单调递增，旧 Begin 不能取消已经开始的新轮次
 bool FDeliverySpeechRecognizer::BeginTurn(uint64 TurnId)
 { return Impl->BeginTurn(TurnId); }
 bool FDeliverySpeechRecognizer::PushAudio(uint64 TurnId, int32 Rate, TArray<float>&& Samples)
 { return Impl->EnqueueAudio(TurnId, Rate, MoveTemp(Samples)); }
+
+/// @brief 最后一批音频已经提交后才调用，重复完成不会延长或再次提交本轮
 bool FDeliverySpeechRecognizer::FinishTurn(uint64 TurnId)
 { return Impl->FinishTurn(TurnId); }
 void FDeliverySpeechRecognizer::CancelTurn(uint64 TurnId)

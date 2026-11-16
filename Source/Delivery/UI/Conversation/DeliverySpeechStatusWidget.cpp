@@ -8,6 +8,10 @@
 #include "UI/HUD/DeliveryHUD.h"
 #include "Speech/DeliverySpeechInputComponent.h"
 
+// ── 生命周期 ──
+// NativeConstruct 绑定按钮并调用 SetSpeechInput；NativeDestruct 取消所有订阅
+
+/// @brief 控件建好：绑定 VoiceDisableButton 的点击；没指定语音输入组件时从拥有者玩家控制器上找，然后调用 SetSpeechInput
 void UDeliverySpeechStatusWidget::NativeConstruct()
 {
     Super::NativeConstruct();
@@ -23,12 +27,16 @@ void UDeliverySpeechStatusWidget::NativeConstruct()
     SetSpeechInput(Input);
 }
 
+// ── 绑定 ──
+
+/// @brief 换成显示 Value：先取消旧组件的订阅，再订阅新组件的 OnDisplayChanged 和交谈组件的 OnVoiceInputError，最后调用 RefreshStatus
 void UDeliverySpeechStatusWidget::SetSpeechInput(UDeliverySpeechInputComponent* Value)
 {
     if (auto* Previous = SpeechInput.Get())
         Previous->OnDisplayChanged.RemoveDynamic(this, &UDeliverySpeechStatusWidget::RefreshStatus);
     UnbindConversation();
-    // 只绑定创建此界面的玩家，不能读取另一个 PIE 世界或其他玩家的录音
+
+    // Value 必须属于拥有这个控件的本机玩家控制器、而且在同一个世界里，否则当作空；其他 PIE 窗口和其他玩家的录音不显示
     const auto* Player = GetOwningPlayer();
     SpeechInput = IsValid(Player) && Player->IsLocalController() && IsValid(Value) &&
         Value->GetWorld() == GetWorld() && Value->GetOwner() == Player
@@ -48,6 +56,9 @@ void UDeliverySpeechStatusWidget::SetSpeechInput(UDeliverySpeechInputComponent* 
     RefreshStatus();
 }
 
+// ── 刷新 ──
+
+/// @brief 没有语音输入组件时隐藏；有就显示，State 为 Capturing 时播放呼吸动画，图标按连麦是否开着切换
 void UDeliverySpeechStatusWidget::RefreshStatus()
 {
     const auto* Input = SpeechInput.Get();
@@ -61,7 +72,8 @@ void UDeliverySpeechStatusWidget::RefreshStatus()
     if (VoiceIcons) VoiceIcons->SetActiveWidgetIndex(bVoiceEnabled ? 1 : 0);
     if (!VoiceDisableButton) return;
 
-    // 界面只显示图标和按键，悬停仍能查看连麦失败或繁忙的原因
+    // 按钮悬停提示：平时写开或关连麦；正在准备或出错时写语音输入组件的状态文字；
+    // 准备好了但交谈组件报过错时，按错误原因 Busy、Unavailable 或其他写对应的提示
     FText Tooltip = bVoiceEnabled
         ? NSLOCTEXT("DeliverySpeech", "DisableVoiceTooltip", "关闭连麦和麦克风")
         : NSLOCTEXT("DeliverySpeech", "EnableVoiceTooltip", "与二狗连麦");
@@ -84,11 +96,13 @@ void UDeliverySpeechStatusWidget::RefreshStatus()
     VoiceDisableButton->SetToolTipText(Tooltip);
 }
 
+/// @brief 交谈组件的 OnVoiceInputError 回调，调用 RefreshStatus
 void UDeliverySpeechStatusWidget::HandleVoiceInputError(FName)
 {
     RefreshStatus();
 }
 
+/// @brief 取消订阅交谈组件的 OnVoiceInputError 并清空记录
 void UDeliverySpeechStatusWidget::UnbindConversation()
 {
     if (auto* OwnerConversation = Conversation.Get())
@@ -97,6 +111,7 @@ void UDeliverySpeechStatusWidget::UnbindConversation()
     ConversationErrorHandle.Reset();
 }
 
+/// @brief 按钮点击：连麦开着时调用 DisableVoice 关掉；关着时调用 EnableVoice，打开成功后调用 HUD 的 CloseResidentConversation 关闭交谈面板
 void UDeliverySpeechStatusWidget::DisableVoice()
 {
     if (auto* Input = SpeechInput.Get())
@@ -108,6 +123,7 @@ void UDeliverySpeechStatusWidget::DisableVoice()
     }
 }
 
+/// @brief bEnabled 为 true 时循环播放 VoiceStatusPulse，false 时停止；和当前状态一样时直接返回
 void UDeliverySpeechStatusWidget::SetPulseEnabled(bool bEnabled)
 {
     if (bEnabled == bPulsePlaying) return;
@@ -117,6 +133,9 @@ void UDeliverySpeechStatusWidget::SetPulseEnabled(bool bEnabled)
     else StopAnimation(VoiceStatusPulse);
 }
 
+// ── 生命周期 ──
+
+/// @brief 控件销毁：取消语音输入组件、交谈组件和按钮的订阅，停止呼吸动画
 void UDeliverySpeechStatusWidget::NativeDestruct()
 {
     bConstructed = false;

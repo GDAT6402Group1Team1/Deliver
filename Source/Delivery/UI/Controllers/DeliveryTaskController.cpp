@@ -33,7 +33,7 @@ constexpr float TaskHudBindRetrySeconds = 0.5f;
 constexpr float FirstOrderRecoveryRadius = 600.f;
 constexpr float FirstOrderRecoveryFloorTolerance = 100.f;
 
-// 只在开门现场引导这名玩家找回自己为拿斧头而放下的同一件外卖
+/// @brief 只在开门现场引导这名玩家找回自己为拿斧头而放下的同一件外卖
 const ADeliveryPackageItem* FindFirstOrderRecoveryPackage(const ADeliveryCharacter* Character,
                                                          const UDeliveryTaskDefinition* Task)
 {
@@ -80,7 +80,7 @@ const ADeliveryPackageItem* FindFirstOrderRecoveryPackage(const ADeliveryCharact
     return IsNearDoor(PlayerFeet) && IsNearDoor(PackageFeet) ? Package : nullptr;
 }
 
-/** 把秒数排成 4:32；负数（超时）前面加 +，表示已经多用了这么久 */
+/// @brief 把秒数写成 4:32 的样子；负数（超时）前面加 +，表示已经超出多久
 FText FormatClock(float Seconds)
 {
     const bool bOver = Seconds < 0.f;
@@ -90,12 +90,8 @@ FText FormatClock(float Seconds)
         FString::Printf(TEXT("%s%d:%02d"), bOver ? TEXT("+") : TEXT(""), Total / 60, Total % 60));
 }
 
-/**
- * 把相对镜头的夹角变成一个箭头
- *
- * 只用八个方向而不是连续旋转的图标：这是 Slate 文本，转不了
- * 而玩家在跑动中其实只需要"大概往哪拐"，八向足够
- */
+/// @brief 把目标相对镜头的水平夹角换成八个方向之一的箭头字符
+/// 提示条是 Slate 文本，箭头不能旋转，所以只分八个方向；玩家跑动中只需要知道大概往哪边拐
 const TCHAR *ArrowForYaw(float RelativeYaw)
 {
     const float Yaw = FRotator::NormalizeAxis(RelativeYaw);
@@ -119,7 +115,7 @@ const TCHAR *ArrowForYaw(float RelativeYaw)
 }
 } // namespace
 
-// 生成结算提示，并记录提示开始显示的时间
+/// @brief 生成结算提示，并记录提示开始显示的时间
 void UDeliveryTaskController::HandleTaskPaid(UDeliveryTaskDefinition *Task,
                                              const FDeliveryRewardBreakdown &Reward)
 {
@@ -131,7 +127,7 @@ void UDeliveryTaskController::HandleTaskPaid(UDeliveryTaskDefinition *Task,
                                    GradeSuffix);
     CompletionShownTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 }
-// 有来电或通话时生成电话提示，并占用顶部显示
+/// @brief 有来电或通话时生成电话提示，并占用顶部显示
 bool UDeliveryTaskController::PushCallState(UDeliveryPhoneCallQueueComponent *Phone)
 {
     if (!Phone || !GetWorld())
@@ -174,7 +170,7 @@ bool UDeliveryTaskController::PushCallState(UDeliveryPhoneCallQueueComponent *Ph
         return false;
     }
 }
-// 结算提示尚未到期时继续显示，过期后清除
+/// @brief 结算提示尚未到期时继续显示，过期后清除
 bool UDeliveryTaskController::PushCompletionBanner()
 {
     UWorld *World = GetWorld();
@@ -194,7 +190,7 @@ bool UDeliveryTaskController::PushCompletionBanner()
 
     return true;
 }
-// 根据个人追踪任务生成目的地和倒计时提示
+/// @brief 根据个人追踪任务生成目的地和倒计时提示
 bool UDeliveryTaskController::PushTaskState()
 {
     UWorld *World = GetWorld();
@@ -285,7 +281,9 @@ bool UDeliveryTaskController::PushTaskState()
     return true;
 }
 
-// 连接当前玩家，先解除旧玩家的订阅
+// ── 生命周期 ──
+
+/// @brief 连接当前玩家，先解除旧玩家的订阅
 void UDeliveryTaskController::Initialize(APlayerController *InPlayer)
 {
     Shutdown();
@@ -293,13 +291,13 @@ void UDeliveryTaskController::Initialize(APlayerController *InPlayer)
     BindToWallet();
 }
 
-// 通过所属玩家取得当前世界
+/// @brief 通过所属玩家取得当前世界
 UWorld *UDeliveryTaskController::GetWorld() const
 {
     return Player.IsValid() ? Player->GetWorld() : nullptr;
 }
 
-// 解除钱包订阅并清空本次界面状态
+/// @brief 解除钱包订阅并清空本次界面状态
 void UDeliveryTaskController::Shutdown()
 {
     if (Wallet.IsValid())
@@ -310,7 +308,7 @@ void UDeliveryTaskController::Shutdown()
     bVisible = false;
 }
 
-// 在玩家状态就绪或变化后连接正确的钱包
+/// @brief 在玩家状态就绪或变化后连接正确的钱包
 void UDeliveryTaskController::BindToWallet()
 {
     UDeliveryWalletComponent *Current =
@@ -325,7 +323,7 @@ void UDeliveryTaskController::BindToWallet()
         Current->OnTaskPaid.AddUniqueDynamic(this, &UDeliveryTaskController::HandleTaskPaid);
 }
 
-// 一次更新完整的任务显示内容
+/// @brief 一次更新完整的任务显示内容
 void UDeliveryTaskController::SetDisplay(const FText &InTitle, const FText &InDetail, bool bInUrgent)
 {
     Title = InTitle;
@@ -334,7 +332,7 @@ void UDeliveryTaskController::SetDisplay(const FText &InTitle, const FText &InDe
     bVisible = true;
 }
 
-// 按照来电、结算、任务的顺序选择本次显示内容
+/// @brief 按照来电、结算、任务的顺序选择本次显示内容
 void UDeliveryTaskController::Update(float CompletionSeconds, float UrgentSeconds)
 {
     // 每次重新判断是否有内容，防止上一条任务提示残留

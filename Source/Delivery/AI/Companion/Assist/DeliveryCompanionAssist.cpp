@@ -25,11 +25,16 @@ namespace
 constexpr uint8 OwnerHitResidentMemory=1;
 constexpr uint8 ResidentHitOwnerMemory=2;
 
+// ── 协战 ──
+// 主人真实打中别人或被打中后，二狗记下护主目标；JoinAssist 开始协战、StopAssist 收手，只认当前主人
+
+/// @brief 三个坐标分量都是有限数时返回 true
 bool IsFiniteWitnessPoint(const FVector& Point)
 {
     return FMath::IsFinite(Point.X) && FMath::IsFinite(Point.Y) && FMath::IsFinite(Point.Z);
 }
 
+/// @brief 二狗亲眼看到主人和居民互相动手时，生成一句写进模型请求的目击描述；bOwnerAttacked 为 true 表示主人是出手的一方
 bool TryDescribeWitnessedResidentHit(const ADeliveryCompanionCharacter* Npc,
     const UDeliveryCombatHitEvent& Hit,bool bOwnerAttacked,FString& OutDescription)
 {
@@ -93,6 +98,7 @@ bool TryDescribeWitnessedResidentHit(const ADeliveryCompanionCharacter* Npc,
 }
 }
 
+/// @brief 主人能指挥二狗时订阅主人 ASC 的真实命中事件，主人变了就先 UnbindOwnerCombat 再订阅新的
 void UDeliveryCompanionComponent::RefreshOwnerCombatSubscription()
 {
     auto* Npc=GetCompanion();
@@ -108,6 +114,7 @@ void UDeliveryCompanionComponent::RefreshOwnerCombatSubscription()
         FGameplayEventTagMulticastDelegate::FDelegate::CreateUObject(this,&ThisClass::OnOwnerConfirmedHit));
 }
 
+/// @brief 取消对主人 ASC 真实命中事件的订阅，可以重复调用
 void UDeliveryCompanionComponent::UnbindOwnerCombat()
 {
     if (auto* ASC=BoundOwnerCombat.Get(); ASC && OwnerCombatHandle.IsValid())
@@ -119,6 +126,7 @@ void UDeliveryCompanionComponent::UnbindOwnerCombat()
     BoundOwnerCombat.Reset();
 }
 
+/// @brief 判断 Target 能否作为护主目标：不能是二狗自己、主人、主人的车或同属一个主人的同伴
 bool UDeliveryCompanionComponent::IsAllowedAssistTarget(const AActor* Target) const
 {
     const auto* Npc=GetCompanion();
@@ -137,6 +145,7 @@ bool UDeliveryCompanionComponent::IsAllowedAssistTarget(const AActor* Target) co
     return Cast<ADeliveryCharacter>(Target)!=nullptr || Cast<IDeliveryImpactReceiver>(Target)!=nullptr;
 }
 
+/// @brief 这次命中记录（EvidenceId）仍对应当前护主目标、主人仍在线且目标仍然合法时返回 true
 bool UDeliveryCompanionComponent::IsAssistEvidenceCurrent(const AActor* Target,FGuid EvidenceId) const
 {
     const auto* Npc=GetCompanion();
@@ -148,17 +157,20 @@ bool UDeliveryCompanionComponent::IsAssistEvidenceCurrent(const AActor* Target,F
             (GetWorld()->GetTimeSeconds()<PendingAssistExpiresAt && Npc->Agent->HasObservationEvent(EvidenceId)));
 }
 
+/// @brief 还没开打且命中记录仍有效时可以加入协战；Requester 为空时表示规则自动加入，主人喊过停手的对手不再自动加入
 bool UDeliveryCompanionComponent::CanJoinAssist(APlayerState* Requester) const
 {
     return !bAssistCommitted && IsAssistEvidenceCurrent(AssistTarget,AssistEvidenceId) &&
         (Requester?CanCommand(Requester):StoppedAssistTarget.Get()!=AssistTarget);
 }
 
+/// @brief 已经在协战、请求人是当前主人且命中记录仍有效时可以收手
 bool UDeliveryCompanionComponent::CanStopAssist(APlayerState* Requester) const
 {
     return bAssistCommitted && CanCommand(Requester) && IsAssistEvidenceCurrent(AssistTarget,AssistEvidenceId);
 }
 
+/// @brief 编号对得上且 CanJoinAssist 通过后标记开打，AssistRevision 加一并立即同步
 bool UDeliveryCompanionComponent::JoinAssist(APlayerState* Requester,int32 ExpectedAssistRevision)
 {
     if (ExpectedAssistRevision!=AssistRevision || !CanJoinAssist(Requester)) return false;
@@ -169,6 +181,7 @@ bool UDeliveryCompanionComponent::JoinAssist(APlayerState* Requester,int32 Expec
     return true;
 }
 
+/// @brief 编号对得上且 CanStopAssist 通过后记下这个对手，再调用 CancelAssist 停止协战
 bool UDeliveryCompanionComponent::StopAssist(APlayerState* Requester,int32 ExpectedAssistRevision)
 {
     if (ExpectedAssistRevision!=AssistRevision || !CanStopAssist(Requester)) return false;
@@ -178,16 +191,19 @@ bool UDeliveryCompanionComponent::StopAssist(APlayerState* Requester,int32 Expec
     return true;
 }
 
+/// @brief 主人开口说话时暂停当前这一轮出手，协战安排保留
 void UDeliveryCompanionComponent::PauseAssistForOwnerConversation(APlayerState* Requester)
 {
     if (CanStopAssist(Requester)) PauseAssistRound(TEXT("OwnerSpeaking"));
 }
 
+/// @brief 协战的接近距离，限制在 200～1200 cm
 float UDeliveryCompanionComponent::GetAssistRange() const
 {
     return FMath::Clamp(GetTuning().AssistRange,200.f,1200.f);
 }
 
+/// @brief 只检查当前真实命中建立的护主目标，模型和访客不能写入这个版本
 bool UDeliveryCompanionComponent::CanExecuteAssist(AActor* Target,int32 RuleRevision) const
 {
     const auto* Npc=GetCompanion();
@@ -201,6 +217,7 @@ bool UDeliveryCompanionComponent::CanExecuteAssist(AActor* Target,int32 RuleRevi
         FVector::DistSquared(OwnerPawn->GetActorLocation(),Target->GetActorLocation())<=FMath::Square(Range);
 }
 
+/// @brief 主人真实打中别人或被打中时由 ASC 事件调用，记下对手和命中编号，允许时直接加入协战
 void UDeliveryCompanionComponent::OnOwnerConfirmedHit(FGameplayTag EventTag,const FGameplayEventData* EventData)
 {
     auto* Npc=GetCompanion();
@@ -285,6 +302,7 @@ void UDeliveryCompanionComponent::OnOwnerConfirmedHit(FGameplayTag EventTag,cons
     Npc->ForceNetUpdate();
 }
 
+/// @brief 结束协战并清空护主目标；主人给了新安排时把对手记作喊过停手
 void UDeliveryCompanionComponent::CancelAssist(FName Reason)
 {
     auto* Npc=GetCompanion();
@@ -313,6 +331,7 @@ void UDeliveryCompanionComponent::CancelAssist(FName Reason)
     if (bHadAssist && IsValid(Npc)) Npc->ForceNetUpdate();
 }
 
+/// @brief 只结束当前这一轮由规则发起的出手动作，bAssistCommitted 保持不变
 void UDeliveryCompanionComponent::PauseAssistRound(FName Reason)
 {
     auto* Npc=GetCompanion();
@@ -323,11 +342,13 @@ void UDeliveryCompanionComponent::PauseAssistRound(FName Reason)
         Npc->Agent->TryFinishAction(State.ActionId,EDeliveryNpcActionStatus::Cancelled,Reason);
 }
 
+/// @brief 护主目标被销毁时调用 CancelAssist 结束协战
 void UDeliveryCompanionComponent::OnAssistTargetDestroyed(AActor* DestroyedActor)
 {
     if (DestroyedActor==AssistTarget) CancelAssist(TEXT("AssistTargetLost"));
 }
 
+/// @brief 服务器每帧检查护主目标和命中记录是否仍有效，失效就结束协战，有效就保持出手动作
 void UDeliveryCompanionComponent::UpdateAssist()
 {
     auto* Npc=GetCompanion();
