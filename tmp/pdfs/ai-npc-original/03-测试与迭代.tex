@@ -1,0 +1,464 @@
+\documentclass[11pt]{article}
+\input{公共导言区}
+\begin{document}
+\doctitle{测试与迭代}{分层测试、观测工具与四个迭代案例}{3 / 3}
+
+大模型的输出存在不确定性，相同的输入可能产生不同的台词和动作。本文先说明测试方法和观测工具，再通过四个案例说明问题的定位和修改过程。
+
+\section{术语}
+
+{\small\begin{tabularx}{\textwidth}{@{}l L@{}}
+\toprule
+\term{PIE}{Play In Editor，在 UE 编辑器内运行游戏。双人 PIE 指在同一台机器上同时运行主机和客户端两个窗口。}
+\term{自动化测试}{由程序自动执行并检查结果的测试，不需要人工操作。UE 侧使用引擎自带的 Automation 框架，后端使用 Python unittest。}
+\term{回归}{修改代码后重新运行已有测试，确认原有功能没有被破坏。}
+\term{候选}{服务器在每次请求中提供给模型的可选动作列表。}
+\term{固定场景对照}{用同一份场景脚本（人物、站位、玩家台词）调用真实模型，比较修改前后的输出。}
+\term{封存验收集}{一组不参与训练、题目和标准答案固定不变的测试题，只用于评分。}
+\term{LoRA}{一种微调方法：只训练少量新增参数，不修改原模型的权重。}
+\term{量化（Q8、Q4）}{降低模型权重的数值精度，以减小文件体积和显存占用。Q4 比 Q8 更小，精度略低。}
+\term{教师模型}{能力更强的大模型，用来审核和纠正训练数据中的答案。}
+\term{中位数、P95}{把多次测量结果从小到大排序，中位数是位于正中间的值，P95 是 95\% 的结果不超过的值。}
+\term{帧时间}{渲染一帧画面所用的时间。帧时间越长，画面越不流畅。}
+\term{TTS、首块延迟}{TTS 是文字转语音。首块延迟是从开始合成到收到第一段音频的时间。}
+\term{token}{模型处理文字的最小单位。输入和输出的长度按 token 计算。}
+\bottomrule
+\end{tabularx}}
+
+\section{测试方法}
+
+\subsection{四层测试}
+
+测试分为四层。下面两层运行时间短，结果确定；上面两层运行时间长，更接近实际游玩。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  \foreach \i/\w/\t/\d/\c in {
+    0/15.2/后端单元测试/{Python unittest：协议校验、排队调度、句子解析、提示词拼接。不运行游戏，不调用模型}/data,
+    1/12.6/UE 自动化测试/{Delivery.AI.*：感知、交谈、动作、战斗、跟班。不调用模型}/game,
+    2/10.0/固定场景模型对照/{调用真实模型，使用固定场景脚本，比较修改前后的输出}/model,
+    3/7.4/实机试玩/{单人与双人联机，由人工检查台词、动作和等待时间}/client}
+  { \node[box=\c,minimum width=\w cm,minimum height=1.0cm,align=center] at (0,\i*1.15)
+      {\textbf{\t}\\[-1pt]{\scriptsize \d}}; }
+  \draw[flow] (8.1,-0.3) -- node[lab,fill=none,rotate=90,above=1pt] {运行更慢，更接近实际游玩} (8.1,3.8);
+\end{tikzpicture}
+\caption{测试分层}
+\end{figure}
+\explain{下两层不调用模型，可在每次修改后自动运行。上两层调用真实模型，用于检查模型的选择和实际体验。}
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}l L L@{}}
+\toprule
+\textbf{层} & \textbf{可以确认的内容} & \textbf{不能确认的内容} \\
+\midrule
+后端单元测试 & 非法动作被拒绝；玩家消息的优先级高于闲聊；请求取消后不返回旧结果。 & 模型输出的质量。 \\
+UE 自动化测试 & 被墙遮挡的角色听不到发言；倒地的角色不能出拳；旧回复不会启动新动作。 & 动画的视觉效果和操作手感。 \\
+固定场景对照 & 修改提示词后，模型在同一场景脚本下的选择是否改变。 & 每个场景只运行少量样本，结果不能当作概率。 \\
+实机试玩 & 完整链路的实际表现，包括语音和多人联机。 & 问题难以复现，需要结合日志定位。 \\
+\bottomrule
+\end{tabularx}
+\caption{每一层的作用范围}
+\end{table}
+
+
+\subsection{自动化测试的覆盖范围}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  \node[gtitle=game,anchor=west] at (-0.05,0.58) {UE 自动化测试（C++，按测试文件分组）};
+  \foreach \i/\t/\d in {
+    0/交谈与上下文/{对象选择、遮挡\\记忆边界、玩家插话},
+    1/决策与校验/{请求编码、建议校验\\行为表、人物表},
+    2/战斗与移动/{追打、靠近出拳\\站位避让、越障},
+    3/语音与表现/{流式音频、编解码\\身体动画、注视},
+    4/跟班/{跟随、跑腿、协战\\包裹与物品交接}}
+  { \node[solid,minimum width=3.0cm,font=\scriptsize\bfseries] (g\i) at (\i*3.25+1.5,0) {\t};
+    \node[box,minimum width=3.0cm,minimum height=1.25cm,font=\scriptsize,inner xsep=1pt,below=0pt of g\i] {\d}; }
+  \node[gtitle=data,anchor=west] at (-0.05,-2.22) {后端单元测试（Python，按测试文件分组）};
+  \foreach \i/\t/\d in {
+    0/协议与校验/{请求校验、动作校验\\同伴与家居上下文},
+    1/调度与取消/{玩家优先、队列容量\\取消后进程复用},
+    2/流式与句子/{逐句解析、首句保留\\音频分块},
+    3/语音合成/{合成队列、时长上限\\音色配置},
+    4/小模型与数据/{候选映射、超时回退\\人物与关系配置}}
+  { \node[solid=data,minimum width=3.0cm,font=\scriptsize\bfseries] (h\i) at (\i*3.25+1.5,-2.8) {\t};
+    \node[box=data,minimum width=3.0cm,minimum height=1.25cm,font=\scriptsize,inner xsep=1pt,below=0pt of h\i] {\d}; }
+\end{tikzpicture}
+\caption{两层自动化测试的覆盖范围}
+\end{figure}
+\explain{UE 自动化测试位于 AI 目录，共近 30 个测试文件，另有使用 PIE 的整链路测试。后端单元测试在小模型接入时的一次全量运行为 412 项。两层都不调用真实模型。}
+
+
+\subsection{验收级别}
+
+一项功能按以下五个级别依次验证。每个级别的结论只适用于该级别检查过的内容。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  \foreach \i/\t/\d/\c in {
+    0/编译通过/{代码可以构建}/client,
+    1/自动化通过/{原有规则没有被破坏}/data,
+    2/后台模型对照/{固定场景下模型的选择}/model,
+    3/单人实机/{实际按键操作后的反馈}/game,
+    4/双人实机/{主机和客户端的表现一致}/game}
+  { \node[solid=\c,minimum width=2.9cm,minimum height=0.7cm,anchor=south west] (s\i) at (\i*3.2,\i*0.42) {\t};
+    \node[font=\scriptsize,text=sub,anchor=north] at ([yshift=-1pt]s\i.south) {\d}; }
+  \foreach \a/\b in {s0/s1,s1/s2,s2/s3,s3/s4} \draw[flow] (\a.east) -- ++(0.15,0) |- (\b.west);
+\end{tikzpicture}
+\caption{验收的五个级别}
+\end{figure}
+\explain{五级验收依次进行。涉及玩家操作的功能，需在游戏窗口中实际按键和点击后才记为通过；直接调用 RPC、修改运行状态或只检查日志不计入实机验收。交付说明中列出已验证和未验证的范围。}
+
+
+\section{迭代流程}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  \foreach \a/\n/\t/\c in {90/a/试玩反馈/client,30/b/根据日志定位/game,-30/c/修改/game,-90/d/离线对照/model,-150/e/自动化回归/data,150/f/构建并交付/game}
+    \node[solid=\c,minimum width=2.5cm] (\n) at (\a:3.0cm and 2.0cm) {\t};
+  \foreach \x/\y in {a/b,b/c,c/d,d/e,e/f,f/a} \draw[flow] (\x) to[bend left=14] (\y);
+  \node[font=\scriptsize,text=sub,align=center] at (0,0) {每轮记录\\原因、改动、证据\\和未验证的范围};
+  \node[font=\scriptsize,text=sub,align=left,anchor=west] at (4.6,1.0) {用请求编号关联\\游戏和后端的日志};
+  \node[font=\scriptsize,text=sub,align=left,anchor=west] at (4.6,-1.0) {提示词、人物配置\\或 C++ 代码};
+  \node[font=\scriptsize,text=sub,align=right,anchor=east] at (-4.6,-1.0) {先运行不调用模型的\\两层测试};
+  \node[font=\scriptsize,text=sub,align=right,anchor=east] at (-4.6,1.0) {由人工试玩\\通过后记为完成};
+\end{tikzpicture}
+\caption{一轮迭代}
+\end{figure}
+\explain{一轮迭代包含六个步骤，从试玩反馈开始，到交付试玩结束。每轮记录修改原因、改动内容、验证结果和未验证的范围。}
+
+
+\section{观测工具}
+
+框架为每次发言、请求、动作和回复分配编号，并在各阶段记录时间。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  \foreach \y/\n/\c in {0/游戏服务器/game,-1.15/后端调度/model,-2.3/模型/model,-3.45/语音合成/client}
+  { \node[solid=\c,minimum width=2.2cm,minimum height=0.7cm,font=\scriptsize\bfseries] at (0,\y) {\n};
+    \draw[\c!40,line width=0.5pt] (1.2,\y) -- (15.2,\y); }
+  \newcommand{\pb}[4]{\node[box=#4,font=\scriptsize\ttfamily,inner xsep=3pt,inner ysep=3pt,fill=white] at (#1,#2) {#3};}
+  \pb{2.6}{0}{http\_start}{game} \pb{10.9}{0}{approved}{game} \pb{14.1}{0}{model\_done}{game}
+  \pb{3.5}{-1.15}{worker\_started}{model} \pb{6.4}{-1.15}{model\_slot\_acquired}{model} \pb{13.9}{-1.15}{reply\_finished}{model}
+  \pb{7.6}{-2.3}{首段文字}{model} \pb{9.9}{-2.3}{首句完整}{model} \pb{12.6}{-2.3}{model\_completed}{model}
+  \pb{10.9}{-3.45}{tts\_queue\_ms}{client} \pb{13.0}{-3.45}{tts\_ms}{client}
+  \node[font=\tiny,text=sub] at (3.5,-1.62) {scheduler\_queue\_ms};
+  \node[font=\tiny,text=sub] at (6.4,-1.62) {slot\_wait\_ms};
+  \node[font=\tiny,text=sub] at (12.6,-2.77) {输入 / 缓存 / 输出 token};
+\end{tikzpicture}
+\caption{各环节的计时埋点}
+\end{figure}
+\explain{每个方框是一个计时点，游戏服务器、后端调度、模型、语音合成分别记录。同一次发言的计时点用同一个发言编号关联。每台机器只计算本机的时长。}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[x=2.75cm]
+  \draw[line width=1.2pt,sub] (0,0) -- (5.55,0);
+  \fill[game!20] (0,-0.13) rectangle (0.09,0.13);
+  \fill[model!35] (0.09,-0.13) rectangle (1.98,0.13);
+  \fill[model!18] (1.98,-0.13) rectangle (2.80,0.13);
+  \fill[game!20] (2.80,-0.13) rectangle (3.15,0.13);
+  \fill[client!25] (3.15,-0.13) rectangle (5.22,0.13);
+  \foreach \x/\l/\t in {0/0/发出请求,1.98/1.98/首段文字,2.80/2.80/首句完整,3.15/3.15/动作批准,5.22/5.22/首块声音}
+  { \draw[sub,line width=0.8pt] (\x,-0.22) -- (\x,0.22);
+    \node[font=\scriptsize,text=sub,below] at (\x,-0.22) {\l}; }
+  \foreach \x/\t in {0/发出请求,1.98/首段文字,5.22/首块声音} \node[font=\scriptsize,above] at (\x,0.22) {\t};
+  \node[font=\scriptsize,above] (fs) at (2.55,0.62) {首句完整}; \draw[sub,line width=0.4pt] (fs.south) -- (2.80,0.24);
+  \node[font=\scriptsize,above] (ap) at (3.45,0.62) {动作批准}; \draw[sub,line width=0.4pt] (ap.south) -- (3.15,0.24);
+  \node[font=\scriptsize,text=model] at (1.03,-0.9) {等待模型开始输出};
+  \draw[model,line width=0.5pt] (1.03,-0.72) -- (1.03,-0.16);
+  \node[font=\scriptsize,text=client!70!black] at (4.18,-0.9) {语音排队与合成};
+  \draw[client,line width=0.5pt] (4.18,-0.72) -- (4.18,-0.16);
+\end{tikzpicture}
+\caption{一次玩家交谈的阶段计时（单位：秒，单次试玩记录）}
+\end{figure}
+\explain{测量对象：一次玩家对 NPC 的发言。结果：首段文字 1.98 秒，首句完整 2.80 秒，动作批准 3.15 秒，首块声音 5.22 秒；排队时间为零。这是单次记录。}
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}l L@{}}
+\toprule
+\textbf{工具} & \textbf{用途} \\
+\midrule
+统一编号 & \code{EventId}、\code{RequestId}、\code{ActionId}、\code{ReplyId}。同一次发言在界面、服务器和后端的日志通过编号关联。 \\
+AI 检视面板 & 游戏内面板（\code{UDeliveryAiInspectorWidget}）。显示最近一次决策的内容：NPC 的观察、候选列表、模型的建议、服务器的校验结果、耗时和 token 数。 \\
+对话日志 & 后端保存每次请求的人物配置、模型输入和提示词版本，用于事后核对模型当时收到的输入。 \\
+试玩审计脚本 & 把模型的建议与 UE 服务器的实际执行结果逐条对照，找出台词承诺了动作但动作没有执行的情况。 \\
+\bottomrule
+\end{tabularx}
+\caption{观测工具}
+\end{table}
+
+
+\section{案例一：到达距离与出拳距离不一致}
+
+\casefacts{玩家挑拨后，NPC 选择走向对方，到达后只播放台词，没有出拳。}
+{“走近”的到达判定距离约 208 厘米（接受距离 140 加双方碰撞半径各 34），出拳要求距离不超过 160 厘米。出拳候选只在距离满足时生成，因此角色到达后，候选列表中不包含出拳。}
+{在出拳动作中加入靠近步骤。模型选择是否出拳，行为树负责把角色移动到出拳距离内。}
+{修改后的实机试玩中，NPC 选择出拳后，能够走近目标并命中。}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[x=0.05cm]
+  \draw[line width=1pt,sub] (0,0) -- (250,0);
+  \node[solid,circle,minimum size=0.8cm,inner sep=0pt] (t) at (0,0.62) {目标};
+  \node[solid=model,circle,minimum size=0.8cm,inner sep=0pt] (n) at (208,0.62) {NPC};
+  \draw[<->,line width=0.7pt,data] (0,-0.35) -- node[lab,below=1pt,text=data,fill=none] {出拳要求：不超过 160 厘米} (160,-0.35);
+  \draw[<->,line width=0.7pt,model] (0,-1.15) -- node[lab,below=1pt,text=model,fill=none] {到达判定：距离约 208 厘米时停止移动} (208,-1.15);
+  \fill[warn!25] (160,-0.14) rectangle (208,0.14);
+  \node[font=\scriptsize,text=warn!80!black] at (184,0.36) {相差 48 厘米};
+\end{tikzpicture}
+\caption{到达距离与出拳距离不一致}
+\end{figure}
+
+
+\begin{note}[排查顺序]
+模型没有选择某个动作时，先检查候选列表中是否包含该动作，再检查提示词。
+\end{note}
+
+\section{案例二：模型不选择攻击}
+
+\casefacts{一段实机会话中，17 次请求都包含 \code{Fight} 候选，模型选择 \code{Fight} 的次数为 0。两个 NPC 的回复都是向玩家核实传话内容。}
+{人物设定只描述了性格，没有描述人物的动机。对方否认转述的内容后，模型判断冲突已经结束。}
+{在人物设定中加入动机和动作示例，同时加入停止攻击的条件。没有增加按挑拨次数触发攻击的规则。}
+{固定场景对照中：直接挑衅的场景，模型在第一轮选择攻击；改变措辞挑拨的场景，模型在第三轮选择攻击；道歉和问候的场景，模型没有选择攻击。}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.6cm]
+  \node[box=client,text width=3.2cm] (a) {\textbf{第一版}\\{\scriptsize 人物设定只有“脾气急”的描述。对方否认转述内容后，冲突结束}};
+  \node[box,text width=3.2cm,right=of a] (b) {\textbf{加入动机}\\{\scriptsize 大壮看重面子，翠花反感他说教。不相信转述内容时，对方当面的态度仍可能引发冲突}};
+  \node[box,text width=3.2cm,right=of b] (c) {\textbf{加入动作示例}\\{\scriptsize 示范态度如何对应到动作：当面受到嘲讽时选择 Fight}};
+  \node[box=data,text width=3.2cm,right=of c] (d) {\textbf{加入停止条件}\\{\scriptsize 普通问候时不攻击；对方道歉后可以停止；受伤后可以逃跑}};
+  \foreach \x/\y in {a/b,b/c,c/d} \draw[flow] (\x) -- (\y);
+\end{tikzpicture}
+\caption{人物设定的三次调整}
+\end{figure}
+
+
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.45cm]
+  \node[box=data,text width=2.7cm] (a) {场景脚本\\{\scriptsize 人物、站位、玩家每轮的发言}};
+  \node[box=model,text width=2.5cm,right=of a] (b) {真实模型逐轮调用\\{\scriptsize 不运行游戏，不合成语音}};
+  \node[box,text width=2.5cm,right=of b] (c) {记录每轮的选择\\{\scriptsize 选择 Fight 后结束该场景}};
+  \node[box,text width=2.9cm,right=of c] (d) {生成报告\\{\scriptsize 附带当时的提示词和人物设定}};
+  \node[solid,right=of d] (e) {版本\\对照};
+  \foreach \x/\y in {a/b,b/c,c/d,d/e} \draw[flow] (\x) -- (\y);
+\end{tikzpicture}
+\caption{固定场景对照工具}
+\end{figure}
+\explain{工具按场景脚本逐轮调用真实模型，不进入游戏，不合成声音。本轮共 16 份报告、58 次模型调用，分为基线和三个候选版本。每个版本的每个场景运行一次。}
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}l L@{}}
+\toprule
+\textbf{固定场景} & \textbf{最终版本的结果（每个场景运行一次）} \\
+\midrule
+直接点名挑衅 & 模型在第一轮选择 \code{Fight}。 \\
+改变措辞挑拨 & NPC 先否认转述的内容，之后因对方的语气继续争吵，模型在第三轮选择 \code{Fight}。 \\
+道歉 & 模型没有选择攻击，之后选择让路或等待。 \\
+普通问候 & NPC 正常回应，模型没有选择攻击（沿用上一版本的结果，未重新运行）。 \\
+\bottomrule
+\end{tabularx}
+\caption{固定场景对照}
+\end{table}
+
+
+\section{案例三：追打决策的小模型}
+
+\casefacts{追打过程中每隔数秒需要一次判断（继续、逃跑或停止）。大模型单次响应需要数秒，不能满足这个频率。}
+{大模型的响应时间主要消耗在模型开始输出之前的阶段，调度优化不能把它缩短到 1 秒以内。}
+{微调一个本地小模型（Qwen3-1.7B），只负责追打中的这一类判断。其余请求仍由大模型处理。}
+{封存验收集 40 题中，Q4 量化版答对 38 题；单独运行时耗时中位数约 0.12 秒。与游戏同时运行时，帧时间增幅超过验收上限，当前标记为试玩阶段。}
+
+\subsection{训练}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.42cm]
+  \node[box=data] (a) {编写\\独立故事};
+  \node[box=model,right=of a] (b) {教师模型\\逐条审核};
+  \node[box,right=of b] (c) {LoRA 微调\\{\scriptsize Qwen3-1.7B}};
+  \node[box,right=of c] (d) {量化导出\\{\scriptsize Q8 / Q4}};
+  \node[box=data,right=of d] (e) {封存 40 题\\验收};
+  \node[solid,right=of e] (f) {接入试玩\\{\scriptsize\mdseries 超时回退}};
+  \foreach \x/\y in {a/b,b/c,c/d,d/e,e/f} \draw[flow] (\x) -- (\y);
+  \draw[flow,dashed] (e.south) -- ++(0,-0.6) -| node[lab,pos=0.25] {未达标：分析错误类型，补充新故事（不查看验收题内容）} (a.south);
+\end{tikzpicture}
+\caption{小模型的训练流程}
+\end{figure}
+\explain{训练数据由独立编写的故事组成，经教师模型逐条审核。40 道验收题不进入训练集。同一个故事的不同版本只放在同一个集合中。}
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}l L L L@{}}
+\toprule
+ & \textbf{第一轮} & \textbf{第二轮} & \textbf{第三轮} \\
+\midrule
+方法 & LoRA，rank 16，alpha 32 & 从第一轮继续 & 从第二轮继续 \\
+训练数据 & 128 条 & 160 条 & 224 条 \\
+学习率 & 0.0002 & 0.00005 & 0.00002 \\
+参数更新 & 48 步 & 64 步 & 56 步 \\
+训练用时 & 约 115 秒 & 约 155 秒 & 约 178 秒 \\
+封存验收（40 题不变） & 31（77.5\%） & 35（87.5\%） & Q8：40；Q4：38 \\
+\bottomrule
+\end{tabularx}
+\caption{训练配置（RTX 5070 Ti Laptop 12 GB，基座 Qwen3-1.7B）}
+\end{table}
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}l L@{}}
+\toprule
+\textbf{轮次} & \textbf{发现与改动} \\
+\midrule
+第一轮 & 训练故事中，受击三次的样本几乎都标注为逃跑，模型可能只依据受击次数作判断。 \\
+第二轮 & 补充了和解、新旧冲突、他人转述等 32 个故事。剩余的 5 个错误属于同一类：局面已经改变，模型仍延续原来的动作。 \\
+第三轮 & 发现训练输入与游戏实际发送的文字格式不一致，并修正了一句有误导性的战况说明。统一格式后重新训练。 \\
+\bottomrule
+\end{tabularx}
+\caption{每轮发现的问题与修改}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[y=0.042cm]
+  \draw[sub] (0,0) -- (13.6,0);
+  \foreach \v in {0,50,100} { \draw[sub!35,dashed] (0,\v) -- (13.6,\v); \node[font=\tiny,text=sub,anchor=east] at (-0.05,\v) {\v\%}; }
+  \draw[warn,line width=0.8pt,dashed] (3.3,90) -- (13.6,90);
+  \node[font=\scriptsize,text=warn!85!black,anchor=west] at (13.65,90) {验收线 90\%};
+  \foreach \x/\v/\l/\s/\c in {1.3/27.8/首次尝试/{5 / 18}/client,4.6/77.5/第一轮/{31 / 40}/game,7.0/87.5/第二轮/{35 / 40}/game,9.4/100/第三轮 Q8/{40 / 40}/data,11.8/95/第三轮 Q4/{38 / 40}/data}
+  { \fill[\c!70] (\x-0.6,0) rectangle (\x+0.6,\v);
+    \node[font=\scriptsize\bfseries,above] at (\x,\v) {\s};
+    \node[font=\scriptsize,below] at (\x,-2) {\l}; }
+  \draw[sub,dashed] (2.95,-14) -- (2.95,112);
+  \node[font=\scriptsize,text=sub,align=center] at (1.3,-23) {台词和动作\\都由小模型生成};
+  \node[font=\scriptsize,text=sub,align=center] at (8.2,-23) {任务缩小为三选一：继续追打、逃跑、停止};
+\end{tikzpicture}
+\caption{动作选择的合理率}
+\end{figure}
+\explain{指标是动作选择的合理率。首次尝试的任务包含台词和动作，18 个场景中合理 5 个。之后任务缩小为只选动作，用 40 道封存题验收：三轮分别为 31、35、40（Q8 量化），Q4 量化版为 38。三轮使用同一组题。}
+
+
+\subsection{与游戏、语音共用显卡的部署测试}
+
+小模型实际运行时，与游戏渲染、两个人物的语音合成共用一块 12 GB 显卡。下图列出部署阶段测试过的方案和结果。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  \foreach \i/\t/\r/\c/\m in {
+    0/全部放在 GPU（99 层）/{语音合成超时，测试提前结束}/warn/未采用,
+    1/GPU 14 层/{语音合成耗时是声音长度的 2.5 倍，慢于播放速度}/warn/未采用,
+    2/改用 CPU 多线程/{决策按时返回，但帧时间 P95 增加约 25\%}/warn/未采用,
+    3/模型只输出动作名（语法约束）/{输出由 10–13 个 token 降为 2–3 个；中位耗时由 428 降为 206 毫秒}/data/保留,
+    4/每个人物一份提示缓存/{两个人物的缓存不再互相覆盖；中位耗时由 318 降为 242 毫秒}/data/保留,
+    5/语音：共用解码器，词嵌入按句上传/{两种声音的输出逐字节不变，共节省约 1 GB 显存}/data/保留,
+    6/给游戏和模型分配不同的 CPU 核心/{帧时间 P95 仍增加约 18\%}/warn/未采用,
+    7/模型和语音分时使用 GPU/{40 题中 16 题超时}/warn/未采用}
+  { \node[box=\c,minimum width=5.0cm,minimum height=0.62cm,anchor=west,font=\scriptsize,align=left,text width=4.6cm,inner ysep=2pt] at (0,-\i*0.72) {\t};
+    \node[box=\c,minimum width=9.15cm,minimum height=0.62cm,anchor=west,font=\scriptsize,align=left,text width=8.8cm,inner xsep=5pt,inner ysep=2pt] at (5.15,-\i*0.72) {\r};
+    \node[solid=\c,minimum width=1.25cm,minimum height=0.62cm,anchor=west,font=\scriptsize\bfseries,inner xsep=2pt] at (14.45,-\i*0.72) {\m}; }
+  \node[solid,minimum width=15.7cm,anchor=west,font=\scriptsize\bfseries] at (0,-6.0) {当前试玩配置：Q4 量化 · 18 层在 GPU、输出层在 CPU · 单线程 · 每人 4096 token 缓存 · 超时 1.5 秒后转给大模型};
+\end{tikzpicture}
+\caption{部署方案的取舍}
+\end{figure}
+\explain{测试条件：双人游戏和两种人物语音同时运行，显卡 12 GB。指标：决策是否在 1.5 秒内返回、语音合成耗时与声音长度之比、帧时间 P95。绿色行已采用，橙色行未采用。}
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}L L l@{}}
+\toprule
+\textbf{事先约定的验收标准} & \textbf{实际结果} & \textbf{结论} \\
+\midrule
+40 个独立情境中，合理动作不少于 90\%。 & Q4 量化版 38 / 40（95\%）。 & 达标 \\
+非法目标、取消后恢复旧攻击的次数为零。 & 40 题目标全部合法；取消与恢复探针通过。 & 达标 \\
+决策中位耗时比大模型至少低 30\%。 & 一次双人对照中，由 1.69 秒降为 1.08 秒（降低 36\%）。 & 达标 \\
+新增处理造成的帧时间 P95 增幅不超过 10\%。 & 各次对照的增幅为 12\% 到 25\%。 & 未达标 \\
+\bottomrule
+\end{tabularx}
+\caption{小模型的验收标准与结果}
+\end{table}
+
+
+\begin{note}[当前状态]
+帧时间一项未达标。配置中的发布阶段标记为“试玩”，性能验收标记为未通过。验收标准和测量记录保留。
+\end{note}
+
+\section{案例四：时延测量}
+
+各项时延技术的做法见第 1 篇“时延架构”。本节列出测量结果。每项单独测量，修改前后使用相同条件。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[x=0.0125cm]
+  \foreach \i/\n/\a/\b/\ta/\tb in {
+    0/语音首块延迟（男声）/772/322/{772 毫秒}/{322 毫秒},
+    1/语音首块延迟（女声）/710/304/{710 毫秒}/{304 毫秒},
+    2/单句音频的网络体积/800/81/{117 KB}/{12 KB},
+    3/普通交谈的上下文体积/800/620/{100\%}/{约 74\%–80\%}}
+  { \node[font=\scriptsize,anchor=east] at (-12,-\i*0.86) {\n};
+    \fill[client!55] (0,-\i*0.86+0.2) rectangle (\a,-\i*0.86+0.02);
+    \fill[data!75] (0,-\i*0.86-0.02) rectangle (\b,-\i*0.86-0.2);
+    \node[font=\tiny,anchor=west,text=sub] at (\a+6,-\i*0.86+0.11) {\ta};
+    \node[font=\tiny,anchor=west,text=data] at (\b+6,-\i*0.86-0.11) {\tb}; }
+  \fill[client!55] (0,-3.39) rectangle (40,-3.21); \node[font=\scriptsize,anchor=west] at (46,-3.30) {优化前};
+  \fill[data!75] (180,-3.39) rectangle (220,-3.21); \node[font=\scriptsize,anchor=west] at (226,-3.30) {优化后};
+\end{tikzpicture}
+\caption{几项已测量的优化（各项单位不同，条长仅在同一行内比较）}
+\end{figure}
+\explain{测量条件：语音首块延迟在未运行游戏时测量；音频体积是同一句声音压缩前后的字节数；上下文体积是普通交谈样例的 UTF-8 字节数。}
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}L l l l@{}}
+\toprule
+\textbf{调度器检查项（真实调度器 + 模拟模型调用，各测 3 次）} & \textbf{先进先出} & \textbf{原实现} & \textbf{修改后} \\
+\midrule
+队列被闲聊填满后，玩家消息被拒绝 & 3 / 3 & 3 / 3 & 0 / 3 \\
+玩家交谈期间启动了新的闲聊请求 & 3 / 3 & 3 / 3 & 0 / 3 \\
+取消排队中的请求后，队列容量立即释放 & 0 / 3 & 0 / 3 & 3 / 3 \\
+\bottomrule
+\end{tabularx}
+\caption{排队修复的前后对照}
+\end{table}
+
+
+\section{问题记录节选}
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}L L L@{}}
+\toprule
+\textbf{现象} & \textbf{原因} & \textbf{修复} \\
+\midrule
+拳头未接触目标时也判定命中。 & 命中判定只检查双方中心点的距离。 & 改为沿拳头骨骼的实际轨迹检测接触。 \\
+两个 NPC 持续互相接话，并重复已说过的内容。 & 双方把对方的台词当作新的发言。 & 自动接话最多三轮；记录 NPC 自身说过的台词。 \\
+NPC 的台词称邻居已离开，而邻居仍在旁边。 & 听觉事件到期被记录为看不到该角色。 & 视觉事件和听觉事件分开处理。 \\
+\bottomrule
+\end{tabularx}
+\caption{问题记录}
+\end{table}
+
+
+\need{2.3cm}
+\plainsection{当前限制}
+
+{\small
+\begin{itemize}\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}
+  \item \textbf{响应延迟。} 从玩家发言结束到 NPC 开始说话通常需要数秒，时间主要消耗在模型开始输出之前。
+  \item \textbf{样本量。} 固定场景对照和小模型验收的样本各为几十条；多人联机只进行过少量双人试玩。
+  \item \textbf{小模型的性能。} 与游戏、语音合成同时运行时，帧时间增幅超过 10\% 的验收上限。
+\end{itemize}
+}
+
+\end{document}

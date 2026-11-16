@@ -1,0 +1,123 @@
+\documentclass[11pt]{article}
+\input{公共导言区}
+\begin{document}
+\doctitle{关键技术和参考资料}
+
+主人请二狗去拿东西，或者请正在追打的翠花停手。模型得先听懂话，再从游戏给出的做法里选一项。游戏负责让角色动起来，并记录事情最后办成了没有。
+
+\plainsection{模型决策与游戏执行}
+
+跟随、搬运和追打会持续一段时间，途中也可能被玩家打断。Delivery 沿用 UE 行为树推进这些动作，由同伴组件保存长期安排，出拳和物品交接复用 GAS。导航、避让和受击恢复在游戏里完成，角色遇到障碍时可以立即调整。
+
+以二狗取件为例，服务器先根据现场列出可取的货物和目的地，模型结合人物设定与玩家的话决定要不要接下委托。游戏再检查权限和包裹状态。只有交接发生后，订单才会推进，二狗也会在下一轮知道取到了什么。
+
+这套分工借鉴了 PUBG Ally 对持续安排和即时执行的区分。二狗可以暂时去拿货，完成后再回到原先的跟随安排。Voyager 把执行失败交回模型的做法也提供了参考。例如取件点被堵后，Delivery 会把受阻原因写回现场记录，供模型结合当前候选决定接下来怎么办。
+
+{\small\href{https://arxiv.org/html/2609.29837v1#S3}{PUBG Ally，第 3 节：事件调度与实时控制}\quad
+\href{https://github.com/MineDojo/Voyager}{Voyager：执行反馈与迭代}\quad
+\href{https://dev.epicgames.com/documentation/en-us/unreal-engine/lyra-sample-game-interaction-system-in-unreal-engine}{Epic：Lyra 交互系统}}
+
+\plainsection{现场信息与异步回复}
+
+模型还在想的时候，别人可能已经拿走了二狗要找的东西。参考 AI Town 的异步编号，Delivery 给每次请求、动作和台词编号。收到回复时，游戏可以认出这是哪一轮，再检查东西还在不在。
+
+网关负责请求的提交与取消，角色组件维护执行状态，表现组件按事件播放声音和字幕。这种分工参考了 Convai SDK 的连接与通知接口，Delivery 沿用项目自己的 UE 组件和界面。
+
+{\small\href{https://github.com/a16z-infra/ai-town/blob/1b2f7d8b824c7bc679017a091d9d45ba3dc3029e/ARCHITECTURE.md}{AI Town 架构说明（固定版本）}\quad
+\href{https://github.com/Mantella-Software/Mantella}{Mantella 项目}\quad
+\href{https://github.com/Conv-AI/Convai-UnrealEngine-SDK-V4}{Convai Unreal SDK}}
+
+\clearpage
+\plainsection{请求调度与对话轮次}
+
+二狗正在送件，主人先问“到哪了”，随后又说“先回来”。上一轮语音可能还在生成，附近也可能有居民在闲聊。后端先决定哪个请求先跑，游戏再决定旧安排要不要继续。
+
+后端先给请求排队。玩家发言排在还没开始的 NPC 闲聊前面，同类请求按提交时间处理。队列满时，玩家请求可以挤掉一条等待中的闲聊。已经开始的工作有单独的取消入口。
+
+轮到“到哪了”时，模型输入会把它标成待回答的发言，二狗的位置和委托进度是回答依据，之前答过的话则作为背景。模型可以回一句进度，同时沿用原来的送件安排。推理或播放期间出现的新事件会留给下一轮。
+
+主人说“先回来”后，游戏只给这一轮提供目前能做的事。如果二狗开始返回，上一轮迟到的建议也不能把他送回原来的路线。
+
+如果主人问完进度，包裹正好签收，原来的回答可能还在说“路上呢”。游戏会用最新进度重答仍有效的问题。即使玩家打断了旧台词，已经签收的包裹也照样算送到。
+
+历史的队列压力检查中，闲聊占满容量时，玩家请求从三次都被拒绝变为三次都被接收。第三篇记录了实际对话中的等待时间。
+
+
+
+\clearpage
+\plainsection{对话反馈与语音延迟}
+
+玩家提交发言后，NPC 会先朝说话者转头，并用倾听姿态或短反应音表示听见了。这段表现由游戏触发，大模型可以同时准备回答。腾讯在 GDC 分享的即时反馈思路提供了参考。它改善的是玩家等候时能看到的反馈，模型的实际耗时仍由日志记录。
+
+翠花的一次对话显示，最久的等待在第一段文字回来之前，之后语音还有自己的排队。为了少等一段，后端收到完整首句就开始合成，模型继续生成后续台词。句内音频也可以分块发送。客户端先积累一小段声音再播，用这段缓冲吸收合成与网络的短时波动。项目借鉴 Mantella 的分段计时方式，分别看首段文字、首句、首块音频和客户端起播。
+
+以前一句长台词还没合成完，下一次模型请求就可能得继续等。现在模型一答完就释放名额，剩下的声音在另一条队列里处理。玩家插话时，游戏会按回复编号停掉原来的声音和字幕。
+
+PredGen 提供了另一条路线，在玩家还没说完时生成候选回复。Delivery 目前按完整发言和有效现场状态发起请求。采用预生成还需处理玩家改口、错误猜测造成的额外计算，以及预测期间现场状态变化。
+
+{\small\href{https://gdcvault.com/play/1035448/Tencent-Games-Developer-Summit-Conversational}{GDC Vault：腾讯对话 AI 分享}\quad
+\href{https://arxiv.org/html/2506.15556v2}{PredGen 论文}}
+
+\plainsection{本地模型的适用范围}
+
+进入追打后，经常只需决定继续、退开或收手。这个范围适合单独训练和测试，所以保留大模型处理完整对话，只为居民交战续判尝试本地模型。数据迭代参考 PUBG Ally 的教师纠错思路。项目依据错题修订训练样本，用固定题集比较选择质量。
+
+1.7B Q4 在固定题里答对 38/40。和游戏一起运行时，虽然它选动作更快，游戏较慢的帧却慢了 12.04\%，超过预设的 10\% 上限。更小的 0.6B 首轮答对 29/40，几次把应该停手的情况判成继续追打。部署时要一起看判断、声音和画面。
+
+玩家或二狗打中居民后，符合条件时，居民可以先还手，模型再决定说什么、是否继续追打。这个做法缩短的是挨打后的反应时间。
+
+{\small\href{https://arxiv.org/html/2609.29837v1#S4}{PUBG Ally，第 4 节：数据与训练}\quad
+项目实验详见第 3 篇《NPC 响应延迟与性能取舍》，研究与迭代记录见 \path{Document/AIIteration.html}。}
+
+
+\clearpage
+\plainsection{卡通角色的面部动画}
+
+大壮和翠花没有现成的面部骨骼。好在眼睛的顶点可以单独编辑。项目用 UE 的 Morph Target 保存每个顶点要挪多远。比如生气时把眼睛上下边缘往中间挪，游戏再按情绪强度决定挪多少。
+
+\begin{figure}[H]
+\centering
+\begin{minipage}[t]{.48\textwidth}\centering
+\includegraphics[width=\linewidth]{../../Images/AI/npc-angry.png}\\
+\small 大壮生气时，眯眼与压眉分别控制
+\end{minipage}\hfill
+\begin{minipage}[t]{.48\textwidth}\centering
+\includegraphics[width=\linewidth]{../../Images/AI/npc-surprised.png}\\
+\small 翠花惊讶时，双眼放大并抬高
+\end{minipage}
+\caption{UE 中的 NPC 表情}
+\end{figure}
+
+眨眼的节奏借鉴了 Disney Research 对眼睑运动的分析。闭眼较快，睁开稍慢，Delivery 用可编辑曲线把这段节奏应用到豆豆眼。模型负责选择生气或惊讶等情绪，客户端在每帧混合表情、视线与眨眼。
+
+叠加表情时遇到过一个具体问题。生气和眨眼都会往中间挤压眼睛，两组位移同时生效会让上下边缘交叉。现在闭眼时逐渐减弱其他眼部变形，睁眼后再恢复。眉毛使用独立的形状，因此压低的眉毛可以保持原位。
+
+说话时，嘴的张开程度取自正在播放的声音振幅。这个做法借鉴了 Audio2Face 将声音与面部运动对齐的思路，并适应了现有角色的简化五官。
+
+{\small\href{https://la.disneyresearch.com/publication/modeling-and-animating-eye-blinks/}{Disney Research：Modeling and Animating Eye Blinks}\quad
+\href{https://github.com/NVIDIA/Audio2Face-3D-SDK/blob/main/docs/README.md}{NVIDIA：Audio2Face-3D SDK}}
+
+
+\clearpage
+\plainsection{语音交互、寻路与配置}
+
+\plainsubsection{麦克风输入}
+玩家开外放说话时，麦克风也会收到 NPC 的声音。UE 里的 WebRTC 用扬声器正在播的声音做参考，尝试从麦克风里去掉这部分回声。sherpa-onnx 在玩家电脑上把剩下的人声转成文字，停顿后提交一句。
+
+\plainsubsection{联机语音}
+早期发整句数据时，语音传输会拖住其它状态。后来按播放进度发送，使用 Opus 减少数据量，并在后台编码。客户端按照自己接收到和实际播放的句子更新字幕。玩家打断时，回复编号帮助客户端丢弃迟到的音频。
+
+\plainsubsection{导航与避障}
+二狗走向门口却一直被门框挡住时，游戏会根据移动结果选另一个站位。遇到矮障碍，还会检查身体能不能沿跳跃路线通过、落点有没有地面。通过检查才起跳，落地后继续原来的任务。
+
+\plainsubsection{数据资产}
+人物表保存身份和表现配置，行为表保存动作定义，二狗的 Data Asset 保存跟随距离和关系参数。比如修正跟随太贴身，可以调整后距和侧距。当前跟谁、正拿哪件货、是否完成委托，由服务器组件保存。
+
+\plainsubsection{调试接口}
+后端提供固定“等待”回复，便于检查协议和游戏状态流转。Jev 适配曾用于探索外部服务只选动作的做法，试玩中的模型分工见第一篇。
+
+{\small 具体实现与记录见 \path{Document/Architecture.md} 的语音输入与二狗章节，以及 \path{Document/AIIteration.html} 的多人播放、寻路恢复和模型对照。}
+
+\end{document}
+
+

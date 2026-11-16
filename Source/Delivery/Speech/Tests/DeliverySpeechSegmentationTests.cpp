@@ -1,7 +1,7 @@
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
-#include "Speech/DeliverySpeechSegmentation.h"
+#include "Speech/Recognition/DeliverySpeechSegmentation.h"
 
 namespace
 {

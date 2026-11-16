@@ -17,12 +17,12 @@
 #include "Interaction/DeliveryInteractionRegistry.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
-#include "Inventory/DeliveryHandheldItem.h"
-#include "Inventory/DeliveryPackageItem.h"
+#include "Inventory/Items/DeliveryHandheldItem.h"
+#include "Inventory/Items/DeliveryPackageItem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
-#include "Inventory/DeliveryTestAxe.h"
+#include "Inventory/Items/DeliveryTestAxe.h"
 #include "Carry/DeliveryCarryComponent.h"
-#include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/Motorbike/DeliveryMotorbike.h"
 #include "UI/Controllers/DeliveryHotbarController.h"
 #include "UI/Controllers/DeliveryInteractionController.h"
 #include "Components/BoxComponent.h"
@@ -36,7 +36,7 @@
 #include "Task/World/DeliveryItemComponent.h"
 #include "Task/World/DeliveryTargetComponent.h"
 #include "Task/World/DeliveryPickupPointComponent.h"
-#include "World/DeliveryLocationComponent.h"
+#include "World/Location/DeliveryLocationComponent.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryInteractionFlowTest, "Delivery.Systems.Interaction.PlayerFlow",
                                  EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

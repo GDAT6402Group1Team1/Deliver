@@ -1,0 +1,138 @@
+\documentclass[UTF8,a4paper,11pt,fontset=fandol]{ctexart}
+\usepackage[left=17mm,right=17mm,top=17mm,bottom=18mm]{geometry}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage{tcolorbox}
+\usepackage{array,tabularx,booktabs}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{Ink}{HTML}{14253B}
+\definecolor{Muted}{HTML}{455D73}
+\definecolor{Rule}{HTML}{CCD7E2}
+\definecolor{Blue}{HTML}{1D568D}
+\definecolor{Mint}{HTML}{176B5E}
+\definecolor{Amber}{HTML}{8A4A15}
+\definecolor{Red}{HTML}{9A3B3E}
+\definecolor{Ice}{HTML}{EFF5FB}
+\definecolor{Leaf}{HTML}{EAF6F2}
+\definecolor{Sand}{HTML}{FBF0E1}
+\definecolor{Rose}{HTML}{FAEDEE}
+\renewcommand{\familydefault}{\sfdefault}
+\hypersetup{pdftitle={AI NPC 的输入与提示词},pdfauthor={Delivery 项目}}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlength{\tabcolsep}{8pt}
+\renewcommand{\arraystretch}{1.32}
+\setlength{\headheight}{15pt}
+\raggedbottom
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0.35pt}
+\fancyfoot[L]{\small\color{Muted}Delivery \hspace{.45em}/\hspace{.45em} AI NPC 的输入与提示词}
+\fancyfoot[R]{\small\color{Muted}\thepage\ / 2}
+
+\newcommand{\hero}[2]{%
+  {\small\bfseries\color{Blue}DELIVERY\enspace /\enspace UE 5.8\enspace /\enspace 项目面试材料}\par
+  \vspace{3mm}{\fontsize{31}{38}\selectfont\bfseries #1}\par
+  \vspace{1mm}{\large\color{Muted}#2}\par\vspace{3mm}}
+\newcommand{\sectionline}[1]{\par\vspace{2mm}{\large\bfseries #1}\par\vspace{.5mm}}
+\newcommand{\fig}[2]{\par{\centering #1\par}\vspace{-.5mm}%
+  {\centering\small\color{Muted}#2\par}\vspace{1mm}}
+\newcommand{\aside}[2]{%
+  \begin{tcolorbox}[colback=Ice,colframe=Rule,boxrule=.5pt,arc=2mm,boxsep=0pt,top=2.4mm,bottom=2.4mm,left=3.2mm,right=3.2mm,before skip=4pt,after skip=4pt]
+  \textbf{\color{Blue}#1}\par\small #2
+  \end{tcolorbox}}
+\newcommand{\refline}[1]{\vspace{2mm}\par{\footnotesize\color{Muted}\textbf{工程参考}\enspace #1\par}}
+\newcommand{\codeword}[1]{\texttt{#1}}
+\newcommand{\celltitle}[1]{\textbf{\color{Ink}#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\tikzset{
+  box/.style={draw=Rule,fill=Ice,rounded corners=2.2mm,align=center,
+    font=\small,text=Ink,inner sep=2mm,text width=3.2cm,minimum height=13mm},
+  engine/.style={box,fill=Leaf,draw=Mint!42!white},
+  backend/.style={box,fill=Sand,draw=Amber!42!white},
+  issue/.style={box,fill=Rose,draw=Red!38!white},
+  head/.style={font=\bfseries\small,text=Ink},
+  label/.style={font=\footnotesize,text=Muted,align=center},
+  arrow/.style={-{Stealth[length=2.2mm,width=1.5mm]},line width=.75pt,draw=Blue},
+  returnpath/.style={arrow,densely dashed,draw=Mint},
+  line/.style={line width=.55pt,draw=Rule}
+}
+\begin{document}
+\color{Ink}
+
+\hero{AI NPC 的输入与提示词}{角色知道什么，能做什么，怎样作决定}
+模型每轮收到一份属于当前 NPC 的上下文。它包含作者配置、当局观察、当前行动和游戏许可的选项。
+
+\sectionline{一份请求包含四类信息}
+\fig{\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[box,text width=6.15cm,minimum height=17mm] (profile) at (3.34,2.62)
+    {\textbf{人物设定}\enspace \codeword{persona / background}\\性格、街坊关系、熟悉的地点和例句};
+  \node[box,text width=6.15cm,minimum height=17mm] (sense) at (3.34,.51)
+    {\textbf{现场观察}\enspace \codeword{subjects / evidence}\\看见谁、听见谁、实际受到什么影响};
+  \node[box,text width=6.15cm,minimum height=17mm] (current) at (3.34,-1.60)
+    {\textbf{自己的状态}\enspace \codeword{current\_action}\\正在做什么、对谁、还剩多久};
+  \node[engine,text width=6.15cm,minimum height=17mm] (permit) at (3.34,-3.71)
+    {\textbf{本轮合法动作}\enspace \codeword{candidates}\\动作、目标和时限由游戏筛选};
+  \node[backend,text width=5.6cm,minimum height=27mm] (model) at (13.43,-.52)
+    {\textbf{当前这个 NPC 的决定}\\选择一个可用行动\\与一段符合人物口气的台词};
+  \draw[arrow] (profile.east)--++(1.4,0)-- ($(model.west)+(0,.64)$);
+  \draw[arrow] (sense.east)--++(1.4,0)-- ($(model.west)+(0,.21)$);
+  \draw[arrow] (current.east)--++(1.4,0)-- ($(model.west)+(0,-.21)$);
+  \draw[arrow] (permit.east)--++(1.4,0)-- ($(model.west)+(0,-.64)$);
+\end{tikzpicture}}{静态设定解释人物为什么在意某件事，现场记录说明本轮实际发生了什么。}
+
+\sectionline{同一条街，每个人知道的事不同}
+\fig{\begin{tikzpicture}[x=1cm,y=1cm]
+  \fill[Ice,rounded corners=2.5mm] (0,-1.30) rectangle (16.5,1.62);
+  \draw[white,line width=12pt,line cap=round] (1,-.95)--(15.5,-.95);
+  \node[box,fill=white,text width=2.6cm] (player) at (2.55,.20) {\textbf{玩家}\\发言者};
+  \node[engine,text width=2.6cm] (loud) at (8.27,.20) {\textbf{大壮}\\听见玩家原话};
+  \node[backend,text width=2.6cm] (sharp) at (13.98,.20) {\textbf{翠花}\\附近的老邻居};
+  \draw[arrow] (player)--node[label,above]{直接发言}(loud);
+  \draw[returnpath] (loud)--node[label,above]{看到对方}(sharp);
+\end{tikzpicture}}{场景示意。玩家的转述会带上来源，看到翠花也只证明她当时在场。}
+
+\aside{人物配置怎样起作用？}{大壮爱面子，翠花嘴快、爱拆台，牛二狗可以持续跟随或受主人委托。性格和关系用于理解语境。谁是当前主人、现场有哪些人、动作能否执行，都来自游戏状态。}
+
+\newpage
+\hero{提示词与动作候选}{把一段街坊对话写成可校验的行动建议}
+玩家说「翠花说你不敢动手」，游戏记录的是玩家转述。大壮可以追问、还嘴或选一个合法动作，这句传话本身不会登记为翠花已说过的话。
+
+\sectionline{提示词片段 \enspace 意译与缩写}
+\aside{对当前角色的指示}{%
+根据人物性格和有来源的现场记录，选择一个现有候选，并用符合人物的中文说话。\par
+把传闻、亲历和行动结果分开。没有看到命中时，台词只说此刻想做什么。\par
+只安排自己能做的事。说话对象可以与行动对象不同。}
+
+\sectionline{本轮怎样选动作}
+\fig{\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[engine,text width=4.4cm,minimum height=17mm] (allow) at (2.5,0)
+    {\textbf{UE 给出选项}\\看向翠花、打一拳、追打};
+  \node[backend,text width=4.4cm,minimum height=17mm] (pick) at (8.25,0)
+    {\textbf{模型选择}\\候选 1\enspace 看向翠花};
+  \node[engine,text width=4.4cm,minimum height=17mm] (check) at (14.0,0)
+    {\textbf{UE 检查并执行}\\候选编号、目标仍有效};
+  \draw[arrow] (allow)--(pick);
+  \draw[arrow] (pick)--(check);
+\end{tikzpicture}}{示意候选编号。一轮可以先看向对方，后续行动随新的发言、命中或位置变化更新。}
+
+\begin{tabularx}{\linewidth}{@{}p{27mm}Y@{}}
+\toprule
+\celltitle{动作类别} & \celltitle{例子}\\
+\midrule
+交谈与观察 & \codeword{LookAt} 看向目标，\codeword{Wait} 等待。台词由模型另行生成。\\
+移动与战斗 & \codeword{MoveTo} 靠近，\codeword{StrikeOnce} 打一拳，\codeword{Fight} 短时追打，\codeword{Flee} 逃离。\\
+同伴与实物 & 二狗可跟随、跑腿或按安排坐下。拾取和交件需要现场实物与相应权限。\\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+\aside{为什么台词不能直接推动任务？}{游戏用服务器回执记录实际拾取、交接、命中和任务完成。后续对话可以引用这些结果，同一次发言中的承诺只说明 NPC 打算做什么。}
+
+\refline{\path{Design/AI/NpcProfiles.json}、\path{Design/AI/NpcRelationships.json}、\path{Design/AI/NpcBehaviorCatalog.json}。\par
+提示词见 \path{Tools/DeliveryAI/server.py}、\path{Tools/DeliveryAI/dialogue_background.py}。}
+\end{document}

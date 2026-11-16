@@ -1,5 +1,5 @@
 #include "AI/BehaviorTree/BTTask_DeliveryCompanionErrand.h"
-#include "AI/Companion/DeliveryCompanionComponent.h"
+#include "AI/Companion/Core/DeliveryCompanionComponent.h"
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"

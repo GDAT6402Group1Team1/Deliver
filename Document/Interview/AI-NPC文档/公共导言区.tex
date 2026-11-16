@@ -1,0 +1,121 @@
+% Delivery AI NPC 文档的公共导言区
+% 编译：xelatex 01-AI-NPC框架.tex（另外两篇同理），各编译两遍
+% 装有 ctex 宏包时使用系统中文字体；否则回退到 Noto Sans CJK SC
+\usepackage[a4paper,left=2.3cm,right=2.3cm,top=2.4cm,bottom=2.4cm]{geometry}
+\usepackage{iftex}
+\IfFileExists{ctex.sty}{%
+  \usepackage[UTF8,scheme=plain]{ctex}
+}{%
+  \usepackage{fontspec}
+  \setmainfont{Noto Sans CJK SC}
+  \setsansfont{Noto Sans CJK SC}
+  \setmonofont{Noto Sans Mono CJK SC}
+  \XeTeXlinebreaklocale "zh"
+  \XeTeXlinebreakskip = 0pt plus 1pt
+}
+\newfontfamily\symbolfont{Segoe UI Symbol}[BoldFont={Segoe UI Symbol}]
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{adjustbox}
+\usepackage{xurl}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.multipart,shapes.geometric,fit,calc,backgrounds,decorations.pathreplacing}
+\usepackage{booktabs,tabularx,array}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{caption}
+\usepackage{float}
+\usepackage[most]{tcolorbox}
+\usepackage[hidelinks]{hyperref}
+
+% ---------- 颜色 ----------
+\definecolor{ink}{HTML}{1F2933}
+\definecolor{sub}{HTML}{52606D}
+\definecolor{game}{HTML}{2B6CB0}    % 游戏服务器
+\definecolor{model}{HTML}{C05621}   % AI 后端与模型
+\definecolor{data}{HTML}{2F855A}    % 配置与数据
+\definecolor{client}{HTML}{6B7280}  % 客户端与表现
+\definecolor{warn}{HTML}{B7791F}
+\color{ink}
+
+% ---------- 版式 ----------
+\setlength{\parindent}{0pt}
+\emergencystretch=3em
+\setlength{\parskip}{0.55em}
+\linespread{1.25}
+\setlist{nosep,leftmargin=1.6em,itemsep=0.2em,topsep=0.2em}
+\titleformat{\section}{\Large\bfseries\color{game}}{\thesection}{0.6em}{}[\vspace{-0.4em}{\color{game!35}\titlerule[0.8pt]}]
+\titleformat{\subsection}{\large\bfseries\color{ink}}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.4em}{0.7em}
+\titlespacing*{\subsection}{0pt}{1.0em}{0.3em}
+\renewcommand{\figurename}{图}
+\renewcommand{\tablename}{表}
+\captionsetup{font={small,color=sub},labelfont=bf,labelsep=quad,skip=6pt}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[C]{\small\color{sub}\thepage}
+\renewcommand{\arraystretch}{1.35}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+
+% 页面剩余高度不足时提前换页，避免标题和图分到两页
+\newcommand{\need}[1]{\par\penalty-100\begingroup\dimen0=#1\relax\dimen2=\pagegoal\advance\dimen2 by -\pagetotal
+  \ifdim\dimen0>\dimen2 \ifdim\dimen2>0pt \vfil\fi\break\fi\endgroup}
+\let\plainsection\section
+\renewcommand{\section}{\need{6.5cm}\plainsection}
+\let\plainsubsection\subsection
+\renewcommand{\subsection}{\need{5.5cm}\plainsubsection}
+
+% ---------- 小工具 ----------
+\newcommand{\cb}{{\setlength{\fboxsep}{0pt}\setlength{\fboxrule}{0.5pt}\fbox{\phantom{\rule{5pt}{5pt}}}}\hspace{4pt}}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\doctitle}[1]{%
+  {\Huge\bfseries #1}\par\vspace{0.7em}
+  {\color{game}\hrule height 1.2pt}\vspace{1em}}
+\newtcolorbox{note}[1][说明]{enhanced,breakable,colback=game!5,colframe=game!60,
+  boxrule=0pt,leftrule=3pt,arc=0pt,left=8pt,right=8pt,top=5pt,bottom=5pt,
+  fontupper=\small,title={#1},coltitle=game,fonttitle=\small\bfseries,
+  attach title to upper={\quad},before skip=0.8em,after skip=0.8em}
+\newtcolorbox{limit}[1][当前限制]{enhanced,breakable,colback=warn!7,colframe=warn!75,
+  boxrule=0pt,leftrule=3pt,arc=0pt,left=8pt,right=8pt,top=5pt,bottom=5pt,
+  fontupper=\small,title={#1},coltitle=warn!85!black,fonttitle=\small\bfseries,
+  attach title to upper={\quad},before skip=0.8em,after skip=0.8em}
+% 图下的一行注解
+\newcommand{\explain}[1]{\par\vspace{-0.3em}{\small\color{sub}#1}\par}
+
+% 案例的四行摘要：问题、原因、修改、结果
+\newcommand{\casefacts}[4]{\par{\small\begin{tabularx}{\textwidth}{@{}>{\bfseries\color{game}}l L@{}}
+\toprule 问题 & #1 \\ 原因 & #2 \\ 修改 & #3 \\ 结果 & #4 \\ \bottomrule\end{tabularx}}\par\vspace{0.4em}}
+% 术语表的一行
+\newcommand{\term}[2]{\textbf{#1} & #2 \\}
+
+% ---------- TikZ 样式 ----------
+\tikzset{
+  >={Stealth[length=2.2mm,width=1.6mm]},
+  every node/.style={font=\small},
+  box/.style={draw=#1!70,fill=#1!8,rounded corners=2.5pt,align=center,
+    inner xsep=6pt,inner ysep=5pt,line width=0.6pt,text=ink},
+  box/.default=game,
+  solid/.style={draw=#1,fill=#1,rounded corners=2.5pt,align=center,
+    inner xsep=6pt,inner ysep=5pt,text=white,font=\small\bfseries},
+  solid/.default=game,
+  group/.style={draw=#1!55,dashed,rounded corners=4pt,inner sep=8pt,line width=0.6pt},
+  group/.default=sub,
+  gtitle/.style={font=\footnotesize\bfseries,text=#1},
+  gtitle/.default=sub,
+  flow/.style={->,line width=0.7pt,draw=sub},
+  lab/.style={font=\scriptsize,text=sub,fill=white,inner sep=1.5pt},
+  cp/.style={box=#1,minimum width=3.2cm,minimum height=1.0cm},cp/.default=game,
+  lane/.style={draw=#1!55,dashed,rounded corners=4pt,line width=0.6pt},
+  num/.style={font=\scriptsize\bfseries,text=ink,fill=white,inner sep=1.5pt},
+  cls/.style={draw=#1!70,fill=#1!6,rectangle split,rectangle split parts=2,
+    rectangle split part fill={#1!18,white},text width=4.5cm,align=left,
+    inner xsep=5pt,inner ysep=4pt,line width=0.6pt,font=\scriptsize},
+  cls/.default=game,
+  chk/.style={draw=#1!70,fill=#1!6,rounded corners=2.5pt,align=left,inner xsep=7pt,inner ysep=6pt,line width=0.6pt,font=\scriptsize,text=ink},
+  chk/.default=game,
+  decision/.style={draw=warn!80,fill=warn!10,diamond,aspect=2.4,align=center,
+    inner sep=1.5pt,line width=0.6pt,font=\footnotesize},
+}

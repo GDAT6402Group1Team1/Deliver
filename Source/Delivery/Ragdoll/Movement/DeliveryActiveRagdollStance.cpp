@@ -3,7 +3,7 @@
 // 目标只是电机想去的位置；角色刚体的位置仍由物理模拟决定
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Character/DeliveryCharacter.h"
-#include "Combat/DeliveryPunchTrajectory.h"
+#include "Combat/Pose/DeliveryPunchTrajectory.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Controller.h"

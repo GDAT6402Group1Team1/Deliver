@@ -1,5 +1,5 @@
 #include "DeliveryConversationAssetTools.h"
-#include "UI/DeliveryConversationWidget.h"
+#include "UI/Conversation/DeliveryConversationWidget.h"
 #include "AssetToolsModule.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Blueprint/WidgetTree.h"

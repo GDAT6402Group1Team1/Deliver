@@ -24,7 +24,7 @@
 #include "Player/DeliveryPlayerController.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "UObject/UObjectIterator.h"
-#include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/Motorbike/DeliveryMotorbike.h"
 
 namespace DeliveryInputDebug
 {

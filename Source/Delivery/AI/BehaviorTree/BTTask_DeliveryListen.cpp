@@ -3,29 +3,48 @@
 #include "AI/Decision/DeliveryNpcAgentComponent.h"
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
-namespace { constexpr EAIFocusPriority::Type ListeningFocus=EAIFocusPriority::LastFocusPriority+2; }
 
+namespace
+{
+constexpr EAIFocusPriority::Type ListeningFocus = EAIFocusPriority::LastFocusPriority + 2;
+}
+
+// 每个 NPC 各用一个节点实例
 UBTTask_DeliveryListen::UBTTask_DeliveryListen()
 {
-    NodeName=TEXT("倾听玩家"); bCreateNodeInstance=true; bNotifyTick=true; bNotifyTaskFinished=true;
+    NodeName = TEXT("倾听玩家");
+    bCreateNodeInstance = true;
+    bNotifyTick = true;
+    bNotifyTaskFinished = true;
 }
-EBTNodeResult::Type UBTTask_DeliveryListen::ExecuteTask(UBehaviorTreeComponent& OwnerComp,uint8* Memory)
+
+// 需要停下倾听时停止移动，任务保持进行中
+EBTNodeResult::Type UBTTask_DeliveryListen::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* Memory)
 {
-    Controller=OwnerComp.GetAIOwner();
-    auto* Npc=Controller.IsValid()?Cast<ADeliveryNpcCharacter>(Controller->GetPawn()):nullptr;
-    if (!Npc || !Npc->Agent->ShouldPauseForConversation()) return EBTNodeResult::Failed;
+    Controller = OwnerComp.GetAIOwner();
+    auto* Npc = Controller.IsValid() ? Cast<ADeliveryNpcCharacter>(Controller->GetPawn()) : nullptr;
+    if (!Npc || !Npc->Agent->ShouldPauseForConversation())
+        return EBTNodeResult::Failed;
     Controller->StopMovement();
-    Controller->SetFocus(Npc->Agent->GetListeningSpeaker(),ListeningFocus);
+    Controller->SetFocus(Npc->Agent->GetListeningSpeaker(), ListeningFocus);
     return EBTNodeResult::InProgress;
 }
-void UBTTask_DeliveryListen::TickTask(UBehaviorTreeComponent& OwnerComp,uint8* Memory,float DeltaSeconds)
+
+// 不再需要倾听或被打倒时结束任务
+void UBTTask_DeliveryListen::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* Memory, float DeltaSeconds)
 {
-    auto* Npc=Controller.IsValid()?Cast<ADeliveryNpcCharacter>(Controller->GetPawn()):nullptr;
-    if (!Npc || Npc->IsKnockedDown() || !Npc->Agent->ShouldPauseForConversation()) FinishLatentTask(OwnerComp,EBTNodeResult::Succeeded);
-    else Controller->SetFocus(Npc->Agent->GetListeningSpeaker(),ListeningFocus);
+    auto* Npc = Controller.IsValid() ? Cast<ADeliveryNpcCharacter>(Controller->GetPawn()) : nullptr;
+    if (!Npc || Npc->IsKnockedDown() || !Npc->Agent->ShouldPauseForConversation())
+        FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
+    else
+        Controller->SetFocus(Npc->Agent->GetListeningSpeaker(), ListeningFocus);
 }
-void UBTTask_DeliveryListen::OnTaskFinished(UBehaviorTreeComponent& OwnerComp,uint8* Memory,EBTNodeResult::Type Result)
+
+// 任务结束时清理
+void UBTTask_DeliveryListen::OnTaskFinished(UBehaviorTreeComponent& OwnerComp, uint8* Memory, EBTNodeResult::Type Result)
 {
-    if (Controller.IsValid()) Controller->ClearFocus(ListeningFocus);
-    Controller.Reset(); Super::OnTaskFinished(OwnerComp,Memory,Result);
+    if (Controller.IsValid())
+        Controller->ClearFocus(ListeningFocus);
+    Controller.Reset();
+    Super::OnTaskFinished(OwnerComp, Memory, Result);
 }

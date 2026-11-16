@@ -11,8 +11,8 @@
 #include "HAL/PlatformTime.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
-#include "Speech/DeliverySpeechAudioCapture.h"
-#include "Speech/DeliverySpeechRecognizer.h"
+#include "Speech/Capture/DeliverySpeechAudioCapture.h"
+#include "Speech/Recognition/DeliverySpeechRecognizer.h"
 #include "Widgets/SViewport.h"
 #include <atomic>
 

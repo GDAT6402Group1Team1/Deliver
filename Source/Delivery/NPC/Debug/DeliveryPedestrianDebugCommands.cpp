@@ -14,8 +14,8 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
-#include "NPC/DeliveryPedestrian.h"
-#include "NPC/DeliveryPedestrianRoute.h"
+#include "NPC/Pedestrian/DeliveryPedestrian.h"
+#include "NPC/Pedestrian/DeliveryPedestrianRoute.h"
 
 namespace DeliveryPedestrianDebug
 {

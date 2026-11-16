@@ -1,0 +1,136 @@
+\documentclass[UTF8,a4paper,11pt,fontset=fandol]{ctexart}
+\usepackage[left=17mm,right=17mm,top=17mm,bottom=18mm]{geometry}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage{tcolorbox}
+\usepackage{array,tabularx,booktabs}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{Ink}{HTML}{14253B}
+\definecolor{Muted}{HTML}{455D73}
+\definecolor{Rule}{HTML}{CCD7E2}
+\definecolor{Blue}{HTML}{1D568D}
+\definecolor{Mint}{HTML}{176B5E}
+\definecolor{Amber}{HTML}{8A4A15}
+\definecolor{Red}{HTML}{9A3B3E}
+\definecolor{Ice}{HTML}{EFF5FB}
+\definecolor{Leaf}{HTML}{EAF6F2}
+\definecolor{Sand}{HTML}{FBF0E1}
+\definecolor{Rose}{HTML}{FAEDEE}
+\renewcommand{\familydefault}{\sfdefault}
+\hypersetup{pdftitle={AI NPC 测试与迭代},pdfauthor={Delivery 项目}}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlength{\tabcolsep}{8pt}
+\renewcommand{\arraystretch}{1.32}
+\setlength{\headheight}{15pt}
+\raggedbottom
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0.35pt}
+\fancyfoot[L]{\small\color{Muted}Delivery \hspace{.45em}/\hspace{.45em} AI NPC 测试与迭代}
+\fancyfoot[R]{\small\color{Muted}\thepage\ / 2}
+
+\newcommand{\hero}[2]{%
+  {\small\bfseries\color{Blue}DELIVERY\enspace /\enspace UE 5.8\enspace /\enspace 项目面试材料}\par
+  \vspace{3mm}{\fontsize{31}{38}\selectfont\bfseries #1}\par
+  \vspace{1mm}{\large\color{Muted}#2}\par\vspace{3mm}}
+\newcommand{\sectionline}[1]{\par\vspace{2mm}{\large\bfseries #1}\par\vspace{.5mm}}
+\newcommand{\fig}[2]{\par{\centering #1\par}\vspace{-.5mm}%
+  {\centering\small\color{Muted}#2\par}\vspace{1mm}}
+\newcommand{\aside}[2]{%
+  \begin{tcolorbox}[colback=Ice,colframe=Rule,boxrule=.5pt,arc=2mm,boxsep=0pt,top=2.4mm,bottom=2.4mm,left=3.2mm,right=3.2mm,before skip=4pt,after skip=4pt]
+  \textbf{\color{Blue}#1}\par\small #2
+  \end{tcolorbox}}
+\newcommand{\refline}[1]{\vspace{2mm}\par{\footnotesize\color{Muted}\textbf{工程参考}\enspace #1\par}}
+\newcommand{\codeword}[1]{\texttt{#1}}
+\newcommand{\celltitle}[1]{\textbf{\color{Ink}#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\tikzset{
+  box/.style={draw=Rule,fill=Ice,rounded corners=2.2mm,align=center,
+    font=\small,text=Ink,inner sep=2mm,text width=3.2cm,minimum height=13mm},
+  engine/.style={box,fill=Leaf,draw=Mint!42!white},
+  backend/.style={box,fill=Sand,draw=Amber!42!white},
+  issue/.style={box,fill=Rose,draw=Red!38!white},
+  head/.style={font=\bfseries\small,text=Ink},
+  label/.style={font=\footnotesize,text=Muted,align=center},
+  arrow/.style={-{Stealth[length=2.2mm,width=1.5mm]},line width=.75pt,draw=Blue},
+  returnpath/.style={arrow,densely dashed,draw=Mint},
+  line/.style={line width=.55pt,draw=Rule}
+}
+\begin{document}
+\color{Ink}
+
+\hero{AI NPC 测试与迭代}{从玩家反馈追到可以验证的原因}
+每次改动都用同一条操作复现问题，记下候选动作、执行回执或两端播放日志，再回到真实游戏窗口重试。
+
+\sectionline{案例一 \enspace 打包后，挑拨只能换来一句话}
+\fig{\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[box] (feedback) at (0,0) {\textbf{试玩反馈}\\两位 NPC 能回话\\却迟迟不动手};
+  \node[box] (trace) at (4.31,0) {\textbf{检查候选}\\只有等待、躺下\\和看向两个对象};
+  \node[issue] (reason) at (8.62,0) {\textbf{定位导航}\\流送地图时\\已有导航网格被丢弃};
+  \node[engine] (fix) at (12.93,0) {\textbf{保留导航}\\沿用地图已有网格\\重测双向完整路径};
+  \draw[arrow] (feedback)--(trace);
+  \draw[arrow] (trace)--(reason);
+  \draw[arrow] (reason)--(fix);
+\end{tikzpicture}}{007 包的行为树、技能和出拳动画都能加载，追打所依赖的导航路径缺失。}
+
+\sectionline{先做对照，再用新包重试}
+\fig{\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[label,anchor=west] at (0,2.02) {实验条件\enspace 同一个 007 可执行文件，同一监听地图，只改变一项导航配置};
+  \node[issue,text width=5.6cm,minimum height=17mm] (a) at (3.2,.86)
+    {\textbf{007 默认配置}\\大壮 $\leftrightarrow$ 翠花 \enspace 无法构建路径};
+  \node[engine,text width=5.6cm,minimum height=17mm] (b) at (13.26,.86)
+    {\textbf{007 保留子关卡导航}\\大壮 $\leftrightarrow$ 翠花 \enspace 双向完整路径};
+  \draw[arrow] (a)--node[label,fill=white]{改一项配置}(b);
+  \draw[line] (0,-.28)--(16.5,-.28);
+  \node[engine,text width=5.6cm,minimum height=16mm] (c) at (3.2,-1.32)
+    {\textbf{008 正式包}\\默认启动即能双向寻路};
+  \node[box,text width=5.6cm,minimum height=16mm] (d) at (13.26,-1.32)
+    {\textbf{两个游戏进程}\\建房、列表加入、开局、发送台词};
+  \draw[arrow] (c)--(d);
+\end{tikzpicture}}{路径对照隔离了根因，实际对话验收覆盖了玩家原来的触发入口。}
+
+\aside{观察到什么？}{房主用调试命令来到居民旁，然后实际按 T、输入并发送。大壮先看向目标，翠花出拳命中，随后大壮追打并回击命中。客人画面看到两人对峙，两端日志记录同一轮语音启动。}
+
+\newpage
+\hero{怎样判断改动有效}{短测定位问题，双人实测检查最终体验}
+
+\sectionline{案例二 \enspace 长回复能否播完整}
+\fig{\begin{tikzpicture}[x=1.16cm,y=1cm]
+  \draw[line width=1.5pt,draw=Rule,line cap=round] (0,0)--(12,0);
+  \draw[line width=4pt,draw=Mint,line cap=round] (0,0)--(8.64,0);
+  \draw[densely dashed,draw=Red,line width=.8pt] (8,-.42)--(8,1.22);
+  \node[label,text=Red,anchor=east] at (7.94,1.03) {旧上限\enspace 8 秒};
+  \draw[draw=Mint,line width=.8pt] (8.64,0)--(8.64,.62);
+  \node[label,text=Mint,anchor=west] at (8.72,.58) {实际台词\enspace 8.64 秒};
+  \fill[Ink] (12,0) circle[radius=1.2pt];
+  \node[label,anchor=north] at (12,-.18) {新上限\enspace 12 秒};
+  \node[label,anchor=north] at (0,-.18) {0 秒};
+\end{tikzpicture}}{一条超过旧上限的源语音，在主机和客户端都播放完整。}
+双人 PIE 记录中，两轮从服务器接受发言到引擎开始播放分别约为 \textbf{4.00 秒}和 \textbf{3.53 秒}。这两个样本记录的是引擎播放器时刻。
+
+\sectionline{小模型试验同时看质量和游戏性能}
+\fig{\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[engine,text width=6.8cm,minimum height=22mm] at (3.68,0)
+    {{\large\bfseries 38 / 40}\\某轮战斗固定题答对数};
+  \node[issue,text width=6.8cm,minimum height=22mm] at (11.72,0)
+    {{\large\bfseries 帧时间 P95 增加 12.04\%}\\同机运行超出当时 10\% 的门槛};
+\end{tikzpicture}}{这是早期 Q4 的一轮记录。后来启用过试玩配置，完整性能对照仍待完成。}
+
+\sectionline{本次验证覆盖}
+\begin{tabularx}{\linewidth}{@{}p{32mm}Y@{}}
+\toprule
+\celltitle{验证方式} & \celltitle{结果}\\
+\midrule
+自动化与双人 PIE & 居民战斗和二狗协战通过。双人第一单使用自动化站位，交件玩家实收 120，旁观者未入账。\\
+两个打包进程 & 实点建房、加入、开局、文字对话，服务器确认居民互相命中。\\
+后续实测 & 两台实体电脑联机、从出生点手动走完第一单、持续交战时的性能对照。\\
+\bottomrule
+\end{tabularx}
+
+\refline{\path{Document/AIIteration.html} 的真实播放和小模型记录。联机分支 \codeword{codex/lan-playtest} 的 \path{Document/Architecture.md} 记录 008 验收。}
+\end{document}

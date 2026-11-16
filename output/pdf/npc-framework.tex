@@ -1,0 +1,141 @@
+\documentclass[UTF8,a4paper,11pt,fontset=fandol]{ctexart}
+\usepackage[left=17mm,right=17mm,top=17mm,bottom=18mm]{geometry}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage{tcolorbox}
+\usepackage{array,tabularx,booktabs}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{Ink}{HTML}{14253B}
+\definecolor{Muted}{HTML}{455D73}
+\definecolor{Rule}{HTML}{CCD7E2}
+\definecolor{Blue}{HTML}{1D568D}
+\definecolor{Mint}{HTML}{176B5E}
+\definecolor{Amber}{HTML}{8A4A15}
+\definecolor{Red}{HTML}{9A3B3E}
+\definecolor{Ice}{HTML}{EFF5FB}
+\definecolor{Leaf}{HTML}{EAF6F2}
+\definecolor{Sand}{HTML}{FBF0E1}
+\definecolor{Rose}{HTML}{FAEDEE}
+\renewcommand{\familydefault}{\sfdefault}
+\hypersetup{pdftitle={AI NPC 框架},pdfauthor={Delivery 项目}}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlength{\tabcolsep}{8pt}
+\renewcommand{\arraystretch}{1.32}
+\setlength{\headheight}{15pt}
+\raggedbottom
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0.35pt}
+\fancyfoot[L]{\small\color{Muted}Delivery \hspace{.45em}/\hspace{.45em} AI NPC 框架}
+\fancyfoot[R]{\small\color{Muted}\thepage\ / 2}
+
+\newcommand{\hero}[2]{%
+  {\small\bfseries\color{Blue}DELIVERY\enspace /\enspace UE 5.8\enspace /\enspace 项目面试材料}\par
+  \vspace{3mm}{\fontsize{31}{38}\selectfont\bfseries #1}\par
+  \vspace{1mm}{\large\color{Muted}#2}\par\vspace{3mm}}
+\newcommand{\sectionline}[1]{\par\vspace{2mm}{\large\bfseries #1}\par\vspace{.5mm}}
+\newcommand{\fig}[2]{\par{\centering #1\par}\vspace{-.5mm}%
+  {\centering\small\color{Muted}#2\par}\vspace{1mm}}
+\newcommand{\aside}[2]{%
+  \begin{tcolorbox}[colback=Ice,colframe=Rule,boxrule=.5pt,arc=2mm,boxsep=0pt,top=2.4mm,bottom=2.4mm,left=3.2mm,right=3.2mm,before skip=4pt,after skip=4pt]
+  \textbf{\color{Blue}#1}\par\small #2
+  \end{tcolorbox}}
+\newcommand{\refline}[1]{\vspace{2mm}\par{\footnotesize\color{Muted}\textbf{工程参考}\enspace #1\par}}
+\newcommand{\codeword}[1]{\texttt{#1}}
+\newcommand{\celltitle}[1]{\textbf{\color{Ink}#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\tikzset{
+  box/.style={draw=Rule,fill=Ice,rounded corners=2.2mm,align=center,
+    font=\small,text=Ink,inner sep=2mm,text width=3.2cm,minimum height=13mm},
+  engine/.style={box,fill=Leaf,draw=Mint!42!white},
+  backend/.style={box,fill=Sand,draw=Amber!42!white},
+  issue/.style={box,fill=Rose,draw=Red!38!white},
+  head/.style={font=\bfseries\small,text=Ink},
+  label/.style={font=\footnotesize,text=Muted,align=center},
+  arrow/.style={-{Stealth[length=2.2mm,width=1.5mm]},line width=.75pt,draw=Blue},
+  returnpath/.style={arrow,densely dashed,draw=Mint},
+  line/.style={line width=.55pt,draw=Rule}
+}
+\begin{document}
+\color{Ink}
+
+\hero{AI NPC 框架}{一句话怎样变成看得见的动作}
+Delivery 是一款送快递游戏。玩家可以和街坊聊天、起哄或劝架。每个 NPC 从自己的视角判断接下来做什么，游戏服务器负责判定这件事能否发生。
+
+\sectionline{从玩家输入到双方看见结果}
+\fig{\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[label,anchor=west] at (-1.8,.98) {玩家端};
+  \node[label,anchor=west,text=Mint] at (2.53,.98) {主机 UE};
+  \node[label,anchor=west,text=Amber] at (6.84,.98) {AI 后端};
+  \node[label,anchor=west,text=Mint] at (11.15,.98) {主机 UE};
+  \node[box] (input) at (0,0) {\textbf{交谈与感知}\\文字、麦克风、现场事件};
+  \node[engine] (agent) at (4.31,0) {\textbf{NPC Agent}\\整理证据，列出合法动作};
+  \node[backend] (model) at (8.62,0) {\textbf{模型决策}\\选一个动作，生成台词};
+  \node[engine] (gate) at (12.93,0) {\textbf{服务器复核}\\检查请求、目标和状态};
+  \draw[arrow] (input)--(agent);
+  \draw[arrow] (agent)--(model);
+  \draw[arrow] (model)--(gate);
+  \node[engine] (execute) at (12.93,-2.25) {\textbf{行为树与技能}\\移动、出拳、命中判定};
+  \node[box] (view) at (8.62,-2.25) {\textbf{主机与客人}\\动作、表情、字幕和声音};
+  \node[engine] (facts) at (4.31,-2.25) {\textbf{结果回到 NPC}\\命中、挥空、取消或完成};
+  \draw[arrow] (gate)--(execute);
+  \draw[arrow] (execute)--(view);
+  \draw[returnpath] (execute.south) -- ++(0,-.38) -| (facts.south);
+  \draw[returnpath] (facts)--(agent);
+\end{tikzpicture}}{实线是执行路径，虚线把实际动作结果带回下一轮决策。}
+
+\sectionline{谁负责什么}
+\begin{tabularx}{\linewidth}{@{}p{34mm}Y@{}}
+\toprule
+\celltitle{游戏内组件} & \celltitle{主要职责}\\
+\midrule
+\textbf{Agent 与 Gateway} & Agent 保存各 NPC 的证据和当前计划。Gateway 请求后端，按请求与世界标识关联回包。\\
+\textbf{模型与语音后端} & 主对话模型理解玩家说的话。主机请求台词配音，语音按句分段发送。\\
+\textbf{行为树与技能} & 行为树负责走到目标附近、等待和收招。技能执行出拳，服务器按实际击中结算。\\
+\bottomrule
+\end{tabularx}
+
+\vspace{3mm}
+\aside{为什么要列出合法动作？}{模型只需在本轮可执行的选项里做选择。比如目标被遮挡或走不到，游戏会先筛掉对应的追打选项。目标在等待期间离开，服务器还会再校验一次。}
+
+\newpage
+\hero{一次居民交战}{从起哄、动手到停手，动作与台词如何配合}
+在双人局里，主机为两个 NPC 分别做决策。玩家在场看到的命中、受击和字幕来自同一局游戏状态。
+
+\sectionline{服务器如何处理同一轮行动}
+\fig{\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[box] (hear) at (0,0) {\textbf{听见玩家发言}\\保留谁说、对谁说};
+  \node[backend] (choose) at (4.31,0) {\textbf{选择行动与台词}\\看向、打一拳、追打};
+  \node[engine] (start) at (8.62,0) {\textbf{复核后开始}\\检查身份、距离和路径};
+  \node[engine] (end) at (12.93,0) {\textbf{结算实际结果}\\命中、挥空、受击中止};
+  \draw[arrow] (hear)--(choose);
+  \draw[arrow] (choose)--(start);
+  \draw[arrow] (start)--(end);
+  \node[label,anchor=west] at (0,-1.05) {新的现场事件};
+  \draw[returnpath] (end.south) -- ++(0,-.83) -| (choose.south);
+  \node[label,fill=white,inner sep=1.2mm] at (8.55,-1.68) {受击或目标变化后重新判断};
+\end{tikzpicture}}{同一场争执可以在继续追打、逃跑和停手之间变化。}
+
+\sectionline{文字、麦克风与语音回放}
+\fig{\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[box] (mic) at (0,0) {\textbf{玩家电脑}\\麦克风在本地转文字};
+  \node[engine] (host) at (4.31,0) {\textbf{主机}\\校验发言并请求决策};
+  \node[backend] (voice) at (8.62,0) {\textbf{后端}\\生成台词与分段音频};
+  \node[box] (clients) at (12.93,0) {\textbf{听者客户端}\\显示字幕并按时序播放};
+  \draw[arrow] (mic)--(host);
+  \draw[arrow] (host)--(voice);
+  \draw[arrow] (voice)--(clients);
+  \node[label,anchor=west] at (-1.8,-1.05) {文字输入从发言校验进入同一条链路。};
+  \node[label,anchor=west] at (6.79,-1.05) {受击或轮次取消会停掉相应播放。};
+\end{tikzpicture}}{每个玩家可本地识别语音，服务器统一安排 NPC 的决定和发言。}
+
+\aside{战斗小模型放在哪里？}{在启用的试玩配置里，已开始的追打或逃跑可以交给本地小模型继续判断。玩家发言、初次挑拨和需要回答的对话走主模型。小模型超时或输出无效时回到主模型。}
+
+\refline{\path{Document/Architecture.md} 的居民框架、行为树与语音章节。\par
+\path{Source/Delivery/AI/Decision/DeliveryNpcAgentComponent.cpp}、\path{Tools/DeliveryAI/combat_model.py}。}
+\end{document}

@@ -1,6 +1,6 @@
 #include "Character/DeliveryCharacter.h"
 #include "Inventory/DeliveryInventoryComponent.h"
-#include "Inventory/DeliveryHandheldItem.h"
+#include "Inventory/Items/DeliveryHandheldItem.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/PlayerController.h"
 

@@ -2,7 +2,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-#include "Speech/DeliverySpeechTurn.h"
+#include "Speech/Recognition/DeliverySpeechTurn.h"
 #include <limits>
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliverySpeechTurnCompletionTest, "Delivery.Speech.Turn.Completion",

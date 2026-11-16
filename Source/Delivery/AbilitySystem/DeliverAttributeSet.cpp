@@ -4,7 +4,7 @@
 #include "Net/UnrealNetwork.h"
 #include "GameplayEffectExtension.h"
 #include "Character/DeliveryCharacter.h"
-#include "Vehicle/DeliveryTrunkPassengerComponent.h"
+#include "Vehicle/Trunk/DeliveryTrunkPassengerComponent.h"
 
 UDeliverAttributeSet::UDeliverAttributeSet()
 {

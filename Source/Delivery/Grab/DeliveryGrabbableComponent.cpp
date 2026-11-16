@@ -7,7 +7,7 @@
 #include "Engine/OverlapResult.h"
 #include "GameFramework/Pawn.h"
 #include "Grab/DeliveryGrabComponent.h"
-#include "Vehicle/DeliveryTrunkPassengerComponent.h"
+#include "Vehicle/Trunk/DeliveryTrunkPassengerComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"

@@ -1,5 +1,5 @@
 #include "AbilitySystem/Abilities/GA_NpcStrike.h"
-#include "Combat/DeliveryNpcStrikeExecutor.h"
+#include "Combat/Types/DeliveryNpcStrikeExecutor.h"
 #include "GameFramework/Actor.h"
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Event_Npc_Strike,"Event.Npc.Strike");

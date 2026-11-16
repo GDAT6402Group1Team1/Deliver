@@ -16,10 +16,10 @@
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
-#include "Inventory/DeliveryHandheldItem.h"
+#include "Inventory/Items/DeliveryHandheldItem.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "Task/World/DeliveryPickupPointComponent.h"
-#include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/Motorbike/DeliveryMotorbike.h"
 
 UDeliveryInteractionProbeComponent::UDeliveryInteractionProbeComponent()
 {

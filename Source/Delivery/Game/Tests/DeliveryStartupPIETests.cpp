@@ -3,7 +3,7 @@
 #include "Misc/AutomationTest.h"
 #include "Game/DeliveryStartupFlow.h"
 #include "Task/DeliveryTaskManagerComponent.h"
-#include "UI/DeliveryHUD.h"
+#include "UI/HUD/DeliveryHUD.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"

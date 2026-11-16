@@ -3,8 +3,8 @@
 
 #include "Combat/DeliveryRagdollCombatComponent.h"
 
-#include "Combat/DeliveryCollisionChannels.h"
-#include "Combat/DeliveryImpactReceiver.h"
+#include "Combat/Types/DeliveryCollisionChannels.h"
+#include "Combat/Types/DeliveryImpactReceiver.h"
 #include "Player/DeliverPlayerState.h"
 #include "Character/DeliveryCharacter.h"
 #include "Engine/World.h"

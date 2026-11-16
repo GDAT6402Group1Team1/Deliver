@@ -3,7 +3,7 @@
 
 #include "Inventory/DeliveryInventoryItemComponent.h"
 #include "Character/DeliveryCharacter.h"
-#include "Inventory/DeliveryHandheldItem.h"
+#include "Inventory/Items/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryInventoryComponent.h"
 #include "Net/UnrealNetwork.h"
 

@@ -1,7 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Interaction/DeliveryPromptSubsystem.h"
-#include "UI/DeliveryHintComponent.h"
+#include "UI/HUD/DeliveryHintComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 

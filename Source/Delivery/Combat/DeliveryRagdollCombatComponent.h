@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Combat/DeliveryCombatTypes.h"
+#include "Combat/Types/DeliveryCombatTypes.h"
 #include "DeliveryRagdollCombatComponent.generated.h"
 
 class USkeletalMeshComponent;

@@ -6,8 +6,8 @@
 #include "AbilitySystem/Abilities/GA_DeliverPunch.h"
 
 #include "AbilitySystemComponent.h"
-#include "Combat/DeliveryImpactReceiver.h"
-#include "Combat/DeliveryCombatEvents.h"
+#include "Combat/Types/DeliveryImpactReceiver.h"
+#include "Combat/Types/DeliveryCombatEvents.h"
 #include "Combat/DeliveryRagdollCombatComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "AbilitySystem/DeliverGameplayTags.h"

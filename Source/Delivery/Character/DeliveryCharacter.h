@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystemInterface.h"
-#include "Combat/DeliveryCombatInterface.h"
+#include "Combat/Types/DeliveryCombatInterface.h"
 #include "Carry/DeliveryPackageCarrierInterface.h"
 #include "Carry/DeliveryHandheldCarrierInterface.h"
 #include "GameFramework/Pawn.h"

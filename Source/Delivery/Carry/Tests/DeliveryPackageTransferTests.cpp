@@ -1,7 +1,7 @@
 #include "Carry/Tests/DeliveryPackageTransferProbe.h"
 #include "Character/DeliveryCharacter.h"
 #include "Inventory/DeliveryInventoryComponent.h"
-#include "Inventory/DeliveryPackageItem.h"
+#include "Inventory/Items/DeliveryPackageItem.h"
 
 void UDeliveryPackageTransferProbe::OnInventoryChanged()
 {
@@ -14,8 +14,8 @@ void UDeliveryPackageTransferProbe::OnInventoryChanged()
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
-#include "AI/Companion/DeliveryCompanionCharacter.h"
-#include "AI/Companion/DeliveryCompanionComponent.h"
+#include "AI/Companion/Core/DeliveryCompanionCharacter.h"
+#include "AI/Companion/Core/DeliveryCompanionComponent.h"
 #include "AI/Network/DeliveryAiSettings.h"
 #include "Carry/DeliveryPackageCarrierInterface.h"
 #include "Components/BoxComponent.h"

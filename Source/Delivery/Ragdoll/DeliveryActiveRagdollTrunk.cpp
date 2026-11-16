@@ -1,6 +1,6 @@
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Character/DeliveryCharacter.h"
-#include "Vehicle/DeliveryTrunkPassengerComponent.h"
+#include "Vehicle/Trunk/DeliveryTrunkPassengerComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "PhysicsControlComponent.h"

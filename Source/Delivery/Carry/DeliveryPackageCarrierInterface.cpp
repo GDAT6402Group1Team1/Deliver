@@ -1,5 +1,5 @@
 #include "Carry/DeliveryPackageCarrierInterface.h"
-#include "Inventory/DeliveryPackageItem.h"
+#include "Inventory/Items/DeliveryPackageItem.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "GameFramework/PlayerState.h"
 #include "Engine/World.h"

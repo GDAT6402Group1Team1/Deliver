@@ -50,7 +50,7 @@ void UDeliveryPhoneController::Toggle()
 手机和其他界面可能同时打开。每个界面只报告自己的开关状态，HUD 判断是否还有其他面板存在
 
 ```cpp
-// 来源：Source/Delivery/UI/DeliveryHUD.cpp
+// 来源：Source/Delivery/UI/HUD/DeliveryHUD.cpp
 void ADeliveryHUD::SetPanelOpen(FName PanelId, bool bOpen)
 {
     if (PanelId.IsNone()) return;
@@ -93,7 +93,7 @@ PhoneAudio 是 PC 上的独立组件，它自己订阅电话队列，不依赖 W
 ## 代码位置
 
 - `Source/Delivery/UI/Controllers/DeliveryPhoneController.h/.cpp`：手机操作、对白和字幕
-- `Source/Delivery/UI/DeliveryHUD.h/.cpp`：处理器生命周期、面板集合、鼠标模式
+- `Source/Delivery/UI/HUD/DeliveryHUD.h/.cpp`：处理器生命周期、面板集合、鼠标模式
 - `Source/Delivery/Audio/DeliveryPhoneAudioComponent.h/.cpp`：电话音效
 - `Source/Delivery/Player/DeliveryPlayerController.h/.cpp`：输入、网络请求和旧蓝图转发入口
 - `Source/Delivery/Phone/DeliveryPhoneCallQueueComponent.h/.cpp`：原有电话队列与网络状态

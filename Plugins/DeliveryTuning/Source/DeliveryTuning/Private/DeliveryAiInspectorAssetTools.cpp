@@ -1,6 +1,6 @@
 #include "DeliveryAiInspectorAssetTools.h"
 
-#include "UI/DeliveryAiInspectorWidget.h"
+#include "UI/Conversation/DeliveryAiInspectorWidget.h"
 #include "Animation/WidgetAnimation.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"

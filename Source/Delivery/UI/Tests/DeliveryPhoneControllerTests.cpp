@@ -1,6 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
-#include "UI/DeliveryHUD.h"
+#include "UI/HUD/DeliveryHUD.h"
 #include "UI/Controllers/DeliveryPhoneController.h"
 #include "Player/DeliveryPlayerController.h"
 #include "Audio/DeliveryDialogueVoiceComponent.h"

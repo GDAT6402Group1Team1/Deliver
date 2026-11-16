@@ -8,7 +8,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
-#include "World/DeliveryLocationRegistry.h"
+#include "World/Location/DeliveryLocationRegistry.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
 #include "Task/DeliveryTaskManagerComponent.h"
 #include "TimerManager.h"

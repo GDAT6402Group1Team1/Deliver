@@ -3,7 +3,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Speech/DeliverySpeechInputComponent.h"
 #include "Character/DeliveryCharacter.h"
-#include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/Motorbike/DeliveryMotorbike.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"

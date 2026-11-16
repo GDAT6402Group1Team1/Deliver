@@ -6,7 +6,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
-#include "World/DeliveryLocationRegistry.h"
+#include "World/Location/DeliveryLocationRegistry.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
 #include "Task/Tracking/DeliveryTaskTrackerComponent.h"
 

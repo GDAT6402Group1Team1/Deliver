@@ -11,7 +11,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "Abilities/GA_DeliverPunch.h"
 #include "GameplayEffect.h"
-#include "Vehicle/DeliveryTrunkPassengerComponent.h"
+#include "Vehicle/Trunk/DeliveryTrunkPassengerComponent.h"
 
 UDeliverAbilitySystemComponent::UDeliverAbilitySystemComponent()
 {

@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbility.h"
-#include "Combat/DeliveryCombatTypes.h"
+#include "Combat/Types/DeliveryCombatTypes.h"
 #include "GA_DeliverPunch.generated.h"
 
 class ADeliveryCharacter;

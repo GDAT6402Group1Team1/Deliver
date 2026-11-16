@@ -35,7 +35,7 @@ R 经 IMC_Default 找到 IA_SummonVehicle，输入组件在 Bind 中将动作的
 召唤组件把请求送到服务器。服务器检查冷却、可用车辆和落点，成功后更新 ReadyServerTime。找不到落点或无法召唤时，不消耗冷却
 
 ```cpp
-// 来源：Source/Delivery/Vehicle/DeliveryVehicleSummonComponent.cpp
+// 来源：Source/Delivery/Vehicle/Summon/DeliveryVehicleSummonComponent.cpp
 ReadyServerTime = Now + Cooldown;
 // 房主不经过属性复制回调，因此服务器修改后也要发送通知
 OnCooldownChanged.Broadcast();
@@ -66,7 +66,7 @@ Cooldown 是等待时长，默认 10 秒；ReadyServerTime 是下一次允许召
 开始冷却只发生一次，但界面要把 10 秒改成 9 秒、8 秒。提示组件在冷却尚未结束时设置一次计时器，到时重新读取服务器时间，并决定是否再设置下一次
 
 ```cpp
-// 来源：Source/Delivery/UI/DeliveryHintComponent.cpp
+// 来源：Source/Delivery/UI/HUD/DeliveryHintComponent.cpp
 // 每次用服务器结束时间重算，卡顿时不会把倒计时越拖越长
 GetWorld()->GetTimerManager().SetTimer(
     CountdownTimer, this, &UDeliveryHintComponent::RefreshHint,

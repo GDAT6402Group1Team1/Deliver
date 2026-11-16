@@ -2,7 +2,7 @@
 
 #include "Game/DeliveryGameMode.h"
 #include "Game/DeliveryStartupFlow.h"
-#include "UI/DeliveryHUD.h"
+#include "UI/HUD/DeliveryHUD.h"
 #include "Character/DeliveryCharacter.h"
 #include "Game/DeliveryGameState.h"
 #include "Player/DeliveryPlayerController.h"

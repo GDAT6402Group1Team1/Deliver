@@ -2,8 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Speech/DeliverySpeechTurn.h"
-#include "Speech/DeliverySpeechAudioCapture.h"
+#include "Speech/Recognition/DeliverySpeechTurn.h"
+#include "Speech/Capture/DeliverySpeechAudioCapture.h"
 #include "Speech/DeliverySpeechPlayerContext.h"
 #include "DeliverySpeechInputComponent.generated.h"
 

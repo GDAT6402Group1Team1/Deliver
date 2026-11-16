@@ -2,8 +2,8 @@
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "AI/Conversation/DeliveryConversationComponent.h"
 #include "GameFramework/PlayerController.h"
-#include "UI/DeliveryAiInspectorWidget.h"
-#include "UI/DeliveryHUD.h"
+#include "UI/Conversation/DeliveryAiInspectorWidget.h"
+#include "UI/HUD/DeliveryHUD.h"
 
 void UDeliveryAiInspectorController::Initialize(APlayerController* InPlayer,ADeliveryHUD* InHUD,UDeliveryAiInspectorWidget* InWidget)
 {

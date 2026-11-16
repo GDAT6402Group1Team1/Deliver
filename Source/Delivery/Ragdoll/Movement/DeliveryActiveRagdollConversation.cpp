@@ -1,7 +1,7 @@
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Character/DeliveryCharacter.h"
 #include "Grab/DeliveryGrabComponent.h"
-#include "Vehicle/DeliveryTrunkPassengerComponent.h"
+#include "Vehicle/Trunk/DeliveryTrunkPassengerComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"

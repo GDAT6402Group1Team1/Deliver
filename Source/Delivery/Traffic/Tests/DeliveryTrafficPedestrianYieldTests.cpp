@@ -1,7 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Traffic/DeliveryTrafficCarComponent.h"
-#include "NPC/DeliveryPedestrian.h"
+#include "NPC/Pedestrian/DeliveryPedestrian.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SplineComponent.h"

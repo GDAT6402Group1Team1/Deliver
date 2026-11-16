@@ -1,6 +1,6 @@
 #include "DeliveryNpcCaptionAssetTools.h"
 
-#include "UI/DeliveryNpcCaptionWidget.h"
+#include "UI/Conversation/DeliveryNpcCaptionWidget.h"
 #include "Animation/WidgetAnimation.h"
 #include "AssetToolsModule.h"
 #include "Blueprint/WidgetTree.h"

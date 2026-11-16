@@ -3,7 +3,7 @@
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Task/World/DeliveryPickupPointComponent.h"
 #include "Task/World/DeliveryItemComponent.h"
-#include "Inventory/DeliveryPackageItem.h"
+#include "Inventory/Items/DeliveryPackageItem.h"
 
 // 优先显示目标无法操作的原因，否则使用目标配置的提示
 FText UDeliveryInteractionController::GetPrompt(UDeliveryInteractableComponent *Target, bool bPickup,

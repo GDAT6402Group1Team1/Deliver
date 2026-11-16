@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "World/DeliveryLocationMarker.h"
+#include "World/Location/DeliveryLocationMarker.h"
 #include "DeliveryDropOffPoint.generated.h"
 
 class UDeliveryInteractableComponent;

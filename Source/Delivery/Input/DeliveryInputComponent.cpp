@@ -9,7 +9,7 @@
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "Inventory/DeliveryInventoryComponent.h"
-#include "Vehicle/DeliveryVehicleSummonComponent.h"
+#include "Vehicle/Summon/DeliveryVehicleSummonComponent.h"
 #include "Combat/DeliveryRagdollCombatComponent.h"
 #include "Engine/World.h"
 #include "TimerManager.h"

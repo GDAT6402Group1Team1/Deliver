@@ -4,7 +4,7 @@
 #include "Character/DeliveryCharacter.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "Inventory/DeliveryInventoryComponent.h"
-#include "Inventory/DeliveryHandheldItem.h"
+#include "Inventory/Items/DeliveryHandheldItem.h"
 #include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"
 #include "Task/World/DeliveryBreakableDoor.h"

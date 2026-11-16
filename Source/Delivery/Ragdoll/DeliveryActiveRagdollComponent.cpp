@@ -7,7 +7,7 @@
 
 #include "Ragdoll/DeliveryActiveRagdollComponent.h"
 #include "Character/DeliveryCharacter.h"
-#include "Vehicle/DeliveryTrunkPassengerComponent.h"
+#include "Vehicle/Trunk/DeliveryTrunkPassengerComponent.h"
 #include "Grab/DeliveryGrabComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -28,7 +28,7 @@
 
 #include "UObject/ConstructorHelpers.h"
 #include "Inventory/DeliveryInventoryComponent.h"
-#include "Inventory/DeliveryHandheldItem.h"
+#include "Inventory/Items/DeliveryHandheldItem.h"
 
 UDeliveryActiveRagdollComponent::UDeliveryActiveRagdollComponent()
 {

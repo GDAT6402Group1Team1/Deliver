@@ -3,7 +3,7 @@
 #include "AI/BehaviorTree/BTTask_DeliveryListen.h"
 #include "AI/BehaviorTree/BTTask_DeliveryCompanionFollow.h"
 #include "AI/BehaviorTree/BTTask_DeliveryCompanionErrand.h"
-#include "AI/Presentation/DeliveryNpcExpressionSet.h"
+#include "AI/Presentation/Face/DeliveryNpcExpressionSet.h"
 #include "Curves/CurveFloat.h"
 #include "NavigationSystem.h"
 #include "NavMesh/NavMeshBoundsVolume.h"

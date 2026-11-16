@@ -7,13 +7,13 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Inventory/DeliveryInventoryComponent.h"
-#include "Inventory/DeliveryPackageItem.h"
+#include "Inventory/Items/DeliveryPackageItem.h"
 #include "Interaction/DeliveryInteractableComponent.h"
 #include "Task/World/DeliveryItemComponent.h"
 #include "Task/World/DeliveryPickupPointComponent.h"
 #include "Task/World/DeliveryTargetComponent.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
-#include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/Motorbike/DeliveryMotorbike.h"
 
 #if !UE_BUILD_SHIPPING
 

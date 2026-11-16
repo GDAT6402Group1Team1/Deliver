@@ -9,7 +9,7 @@
 #include "Ragdoll/Movement/DeliveryRagdollRecovery.h"
 #include "Ragdoll/Combat/DeliveryRagdollPunch.h"
 #include "TimerManager.h"
-#include "Combat/DeliveryBoxingPose.h"
+#include "Combat/Pose/DeliveryBoxingPose.h"
 #include "Ragdoll/DeliveryTrunkPose.h"
 #include "DeliveryActiveRagdollComponent.generated.h"
 

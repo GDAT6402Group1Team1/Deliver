@@ -10,8 +10,8 @@
 #include "PhysicsEngine/SkeletalBodySetup.h"
 #include "PhysicsControlComponent.h"
 #include "Character/DeliveryCharacter.h"
-#include "Vehicle/DeliveryTrunkPassengerComponent.h"
-#include "Vehicle/DeliveryMotorbike.h"
+#include "Vehicle/Trunk/DeliveryTrunkPassengerComponent.h"
+#include "Vehicle/Motorbike/DeliveryMotorbike.h"
 
 // 角色根位置与控制状态
 

@@ -1,5 +1,5 @@
 ﻿// 验证人行路线的生成上限、沿线段推进、出入场缩放与到端点回收
-#include "NPC/DeliveryPedestrianRoute.h"
+#include "NPC/Pedestrian/DeliveryPedestrianRoute.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Components/BoxComponent.h"
@@ -13,7 +13,7 @@
 #include "EngineUtils.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
-#include "NPC/DeliveryPedestrian.h"
+#include "NPC/Pedestrian/DeliveryPedestrian.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDeliveryPedestrianWalkTest, "Delivery.NPC.PedestrianWalk",
                                  EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

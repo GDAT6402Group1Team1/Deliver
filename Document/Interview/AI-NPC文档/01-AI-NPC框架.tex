@@ -1,0 +1,881 @@
+\documentclass[11pt]{article}
+\input{公共导言区}
+\begin{document}
+\doctitle{AI NPC 框架}
+
+Delivery 是一款使用 Unreal Engine 5.8 开发的多人送货游戏。街区中的 NPC（大壮、翠花和跟班二狗）由大语言模型驱动。玩家使用自然语言与 NPC 交谈，NPC 根据自身感知到的事件生成台词并选择动作。
+
+
+
+\plainsection{概述}
+
+玩家和翠花交谈时，游戏先记录她听到了什么，再请模型决定怎么回答、要不要做一个动作。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  % 泳道
+  \draw[lane=client] (2.15,0.75) rectangle (16.0,-0.75);
+  \draw[lane=game]   (2.15,-1.55) rectangle (16.0,-4.65);
+  \draw[lane=model]  (2.15,-5.5) rectangle (16.0,-7.0);
+  \node[solid=client,minimum width=2.05cm,minimum height=1.5cm] at (1.0,0) {玩家客户端\\{\scriptsize\mdseries 每名玩家一个}};
+  \node[solid=game,minimum width=2.05cm,minimum height=3.1cm] at (1.0,-3.1) {游戏服务器\\{\scriptsize\mdseries 房主一侧}};
+  \node[solid=model,minimum width=2.05cm,minimum height=1.5cm] at (1.0,-6.25) {AI 后端\\{\scriptsize\mdseries 独立进程}};
+  % 组件
+  \node[cp=client] (ui)   at (4.1,0)     {交谈界面\\{\scriptsize 文字或语音输入}};
+  \node[cp=client] (show) at (13.9,0)    {NPC 表现\\{\scriptsize 字幕、语音、表情}};
+  \node[cp] (conv)  at (4.1,-2.3)  {交谈组件\\{\scriptsize 校验距离、遮挡、频率}};
+  \node[cp] (agent) at (9.0,-2.3)  {NPC 决策组件\\{\scriptsize 记忆、候选、建议校验}};
+  \node[cp] (bt)    at (13.9,-2.3) {行为树与 GAS\\{\scriptsize 移动、出拳、搬运}};
+  \node[cp] (gw)    at (9.0,-3.9)  {模型网关\\{\scriptsize 排队、超时、取消}};
+  \node[cp=model] (llm) at (4.1,-6.25)  {语言模型\\{\scriptsize 大模型和本地小模型}};
+  \node[cp=model] (svc) at (9.0,-6.25)  {后端服务\\{\scriptsize 请求校验、调度、切句}};
+  \node[cp=model] (tts) at (13.9,-6.25) {语音合成\\{\scriptsize 逐句生成音频}};
+  % 连接
+  \draw[flow] (ui) -- node[num,right=2pt,fill=none] {{\symbolfont\mdseries ①} 玩家发言（RPC）} (conv);
+  \draw[flow] (conv) -- node[num,above=1pt,fill=none] {{\symbolfont\mdseries ②} 发言事件} (agent);
+  \draw[flow,<->] (agent) -- node[num,right=2pt,fill=none] {{\symbolfont\mdseries ③} 请求与回复} (gw);
+  \draw[flow,<->] (gw) -- node[num,right=2pt] {{\symbolfont\mdseries ④} HTTP 流式传输} (svc);
+  \draw[flow,<->] (svc) -- node[num,above=1pt,fill=none] {{\symbolfont\mdseries ⑤} 生成文字} (llm);
+  \draw[flow,<->] (svc) -- node[num,above=1pt,fill=none] {{\symbolfont\mdseries ⑥} 合成语音} (tts);
+  \draw[flow] (agent) -- node[num,above=1pt,fill=none] {{\symbolfont\mdseries ⑦} 执行动作} (bt);
+  \draw[flow] (bt) -- node[num,left=2pt,fill=none] {{\symbolfont\mdseries ⑧} 网络复制：动作、字幕、音频} (show);
+\end{tikzpicture}
+\end{adjustbox}
+\caption{系统总览}
+\end{figure}
+
+
+
+\clearpage
+\plainsection{网络架构与同步}
+
+联机试玩由房主同时运行 UE 服务器和本机客户端。远端玩家加入后，和房主看到的是同一个服务器维护的 NPC。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}[stepbox/.style={box=#1,text width=3.65cm,minimum height=1.00cm,font=\small}]
+\node[solid=client,minimum width=4.2cm] at (0,0) {玩家客户端};
+\node[solid=game,minimum width=4.2cm] at (5.65,0) {UE 游戏服务器};
+\node[solid=model,minimum width=4.2cm] at (11.30,0) {Python AI 后端};
+
+\node[stepbox=client] (input) at (0,-1.45) {文字或本机语音识别\\选定交谈对象};
+\node[stepbox=game] (submit) at (5.65,-1.45) {接收发言\\检查距离、权限与目标};
+\node[stepbox=model] (queue) at (11.30,-1.45) {请求排队\\人物、现场记录、候选动作};
+\draw[flow] (input) -- node[lab,above] {发言 RPC} (submit);
+\draw[flow] (submit) -- node[lab,above] {HTTP 请求} (queue);
+
+\node[stepbox=model] (model) at (11.30,-3.20) {模型选动作\\逐句生成台词};
+\node[stepbox=game] (check) at (5.65,-3.20) {服务器复查建议\\目标是否还在，动作能否执行};
+\draw[flow] (queue) -- (model);
+\draw[flow] (model) -- node[lab,above] {动作建议} (check);
+
+\node[stepbox=game] (bt) at (5.65,-4.95) {行为树\\接近、追赶、请求出拳};
+\node[stepbox=model] (tts) at (11.30,-4.95) {语音合成\\首句完成后开始合成};
+\draw[flow] (check) -- (bt);
+\draw[flow] (model) -- node[lab,right] {台词} (tts);
+
+\node[stepbox=data] (gas) at (5.65,-6.70) {GAS 与战斗组件\\出拳技能、扫掠判定命中};
+\node[stepbox=game] (opus) at (11.30,-6.70) {UE 音频分包\\压缩为 Opus，标记句子编号};
+\draw[flow] (bt) -- node[lab,right] {执行攻击} (gas);
+\draw[flow] (tts) -- node[lab,right] {HTTP 音频流} (opus);
+
+\node[stepbox=game] (state) at (5.65,-8.45) {服务器确认战斗结果\\扣血、倒地、动作开始时间};
+\node[stepbox=client] (anim) at (0,-8.45) {各客户端更新画面\\按服务器时间接上动画};
+\node[stepbox=client] (sound) at (11.30,-8.45) {各客户端播放声音\\边收边播，字幕跟随播放};
+\draw[flow] (gas) -- node[lab,right] {命中后结算} (state);
+\draw[flow] (state) -- node[lab,above] {状态复制} (anim);
+\draw[flow] (opus) -- node[lab,right] {广播或发给指定玩家} (sound);
+\end{tikzpicture}
+\end{adjustbox}
+\caption{从玩家发言到 GAS 执行和客户端同步}
+\end{figure}
+
+出拳在服务器上判定，客户端接收结果。下图用翠花打中玩家的例子展开 GAS 的各部分。
+
+\clearpage
+\plainsection{GAS 出拳与伤害结算}
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}[step/.style={box=#1,text width=4.25cm,minimum height=1.15cm,font=\small}]
+\node[step=game] (bt) at (0,0) {行为树\\翠花走到出拳距离};
+\node[step=data] (asc) at (5.5,0) {翠花的能力系统组件（ASC）\\接收出拳事件};
+\node[step=data] (ability) at (11,0) {Gameplay Ability\\启动并跟踪这一拳};
+\draw[flow] (bt) -- (asc);
+\draw[flow] (asc) -- (ability);
+\node[step=game] (hit) at (11,-2.1) {NPC 战斗组件\\扫过拳头经过的位置};
+\draw[flow] (ability) -- (hit);
+
+\node[step=game] (npc) at (0,-4.25) {打中居民\\由居民的战斗组件处理受击};
+\node[step=data] (effect) at (5.5,-4.25) {打中玩家\\构造伤害 Gameplay Effect};
+\node[step=client] (miss) at (11,-4.25) {挥空\\结束这一拳};
+\draw[flow] (hit.south) -- (miss.north);
+\draw[flow] (hit.south) -- ++(0,-.45) -| (effect.north);
+\draw[flow] (hit.south) -- ++(0,-.45) -| (npc.north);
+
+\node[step=data] (player) at (5.5,-6.05) {玩家的 ASC\\应用伤害效果};
+\node[step=data] (hp) at (5.5,-7.85) {Attribute Set\\保存当前血量 Health};
+\node[step=client] (ui) at (5.5,-9.65) {玩家客户端\\收到血量变化，更新显示};
+\draw[flow] (effect) -- (player);
+\draw[flow] (player) -- (hp);
+\draw[flow] (hp) -- node[lab,right] {复制血量} (ui);
+\end{tikzpicture}
+\end{adjustbox}
+\caption{NPC 出拳、命中分支与玩家血量同步}
+\end{figure}
+
+Gameplay Tag 用来标记出拳事件和伤害数值。行为树通过 \code{Event.Npc.Strike} 触发 \code{GA_NpcStrike}。挥空时，这一拳结束。打中居民时走居民的受击处理。打中玩家时，伤害效果由玩家身份上的 ASC 应用，血量变化随后同步到客户端。
+
+\section{感知、判断和执行}
+
+NPC 的每次反应按同一个循环执行。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}[node distance=0.55cm]
+  \node[solid] (s1) {1 感知};
+  \node[solid,right=of s1] (s2) {2 记忆};
+  \node[solid=model,right=of s2] (s3) {3 模型建议};
+  \node[solid,right=of s3] (s4) {4 服务器校验};
+  \node[solid,right=of s4] (s5) {5 行为树执行};
+  \node[solid=client,right=of s5] (s6) {6 表现};
+  \foreach \a/\b in {s1/s2,s2/s3,s3/s4,s4/s5,s5/s6} \draw[flow] (\a) -- (\b);
+  \draw[flow,dashed] (s5.south) -- ++(0,-0.75) -| node[lab,pos=0.25] {动作结果写回记忆} (s2.south);
+  \foreach \n/\t in {s1/视觉、听觉\\他人告知,s2/每个 NPC 一份\\按时间过期,s3/台词和动作\\动作取自候选,s4/目标是否存在\\状态是否允许,s5/移动、出拳\\拽车、搬运,s6/字幕、声音\\表情}
+    \node[font=\scriptsize,text=sub,align=center,above=2pt of \n] {\t};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{感知—决策—执行循环}
+\end{figure}
+例如翠花决定让路。她走到旁边并停下来，游戏把这次让路的结果留给下一轮决定。
+
+\section{三层反应}
+
+模型一次回复需要数秒。框架把反应按响应时间分为三层，三层并行运行。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \node[solid=client,minimum width=2.6cm] (t1) at (0,1.7) {本能层};
+  \node[box=client,minimum width=8.2cm,anchor=west,align=left,text width=7.7cm] (b1) at (1.5,1.7)
+    {\textbf{约 0.2 秒，不请求模型}\\{\scriptsize 听到发言后转头倾听；有人经过时注视；近处鸣笛时受惊；移动中避让他人、跳过矮障碍}};
+  \node[solid,minimum width=2.6cm] (t2) at (0,0) {规则层};
+  \node[box,minimum width=8.2cm,anchor=west,align=left,text width=7.7cm] (b2) at (1.5,0)
+    {\textbf{当帧，服务器规则}\\{\scriptsize 生成候选动作；校验建议；确认命中、交接和奖励；主人命中或受击时可触发协战}};
+  \node[solid=model,minimum width=2.6cm] (t3) at (0,-1.7) {模型层};
+  \node[box=model,minimum width=8.2cm,anchor=west,align=left,text width=7.7cm] (b3) at (1.5,-1.7)
+    {\textbf{秒级，大模型或小模型}\\{\scriptsize 理解玩家发言；生成台词并确定说话对象；从候选中选择动作和情绪}};
+  \node[solid,minimum width=2.6cm,minimum height=1.5cm] (ex) at (12.6,0) {共用的执行层\\{\scriptsize\mdseries 行为树 + GAS 技能}};
+  \foreach \b in {b1,b2,b3} \draw[flow] (\b.east) -- ++(0.45,0) |- (ex.west);
+\end{tikzpicture}
+\end{adjustbox}
+\caption{三层反应}
+\end{figure}
+
+
+\begin{note}
+玩家刚开口，NPC 就可以转头倾听。如果二狗正在跟随，主动避让和跳过矮障碍仍由游戏处理。例如起跳前会确认二狗没有骑车或搬家具，并检查落点和跳跃路线。
+\end{note}
+
+\section{职责边界}
+
+
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}L L@{}}
+\toprule
+\textbf{模型决定} & \textbf{游戏服务器决定} \\
+\midrule
+台词内容和说话对象 & 目标是否可到达，以及移动路线 \\
+对玩家发言的理解，以及是否采信他人转述的信息 & 攻击是否命中，目标是否被击倒 \\
+从候选中选择的动作，以及表现的情绪 & 每次请求提供哪些候选动作，以及动作的持续时间上限 \\
+交战中继续追打、逃跑或停止 & 任务进度、包裹归属、奖励结算和主人关系 \\
+\bottomrule
+\end{tabularx}
+\caption{模型与游戏服务器的决定范围}
+\end{table}
+
+\section{两种 AI 角色}
+
+游戏中有两种由大模型驱动的角色：居民和跟班。两者使用同一条决策链路，职责和权限不同。
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}l L L@{}}
+\toprule
+ & \textbf{居民（大壮、翠花）} & \textbf{跟班（二狗）} \\
+\midrule
+定位 & 街区居民。行为包括交谈、争吵、互相攻击和拖拽玩家的车辆。 & 玩家的同伴。行为包括跟随、代取代送包裹、寻找物品和摆放家具。 \\
+安排权限 & 没有主人，行动由模型选择。 & 只接受当前主人的安排。其他玩家可以与他交谈，但不能更改安排。 \\
+动作特点 & 每次执行一个短动作，或一段持续追打。 & 持续安排（跟随、等候）和单次委托（取件、送件）分别保存。 \\
+使用的模型 & 大模型。开启试验配置后，小模型可接手部分追打判断。 & 大模型。 \\
+记忆 & 记录现场事件，事件按时间过期。 & 另外保存本局经历（结识、共同完成的配送、受到的攻击），每次请求最多向模型提供 24 条。 \\
+战斗 & 通常由模型选择；被玩家或二狗真实打中后，可按服务器规则立即还手，居民互殴仍由模型决定。 & 主人真实打中对手或被打中时，可直接加入协战；主人要求收手后保留停止约束。 \\
+\bottomrule
+\end{tabularx}
+\caption{两种 AI 角色的区别}
+\end{table}
+
+\subsection{居民}
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \node[cls=client] (comp) at (0,3.3) {\textbf{表现与动作组件}
+    \nodepart{two}Presentation：字幕、声音、表情\\Look：注视与即时反应\\Combat：出拳与受击\\VehicleHold：拽住车辆};
+  \node[cls] (conv) at (5.75,3.3) {\textbf{UDeliveryConversation-\\Component}
+    \nodepart{two}位于玩家控制器\\Submit() / ServerSubmit()};
+  \node[cls=model] (gw) at (11.5,3.3) {\textbf{UDeliveryAiGatewaySubsystem}
+    \nodepart{two}Enqueue() / Cancel()\\并发、排队、超时};
+  \node[cls] (agent) at (11.5,0) {\textbf{UDeliveryNpcAgentComponent}
+    \nodepart{two}ObserveEvent()\\BuildDecisionRequest()\\StartAction() / TryFinishAction()};
+  \node[cls] (npc) at (5.75,0) {\textbf{ADeliveryNpcCharacter}
+    \nodepart{two}HearSpeech()\\CanExecute()\\ExecuteAction() / StopAction()};
+  \node[cls] (ctl) at (0,0) {\textbf{ADeliveryNpcAIController}
+    \nodepart{two}AI Perception：视觉、听觉\\RefreshBlackboard()\\站位避让、跳过矮障碍};
+  \node[cls] (bt) at (5.75,-3.1) {\textbf{UBTTask\_Delivery-\\ExecuteNpcAction}
+    \nodepart{two}ExecuteTask() / TickTask()\\AbortTask()};
+  \draw[flow] (conv) -- node[lab] {HearSpeech} (npc);
+  \draw[flow,{Diamond[length=3mm,width=1.8mm]}-] (npc) -- node[lab] {持有} (agent);
+  \draw[flow,{Diamond[length=3mm,width=1.8mm]}-] (npc.north west) -- node[lab] {持有} (comp.south east);
+  \draw[flow] (ctl) -- node[lab] {控制} (npc);
+  \draw[flow] (ctl.south east) -- node[lab] {运行行为树} (bt.north west);
+  \draw[flow] (bt) -- node[lab] {ExecuteAction} (npc);
+  \draw[flow] (bt.north east) -- node[lab] {StartAction} (agent.south west);
+  \draw[flow] (agent) -- node[lab] {Enqueue} (gw);
+  \node[font=\scriptsize,text=sub,align=left,anchor=west] at (9.4,-3.1) {实心菱形：组合\\箭头：调用方向};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{居民的类图（只列关键成员）}
+\end{figure}
+
+
+
+
+\subsection{跟班二狗}
+
+二狗沿用居民的对话和行动系统。另外，他要记住谁是主人，以及主人最后让他跟随、等候还是回家。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \node[cls=client] (base) at (0,0) {\textbf{ADeliveryNpcCharacter（复用）}
+    \nodepart{two}决策组件、模型网关\\表现组件、战斗组件};
+  \node[cls] (cc) at (5.75,0) {\textbf{ADeliveryCompanionCharacter}
+    \nodepart{two}重写 CanExecute()\\重写 ExecuteAction()\\重写 StopAction()};
+  \node[cls] (comp) at (11.5,0) {\textbf{UDeliveryCompanion-\\Component}
+    \nodepart{two}主人（绑定 PlayerState）\\模式：跟随 / 等候 / 回家\\当前委托、手持的实物\\本局经历与关系};
+  \node[cls] (bt) at (5.75,-3.0) {\textbf{BT\_Companion（行为树）}
+    \nodepart{two}跟随任务、跑腿任务\\物品搜索子树\\BT\_SearchNearbyItem};
+  \node[cls=data] (w) at (11.5,-3.0) {\textbf{协作的游戏系统}
+    \nodepart{two}任务系统：取件点、收件点\\GAS 技能：物品交接、使用家具\\专属摩托车、共用房屋};
+  \draw[flow,-{Triangle[open,length=2.6mm,width=2.6mm]}] (cc) -- node[lab] {继承} (base);
+  \draw[flow,{Diamond[length=3mm,width=1.8mm]}-] (cc) -- node[lab] {持有} (comp);
+  \draw[flow] (bt) -- node[lab] {执行} (cc);
+  \draw[flow] (comp) -- node[lab] {校验后调用} (w);
+  \draw[flow] (bt) -- node[lab] {读取安排} (comp.south west);
+  \node[font=\scriptsize,text=sub,align=left] at (0,-3.0) {空心三角：继承\\实心菱形：组合};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{跟班的类图}
+\end{figure}
+二狗记住的是玩家身份（PlayerState）。主人从步行改为开车，仍然可以给二狗安排任务。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}[node distance=0.6cm and 0.9cm]
+  \node[box=client] (u) {未结识\\{\scriptsize 倒在面馆门口}};
+  \node[solid,right=1.5cm of u] (f) {跟随};
+  \node[solid,right=1.3cm of f] (s) {等候};
+  \node[solid,right=1.3cm of s] (h) {回家};
+  \draw[flow] (u) -- node[lab,above,fill=none] {玩家扶起} (f);
+  \draw[flow] ([yshift=3pt]f.east) -- ([yshift=3pt]s.west);
+  \draw[flow] ([yshift=-3pt]s.west) -- ([yshift=-3pt]f.east);
+  \draw[flow] ([yshift=3pt]s.east) -- ([yshift=3pt]h.west);
+  \draw[flow] ([yshift=-3pt]h.west) -- ([yshift=-3pt]s.east);
+  \node[lab,fill=none,anchor=west] at ([xshift=4pt]h.east) {持续安排：主人提出新安排时才改变};
+  \node[box=data,below=1.0cm of u] (e1) {去取件点};
+  \node[box=data,right=of e1] (e2) {接过包裹};
+  \node[box=data,right=of e2] (e3) {去收件点};
+  \node[box=data,right=of e3] (e4) {交付或交还};
+  \foreach \x/\y in {e1/e2,e2/e3,e3/e4} \draw[flow] (\x) -- (\y);
+  \node[lab,fill=none,anchor=west] at ([xshift=4pt]e4.east) {单次委托：完成后回到当前的持续安排};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{持续安排与单次委托}
+\end{figure}
+主人让正在跟随的二狗去取件时，取件是临时委托。办完后，二狗可以接着跟随。取件路上受阻时，游戏会把原因记下来，供下一次回答或判断使用。
+
+\section{模块设计}
+
+
+
+\subsection{内部模块与外部组件}
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \node[solid,minimum width=4.3cm,minimum height=0.6cm,anchor=west] at (0,0.74) {内部模块};
+  \node[solid=model,minimum width=6.0cm,minimum height=0.6cm,anchor=west] at (5.0,0.74) {外部组件};
+  \node[solid=client,minimum width=4.6cm,minimum height=0.6cm,anchor=west] at (11.4,0.74) {调用时的限制};
+  \foreach \i/\a/\b/\c in {
+    0/{后端：大模型调用}/{云端大模型（常驻连接，流式输出）}/{请求可取消；网关超时 8 秒},
+    1/{后端：小模型客户端}/{llama.cpp + Qwen3-1.7B 微调模型（Q4）}/{超时 1.5 秒后转给大模型},
+    2/{后端：语音合成队列}/{Qwen3-TTS 0.6B，输出 24 kHz PCM}/{单工作线程；队列容量 24},
+    3/{游戏：语音识别线程}/{sherpa-onnx 中文流式 Zipformer（CPU）}/{独立线程；音频队列有上限},
+    4/{游戏：语音输入管线}/{UE 自带 WebRTC：回声消除、人声检测}/{音频线程执行；10 毫秒一帧},
+    5/{游戏：语音编解码}/{UE Voice 模块的 Opus 编解码器}/{后台线程编码；单句最长 12 秒},
+    6/{游戏：感知与动作执行}/{UE 感知、行为树、GAS、Smart Objects}/{只在服务器执行}}
+  { \node[box,minimum width=4.3cm,minimum height=0.62cm,anchor=west,font=\scriptsize,align=left,text width=3.9cm,inner ysep=2pt] (a\i) at (0,-\i*0.74) {\a};
+    \node[box=model,minimum width=6.0cm,minimum height=0.62cm,anchor=west,font=\scriptsize,align=left,text width=5.6cm,inner ysep=2pt] (b\i) at (5.0,-\i*0.74) {\b};
+    \node[box=client,minimum width=4.6cm,minimum height=0.62cm,anchor=west,font=\scriptsize,align=left,text width=4.2cm,inner ysep=2pt] at (11.4,-\i*0.74) {\c};
+    \draw[flow] (a\i.east) -- (b\i.west); }
+\end{tikzpicture}
+\end{adjustbox}
+\caption{内部模块与外部组件}
+\end{figure}
+
+
+\subsection{决策组件}
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \tikzset{inbox/.style={box,minimum width=3.6cm,minimum height=1.25cm,inner xsep=3pt},
+           exbox/.style={box=client,minimum width=2.4cm,minimum height=0.9cm}}
+  % 内部
+  \node[inbox] (mem) at (7.0,0)    {事件记忆\\{\scriptsize 按事件编号去重}\\{\scriptsize 最多 32 条，按时间过期}};
+  \node[inbox] (req) at (11.5,0)   {请求构建\\{\scriptsize 记忆、候选、在场人物}\\{\scriptsize 保存请求快照}};
+  \node[inbox] (act) at (7.0,-2.0) {动作状态\\{\scriptsize 分配 ActionId}\\{\scriptsize 状态复制到所有客户端}};
+  \node[inbox] (val) at (11.5,-2.0){建议校验\\{\scriptsize 核对请求编号和记忆版本}\\{\scriptsize 核对候选、目标、证据}};
+  \node[inbox] (rep) at (7.0,-4.0) {回复跟踪\\{\scriptsize 分配 ReplyId，保存台词}\\{\scriptsize 播放结束后结束本轮回复}};
+  \begin{scope}[on background layer]
+    \node[group=game,fit=(mem)(req)(rep)(val),inner sep=7pt] (g) {};
+  \end{scope}
+  \node[gtitle=game,anchor=south west] at (g.north west) {UDeliveryNpcAgentComponent（服务器）};
+  % 外部
+  \node[exbox] (src) at (1.3,0)    {事件来源\\{\scriptsize 感知、交谈、通信}};
+  \node[exbox] (bt)  at (1.3,-2.0) {行为树\\{\scriptsize 执行动作}};
+  \node[exbox] (pre) at (1.3,-4.0) {表现组件\\{\scriptsize 字幕、语音}};
+  \node[box=model,minimum width=1.7cm,minimum height=3.25cm] (gw) at (15.15,-1.0) {模型\\网关};
+  % 连接
+  \draw[flow] (src) -- node[lab,above,fill=none,font=\tiny] {\code{ObserveEvent}} (mem);
+  \draw[flow] (mem) -- (req);
+  \draw[flow] (req.east) -- node[lab,above,fill=none] {请求} (req.east-|gw.west);
+  \draw[flow] (val.east-|gw.west) -- node[lab,above,fill=none] {回复} (val.east);
+  \draw[flow] (val) -- (act);
+  \draw[flow] (val.south) |- (rep.east);
+  \draw[flow,<->] (bt) -- node[lab,above,fill=none,font=\tiny] {\code{StartAction}} node[lab,below,fill=none,font=\tiny] {\code{TryFinishAction}} (act);
+  \draw[flow,<->] (pre) -- node[lab,above,fill=none] {句子和音频} node[lab,below,fill=none] {播放完成确认} (rep);
+  \draw[flow,dashed] (act.north west) ++(0.5,0) coordinate (ax) -- node[lab,left=1pt,fill=none,pos=0.5] {} (ax|-mem.south);
+  \node[lab,fill=none,anchor=west] at ([xshift=3pt,yshift=-9pt]mem.south west) {};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{决策组件的内部结构}
+\end{figure}
+
+
+\subsection{模型网关与 AI 后端}
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \tikzset{st/.style={box=#1,minimum width=2.45cm,minimum height=1.15cm,inner xsep=2pt,font=\footnotesize},st/.default=game}
+  \draw[lane=game]  (2.15,0.95) rectangle (15.95,-0.95);
+  \draw[lane=model] (2.15,-1.85) rectangle (15.95,-4.75);
+  \node[solid=game,minimum width=2.05cm,minimum height=1.9cm] at (1.0,0) {模型网关\\{\scriptsize\mdseries 游戏服务器}};
+  \node[solid=model,minimum width=2.05cm,minimum height=2.9cm] at (1.0,-3.3) {AI 后端\\{\scriptsize\mdseries 独立进程}};
+  % 网关
+  \node[st,minimum height=1.5cm] (q) at (3.55,0) {排队与派发\\{\scriptsize 每个 NPC 一个}\\{\scriptsize 等待上限 32}\\{\scriptsize 同时发送 2 个}};
+  \node[st,minimum width=7.95cm,minimum height=1.5cm,align=left,text width=7.5cm] at (9.05,0) {\textbf{对每个请求的保护}\\{\scriptsize 超时：8 秒，包含排队和网络等待}\\{\scriptsize 取消：断开连接，后端停止该请求的剩余工作}\\{\scriptsize 世界结束：丢弃所有未完成的请求和回复}};
+  \node[st,minimum height=1.5cm] (rd) at (14.55,0) {流式读取\\{\scriptsize 按行解析事件}\\{\scriptsize 核对请求编号}\\{\scriptsize 转交决策组件}};
+  % 后端
+  \node[st=model] (h) at (3.55,-2.75)  {请求处理\\{\scriptsize 体积上限 64 KB}\\{\scriptsize 校验字段和版本}};
+  \node[st=model] (s) at (6.3,-2.75)   {调度器\\{\scriptsize 玩家请求优先}\\{\scriptsize 容量 8，线程 2}};
+  \node[st=model] (m) at (9.05,-2.75)  {模型调用\\{\scriptsize 同时最多 2 个}\\{\scriptsize 大模型或小模型}};
+  \node[st=model] (p) at (11.8,-2.75)  {句子解析\\{\scriptsize 先输出动作建议}\\{\scriptsize 再逐句输出台词}};
+  \node[st=model] (t) at (14.55,-2.75) {语音合成\\{\scriptsize 队列容量 24}\\{\scriptsize 分块返回音频}};
+  \node[box=model,minimum width=13.45cm,minimum height=0.6cm,font=\scriptsize,anchor=west] (ev) at (2.325,-4.2) {事件队列（上限 64 条）：proposal、sentence、audio\_chunk、model\_done、done};
+  \draw[flow] (h) -- (s); \draw[flow] (s) -- (m); \draw[flow] (m) -- (p); \draw[flow] (p) -- (t);
+  \foreach \n in {m,p,t} \draw[flow] (\n.south) -- (\n.south|-ev.north);
+  \draw[flow] (q) -- node[lab,right=2pt,fill=none,pos=0.42] {HTTP 请求} (h);
+  \draw[flow,dashed] (ev.east) -- ++(0.25,0) |- (rd.east);
+  \node[lab,fill=none,anchor=east] at (15.9,-1.4) {流式返回（每行一个 JSON 事件）};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{模型网关与 AI 后端的内部结构}
+\end{figure}
+
+
+\subsection{结构化决策}
+
+模型要用固定格式回传动作选项和台词。比如返回“选第 2 项”，后端就按原请求找到那项对应的动作和目标。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \node[box=model,minimum width=6.0cm,minimum height=3.7cm,align=left,text width=5.6cm,font=\scriptsize] (out) at (3.1,0)
+    {\textbf{模型输出（每行一个 JSON 对象）}\\[2pt]
+     第 1 行：候选序号、说话对象、情绪、台词\\
+     {\ttfamily \{"candidate\_index": 2,}\\
+     {\ttfamily \ "speech\_target\_id": "p1",}\\
+     {\ttfamily \ "emotion": "Angry",}\\
+     {\ttfamily \ "speech": "你少瞧不起人！"\}}\\[2pt]
+     后续行：只包含台词\\
+     {\ttfamily \{"speech": "来，试试！"\}}};
+  \node[box,minimum width=4.9cm,minimum height=3.7cm,align=left,text width=4.5cm,font=\scriptsize] (par) at (9.0,0)
+    {\textbf{句子解析器}\\[2pt]
+     {\symbolfont\mdseries ①} 逐行解析，单行上限 8192 字符\\
+     {\symbolfont\mdseries ②} 按候选序号从原请求中取出动作、目标、依据和时长\\
+     {\symbolfont\mdseries ③} 校验候选和说话对象\\
+     {\symbolfont\mdseries ④} 按标点把台词切分为句子\\
+     {\symbolfont\mdseries ⑤} 上限：3 行、3 句、120 字};
+  \node[box=game,minimum width=4.0cm,minimum height=1.05cm,font=\scriptsize] (p1) at (14.0,1.32) {\textbf{proposal 事件}\\动作建议，发给游戏服务器};
+  \node[box=data,minimum width=4.0cm,minimum height=1.05cm,font=\scriptsize] (p2) at (14.0,0) {\textbf{sentence 事件}\\逐句文本，送去语音合成};
+  \node[box=warn,minimum width=4.0cm,minimum height=1.05cm,font=\scriptsize] (p3) at (14.0,-1.32) {\textbf{格式错误}\\结束本次回复，并通知游戏};
+  \draw[flow] (out) -- (par);
+  \draw[flow] (par.east|-p1) -- (p1);
+  \draw[flow] (par.east|-p2) -- (p2);
+  \draw[flow] (par.east|-p3) -- (p3);
+\end{tikzpicture}
+\end{adjustbox}
+\caption{结构化决策：模型输出的格式与解析}
+\end{figure}
+
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=.65cm and .9cm]
+  \node[solid,minimum width=11cm] (req) {游戏服务器提交现场信息和可选动作};
+  \node[box=model,text width=5cm,below left=.65cm and -5.1cm of req] (large)
+    {大模型\\{\small 回答玩家、生成台词并选择行动}};
+  \node[box=model,text width=5cm,below right=.65cm and -5.1cm of req] (small)
+    {本地小模型（试验配置）\\{\small 已经开打后，选择继续、撤退或停手}};
+  \node[solid,minimum width=11cm,below=2.6cm of req] (check) {游戏服务器复查目标、权限和角色状态后执行};
+  \draw[flow] (req.south -| large.north) -- (large.north);
+  \draw[flow] (req.south -| small.north) -- (small.north);
+  \draw[flow] (large.south) -- (check.north -| large.south);
+  \draw[flow] (small.south) -- (check.north -| small.south);
+\end{tikzpicture}
+\caption{交谈与交战续判使用的模型}
+\end{figure}
+\explain{普通对话与二狗的安排由大模型处理。只有开启本地试验配置时，已进入交战的居民才会把符合条件的续判交给小模型。超时可回到大模型。后端先检查回复能否对应原候选，游戏服务器再判断现场是否仍允许执行。}
+
+
+
+\subsection{语音输出}
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \tikzset{st/.style={box=#1,minimum width=3.1cm,minimum height=1.05cm,inner xsep=2pt,font=\footnotesize},st/.default=game}
+  \draw[lane=model]  (2.15,0.8) rectangle (15.95,-0.8);
+  \draw[lane=game]   (2.15,-1.4) rectangle (15.95,-3.0);
+  \draw[lane=client] (2.15,-3.6) rectangle (15.95,-5.2);
+  \node[solid=model,minimum width=2.05cm,minimum height=1.6cm] at (1.0,0) {AI 后端};
+  \node[solid=game,minimum width=2.05cm,minimum height=1.6cm] at (1.0,-2.2) {游戏服务器};
+  \node[solid=client,minimum width=2.05cm,minimum height=1.6cm] at (1.0,-4.4) {玩家客户端};
+  \node[st=model] (a1) at (3.9,0)   {台词句子\\{\scriptsize 已通过校验的一句}};
+  \node[st=model] (a2) at (7.25,0)  {合成队列\\{\scriptsize 单工作线程，可取消}};
+  \node[st=model] (a3) at (10.6,0)  {Qwen3-TTS\\{\scriptsize 按人物选择音色}};
+  \node[st=model] (a4) at (13.95,0) {分块输出\\{\scriptsize 24 kHz PCM}};
+  \node[st] (b1) at (3.9,-2.2)   {流式读取\\{\scriptsize 接收音频事件}};
+  \node[st] (b2) at (7.25,-2.2)  {回复核对\\{\scriptsize 核对 ReplyId 和句序}};
+  \node[st] (b3) at (10.6,-2.2)  {Opus 编码\\{\scriptsize 后台线程逐块编码}};
+  \node[st] (b4) at (13.95,-2.2) {发送\\{\scriptsize 发送到各客户端}};
+  \node[st=client] (c1) at (3.9,-4.4)   {Opus 解码\\{\scriptsize 每句独立解码}};
+  \node[st=client] (c2) at (7.25,-4.4)  {播放缓冲\\{\scriptsize 累计 1.28 秒后开始}};
+  \node[st=client] (c3) at (10.6,-4.4)  {语音播放\\{\scriptsize 缺音时暂停后续播}};
+  \node[st=client] (c4) at (13.95,-4.4) {字幕与动画\\{\scriptsize 跟随实际播放的句子}};
+  \foreach \r in {a,b,c} { \draw[flow] (\r1) -- (\r2); \draw[flow] (\r2) -- (\r3); \draw[flow] (\r3) -- (\r4); }
+  \draw[flow] (a4.south) -- (13.95,-1.1) -- node[lab] {HTTP 流式事件} (3.9,-1.1) -- (b1.north);
+  \draw[flow] (b4.south) -- (13.95,-3.3) -- node[lab] {网络同步} (3.9,-3.3) -- (c1.north);
+\end{tikzpicture}
+\end{adjustbox}
+\caption{语音输出的处理链路}
+\end{figure}
+\explain{语音在后端合成，在游戏服务器压缩，在客户端解码和播放。大壮和二狗使用模型的预置音色，翠花使用参考音频克隆的音色。单句音频最长 12 秒。客户端累计 1.28 秒音频后开始播放；缓冲耗尽时暂停，累计 0.32 秒后继续。}
+
+\section{一次交谈的流程}
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \def\ytop{0}\def\ybot{-8.6}
+  \foreach \x/\n/\c in {0/玩家界面/client,3.2/交谈组件/game,6.4/决策组件/game,9.6/模型网关/game,12.8/AI 后端/model}
+  { \node[solid=\c,minimum width=2.3cm] at (\x,\ytop) {\n};
+    \draw[draw=\c!60,dashed,line width=0.5pt] (\x,-0.38) -- (\x,\ybot); }
+  \newcommand{\msg}[5][]{\draw[flow,#1] (#2,#4) -- node[lab,above=0.5pt,fill=none] {#5} (#3,#4);}
+  \newcommand{\self}[3]{\draw[flow] (#1,#2) -- ++(0.45,0) -- ++(0,-0.4) -- ++(-0.45,0);
+    \node[lab,anchor=west] at (#1+0.5,#2-0.2) {#3};}
+  \msg{0}{3.2}{-1.0}{{\symbolfont\mdseries ①} 发送玩家发言}
+  \self{3.2}{-1.5}{{\symbolfont\mdseries ②} 校验距离、遮挡、频率}
+  \msg{3.2}{6.4}{-2.5}{{\symbolfont\mdseries ③} HearSpeech}
+  \self{6.4}{-3.0}{{\symbolfont\mdseries ④} 倾听反应：转头注视玩家}
+  \msg{6.4}{9.6}{-4.0}{{\symbolfont\mdseries ⑤} 请求（记忆 + 候选）}
+  \msg{9.6}{12.8}{-4.6}{{\symbolfont\mdseries ⑥} 发送 HTTP 请求}
+  \msg[dashed]{12.8}{9.6}{-5.5}{{\symbolfont\mdseries ⑦} 动作建议、逐句台词和音频}
+  \msg[dashed]{9.6}{6.4}{-6.1}{{\symbolfont\mdseries ⑧} 返回建议}
+  \self{6.4}{-6.6}{{\symbolfont\mdseries ⑨} 校验建议，交给行为树}
+  \msg[dashed]{6.4}{0}{-7.9}{{\symbolfont\mdseries ⑩} 复制给所有客户端：动作、字幕、声音}
+\end{tikzpicture}
+\end{adjustbox}
+\caption{玩家交谈时序}
+\end{figure}
+\explain{步骤 {\symbolfont\mdseries ④} 在收到发言的当帧执行，不等待模型。步骤 {\symbolfont\mdseries ⑦} 按句返回：后端每解析出一个完整句子就送去合成语音，同时继续接收后续文字。}
+
+\begin{note}
+玩家的一条发言会同时写入听觉范围内其他 NPC 的记忆，并标明发言对象。发言对象负责回复。旁听的 NPC 只记录这条发言；发言提到旁听者的名字，或把旁听者与他人比较时，旁听者可以主动回应。NPC 之间的自动接话最多连续三轮。
+\end{note}
+
+\section{建议的校验与执行}
+
+比如模型建议追打大壮，游戏会先检查大壮是否还在场、翠花现在能不能出手。通过后，行为树才会开始执行。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}[node distance=0.5cm and 0.75cm]
+  \node[box=model] (in) {模型返回建议};
+  \node[decision,right=of in] (d1) {请求是否\\仍为最新？};
+  \node[decision,right=of d1] (d2) {动作是否\\在候选中？};
+  \node[decision,right=of d2] (d3) {目标和状态\\是否有效？};
+  \node[box=client,above=0.8cm of d2,minimum width=9.6cm] (drop) {丢弃建议，不执行动作。玩家仍在等待回复时，界面提示重试};
+  \node[box,below=0.8cm of d3] (run) {行为树执行\\{\scriptsize StartAction → ExecuteAction}};
+  \node[box] (fin) at (d2|-run) {报告结果\\{\scriptsize TryFinishAction}};
+  \node[box=data] (mem) at (d1|-run) {写回记忆\\{\scriptsize ActionFinished}};
+  \draw[flow] (in) -- (d1);
+  \draw[flow] (d1) -- node[lab] {是} (d2);
+  \draw[flow] (d2) -- node[lab] {是} (d3);
+  \draw[flow] (d3) -- node[lab] {是} (run);
+  \draw[flow] (run) -- (fin);
+  \draw[flow] (fin) -- (mem);
+  \foreach \d in {d1,d2,d3} \draw[flow] (\d) -- node[lab] {否} (\d|-drop.south);
+\end{tikzpicture}
+\end{adjustbox}
+\caption{从建议到动作}
+\end{figure}
+
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}l L@{}}
+\toprule
+\textbf{编号} & \textbf{用途} \\
+\midrule
+\code{WorldEpoch} & 关卡重新加载后，丢弃上一个世界中发出的请求所对应的回复。 \\
+\code{RequestId} & 每个 NPC 同一时间只有一个有效请求。请求取消后到达的回复因编号不匹配而被丢弃。 \\
+\code{ContextRevision} & 回复到达时，核对生成该回复所依据的记忆版本。 \\
+\code{ActionId} & 动作结束通知只对编号相同的动作生效，旧动作的结束通知不影响新动作。 \\
+\code{ReplyId} & 一段追打期间可以多次更换台词。取消语音时，只取消编号对应的那次回复。 \\
+\bottomrule
+\end{tabularx}
+\caption{编号体系}
+\end{table}
+
+\section{动作库}
+
+NPC 的动作登记在数据表中。每个动作分为定义、执行、表现三层，三层分别配置。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \node[solid=data,minimum width=4.7cm] (h1) at (0,0) {定义层：动作的名称和适用范围};
+  \node[box=data,minimum width=4.7cm,minimum height=2.3cm,align=left,text width=4.2cm,font=\scriptsize,below=0pt of h1] (c1)
+    {数据表 \code{DT_NpcBehaviorCatalog}\\行名为 Gameplay Tag\\字段：分类、说明、允许的角色\\和请求来源\\当前 34 行，所有人物共用};
+  \node[solid,minimum width=4.7cm] (h2) at (5.55,0) {执行层：服务器的执行方式};
+  \node[box,minimum width=4.7cm,minimum height=2.3cm,align=left,text width=4.2cm,font=\scriptsize,below=0pt of h2] (c2)
+    {行为树任务：走近、追打、搜索\\GAS 技能：出拳、物品交接、\\使用家具\\Smart Objects：座位与摆放槽位\\动作是否完成由服务器确认};
+  \node[solid=client,minimum width=4.7cm] (h3) at (11.1,0) {表现层：各人物的动画配置};
+  \node[box=client,minimum width=4.7cm,minimum height=2.3cm,align=left,text width=4.2cm,font=\scriptsize,below=0pt of h3] (c3)
+    {人物表 \code{BehaviorPresentation}\\按 Tag 覆盖动画片段和速率\\未配置时使用默认表现\\命中与位移由服务器校验};
+  \draw[flow] (c1.east) -- (c2.west);
+  \draw[flow] (c2.east) -- (c3.west);
+  \node[box=data,minimum width=4.7cm,font=\scriptsize,below=0.35cm of c1] (e1) {\code{Npc.Behavior.Movement.MoveAside}};
+  \node[box,minimum width=4.7cm,font=\scriptsize] (e2) at (c2|-e1) {查找侧方空位，沿导航路径移动};
+  \node[box=client,minimum width=4.7cm,font=\scriptsize] (e3) at (c3|-e1) {翠花和二狗分别配置了短步动画};
+  \draw[flow] (e1) -- (e2); \draw[flow] (e2) -- (e3);
+  \node[lab,fill=none,anchor=east] at ([xshift=-2pt]e1.west) {例};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{动作库的三层}
+\end{figure}
+翠花和二狗都能让路。他们用同样的规则找侧方空位，各自播放人物表里配置的侧步动画。
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}l L@{}}
+\toprule
+\textbf{查询} & \textbf{做法与代价} \\
+\midrule
+按 Tag 查找动作定义 & 世界启动时读取数据表并建立索引，之后单次查询平均为 $O(1)$。 \\
+核对模型选择的候选 & 候选编号通过哈希索引查找，平均为 $O(1)$；随后仍需核对动作、目标、证据与实时执行条件，完整校验不能概括为 $O(1)$。 \\
+生成本次请求的候选 & 先按角色和当前事件过滤动作，再逐个检查执行条件，复杂度为 $O(k)$，$k$ 是过滤后的动作数。 \\
+\bottomrule
+\end{tabularx}
+\caption{动作库的查询}
+\end{table}
+
+\begin{note}[协议版本]
+同伴能力协议当前为第 10 版。新增动作时版本号加一。使用旧版本的请求不包含新动作，因此后端和游戏可以分别升级。
+\end{note}
+
+\section{世界查询}
+
+NPC 的世界查询分为四类，每类有固定的数据来源。数据来源按 World 隔离，两个 PIE 世界之间不共享对象。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \foreach \i/\q/\s/\d in {
+    0/附近的角色和事件/AI Perception/{视觉和听觉感知，结果写入个人记忆},
+    1/附近可拾取、可使用的物品/交互注册表/{World 子系统，可交互物在 BeginPlay 登记},
+    2/地点的位置和用途/地点注册表/{World 子系统，关卡里的地点组件登记名称和用途},
+    3/目标是否可到达、是否可见/导航与射线/{执行前由服务器实际检测，不使用模型的判断}}
+  { \node[box=model,minimum width=4.6cm,minimum height=0.8cm] (q\i) at (0,-\i*1.0) {\q};
+    \node[solid,minimum width=3.0cm,minimum height=0.8cm] (s\i) at (4.75,-\i*1.0) {\s};
+    \node[box,minimum width=7.2cm,minimum height=0.8cm,font=\scriptsize] (d\i) at (10.4,-\i*1.0) {\d};
+    \draw[flow] (q\i) -- (s\i); }
+\end{tikzpicture}
+\end{adjustbox}
+\caption{四类查询和它们的来源}
+\end{figure}
+二狗找东西时，先从当前关卡登记的物品里找线索。到了附近，他还要亲眼看到那件物品才能去拿。
+
+下图以玩家发言“在我旁边找一把锤子”为例，说明查询结果转换为动作的过程。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}[node distance=0.5cm]
+  \node[box=client,text width=2.3cm] (a) {主人发言\\{\scriptsize “找一把锤子”}};
+  \node[box,text width=2.75cm,right=of a] (b) {查询交互注册表\\{\scriptsize 主人 6.5 米内、无遮挡，最多 4 条线索}};
+  \node[box=model,text width=2.3cm,right=of b] (c) {模型选择\\{\scriptsize FetchItem 和线索编号}};
+  \node[box,text width=2.6cm,right=of c] (d) {行为树搜索\\{\scriptsize 移动到线索位置，更换站位，俯身查看}};
+  \node[decision,below=0.75cm of d] (e) {是否看到\\该物品？};
+  \node[box,text width=2.3cm] (f) at (c|-e) {拾取并带回\\{\scriptsize GAS 技能确认交接}};
+  \node[box=client,text width=2.75cm] (g) at (b|-e) {报告结果\\{\scriptsize 未找到，或请主人补充说明}};
+  \foreach \x/\y in {a/b,b/c,c/d,d/e} \draw[flow] (\x) -- (\y);
+  \draw[flow] (e) -- node[lab] {是} (f);
+  \draw[flow] (e.south) -- ++(0,-0.45) -| node[lab,pos=0.25] {否} (g.south);
+\end{tikzpicture}
+\end{adjustbox}
+\caption{找物品的查询与执行流程}
+\end{figure}
+\explain{注册表返回的条目是线索，有效期 15 秒。角色到达线索位置后，行为树执行视线检查，确认看到同一件物品后才执行拾取。物品交接由 GAS 技能在服务器确认。}
+
+\section{持续行动}
+
+追打、跟随和跑腿持续数秒到数十秒。动作由行为树持续执行，决策组件在执行期间按时间点和事件发出模型请求。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}[x=0.72cm]
+  \draw[->,line width=0.8pt,sub] (0,0) -- (20.8,0) node[right,font=\scriptsize,text=sub] {秒};
+  \foreach \x in {0,4,8,12,16,20} { \draw[sub] (\x,-0.1) -- (\x,0.1); \node[font=\scriptsize,text=sub,below] at (\x,-0.1) {\x}; }
+  \fill[game!55] (0,0.9) rectangle (16,1.4); \node[font=\scriptsize,text=white] at (8,1.15) {同一个 ActionId：行为树持续追赶和出拳};
+  \fill[model!55] (0,1.6) rectangle (6.4,2.05); \node[font=\scriptsize,text=white] at (3.2,1.825) {ReplyId 1：“你少瞧不起人！”};
+  \fill[model!55] (6.6,1.6) rectangle (12.6,2.05); \node[font=\scriptsize,text=white] at (9.6,1.825) {ReplyId 2：“还嘴硬？”};
+  \fill[data!55] (12.8,1.6) rectangle (16,2.05); \node[font=\scriptsize,text=white] at (14.4,1.825) {停止};
+  \foreach \x/\l in {4/提前请求下一段动作,10.5/被命中，立即请求} { \draw[model,line width=0.7pt,->] (\x,0.85) -- (\x,0.15); \node[font=\scriptsize,text=model,above right=-1pt and 1pt] at (\x,0.25) {\l}; }
+  \draw[warn,dashed,line width=0.8pt] (20,0.1) -- (20,2.2); \node[font=\scriptsize,text=warn!85!black,anchor=east] at (19.9,2.05) {连续交战上限};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{一段追打里的后台决策}
+\end{figure}
+\explain{一段追打最长 8 秒。决策组件在结束前 4 秒发出下一次模型请求；角色被命中或对方逃跑时立即发出。目标相同的续接保留 \code{ActionId}，台词使用新的 \code{ReplyId}。连续交战上限为 20 秒。}
+
+\section{时延架构}
+
+从玩家发言结束到 NPC 开始说话，经过排队、模型生成、语音合成、网络同步、本机播放五个阶段。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \foreach \i/\s/\c in {0/排队/game,1/模型生成/model,2/语音合成/model,3/网络同步/game,4/本机播放/client}
+    \node[solid=\c,minimum width=2.95cm] (s\i) at (\i*3.25,0) {\s};
+  \foreach \a/\b in {s0/s1,s1/s2,s2/s3,s3/s4} \draw[flow] (\a) -- (\b);
+  \foreach \i/\l/\c in {
+    0/{玩家消息优先\\队列满时替换闲聊请求\\取消的请求立即出队}/game,
+    1/{复用常驻的模型连接\\长编号替换为短编号\\追打判断交给小模型}/model,
+    2/{逐句流式：首句先合成\\句内分段：生成中发送\\合成主干启用图加速}/model,
+    3/{Opus 压缩\\后台线程编码\\游戏线程只提交任务}/game,
+    4/{缓冲 1.28 秒后播放\\缺音时暂停，随后续播\\字幕跟随实际播放}/client}
+    \node[box=\c,minimum width=2.95cm,minimum height=1.75cm,font=\scriptsize,inner xsep=1pt] at (\i*3.25,-1.45) {\l};
+  \node[box=client,minimum width=15.95cm,font=\scriptsize] at (6.5,1.0) {与以上五个阶段并行：收到发言后约 0.2 秒内转头倾听，之后保持注视和等待姿态};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{各阶段的时延处理}
+\end{figure}
+后端拿到完整首句就开始合成，模型此时可以继续生成下一句。实测数据见第三篇。
+
+\section{表情、动画与声音}
+
+模型输出情绪和台词。表现层把它们转换为表情、姿态、动画和声音。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \node[box=model,minimum width=3.3cm] (i1) at (0,1.5) {模型输出的情绪\\{\scriptsize 平静 / 生气 / 惊讶}};
+  \node[box,minimum width=3.3cm] (i2) at (0,0) {交谈状态\\{\scriptsize 倾听 / 思考 / 说话}};
+  \node[box,minimum width=3.3cm] (i3) at (0,-1.5) {注视目标\\{\scriptsize 服务器选定，各端跟随}};
+  \node[solid=data,minimum width=3.5cm,minimum height=2.2cm] (set) at (5.1,0) {表情数据资产\\{\scriptsize\mdseries 表情名 → 形态键权重}\\{\scriptsize\mdseries 眨眼曲线与间隔}\\{\scriptsize\mdseries 视线上限、过渡速度}};
+  \node[box,minimum width=3.6cm,align=left,text width=3.2cm,font=\scriptsize] (mix) at (9.9,0) {\textbf{叠加规则}\\闭眼时减弱其他眼部变化\\眉毛和眼睛分别控制\\视线不重复头部的转动};
+  \node[solid=client,minimum width=1.9cm,minimum height=1.2cm] (out) at (13.7,0) {形态键\\{\scriptsize\mdseries 眼、眉}};
+  \foreach \n in {i1,i2,i3} \draw[flow] (\n.east) -- ++(0.45,0) |- (set.west);
+  \draw[flow] (set) -- (mix); \draw[flow] (mix) -- (out);
+\end{tikzpicture}
+\end{adjustbox}
+\caption{表情系统}
+\end{figure}
+\explain{输入有三项：模型输出的情绪、交谈状态、注视目标。表情数据资产把它们映射为形态键权重。源模型没有面部骨骼，眼睛和眉毛的形态键由脚本按顶点生成。}
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \foreach \i/\t/\d/\c in {
+    0/{\symbolfont\mdseries ①} 身体姿势/{主动画蓝图在十种姿势间混合：站立、说话、走、踱步、快步、拽车、挥拳、倒地、起身、受击后仰}/game,
+    1/{\symbolfont\mdseries ②} 交谈姿态/{叠加在身体姿势之上：转头、前倾、侧头}/game,
+    2/{\symbolfont\mdseries ③} 眼睛与眉毛/{形态键：表情、眨眼、视线}/data,
+    3/{\symbolfont\mdseries ④} 声音与字幕/{按句播放；字幕跟随实际播放的那一句}/client}
+  { \node[solid=\c,minimum width=3.2cm,minimum height=0.72cm,anchor=west] at (0,-\i*0.84) {\t};
+    \node[box=\c,minimum width=12.2cm,minimum height=0.72cm,anchor=west,font=\scriptsize,align=left,text width=11.7cm] at (3.3,-\i*0.84) {\d}; }
+\end{tikzpicture}
+\end{adjustbox}
+\caption{表现的四层}
+\end{figure}
+\explain{四层按顺序叠加。身体姿势的优先级从高到低为：倒地和起身、受击后仰、挥拳、交谈、移动。动画不修改角色位移和命中结果。}
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}[x=1.45cm]
+  \draw[->,line width=0.8pt,sub] (0,0) -- (10.6,0) node[right,font=\scriptsize,text=sub] {时间};
+  \fill[game!45] (0,0.35) rectangle (0.9,0.95); \node[font=\scriptsize] at (0.45,0.65) {倾听};
+  \fill[game!25] (0.9,0.35) rectangle (4.0,0.95); \node[font=\scriptsize] at (2.45,0.65) {思考};
+  \fill[model!45] (4.0,0.35) rectangle (6.2,0.95); \node[font=\scriptsize] at (5.1,0.65) {说话};
+  \fill[client!30] (6.2,0.35) rectangle (7.0,0.95); \node[font=\scriptsize] at (6.6,0.65) {缺音};
+  \fill[model!45] (7.0,0.35) rectangle (9.4,0.95); \node[font=\scriptsize] at (8.2,0.65) {说话};
+  \foreach \x/\l in {0.45/{探身，约 0.7 秒},2.45/{侧头，保持注视},5.1/{说话动画 + 情绪},6.6/{回到待机\\口型停止},8.2/{继续播放同一句}}
+    \node[font=\scriptsize,text=sub,align=center,below] at (\x,-0.1) {\l};
+  \draw[sub,line width=0.6pt] (0,1.05) -- (0,1.35); \node[font=\scriptsize,anchor=west] at (0,1.25) {玩家发言结束};
+  \draw[sub,line width=0.6pt] (4.0,1.05) -- (4.0,1.35); \node[font=\scriptsize,anchor=west] at (4.0,1.25) {首句声音到达};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{一轮交谈里的姿态变化}
+\end{figure}
+\explain{倾听姿态持续约 0.7 秒，之后切换为思考姿态，直到首句声音到达。播放中音频缓冲耗尽时，身体动画切回待机，字幕和注视保持；后续音频到达后继续播放同一句。}
+
+\begin{note}[多人同步]
+挥拳、倒地、起身和受击动作都记录服务器上的开始时间。客户端延迟收到状态或重建动画实例时，根据开始时间计算当前进度，并从该进度继续播放。
+\end{note}
+
+\section{语音输入}
+
+玩家可以使用文字或语音输入。主人可以与自己的二狗建立语音连线。连线期间，二狗不在主人附近时也能接收主人的语音。
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}[node distance=0.42cm]
+  \node[box=client] (a) {麦克风};
+  \node[box,right=of a] (b) {回声消除\\{\scriptsize WebRTC}};
+  \node[box,right=of b] (c) {人声检测\\{\scriptsize 每 10 毫秒一帧}};
+  \node[box,right=of c] (d) {自动分句\\{\scriptsize 静音 0.8 秒结束一句}};
+  \node[box=model,right=of d] (e) {本地识别\\{\scriptsize sherpa-onnx}};
+  \node[solid,right=of e] (f) {服务器\\{\scriptsize\mdseries 轮次校验}};
+  \foreach \x/\y in {a/b,b/c,c/d,d/e,e/f} \draw[flow] (\x) -- (\y);
+\end{tikzpicture}
+\end{adjustbox}
+\caption{语音输入管线}
+\end{figure}
+\explain{回声消除和人声检测使用 UE 自带的 WebRTC 音频处理，识别使用 sherpa-onnx 流式模型。回声消除、人声检测和分句在音频线程执行，识别在独立线程执行。分句参数：0.25 秒预卷，连续 0.1 秒人声开始一句，0.8 秒静音结束一句。识别结果以文字提交服务器，后续流程与文字输入相同。}
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}l L@{}}
+\toprule
+\textbf{设计点} & \textbf{做法} \\
+\midrule
+对话占用 & 每个 NPC 同一时间只接受一位玩家的语音输入。占用关系由 World 子系统管理，在超时或玩家离开时自动释放。 \\
+语音连线 & 服务器按 PlayerState 确认二狗的归属后，主人与二狗的交谈不受距离限制。主人本机播放二狗的回复时不做距离衰减。 \\
+\bottomrule
+\end{tabularx}
+\caption{语音输入的几个设计点}
+\end{table}
+
+\section{其他设计}
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\textwidth}{@{}l L@{}}
+\toprule
+\textbf{设计} & \textbf{说明} \\
+\midrule
+拳头接触判定 & 沿拳头骨骼从上一帧位置到当前帧位置的轨迹做球体扫掠，扫掠接触到目标时判定命中。同一次出拳对同一目标只结算一次。 \\
+站位避让 & 两个 NPC 结束交谈后，身体间距小于 80 厘米时，其中一人沿导航路径移动，使间距达到约 120 厘米。 \\
+跳过矮障碍 & 沿当前路径向前检查障碍。确认落点有地面支撑、跳跃弧线上没有碰撞后起跳。落地后继续执行原路径请求。 \\
+NPC 直接通信 & NPC 之间可以直接发送文字消息。接收方把消息记录为“被告知”，不记录为“听见”。消息不能转移主人权限。 \\
+AI 检视面板 & 在游戏内显示最近一次决策的输入、候选、建议、校验结果和各阶段耗时。 \\
+\bottomrule
+\end{tabularx}
+\caption{其他技术设计}
+\end{table}
+
+\section{玩家插话时的处理}
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\textwidth}
+\begin{tikzpicture}
+  \draw[sub,line width=0.6pt,->] (0,0) -- (15.6,0) node[right,font=\scriptsize,text=sub] {时间};
+  \fill[client!45] (1.9,0.95) rectangle (5.6,1.35);
+  \draw[client!70,dashed,line width=0.6pt] (5.6,1.15) -- (9.4,1.15);
+  \node[font=\scriptsize,text=ink] at (3.75,1.15) {请求 A};
+  \fill[game!60] (5.6,0.35) rectangle (13.2,0.75);
+  \node[font=\scriptsize,text=white] at (9.4,0.55) {请求 B};
+  \foreach \x in {1.9,5.6,9.4,13.2} \draw[sub,line width=0.6pt] (\x,-0.12) -- (\x,0.12);
+  \node[box=client,font=\scriptsize,minimum width=3.3cm,minimum height=1.0cm] at (1.9,-0.95) {玩家第一次发言\\发出请求 A};
+  \node[box,font=\scriptsize,minimum width=3.6cm,minimum height=1.0cm] at (5.6,-0.95) {玩家插话\\取消请求 A，发出请求 B};
+  \node[box=warn,font=\scriptsize,minimum width=3.6cm,minimum height=1.0cm] at (9.4,-0.95) {请求 A 的回复到达\\编号与当前请求不同，丢弃};
+  \node[box=data,font=\scriptsize,minimum width=3.3cm,minimum height=1.0cm] at (13.2,-0.95) {请求 B 的回复到达\\校验通过，执行动作};
+\end{tikzpicture}
+\end{adjustbox}
+\caption{过期回复的处理}
+\end{figure}
+玩家问到一半改口时，游戏用新请求替换旧请求。即使旧回复先返回，服务器也会认出它属于上一轮。
+
+\section{二狗的角色蓝图与家居交互}
+\subsection{角色蓝图如何组装现有能力}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/03-companion-blueprint-print.png}
+\caption{二狗角色蓝图}
+\end{figure}
+\explain{资产：\path{/Game/NPC/Companion/BP_Companion_Ergou}}
+
+主人说“把抱枕放到桌上”，模型从游戏给出的选项里选出抱枕和桌子。游戏确认房屋已解锁、抱枕能拿、桌上有空位后，二狗走过去拿起抱枕，再搬到桌边放下。抱枕放到桌上的那一刻，游戏才记下这件事已经办完。
+
+\end{document}

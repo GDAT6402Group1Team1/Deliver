@@ -2,7 +2,7 @@
 
 #include "Task/Tracking/DeliveryObjectiveRingComponent.h"
 
-#include "World/DeliveryLocationRegistry.h"
+#include "World/Location/DeliveryLocationRegistry.h"
 #include "Task/Tracking/DeliveryTaskTrackerComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/DecalComponent.h"

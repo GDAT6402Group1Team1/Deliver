@@ -1,0 +1,138 @@
+\documentclass[11pt]{article}
+\input{公共导言区}
+\begin{document}
+\doctitle{NPC 响应延迟与性能取舍}
+
+玩家和 NPC 说完话，要等几秒才能听见回答。战斗中，对手跑开以后，NPC 也可能过一会儿才决定要不要追。我们分别测了说话的等待和战斗判断的耗时。
+
+\plainsection{先找出等待发生在哪}
+
+用请求编号把游戏和后端日志对起来，就能看见模型什么时候开始回字、游戏什么时候批准动作、玩家端什么时候开始播声音。
+
+\begin{table}[H]\small
+\begin{tabularx}{\textwidth}{@{}l l L@{}}
+\toprule 记录点 & 历史实测 & 计时范围 \\
+\midrule
+首段文字 & 约 1.98 s & 后端开始处理到收到首段，其中约 1.89 s 在等待内容返回。\\
+首句完整 & 约 2.80 s & 后端到完整首句可送给 TTS。\\
+动作批准 & 约 3.15 s & UE 发出请求到服务器批准动作。\\
+首块音频返回 & 约 5.22 s & 后端收到请求到交出首块音频，其中 TTS 排队约 1.28 s。\\
+\bottomrule
+\end{tabularx}
+\caption{11 月 14 日 16:07 翠花交谈的一次记录}
+\end{table}
+
+这次等待主要发生在模型回第一段文字之前，语音合成也要单独排队。先改成第一句写完就送去合成，后面的文字继续生成。
+
+另一次双人联机试玩中，发送后约 3.5 秒，两端都开始播放第一句。那次用的是文字输入，语音输入还要计入识别时间。
+
+
+
+\clearpage
+\plainsection{第一句先播，后面的边生成边送}
+
+最初要等模型把回复写完，才能合成整段台词。改为逐句流式后，第一句完整就送去合成，其余句子仍可继续生成。句内再分块发送，客户端收到约 1.28 秒声音即可起播。缓冲保留一点余量，是为了让合成或网络偶尔慢下来时，声音仍能接上。
+
+\begin{table}[H]\small
+\begin{tabularx}{\textwidth}{@{}l L L@{}}
+\toprule 方案 & 实测 & 取舍 \\
+\midrule
+TTS 主干 CUDA Graph & 独立语音测试中，男声首块约 772 → 322 ms，女声约 710 → 304 ms。 & 每个音色启动时建图约 0.6--0.7 s。该测量采用预热后的生成路径，游戏与模型共用显卡的结果另测。\\
+逐句及句内流式 & 一条后端 HTTP 重放约 2.85 s 首句、3.33 s 首块。5.2 s 音频约用 2.32 s 合成。 & 按 1.28 s 缓冲模拟未耗尽。实际联机播放取决于编码、传输和客户端缓冲。\\
+Opus 压缩 & 同一句音频从约 117 KB 降至 12 KB，后台编码约 26 ms。 & 编码增加处理时间，换来网络体积下降。上线评估还要看并发时的编码队列与实际播放。\\
+\bottomrule
+\end{tabularx}
+\caption{语音路径的测量与取舍}
+\end{table}
+
+单独测语音后，再开双人游戏和本地模型一起测。只有声音可以接着播、游戏也没有明显变慢，这项优化才适合放进试玩。
+ 
+\clearpage
+\plainsection{把战斗判断交给本地模型}
+
+追打途中常只需要在继续、撤退、停手之间选一项。为这类判断试用本地小模型，普通对话继续走原来的大模型。先用 40 个固定情境核对选择，再把符合要求的配置放进双人游戏里测速度和帧时间。
+
+同一台电脑上开两个游戏窗口。先测只运行游戏和语音的情况，再分别加本地 Q4 和远端 Luna。每组测 40 秒，镜头和台词都相同。
+
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[x=.080cm,y=.64cm,font=\small]
+\foreach \x in {0,30,60,90,120}{
+ \draw[sub!18] (\x,-2.55) -- (\x,.5);
+ \node[below,font=\scriptsize] at (\x,-2.55) {\x};
+}
+\foreach \i/\lab/\v/\barcolor in {0/双人游戏＋语音/109.08/game,1/加入全 GPU Q4/122.21/warn,2/改用 Luna/111.10/data}{
+ \node[left] at (-2,-\i) {\lab};
+ \fill[\barcolor] (0,-\i-.23) rectangle (\v,-\i+.23);
+ \node[right,font=\scriptsize] at (\v,-\i) {\v};
+}
+\draw[warn,dashed] (119.99,-2.52) -- (119.99,.52);
+\node[above left,font=\scriptsize,text=warn] at (119.99,.53) {上限 119.99 ms};
+\node[font=\scriptsize] at (65,-3.48) {帧时间 P95（ms，越低越好）};
+\end{tikzpicture}
+\caption{每组完整 40 秒的 UE 帧时间实测}
+\end{figure}
+\explain{P95 可以理解为 95\% 的帧都能在这个时间内完成。Q4 组从基线的 109.08 ms 升到 122.21 ms，超过预先设定的 119.99 ms 上限。}
+\begin{center}
+\includegraphics[width=\textwidth]{images/05-frame-capture-log.png}
+\end{center}
+\explain{UE 原始日志摘录。两行记录整次 CSV 采集起止和写出的文件，图 1 取其中三段各 40 秒的数据。}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[x=.67cm,y=1.08cm,font=\scriptsize]
+\foreach \y in {0,1,2,3}{
+ \draw[sub!18] (.7,\y) -- (15.3,\y);
+ \node[left] at (.7,\y) {\y};
+}
+\foreach \x in {1,3,5,7,9,11,13,15}{\node[below] at (\x,0) {\x};}
+\node[above] at (2,3.06) {决策耗时（秒）};
+\node[above,text=game] at (10,3.06) {\textbullet Q4};
+\node[above,text=model] at (13,3.06) {\textbullet Luna};
+\fill[game] (1,0.2757) circle (1.5pt); \fill[model] (1,1.9165) circle (1.5pt);
+\fill[game] (2,0.2436) circle (1.5pt); \fill[model] (2,2.0997) circle (1.5pt);
+\fill[game] (3,0.2060) circle (1.5pt); \fill[model] (3,2.1040) circle (1.5pt);
+\fill[game] (4,0.2761) circle (1.5pt); \fill[model] (4,2.3336) circle (1.5pt);
+\fill[game] (5,0.1924) circle (1.5pt); \fill[model] (5,2.8016) circle (1.5pt);
+\fill[game] (6,0.2438) circle (1.5pt); \fill[model] (6,1.8958) circle (1.5pt);
+\fill[game] (7,0.1966) circle (1.5pt); \fill[model] (7,2.0511) circle (1.5pt);
+\fill[game] (8,0.2111) circle (1.5pt); \fill[model] (8,2.2854) circle (1.5pt);
+\fill[game] (9,0.2355) circle (1.5pt); \fill[model] (9,2.0442) circle (1.5pt);
+\fill[game] (10,0.2024) circle (1.5pt); \fill[model] (10,1.9512) circle (1.5pt);
+\fill[game] (11,0.3625) circle (1.5pt); \fill[model] (11,1.8595) circle (1.5pt);
+\fill[game] (12,0.2558) circle (1.5pt); \fill[model] (12,2.0836) circle (1.5pt);
+\fill[game] (13,0.1842) circle (1.5pt); \fill[model] (13,2.2386) circle (1.5pt);
+\fill[game] (14,0.1967) circle (1.5pt); \fill[model] (14,2.0987) circle (1.5pt);
+\fill[game] (15,0.2091) circle (1.5pt); \fill[model] (15,1.8743) circle (1.5pt);
+\node[below] at (8,-.35) {共同完成的情境编号};
+\end{tikzpicture}
+\caption{同一批 15 个情境的决策耗时}
+\end{figure}
+两种模型都答完了这 15 道题。把每个模型的耗时从快到慢排列，排在中间的一题，Q4 用了约 0.21 秒，Luna 用了约 2.08 秒。Luna 还有 25 次发起时机因为上一题没答完而跳过。
+
+Q4 的动作判断更快，但游戏较慢的帧也更慢，超过了这轮定好的上限，所以没有采用这组设置。三组的路人数量也有波动，要重复对照才能进一步查出原因。
+
+\clearpage
+\plainsection{为什么换方案也要重测}
+
+\begin{table}[H]\small
+\begin{tabularx}{\textwidth}{@{}l L L@{}}
+\toprule 尝试 & 观察 & 决策 \\
+\midrule
+21 层放 GPU & 另一轮各 70 秒且双音色常驻的对照中，40 次尝试有 15 次超时。最慢完整句合成比例 2.55，模拟缺音 14.08 s，帧时间 P95 增加 22.44\%。 & 部分放到 CPU 后仍需同时过动作、语音和帧时间门槛。该配置未采用。\\
+缩短输出并保留人物缓存 & 输出从约 10--13 个 token 缩到 2--3 个。为大壮和翠花各保留提示缓存，减少轮流调用的重复计算。 & 保留为优化方向。分别复核动作质量、并发时的显存和合成表现。\\
+减少推理线程 & 一轮记录期间双人 PIE 提前退出，随后第二个编辑器与测试重叠。 & 作废对照并保留失败日志。重新测量时固定游戏状态与后台进程。\\
+18 层试玩配置 & 只在指定居民的战斗中试用，超时转回大模型。 & 这一版的游戏帧时间和语音表现需要单独测。\\
+\bottomrule
+\end{tabularx}
+\caption{后续配置对照}
+\end{table}
+
+试玩后来明确了一个可以单独处理的场景：玩家或二狗真实打中居民后，部分还手可由服务器先启动，模型随后接话和判断战况。这样减少的是命中到还手的等待。居民之间是否升级争执等需要理解上下文的判断，仍由模型负责。
+
+复测时轮换三组的先后顺序，再看动作是否按时返回、语音是否断过、画面慢帧是否增加。
+
+{\small\textbf{记录位置}\quad \path{Document/AIIteration.html} 的“NPC 决策等待分析”、语音加速和本地模型同机对照。40 秒原始汇总、配对题与帧统计位于 \path{Tools/DeliveryAI/npc_training/records/2026-11-14/round3/q4-coexist/}。}
+
+\end{document}

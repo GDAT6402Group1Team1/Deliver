@@ -53,7 +53,7 @@ DeliveryActiveRagdollComponent 按物理更新阶段组织角色控制。物理�
 对应文件：
 
 - [Source/Delivery/Combat/DeliveryRagdollCombatComponent.cpp](../Source/Delivery/Combat/DeliveryRagdollCombatComponent.cpp)
-- [Source/Delivery/Combat/DeliveryBoxingPose.cpp](../Source/Delivery/Combat/DeliveryBoxingPose.cpp)
+- [Source/Delivery/Combat/Pose/DeliveryBoxingPose.cpp](../Source/Delivery/Combat/Pose/DeliveryBoxingPose.cpp)
 - [Source/Delivery/Ragdoll/Combat/DeliveryActiveRagdollCombat.cpp](../Source/Delivery/Ragdoll/Combat/DeliveryActiveRagdollCombat.cpp)
 - [Source/Delivery/AbilitySystem/Abilities/GA_DeliverPunch.cpp](../Source/Delivery/AbilitySystem/Abilities/GA_DeliverPunch.cpp)
 
@@ -70,7 +70,7 @@ DeliveryAnimationArmPose.cpp 负责动画采样。它累计骨骼层级变换，
 对应文件：
 
 - [Source/Delivery/Ragdoll/Combat/DeliveryActiveRagdollAnimation.cpp](../Source/Delivery/Ragdoll/Combat/DeliveryActiveRagdollAnimation.cpp)
-- [Source/Delivery/Combat/DeliveryAnimationArmPose.cpp](../Source/Delivery/Combat/DeliveryAnimationArmPose.cpp)
+- [Source/Delivery/Combat/Pose/DeliveryAnimationArmPose.cpp](../Source/Delivery/Combat/Pose/DeliveryAnimationArmPose.cpp)
 - [Source/Delivery/Task/World/DeliveryBreakableDoor.cpp](../Source/Delivery/Task/World/DeliveryBreakableDoor.cpp)
 
 ## 网络同步
@@ -100,7 +100,7 @@ DeliveryGrabComponent 管理抓取候选、服务器检查、双手接触点和�
 对应文件：
 
 - [Source/Delivery/Grab/DeliveryGrabComponent.cpp](../Source/Delivery/Grab/DeliveryGrabComponent.cpp)
-- [Source/Delivery/UI/DeliveryHotbarWidget.cpp](../Source/Delivery/UI/DeliveryHotbarWidget.cpp)
+- [Source/Delivery/UI/HUD/DeliveryHotbarWidget.cpp](../Source/Delivery/UI/HUD/DeliveryHotbarWidget.cpp)
 
 ## 界面与资源
 
@@ -114,4 +114,4 @@ DeliveryHotbarWidget 显示背包槽位、物品图标和耐久。BuildWidgetTre
 
 - [Source/Delivery/Character/DeliveryCharacter.cpp](../Source/Delivery/Character/DeliveryCharacter.cpp)
 - [Source/Delivery/Ragdoll/DeliveryActiveRagdollComponent.h](../Source/Delivery/Ragdoll/DeliveryActiveRagdollComponent.h)
-- [Source/Delivery/UI/DeliveryHotbarWidget.cpp](../Source/Delivery/UI/DeliveryHotbarWidget.cpp)
+- [Source/Delivery/UI/HUD/DeliveryHotbarWidget.cpp](../Source/Delivery/UI/HUD/DeliveryHotbarWidget.cpp)

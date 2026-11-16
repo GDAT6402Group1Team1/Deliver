@@ -1,7 +1,7 @@
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
-#include "Speech/DeliverySpeechAudioProcessor.h"
+#include "Speech/Capture/DeliverySpeechAudioProcessor.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/ScopeLock.h"

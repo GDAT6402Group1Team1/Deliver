@@ -2,7 +2,7 @@
 #include "UObject/UnrealType.h"
 
 #include "DeliveryConversationAssetTools.h"
-#include "UI/DeliverySpeechStatusWidget.h"
+#include "UI/Conversation/DeliverySpeechStatusWidget.h"
 #include "Animation/WidgetAnimation.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"

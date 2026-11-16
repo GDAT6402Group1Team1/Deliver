@@ -165,7 +165,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 
 结识后实际倒地可由当前主人长按同一 E 辅助起身，完成站立才增加关系。站立时从同一 E 入口交接场景中真实的小绿，旧临时生成配置已移除。模型仅在当前主人同意后选择真实拾取或向同单原包裹投放。协战由模型选择绑定真实命中的 `JoinAssist`，取代旧的命中即自动开打入口，之后复用居民 Fight 和 GAS。主人本轮明确收手使用 `StopAssist`，普通聊天用 `ContinueCurrent` 保留安排。记忆保留首次结识和真实累计经历，模型最多读取 24 条事实。编号去重、退出清理、门洞智能连接、爷爷搬离和共用 Home 见主文档。保留既有音色、分段播放与轻量 UI。用实际 E/T、驾驶、初遇和多人操作验收，按当批实际结果更新 `Document/Architecture.md` 二狗章节和 `Document/AIIteration.html`。
 
-2026-11-15 试玩后的调整（源码已改，尚未编译和实机验收）：主人真实打中对手或被打中后，二狗默认直接加入协战（`bJoinAssistWithoutModel`），答应后自己的等待、张望不再挡住开打；主人对这个对手喊过停手时仍由模型选择 `JoinAssist`。居民被玩家或二狗打中后不等模型回复，后仰结束或起身后直接追打动手的人，开打后立刻请模型接话；居民之间互殴仍由各自的模型决定（第一版对所有人都还手，大壮和翠花会一来一往打个不停，已收窄）（`UDeliveryNpcCombatComponent::bRetaliateWhenHit`、`UDeliveryNpcAgentComponent::RequestRetaliation`），之后继续、逃跑或停手仍由模型在交战中决定；这是用户明确要求的降级，原因是有同伴在场时本地战斗模型不接管，大模型回复慢且选错过目标编号。家居摆放改为：登记搬运后拿取距离沿用登记前的边缘接触结果；走向物件或目的地途中暂时看不见、离得远不再结束安排，到位后照常复核；二狗熟悉已到手的共用房屋，人在屋内或门口时所有家具都有候选，看得见、够得着只在走到使用点后复核；实物被顶住到不了手前时，跟在搬运距离内等一秒即可开始摆放（`HomePropNotAtHand` 日志记录实际偏差）；手里的东西总能请二狗放到主人面前，六秒内找不到放得下原尺寸的位置就放在自己脚边；找不到跟随站位时 `CompanionFollowNoStand` 日志记录各类落选原因；主人点名的物件不在候选里时要求模型直接说明。跟随找不到任何可走站位约一秒后，二狗会直接跳到主人身边（`TryLeapToOwner`，日志 `CompanionFollowLeap`/`CompanionFollowLeapRejected`）：主人须在 `FollowLeapMaxDistance` 内，落点有实地且站得下，抛物线上扫不到墙或关着的门；搬家具或有房屋安排时不跳。这是跟随命令下的固定移动规则，不经过模型，可用 `bLeapToOwnerWhenFollowBlocked` 关闭，尚未编译和实机验收。2026-11-15 已接入举锤路线的最小版（源码已改，尚未编译和实机验收）：`bRequireUrgeToMoveOut` 开启时，爷爷确认收货后停在 `WaitingToBeUrged`，头顶台词「汤居然没洒。你先走，碗我自己洗。」；玩家把斧头拿在手上、靠近后长按 E（`UrgeInteraction`，服务器核对手持 `ADeliveryTestAxe`、距离和视线）开始催促，爷爷依次说「你催我可以，汤还烫着呢。」「等会儿，我这凳子坐了二十年。」，每句 `UrgeLineSeconds`，随后沿原搬离路线走，路上台词「门让你劈坏了，记得给后来的留个门帘。」。房屋解锁仍由原路线终点确认，解锁后本机顶部提示「新家到手！」「你可以回这里休息了」约两秒半，按 `ClaimEventId` 去重，解锁超过五秒才连入的玩家不补播。暂用现有斧头代替锤子，没有举锤、藏碗、搬凳子的动作和道具；请大壮出面的路线还没接入。房屋解锁反馈第一批（源码已改，尚未编译和实机验收）：`ADeliveryHome` 解锁时记录催促者 `ClaimedBy`，各机在 `ShowClaimHint` 按 `ClaimEventId` 去重后播放——门框约一秒金色星光（四角 `T_HomeClaim_Star01`、三边 `T_HomeClaim_Star02`），催促者听到确认音 `SFX_HomeClaim_Confirm`（未导入时退回 `SFX_Task_Delivered`）并看到「新家到手！」「你可以回这里休息了」，其他玩家看到「街坊小屋已解锁」，门楣上方留下 `T_HomeClaim_Marker` 小房子标记；解锁超过五秒才连入的玩家只看到标记。实现放在 `World/DeliveryHomeClaimFeedback.cpp`：星光和标记是按世界位置投到本机屏幕的 Slate 绘制，提示条是专用 Slate 控件，都不是 Niagara 或 UMG 资产；星光不被墙遮挡，标记隔墙隐藏。门框位置取 `DoorwayLink` 屋外端点，用实例上的 `ClaimFrameWidth`、`ClaimFrameHeight`、`ClaimFrameOffset` 微调。素材与许可记录在 `Design/Art/VFX/HomeClaim/Selected/README.md`，由 `Content/Python/import_home_claim_assets.py` 导入 `/Game/UI/HomeClaim`，编辑器启动时 `init_unreal.py` 会补导缺失项。2026-11-15 第二次试玩后的调整（源码已改，尚未编译和实机验收）：捡地上道具的最终复核改按水平距离，射线停在物件上方，修掉二狗走到斧头旁仍报 `OutOfReachOrObstructed`（拒绝时日志 `WorldItemPickupRejected`）；爷爷没搬走时家居物件状态和后端提示写明要先催走爷爷、房屋解锁后才能搬动，二狗据此直说原因；居民头顶字幕在本机镜头超过 `CaptionVisibleDistance`（默认 1500 cm）后隐藏。同一按键挂多个交互入口时 `FindOn` 优先取当前开放的入口。
+2026-11-15 试玩后的调整（源码已改，尚未编译和实机验收）：主人真实打中对手或被打中后，二狗默认直接加入协战（`bJoinAssistWithoutModel`），答应后自己的等待、张望不再挡住开打；主人对这个对手喊过停手时仍由模型选择 `JoinAssist`。居民被玩家或二狗打中后不等模型回复，后仰结束或起身后直接追打动手的人，开打后立刻请模型接话；居民之间互殴仍由各自的模型决定（第一版对所有人都还手，大壮和翠花会一来一往打个不停，已收窄）（`UDeliveryNpcCombatComponent::bRetaliateWhenHit`、`UDeliveryNpcAgentComponent::RequestRetaliation`），之后继续、逃跑或停手仍由模型在交战中决定；这是用户明确要求的降级，原因是有同伴在场时本地战斗模型不接管，大模型回复慢且选错过目标编号。家居摆放改为：登记搬运后拿取距离沿用登记前的边缘接触结果；走向物件或目的地途中暂时看不见、离得远不再结束安排，到位后照常复核；二狗熟悉已到手的共用房屋，人在屋内或门口时所有家具都有候选，看得见、够得着只在走到使用点后复核；实物被顶住到不了手前时，跟在搬运距离内等一秒即可开始摆放（`HomePropNotAtHand` 日志记录实际偏差）；手里的东西总能请二狗放到主人面前，六秒内找不到放得下原尺寸的位置就放在自己脚边；找不到跟随站位时 `CompanionFollowNoStand` 日志记录各类落选原因；主人点名的物件不在候选里时要求模型直接说明。跟随找不到任何可走站位约一秒后，二狗会直接跳到主人身边（`TryLeapToOwner`，日志 `CompanionFollowLeap`/`CompanionFollowLeapRejected`）：主人须在 `FollowLeapMaxDistance` 内，落点有实地且站得下，抛物线上扫不到墙或关着的门；搬家具或有房屋安排时不跳。这是跟随命令下的固定移动规则，不经过模型，可用 `bLeapToOwnerWhenFollowBlocked` 关闭，尚未编译和实机验收。2026-11-15 已接入举锤路线的最小版（源码已改，尚未编译和实机验收）：`bRequireUrgeToMoveOut` 开启时，爷爷确认收货后停在 `WaitingToBeUrged`，头顶台词「汤居然没洒。你先走，碗我自己洗。」；玩家把斧头拿在手上、靠近后长按 E（`UrgeInteraction`，服务器核对手持 `ADeliveryTestAxe`、距离和视线）开始催促，爷爷依次说「你催我可以，汤还烫着呢。」「等会儿，我这凳子坐了二十年。」，每句 `UrgeLineSeconds`，随后沿原搬离路线走，路上台词「门让你劈坏了，记得给后来的留个门帘。」。房屋解锁仍由原路线终点确认，解锁后本机顶部提示「新家到手！」「你可以回这里休息了」约两秒半，按 `ClaimEventId` 去重，解锁超过五秒才连入的玩家不补播。暂用现有斧头代替锤子，没有举锤、藏碗、搬凳子的动作和道具；请大壮出面的路线还没接入。房屋解锁反馈第一批（源码已改，尚未编译和实机验收）：`ADeliveryHome` 解锁时记录催促者 `ClaimedBy`，各机在 `ShowClaimHint` 按 `ClaimEventId` 去重后播放——门框约一秒金色星光（四角 `T_HomeClaim_Star01`、三边 `T_HomeClaim_Star02`），催促者听到确认音 `SFX_HomeClaim_Confirm`（未导入时退回 `SFX_Task_Delivered`）并看到「新家到手！」「你可以回这里休息了」，其他玩家看到「街坊小屋已解锁」，门楣上方留下 `T_HomeClaim_Marker` 小房子标记；解锁超过五秒才连入的玩家只看到标记。实现放在 `World/Home/DeliveryHomeClaimFeedback.cpp`：星光和标记是按世界位置投到本机屏幕的 Slate 绘制，提示条是专用 Slate 控件，都不是 Niagara 或 UMG 资产；星光不被墙遮挡，标记隔墙隐藏。门框位置取 `DoorwayLink` 屋外端点，用实例上的 `ClaimFrameWidth`、`ClaimFrameHeight`、`ClaimFrameOffset` 微调。素材与许可记录在 `Design/Art/VFX/HomeClaim/Selected/README.md`，由 `Content/Python/import_home_claim_assets.py` 导入 `/Game/UI/HomeClaim`，编辑器启动时 `init_unreal.py` 会补导缺失项。2026-11-15 第二次试玩后的调整（源码已改，尚未编译和实机验收）：捡地上道具的最终复核改按水平距离，射线停在物件上方，修掉二狗走到斧头旁仍报 `OutOfReachOrObstructed`（拒绝时日志 `WorldItemPickupRejected`）；爷爷没搬走时家居物件状态和后端提示写明要先催走爷爷、房屋解锁后才能搬动，二狗据此直说原因；居民头顶字幕在本机镜头超过 `CaptionVisibleDistance`（默认 1500 cm）后隐藏。同一按键挂多个交互入口时 `FindOn` 优先取当前开放的入口。
 
 
 ## 项目概览
@@ -177,7 +177,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 这是一个 Unreal Engine 工程，没有传统意义上的 `npm test` / `make` 构建命令：
 - 打开工程：用 Unreal Editor 5.8 打开 `Delivery.uproject`。
 - 生成 IDE 工程：右键 `.uproject` → Generate Visual Studio project files（生成的 `.sln`/`.vs` 不提交）。
-- C++ 单元测试：`Source/Delivery/Combat/DeliveryBoxingPoseTests.cpp`，通过 UE 的 Automation/Session Frontend 运行，不是命令行测试。
+- C++ 单元测试：`Source/Delivery/Combat/Tests/DeliveryBoxingPoseTests.cpp`，通过 UE 的 Automation/Session Frontend 运行，不是命令行测试。
 
 ## 目前已实现的内容（从 git 历史与代码整理）
 
@@ -186,7 +186,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - 本机网络校正：小幅偏差通过全身相同的速度增量追上服务器，不再逐包传送刚体；超过强制校正距离时才整体平移，并同步迈步起点、落点和世界空间控制目标，保留迈步进度、目标速度和驱动开关。快照按物理资产采集全部刚体，包含大腿和小腿，避免远端只更新髋和脚。回归检查：`Delivery.Ragdoll.NetworkCorrection`。已验证同机双人 PIE 的前进、转向、反向移动和停步；原地图约 10 FPS 下完成相同检查。21 项自动化通过，其中 6 项带警告。
 - 平地和坡面松键后，髋部切向站立目标保持在停步位置，不再每帧跟随下滑的身体重建；恢复移动、跳跃、攻击/受击、失衡或离支撑点超过 80 cm 时解除。只固定电机参考，不修改刚体变换；移动地面按命中点速度推进参考。
 - 坡面防滑：落脚最后 15% 不再被跟随髋部的横向纠偏移动目标。已贴地且未启用位置驱动的支撑脚，在 5° 至翻滚阈值之间施加有上限的切向摩擦辅助（`SlopeSupportTraction` / `SlopeSupportMaxAcceleration`），补偿顺坡重力并阻尼相对地面速度；不锁位置、不施加法线吸附，摆动/释放恢复/离地及明显失衡时不介入。动态地面按表面速度计算。
-代码阅读顺序：`DeliveryActiveRagdollComponent.cpp` 保留状态和每帧入口；同目录的 `DeliveryActiveRagdollSetup.cpp`、`DeliveryActiveRagdollStance.cpp`、`DeliveryActiveRagdollGait.cpp`、`DeliveryActiveRagdollGround.cpp`、`DeliveryActiveRagdollCombat.cpp`、`DeliveryActiveRagdollNetwork.cpp` 分别处理物理控制初始化、身体目标、脚步、地面/翻滚、物理受击和复制。它们仍实现同一个组件，蓝图参数与复制字段都在原头文件。无场景依赖的落点和摆动公式在 `DeliveryFootPlacement.h`，拳路公式在 `Combat/DeliveryPunchTrajectory.h`；拳击资产补全单独在 `Combat/DeliveryBoxingPhysicsAsset.cpp`。改物理时先看每帧入口及调用顺序。
+代码阅读顺序：`DeliveryActiveRagdollComponent.cpp` 保留状态和每帧入口；同目录的 `DeliveryActiveRagdollSetup.cpp`、`DeliveryActiveRagdollStance.cpp`、`DeliveryActiveRagdollGait.cpp`、`DeliveryActiveRagdollGround.cpp`、`DeliveryActiveRagdollCombat.cpp`、`DeliveryActiveRagdollNetwork.cpp` 分别处理物理控制初始化、身体目标、脚步、地面/翻滚、物理受击和复制。它们仍实现同一个组件，蓝图参数与复制字段都在原头文件。无场景依赖的落点和摆动公式在 `DeliveryFootPlacement.h`，拳路公式在 `Combat/Pose/DeliveryPunchTrajectory.h`；拳击资产补全单独在 `Combat/Pose/DeliveryBoxingPhysicsAsset.cpp`。改物理时先看每帧入口及调用顺序。
 下坡双脚防交叉：落点左右轴跟随 `CurrentFacingYaw`（身体朝向），不随 WASD 方向瞬时翻转；仅在着地可控状态对内滑的脚/小腿刚体施加有上限的水平纠偏加速度。迈步最后 15% 固定落点，最多额外等待 0.18 秒到位；停步后也允许纠正已交叉的脚。回归检查：`Delivery.Ragdoll.FootSeparation`。
 角色采用"持续物理驱动"：从 BeginPlay 起 Simulate Physics 常驻打开，走路/站立/
 摔倒/起身/抓取/互殴都在同一条刚体链上完成，而不是"平时动画、摔倒才切物理"的
@@ -218,10 +218,10 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - **第一单爷爷与斧击破门**：`ADeliveryBreakableDoor` 沿用完整门 `/Game/model/door` 和碎片 `/Game/crack/crackdoor`，服务器默认三次有效斧击破门，每次门体回弹并播放木击音效，只向挥斧玩家发送镜头反馈，最终破碎后复制并通知爷爷。`Content/Python/place_grandpa.py` 在 `TestForCharacter` 放置 `OldManHouse_FrontDoor` 与 `NPC_OldMan_001`，保留附近正式 `OldManHouse_Axe`，移除原房屋直接交付入口。第一次按住 E 敲门无回应，第二次回复，等多久都不开门，必须破门再进入屋内交付。`/Game/NPC/Grandpa/AI/BT_Grandpa` 与 `BTT_Grandpa*` 蓝图负责待机、回复、受惊、收件和感谢，C++ 负责服务器校验、状态复制和清理。模型使用用户提供的骨骼 FBX，动画来自 Quaternius CC0，独立源资产、许可证与复建脚本见 `Document/TaskSystem.md`。回归入口 `Delivery.NPC.Grandpa.*`、`Delivery.Axe.HeldItemFlow`；双人测试固定玩家位置，不代替物理手感验收。
 - 出拳手感追加调校：释放冲量当前为 1200（上一版 900），后收比例 0.24，蓄力姿态速度 4、伸拳速度 10；前送沿用快速释放曲线，收拳单独使用 SmoothStep 两端缓速。保留下半身支撑与 4 cm 髋部前压，不提高伤害数值。
 - [Source/Delivery/Combat/DeliveryRagdollCombatComponent.h](Source/Delivery/Combat/DeliveryRagdollCombatComponent.h) —— 在布娃娃刚体链上执行出拳动作。
-- [Source/Delivery/Combat/DeliveryCombatInterface.h](Source/Delivery/Combat/DeliveryCombatInterface.h) —— `StartMeleeAttack` / `GatherMeleeHits` / `EndMeleeAttack` / `IsMeleeAttacking`，Character 实现，GA 调用。
-- [Source/Delivery/Combat/DeliveryCombatTypes.h](Source/Delivery/Combat/DeliveryCombatTypes.h) —— `FDeliveryArmPoseSettings`：A 姿势、后收蓄力、直拳三段姿态的参数化定义，握拳靠手指弯曲角度模拟（无手指刚体）。蓄力目标在肩后略向外、略向下；释放时直接插值手的位置，向外偏移用于避免拳路经过肩关节原点。
+- [Source/Delivery/Combat/Types/DeliveryCombatInterface.h](Source/Delivery/Combat/Types/DeliveryCombatInterface.h) —— `StartMeleeAttack` / `GatherMeleeHits` / `EndMeleeAttack` / `IsMeleeAttacking`，Character 实现，GA 调用。
+- [Source/Delivery/Combat/Types/DeliveryCombatTypes.h](Source/Delivery/Combat/Types/DeliveryCombatTypes.h) —— `FDeliveryArmPoseSettings`：A 姿势、后收蓄力、直拳三段姿态的参数化定义，握拳靠手指弯曲角度模拟（无手指刚体）。蓄力目标在肩后略向外、略向下；释放时直接插值手的位置，向外偏移用于避免拳路经过肩关节原点。
 - 出拳下半身稳定：拧身改由胸腰完成，不再扭动骨盆；髋部前压默认从 24 cm 降到 4 cm，手部释放冲量从 1800 降到 900，蓄力默认 0.32 秒。原地、着地且直立时短暂启用脚部位置电机并固定髋目标的水平基准；移动、跳跃、受击、晕倒或明显偏离支撑点时解除，不关闭物理模拟。行走时出拳保留步态，只减小髋部摆动。
-- [Source/Delivery/Combat/DeliveryHandPose.h](Source/Delivery/Combat/DeliveryHandPose.h)、[DeliveryBoxingPose.h](Source/Delivery/Combat/DeliveryBoxingPose.h)（含单测）。
+- [Source/Delivery/Combat/Pose/DeliveryHandPose.h](Source/Delivery/Combat/Pose/DeliveryHandPose.h)、[DeliveryBoxingPose.h](Source/Delivery/Combat/Pose/DeliveryBoxingPose.h)（含单测）。
 - 左右拳通过 GAS 技能 [GA_DeliverPunch](Source/Delivery/AbilitySystem/Abilities/GA_DeliverPunch.h) 触发，对应 tag `Ability.Attack.Punch.Left/Right`。
 
 ### 2b. 抓取系统（双手托举物品 + 单手物理拖人）
@@ -304,7 +304,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
   表现是快递在车后面疯狂抽动（拖人那套踩过同一个坑）。
   - **流程**：手上有货走到车边 → 浮窗显示「左键装货」→ 开盖、快递落进箱子、合盖（约 1.15 秒）
     → 这之后才显示「按 F 驾驶」。下车后再走到车边 →「左键取货」→ 开盖、快递升出来、
-    合盖 → 回到手上。实现在 `Vehicle/DeliveryMotorbikeTrunk.cpp`（和骑手一样是
+    合盖 → 回到手上。实现在 `Vehicle/Trunk/DeliveryMotorbikeTrunk.cpp`（和骑手一样是
     `ADeliveryMotorbike` 的一部分，分文件只是因为主文件已经很长）。
   - **"手上有货不给上车"和"装货动作"必须一起做**。只加装货、不去掉 `TryEnter` 里
     原来那段"顺手把手上的快递搬到车上"，表现就是按 F 直接带货上车、新动作永远用不到。
@@ -447,7 +447,7 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 - 任务数值由策划在 `Design/Tasks.csv` 里维护，编辑器菜单 **Delivery → Import / Reimport Tasks** 导入成 DataAsset（脚本在 `Content/Python/delivery_task_import.py`，按 TaskId 增量更新，不会冲掉资产上手填的字段）。时间评价档位用**剩余秒数**表达，正数提前、负数超时，和策划表一一对应。
 - 调试用控制台命令（`Delivery.Task.Dump` / `Acquire` / `Deliver` / `Event`）见 [DeliveryTaskDebugCommands.cpp](Source/Delivery/Task/Debug/DeliveryTaskDebugCommands.cpp)，在 PIE 里不用 UI 就能跑完整个任务流程；`DeliveryTaskDefinition` 有 `IsDataValid` 校验，阈值配反、档位顺序错会在编辑器里标红。
 - **钱包**：[DeliveryWalletComponent](Source/Delivery/Economy/DeliveryWalletComponent.h) 挂在 `ADeliverPlayerState` 上（和 ASC 同理——钱要在角色死亡/重生/上下载具之后还在）。**入账全自动**：组件自己订阅 GameState 上的 `OnTaskCompleted`，那个委托自带 `APlayerState* Deliverer`，多人抢单时钱记给谁天然就对，任务系统那边一行都不用改。余额 `COND_OwnerOnly` 复制，不做客户端预测。PlayerState 可能比 GameState 先 `BeginPlay`，订阅不到时每 0.5 秒重试——不重试的话这个玩家整局收不到钱且毫无报错。UI 接 `OnTaskPaid(Task, Reward)` 拿完整奖励明细做结算飘字。
-- **地点 ID 解析**：[DeliveryLocationRegistry](Source/Delivery/World/DeliveryLocationRegistry.h)（WorldSubsystem）+ [DeliveryLocationComponent](Source/Delivery/World/DeliveryLocationComponent.h)。关卡里的取件点/收件点/收件人 NPC 挂后者、填 `LocationId`（和 `Tasks.csv` 一致），任务定义里那几个裸 `FName` 才能变成世界坐标。三种点共用一个组件，因为在数据上它们是同一种东西；继承 SceneComponent 是为了能带相对偏移（收件点挂在整栋楼上时楼的原点可能在地下，箭头该指门口）。查找走注册表而不是遍历关卡，和交互系统同一个理由：碰撞查询在本项目静默失效过一次。
+- **地点 ID 解析**：[DeliveryLocationRegistry](Source/Delivery/World/Location/DeliveryLocationRegistry.h)（WorldSubsystem）+ [DeliveryLocationComponent](Source/Delivery/World/Location/DeliveryLocationComponent.h)。关卡里的取件点/收件点/收件人 NPC 挂后者、填 `LocationId`（和 `Tasks.csv` 一致），任务定义里那几个裸 `FName` 才能变成世界坐标。三种点共用一个组件，因为在数据上它们是同一种东西；继承 SceneComponent 是为了能带相对偏移（收件点挂在整栋楼上时楼的原点可能在地下，箭头该指门口）。查找走注册表而不是遍历关卡，和交互系统同一个理由：碰撞查询在本项目静默失效过一次。
 - **任务地点建筑高亮已停用**：`TaskTracker` 不再给目的地建筑开启 `CustomDepth/Stencil`，也不再定时扫描建筑；罗盘、小地图和脚边箭头继续提供指引。`DeliveryPlayerController` 的后处理仍用于交互物和抓取候选，不能为了关建筑高亮而移除。
 - **"该去哪"**：`Tracker::GetTrackedTaskDestination()`。**目的地按任务状态自动切换**（待取件→取件点，进行中→收件点），调用方不要自己判——判错的表现是"箭头指向已经拿过的地方"，四个界面会各错各的。ID 在关卡里找不到对应点时返回 false 并在日志点名；静默失败的话表现只是"箭头不显示"，根因几乎查不到。
 - **丢件恢复**：`NotifyItemLost` 把进行中的任务退回待取件，但接电话时开始的计时、催促状态和特殊事件继续保留；`UDeliveryItemComponent::EndPlay` 在 Actor 被销毁时自动上报（掉出世界会走到）。**"正常交付"和"意外丢失"靠执行顺序区分**——`TryDeliver` 先标已完成再销毁快递，所以 `EndPlay` 时状态已不是进行中，`NotifyItemLost` 自己返回 false；**调换这两步会让每次成功交付都被误判成丢件**。退回待取件之后**回取货点再领一件**即可，不再需要关卡里还躺着那件原物——这是取货点流程修掉的那个死锁。
@@ -518,8 +518,8 @@ Skills 需要有实际技能文件或工具支持；本表只说明分类，不�
 
 `Design/Art/NPC/` 下六份未导入的 FBX（小男孩 / 小女孩 / 中年男 / 中年女 / 老爷爷 / 老奶奶）。源美术文件统一放 `Design/Art/`，不散在工程根目录。离线解析结论：有蒙皮（Skin 1 / Cluster 29）、骨骼是 **Mixamo 标准命名**（六个完全一致，所以共用一个 Skeleton）、**没有走路动画**（`AnimStack` 1 个但 `AnimCurveNode`/`AnimLayer` 都是 0，空壳）、绑定姿势就是站姿（导入时 `use_t0_as_ref_pose` 保持关闭，和摩托车骑手相反）。**贴图是内嵌的、六个都有**，真导进去会解出六张 base color 和六个 `tripo_mat_*` 材质；早先「贴图大概率缺失、导进来是灰白」的结论是错的（离线扫法按文件名找引用，内嵌贴图没有文件名）。导入会在 FBX 旁生成 `<名字>.fbm/` 存解出来的贴图，是中间产物、已 `.gitignore`。
 
-- [ADeliveryPedestrianRoute](Source/Delivery/NPC/DeliveryPedestrianRoute.h) —— 普通模式是小范围生成点；关闭 `bRoamInArea` 才沿样条走并在两端回收。生成只在服务器做，路人自己复制移动。
-- [ADeliveryPedestrian](Source/Delivery/NPC/DeliveryPedestrian.h) —— 运动学推进、不进物理、不接 AI 与寻路，每帧向下打射线贴地。
+- [ADeliveryPedestrianRoute](Source/Delivery/NPC/Pedestrian/DeliveryPedestrianRoute.h) —— 普通模式是小范围生成点；关闭 `bRoamInArea` 才沿样条走并在两端回收。生成只在服务器做，路人自己复制移动。
+- [ADeliveryPedestrian](Source/Delivery/NPC/Pedestrian/DeliveryPedestrian.h) —— 运动学推进、不进物理、不接 AI 与寻路，每帧向下打射线贴地。
 
 - **出入场按距离算不按时间**：快走和慢走的人要在同一个位置完成出场，按时间算快的人会在离端点很远处就已满尺寸。
 - **缩放不在 `ReplicatedMovement` 里**（只带位置/旋转/速度），所以 `AppearAlpha` 单独复制。不复制的表现是**客户端一个路人都看不见**——服务器上缩放正常、客户端停在生成时的近零缩放，而位置一直在更新，看着像渲染问题。窗口外 Alpha 恒为 1、不发包。
@@ -801,7 +801,7 @@ GetFuturePostionandRotationAlongSpline:
 - [DeliveryPromptSubsystem](Source/Delivery/Interaction/DeliveryPromptSubsystem.h) —— 浮窗本体，**C++ Slate 直接挂视口**，没有 WBP 资产。中文靠 Slate 自带字体回退（引擎自带 `DroidSansFallback.ttf`）渲染。调用约定是"每帧推一次"，停推 0.25 秒自动消失——这样调用方不需要成对写 Show/Hide，不会因为某条退出分支漏掉 Hide 把提示永久留在屏幕上。世界坐标→屏幕坐标用 `UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition`（自带 DPI 折算），为此 Build.cs 加了 `Slate`/`SlateCore`/`UMG`。
 - 交互键走服务器复核：客户端 `ADeliveryCharacter::DoInteract()` 把本地探到的目标发 `ServerInteract(Target)`，服务器重新查组件 + 距离才执行。
 
-**摩托车（[DeliveryMotorbike](Source/Delivery/Vehicle/DeliveryMotorbike.h)）** —— 运动学街机式载具，不是 Chaos Vehicle：
+**摩托车（[DeliveryMotorbike](Source/Delivery/Vehicle/Motorbike/DeliveryMotorbike.h)）** —— 运动学街机式载具，不是 Chaos Vehicle：
 - 人物和摩托车自由视角的鼠标灵敏度 `MouseLookSensitivity` 默认 0.75（原输入的 75%）；手柄右摇杆不变，摩托车固定车尾视角仍不响应鼠标。
 - 美术资产是一整套静态网格 + 一个坐姿骑手，**没有轮子骨骼、没有物理资产**，Chaos 需要的东西一样都没有；且关卡里的交通车本来就是运动学沿样条走的，玩家车用同一套假设不会出现"玩家车被物理弹飞、AI 车纹丝不动"。
 - 每帧自己算速度/转向，水平位移带 sweep 挡墙，竖直方向打射线贴地（竖直**不能**用 sweep，会和"贴到地面上"互相打架）。转向量乘 `Speed/TurnSpeedReference`，停着不能原地转圈。
@@ -1020,7 +1020,7 @@ GetFuturePostionandRotationAlongSpline:
 
 
 ### 召唤载具（按 R）
-[DeliveryVehicleSummonComponent](Source/Delivery/Vehicle/DeliveryVehicleSummonComponent.h) —— 挂在玩家 Pawn 上，按 R 把最近一辆没人骑的摩托车挪到身前，冷却 10 秒。地图没有摩托车时，服务器通过 `DefaultVehicleClass`（默认 `/Game/Vehicle/Motorbike/BP_Motorbike`）生成首辆车；已有车被占用或超出搜索范围时不额外生成。生成后仍走 `SummonTo` 探地，失败销毁临时车且不计冷却。回归检查：`Delivery.Vehicle.Summon.EmptyMap`。
+[DeliveryVehicleSummonComponent](Source/Delivery/Vehicle/Summon/DeliveryVehicleSummonComponent.h) —— 挂在玩家 Pawn 上，按 R 把最近一辆没人骑的摩托车挪到身前，冷却 10 秒。地图没有摩托车时，服务器通过 `DefaultVehicleClass`（默认 `/Game/Vehicle/Motorbike/BP_Motorbike`）生成首辆车；已有车被占用或超出搜索范围时不额外生成。生成后仍走 `SummonTo` 探地，失败销毁临时车且不计冷却。回归检查：`Delivery.Vehicle.Summon.EmptyMap`。
 - 召唤组件只处理召唤和冷却，左下角提示由控制器上的 DeliveryHintComponent 监听状态通知后更新
 - 冷却是**服务器权威**的：`ReadyServerTime` 服务器写、`COND_OwnerOnly` 只复制给拥有者，客户端只拿来显示，不做预测（召唤本来就要等一个来回）。**探不到地面的召唤不计冷却**——玩家什么都没得到，不该被罚等 10 秒。
 - 落位交给 `ADeliveryMotorbike::SummonTo()`，车自己往下打地面射线，并**清空 `CurrentSpeed` / `VerticalVelocity` / 油门转向 / 被撞状态**：残余车速会让车刚出现就从脚边滑走，残余被撞状态会让它一边抖一边歪着出现。车上有人时拒绝，不能把别人正骑的车抽走。
@@ -1178,21 +1178,43 @@ PlayerController 自动累积到 `DeliveryPromptSubsystem` 的屏幕下方字幕
 
 ## 代码结构
 
+各子目录的划分见 [Source/Delivery/README.md](Source/Delivery/README.md)
+
 ```
 Source/Delivery/
-├── DeliveryCharacter.{h,cpp}
-├── DeliveryGameMode.{h,cpp}          最小 GameMode，具体逻辑在蓝图里
-├── DeliveryGameState.{h,cpp}         承载全局共享状态：任务管理器 + 电话队列
-├── DeliveryPlayerController.{h,cpp}
-├── Audio/                            本机程序化人物语音、预设与控制台验收命令
-├── Combat/                           姿势/类型定义、战斗接口、单测
-├── GAS/                              ASC、AttributeSet、PlayerState、Tags、Abilities/
-├── Grab/                             双键抓取：抓取组件、可抓取组件、可抓道具
-├── Interaction/                      走近按 F：可交互组件、探测组件、Slate 浮窗子系统
-├── NPC/                              街上的路人（人行路线 + 路人，程序化步态）
-├── Ragdoll/                          主动布娃娃、布娃娃战斗组件
-├── Traffic/                          交通车辆辅助组件（卡住重置循环、前车避让减速）
-└── Vehicle/                          可骑载具（摩托车，运动学街机式）+ 按 R 召唤载具组件
+├── AbilitySystem/   ASC、AttributeSet、Tags；Abilities/ 放出拳、NPC 出拳、家居使用等 GA
+├── AI/
+│   ├── Actions/         NPC 战斗与拽车组件
+│   ├── BehaviorTree/    行为树任务：执行动作、倾听、二狗跟随与跑腿
+│   ├── Characters/      居民角色、AI 控制器、人物配置、越障
+│   ├── Companion/       二狗：Core（角色与组件）/ Encounter / Home / Errand / Travel / Assist
+│   ├── Conversation/    交谈组件、轮次子系统、语音目标
+│   ├── Decision/        Agent 组件、行为目录、决策类型与消息
+│   ├── Network/         AI 网关子系统与设置
+│   ├── Presentation/    表现组件；Speech（播放与音色）/ Animation / Face（表情与视线）
+│   └── Tests/           Resident / Companion / Conversation / Speech / Fight
+├── Audio/           音效、音乐、电话与车辆音频组件；Debug/ 控制台命令
+├── Camera/          玩家镜头组件与配置
+├── Carry/           快递在手上、背包和车辆之间的交接
+├── Character/       DeliveryCharacter 及其分文件实现
+├── Combat/          RagdollCombatComponent；Pose（拳击与手臂姿势）/ Types（接口、类型、通道）/ Tests
+├── Economy/         钱包
+├── Events/          对象范围的本地事件
+├── Game/            GameMode、GameState、地图设置、后台加载入口
+├── Grab/            双键抓取
+├── Input/           步行输入组件；Debug / Tests
+├── Interaction/     可交互组件、探测、注册表、浮窗子系统；Tests
+├── Inventory/       背包与物品组件；Items（斧头、快递、小绿等）/ Debug
+├── NPC/             Grandpa（爷爷与搬离任务）/ Pedestrian（路人与路线）/ Debug / Tests
+├── Phone/           电话队列
+├── Player/          PlayerController、PlayerState
+├── Ragdoll/         主动布娃娃；Setup / Movement / Combat / Network / Debug / Tests
+├── Speech/          语音输入组件与玩家上下文；Capture（采集与处理）/ Recognition（识别与分句）/ Tests
+├── Task/            任务管理器与结算；Data / World / Tracking / Debug / Tests
+├── Traffic/         交通车辆辅助组件
+├── UI/              HUD（HUD、快捷栏、小地图、提示）/ Conversation（对话、字幕、AI 检查器）/ Controllers / Tests
+├── Vehicle/         Motorbike / Rider / Trunk / Companion（二狗专属车）/ Summon / Tests
+└── World/           导航区域；Home（房屋与家居物件）/ Location（地点注册）/ Tests
 
 Plugins/PS2DEMImporter/               地形转 landscape spline 道路插件
 Content/Python/                       编辑器 Python 工具链：车道/路口/转弯生成、
@@ -1219,7 +1241,7 @@ Document/AudioSystem.md               人物电子语音（合成器+文本节�
 
 ### 脚边箭头与圆形小地图
 - `Task/DeliveryGroundArrowComponent` 默认挂 PlayerController，本机在人物周围（95 cm）/摩托车周围（180 cm）显示高饱和橙黄双 V 箭头。目的地统一取 `GetTrackedTaskDestination`，随取件/交付阶段切换，无目标隐藏。只用 XY 方向；目标位于镜头前方时沿目标方向额外前移最多 50 cm（不越过目的地），避免角色挡住；地面探测后抬高 60 cm。大小、半径、前移量和高度可调；上下车使用当前受控 Pawn。
-- `/Game/UI/Minimap/WBP_Minimap` 继承 `UI/DeliveryMinimapWidget`，仍由 `WBP_Main` 引用。圆形裁切、深浅双边框、中心红色方向尖头由原生绘制完成。默认直径 320、右上角边距 24；拍摄宽度从 24000 cm 拉近到 18000 cm。地图朝向由**项目设置**里的 `UDeliveryMapSettings::MapNorthWorldYaw` 决定（项目设置 → 游戏 → Delivery 地图，0 = 世界 +X 朝北），标记按身体朝向旋转（步行取 `GetBodyForward()`，骑车取 Pawn 朝向），不跟随自由镜头。**小地图的朝上方向和罗盘的 N/E/S/W 读的是同一个值**——"这张地图的北在哪"是一个事实，原来抄在两处（小地图的 `MapUpWorldYaw` + 罗盘节点的 `NorthWorldYaw` 引脚），改一处忘另一处的表现是"小地图正的、罗盘偏 90°"，而两个数单看都像是对的。现在那两个字段都删了，`GetTrackedTaskCompass` 也**不再有 `NorthWorldYaw` 参数**（删参数会让 `WBP_Compass` 的节点少一个引脚，重编译一次即可）。放 `UDeveloperSettings` 的理由：不用每张图记得摆 Actor（漏摆会静默退回 0）；存 `Config/DefaultGame.ini` 是**文本**，而本项目被 `git pull` 的 autostash 冲掉过两次，二进制 `.uasset` 冲突只能整份取舍、文本能合并。代价是整个项目一份、不是每关一份。相机是 `UDeliveryMinimapWidget` 运行时 `NewObject` 出来的 `USceneCaptureComponent2D`、挂在 PlayerController 上，**关卡 Outliner 里找不到它**；旋转每帧重设，所以改设置立刻生效。**任务目的地也标在小地图上**：在拍摄范围内画橙色圆点（真实位置），超出就夹到圆边并换成**朝外的三角**——圆点停在边上看不出"目标还在更远处"，三角的尖端天然表达"继续往这边走"。描边用 `#020c1e`，和罗盘图钉、人物标记同一套。**比例尺是 `2*MapRadius / MapWorldWidth`**：`Disc()` 把整张 RT 的 UV 0~1 铺在**直径**上，而 RT 宽度就是 `OrthoWidth = MapWorldWidth`；用半径去除会小一半，表现是"目标点总比真实位置离中心近"，而且近得很均匀，看着像比例没调好、不像算错。目的地在 **Tick 里就换算成地图空间**（X=图上右、Y=图上上）存成 `TargetMapOffsetCm`，Paint 里只剩乘比例尺和夹圆——Paint 是 const 且每帧可能被调多次，不在那里查任务系统；用的 up/right 和相机 `FRotator(-90, N, 0)` 推出来的是同一组，地图转了标记跟着转。没有目标时（`GetTrackedTaskDestination` 返回 false）整个标记不画，和罗盘图钉、脚边箭头同一个判据。每名本机玩家有独立 512×512 RT 和摄像头，以 30Hz 跟随当前 Pawn；暂停旧蓝图写共享 `RT_Minimap` 的摄像头，控件销毁时恢复。绘制忽略 RT 的 Alpha，避免场景颜色被透明通道遮掉。尺寸、拍摄范围、刷新率、边框可在蓝图默认值调整。
+- `/Game/UI/Minimap/WBP_Minimap` 继承 `UI/HUD/DeliveryMinimapWidget`，仍由 `WBP_Main` 引用。圆形裁切、深浅双边框、中心红色方向尖头由原生绘制完成。默认直径 320、右上角边距 24；拍摄宽度从 24000 cm 拉近到 18000 cm。地图朝向由**项目设置**里的 `UDeliveryMapSettings::MapNorthWorldYaw` 决定（项目设置 → 游戏 → Delivery 地图，0 = 世界 +X 朝北），标记按身体朝向旋转（步行取 `GetBodyForward()`，骑车取 Pawn 朝向），不跟随自由镜头。**小地图的朝上方向和罗盘的 N/E/S/W 读的是同一个值**——"这张地图的北在哪"是一个事实，原来抄在两处（小地图的 `MapUpWorldYaw` + 罗盘节点的 `NorthWorldYaw` 引脚），改一处忘另一处的表现是"小地图正的、罗盘偏 90°"，而两个数单看都像是对的。现在那两个字段都删了，`GetTrackedTaskCompass` 也**不再有 `NorthWorldYaw` 参数**（删参数会让 `WBP_Compass` 的节点少一个引脚，重编译一次即可）。放 `UDeveloperSettings` 的理由：不用每张图记得摆 Actor（漏摆会静默退回 0）；存 `Config/DefaultGame.ini` 是**文本**，而本项目被 `git pull` 的 autostash 冲掉过两次，二进制 `.uasset` 冲突只能整份取舍、文本能合并。代价是整个项目一份、不是每关一份。相机是 `UDeliveryMinimapWidget` 运行时 `NewObject` 出来的 `USceneCaptureComponent2D`、挂在 PlayerController 上，**关卡 Outliner 里找不到它**；旋转每帧重设，所以改设置立刻生效。**任务目的地也标在小地图上**：在拍摄范围内画橙色圆点（真实位置），超出就夹到圆边并换成**朝外的三角**——圆点停在边上看不出"目标还在更远处"，三角的尖端天然表达"继续往这边走"。描边用 `#020c1e`，和罗盘图钉、人物标记同一套。**比例尺是 `2*MapRadius / MapWorldWidth`**：`Disc()` 把整张 RT 的 UV 0~1 铺在**直径**上，而 RT 宽度就是 `OrthoWidth = MapWorldWidth`；用半径去除会小一半，表现是"目标点总比真实位置离中心近"，而且近得很均匀，看着像比例没调好、不像算错。目的地在 **Tick 里就换算成地图空间**（X=图上右、Y=图上上）存成 `TargetMapOffsetCm`，Paint 里只剩乘比例尺和夹圆——Paint 是 const 且每帧可能被调多次，不在那里查任务系统；用的 up/right 和相机 `FRotator(-90, N, 0)` 推出来的是同一组，地图转了标记跟着转。没有目标时（`GetTrackedTaskDestination` 返回 false）整个标记不画，和罗盘图钉、脚边箭头同一个判据。每名本机玩家有独立 512×512 RT 和摄像头，以 30Hz 跟随当前 Pawn；暂停旧蓝图写共享 `RT_Minimap` 的摄像头，控件销毁时恢复。绘制忽略 RT 的 Alpha，避免场景颜色被透明通道遮掉。尺寸、拍摄范围、刷新率、边框可在蓝图默认值调整。
 - 新父类须先完整编译，再用 `Content/Python/upgrade_minimap.py` 切换小地图父类、编译保存，并验证主 HUD。无需更改关卡。
 
 箭头可见性修正：逻辑组件留在 PlayerController，世界空间 Widget 的 Owner 必须是当前受控 Pawn。`OnlyOwnerSee` 按镜头 ViewActor 与 Owner 链判断，视觉挂 Controller 会被普通 Pawn 镜头过滤；上下摩托车时销毁旧视觉并以新 Pawn 为 Owner 重建。箭头原生 Widget 显式提供 128×128 绘制区域并启用动态重绘。
@@ -1248,7 +1270,7 @@ UI/Controllers 提供任务、快捷栏与交互显示数据，现有控件保�
 源码按 Character、Player、Game、AbilitySystem、Phone、World 及各玩法目录组织，类型名和资产路径不变
 详细结构见 Document/Architecture.md
 
-输入与界面拆分：`Input/DeliveryInputComponent` 负责步行输入绑定、组合键判断及失去控制权后的取消；Character 仅保留绑定接入点和玩法入口。`UI/DeliveryHUD` 由 GameMode 创建，管理本机快捷栏并在步行/骑车时解析角色背包。输入配置只在 PlayerInput 组件上编辑，快捷栏配置只在 HUD 上编辑，角色不再保留重复字段。车辆驾驶输入、手机蓝图和既有 UI Controller 沿用原实现。
+输入与界面拆分：`Input/DeliveryInputComponent` 负责步行输入绑定、组合键判断及失去控制权后的取消；Character 仅保留绑定接入点和玩法入口。`UI/HUD/DeliveryHUD` 由 GameMode 创建，管理本机快捷栏并在步行/骑车时解析角色背包。输入配置只在 PlayerInput 组件上编辑，快捷栏配置只在 HUD 上编辑，角色不再保留重复字段。车辆驾驶输入、手机蓝图和既有 UI Controller 沿用原实现。
 
 ### 上下车之后输入全失效（2026-11-05 修）
 症状是"骑车下来之后前后左右和鼠标全不管用，人有时还一直往前走"。来电只是巧合，

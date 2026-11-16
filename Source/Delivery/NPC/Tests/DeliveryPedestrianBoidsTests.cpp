@@ -1,8 +1,8 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
-#include "NPC/DeliveryPedestrian.h"
-#include "NPC/DeliveryPedestrianRoute.h"
+#include "NPC/Pedestrian/DeliveryPedestrian.h"
+#include "NPC/Pedestrian/DeliveryPedestrianRoute.h"
 #include "Components/BoxComponent.h"
 #include "Components/SplineComponent.h"
 #include "Engine/Engine.h"

@@ -13,4 +13,4 @@ DeliveryInputTests 检查重复绑定、组合键取消和骑车时的界面数�
 DeliveryRightMouseGestureTests 检查短按、长按、拖动、抓取和取消后的点击结果；实际视角与手感仍需游戏中检查
 
 召唤与五个物品栏动作统一通过 IA 绑定，手机由 PlayerController 绑定，驾驶视角由车辆绑定
-按键在 IMC_Default 配置，提示由 UI/DeliveryHintComponent 根据实际映射生成
+按键在 IMC_Default 配置，提示由 UI/HUD/DeliveryHintComponent 根据实际映射生成

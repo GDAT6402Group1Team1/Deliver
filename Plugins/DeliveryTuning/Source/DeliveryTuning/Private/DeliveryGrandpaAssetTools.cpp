@@ -1,5 +1,5 @@
 #include "DeliveryGrandpaAssetTools.h"
-#include "NPC/DeliveryGrandpa.h"
+#include "NPC/Grandpa/DeliveryGrandpa.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BlackboardData.h"

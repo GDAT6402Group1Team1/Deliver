@@ -1,6 +1,6 @@
 #include "DeliveryNpcAnimationAssetTools.h"
-#include "AI/Presentation/DeliveryNpcConversationAnimInstance.h"
-#include "AI/Presentation/DeliveryNpcBodyAnimInstance.h"
+#include "AI/Presentation/Animation/DeliveryNpcConversationAnimInstance.h"
+#include "AI/Presentation/Animation/DeliveryNpcBodyAnimInstance.h"
 #include "AI/Presentation/DeliveryNpcPresentationComponent.h"
 #include "AI/Characters/DeliveryNpcCharacter.h"
 #include "Animation/AnimBlueprint.h"

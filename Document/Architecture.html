@@ -227,7 +227,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <p>手机自动展开、接听后收起或 Widget 自行关闭时，原蓝图仍可以调用 ReportPhoneUIOpen。这个兼容入口现在把状态转交给处理器，再由 HUD 更新面板集合。新蓝图可通过 GetPhoneController 直接调用 SetOpen、Answer 和 HangUp</p>
 <h2>面板关闭后，为什么鼠标有时还在</h2>
 <p>手机和其他界面可能同时打开。每个界面只报告自己的开关状态，HUD 判断是否还有其他面板存在</p>
-<div class="current-code"><pre><span></span><span class="c1">// 来源：Source/Delivery/UI/DeliveryHUD.cpp</span>
+<div class="current-code"><pre><span></span><span class="c1">// 来源：Source/Delivery/UI/HUD/DeliveryHUD.cpp</span>
 <span class="kt">void</span><span class="w"> </span><span class="nf">ADeliveryHUD::SetPanelOpen</span><span class="p">(</span><span class="n">FName</span><span class="w"> </span><span class="n">PanelId</span><span class="p">,</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="n">bOpen</span><span class="p">)</span>
 <span class="p">{</span>
 <span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">PanelId</span><span class="p">.</span><span class="n">IsNone</span><span class="p">())</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
@@ -254,7 +254,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <h2>代码位置</h2>
 <ul>
 <li><code>Source/Delivery/UI/Controllers/DeliveryPhoneController.h/.cpp</code>：手机操作、对白和字幕</li>
-<li><code>Source/Delivery/UI/DeliveryHUD.h/.cpp</code>：处理器生命周期、面板集合、鼠标模式</li>
+<li><code>Source/Delivery/UI/HUD/DeliveryHUD.h/.cpp</code>：处理器生命周期、面板集合、鼠标模式</li>
 <li><code>Source/Delivery/Audio/DeliveryPhoneAudioComponent.h/.cpp</code>：电话音效</li>
 <li><code>Source/Delivery/Player/DeliveryPlayerController.h/.cpp</code>：输入、网络请求和旧蓝图转发入口</li>
 <li><code>Source/Delivery/Phone/DeliveryPhoneCallQueueComponent.h/.cpp</code>：原有电话队列与网络状态</li>
@@ -316,7 +316,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="p">};</span>
 </pre></div>
 </details><details><summary>UI/Controllers/DeliveryPhoneController.cpp</summary><p>来源：Source/Delivery/UI/Controllers/DeliveryPhoneController.cpp</p><div class="current-code"><pre><span></span><span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/Controllers/DeliveryPhoneController.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/DeliveryHUD.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/HUD/DeliveryHUD.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Player/DeliveryPlayerController.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Phone/DeliveryPhoneCallQueueComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Audio/DeliveryDialogueVoiceComponent.h"</span>
@@ -439,10 +439,10 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="w">    </span><span class="n">Player</span><span class="p">.</span><span class="n">Reset</span><span class="p">();</span>
 <span class="p">}</span>
 </pre></div>
-</details><details><summary>UI/DeliveryHUD.cpp</summary><p>来源：Source/Delivery/UI/DeliveryHUD.cpp</p><div class="current-code"><pre><span></span><span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/DeliveryHUD.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/DeliveryHotbarWidget.h"</span>
+</details><details><summary>UI/HUD/DeliveryHUD.cpp</summary><p>来源：Source/Delivery/UI/HUD/DeliveryHUD.cpp</p><div class="current-code"><pre><span></span><span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/HUD/DeliveryHUD.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/HUD/DeliveryHotbarWidget.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Character/DeliveryCharacter.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/DeliveryMotorbike.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/Motorbike/DeliveryMotorbike.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Inventory/DeliveryInventoryComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"GameFramework/PlayerController.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Player/DeliveryPlayerController.h"</span>
@@ -701,7 +701,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Player/DeliveryPlayerController.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Character/DeliveryCharacter.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/DeliveryMotorbike.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/Motorbike/DeliveryMotorbike.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Blueprint/UserWidget.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Audio/DeliveryDialogueVoiceComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Audio/DeliveryMusicComponent.h"</span>
@@ -710,8 +710,8 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"EnhancedInputSubsystems.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"EnhancedInputComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"InputKeyEventArgs.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/DeliveryHintComponent.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/DeliveryHUD.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/HUD/DeliveryHintComponent.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/HUD/DeliveryHUD.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/Controllers/DeliveryPhoneController.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Audio/DeliveryPhoneAudioComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Engine/LocalPlayer.h"</span>
@@ -1078,7 +1078,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <h2>从按下 R 到显示冷却</h2>
 <p>R 经 IMC_Default 找到 IA_SummonVehicle，输入组件在 Bind 中将动作的 Started 事件绑定到 SummonVehiclePressed。这个函数仍然检查角色能否行动，然后调用召唤组件，不负责生成车辆</p>
 <p>召唤组件把请求送到服务器。服务器检查冷却、可用车辆和落点，成功后更新 ReadyServerTime。找不到落点或无法召唤时，不消耗冷却</p>
-<div class="current-code"><pre><span></span><span class="c1">// 来源：Source/Delivery/Vehicle/DeliveryVehicleSummonComponent.cpp</span>
+<div class="current-code"><pre><span></span><span class="c1">// 来源：Source/Delivery/Vehicle/Summon/DeliveryVehicleSummonComponent.cpp</span>
 <span class="n">ReadyServerTime</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Now</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">Cooldown</span><span class="p">;</span>
 <span class="c1">// 房主不经过属性复制回调，因此服务器修改后也要发送通知</span>
 <span class="n">OnCooldownChanged</span><span class="p">.</span><span class="n">Broadcast</span><span class="p">();</span>
@@ -1132,7 +1132,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <p>角色变成车辆后，HandlePawnChanged 先取消订阅角色的召唤通知，再订阅车辆事件。RefreshHint 优先检查当前 Pawn 是否为摩托车，因此驾驶时显示切换视角提示，下车后恢复召唤提示</p>
 <h2>为什么倒计时仍需要计时器</h2>
 <p>开始冷却只发生一次，但界面要把 10 秒改成 9 秒、8 秒。提示组件在冷却尚未结束时设置一次计时器，到时重新读取服务器时间，并决定是否再设置下一次</p>
-<div class="current-code"><pre><span></span><span class="c1">// 来源：Source/Delivery/UI/DeliveryHintComponent.cpp</span>
+<div class="current-code"><pre><span></span><span class="c1">// 来源：Source/Delivery/UI/HUD/DeliveryHintComponent.cpp</span>
 <span class="c1">// 每次用服务器结束时间重算，卡顿时不会把倒计时越拖越长</span>
 <span class="n">GetWorld</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">GetTimerManager</span><span class="p">().</span><span class="n">SetTimer</span><span class="p">(</span>
 <span class="w">    </span><span class="n">CountdownTimer</span><span class="p">,</span><span class="w"> </span><span class="k">this</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">UDeliveryHintComponent</span><span class="o">::</span><span class="n">RefreshHint</span><span class="p">,</span>
@@ -1147,7 +1147,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <p>改按键先打开 IMC_Default，检查动作、键盘键和手柄键。提示通过 QueryKeysMappedToAction 查询当前生效的映射，不保存一份独立的键名。当前输入设备没有对应映射时隐藏该操作提示</p>
 <p>按键没有反应时，先看动作是否映射，再看当前控制的是角色还是车辆，最后看对应组件是否接受操作。IA 只负责传入操作，晕倒、收拳、抓取和服务器权限等条件仍由原玩法代码检查</p>
 <p>上车后提示不对时，检查 HandlePawnChanged 是否接到新的车辆；按 P 后文字没有变化时，检查车辆是否发出 CameraChanged；召唤后没有倒计时时，检查服务器的 ReadyServerTime 和拥有者客户端的复制回调</p>
-<p>输入缓冲未在本次增加。鼠标的 0.2 秒等待用于区分单键出拳与双键抓取，不会把收拳期间被拒绝的攻击保存为下一拳</p><details><summary>UI/DeliveryHintComponent.h</summary><p>来源：Source/Delivery/UI/DeliveryHintComponent.h</p><div class="current-code"><pre><span></span><span class="cp">#pragma once</span>
+<p>输入缓冲未在本次增加。鼠标的 0.2 秒等待用于区分单键出拳与双键抓取，不会把收拳期间被拒绝的攻击保存为下一拳</p><details><summary>UI/HUD/DeliveryHintComponent.h</summary><p>来源：Source/Delivery/UI/HUD/DeliveryHintComponent.h</p><div class="current-code"><pre><span></span><span class="cp">#pragma once</span>
 
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"CoreMinimal.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Components/ActorComponent.h"</span>
@@ -1218,11 +1218,11 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="w">    </span><span class="n">FDelegateHandle</span><span class="w"> </span><span class="n">DestroyHandle</span><span class="p">;</span>
 <span class="p">};</span>
 </pre></div>
-</details><details><summary>UI/DeliveryHintComponent.cpp</summary><p>来源：Source/Delivery/UI/DeliveryHintComponent.cpp</p><div class="current-code"><pre><span></span><span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/DeliveryHintComponent.h"</span>
+</details><details><summary>UI/HUD/DeliveryHintComponent.cpp</summary><p>来源：Source/Delivery/UI/HUD/DeliveryHintComponent.cpp</p><div class="current-code"><pre><span></span><span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/HUD/DeliveryHintComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Character/DeliveryCharacter.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Input/DeliveryInputComponent.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/DeliveryMotorbike.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/DeliveryVehicleSummonComponent.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/Motorbike/DeliveryMotorbike.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/Summon/DeliveryVehicleSummonComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Interaction/DeliveryPromptSubsystem.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"EnhancedInputSubsystems.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Engine/LocalPlayer.h"</span>
@@ -1386,7 +1386,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"InputActionValue.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Grab/DeliveryGrabComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Inventory/DeliveryInventoryComponent.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/DeliveryVehicleSummonComponent.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/Summon/DeliveryVehicleSummonComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Combat/DeliveryRagdollCombatComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Engine/World.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"TimerManager.h"</span>
@@ -1743,9 +1743,9 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">SummonAction</span><span class="p">.</span><span class="n">LoadSynchronous</span><span class="p">();</span>
 <span class="p">}</span>
 </pre></div>
-</details><details><summary>Vehicle/DeliveryVehicleSummonComponent.cpp</summary><p>来源：Source/Delivery/Vehicle/DeliveryVehicleSummonComponent.cpp</p><div class="current-code"><pre><span></span><span class="c1">// Copyright Epic Games, Inc. All Rights Reserved.</span>
+</details><details><summary>Vehicle/Summon/DeliveryVehicleSummonComponent.cpp</summary><p>来源：Source/Delivery/Vehicle/Summon/DeliveryVehicleSummonComponent.cpp</p><div class="current-code"><pre><span></span><span class="c1">// Copyright Epic Games, Inc. All Rights Reserved.</span>
 
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/DeliveryVehicleSummonComponent.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/Summon/DeliveryVehicleSummonComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Delivery.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Character/DeliveryCharacter.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"EngineUtils.h"</span>
@@ -1753,7 +1753,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"GameFramework/Pawn.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"GameFramework/GameStateBase.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Net/UnrealNetwork.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/DeliveryMotorbike.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/Motorbike/DeliveryMotorbike.h"</span>
 
 <span class="n">UDeliveryVehicleSummonComponent</span><span class="o">::</span><span class="n">UDeliveryVehicleSummonComponent</span><span class="p">()</span>
 <span class="p">{</span>
@@ -2349,7 +2349,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"InputActionValue.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Grab/DeliveryGrabComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Inventory/DeliveryInventoryComponent.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/DeliveryVehicleSummonComponent.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/Summon/DeliveryVehicleSummonComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Combat/DeliveryRagdollCombatComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Engine/World.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"TimerManager.h"</span>
@@ -2706,7 +2706,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">SummonAction</span><span class="p">.</span><span class="n">LoadSynchronous</span><span class="p">();</span>
 <span class="p">}</span>
 </pre></div>
-</details><details><summary>UI/DeliveryHUD.h</summary><p><a href="file:///D:/Udev/Delivery/Source/Delivery/UI/DeliveryHUD.h">打开源文件</a></p><div class="current-code"><pre><span></span><span class="cp">#pragma once</span>
+</details><details><summary>UI/HUD/DeliveryHUD.h</summary><p><a href="file:///D:/Udev/Delivery/Source/Delivery/UI/HUD/DeliveryHUD.h">打开源文件</a></p><div class="current-code"><pre><span></span><span class="cp">#pragma once</span>
 
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"CoreMinimal.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"GameFramework/HUD.h"</span>
@@ -2739,10 +2739,10 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="w">    </span><span class="n">TWeakObjectPtr</span><span class="o">&lt;</span><span class="n">ADeliveryCharacter</span><span class="o">&gt;</span><span class="w"> </span><span class="n">BoundCharacter</span><span class="p">;</span>
 <span class="p">};</span>
 </pre></div>
-</details><details><summary>UI/DeliveryHUD.cpp</summary><p><a href="file:///D:/Udev/Delivery/Source/Delivery/UI/DeliveryHUD.cpp">打开源文件</a></p><div class="current-code"><pre><span></span><span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/DeliveryHUD.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/DeliveryHotbarWidget.h"</span>
+</details><details><summary>UI/HUD/DeliveryHUD.cpp</summary><p><a href="file:///D:/Udev/Delivery/Source/Delivery/UI/HUD/DeliveryHUD.cpp">打开源文件</a></p><div class="current-code"><pre><span></span><span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/HUD/DeliveryHUD.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"UI/HUD/DeliveryHotbarWidget.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Character/DeliveryCharacter.h"</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/DeliveryMotorbike.h"</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"Vehicle/Motorbike/DeliveryMotorbike.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"Inventory/DeliveryInventoryComponent.h"</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">"GameFramework/PlayerController.h"</span>
 

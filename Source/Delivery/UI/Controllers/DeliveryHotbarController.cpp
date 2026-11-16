@@ -1,6 +1,6 @@
 #include "UI/Controllers/DeliveryHotbarController.h"
 #include "Inventory/DeliveryInventoryComponent.h"
-#include "Inventory/DeliveryHandheldItem.h"
+#include "Inventory/Items/DeliveryHandheldItem.h"
 #include "Inventory/DeliveryInventoryItemComponent.h"
 #include "Engine/Texture2D.h"
 

@@ -2,8 +2,8 @@
 
 #include "Delivery.h"
 #include "Task/World/DeliveryItemComponent.h"
-#include "World/DeliveryLocationComponent.h"
-#include "World/DeliveryLocationRegistry.h"
+#include "World/Location/DeliveryLocationComponent.h"
+#include "World/Location/DeliveryLocationRegistry.h"
 #include "Task/World/DeliveryPickupPointComponent.h"
 #include "Task/World/DeliveryTargetComponent.h"
 #include "Task/Data/DeliveryTaskDefinition.h"
